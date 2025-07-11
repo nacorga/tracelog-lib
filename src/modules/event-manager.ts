@@ -10,6 +10,7 @@ import {
   Timestamp,
 } from '../types';
 import { isEventValid } from '../utils/event-check';
+import { TagManager } from './tag-manager';
 
 export class EventManager {
   private eventsQueue: TracelogEvent[] = [];
@@ -95,13 +96,13 @@ export class EventManager {
       ...(isRouteExcluded && isSessionEvent && { excluded_route: true }),
     };
 
-    // Tags functionality disabled for now
-    // if (this.config?.tags?.length) {
-    //   const matchedTags = this.getEventTags(payload, this.getDevice()!);
-    //   if (matchedTags?.length) {
-    //     payload.tags = matchedTags;
-    //   }
-    // }
+    // Tags functionality enabled
+    if (this.config?.tags?.length) {
+      const matchedTags = this.getEventTags(payload, this.getDevice()!);
+      if (matchedTags?.length) {
+        payload.tags = matchedTags;
+      }
+    }
 
     this.lastEvent = payload;
     this.sendEvent(payload);
@@ -263,80 +264,131 @@ export class EventManager {
     return Object.keys(utmParameters).length > 0 ? utmParameters : null;
   }
 
-  // Tags functionality disabled for now
-  // private getEventTags(event: TracelogEvent, deviceType: DeviceType): string[] {
-  //   switch (event.type) {
-  //     case EventType.PAGE_VIEW:
-  //       return this.checkEventTypePageView(event, deviceType);
-  //     case EventType.CLICK:
-  //       return this.checkEventTypeClick(event, deviceType);
-  //     default:
-  //       return [];
-  //   }
-  // }
+  private getEventTags(event: TracelogEvent, deviceType: DeviceType): string[] {
+    switch (event.type) {
+      case EventType.PAGE_VIEW: {
+        return this.checkEventTypePageView(event, deviceType);
+      }
+      case EventType.CLICK: {
+        return this.checkEventTypeClick(event, deviceType);
+      }
+      default: {
+        return [];
+      }
+    }
+  }
 
-  // private checkEventTypePageView(event: TracelogEvent, deviceType: DeviceType): string[] {
-  //   const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) || [];
-  //   if (!tags.length) {
-  //     return [];
-  //   }
-  //   const matchedTagIds: string[] = [];
-  //   for (const tag of tags) {
-  //     const { logicalOperator, conditions } = tag;
-  //     const results: boolean[] = [];
-  //     for (const condition of conditions) {
-  //       if (condition.type === 'url_matches') {
-  //         results.push(TagManager.matchUrlMatches(condition, event.page_url));
-  //       } else if (condition.type === 'device_type') {
-  //         results.push(TagManager.matchDeviceType(condition, deviceType));
-  //       }
-  //     }
-  //     let isMatch = false;
-  //     if (logicalOperator === 'AND') {
-  //       isMatch = results.every(Boolean);
-  //     } else {
-  //       isMatch = results.some(Boolean);
-  //     }
-  //     if (isMatch) {
-  //       matchedTagIds.push(tag.id);
-  //     }
-  //   }
-  //   return matchedTagIds;
-  // }
+  private checkEventTypePageView(event: TracelogEvent, deviceType: DeviceType): string[] {
+    const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) || [];
+    if (tags.length === 0) {
+      return [];
+    }
+    const matchedTagIds: string[] = [];
+    for (const tag of tags) {
+      const { id, logicalOperator, conditions } = tag;
+      const results: boolean[] = [];
+      for (const condition of conditions) {
+        switch (condition.type) {
+          case 'url_matches': {
+            results.push(TagManager.matchUrlMatches(condition, event.page_url));
 
-  // private checkEventTypeClick(event: TracelogEvent, deviceType: DeviceType): string[] {
-  //   const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) || [];
-  //   if (!tags.length) {
-  //     return [];
-  //   }
-  //   const matchedTagIds: string[] = [];
-  //   for (const tag of tags) {
-  //     const { logicalOperator, conditions } = tag;
-  //     const results: boolean[] = [];
-  //     for (const condition of conditions) {
-  //       if (!event.click_data) {
-  //         results.push(false);
-  //         continue;
-  //       }
-  //       const clickData = event.click_data;
-  //       if (condition.type === 'element_matches') {
-  //         results.push(TagManager.matchElementSelector(condition, clickData));
-  //       } else if (condition.type === 'device_type') {
-  //         results.push(TagManager.matchDeviceType(condition, deviceType));
-  //       }
-  //     }
-  //     let isMatch = false;
-  //     if (logicalOperator === 'AND') {
-  //       isMatch = results.every(Boolean);
-  //     } else {
-  //       isMatch = results.some(Boolean);
-  //     }
-  //     if (isMatch) {
-  //       matchedTagIds.push(tag.id);
-  //     }
-  //   }
-  //   return matchedTagIds;
-  // }
+            break;
+          }
+          case 'device_type': {
+            results.push(TagManager.matchDeviceType(condition, deviceType));
+
+            break;
+          }
+          case 'utm_source': {
+            results.push(TagManager.matchUtmCondition(condition, event.utm?.source));
+
+            break;
+          }
+          case 'utm_medium': {
+            results.push(TagManager.matchUtmCondition(condition, event.utm?.medium));
+
+            break;
+          }
+          case 'utm_campaign': {
+            results.push(TagManager.matchUtmCondition(condition, event.utm?.campaign));
+
+            break;
+          }
+        }
+      }
+
+      let isMatch = false;
+
+      isMatch = logicalOperator === 'AND' ? results.every(Boolean) : results.some(Boolean);
+
+      if (isMatch) {
+        matchedTagIds.push(id);
+      }
+    }
+
+    return matchedTagIds;
+  }
+
+  private checkEventTypeClick(event: TracelogEvent, deviceType: DeviceType): string[] {
+    const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) || [];
+    if (tags.length === 0) {
+      return [];
+    }
+    const matchedTagIds: string[] = [];
+    for (const tag of tags) {
+      const { id, logicalOperator, conditions } = tag;
+      const results: boolean[] = [];
+      for (const condition of conditions) {
+        if (!event.click_data) {
+          results.push(false);
+          continue;
+        }
+        const clickData = event.click_data;
+        switch (condition.type) {
+          case 'element_matches': {
+            results.push(TagManager.matchElementSelector(condition, clickData));
+
+            break;
+          }
+          case 'device_type': {
+            results.push(TagManager.matchDeviceType(condition, deviceType));
+
+            break;
+          }
+          case 'url_matches': {
+            results.push(TagManager.matchUrlMatches(condition, event.page_url));
+
+            break;
+          }
+          case 'utm_source': {
+            results.push(TagManager.matchUtmCondition(condition, event.utm?.source));
+
+            break;
+          }
+          case 'utm_medium': {
+            results.push(TagManager.matchUtmCondition(condition, event.utm?.medium));
+
+            break;
+          }
+          case 'utm_campaign': {
+            results.push(TagManager.matchUtmCondition(condition, event.utm?.campaign));
+
+            break;
+          }
+        }
+      }
+
+      let isMatch = false;
+
+      isMatch = logicalOperator === 'AND' ? results.every(Boolean) : results.some(Boolean);
+
+      if (isMatch) {
+        matchedTagIds.push(id);
+      }
+    }
+
+    return matchedTagIds;
+  }
 
   cleanup(): void {
     if (this.eventsQueueIntervalId !== null) {

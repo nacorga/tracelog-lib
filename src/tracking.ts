@@ -154,16 +154,19 @@ export class Tracking {
 
     // Create cleanup function for beforeunload
     const beforeUnloadCleanup = (): void => {
+      this.sessionManager?.setPageUnloading(true);
       cleanup();
     };
 
     // Create cleanup function for pagehide
     const pageHideCleanup = (): void => {
+      this.sessionManager?.setPageUnloading(true);
       cleanup();
     };
 
     // Create cleanup function for unload
     const unloadCleanup = (): void => {
+      this.sessionManager?.setPageUnloading(true);
       cleanup();
     };
 

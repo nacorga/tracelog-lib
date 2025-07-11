@@ -11,6 +11,8 @@ export class SessionManager {
   private readonly device: DeviceType | undefined;
   private globalMetadata: Record<string, MetadataType> | undefined;
   private readonly sessionHandler: SessionHandler;
+  private sessionEndSent = false;
+  private pageUnloading = false;
 
   constructor(
     private readonly config: TracelogConfig,
@@ -80,19 +82,25 @@ export class SessionManager {
   }
 
   isSessionEndSent(): boolean {
-    return false; // Simplified for now
+    return this.sessionEndSent;
   }
 
   isPageCurrentlyUnloading(): boolean {
-    return false; // Simplified for now
+    return this.pageUnloading;
   }
 
-  setPageUnloading(_isUnloading: boolean): void {
-    // Simplified for now
+  setPageUnloading(isUnloading: boolean): void {
+    this.pageUnloading = isUnloading;
+
+    if (this.isQaMode()) {
+      console.log(`[TraceLog] Page unloading state changed: ${isUnloading}`);
+    }
   }
 
   // Session lifecycle management
   startSession(): void {
+    // Reset session end flag when starting new session
+    this.sessionEndSent = false;
     this.sessionHandler.startSession();
   }
 
@@ -117,6 +125,8 @@ export class SessionManager {
       }
     }
 
+    // Mark that session end will be sent
+    this.sessionEndSent = true;
     this.sessionHandler.endSession(sessionTrigger);
   }
 
@@ -152,7 +162,7 @@ export class SessionManager {
 
   private handleSessionData(sessionData: SessionData): void {
     // Determine event type based on session data
-    const eventType = EventType.SESSION_START; // Simplified for now
+    const eventType: EventType = sessionData.endTrigger ? EventType.SESSION_END : EventType.SESSION_START;
 
     // Map trigger to string for backward compatibility
     let triggerString: string | undefined;
