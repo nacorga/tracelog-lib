@@ -18,6 +18,7 @@ module.exports = {
     'eslint:recommended',
     'plugin:unicorn/recommended',
     'plugin:@typescript-eslint/recommended',
+    'plugin:prettier/recommended',
   ],
   rules: {
     'unicorn/prevent-abbreviations': 'warn',

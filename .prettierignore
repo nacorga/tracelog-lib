@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.git/
+*.config.js
+*.config.cjs
+*.config.mjs
+playwright-report/
+test-results/
+package-lock.json
+*.md
+*.html 

@@ -1,8 +1,8 @@
+*.tgz
+.npmrc
+.DS_Store
 /dist
 /node_modules
-.npmrc
-*.tgz
 /coverage
-.DS_Store
-test-results
-playwright-report/data
+/test-results
+/playwright-report
