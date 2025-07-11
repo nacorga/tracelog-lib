@@ -43,6 +43,22 @@ jobs:
         env:
           CI: true
 
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.run_number }}
+          path: test-results/
+          retention-days: 30
+
       - name: Get current version
         id: current_version
         run: |
@@ -112,6 +128,11 @@ jobs:
             # Latest RC version (auto-updated)
             npm install @tracelog/client@rc
             \`\`\`
+            
+            **📊 Test Reports & Artifacts:**
+            - 🔗 [Playwright HTML Report](../../actions/runs/${{ github.run_id }}/artifacts) - Interactive test results
+            - 📋 [Test Results & Traces](../../actions/runs/${{ github.run_id }}/artifacts) - Detailed failure analysis
+            - 📄 [Full CI Logs](../../actions/runs/${{ github.run_id }}) - Complete workflow execution
             
             ✨ **Each push to this PR will generate a new RC version automatically.**
             
