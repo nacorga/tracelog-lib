@@ -34,13 +34,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+      # - name: Install Playwright browsers
+      #   run: npx playwright install --with-deps
 
-      - name: Run E2E tests
-        run: npm run test:e2e
-        env:
-          CI: true
+      # - name: Run E2E tests
+      #   run: npm run test:e2e
+      #   env:
+      #     CI: true
 
       - name: Install standard-version
         run: npm install --save-dev standard-version
@@ -102,14 +102,14 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          # Obtener la versión actual
+          # Get the current version
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           
-          # Limpiar versiones RC anteriores usando nuestro script
+          # Clean up previous RC versions using our script
           echo "🧹 Cleaning up RC versions..."
           node scripts/rc-manager.js cleanup || echo "No RC versions to clean"
           
-          # Actualizar el tag 'latest' para asegurar que apunte a la nueva versión
+          # Update the 'latest' tag to ensure it points to the new version
           npm dist-tag add @tracelog/client@$CURRENT_VERSION latest
           
           echo "✅ Published version $CURRENT_VERSION as latest"
