@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+Do not generate documentation (comments, markdown files, etc.) unless I explicitly ask for it. Only produce documentation when prompted with terms like “add documentation”, “generate docstring”, or similar clear instructions.
+
+Do not run any Git commands, especially git commit, git push, or similar, automatically. Only perform Git operations if I explicitly request them with a clear instruction like “commit with message...” or “push these changes.”

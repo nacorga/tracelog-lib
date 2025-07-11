@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TraceLog E2E Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background-color: #fafafa;
+        }
+        
+        .section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+        
+        .section h3 {
+            color: #555;
+            margin-top: 15px;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .secondary-btn {
+            background-color: #6c757d;
+        }
+        
+        .secondary-btn:hover {
+            background-color: #5a6268;
+        }
+        
+        .danger-btn {
+            background-color: #dc3545;
+        }
+        
+        .danger-btn:hover {
+            background-color: #c82333;
+        }
+        
+        .success-btn {
+            background-color: #28a745;
+        }
+        
+        .success-btn:hover {
+            background-color: #218838;
+        }
+        
+        .scroll-area {
+            height: 200px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: white;
+            margin: 10px 0;
+        }
+        
+        .event-log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .event-item {
+            margin: 2px 0;
+            padding: 2px 0;
+        }
+        
+        .counter {
+            font-weight: bold;
+            font-size: 16px;
+            color: #007bff;
+        }
+        
+        .metadata-demo {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .config-panel {
+            background-color: #f1f3f4;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        .form-group {
+            margin: 10px 0;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .inline-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .performance-stats {
+            background-color: #e3f2fd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TraceLog E2E Test Page</h1>
+        
+        <!-- Tracking Status Section -->
+        <div class="section">
+            <h2>Tracking Status</h2>
+            <div id="tracking-status" class="status" data-testid="tracking-status">
+                <span id="status-text">Not initialized</span>
+            </div>
+            <div class="inline-controls">
+                <button id="init-tracking" data-testid="init-tracking">Initialize Tracking</button>
+                <button id="reinit-tracking" data-testid="reinit-tracking">Reinitialize Tracking</button>
+                <button id="check-status" data-testid="check-status" class="secondary-btn">Check Status</button>
+            </div>
+        </div>
+
+        <!-- Configuration Testing Section -->
+        <div class="section">
+            <h2>Configuration Testing</h2>
+            <div class="config-panel">
+                <h3>Custom Configuration</h3>
+                <div class="form-group">
+                    <label for="tracking-id">Tracking ID:</label>
+                    <input type="text" id="tracking-id" value="test-tracking-id" />
+                </div>
+                <div class="form-group">
+                    <label for="session-timeout">Session Timeout (ms):</label>
+                    <input type="number" id="session-timeout" value="900000" min="30000" />
+                </div>
+                <div class="form-group">
+                    <label for="global-metadata">Global Metadata (JSON):</label>
+                    <textarea id="global-metadata" rows="3">{"app_version": "2.0.4", "environment": "test"}</textarea>
+                </div>
+                <div class="inline-controls">
+                    <button id="init-with-config" data-testid="init-with-config">Initialize with Config</button>
+                    <button id="test-invalid-config" data-testid="test-invalid-config" class="danger-btn">Test Invalid Config</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Events Section -->
+        <div class="section">
+            <h2>Custom Events</h2>
+            <div class="inline-controls">
+                <button id="simple-event-btn" data-testid="simple-event-btn">Send Simple Event</button>
+                <button id="metadata-event-btn" data-testid="metadata-event-btn">Send Event with Metadata</button>
+                <button id="invalid-event-btn" data-testid="invalid-event-btn" class="danger-btn">Send Invalid Event</button>
+            </div>
+            
+            <h3>Custom Event Testing</h3>
+            <div class="metadata-demo">
+                <div class="form-group">
+                    <label for="custom-event-name">Event Name:</label>
+                    <input type="text" id="custom-event-name" value="custom_test_event" />
+                </div>
+                <div class="form-group">
+                    <label for="custom-metadata">Metadata (JSON):</label>
+                    <textarea id="custom-metadata" rows="3">{"action": "test", "value": 123, "tags": ["e2e", "test"]}</textarea>
+                </div>
+                <button id="send-custom-event" data-testid="send-custom-event">Send Custom Event</button>
+            </div>
+
+            <h3>Metadata Type Testing</h3>
+            <div class="inline-controls">
+                <button id="test-string-metadata" data-testid="test-string-metadata">String Metadata</button>
+                <button id="test-number-metadata" data-testid="test-number-metadata">Number Metadata</button>
+                <button id="test-boolean-metadata" data-testid="test-boolean-metadata">Boolean Metadata</button>
+                <button id="test-array-metadata" data-testid="test-array-metadata">Array Metadata</button>
+                <button id="test-mixed-metadata" data-testid="test-mixed-metadata">Mixed Metadata</button>
+            </div>
+        </div>
+
+        <!-- User Interactions Section -->
+        <div class="section">
+            <h2>User Interactions</h2>
+            
+            <h3>Click Tracking</h3>
+            <div class="inline-controls">
+                <button id="click-test-btn" data-testid="click-test-btn">Click Test Button</button>
+                <span id="click-counter" class="counter" data-testid="click-counter">Clicks: 0</span>
+                <button id="reset-clicks" data-testid="reset-clicks" class="secondary-btn">Reset Counter</button>
+            </div>
+            
+            <h3>Multiple Element Testing</h3>
+            <div class="inline-controls">
+                <button id="btn-1" data-testid="multi-btn-1" data-tracking="button_1">Button 1</button>
+                <button id="btn-2" data-testid="multi-btn-2" data-tracking="button_2" class="success-btn">Button 2</button>
+                <button id="btn-3" data-testid="multi-btn-3" data-tracking="button_3" class="danger-btn">Button 3</button>
+                <a href="#test" id="link-test" data-testid="test-link" data-tracking="test_link">Test Link</a>
+            </div>
+
+            <h3>Scroll Testing</h3>
+            <p>Scroll down in the content below to trigger scroll events:</p>
+            <div id="scroll-area" class="scroll-area" data-testid="scroll-area">
+                <h4>Scrollable Content</h4>
+                <p>This is a long content area that you can scroll through to test scroll event tracking.</p>
+                <p>Keep scrolling to trigger scroll events...</p>
+                <p>More content here...</p>
+                <p>Even more content...</p>
+                <p>And more...</p>
+                <p>Testing scroll depth...</p>
+                <p>Almost at the bottom...</p>
+                <p>Bottom of content</p>
+            </div>
+        </div>
+
+        <!-- Performance Testing Section -->
+        <div class="section">
+            <h2>Performance Testing</h2>
+            <div class="inline-controls">
+                <button id="batch-events" data-testid="batch-events">Send Batch Events (10)</button>
+                <button id="rapid-events" data-testid="rapid-events">Rapid Events (100)</button>
+                <button id="large-metadata" data-testid="large-metadata" class="danger-btn">Large Metadata Test</button>
+                <button id="stress-test" data-testid="stress-test" class="danger-btn">Stress Test</button>
+            </div>
+            
+            <div id="performance-stats" class="performance-stats" data-testid="performance-stats">
+                Performance stats will appear here...
+            </div>
+        </div>
+
+        <!-- Session Management Section -->
+        <div class="section">
+            <h2>Session Management</h2>
+            <div class="inline-controls">
+                <button id="check-session" data-testid="check-session">Check Session Info</button>
+                <button id="trigger-session-event" data-testid="trigger-session-event">Trigger Session Event</button>
+                <button id="simulate-timeout" data-testid="simulate-timeout" class="warning">Simulate Timeout</button>
+                <button id="clear-storage" data-testid="clear-storage" class="danger-btn">Clear Local Storage</button>
+            </div>
+            
+            <div id="session-info" class="metadata-demo" data-testid="session-info">
+                Session information will appear here...
+            </div>
+        </div>
+
+        <!-- Navigation Testing Section -->
+        <div class="section">
+            <h2>Navigation Testing</h2>
+            <div class="inline-controls">
+                <button id="navigation-btn" data-testid="navigation-btn">Simulate Page Navigation</button>
+                <button id="hash-navigation" data-testid="hash-navigation">Hash Navigation</button>
+                <button id="external-navigation" data-testid="external-navigation">External Navigation Test</button>
+            </div>
+            <p>Current Page: <span id="current-page" data-testid="current-page">/</span></p>
+        </div>
+
+        <!-- Error Handling Section -->
+        <div class="section">
+            <h2>Error Handling & Edge Cases</h2>
+            <div class="inline-controls">
+                <button id="test-before-init" data-testid="test-before-init" class="danger-btn">Event Before Init</button>
+                <button id="test-null-values" data-testid="test-null-values" class="danger-btn">Null/Undefined Values</button>
+                <button id="test-invalid-types" data-testid="test-invalid-types" class="danger-btn">Invalid Types</button>
+                <button id="test-memory-leak" data-testid="test-memory-leak" class="warning">Memory Leak Test</button>
+            </div>
+        </div>
+
+        <!-- Event Log Section -->
+        <div class="section">
+            <h2>Event Log</h2>
+            <div class="inline-controls">
+                <button id="clear-log" class="danger-btn">Clear Log</button>
+                <button id="export-log" data-testid="export-log" class="secondary-btn">Export Log</button>
+                <button id="toggle-timestamps" data-testid="toggle-timestamps" class="secondary-btn">Toggle Timestamps</button>
+            </div>
+            <div id="event-log" class="event-log" data-testid="event-log">
+                Event log will appear here...
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import TraceLog functions
+        import { startTracking, sendCustomEvent } from '/dist/esm/public-api.js';
+        
+        // Make functions available globally for testing
+        window.TraceLog = { startTracking, sendCustomEvent };
+        
+        // State variables
+        let isTrackingInitialized = false;
+        let clickCount = 0;
+        let currentPage = '/';
+        let eventCount = 0;
+        let performanceStats = { eventsProcessed: 0, startTime: Date.now() };
+        
+        // DOM elements
+        const statusText = document.getElementById('status-text');
+        const trackingStatus = document.getElementById('tracking-status');
+        const eventLog = document.getElementById('event-log');
+        const clickCounter = document.getElementById('click-counter');
+        const currentPageSpan = document.getElementById('current-page');
+        const sessionInfo = document.getElementById('session-info');
+        const performanceStatsEl = document.getElementById('performance-stats');
+        
+        // Utility functions
+        function updateStatus(message, type = 'success') {
+            statusText.textContent = message;
+            trackingStatus.className = `status ${type}`;
+        }
+        
+        function logEvent(message) {
+            const timestamp = new Date().toISOString().substr(11, 12);
+            const eventItem = document.createElement('div');
+            eventItem.className = 'event-item';
+            eventItem.textContent = `[${timestamp}] ${message}`;
+            eventLog.appendChild(eventItem);
+            eventLog.scrollTop = eventLog.scrollHeight;
+            
+            eventCount++;
+            performanceStats.eventsProcessed++;
+            updatePerformanceStats();
+        }
+        
+        function updatePerformanceStats() {
+            const elapsed = Date.now() - performanceStats.startTime;
+            const rate = (performanceStats.eventsProcessed / elapsed * 1000).toFixed(2);
+            performanceStatsEl.textContent = 
+                `Events: ${performanceStats.eventsProcessed} | ` +
+                `Rate: ${rate} events/sec | ` +
+                `Runtime: ${(elapsed / 1000).toFixed(1)}s`;
+        }
+        
+        function updateSessionInfo() {
+            const sessionData = {
+                localStorage: Object.keys(localStorage).filter(k => k.includes('tracelog')),
+                sessionStorage: Object.keys(sessionStorage).filter(k => k.includes('tracelog')),
+                userAgent: navigator.userAgent.substr(0, 50) + '...',
+                timestamp: new Date().toISOString()
+            };
+            sessionInfo.textContent = JSON.stringify(sessionData, null, 2);
+        }
+        
+        // Core initialization functions
+        function initializeTracking() {
+            if (isTrackingInitialized) {
+                logEvent('Tracking already initialized');
+                return;
+            }
+            
+            try {
+                startTracking('test-tracking-id');
+                isTrackingInitialized = true;
+                updateStatus('Tracking initialized successfully');
+                logEvent('Tracking initialized with test-tracking-id');
+            } catch (error) {
+                updateStatus('Tracking initialization failed: ' + error.message, 'error');
+                logEvent('Tracking initialization failed: ' + error.message);
+            }
+        }
+        
+        function reinitializeTracking() {
+            try {
+                startTracking('test-tracking-id-2');
+                logEvent('Attempted reinitialization');
+            } catch (error) {
+                logEvent('Reinitialization failed: ' + error.message);
+            }
+        }
+        
+        function initializeWithConfig() {
+            const trackingId = document.getElementById('tracking-id').value;
+            const sessionTimeout = parseInt(document.getElementById('session-timeout').value);
+            const globalMetadataText = document.getElementById('global-metadata').value;
+            
+            try {
+                const globalMetadata = JSON.parse(globalMetadataText);
+                const config = {
+                    sessionTimeout,
+                    globalMetadata
+                };
+                
+                startTracking(trackingId, config);
+                isTrackingInitialized = true;
+                updateStatus('Tracking initialized with custom config');
+                logEvent(`Tracking initialized with config: ${JSON.stringify(config)}`);
+            } catch (error) {
+                updateStatus('Config initialization failed: ' + error.message, 'error');
+                logEvent('Config initialization failed: ' + error.message);
+            }
+        }
+        
+        // Event handlers
+        document.getElementById('init-tracking').addEventListener('click', initializeTracking);
+        document.getElementById('reinit-tracking').addEventListener('click', reinitializeTracking);
+        document.getElementById('init-with-config').addEventListener('click', initializeWithConfig);
+        
+        document.getElementById('check-status').addEventListener('click', () => {
+            updateStatus(isTrackingInitialized ? 'Tracking is active' : 'Tracking not initialized', 
+                       isTrackingInitialized ? 'success' : 'warning');
+        });
+        
+        document.getElementById('test-invalid-config').addEventListener('click', () => {
+            try {
+                startTracking('invalid-test', {
+                    sessionTimeout: 1000, // Less than minimum
+                    globalMetadata: 'invalid' // Should be object
+                });
+                logEvent('Invalid config test completed');
+            } catch (error) {
+                logEvent('Invalid config test error: ' + error.message);
+            }
+        });
+        
+        // Custom event handlers
+        document.getElementById('simple-event-btn').addEventListener('click', () => {
+            sendCustomEvent('simple_custom_event');
+            logEvent('Sent simple custom event');
+        });
+        
+        document.getElementById('metadata-event-btn').addEventListener('click', () => {
+            sendCustomEvent('custom_event_with_metadata', {
+                button: 'metadata-button',
+                timestamp: Date.now(),
+                userAgent: navigator.userAgent
+            });
+            logEvent('Sent custom event with metadata');
+        });
+        
+        document.getElementById('invalid-event-btn').addEventListener('click', () => {
+            sendCustomEvent('', { invalid: true });
+            logEvent('Attempted to send invalid event');
+        });
+        
+        document.getElementById('send-custom-event').addEventListener('click', () => {
+            const eventName = document.getElementById('custom-event-name').value;
+            const metadataText = document.getElementById('custom-metadata').value;
+            
+            try {
+                const metadata = JSON.parse(metadataText);
+                sendCustomEvent(eventName, metadata);
+                logEvent(`Sent custom event: ${eventName}`);
+            } catch (error) {
+                logEvent(`Custom event error: ${error.message}`);
+            }
+        });
+        
+        // Metadata type testing
+        document.getElementById('test-string-metadata').addEventListener('click', () => {
+            sendCustomEvent('string_metadata_test', { stringValue: 'test string data' });
+            logEvent('Sent event with string metadata');
+        });
+        
+        document.getElementById('test-number-metadata').addEventListener('click', () => {
+            sendCustomEvent('number_metadata_test', { numberValue: 42.5 });
+            logEvent('Sent event with number metadata');
+        });
+        
+        document.getElementById('test-boolean-metadata').addEventListener('click', () => {
+            sendCustomEvent('boolean_metadata_test', { booleanValue: true });
+            logEvent('Sent event with boolean metadata');
+        });
+        
+        document.getElementById('test-array-metadata').addEventListener('click', () => {
+            sendCustomEvent('array_metadata_test', { arrayValue: ['item1', 'item2', 'item3'] });
+            logEvent('Sent event with array metadata');
+        });
+        
+        document.getElementById('test-mixed-metadata').addEventListener('click', () => {
+            sendCustomEvent('mixed_metadata_test', {
+                stringVal: 'test',
+                numberVal: 123,
+                booleanVal: false,
+                arrayVal: ['a', 'b', 'c']
+            });
+            logEvent('Sent event with mixed metadata types');
+        });
+        
+        // Click tracking
+        document.getElementById('click-test-btn').addEventListener('click', () => {
+            clickCount++;
+            clickCounter.textContent = `Clicks: ${clickCount}`;
+            logEvent(`Click test button clicked (${clickCount} times)`);
+        });
+        
+        document.getElementById('reset-clicks').addEventListener('click', () => {
+            clickCount = 0;
+            clickCounter.textContent = `Clicks: ${clickCount}`;
+            logEvent('Click counter reset');
+        });
+        
+        // Multi-button tracking
+        ['btn-1', 'btn-2', 'btn-3', 'link-test'].forEach(id => {
+            document.getElementById(id).addEventListener('click', (e) => {
+                const trackingAttr = e.target.getAttribute('data-tracking');
+                logEvent(`${trackingAttr} clicked`);
+            });
+        });
+        
+        // Performance testing
+        document.getElementById('batch-events').addEventListener('click', () => {
+            for (let i = 0; i < 10; i++) {
+                sendCustomEvent(`batch_event_${i}`, { batchIndex: i });
+            }
+            logEvent('Sent 10 batch events');
+        });
+        
+        document.getElementById('rapid-events').addEventListener('click', () => {
+            const startTime = Date.now();
+            for (let i = 0; i < 100; i++) {
+                sendCustomEvent(`rapid_event_${i}`, { rapidIndex: i });
+            }
+            const duration = Date.now() - startTime;
+            logEvent(`Sent 100 rapid events in ${duration}ms`);
+        });
+        
+        document.getElementById('large-metadata').addEventListener('click', () => {
+            const largeData = {
+                largeString: 'x'.repeat(1000),
+                largeArray: new Array(100).fill('data'),
+                nested: { deep: { data: { structure: true } } }
+            };
+            sendCustomEvent('large_metadata_test', largeData);
+            logEvent('Sent event with large metadata');
+        });
+        
+        document.getElementById('stress-test').addEventListener('click', () => {
+            const iterations = 1000;
+            const startTime = Date.now();
+            
+            for (let i = 0; i < iterations; i++) {
+                sendCustomEvent(`stress_test_${i}`, {
+                    iteration: i,
+                    randomData: Math.random(),
+                    timestamp: Date.now()
+                });
+            }
+            
+            const duration = Date.now() - startTime;
+            logEvent(`Stress test: ${iterations} events in ${duration}ms`);
+        });
+        
+        // Session management
+        document.getElementById('check-session').addEventListener('click', () => {
+            updateSessionInfo();
+            logEvent('Session info updated');
+        });
+        
+        document.getElementById('trigger-session-event').addEventListener('click', () => {
+            sendCustomEvent('manual_session_event', { trigger: 'manual' });
+            logEvent('Manual session event triggered');
+        });
+        
+        document.getElementById('clear-storage').addEventListener('click', () => {
+            localStorage.clear();
+            sessionStorage.clear();
+            logEvent('Local and session storage cleared');
+            updateSessionInfo();
+        });
+        
+        // Navigation testing
+        document.getElementById('navigation-btn').addEventListener('click', () => {
+            const pages = ['/about', '/contact', '/products', '/'];
+            const randomPage = pages[Math.floor(Math.random() * pages.length)];
+            currentPage = randomPage;
+            currentPageSpan.textContent = currentPage;
+            
+            // Simulate navigation
+            window.history.pushState({}, '', randomPage);
+            logEvent(`Simulated navigation to: ${randomPage}`);
+        });
+        
+        document.getElementById('hash-navigation').addEventListener('click', () => {
+            const hash = '#section-' + Date.now();
+            window.location.hash = hash;
+            logEvent(`Hash navigation to: ${hash}`);
+        });
+        
+        // Error handling tests
+        document.getElementById('test-before-init').addEventListener('click', () => {
+            sendCustomEvent('before_init_test', { test: true });
+            logEvent('Attempted event before initialization');
+        });
+        
+        document.getElementById('test-null-values').addEventListener('click', () => {
+            try {
+                sendCustomEvent(null);
+                sendCustomEvent(undefined);
+                sendCustomEvent('null_test', null);
+                logEvent('Null/undefined value tests completed');
+            } catch (error) {
+                logEvent('Null/undefined tests error: ' + error.message);
+            }
+        });
+        
+        document.getElementById('test-invalid-types').addEventListener('click', () => {
+            try {
+                sendCustomEvent(123);
+                sendCustomEvent({});
+                sendCustomEvent('type_test', function() {});
+                logEvent('Invalid type tests completed');
+            } catch (error) {
+                logEvent('Invalid type tests error: ' + error.message);
+            }
+        });
+        
+        // Utility functions
+        document.getElementById('clear-log').addEventListener('click', () => {
+            eventLog.innerHTML = 'Event log cleared...';
+            eventCount = 0;
+            logEvent('Event log cleared manually');
+        });
+        
+        document.getElementById('export-log').addEventListener('click', () => {
+            const logContent = eventLog.textContent;
+            const blob = new Blob([logContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tracelog-test-${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            logEvent('Event log exported');
+        });
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            logEvent('Test page loaded successfully');
+            updatePerformanceStats();
+            updateSessionInfo();
+        });
+        
+        // Track page load
+        logEvent('Test page loaded successfully');
+    </script>
+</body>
+</html> 

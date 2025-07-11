@@ -20,7 +20,6 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
   ],
   rules: {
-    // Mejores prácticas y principios SOLID
     'unicorn/prevent-abbreviations': 'warn',
     'unicorn/filename-case': ['error', { case: 'kebabCase' }],
     'unicorn/no-array-reduce': 'warn',
@@ -40,7 +39,6 @@ module.exports = {
     '@typescript-eslint/prefer-for-of': 'warn',
     '@typescript-eslint/prefer-optional-chain': 'warn',
     '@typescript-eslint/prefer-nullish-coalescing': 'warn',
-    // Puedes agregar más reglas específicas para SOLID aquí
   },
   ignorePatterns: ['node_modules/', 'dist/', '*.config.js', '*.config.cjs', '*.config.mjs'],
 }; 

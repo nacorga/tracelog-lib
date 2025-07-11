@@ -41,7 +41,10 @@ export class EventManager {
 
     if (isDuplicatedEvent) {
       if (this.eventsQueue && this.eventsQueue.length > 0) {
-        this.eventsQueue.at(-1).timestamp = Date.now() as Timestamp;
+        const lastEvent = this.eventsQueue.at(-1);
+        if (lastEvent) {
+          lastEvent.timestamp = Date.now() as Timestamp;
+        }
       }
 
       return;
