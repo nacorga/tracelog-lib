@@ -1,0 +1,170 @@
+import { SCROLL_DEBOUNCE_TIME } from '../constants';
+import { ScrollDirection, TracelogEventScrollData } from '../types';
+
+export interface ScrollContainer {
+  element: Window | HTMLElement;
+  lastScrollPos: number;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  listener: EventListener;
+  animationFrameId: number | null;
+  isThrottled: boolean;
+}
+
+export interface ScrollConfig {
+  containerSelectors?: string | string[];
+  debounceTime?: number;
+  throttleTime?: number;
+}
+
+export class ScrollHandler {
+  private containers: ScrollContainer[] = [];
+  private suppressNext: boolean = false;
+
+  constructor(
+    private config: ScrollConfig,
+    private onScrollEvent: (data: TracelogEventScrollData) => void,
+  ) {}
+
+  init(): void {
+    const raw = this.config.containerSelectors;
+    const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
+
+    const elements: Array<Window | HTMLElement> = selectors
+      .map((sel) => document.querySelector(sel))
+      .filter((el): el is HTMLElement => el instanceof HTMLElement);
+
+    if (elements.length === 0) {
+      elements.push(window);
+    }
+
+    elements.forEach((element) => {
+      this.setupScrollContainer(element);
+    });
+  }
+
+  suppressNextEvent(): void {
+    this.suppressNext = true;
+
+    setTimeout(
+      () => {
+        this.suppressNext = false;
+      },
+      (this.config.debounceTime || SCROLL_DEBOUNCE_TIME) * 2,
+    );
+  }
+
+  private setupScrollContainer(element: Window | HTMLElement): void {
+    const handleScroll = () => {
+      if (this.suppressNext) {
+        this.suppressNext = false;
+        return;
+      }
+
+      // Cancel pending animation frame
+      if (container.animationFrameId) {
+        cancelAnimationFrame(container.animationFrameId);
+      }
+
+      // Use requestAnimationFrame for better performance
+      container.animationFrameId = requestAnimationFrame(() => {
+        if (container.isThrottled) {
+          return;
+        }
+
+        container.isThrottled = true;
+
+        // Clear existing debounce timer
+        if (container.debounceTimer) {
+          clearTimeout(container.debounceTimer);
+        }
+
+        // Set new debounce timer
+        container.debounceTimer = setTimeout(() => {
+          const scrollData = this.calculateScrollData(container);
+          if (scrollData) {
+            this.onScrollEvent(scrollData);
+          }
+          container.debounceTimer = null;
+          container.isThrottled = false;
+        }, this.config.debounceTime || SCROLL_DEBOUNCE_TIME);
+
+        container.animationFrameId = null;
+      });
+    };
+
+    const container: ScrollContainer = {
+      element,
+      lastScrollPos: 0,
+      debounceTimer: null,
+      listener: handleScroll,
+      animationFrameId: null,
+      isThrottled: false,
+    };
+
+    this.containers.push(container);
+
+    if (element instanceof Window) {
+      window.addEventListener('scroll', handleScroll, { passive: true });
+    } else {
+      element.addEventListener('scroll', handleScroll, { passive: true });
+    }
+  }
+
+  private calculateScrollData(container: ScrollContainer): TracelogEventScrollData | null {
+    const { element } = container;
+    const scrollTop = this.getScrollTop(element);
+    const viewportHeight = this.getViewportHeight(element);
+    const scrollHeight = this.getScrollHeight(element);
+
+    const direction = scrollTop > container.lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
+    const depth =
+      scrollHeight > viewportHeight
+        ? Math.min(100, Math.max(0, Math.floor((scrollTop / (scrollHeight - viewportHeight)) * 100)))
+        : 0;
+
+    // Only update if scroll position changed significantly
+    const positionDelta = Math.abs(scrollTop - container.lastScrollPos);
+    if (positionDelta < 10) {
+      return null;
+    }
+
+    container.lastScrollPos = scrollTop;
+
+    return { depth, direction };
+  }
+
+  private getScrollTop(element: Window | HTMLElement): number {
+    return element instanceof Window ? window.scrollY : element.scrollTop;
+  }
+
+  private getViewportHeight(element: Window | HTMLElement): number {
+    return element instanceof Window ? window.innerHeight : element.clientHeight;
+  }
+
+  private getScrollHeight(element: Window | HTMLElement): number {
+    return element instanceof Window ? document.documentElement.scrollHeight : element.scrollHeight;
+  }
+
+  cleanup(): void {
+    this.containers.forEach((container) => {
+      // Clear debounce timer
+      if (container.debounceTimer) {
+        clearTimeout(container.debounceTimer);
+      }
+
+      // Cancel animation frame
+      if (container.animationFrameId) {
+        cancelAnimationFrame(container.animationFrameId);
+      }
+
+      // Remove event listener
+      if (container.element instanceof Window) {
+        window.removeEventListener('scroll', container.listener);
+      } else {
+        container.element.removeEventListener('scroll', container.listener);
+      }
+    });
+
+    this.containers = [];
+  }
+}

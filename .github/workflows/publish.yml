@@ -1,0 +1,104 @@
+name: Version & Publish Package
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  version_and_publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: 'https://registry.npmjs.org/'
+          scope: '@tracelog'
+
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install standard-version
+        run: npm install --save-dev standard-version
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet HEAD^ HEAD; then
+            echo "No changes detected, skipping version bump"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected, proceeding with version bump"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        if: steps.check_changes.outputs.skip == 'false'
+        id: bump_version
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "github-actions"
+          npx standard-version \
+            --release-as patch \
+            --releaseCommitMessageFormat "chore(release): {{currentTag}} [skip ci]" \
+            --no-verify \
+            --tag-prefix "v"
+          git push --follow-tags origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest tag
+        if: steps.check_changes.outputs.skip == 'false'
+        id: get_tag
+        run: |
+          TAG=$(git describe --tags --abbrev=0)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: steps.check_changes.outputs.skip == 'false'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
+          release_name: ${{ steps.get_tag.outputs.tag }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+
+      - name: Build the dist folder
+        run: npm run build-ugly
+
+      - name: Publish to NPM
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Clean up RC versions
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # Obtener la versión actual
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
+          # Limpiar versiones RC anteriores usando nuestro script
+          echo "🧹 Cleaning up RC versions..."
+          node scripts/rc-manager.js cleanup || echo "No RC versions to clean"
+          
+          # Actualizar el tag 'latest' para asegurar que apunte a la nueva versión
+          npm dist-tag add @tracelog/client@$CURRENT_VERSION latest
+          
+          echo "✅ Published version $CURRENT_VERSION as latest"
