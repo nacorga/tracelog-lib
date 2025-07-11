@@ -1,4 +1,4 @@
-import { UTM_PARAMS } from '@/constants';
+import { UTM_PARAMS, SCROLL_DEBOUNCE_TIME } from '@/constants';
 import { TracelogEventUtm } from '@/types';
 
 export interface NavigationData {
@@ -11,6 +11,7 @@ export interface NavigationData {
 export interface PageViewConfig {
   trackReferrer?: boolean;
   trackUTM?: boolean;
+  onSuppressNextScroll?: () => void;
 }
 
 // Helper functions moved to module scope for better performance
@@ -107,6 +108,11 @@ export class PageViewHandler {
     };
 
     this.onNavigationEvent(navigationData);
+
+    if (this.config.onSuppressNextScroll) {
+      this.config.onSuppressNextScroll();
+      setTimeout(() => {}, SCROLL_DEBOUNCE_TIME * 2);
+    }
   }
 
   private extractUTMParameters(): TracelogEventUtm | undefined {

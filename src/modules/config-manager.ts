@@ -173,7 +173,6 @@ export class ConfigManager {
   private applyConfigCorrections(config: TracelogConfig): TracelogConfig {
     const correctedConfig = { ...config };
 
-    // Apply default values for invalid configs
     if (
       typeof correctedConfig.samplingRate !== 'number' ||
       correctedConfig.samplingRate < 0 ||
@@ -187,18 +186,18 @@ export class ConfigManager {
     }
 
     if (typeof correctedConfig.sessionTimeout !== 'number' || correctedConfig.sessionTimeout < 30_000) {
-      correctedConfig.sessionTimeout = 15 * 60 * 1000; // 15 minutes
+      correctedConfig.sessionTimeout = 15 * 60 * 1000;
     }
 
     return correctedConfig;
   }
 
-  private async fetchConfigWithRetry(config: TracelogAppConfig): Promise<TracelogApiConfig | null> {
+  private async fetchConfigWithRetry(config: TracelogAppConfig): Promise<TracelogApiConfig | undefined> {
     const now = Date.now();
 
     // Rate limiting (5 seconds)
     if (now - this.lastFetchAttempt < 5000) {
-      return null;
+      return undefined;
     }
 
     this.lastFetchAttempt = now;
@@ -210,13 +209,13 @@ export class ConfigManager {
         severity: 'high',
       });
 
-      return null;
+      return undefined;
     }
 
     return this.fetchConfig(config);
   }
 
-  private async fetchConfig(_config: TracelogAppConfig): Promise<TracelogApiConfig | null> {
+  private async fetchConfig(_config: TracelogAppConfig): Promise<TracelogApiConfig | undefined> {
     try {
       const configUrl = this.getConfigUrl();
 
@@ -224,21 +223,22 @@ export class ConfigManager {
         throw new Error('Config URL is not valid or not allowed');
       }
 
-      // Validate URL before making request
-      if (!isValidUrl(configUrl, 'tracelog.io')) {
+      const allowedDomain = new URL(configUrl).hostname;
+
+      if (!isValidUrl(configUrl, allowedDomain)) {
         throw new Error('Config URL failed security validation');
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10_000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
       const response = await fetch(configUrl, {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': `TraceLog-Client/${packageJson.version}`,
         },
-        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
@@ -261,7 +261,6 @@ export class ConfigManager {
       const safeData = sanitizeApiConfig(data);
       const apiConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...(safeData as TracelogApiConfig) };
 
-      // Reset fetch attempts on success
       this.fetchAttempts = 0;
 
       return apiConfig;
@@ -282,41 +281,94 @@ export class ConfigManager {
     }
   }
 
-  private getConfigUrl(): string | null {
+  private getConfigUrl(): string | undefined {
     if (!this.id) {
-      return null;
+      return undefined;
     }
 
     try {
-      const configUrl = `https://${this.id}.tracelog.io/config`;
+      const urlParameters = new URLSearchParams(window.location.search);
+      const isQaMode = urlParameters.get('qaMode') === 'true';
+      const baseUrl = this.buildDynamicApiUrl(this.id);
 
-      // Additional validation
-      if (!isValidUrl(configUrl, 'tracelog.io')) {
-        return null;
+      if (!baseUrl) {
+        return undefined;
+      }
+
+      let configUrl = `${baseUrl}/config`;
+
+      if (isQaMode) {
+        configUrl += '?qaMode=true';
+      }
+
+      const allowedDomain = new URL(baseUrl).hostname;
+
+      if (!isValidUrl(configUrl, allowedDomain)) {
+        return undefined;
       }
 
       return configUrl;
     } catch {
-      return null;
+      return undefined;
     }
   }
 
-  getApiUrl(): string | null {
+  getApiUrl(): string | undefined {
     if (!this.id) {
-      return null;
+      return undefined;
     }
 
     try {
-      const apiUrl = `https://${this.id}.tracelog.io/api`;
+      const apiUrl = this.buildDynamicApiUrl(this.id);
 
-      // Additional validation
-      if (!isValidUrl(apiUrl, 'tracelog.io')) {
-        return null;
+      if (!apiUrl) {
+        return undefined;
+      }
+
+      const allowedDomain = new URL(apiUrl).hostname;
+
+      if (!isValidUrl(apiUrl, allowedDomain)) {
+        return undefined;
       }
 
       return apiUrl;
     } catch {
-      return null;
+      return undefined;
+    }
+  }
+
+  private buildDynamicApiUrl(id: string): string | undefined {
+    try {
+      const url = new URL(window.location.href);
+      const host = url.hostname;
+      const parts = host.split('.');
+
+      if (parts.length === 0) {
+        return undefined;
+      }
+
+      const tld = parts.slice(-2).join('.');
+      const multiTlds = new Set(['co.uk', 'com.au', 'co.jp', 'co.in', 'com.br', 'com.mx']);
+
+      const cleanDomain = multiTlds.has(tld) && parts.length >= 3 ? parts.slice(-3).join('.') : tld;
+      const apiUrl = `https://${id}.${cleanDomain}`;
+
+      if (!this.validateApiUrl(apiUrl)) {
+        return undefined;
+      }
+
+      return apiUrl;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private validateApiUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
     }
   }
 

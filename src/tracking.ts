@@ -85,7 +85,9 @@ export class Tracking {
       );
 
       // 6. Initialize UrlManager
-      this.urlManager = new UrlManager(mergedConfig, this.handlePageViewEvent.bind(this));
+      this.urlManager = new UrlManager(mergedConfig, this.handlePageViewEvent.bind(this), () =>
+        this.trackingManager?.suppressNextScrollEvent(),
+      );
 
       // 7. Initialize TrackingManager
       this.trackingManager = new TrackingManager(
@@ -168,7 +170,10 @@ export class Tracking {
     // Create cleanup function for visibility change
     const visibilityChangeCleanup = (): void => {
       if (document.visibilityState === 'hidden') {
+        this.handleInactivity(true);
         this.forceImmediateSend();
+      } else {
+        this.handleInactivity(false);
       }
     };
 
