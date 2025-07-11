@@ -18,11 +18,11 @@ export interface ScrollConfig {
 
 export class ScrollHandler {
   private containers: ScrollContainer[] = [];
-  private suppressNext: boolean = false;
+  private suppressNext = false;
 
   constructor(
-    private config: ScrollConfig,
-    private onScrollEvent: (data: TracelogEventScrollData) => void,
+    private readonly config: ScrollConfig,
+    private readonly onScrollEvent: (data: TracelogEventScrollData) => void,
   ) {}
 
   init(): void {
@@ -31,15 +31,15 @@ export class ScrollHandler {
 
     const elements: Array<Window | HTMLElement> = selectors
       .map((sel) => document.querySelector(sel))
-      .filter((el): el is HTMLElement => el instanceof HTMLElement);
+      .filter((element): element is HTMLElement => element instanceof HTMLElement);
 
     if (elements.length === 0) {
       elements.push(window);
     }
 
-    elements.forEach((element) => {
+    for (const element of elements) {
       this.setupScrollContainer(element);
-    });
+    }
   }
 
   suppressNextEvent(): void {
@@ -111,19 +111,19 @@ export class ScrollHandler {
   }
 
   private calculateScrollData(container: ScrollContainer): TracelogEventScrollData | null {
-    const { element } = container;
+    const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
     const viewportHeight = this.getViewportHeight(element);
     const scrollHeight = this.getScrollHeight(element);
 
-    const direction = scrollTop > container.lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
+    const direction = scrollTop > lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
     const depth =
       scrollHeight > viewportHeight
         ? Math.min(100, Math.max(0, Math.floor((scrollTop / (scrollHeight - viewportHeight)) * 100)))
         : 0;
 
     // Only update if scroll position changed significantly
-    const positionDelta = Math.abs(scrollTop - container.lastScrollPos);
+    const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < 10) {
       return null;
     }
@@ -146,7 +146,7 @@ export class ScrollHandler {
   }
 
   cleanup(): void {
-    this.containers.forEach((container) => {
+    for (const container of this.containers) {
       // Clear debounce timer
       if (container.debounceTimer) {
         clearTimeout(container.debounceTimer);
@@ -163,7 +163,7 @@ export class ScrollHandler {
       } else {
         container.element.removeEventListener('scroll', container.listener);
       }
-    });
+    }
 
     this.containers = [];
   }

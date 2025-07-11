@@ -9,12 +9,12 @@ import { sanitizeMetadata } from './sanitize';
 /**
  * Validates if an object contains only primitive fields
  */
-export const isOnlyPrimitiveFields = (obj: Record<string, any>): boolean => {
-  if (typeof obj !== 'object' || obj === null) {
+export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
+  if (typeof object !== 'object' || object === null) {
     return false;
   }
 
-  for (const value of Object.values(obj)) {
+  for (const value of Object.values(object)) {
     if (value === null || value === undefined) {
       continue;
     }
@@ -88,11 +88,12 @@ export const isValidEventName = (eventName: string): { valid: boolean; error?: s
  * Validates metadata with enhanced security
  */
 export const isValidMetadata = (
-  evName: string,
+  eventName: string,
   metadata: Record<string, any>,
   type?: string,
 ): { valid: boolean; error?: string; sanitizedMetadata?: Record<string, any> } => {
-  const intro = type && type === 'sendCustomEvent' ? `${type} "${evName}" metadata error` : `${evName} metadata error`;
+  const intro =
+    type && type === 'sendCustomEvent' ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
 
   // Sanitize metadata first
   const sanitizedMetadata = sanitizeMetadata(metadata);
@@ -108,7 +109,7 @@ export const isValidMetadata = (
   let jsonString: string;
   try {
     jsonString = JSON.stringify(sanitizedMetadata);
-  } catch (e) {
+  } catch {
     return {
       valid: false,
       error: `${intro}: object contains circular references or cannot be serialized.`,

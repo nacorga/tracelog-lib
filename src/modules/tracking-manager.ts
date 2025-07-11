@@ -4,13 +4,13 @@ import { ScrollHandler, ScrollConfig } from '../events/scroll-handler';
 import { InactivityHandler, InactivityConfig, InactivityData } from '../events/inactivity-handler';
 
 export class TrackingManager {
-  private scrollHandler: ScrollHandler;
-  private inactivityHandler: InactivityHandler;
+  private readonly scrollHandler: ScrollHandler;
+  private readonly inactivityHandler: InactivityHandler;
 
   constructor(
-    private config: TracelogConfig,
-    private handleEvent: (event: any) => void,
-    private handleInactivity: (isInactive: boolean) => void,
+    private readonly config: TracelogConfig,
+    private readonly handleEvent: (event: any) => void,
+    private readonly handleInactivity: (isInactive: boolean) => void,
   ) {
     // Initialize scroll handler
     const scrollConfig: ScrollConfig = {
@@ -26,7 +26,7 @@ export class TrackingManager {
 
     // Initialize inactivity handler
     const inactivityConfig: InactivityConfig = {
-      timeout: this.config.sessionTimeout || 300000, // Default 5 minutes
+      timeout: this.config.sessionTimeout || 300_000, // Default 5 minutes
     };
 
     this.inactivityHandler = new InactivityHandler(inactivityConfig, this.handleInactivityChange.bind(this));
@@ -54,13 +54,13 @@ export class TrackingManager {
       // Handle custom tracking attributes
       if (trackingElement) {
         const trackingData = ClickHandler.extractTrackingData(trackingElement);
-        const attrData = ClickHandler.createCustomEventData(trackingData);
+        const attributeData = ClickHandler.createCustomEventData(trackingData);
 
         this.handleEvent({
           evType: EventType.CUSTOM,
           customEvent: {
-            name: attrData.name,
-            ...(attrData.value && { metadata: { value: attrData.value } }),
+            name: attributeData.name,
+            ...(attributeData.value && { metadata: { value: attributeData.value } }),
           },
         });
       }

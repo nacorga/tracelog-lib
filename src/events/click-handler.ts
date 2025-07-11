@@ -4,8 +4,8 @@ import { TracelogEventClickData } from '../types';
 export interface ClickCoordinates {
   x: number;
   y: number;
-  relX: number;
-  relY: number;
+  relativeX: number;
+  relativeY: number;
 }
 
 export interface TrackingElementData {
@@ -28,18 +28,18 @@ const INTERACTIVE_SELECTORS = [
   '[id]',
 ] as const;
 
-export class ClickHandler {
-  static findTrackingElement(element: HTMLElement): HTMLElement | null {
+export const ClickHandler = {
+  findTrackingElement(element: HTMLElement): HTMLElement | undefined {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-name`)) {
       return element;
     }
 
     const closest = element.closest(`[${HTML_DATA_ATTR_PREFIX}-name]`) as HTMLElement;
 
-    return closest || null;
-  }
+    return closest || undefined;
+  },
 
-  static getRelevantClickElement(element: HTMLElement): HTMLElement {
+  getRelevantClickElement(element: HTMLElement): HTMLElement {
     if (INTERACTIVE_SELECTORS.some((selector) => element.matches(selector))) {
       return element;
     }
@@ -52,21 +52,21 @@ export class ClickHandler {
     }
 
     return element;
-  }
+  },
 
-  static calculateClickCoordinates(event: MouseEvent, element: HTMLElement): ClickCoordinates {
+  calculateClickCoordinates(event: MouseEvent, element: HTMLElement): ClickCoordinates {
     const rect = element.getBoundingClientRect();
     const x = event.clientX;
     const y = event.clientY;
 
     // Ensure coordinates are within valid bounds
-    const relX = rect.width > 0 ? Math.max(0, Math.min(1, Number(((x - rect.left) / rect.width).toFixed(3)))) : 0;
-    const relY = rect.height > 0 ? Math.max(0, Math.min(1, Number(((y - rect.top) / rect.height).toFixed(3)))) : 0;
+    const relativeX = rect.width > 0 ? Math.max(0, Math.min(1, Number(((x - rect.left) / rect.width).toFixed(3)))) : 0;
+    const relativeY = rect.height > 0 ? Math.max(0, Math.min(1, Number(((y - rect.top) / rect.height).toFixed(3)))) : 0;
 
-    return { x, y, relX, relY };
-  }
+    return { x, y, relativeX, relativeY };
+  },
 
-  static extractTrackingData(trackingElement: HTMLElement): TrackingElementData {
+  extractTrackingData(trackingElement: HTMLElement): TrackingElementData {
     const name = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
     const value = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-value`);
 
@@ -80,11 +80,11 @@ export class ClickHandler {
       name,
       ...(value && { value }),
     };
-  }
+  },
 
-  static getRelevantText(clickedElement: HTMLElement, relevantElement: HTMLElement): string {
-    const clickedText = clickedElement.innerText?.trim() || '';
-    const relevantText = relevantElement.innerText?.trim() || '';
+  getRelevantText(clickedElement: HTMLElement, relevantElement: HTMLElement): string {
+    const clickedText = clickedElement.textContent?.trim() || '';
+    const relevantText = relevantElement.textContent?.trim() || '';
 
     // If clicked element has text and relevant doesn't, use clicked text
     if (clickedText && !relevantText) {
@@ -98,9 +98,9 @@ export class ClickHandler {
 
     // Default to relevant element text
     return relevantText;
-  }
+  },
 
-  static extractElementAttributes(element: HTMLElement): Record<string, string> {
+  extractElementAttributes(element: HTMLElement): Record<string, string> {
     // element.attributes always exists for HTML elements, but check length for early return
     if (element.attributes.length === 0) {
       return {};
@@ -110,22 +110,22 @@ export class ClickHandler {
     const commonAttributes = ['id', 'class', 'data-testid', 'aria-label', 'title', 'href', 'type', 'name'];
     const result: Record<string, string> = {};
 
-    for (const attrName of commonAttributes) {
-      const value = element.getAttribute(attrName);
+    for (const attributeName of commonAttributes) {
+      const value = element.getAttribute(attributeName);
       if (value) {
-        result[attrName] = value;
+        result[attributeName] = value;
       }
     }
 
     return result;
-  }
+  },
 
-  static generateClickData(
+  generateClickData(
     clickedElement: HTMLElement,
     relevantElement: HTMLElement,
     coordinates: ClickCoordinates,
   ): TracelogEventClickData {
-    const { x, y, relX, relY } = coordinates;
+    const { x, y, relativeX, relativeY } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
     const attributes = this.extractElementAttributes(relevantElement);
 
@@ -138,8 +138,8 @@ export class ClickHandler {
     return {
       x,
       y,
-      relativeX: relX,
-      relativeY: relY,
+      relativeX,
+      relativeY,
       elementTag: relevantElement.tagName.toLowerCase(),
       ...(relevantElement.id && { elementId: relevantElement.id }),
       ...(relevantElement.className && { elementClass: relevantElement.className }),
@@ -151,12 +151,12 @@ export class ClickHandler {
       ...(ariaLabel && { elementAriaLabel: ariaLabel }),
       ...(Object.keys(attributes).length > 0 && { elementDataAttributes: attributes }),
     };
-  }
+  },
 
-  static createCustomEventData(trackingData: TrackingElementData): { name: string; value?: string } {
+  createCustomEventData(trackingData: TrackingElementData): { name: string; value?: string } {
     return {
       name: trackingData.name,
       ...(trackingData.value && { value: trackingData.value }),
     };
-  }
-}
+  },
+};

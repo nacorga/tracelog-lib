@@ -10,16 +10,16 @@ export interface InactivityData {
 }
 
 export class InactivityHandler {
-  private isInactive: boolean = false;
+  private isInactive = false;
   private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
   private lastActivityTime: number = Date.now();
   private readonly defaultEvents = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart', 'touchmove'];
-  private eventListeners: Map<string, EventListener> = new Map();
+  private readonly eventListeners: Map<string, EventListener> = new Map();
   private eventsToTrack: string[] = [];
 
   constructor(
-    private config: InactivityConfig,
-    private onInactivityChange: (data: InactivityData) => void,
+    private readonly config: InactivityConfig,
+    private readonly onInactivityChange: (data: InactivityData) => void,
   ) {}
 
   init(): void {
@@ -59,13 +59,13 @@ export class InactivityHandler {
 
     const handleActivity = this.handleUserActivity.bind(this);
 
-    this.eventsToTrack.forEach((event) => {
+    for (const event of this.eventsToTrack) {
       this.eventListeners.set(event, handleActivity);
       window.addEventListener(event, handleActivity, {
         passive: true,
         capture: true,
       });
-    });
+    }
   }
 
   private handleUserActivity(): void {
@@ -114,11 +114,11 @@ export class InactivityHandler {
     }
 
     // Remove all event listeners
-    this.eventListeners.forEach((listener, event) => {
+    for (const [event, listener] of this.eventListeners.entries()) {
       window.removeEventListener(event, listener, {
         capture: true,
       });
-    });
+    }
 
     // Clear collections
     this.eventListeners.clear();
@@ -126,21 +126,21 @@ export class InactivityHandler {
   }
 
   // Static utility methods for common inactivity scenarios
-  static createStandardConfig(timeoutMinutes: number = 5): InactivityConfig {
+  static createStandardConfig(timeoutMinutes = 5): InactivityConfig {
     return {
       timeout: timeoutMinutes * 60 * 1000, // Convert minutes to milliseconds
       events: ['mousemove', 'keydown', 'scroll', 'click', 'touchstart', 'touchmove'],
     };
   }
 
-  static createMobileOptimizedConfig(timeoutMinutes: number = 3): InactivityConfig {
+  static createMobileOptimizedConfig(timeoutMinutes = 3): InactivityConfig {
     return {
       timeout: timeoutMinutes * 60 * 1000,
       events: ['touchstart', 'touchmove', 'touchend', 'scroll', 'click', 'keydown'],
     };
   }
 
-  static createMinimalConfig(timeoutMinutes: number = 10): InactivityConfig {
+  static createMinimalConfig(timeoutMinutes = 10): InactivityConfig {
     return {
       timeout: timeoutMinutes * 60 * 1000,
       events: ['click', 'keydown'], // Only essential events

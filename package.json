@@ -23,6 +23,7 @@
     "build-ugly": "npm run build:all && find dist -name '*.js' -exec npx uglify-js {} -o {} --compress --mangle --toplevel \\;",
     "build-ugly:win": "npm run build:all && Get-ChildItem -Path dist -Recurse -Filter *.js | ForEach-Object { npx uglify-js $_.FullName -o $_.FullName --compress --mangle --toplevel }",
     "release": "standard-version",
+    "lint": "npx eslint src/**/*.ts",
     "format": "prettier --config ./.prettierrc --write \"src/**/*.ts\"",
     "rc:list": "node scripts/rc-manager.js list",
     "rc:cleanup": "node scripts/rc-manager.js cleanup",
@@ -30,9 +31,16 @@
     "rc:all": "node scripts/rc-manager.js all"
   },
   "devDependencies": {
+    "@eslint/js": "^9.30.1",
+    "@typescript-eslint/eslint-plugin": "^8.36.0",
+    "@typescript-eslint/parser": "^8.36.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-unicorn": "^48.0.1",
+    "globals": "^16.3.0",
     "prettier": "^3.4.2",
     "standard-version": "^9.5.0",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.36.0",
     "uglify-js": "^3.19.3"
   }
 }

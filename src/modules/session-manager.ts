@@ -8,14 +8,14 @@ import { SessionHandler, SessionData, SessionEndTrigger } from '../events/sessio
 export class SessionManager {
   private userId: string | undefined;
   private tempUserId: string | null = null;
-  private device: DeviceType | undefined;
+  private readonly device: DeviceType | undefined;
   private globalMetadata: Record<string, MetadataType> | undefined;
-  private sessionHandler: SessionHandler;
+  private readonly sessionHandler: SessionHandler;
 
   constructor(
-    private config: TracelogConfig,
-    private sendSessionEvent: (eventType: EventType, trigger?: string) => void,
-    private isQaMode: () => boolean,
+    private readonly config: TracelogConfig,
+    private readonly sendSessionEvent: (eventType: EventType, trigger?: string) => void,
+    private readonly isQaMode: () => boolean,
   ) {
     this.userId = this.getUserId();
     this.device = getDeviceType();
@@ -87,7 +87,7 @@ export class SessionManager {
     return false; // Simplified for now
   }
 
-  setPageUnloading(isUnloading: boolean): void {
+  setPageUnloading(_isUnloading: boolean): void {
     // Simplified for now
   }
 
@@ -100,17 +100,21 @@ export class SessionManager {
     let sessionTrigger: SessionEndTrigger = 'manual';
 
     switch (trigger) {
-      case 'page_unload':
+      case 'page_unload': {
         sessionTrigger = 'page_unload';
         break;
-      case 'unexpected_recovery':
+      }
+      case 'unexpected_recovery': {
         sessionTrigger = 'unexpected_recovery';
         break;
-      case 'timeout':
+      }
+      case 'timeout': {
         sessionTrigger = 'timeout';
         break;
-      default:
+      }
+      default: {
         sessionTrigger = 'manual';
+      }
     }
 
     this.sessionHandler.endSession(sessionTrigger);
@@ -135,9 +139,9 @@ export class SessionManager {
     }
 
     const userId = this.getUserId();
-    const hex = userId.replace(/-/g, '');
+    const hex = userId.replaceAll('-', '');
     const last6 = hex.slice(-6);
-    const hash = parseInt(last6, 16) / 0xffffff;
+    const hash = Number.parseInt(last6, 16) / 0xff_ff_ff;
 
     return hash < rate;
   }
@@ -160,7 +164,7 @@ export class SessionManager {
   }
 
   private validateGlobalMetadata(): void {
-    if (Object.keys(this.config?.globalMetadata || {}).length) {
+    if (Object.keys(this.config?.globalMetadata || {}).length > 0) {
       const { valid, error } = isValidMetadata('globalMetadata', this.config!.globalMetadata || {});
 
       if (valid) {

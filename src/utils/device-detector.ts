@@ -52,7 +52,7 @@ export const getDeviceType = (): DeviceType => {
     }
 
     return DeviceType.Desktop;
-  } catch (err) {
+  } catch {
     return DeviceType.Unknown;
   }
 };

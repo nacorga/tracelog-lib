@@ -1,5 +1,3 @@
-import { LSKey } from '../constants';
-
 export interface SessionData {
   sessionId: string;
   startTime: number;
@@ -15,8 +13,8 @@ interface HeartbeatData {
 }
 
 interface StorageManager {
-  set(key: string, value: any): boolean;
-  get(key: string): any;
+  set(key: string, value: unknown): boolean;
+  get(key: string): unknown;
   remove(key: string): boolean;
   isAvailable(): boolean;
   clear(): void;
@@ -24,8 +22,8 @@ interface StorageManager {
 }
 
 class SafeLocalStorage implements StorageManager {
-  private available: boolean;
-  private memoryFallback: Map<string, string> = new Map();
+  private readonly available: boolean;
+  private readonly memoryFallback: Map<string, string> = new Map();
 
   constructor() {
     this.available = this.checkAvailability();
@@ -37,13 +35,13 @@ class SafeLocalStorage implements StorageManager {
       window.localStorage.setItem(testKey, 'test');
       window.localStorage.removeItem(testKey);
       return true;
-    } catch (error) {
+    } catch {
       console.warn('[TraceLog] localStorage not available, using memory fallback');
       return false;
     }
   }
 
-  set(key: string, value: any): boolean {
+  set(key: string, value: unknown): boolean {
     try {
       const serialized = JSON.stringify(value);
 
@@ -63,46 +61,40 @@ class SafeLocalStorage implements StorageManager {
         this.memoryFallback.set(key, serialized);
         return true;
       }
-    } catch (error) {
+    } catch {
       // Storage quota exceeded or other error
-      console.warn('[TraceLog] localStorage write failed:', error);
+      console.warn('[TraceLog] localStorage write failed');
 
-      if (error instanceof DOMException && error.code === 22) {
-        // Storage quota exceeded
+      if (this.available) {
         this.cleanup();
         try {
-          if (this.available) {
-            window.localStorage.setItem(key, JSON.stringify(value));
-          } else {
-            this.memoryFallback.set(key, JSON.stringify(value));
-          }
-          return true;
-        } catch (retryError) {
+          window.localStorage.setItem(key, JSON.stringify(value));
+        } catch {
           this.memoryFallback.set(key, JSON.stringify(value));
-          return true;
         }
+      } else {
+        this.memoryFallback.set(key, JSON.stringify(value));
       }
-
-      return false;
+      return true;
     }
   }
 
-  get(key: string): any {
+  get(key: string): unknown {
     try {
-      let serialized: string | null = null;
+      let serialized: string | undefined = undefined;
 
       if (this.available) {
-        serialized = window.localStorage.getItem(key);
+        serialized = window.localStorage.getItem(key) ?? undefined;
       }
 
       if (!serialized) {
-        serialized = this.memoryFallback.get(key) || null;
+        serialized = this.memoryFallback.get(key) ?? undefined;
       }
 
-      return serialized ? JSON.parse(serialized) : null;
-    } catch (error) {
-      console.warn('[TraceLog] localStorage read failed:', error);
-      return null;
+      return serialized ? JSON.parse(serialized) : undefined;
+    } catch {
+      console.warn('[TraceLog] localStorage read failed');
+      return undefined;
     }
   }
 
@@ -113,8 +105,8 @@ class SafeLocalStorage implements StorageManager {
       }
       this.memoryFallback.delete(key);
       return true;
-    } catch (error) {
-      console.warn('[TraceLog] localStorage remove failed:', error);
+    } catch {
+      console.warn('[TraceLog] localStorage remove failed');
       return false;
     }
   }
@@ -128,15 +120,15 @@ class SafeLocalStorage implements StorageManager {
       if (this.available) {
         // Only clear TraceLog keys
         const keys = Object.keys(window.localStorage);
-        keys.forEach((key) => {
+        for (const key of keys) {
           if (key.startsWith('tracelog_') || key.includes('_critical_events') || key.includes('_heartbeat')) {
             window.localStorage.removeItem(key);
           }
-        });
+        }
       }
       this.memoryFallback.clear();
-    } catch (error) {
-      console.warn('[TraceLog] localStorage clear failed:', error);
+    } catch {
+      console.warn('[TraceLog] localStorage clear failed');
     }
   }
 
@@ -153,11 +145,11 @@ class SafeLocalStorage implements StorageManager {
       }
 
       let size = 0;
-      this.memoryFallback.forEach((value) => {
+      for (const value of this.memoryFallback.values()) {
         size += value.length;
-      });
+      }
       return size;
-    } catch (error) {
+    } catch {
       return 0;
     }
   }
@@ -170,36 +162,36 @@ class SafeLocalStorage implements StorageManager {
       const cutoffTime = Date.now() - 24 * 60 * 60 * 1000;
       const keys = Object.keys(window.localStorage);
 
-      keys.forEach((key) => {
+      for (const key of keys) {
         if (key.includes('_heartbeat') || key.includes('_critical_events')) {
           try {
             const data = JSON.parse(window.localStorage.getItem(key) || '{}');
             if (data.timestamp && data.timestamp < cutoffTime) {
               window.localStorage.removeItem(key);
             }
-          } catch (error) {
+          } catch {
             // Invalid data, remove it
             window.localStorage.removeItem(key);
           }
         }
-      });
-    } catch (error) {
-      console.warn('[TraceLog] localStorage cleanup failed:', error);
+      }
+    } catch {
+      console.warn('[TraceLog] localStorage cleanup failed');
     }
   }
 }
 
 export class SessionHandler {
-  private userId: string;
-  private sessionData: SessionData | null = null;
-  private heartbeatInterval: number | null = null;
-  private storage: StorageManager;
-  private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
+  private readonly userId: string;
+  private sessionData: SessionData | undefined = undefined;
+  private heartbeatInterval: number | undefined = undefined;
+  private readonly storage: StorageManager;
+  private readonly HEARTBEAT_INTERVAL = 30_000; // 30 seconds
 
   constructor(
     userId: string,
-    private onSessionChange: (data: SessionData) => void,
-    private isQaMode: () => boolean,
+    private readonly onSessionChange: (data: SessionData) => void,
+    private readonly isQaMode: () => boolean,
   ) {
     this.userId = userId;
     this.storage = new SafeLocalStorage();
@@ -225,8 +217,8 @@ export class SessionHandler {
           console.log('[TraceLog] Performed storage cleanup due to size limit');
         }
       }
-    } catch (error) {
-      console.warn('[TraceLog] Maintenance cleanup failed:', error);
+    } catch {
+      console.warn('[TraceLog] Maintenance cleanup failed');
     }
   }
 
@@ -265,16 +257,16 @@ export class SessionHandler {
         console.log('[TraceLog] Session ended:', this.sessionData.sessionId, 'trigger:', trigger);
       }
 
-      this.sessionData = null;
+      this.sessionData = undefined;
     }
   }
 
-  getCurrentSession(): SessionData | null {
+  getCurrentSession(): SessionData | undefined {
     return this.sessionData;
   }
 
   private generateSessionId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   }
 
   private startHeartbeat(): void {
@@ -287,7 +279,7 @@ export class SessionHandler {
   private stopHeartbeat(): void {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
+      this.heartbeatInterval = undefined;
     }
     this.clearHeartbeat();
   }
@@ -309,13 +301,13 @@ export class SessionHandler {
 
   checkForUnexpectedSessionEnd(): boolean {
     try {
-      const heartbeatData = this.storage.get(`${this.userId}_heartbeat`);
+      const heartbeatData = this.storage.get(`${this.userId}_heartbeat`) as HeartbeatData | undefined;
 
       if (heartbeatData) {
         const timeSinceLastHeartbeat = Date.now() - heartbeatData.timestamp;
 
         // If more than 2 minutes since last heartbeat, session likely ended unexpectedly
-        if (timeSinceLastHeartbeat > 120000) {
+        if (timeSinceLastHeartbeat > 120_000) {
           this.clearHeartbeat();
 
           if (this.isQaMode()) {
@@ -325,9 +317,9 @@ export class SessionHandler {
           return true;
         }
       }
-    } catch (error) {
+    } catch {
       // Ignore storage errors
-      console.warn('[TraceLog] Error checking for unexpected session end:', error);
+      console.warn('[TraceLog] Error checking for unexpected session end');
     }
 
     return false;
@@ -335,6 +327,6 @@ export class SessionHandler {
 
   cleanup(): void {
     this.stopHeartbeat();
-    this.sessionData = null;
+    this.sessionData = undefined;
   }
 }

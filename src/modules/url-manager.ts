@@ -2,11 +2,11 @@ import { TracelogConfig } from '../types';
 import { PageViewHandler, NavigationData, PageViewConfig } from '../events/pageview-handler';
 
 export class UrlManager {
-  private pageViewHandler: PageViewHandler;
+  private readonly pageViewHandler: PageViewHandler;
 
   constructor(
-    private config: TracelogConfig,
-    private sendPageViewEvent: (fromUrl: string, toUrl: string, referrer?: string, utm?: any) => void,
+    private readonly config: TracelogConfig,
+    private readonly sendPageViewEvent: (fromUrl: string, toUrl: string, referrer?: string, utm?: any) => void,
   ) {
     const pageViewConfig: PageViewConfig = {
       trackReferrer: true,

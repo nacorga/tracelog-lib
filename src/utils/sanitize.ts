@@ -25,23 +25,23 @@ export const sanitizeString = (value: string): string => {
 
   // Limit string length
   if (value.length > MAX_STRING_LENGTH) {
-    value = value.substring(0, MAX_STRING_LENGTH);
+    value = value.slice(0, Math.max(0, MAX_STRING_LENGTH));
   }
 
   // Remove potential XSS patterns
   let sanitized = value;
-  XSS_PATTERNS.forEach((pattern) => {
+  for (const pattern of XSS_PATTERNS) {
     sanitized = sanitized.replace(pattern, '');
-  });
+  }
 
   // Basic HTML entity encoding for critical characters
   sanitized = sanitized
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#x27;')
+    .replaceAll('/', '&#x2F;');
 
   return sanitized.trim();
 };
@@ -49,7 +49,7 @@ export const sanitizeString = (value: string): string => {
 /**
  * Sanitizes any value recursively with depth protection
  */
-const sanitizeValue = (value: unknown, depth: number = 0): unknown => {
+const sanitizeValue = (value: unknown, depth = 0): unknown => {
   // Prevent infinite recursion
   if (depth > MAX_OBJECT_DEPTH) {
     return null;
@@ -65,7 +65,7 @@ const sanitizeValue = (value: unknown, depth: number = 0): unknown => {
 
   if (typeof value === 'number') {
     // Validate number ranges
-    if (!isFinite(value) || value < -Number.MAX_SAFE_INTEGER || value > Number.MAX_SAFE_INTEGER) {
+    if (!Number.isFinite(value) || value < -Number.MAX_SAFE_INTEGER || value > Number.MAX_SAFE_INTEGER) {
       return 0;
     }
     return value;
@@ -82,23 +82,23 @@ const sanitizeValue = (value: unknown, depth: number = 0): unknown => {
   }
 
   if (typeof value === 'object') {
-    const sanitizedObj: Record<string, unknown> = {};
+    const sanitizedObject: Record<string, unknown> = {};
     const entries = Object.entries(value);
 
     // Limit object properties
     const limitedEntries = entries.slice(0, 20);
 
-    for (const [key, val] of limitedEntries) {
+    for (const [key, value_] of limitedEntries) {
       const sanitizedKey = sanitizeString(key);
       if (sanitizedKey) {
-        const sanitizedVal = sanitizeValue(val, depth + 1);
-        if (sanitizedVal !== null) {
-          sanitizedObj[sanitizedKey] = sanitizedVal;
+        const sanitizedValue = sanitizeValue(value_, depth + 1);
+        if (sanitizedValue !== null) {
+          sanitizedObject[sanitizedKey] = sanitizedValue;
         }
       }
     }
 
-    return sanitizedObj;
+    return sanitizedObject;
   }
 
   return null;
@@ -168,16 +168,16 @@ export const sanitizeUrl = (url: string): string => {
 
   try {
     // Basic URL validation
-    const urlObj = new URL(url);
+    const urlObject = new URL(url);
 
     // Only allow http/https protocols
-    if (!['http:', 'https:'].includes(urlObj.protocol)) {
+    if (!['http:', 'https:'].includes(urlObject.protocol)) {
       return '';
     }
 
     // Sanitize the URL string
-    return sanitizeString(urlObj.href);
-  } catch (error) {
+    return sanitizeString(urlObject.href);
+  } catch {
     // If URL parsing fails, sanitize as string
     return sanitizeString(url);
   }

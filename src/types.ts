@@ -32,8 +32,8 @@ export function isValidMetadataRecord(value: unknown): value is Record<string, M
     return false;
   }
 
-  const obj = value as Record<string, unknown>;
-  return Object.values(obj).every((val) => isMetadataType(val));
+  const object = value as Record<string, unknown>;
+  return Object.values(object).every((value_) => isMetadataType(value_));
 }
 
 export function isEventType(value: unknown): value is EventType {
@@ -80,7 +80,7 @@ export function createURL(url: string): URL {
 
   try {
     new URL(url);
-  } catch (error) {
+  } catch {
     throw new Error('Invalid URL format');
   }
 
@@ -325,7 +325,7 @@ export function validateString(value: unknown, fieldName: string): string {
 }
 
 export function validateNumber(value: unknown, fieldName: string): number {
-  if (typeof value !== 'number' || !isFinite(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new ValidationError(`${fieldName} must be a valid number`, fieldName, value);
   }
   return value;
@@ -347,7 +347,7 @@ export function validateArray<T>(value: unknown, fieldName: string, itemValidato
     return value.map((item, index) => {
       try {
         return itemValidator(item);
-      } catch (error) {
+      } catch {
         throw new ValidationError(`${fieldName}[${index}] is invalid`, `${fieldName}[${index}]`, item);
       }
     });
@@ -356,7 +356,7 @@ export function validateArray<T>(value: unknown, fieldName: string, itemValidato
   return value as T[];
 }
 
-export function validateObject<T>(value: unknown, fieldName: string, validator: (obj: unknown) => T): T {
+export function validateObject<T>(value: unknown, fieldName: string, validator: (object: unknown) => T): T {
   if (typeof value !== 'object' || value === null) {
     throw new ValidationError(`${fieldName} must be an object`, fieldName, value);
   }
@@ -365,33 +365,33 @@ export function validateObject<T>(value: unknown, fieldName: string, validator: 
 }
 
 // Safe type conversion utilities
-export function safeParseInt(value: unknown, defaultValue: number = 0): number {
+export function safeParseInt(value: unknown, defaultValue = 0): number {
   if (typeof value === 'number') {
     return Math.floor(value);
   }
 
   if (typeof value === 'string') {
-    const parsed = parseInt(value, 10);
-    return isNaN(parsed) ? defaultValue : parsed;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? defaultValue : parsed;
   }
 
   return defaultValue;
 }
 
-export function safeParseFloat(value: unknown, defaultValue: number = 0): number {
+export function safeParseFloat(value: unknown, defaultValue = 0): number {
   if (typeof value === 'number') {
     return value;
   }
 
   if (typeof value === 'string') {
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? defaultValue : parsed;
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? defaultValue : parsed;
   }
 
   return defaultValue;
 }
 
-export function safeParseBoolean(value: unknown, defaultValue: boolean = false): boolean {
+export function safeParseBoolean(value: unknown, defaultValue = false): boolean {
   if (typeof value === 'boolean') {
     return value;
   }

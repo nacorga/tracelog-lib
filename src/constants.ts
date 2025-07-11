@@ -14,11 +14,11 @@ export enum DeviceType {
 export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 
 // Performance optimized constants
-export const EVENT_SENT_INTERVAL = 5_000; // Reduced from 10s to 5s for better responsiveness
+export const EVENT_SENT_INTERVAL = 5000; // Reduced from 10s to 5s for better responsiveness
 export const MAX_EVENTS_QUEUE_LENGTH = 500; // Reduced from 1000 to 500 for better memory usage
 export const SCROLL_DEBOUNCE_TIME = 100; // Reduced from 250ms to 100ms for better responsiveness
 export const CLICK_DEBOUNCE_TIME = 50; // Added for click events
-export const RETRY_BACKOFF_INITIAL = 1_000;
+export const RETRY_BACKOFF_INITIAL = 1000;
 export const RETRY_BACKOFF_MAX = 30_000; // Reduced from 60s to 30s for faster recovery
 
 // Security and validation constants

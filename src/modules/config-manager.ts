@@ -14,14 +14,14 @@ interface ConfigLoadResult {
 }
 
 export class ConfigManager {
-  private id: string = '';
-  private config: TracelogConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
-  private errorReporter: ErrorReporter;
-  private lastFetchAttempt: number = 0;
-  private fetchAttempts: number = 0;
-  private maxFetchAttempts: number = 3;
+  private id = '';
+  private readonly config: TracelogConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
+  private readonly errorReporter: ErrorReporter;
+  private lastFetchAttempt = 0;
+  private fetchAttempts = 0;
+  private readonly maxFetchAttempts = 3;
 
-  constructor(private catchError: (error: { message: string; api_key?: string }) => Promise<void>) {
+  constructor(private readonly catchError: (error: { message: string; api_key?: string }) => Promise<void>) {
     this.errorReporter = {
       reportError: (error) => {
         this.catchError({
@@ -107,7 +107,7 @@ export class ConfigManager {
     if (config.sessionTimeout !== undefined) {
       if (typeof config.sessionTimeout !== 'number') {
         errors.push('sessionTimeout must be a number');
-      } else if (config.sessionTimeout < 30000) {
+      } else if (config.sessionTimeout < 30_000) {
         errors.push('sessionTimeout must be at least 30 seconds (30000ms)');
       } else if (config.sessionTimeout > 24 * 60 * 60 * 1000) {
         warnings.push('sessionTimeout is very long (>24 hours), consider reducing it');
@@ -120,7 +120,7 @@ export class ConfigManager {
         errors.push('globalMetadata must be an object');
       } else {
         const metadataSize = JSON.stringify(config.globalMetadata).length;
-        if (metadataSize > 10240) {
+        if (metadataSize > 10_240) {
           // 10KB
           errors.push('globalMetadata is too large (max 10KB)');
         }
@@ -149,20 +149,20 @@ export class ConfigManager {
 
     // Excluded URL paths validation
     if (config.excludedUrlPaths !== undefined) {
-      if (!Array.isArray(config.excludedUrlPaths)) {
-        errors.push('excludedUrlPaths must be an array');
-      } else {
-        config.excludedUrlPaths.forEach((path, index) => {
-          if (typeof path !== 'string') {
-            errors.push(`excludedUrlPaths[${index}] must be a string`);
-          } else {
+      if (Array.isArray(config.excludedUrlPaths)) {
+        for (const [index, path] of config.excludedUrlPaths.entries()) {
+          if (typeof path === 'string') {
             try {
               new RegExp(path);
-            } catch (regexError) {
+            } catch {
               errors.push(`excludedUrlPaths[${index}] is not a valid regex pattern`);
             }
+          } else {
+            errors.push(`excludedUrlPaths[${index}] must be a string`);
           }
-        });
+        }
+      } else {
+        errors.push('excludedUrlPaths must be an array');
       }
     }
 
@@ -185,7 +185,7 @@ export class ConfigManager {
       correctedConfig.excludedUrlPaths = [];
     }
 
-    if (typeof correctedConfig.sessionTimeout !== 'number' || correctedConfig.sessionTimeout < 30000) {
+    if (typeof correctedConfig.sessionTimeout !== 'number' || correctedConfig.sessionTimeout < 30_000) {
       correctedConfig.sessionTimeout = 15 * 60 * 1000; // 15 minutes
     }
 
@@ -215,7 +215,7 @@ export class ConfigManager {
     return this.fetchConfig(config);
   }
 
-  private async fetchConfig(config: TracelogAppConfig): Promise<TracelogApiConfig | null> {
+  private async fetchConfig(_config: TracelogAppConfig): Promise<TracelogApiConfig | null> {
     try {
       const configUrl = this.getConfigUrl();
 
@@ -229,7 +229,7 @@ export class ConfigManager {
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10_000); // 10 second timeout
 
       const response = await fetch(configUrl, {
         method: 'GET',
@@ -249,7 +249,7 @@ export class ConfigManager {
       const json = await response.json();
       const { statusCode, data } = json;
 
-      if (typeof data === 'undefined' || data === null || typeof statusCode !== 'number') {
+      if (data === undefined || data === null || typeof statusCode !== 'number') {
         throw new Error('Config API response missing required properties');
       }
 
@@ -258,7 +258,7 @@ export class ConfigManager {
       }
 
       const safeData = sanitizeApiConfig(data);
-      const apiConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...((safeData as TracelogApiConfig) || {}) };
+      const apiConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...(safeData as TracelogApiConfig) };
 
       // Reset fetch attempts on success
       this.fetchAttempts = 0;
@@ -295,7 +295,7 @@ export class ConfigManager {
       }
 
       return configUrl;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -314,7 +314,7 @@ export class ConfigManager {
       }
 
       return apiUrl;
-    } catch (error) {
+    } catch {
       return null;
     }
   }

@@ -13,23 +13,23 @@ import { isEventValid } from '../utils/event-check';
 
 export class EventManager {
   private eventsQueue: TracelogEvent[] = [];
-  private hasInitEventsQueueInterval: boolean = false;
+  private hasInitEventsQueueInterval = false;
   private eventsQueueIntervalId: number | null = null;
   private lastEvent: TracelogEvent | null = null;
-  private pageUrl: string = '';
-  private utmParams: TracelogEventUtm | null | undefined;
+  private pageUrl = '';
+  private readonly utmParams: TracelogEventUtm | null | undefined;
 
   constructor(
-    private config: TracelogConfig,
-    private getUserId: () => string,
-    private getSessionId: () => string | undefined,
-    private getDevice: () => DeviceType | undefined,
-    private getGlobalMetadata: () => Record<string, MetadataType> | undefined,
-    private sendEventsQueue: (body: TracelogQueue) => Promise<boolean>,
-    private sendError: (error: { message: string }) => Promise<void>,
-    private isQaMode: () => boolean,
-    private isExcludedUser: () => boolean,
-    private isRouteExcluded: (url: string) => boolean,
+    private readonly config: TracelogConfig,
+    private readonly getUserId: () => string,
+    private readonly getSessionId: () => string | undefined,
+    private readonly getDevice: () => DeviceType | undefined,
+    private readonly getGlobalMetadata: () => Record<string, MetadataType> | undefined,
+    private readonly sendEventsQueue: (body: TracelogQueue) => Promise<boolean>,
+    private readonly sendError: (error: { message: string }) => Promise<void>,
+    private readonly isQaMode: () => boolean,
+    private readonly isExcludedUser: () => boolean,
+    private readonly isRouteExcluded: (url: string) => boolean,
   ) {
     this.pageUrl = window.location.href;
     this.utmParams = this.getUTMParameters();
@@ -41,8 +41,9 @@ export class EventManager {
 
     if (isDuplicatedEvent) {
       if (this.eventsQueue && this.eventsQueue.length > 0) {
-        this.eventsQueue[this.eventsQueue.length - 1].timestamp = Date.now() as Timestamp;
+        this.eventsQueue.at(-1).timestamp = Date.now() as Timestamp;
       }
+
       return;
     }
 
@@ -147,7 +148,7 @@ export class EventManager {
         this.initEventsQueueInterval();
       }
 
-      if (payload.type === EventType.SESSION_END && this.eventsQueue.length) {
+      if (payload.type === EventType.SESSION_END && this.eventsQueue.length > 0) {
         this.sendEventsQueueNow();
       }
     }
@@ -157,7 +158,7 @@ export class EventManager {
     this.hasInitEventsQueueInterval = true;
 
     this.eventsQueueIntervalId = window.setInterval(() => {
-      if (this.eventsQueue.length) {
+      if (this.eventsQueue.length > 0) {
         this.sendEventsQueueNow();
       }
     }, EVENT_SENT_INTERVAL);
@@ -171,15 +172,15 @@ export class EventManager {
     // Use Set for O(1) lookup and more efficient deduplication
     const uniqueEvents = new Map<string, TracelogEvent>();
 
-    this.eventsQueue.forEach((event) => {
+    for (const event of this.eventsQueue) {
       const key = `${event.type}_${event.timestamp}_${event.page_url}`;
       if (!uniqueEvents.has(key)) {
         uniqueEvents.set(key, event);
       }
-    });
+    }
 
     // Convert back to array
-    const deduplicatedEvents = Array.from(uniqueEvents.values());
+    const deduplicatedEvents = [...uniqueEvents.values()];
 
     // Sort by timestamp for better server processing
     deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
@@ -194,12 +195,7 @@ export class EventManager {
 
     const success = await this.sendEventsQueue(body);
 
-    if (success) {
-      this.eventsQueue = [];
-    } else {
-      // Keep only the events that weren't sent
-      this.eventsQueue = deduplicatedEvents;
-    }
+    this.eventsQueue = success ? [] : deduplicatedEvents;
   }
 
   private isDuplicatedEvent({ evType, url, scrollData, clickData, customEvent }: TracelogEventHandler): boolean {
@@ -223,40 +219,45 @@ export class EventManager {
 
     // Type-specific duplicate checks
     switch (evType) {
-      case EventType.PAGE_VIEW:
+      case EventType.PAGE_VIEW: {
         return this.lastEvent.page_url === url;
+      }
 
-      case EventType.CLICK:
+      case EventType.CLICK: {
         return this.lastEvent.click_data?.x === clickData?.x && this.lastEvent.click_data?.y === clickData?.y;
+      }
 
-      case EventType.SCROLL:
+      case EventType.SCROLL: {
         return (
           this.lastEvent.scroll_data?.depth === scrollData?.depth &&
           this.lastEvent.scroll_data?.direction === scrollData?.direction
         );
+      }
 
-      case EventType.CUSTOM:
+      case EventType.CUSTOM: {
         return this.lastEvent.custom_event?.name === customEvent?.name;
+      }
 
-      default:
+      default: {
         return false;
+      }
     }
   }
 
   private getUTMParameters(): TracelogEventUtm | null {
-    const urlParams = new URLSearchParams(window.location.search);
-    const utmParams: Partial<Record<keyof TracelogEventUtm, string>> = {};
+    const urlParameters = new URLSearchParams(window.location.search);
+    const utmParameters: Partial<Record<keyof TracelogEventUtm, string>> = {};
 
-    UTM_PARAMS.forEach((param) => {
-      const value = urlParams.get(param);
+    for (const parameter of UTM_PARAMS) {
+      const value = urlParameters.get(parameter);
 
       if (value) {
-        const key = param.split('utm_')[1] as keyof TracelogEventUtm;
-        utmParams[key] = value;
+        const key = parameter.split('utm_')[1] as keyof TracelogEventUtm;
+        utmParameters[key] = value;
       }
-    });
+    }
 
-    return Object.keys(utmParams).length ? utmParams : null;
+    return Object.keys(utmParameters).length > 0 ? utmParameters : null;
   }
 
   // Tags functionality disabled for now

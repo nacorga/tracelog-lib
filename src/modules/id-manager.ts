@@ -1,5 +1,5 @@
-export class IdManager {
-  static create(): string {
+export const IdManager = {
+  create(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
@@ -23,22 +23,36 @@ export class IdManager {
       ].join('-');
     }
 
-    let uuid = '',
-      i = 0;
+    let uuid = '';
+    let index = 0;
 
-    while (i < 36) {
-      if (i === 8 || i === 13 || i === 18 || i === 23) {
-        uuid += '-';
-      } else if (i === 14) {
-        uuid += '4';
-      } else if (i === 19) {
-        uuid += ((Math.random() * 4) | 8).toString(16);
-      } else {
-        uuid += ((Math.random() * 16) | 0).toString(16);
+    while (index < 36) {
+      switch (index) {
+        case 8:
+        case 13:
+        case 18:
+        case 23: {
+          uuid += '-';
+
+          break;
+        }
+        case 14: {
+          uuid += '4';
+
+          break;
+        }
+        case 19: {
+          uuid += Math.trunc((Math.random() * 4) | 8).toString(16);
+
+          break;
+        }
+        default: {
+          uuid += Math.trunc(Math.random() * 16).toString(16);
+        }
       }
-      i++;
+      index++;
     }
 
     return uuid;
-  }
-}
+  },
+};

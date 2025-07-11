@@ -7,6 +7,15 @@ import { UrlManager } from './modules/url-manager';
 import { TracelogAppConfig, TracelogEventHandler, MetadataType, EventType, TracelogAdminError } from './types';
 import { DeviceType } from './constants';
 
+// Helper function moved to module scope for consistent scoping
+const createCleanupHandler = (tracker: Tracking): (() => void) => {
+  return () => {
+    if (tracker.isInitialized) {
+      tracker.cleanup();
+    }
+  };
+};
+
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',
   INITIALIZING = 'initializing',
@@ -15,12 +24,12 @@ enum InitializationState {
 }
 
 export class Tracking {
-  public isInitialized: boolean = false;
-  public isExcludedUser: boolean = false;
+  public isInitialized = false;
+  public isExcludedUser = false;
 
   private cleanupListeners: (() => void)[] = [];
   private initializationState: InitializationState = InitializationState.UNINITIALIZED;
-  private initializationPromise: Promise<void> | null = null;
+  private readonly initializationPromise: Promise<void> | null = null;
   private configManager!: ConfigManager;
   private sessionManager!: SessionManager;
   private eventManager!: EventManager;
@@ -141,29 +150,25 @@ export class Tracking {
   }
 
   private setupCleanupListeners(): void {
-    const cleanup = () => {
-      if (this.isInitialized) {
-        this.cleanup();
-      }
-    };
+    const cleanup = createCleanupHandler(this);
 
     // Create cleanup function for beforeunload
-    const beforeUnloadCleanup = () => {
+    const beforeUnloadCleanup = (): void => {
       cleanup();
     };
 
     // Create cleanup function for pagehide
-    const pageHideCleanup = () => {
+    const pageHideCleanup = (): void => {
       cleanup();
     };
 
     // Create cleanup function for unload
-    const unloadCleanup = () => {
+    const unloadCleanup = (): void => {
       cleanup();
     };
 
     // Create cleanup function for visibility change
-    const visibilityChangeCleanup = () => {
+    const visibilityChangeCleanup = (): void => {
       if (document.visibilityState === 'hidden') {
         this.forceImmediateSend();
       }
@@ -224,8 +229,8 @@ export class Tracking {
     const adminError: TracelogAdminError = {
       message: error.message,
       timestamp: Date.now(),
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-      url: typeof window !== 'undefined' ? window.location.href : 'unknown',
+      userAgent: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent,
+      url: typeof window === 'undefined' ? 'unknown' : window.location.href,
       api_key: error.api_key,
       severity: 'medium',
       context: 'tracking',
@@ -367,7 +372,7 @@ export class Tracking {
       this.dataSender?.cleanup();
 
       // 7. Remove all event listeners
-      this.cleanupListeners.forEach((cleanup) => {
+      for (const cleanup of this.cleanupListeners) {
         try {
           cleanup();
         } catch (error) {
@@ -375,7 +380,7 @@ export class Tracking {
             console.error('[TraceLog] Error removing event listener:', error);
           }
         }
-      });
+      }
       this.cleanupListeners = [];
 
       // 8. Reset state
@@ -426,7 +431,7 @@ export class Tracking {
     if (this.initializationState === InitializationState.INITIALIZING && this.initializationPromise) {
       try {
         await this.initializationPromise;
-      } catch (error) {
+      } catch {
         throw new Error('[TraceLog] Initialization failed during wait');
       }
     }

@@ -13,13 +13,29 @@ export interface PageViewConfig {
   trackUTM?: boolean;
 }
 
+// Helper functions moved to module scope for better performance
+const isRegularExpression = (value: unknown): value is RegExp =>
+  typeof value === 'object' && value !== undefined && typeof (value as RegExp).test === 'function';
+
+const escapeRegexString = (string_: string): string => string_.replaceAll(/[$()*+.?[\\\]^{|}]/g, '\\$&');
+
+const wildcardToRegex = (string_: string): RegExp =>
+  new RegExp(
+    '^' +
+      string_
+        .split('*')
+        .map((element) => escapeRegexString(element))
+        .join('.+') +
+      '$',
+  );
+
 export class PageViewHandler {
-  private currentUrl: string = '';
-  private utmParams: TracelogEventUtm | null = null;
+  private currentUrl = '';
+  private readonly utmParams: TracelogEventUtm | undefined = undefined;
 
   constructor(
-    private config: PageViewConfig,
-    private onNavigationEvent: (data: NavigationData) => void,
+    private readonly config: PageViewConfig,
+    private readonly onNavigationEvent: (data: NavigationData) => void,
   ) {
     this.currentUrl = window.location.href;
     if (this.config.trackUTM !== false) {
@@ -35,7 +51,7 @@ export class PageViewHandler {
     return this.currentUrl;
   }
 
-  getUTMParams(): TracelogEventUtm | null {
+  getUTMParams(): TracelogEventUtm | undefined {
     return this.utmParams;
   }
 
@@ -61,15 +77,15 @@ export class PageViewHandler {
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
 
-    history.pushState = (...args) => {
+    history.pushState = (...arguments_: Parameters<typeof history.pushState>): void => {
       const fromUrl = this.currentUrl;
-      originalPushState.apply(history, args);
+      originalPushState.apply(history, arguments_);
       this.handleNavigation(fromUrl, window.location.href);
     };
 
-    history.replaceState = (...args) => {
+    history.replaceState = (...arguments_: Parameters<typeof history.replaceState>): void => {
       const fromUrl = this.currentUrl;
-      originalReplaceState.apply(history, args);
+      originalReplaceState.apply(history, arguments_);
       this.handleNavigation(fromUrl, window.location.href);
     };
 
@@ -93,37 +109,31 @@ export class PageViewHandler {
     this.onNavigationEvent(navigationData);
   }
 
-  private extractUTMParameters(): TracelogEventUtm | null {
-    const urlParams = new URLSearchParams(window.location.search);
-    const utmParams: Partial<Record<keyof TracelogEventUtm, string>> = {};
+  private extractUTMParameters(): TracelogEventUtm | undefined {
+    const urlParameters = new URLSearchParams(window.location.search);
+    const utmParameters: Partial<Record<keyof TracelogEventUtm, string>> = {};
 
-    UTM_PARAMS.forEach((param) => {
-      const value = urlParams.get(param);
+    for (const parameter of UTM_PARAMS) {
+      const value = urlParameters.get(parameter);
 
       if (value) {
-        const key = param.split('utm_')[1] as keyof TracelogEventUtm;
-        utmParams[key] = value;
+        const key = parameter.split('utm_')[1] as keyof TracelogEventUtm;
+        utmParameters[key] = value;
       }
-    });
+    }
 
-    return Object.keys(utmParams).length ? utmParams : null;
+    return Object.keys(utmParameters).length > 0 ? utmParameters : undefined;
   }
 
   static isRouteExcluded(url: string, excludedPaths: string[] = []): boolean {
-    if (!excludedPaths.length) {
+    if (excludedPaths.length === 0) {
       return false;
     }
 
     const path = new URL(url, window.location.origin).pathname;
 
-    const isRegExp = (val: unknown): val is RegExp =>
-      typeof val === 'object' && val !== null && typeof (val as RegExp).test === 'function';
-
-    const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wildcardToRegex = (str: string) => new RegExp('^' + str.split('*').map(escapeRegex).join('.+') + '$');
-
     return excludedPaths.some((pattern) => {
-      if (isRegExp(pattern)) {
+      if (isRegularExpression(pattern)) {
         return pattern.test(path);
       }
 

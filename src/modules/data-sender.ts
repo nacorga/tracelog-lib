@@ -1,9 +1,9 @@
-import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX, LSKey, DeviceType } from '../constants';
-import { TracelogQueue, TracelogAdminError, TracelogEvent, EventType, MetadataType } from '../types';
+import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX, LSKey } from '../constants';
+import { TracelogQueue, TracelogAdminError, EventType } from '../types';
 
 interface StorageManager {
-  set(key: string, value: any): boolean;
-  get(key: string): any;
+  set(key: string, value: unknown): boolean;
+  get(key: string): unknown;
   remove(key: string): boolean;
   isAvailable(): boolean;
   clear(): void;
@@ -11,9 +11,9 @@ interface StorageManager {
 }
 
 class OptimizedStorage implements StorageManager {
-  private available: boolean;
-  private memoryFallback: Map<string, string> = new Map();
-  private compressionEnabled: boolean;
+  private readonly available: boolean;
+  private readonly memoryFallback: Map<string, string> = new Map();
+  private readonly compressionEnabled: boolean;
 
   constructor() {
     this.available = this.checkAvailability();
@@ -26,7 +26,7 @@ class OptimizedStorage implements StorageManager {
       window.localStorage.setItem(testKey, 'test');
       window.localStorage.removeItem(testKey);
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -40,7 +40,7 @@ class OptimizedStorage implements StorageManager {
     return data;
   }
 
-  set(key: string, value: any): boolean {
+  set(key: string, value: unknown): boolean {
     try {
       const serialized = JSON.stringify(value);
 
@@ -90,22 +90,22 @@ class OptimizedStorage implements StorageManager {
     }
   }
 
-  get(key: string): any {
+  get(key: string): unknown {
     try {
-      let serialized: string | null = null;
+      let serialized: string | undefined = undefined;
 
       if (this.available) {
-        serialized = window.localStorage.getItem(key);
+        serialized = window.localStorage.getItem(key) ?? undefined;
       }
 
       if (!serialized) {
-        serialized = this.memoryFallback.get(key) || null;
+        serialized = this.memoryFallback.get(key) ?? undefined;
       }
 
-      return serialized ? JSON.parse(serialized) : null;
+      return serialized ? JSON.parse(serialized) : undefined;
     } catch (error) {
       console.warn('[TraceLog] Storage read failed:', error);
-      return null;
+      return undefined;
     }
   }
 
@@ -131,11 +131,11 @@ class OptimizedStorage implements StorageManager {
       if (this.available) {
         // Only clear TraceLog keys
         const keys = Object.keys(window.localStorage);
-        keys.forEach((key) => {
+        for (const key of keys) {
           if (key.startsWith('tracelog_') || key.includes('_critical_events') || key.includes('_heartbeat')) {
             window.localStorage.removeItem(key);
           }
-        });
+        }
       }
       this.memoryFallback.clear();
     } catch (error) {
@@ -157,11 +157,11 @@ class OptimizedStorage implements StorageManager {
       }
 
       let size = 0;
-      this.memoryFallback.forEach((value) => {
+      for (const value of this.memoryFallback) {
         size += value.length;
-      });
+      }
       return size;
-    } catch (error) {
+    } catch {
       return 0;
     }
   }
@@ -174,18 +174,18 @@ class OptimizedStorage implements StorageManager {
       const cutoffTime = Date.now() - 12 * 60 * 60 * 1000; // 12 hours
       const keys = Object.keys(window.localStorage);
 
-      keys.forEach((key) => {
+      for (const key of keys) {
         if (key.includes('_critical_events') || key.includes('_heartbeat')) {
           try {
             const data = JSON.parse(window.localStorage.getItem(key) || '{}');
             if (data.timestamp && data.timestamp < cutoffTime) {
               window.localStorage.removeItem(key);
             }
-          } catch (error) {
+          } catch {
             window.localStorage.removeItem(key);
           }
         }
-      });
+      }
     } catch (error) {
       console.warn('[TraceLog] Emergency cleanup failed:', error);
     }
@@ -195,14 +195,14 @@ class OptimizedStorage implements StorageManager {
 export class DataSender {
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
-  private storage: StorageManager;
-  private lastSendAttempt: number = 0;
-  private sendAttempts: number = 0;
+  private readonly storage: StorageManager;
+  private lastSendAttempt = 0;
+  private sendAttempts = 0;
 
   constructor(
-    private apiUrl: string,
-    private isQaMode: () => boolean,
-    private getUserId: () => string,
+    private readonly apiUrl: string,
+    private readonly isQaMode: () => boolean,
+    private readonly getUserId: () => string,
   ) {
     this.storage = new OptimizedStorage();
   }
@@ -277,9 +277,9 @@ export class DataSender {
       }
 
       return success;
-    } catch (err) {
+    } catch (error) {
       if (this.isQaMode()) {
-        console.error('[TraceLog] Synchronous send failed:', err);
+        console.error('[TraceLog] Synchronous send failed:', error);
       }
 
       return false;
@@ -306,11 +306,11 @@ export class DataSender {
       });
 
       return response.status >= 200 && response.status < 300;
-    } catch (err) {
+    } catch (error) {
       if (this.isQaMode()) {
         console.error(
           'TraceLog error: failed to send events queue',
-          err instanceof Error ? err.message : 'Unknown error',
+          error instanceof Error ? error.message : 'Unknown error',
         );
       }
 
@@ -346,7 +346,7 @@ export class DataSender {
         this.persistCriticalEvents(body);
         this.scheduleRetry(body);
       }
-    } catch (err) {
+    } catch (error) {
       // Último intento: persistir eventos críticos en localStorage
       this.persistCriticalEvents(body);
       this.scheduleRetry(body);
@@ -354,7 +354,7 @@ export class DataSender {
       if (this.isQaMode()) {
         console.error(
           'TraceLog error: failed to force send critical events, persisting to localStorage',
-          err instanceof Error ? err.message : 'Unknown error',
+          error instanceof Error ? error.message : 'Unknown error',
         );
       }
     }
@@ -394,7 +394,7 @@ export class DataSender {
   clearPersistedEvents(): void {
     try {
       window.localStorage.removeItem(`${LSKey.UserId}_critical_events`);
-    } catch (error) {
+    } catch {
       // Ignorar errores al limpiar localStorage
     }
   }
