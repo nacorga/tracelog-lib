@@ -1,11 +1,13 @@
-import { Tracking } from './tracking';
-import type { MetadataType, TracelogAppConfig } from './types';
+import { Tracking } from '@/tracking';
+import { TracelogAppConfig, MetadataType } from '@/types';
 
-// Re-export only necessary types for tree-shaking
-export type { MetadataType, TracelogAppConfig } from './types';
+export * from '@/types/config.types';
+export * from '@/types/event.types';
+export * from '@/types/queue.types';
+export * from '@/types/tag.types';
 
 // Singleton instance management
-let trackingInstance: Tracking | null = null;
+let trackingInstance: Tracking | undefined;
 
 /**
  * Initialize tracking with configuration

@@ -1,5 +1,5 @@
-import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX, LSKey } from '../constants';
-import { TracelogQueue, TracelogAdminError, EventType } from '../types';
+import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX, LSKey } from '@/constants';
+import { TracelogQueue, TracelogAdminError, EventType } from '@/types';
 
 interface StorageManager {
   set(key: string, value: unknown): boolean;

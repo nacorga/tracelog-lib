@@ -1,5 +1,5 @@
-import { HTML_DATA_ATTR_PREFIX } from '../constants';
-import { TracelogEventClickData } from '../types';
+import { HTML_DATA_ATTR_PREFIX } from '@/constants';
+import { TracelogEventClickData } from '@/types';
 
 export interface ClickCoordinates {
   x: number;

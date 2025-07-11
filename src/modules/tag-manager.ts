@@ -1,12 +1,17 @@
-import { TracelogTagCondition, TracelogEventClickData } from '../types';
-import { DeviceType } from '../constants';
+import {
+  TracelogTagCondition,
+  TracelogEventClickData,
+  TracelogTagConditionType,
+  TracelogTagConditionOperator,
+} from '@/types';
+import { DeviceType } from '@/constants';
 
 export class TagManager {
   /**
    * Matches URL-based conditions against a given URL
    */
   static matchUrlMatches(condition: TracelogTagCondition, url: string): boolean {
-    if (condition.type !== 'url_matches') {
+    if (condition.type !== TracelogTagConditionType.URL_MATCHES) {
       return false;
     }
 
@@ -14,31 +19,23 @@ export class TagManager {
     const targetUrl = condition.caseSensitive ? url : url.toLowerCase();
 
     switch (condition.operator) {
-      case 'equals': {
+      case TracelogTagConditionOperator.EQUALS: {
         return targetUrl === targetValue;
       }
 
-      case 'not_equals': {
-        return targetUrl !== targetValue;
-      }
-
-      case 'contains': {
+      case TracelogTagConditionOperator.CONTAINS: {
         return targetUrl.includes(targetValue);
       }
 
-      case 'not_contains': {
-        return !targetUrl.includes(targetValue);
-      }
-
-      case 'starts_with': {
+      case TracelogTagConditionOperator.STARTS_WITH: {
         return targetUrl.startsWith(targetValue);
       }
 
-      case 'ends_with': {
+      case TracelogTagConditionOperator.ENDS_WITH: {
         return targetUrl.endsWith(targetValue);
       }
 
-      case 'regex': {
+      case TracelogTagConditionOperator.REGEX: {
         try {
           const flags = condition.caseSensitive ? 'g' : 'gi';
           const regex = new RegExp(targetValue, flags);
@@ -59,7 +56,7 @@ export class TagManager {
    * Matches device type conditions
    */
   static matchDeviceType(condition: TracelogTagCondition, deviceType: DeviceType): boolean {
-    if (condition.type !== 'device_type') {
+    if (condition.type !== TracelogTagConditionType.DEVICE_TYPE) {
       return false;
     }
 
@@ -67,31 +64,23 @@ export class TagManager {
     const targetDevice = condition.caseSensitive ? deviceType : deviceType.toLowerCase();
 
     switch (condition.operator) {
-      case 'equals': {
+      case TracelogTagConditionOperator.EQUALS: {
         return targetDevice === targetValue;
       }
 
-      case 'not_equals': {
-        return targetDevice !== targetValue;
-      }
-
-      case 'contains': {
+      case TracelogTagConditionOperator.CONTAINS: {
         return targetDevice.includes(targetValue);
       }
 
-      case 'not_contains': {
-        return !targetDevice.includes(targetValue);
-      }
-
-      case 'starts_with': {
+      case TracelogTagConditionOperator.STARTS_WITH: {
         return targetDevice.startsWith(targetValue);
       }
 
-      case 'ends_with': {
+      case TracelogTagConditionOperator.ENDS_WITH: {
         return targetDevice.endsWith(targetValue);
       }
 
-      case 'regex': {
+      case TracelogTagConditionOperator.REGEX: {
         try {
           const flags = condition.caseSensitive ? 'g' : 'gi';
           const regex = new RegExp(targetValue, flags);
@@ -111,7 +100,7 @@ export class TagManager {
    * Matches element selector conditions against click data
    */
   static matchElementSelector(condition: TracelogTagCondition, clickData: TracelogEventClickData): boolean {
-    if (condition.type !== 'element_matches') {
+    if (condition.type !== TracelogTagConditionType.ELEMENT_MATCHES) {
       return false;
     }
 
@@ -134,32 +123,24 @@ export class TagManager {
     const targetElementData = condition.caseSensitive ? elementData : elementData.toLowerCase();
 
     switch (condition.operator) {
-      case 'equals': {
+      case TracelogTagConditionOperator.EQUALS: {
         // For elements, check if any individual field equals the value
         return this.checkElementFieldEquals(clickData, targetValue, condition.caseSensitive);
       }
 
-      case 'not_equals': {
-        return !this.checkElementFieldEquals(clickData, targetValue, condition.caseSensitive);
-      }
-
-      case 'contains': {
+      case TracelogTagConditionOperator.CONTAINS: {
         return targetElementData.includes(targetValue);
       }
 
-      case 'not_contains': {
-        return !targetElementData.includes(targetValue);
-      }
-
-      case 'starts_with': {
+      case TracelogTagConditionOperator.STARTS_WITH: {
         return targetElementData.startsWith(targetValue);
       }
 
-      case 'ends_with': {
+      case TracelogTagConditionOperator.ENDS_WITH: {
         return targetElementData.endsWith(targetValue);
       }
 
-      case 'regex': {
+      case TracelogTagConditionOperator.REGEX: {
         try {
           const flags = condition.caseSensitive ? 'g' : 'gi';
           const regex = new RegExp(targetValue, flags);
@@ -179,7 +160,13 @@ export class TagManager {
    * Matches UTM parameter conditions
    */
   static matchUtmCondition(condition: TracelogTagCondition, utmValue: string | undefined): boolean {
-    if (!['utm_source', 'utm_medium', 'utm_campaign'].includes(condition.type)) {
+    if (
+      ![
+        TracelogTagConditionType.UTM_SOURCE,
+        TracelogTagConditionType.UTM_MEDIUM,
+        TracelogTagConditionType.UTM_CAMPAIGN,
+      ].includes(condition.type)
+    ) {
       return false;
     }
 
@@ -188,31 +175,23 @@ export class TagManager {
     const targetUtmValue = condition.caseSensitive ? value : value.toLowerCase();
 
     switch (condition.operator) {
-      case 'equals': {
+      case TracelogTagConditionOperator.EQUALS: {
         return targetUtmValue === targetValue;
       }
 
-      case 'not_equals': {
-        return targetUtmValue !== targetValue;
-      }
-
-      case 'contains': {
+      case TracelogTagConditionOperator.CONTAINS: {
         return targetUtmValue.includes(targetValue);
       }
 
-      case 'not_contains': {
-        return !targetUtmValue.includes(targetValue);
-      }
-
-      case 'starts_with': {
+      case TracelogTagConditionOperator.STARTS_WITH: {
         return targetUtmValue.startsWith(targetValue);
       }
 
-      case 'ends_with': {
+      case TracelogTagConditionOperator.ENDS_WITH: {
         return targetUtmValue.endsWith(targetValue);
       }
 
-      case 'regex': {
+      case TracelogTagConditionOperator.REGEX: {
         try {
           const flags = condition.caseSensitive ? 'g' : 'gi';
           const regex = new RegExp(targetValue, flags);

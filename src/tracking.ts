@@ -1,20 +1,6 @@
-import { ConfigManager } from './modules/config-manager';
-import { SessionManager } from './modules/session-manager';
-import { EventManager } from './modules/event-manager';
-import { TrackingManager } from './modules/tracking-manager';
-import { DataSender } from './modules/data-sender';
-import { UrlManager } from './modules/url-manager';
-import { TracelogAppConfig, TracelogEventHandler, MetadataType, EventType, TracelogAdminError } from './types';
-import { DeviceType } from './constants';
-
-// Helper function moved to module scope for consistent scoping
-const createCleanupHandler = (tracker: Tracking): (() => void) => {
-  return () => {
-    if (tracker.isInitialized) {
-      tracker.cleanup();
-    }
-  };
-};
+import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from '@/modules';
+import { DeviceType } from '@/constants';
+import { TracelogAppConfig, EventType, MetadataType, TracelogEventHandler, TracelogAdminError } from '@/types';
 
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',
@@ -23,13 +9,22 @@ enum InitializationState {
   FAILED = 'failed',
 }
 
+const createCleanupHandler = (tracker: Tracking): (() => void) => {
+  return () => {
+    if (tracker.isInitialized) {
+      tracker.cleanup();
+    }
+  };
+};
+
 export class Tracking {
   public isInitialized = false;
   public isExcludedUser = false;
 
+  private readonly initializationPromise: Promise<void> | null = null;
+
   private cleanupListeners: (() => void)[] = [];
   private initializationState: InitializationState = InitializationState.UNINITIALIZED;
-  private readonly initializationPromise: Promise<void> | null = null;
   private configManager!: ConfigManager;
   private sessionManager!: SessionManager;
   private eventManager!: EventManager;

@@ -1,6 +1,8 @@
-export { ConfigManager } from './config-manager';
-export { SessionManager } from './session-manager';
-export { EventManager } from './event-manager';
-export { TrackingManager } from './tracking-manager';
-export { DataSender } from './data-sender';
-export { UrlManager } from './url-manager';
+export * from './config-manager';
+export * from './data-sender';
+export * from './event-manager';
+export * from './id-manager';
+export * from './session-manager';
+export * from './tag-manager';
+export * from './tracking-manager';
+export * from './url-manager';

@@ -1,11 +1,4 @@
-export interface SessionData {
-  sessionId: string;
-  startTime: number;
-  lastActivity: number;
-  endTrigger?: string;
-}
-
-export type SessionEndTrigger = 'timeout' | 'manual' | 'page_unload' | 'unexpected_recovery';
+import { SessionData, SessionEndTrigger } from '@/types';
 
 interface HeartbeatData {
   sessionId: string;

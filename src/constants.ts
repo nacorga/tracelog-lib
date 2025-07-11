@@ -1,4 +1,4 @@
-import { TracelogApiConfig, TracelogAppConfig } from './types';
+import { TracelogApiConfig, TracelogAppConfig } from '@/types';
 
 export enum LSKey {
   UserId = 'tracelog_uid',

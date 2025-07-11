@@ -1,7 +1,7 @@
-import { TracelogAppConfig, TracelogApiConfig, TracelogConfig } from '../types';
-import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
-import { sanitizeApiConfig } from '../utils/sanitize';
-import { validateUrl } from '../utils/validate-url';
+import { TracelogAppConfig, TracelogApiConfig, TracelogConfig } from '@/types';
+import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '@/constants';
+import { sanitizeApiConfig, isValidUrl } from '@/utils';
+import packageJson from '../../package.json';
 
 interface ErrorReporter {
   reportError(error: { message: string; context?: string; severity?: 'low' | 'medium' | 'high' }): void;
@@ -14,12 +14,13 @@ interface ConfigLoadResult {
 }
 
 export class ConfigManager {
-  private id = '';
   private readonly config: TracelogConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
   private readonly errorReporter: ErrorReporter;
+  private readonly maxFetchAttempts = 3;
+
+  private id = '';
   private lastFetchAttempt = 0;
   private fetchAttempts = 0;
-  private readonly maxFetchAttempts = 3;
 
   constructor(private readonly catchError: (error: { message: string; api_key?: string }) => Promise<void>) {
     this.errorReporter = {
@@ -195,9 +196,8 @@ export class ConfigManager {
   private async fetchConfigWithRetry(config: TracelogAppConfig): Promise<TracelogApiConfig | null> {
     const now = Date.now();
 
-    // Rate limiting
+    // Rate limiting (5 seconds)
     if (now - this.lastFetchAttempt < 5000) {
-      // 5 seconds
       return null;
     }
 
@@ -209,6 +209,7 @@ export class ConfigManager {
         message: `Max fetch attempts exceeded (${this.maxFetchAttempts})`,
         severity: 'high',
       });
+
       return null;
     }
 
@@ -224,7 +225,7 @@ export class ConfigManager {
       }
 
       // Validate URL before making request
-      if (!validateUrl(configUrl, 'tracelog.io')) {
+      if (!isValidUrl(configUrl, 'tracelog.io')) {
         throw new Error('Config URL failed security validation');
       }
 
@@ -235,7 +236,7 @@ export class ConfigManager {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'TraceLog-Client/2.0.4',
+          'User-Agent': `TraceLog-Client/${packageJson.version}`,
         },
         signal: controller.signal,
       });
@@ -290,7 +291,7 @@ export class ConfigManager {
       const configUrl = `https://${this.id}.tracelog.io/config`;
 
       // Additional validation
-      if (!validateUrl(configUrl, 'tracelog.io')) {
+      if (!isValidUrl(configUrl, 'tracelog.io')) {
         return null;
       }
 
@@ -309,7 +310,7 @@ export class ConfigManager {
       const apiUrl = `https://${this.id}.tracelog.io/api`;
 
       // Additional validation
-      if (!validateUrl(apiUrl, 'tracelog.io')) {
+      if (!isValidUrl(apiUrl, 'tracelog.io')) {
         return null;
       }
 

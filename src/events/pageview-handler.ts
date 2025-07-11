@@ -1,5 +1,5 @@
-import { UTM_PARAMS } from '../constants';
-import { TracelogEventUtm } from '../types';
+import { UTM_PARAMS } from '@/constants';
+import { TracelogEventUtm } from '@/types';
 
 export interface NavigationData {
   fromUrl: string;

@@ -1,8 +1,7 @@
-import { DeviceType } from '../constants';
+import { DeviceType } from '@/constants';
 
-// Cache media queries for better performance
-let coarsePointerQuery: MediaQueryList | null = null;
-let noHoverQuery: MediaQueryList | null = null;
+let coarsePointerQuery: MediaQueryList | undefined;
+let noHoverQuery: MediaQueryList | undefined;
 
 const initMediaQueries = (): void => {
   if (typeof window !== 'undefined' && !coarsePointerQuery) {
@@ -22,15 +21,14 @@ export const getDeviceType = (): DeviceType => {
   try {
     const nav = navigator as NavigatorWithUserAgentData;
 
-    // Try modern User-Agent Client Hints API first
     if (nav.userAgentData && typeof nav.userAgentData.mobile === 'boolean') {
       if (nav.userAgentData.platform && /ipad|tablet/i.test(nav.userAgentData.platform)) {
         return DeviceType.Tablet;
       }
+
       return nav.userAgentData.mobile ? DeviceType.Mobile : DeviceType.Desktop;
     }
 
-    // Initialize media queries on first call
     initMediaQueries();
 
     const width = window.innerWidth;
@@ -41,12 +39,10 @@ export const getDeviceType = (): DeviceType => {
     const isMobileUA = /mobile|android|iphone|ipod|blackberry|iemobile|opera mini/.test(ua);
     const isTabletUA = /tablet|ipad|android(?!.*mobile)/.test(ua);
 
-    // Mobile detection: small screen OR mobile UA with touch
     if (width <= 767 || (isMobileUA && hasTouchSupport)) {
       return DeviceType.Mobile;
     }
 
-    // Tablet detection: medium screen OR tablet UA OR touch with coarse pointer and no hover
     if ((width >= 768 && width <= 1024) || isTabletUA || (hasCoarsePointer && hasNoHover && hasTouchSupport)) {
       return DeviceType.Tablet;
     }

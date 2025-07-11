@@ -1,9 +1,8 @@
-import { LSKey, DEFAULT_SAMPLING_RATE, DeviceType } from '../constants';
+import { LSKey, DEFAULT_SAMPLING_RATE, DeviceType } from '@/constants';
+import { MetadataType, TracelogConfig, EventType, SessionData, SessionEndTrigger } from '@/types';
+import { getDeviceType, isValidMetadata } from '@/utils';
+import { SessionHandler } from '@/events';
 import { IdManager } from './id-manager';
-import { MetadataType, TracelogConfig, EventType } from '../types';
-import { getDeviceType } from '../utils/device-detector';
-import { isValidMetadata } from '../utils/event-check';
-import { SessionHandler, SessionData, SessionEndTrigger } from '../events/session-handler';
 
 export class SessionManager {
   private userId: string | undefined;

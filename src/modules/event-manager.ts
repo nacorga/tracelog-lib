@@ -1,4 +1,4 @@
-import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, DeviceType, UTM_PARAMS } from '../constants';
+import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, DeviceType, UTM_PARAMS } from '@/constants';
 import {
   TracelogEvent,
   TracelogEventHandler,
@@ -8,8 +8,8 @@ import {
   TracelogEventUtm,
   TracelogConfig,
   Timestamp,
-} from '../types';
-import { isEventValid } from '../utils/event-check';
+} from '@/types';
+import { isEventValid } from '@/utils';
 import { TagManager } from './tag-manager';
 
 export class EventManager {
