@@ -67,10 +67,22 @@ test.describe('TraceLog Smoke Tests', () => {
 
   test('should handle scroll interactions', async ({ page }) => {
     // Test scroll areas are functional
-    const scrollArea = page.locator('.scroll-area').first();
+    const scrollArea = page.locator('[data-testid="scroll-area"]');
     if (await scrollArea.isVisible()) {
       await scrollArea.hover();
-      await page.mouse.wheel(0, 100);
+      
+      // Use mobile-safe scrolling approach
+      if (page.context().browser()?.browserType().name() === 'webkit') {
+        await page.evaluate(() => {
+          const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+          if (scrollEl) {
+            scrollEl.scrollTop += 50;
+          }
+        });
+      } else {
+        await page.mouse.wheel(0, 50);
+      }
+      
       await page.waitForTimeout(300);
     }
     

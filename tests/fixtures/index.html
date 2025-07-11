@@ -318,9 +318,14 @@
         <div class="section">
             <h2>Session Management</h2>
             <div class="inline-controls">
+                <button id="start-session" data-testid="start-session-btn">Start Session</button>
+                <button id="end-session" data-testid="end-session-btn" class="danger-btn">End Session</button>
                 <button id="check-session" data-testid="check-session">Check Session Info</button>
                 <button id="trigger-session-event" data-testid="trigger-session-event">Trigger Session Event</button>
+            </div>
+            <div class="inline-controls">
                 <button id="simulate-timeout" data-testid="simulate-timeout" class="warning">Simulate Timeout</button>
+                <button id="simulate-timeout-btn" data-testid="simulate-timeout-btn" class="warning">Simulate Timeout Alt</button>
                 <button id="clear-storage" data-testid="clear-storage" class="danger-btn">Clear Local Storage</button>
             </div>
             
@@ -626,6 +631,16 @@
         });
         
         // Session management
+        document.getElementById('start-session').addEventListener('click', () => {
+            sendCustomEvent('session_start', { trigger: 'manual', timestamp: Date.now() });
+            logEvent('Manual session start triggered');
+        });
+        
+        document.getElementById('end-session').addEventListener('click', () => {
+            sendCustomEvent('session_end', { trigger: 'manual', timestamp: Date.now() });
+            logEvent('Manual session end triggered');
+        });
+        
         document.getElementById('check-session').addEventListener('click', () => {
             updateSessionInfo();
             logEvent('Session info updated');
@@ -634,6 +649,16 @@
         document.getElementById('trigger-session-event').addEventListener('click', () => {
             sendCustomEvent('manual_session_event', { trigger: 'manual' });
             logEvent('Manual session event triggered');
+        });
+        
+        document.getElementById('simulate-timeout').addEventListener('click', () => {
+            sendCustomEvent('session_timeout_simulation', { trigger: 'manual' });
+            logEvent('Session timeout simulation triggered');
+        });
+        
+        document.getElementById('simulate-timeout-btn').addEventListener('click', () => {
+            sendCustomEvent('session_timeout_alt', { trigger: 'manual_alt' });
+            logEvent('Alternative session timeout simulation triggered');
         });
         
         document.getElementById('clear-storage').addEventListener('click', () => {

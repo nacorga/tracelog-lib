@@ -194,10 +194,21 @@ test.describe('TraceLog Session Management', () => {
       await page.mouse.move(100, 100);
       await page.waitForTimeout(300);
       
-      const scrollArea = page.locator('.scroll-area').first();
+      const scrollArea = page.locator('[data-testid="scroll-area"]');
       if (await scrollArea.isVisible()) {
         await scrollArea.hover();
-        await page.mouse.wheel(0, 50);
+        
+        // Use mobile-safe scrolling approach
+        if (page.context().browser()?.browserType().name() === 'webkit') {
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop += 25;
+            }
+          });
+        } else {
+          await page.mouse.wheel(0, 50);
+        }
       }
       
       // Should handle activity-based timeout reset

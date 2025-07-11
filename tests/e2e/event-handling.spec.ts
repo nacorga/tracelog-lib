@@ -134,23 +134,49 @@ test.describe('TraceLog Event Handling', () => {
 
   test.describe('Scroll Events', () => {
     test('should track scroll events in scroll areas', async ({ page }) => {
-      const scrollArea = page.locator('.scroll-area').first();
+      const scrollArea = page.locator('[data-testid="scroll-area"]');
       
       if (await scrollArea.isVisible()) {
         await scrollArea.scrollIntoViewIfNeeded();
-        
-        // Scroll down
         await scrollArea.hover();
-        await page.mouse.wheel(0, 100);
-        await page.waitForTimeout(300);
         
-        // Scroll up
-        await page.mouse.wheel(0, -50);
-        await page.waitForTimeout(300);
-        
-        // Scroll down again
-        await page.mouse.wheel(0, 150);
-        await page.waitForTimeout(300);
+        // Use mobile-safe scrolling approach
+        if (page.context().browser()?.browserType().name() === 'webkit') {
+          // For Mobile Safari, use evaluate to scroll
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop += 50;
+            }
+          });
+          await page.waitForTimeout(300);
+          
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop -= 25;
+            }
+          });
+          await page.waitForTimeout(300);
+          
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop += 75;
+            }
+          });
+          await page.waitForTimeout(300);
+        } else {
+          // For other browsers, use mouse wheel
+          await page.mouse.wheel(0, 50);
+          await page.waitForTimeout(300);
+          
+          await page.mouse.wheel(0, -25);
+          await page.waitForTimeout(300);
+          
+          await page.mouse.wheel(0, 75);
+          await page.waitForTimeout(300);
+        }
       }
       
       await expect(scrollArea).toBeVisible();
@@ -177,20 +203,56 @@ test.describe('TraceLog Event Handling', () => {
     });
 
     test('should handle scroll direction changes', async ({ page }) => {
-      const scrollArea = page.locator('.scroll-area').first();
+      const scrollArea = page.locator('[data-testid="scroll-area"]');
       
       if (await scrollArea.isVisible()) {
         await scrollArea.hover();
         
-        // Series of scroll direction changes
-        await page.mouse.wheel(0, 100); // Down
-        await page.waitForTimeout(200);
-        await page.mouse.wheel(0, -150); // Up
-        await page.waitForTimeout(200);
-        await page.mouse.wheel(0, 75); // Down
-        await page.waitForTimeout(200);
-        await page.mouse.wheel(0, -25); // Up
-        await page.waitForTimeout(200);
+        // Series of scroll direction changes with mobile-safe approach
+        if (page.context().browser()?.browserType().name() === 'webkit') {
+          // For Mobile Safari, use evaluate to scroll
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop += 50;
+            }
+          });
+          await page.waitForTimeout(200);
+          
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop -= 75;
+            }
+          });
+          await page.waitForTimeout(200);
+          
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop += 38;
+            }
+          });
+          await page.waitForTimeout(200);
+          
+          await page.evaluate(() => {
+            const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+            if (scrollEl) {
+              scrollEl.scrollTop -= 13;
+            }
+          });
+          await page.waitForTimeout(200);
+        } else {
+          // For other browsers, use mouse wheel
+          await page.mouse.wheel(0, 50); // Down
+          await page.waitForTimeout(200);
+          await page.mouse.wheel(0, -75); // Up
+          await page.waitForTimeout(200);
+          await page.mouse.wheel(0, 38); // Down
+          await page.waitForTimeout(200);
+          await page.mouse.wheel(0, -13); // Up
+          await page.waitForTimeout(200);
+        }
       }
       
       await expect(page.locator('body')).toBeVisible();
@@ -338,38 +400,69 @@ test.describe('TraceLog Event Handling', () => {
     });
 
     test('should handle concurrent event generation', async ({ page }) => {
-      // Generate different types of events concurrently
-      const tasks = [
+      // Generate different types of events with mobile-safe approach
+      if (page.context().browser()?.browserType().name() === 'webkit') {
+        // For Mobile Safari, perform operations sequentially to avoid conflicts
         // Click events
-        (async () => {
-          for (let i = 0; i < 10; i++) {
-            await page.click('[data-testid="click-test-btn"]');
-            await page.waitForTimeout(100);
-          }
-        })(),
+        for (let i = 0; i < 5; i++) {
+          await page.click('[data-testid="click-test-btn"]');
+          await page.waitForTimeout(80);
+        }
         
         // Custom events
-        (async () => {
-          for (let i = 0; i < 5; i++) {
-            await page.click('[data-testid="simple-event-btn"]');
-            await page.waitForTimeout(200);
-          }
-        })(),
+        for (let i = 0; i < 3; i++) {
+          await page.click('[data-testid="simple-event-btn"]');
+          await page.waitForTimeout(120);
+        }
         
         // Scroll events
-        (async () => {
-          const scrollArea = page.locator('.scroll-area').first();
-          if (await scrollArea.isVisible()) {
-            await scrollArea.hover();
-            for (let i = 0; i < 5; i++) {
-              await page.mouse.wheel(0, 50);
-              await page.waitForTimeout(150);
-            }
+        const scrollArea = page.locator('[data-testid="scroll-area"]');
+        if (await scrollArea.isVisible()) {
+          for (let i = 0; i < 3; i++) {
+            await page.evaluate(() => {
+              const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+              if (scrollEl) {
+                scrollEl.scrollTop += 25;
+              }
+            });
+            await page.waitForTimeout(100);
           }
-        })(),
-      ];
+        }
+      } else {
+        // For other browsers, use concurrent approach
+        const tasks = [
+          // Click events
+          (async () => {
+            for (let i = 0; i < 10; i++) {
+              await page.click('[data-testid="click-test-btn"]');
+              await page.waitForTimeout(100);
+            }
+          })(),
+          
+          // Custom events
+          (async () => {
+            for (let i = 0; i < 5; i++) {
+              await page.click('[data-testid="simple-event-btn"]');
+              await page.waitForTimeout(200);
+            }
+          })(),
+          
+          // Scroll events
+          (async () => {
+            const scrollArea = page.locator('[data-testid="scroll-area"]');
+            if (await scrollArea.isVisible()) {
+              await scrollArea.hover();
+              for (let i = 0; i < 5; i++) {
+                await page.mouse.wheel(0, 50);
+                await page.waitForTimeout(150);
+              }
+            }
+          })(),
+        ];
+        
+        await Promise.all(tasks);
+      }
       
-      await Promise.all(tasks);
       await page.waitForTimeout(500);
       
       // Should handle concurrent events

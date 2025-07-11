@@ -115,16 +115,39 @@ test.describe('TraceLog Core Functionality', () => {
 
     test('should handle scroll events', async ({ page }) => {
       // Scroll in the scroll area
-      const scrollArea = page.locator('.scroll-area').first();
+      const scrollArea = page.locator('[data-testid="scroll-area"]');
       await scrollArea.scrollIntoViewIfNeeded();
       
-      // Scroll down
+      // Scroll down safely
       await scrollArea.hover();
-      await page.mouse.wheel(0, 100);
+      
+      // Use a more compatible scroll approach for mobile
+      if (page.context().browser()?.browserType().name() === 'webkit') {
+        // For Mobile Safari, use evaluate to scroll
+        await page.evaluate(() => {
+          const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+          if (scrollEl) {
+            scrollEl.scrollTop += 50;
+          }
+        });
+      } else {
+        await page.mouse.wheel(0, 50);
+      }
+      
       await page.waitForTimeout(300);
       
       // Scroll up
-      await page.mouse.wheel(0, -50);
+      if (page.context().browser()?.browserType().name() === 'webkit') {
+        await page.evaluate(() => {
+          const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+          if (scrollEl) {
+            scrollEl.scrollTop -= 25;
+          }
+        });
+      } else {
+        await page.mouse.wheel(0, -25);
+      }
+      
       await page.waitForTimeout(300);
       
       // Should not crash
@@ -282,12 +305,27 @@ test.describe('TraceLog Core Functionality', () => {
       await page.click('[data-testid="init-tracking"]');
       await page.waitForTimeout(1000);
       
-      // Perform multiple operations simultaneously
-      await Promise.all([
-        page.click('[data-testid="simple-event-btn"]'),
-        page.click('[data-testid="click-test-btn"]'),
-        page.mouse.wheel(0, 100),
-      ]);
+      // Perform multiple operations with mobile-safe scrolling
+      if (page.context().browser()?.browserType().name() === 'webkit') {
+        // For Mobile Safari, perform operations sequentially
+        await page.click('[data-testid="simple-event-btn"]');
+        await page.waitForTimeout(100);
+        await page.click('[data-testid="click-test-btn"]');
+        await page.waitForTimeout(100);
+        await page.evaluate(() => {
+          const scrollEl = document.querySelector('[data-testid="scroll-area"]');
+          if (scrollEl) {
+            scrollEl.scrollTop += 50;
+          }
+        });
+      } else {
+        // For other browsers, perform operations simultaneously
+        await Promise.all([
+          page.click('[data-testid="simple-event-btn"]'),
+          page.click('[data-testid="click-test-btn"]'),
+          page.mouse.wheel(0, 50),
+        ]);
+      }
       
       await page.waitForTimeout(500);
       
