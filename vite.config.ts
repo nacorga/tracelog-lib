@@ -1,15 +1,16 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src'),
+      '@': resolve(fileURLToPath(new URL('.', import.meta.url)), './src'),
     },
   },
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/public-api.ts'),
+      entry: resolve(fileURLToPath(new URL('.', import.meta.url)), 'src/public-api.ts'),
       name: 'TraceLog',
       fileName: 'tracelog',
       formats: ['es'],
