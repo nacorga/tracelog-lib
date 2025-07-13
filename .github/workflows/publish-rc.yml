@@ -52,32 +52,40 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Cache Playwright browsers
-        id: cache-playwright
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwoff2-dev
-
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
-        if: steps.cache-playwright.outputs.cache-hit != 'true'
-
-      - name: Verify Playwright installation
-        run: npx playwright --version
 
       - name: Run E2E tests
         run: npm run test:e2e
         env:
           CI: true
+
+      # - name: Cache Playwright browsers
+      #   id: cache-playwright
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       ~/.cache/ms-playwright
+      #     key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-playwright-
+
+      # - name: Install system dependencies
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y libwoff2-dev
+
+      # - name: Install Playwright browsers
+      #   run: npx playwright install --with-deps
+      #   if: steps.cache-playwright.outputs.cache-hit != 'true'
+
+      # - name: Verify Playwright installation
+      #   run: npx playwright --version
+
+      # - name: Run E2E tests
+      #   run: npm run test:e2e
+      #   env:
+      #     CI: true
 
       - name: Get current version
         id: current_version
