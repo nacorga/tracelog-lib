@@ -1,16 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const defaultLaunchOptions = {
-  args: [
-    '--disable-dev-shm-usage',
-    '--disable-background-timer-throttling',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--no-sandbox',
-    '--disable-gpu',
-  ]
-};
-
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -33,37 +22,32 @@ export default defineConfig({
     {
       name: 'chromium',
       use: {
-        ...devices['Desktop Chrome'],
-        launchOptions: defaultLaunchOptions,
+        ...devices['Desktop Chrome']
       },
     },
     {
       name: 'firefox',
       use: {
-        ...devices['Desktop Firefox'],
-        launchOptions: defaultLaunchOptions,
+        ...devices['Desktop Firefox']
       },
     },
 
     {
       name: 'webkit',
       use: {
-        ...devices['Desktop Safari'],
-        launchOptions: defaultLaunchOptions,
+        ...devices['Desktop Safari']
       },
     },
     {
       name: 'Mobile Chrome',
       use: {
-        ...devices['Pixel 5'],
-        launchOptions: defaultLaunchOptions,
+        ...devices['Pixel 5']
       },
     },
     {
       name: 'Mobile Safari',
       use: {
-        ...devices['iPhone 12'],
-        launchOptions: defaultLaunchOptions,
+        ...devices['iPhone 12']
       },
     },
   ],
