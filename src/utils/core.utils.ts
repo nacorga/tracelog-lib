@@ -1,4 +1,4 @@
-import { SessionId, Timestamp, URL, UserId } from '@/types/core.types';
+import { SessionId, Timestamp, URL as URLType, UserId } from '@/types/core.types';
 
 export const createUserId = (id: string): UserId => {
   if (typeof id !== 'string' || id.length === 0) {
@@ -26,7 +26,7 @@ export const createTimestamp = (timestamp?: number): Timestamp => {
   return ts as Timestamp;
 };
 
-export const createURL = (url: string): URL => {
+export const createURL = (url: string): URLType => {
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error('Invalid URL');
   }
@@ -37,5 +37,5 @@ export const createURL = (url: string): URL => {
     throw new Error('Invalid URL format');
   }
 
-  return url as URL;
+  return url as URLType;
 };

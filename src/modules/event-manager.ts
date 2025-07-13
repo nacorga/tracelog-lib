@@ -140,7 +140,7 @@ export class EventManager {
 
   private sendEvent(payload: TracelogEvent): void {
     if (this.isQaMode()) {
-      console.log(`[TraceLog] ${payload.type} event:`, payload);
+      console.log(`[TraceLog] ${payload.type} event:`, JSON.stringify(payload));
     } else {
       this.eventsQueue.push(payload);
 

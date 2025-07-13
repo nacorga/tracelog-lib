@@ -203,11 +203,20 @@ export class DataSender {
     private readonly apiUrl: string,
     private readonly isQaMode: () => boolean,
     private readonly getUserId: () => string,
+    private readonly isDemoMode = false,
   ) {
     this.storage = new OptimizedStorage();
   }
 
   async sendEventsQueue(body: TracelogQueue): Promise<boolean> {
+    if (this.isDemoMode) {
+      for (const event of body.events) {
+        console.log(`[TraceLog] ${event.type} event:`, JSON.stringify(event));
+      }
+
+      return true;
+    }
+
     const now = Date.now();
 
     // Rate limiting: prevent too frequent sends
@@ -242,6 +251,14 @@ export class DataSender {
   }
 
   async sendEventsSynchronously(body: TracelogQueue): Promise<boolean> {
+    // Handle demo mode - log events to console instead of sending to API
+    if (this.isDemoMode) {
+      for (const event of body.events) {
+        console.log(`[TraceLog] ${event.type} event:`, JSON.stringify(event));
+      }
+      return true; // Always return success for demo mode
+    }
+
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
     // Usar sendBeacon que es la opción más confiable para unload
@@ -441,6 +458,12 @@ export class DataSender {
   }
 
   async sendError(error: TracelogAdminError): Promise<void> {
+    // Handle demo mode - log errors to console instead of sending to API
+    if (this.isDemoMode) {
+      console.error(error.message);
+      return;
+    }
+
     const blob = new Blob([JSON.stringify(error)], { type: 'application/json' });
 
     if (navigator.sendBeacon) {

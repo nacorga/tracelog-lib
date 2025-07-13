@@ -226,10 +226,6 @@ export class SessionHandler {
     this.startHeartbeat();
     this.onSessionChange(sessionData);
 
-    if (this.isQaMode()) {
-      console.log('[TraceLog] Session started:', sessionData.sessionId);
-    }
-
     return sessionData;
   }
 

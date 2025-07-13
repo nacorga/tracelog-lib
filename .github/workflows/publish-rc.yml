@@ -35,13 +35,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # - name: Install Playwright browsers
-      #   run: npx playwright install --with-deps
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
 
-      # - name: Run E2E tests
-      #   run: npm run test:e2e
-      #   env:
-      #     CI: true
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
 
       - name: Get current version
         id: current_version

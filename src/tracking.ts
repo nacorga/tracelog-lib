@@ -45,14 +45,11 @@ export class Tracking {
     this.initializationState = InitializationState.INITIALIZING;
 
     try {
-      // 1. Initialize ConfigManager
       this.configManager = new ConfigManager(this.catchError.bind(this));
 
-      // 2. Load configuration (local + remote) - await to prevent race conditions
       const mergedConfig = await this.configManager.loadConfig(id, config || {});
+      const apiUrl = this.configManager.isDemoMode() ? 'demo' : this.configManager.getApiUrl();
 
-      // 3. Initialize DataSender
-      const apiUrl = this.configManager.getApiUrl();
       if (!apiUrl) {
         throw new Error('Failed to get API URL');
       }
@@ -61,16 +58,15 @@ export class Tracking {
         apiUrl,
         () => mergedConfig.qaMode || false,
         () => this.sessionManager?.getUserId() || '',
+        this.configManager.isDemoMode(),
       );
 
-      // 4. Initialize SessionManager
       this.sessionManager = new SessionManager(
         mergedConfig,
         this.handleSessionEvent.bind(this),
         () => mergedConfig.qaMode || false,
       );
 
-      // 5. Initialize EventManager
       this.eventManager = new EventManager(
         mergedConfig,
         () => this.sessionManager.getUserId(),
@@ -84,22 +80,18 @@ export class Tracking {
         (url: string) => this.urlManager?.isRouteExcluded(url) || false,
       );
 
-      // 6. Initialize UrlManager
       this.urlManager = new UrlManager(mergedConfig, this.handlePageViewEvent.bind(this), () =>
         this.trackingManager?.suppressNextScrollEvent(),
       );
 
-      // 7. Initialize TrackingManager
       this.trackingManager = new TrackingManager(
         mergedConfig,
         this.handleTrackingEvent.bind(this),
         this.handleInactivity.bind(this),
       );
 
-      // 8. Start initialization sequence - await to prevent race conditions
       await this.startInitializationSequence();
 
-      // 9. Set flags atomically
       this.isExcludedUser = !this.sessionManager.isSampledUser();
       this.isInitialized = true;
       this.initializationState = InitializationState.INITIALIZED;

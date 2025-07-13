@@ -20,6 +20,7 @@
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:all": "npm run build:esm && npm run build:cjs",
+    "build:browser": "vite build",
     "build-ugly": "npm run build:all && find dist -name '*.js' -exec npx uglify-js {} -o {} --compress --mangle --toplevel \\;",
     "build-ugly:win": "npm run build:all && Get-ChildItem -Path dist -Recurse -Filter *.js | ForEach-Object { npx uglify-js $_.FullName -o $_.FullName --compress --mangle --toplevel }",
     "release": "standard-version",
@@ -30,10 +31,7 @@
     "check": "npm run lint && npm run format:check",
     "fix": "npm run lint:fix && npm run format",
     "serve:test": "http-server tests/fixtures -p 3000 --cors",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug",
-    "test:e2e:headed": "playwright test --headed",
+    "test:e2e": "npm run build:browser && cp dist/browser/tracelog.js tests/fixtures/tracelog.js && playwright test",
     "rc:list": "node scripts/rc-manager.js list",
     "rc:cleanup": "node scripts/rc-manager.js cleanup",
     "rc:info": "node scripts/rc-manager.js info",
@@ -59,6 +57,7 @@
     "standard-version": "^9.5.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.36.0",
-    "uglify-js": "^3.19.3"
+    "uglify-js": "^3.19.3",
+    "vite": "^7.0.4"
   }
 }

@@ -37,15 +37,29 @@ export class ConfigManager {
 
   async loadConfig(id: string, config: TracelogAppConfig): Promise<TracelogConfig> {
     this.id = id;
+
+    if (id === 'demo') {
+      const demoConfig: TracelogConfig = {
+        ...DEFAULT_TRACKING_API_CONFIG,
+        ...config,
+        qaMode: true,
+        samplingRate: 1,
+        tags: [],
+        excludedUrlPaths: [],
+      };
+
+      return demoConfig;
+    }
+
     const result = await this.loadConfigWithValidation(id, config);
 
-    // Log warnings and errors for debugging
     if (result.warnings.length > 0) {
       console.warn('[TraceLog] Configuration warnings:', result.warnings);
     }
 
     if (result.errors.length > 0) {
       console.error('[TraceLog] Configuration errors:', result.errors);
+
       this.errorReporter.reportError({
         message: `Configuration errors: ${result.errors.join('; ')}`,
         severity: 'medium',
@@ -58,20 +72,21 @@ export class ConfigManager {
   private async loadConfigWithValidation(id: string, config: TracelogAppConfig): Promise<ConfigLoadResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
+
     let finalConfig: TracelogConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...config };
 
-    // Validate basic configuration
     try {
       const validationResult = this.validateAppConfig(config);
+
       errors.push(...validationResult.errors);
       warnings.push(...validationResult.warnings);
     } catch (error) {
       errors.push(`Failed to validate app config: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Attempt to fetch remote configuration
     try {
       const remoteConfig = await this.fetchConfigWithRetry(config);
+
       if (remoteConfig) {
         finalConfig = { ...finalConfig, ...remoteConfig };
       } else {
@@ -81,13 +96,12 @@ export class ConfigManager {
       errors.push(`Remote config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Final validation
     try {
       const finalValidation = this.validateFinalConfig(finalConfig);
+
       errors.push(...finalValidation.errors);
       warnings.push(...finalValidation.warnings);
 
-      // Apply corrections if needed
       finalConfig = this.applyConfigCorrections(finalConfig);
     } catch (error) {
       errors.push(`Final config validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -104,7 +118,6 @@ export class ConfigManager {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    // Session timeout validation
     if (config.sessionTimeout !== undefined) {
       if (typeof config.sessionTimeout !== 'number') {
         errors.push('sessionTimeout must be a number');
@@ -115,14 +128,13 @@ export class ConfigManager {
       }
     }
 
-    // Global metadata validation
     if (config.globalMetadata !== undefined) {
       if (typeof config.globalMetadata !== 'object' || config.globalMetadata === null) {
         errors.push('globalMetadata must be an object');
       } else {
         const metadataSize = JSON.stringify(config.globalMetadata).length;
+
         if (metadataSize > 10_240) {
-          // 10KB
           errors.push('globalMetadata is too large (max 10KB)');
         }
 
@@ -139,7 +151,6 @@ export class ConfigManager {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    // Sampling rate validation
     if (config.samplingRate !== undefined) {
       if (typeof config.samplingRate !== 'number') {
         errors.push('samplingRate must be a number');
@@ -148,7 +159,6 @@ export class ConfigManager {
       }
     }
 
-    // Excluded URL paths validation
     if (config.excludedUrlPaths !== undefined) {
       if (Array.isArray(config.excludedUrlPaths)) {
         for (const [index, path] of config.excludedUrlPaths.entries()) {
@@ -314,7 +324,7 @@ export class ConfigManager {
   }
 
   getApiUrl(): string | undefined {
-    if (!this.id) {
+    if (!this.id || this.isDemoMode()) {
       return undefined;
     }
 
@@ -376,7 +386,10 @@ export class ConfigManager {
     return { ...this.config };
   }
 
-  // Health check methods
+  isDemoMode(): boolean {
+    return this.id === 'demo';
+  }
+
   isHealthy(): boolean {
     return (
       this.fetchAttempts < this.maxFetchAttempts && this.config !== null && typeof this.config.samplingRate === 'number'
