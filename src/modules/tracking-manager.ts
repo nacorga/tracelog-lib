@@ -11,6 +11,7 @@ import {
 export class TrackingManager {
   private readonly scrollHandler: ScrollHandler;
   private readonly inactivityHandler: InactivityHandler;
+  private clickHandler?: (event: Event) => void;
 
   constructor(
     private readonly config: TracelogConfig,
@@ -46,7 +47,12 @@ export class TrackingManager {
   }
 
   initClickTracking(): void {
-    const handleClick = (event: Event) => {
+    if (this.clickHandler) {
+      // Prevent accumulating duplicate listeners
+      window.removeEventListener('click', this.clickHandler, true);
+    }
+
+    this.clickHandler = (event: Event) => {
       const mouseEvent = event as MouseEvent;
       const clickedElement = mouseEvent.target as HTMLElement;
 
@@ -80,7 +86,7 @@ export class TrackingManager {
       });
     };
 
-    window.addEventListener('click', handleClick, true);
+    window.addEventListener('click', this.clickHandler, true);
   }
 
   suppressNextScrollEvent(): void {
@@ -108,6 +114,10 @@ export class TrackingManager {
   }
 
   cleanup(): void {
+    if (this.clickHandler) {
+      window.removeEventListener('click', this.clickHandler, true);
+      this.clickHandler = undefined;
+    }
     this.scrollHandler?.cleanup();
     this.inactivityHandler?.cleanup();
   }
