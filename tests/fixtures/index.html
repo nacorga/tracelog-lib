@@ -42,11 +42,20 @@
             data-tracelog-value="test_value">
             Test Button
         </button>
+
+        <button
+            id="custom-event-btn"
+            data-testid="custom-event-btn">
+            Send Custom Event
+        </button>
     </div>
 
     <script type="module">
         import { startTracking, sendCustomEvent } from './tracelog.js';
         startTracking('demo');
+        document.getElementById('custom-event-btn')?.addEventListener('click', () => {
+            sendCustomEvent('playwright_event', { foo: 'bar' });
+        });
     </script>
 </body>
 </html> 

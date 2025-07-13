@@ -16,8 +16,8 @@ test.describe('Click Events - Demo Mode', () => {
     await page.getByTestId('test-button').click();
     await page.waitForTimeout(500);
 
-    const clickLogs = consoleLogs.filter((log) => log.includes(EventType.CLICK));
-    const customLogs = consoleLogs.filter((log) => log.includes(EventType.CUSTOM));
+    const clickLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.CLICK}"`));
+    const customLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.CUSTOM}"`));
 
     expect(clickLogs).toHaveLength(1);
     expect(customLogs).toHaveLength(1);

@@ -18,7 +18,7 @@ test.describe('Scroll Events - Demo Mode', () => {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(500);
 
-    const scrollLogs = consoleLogs.filter((log) => log.includes(EventType.SCROLL));
+    const scrollLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.SCROLL}"`));
     expect(scrollLogs.length).toBeGreaterThan(0);
 
     const scrollEvent = scrollLogs[0];

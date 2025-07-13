@@ -59,7 +59,7 @@ test.describe('Session Events - Demo Mode', () => {
     await page.goto('about:blank');
     await page.waitForTimeout(1000);
 
-    const sessionEndLogs = consoleLogs.filter((log) => log.includes(EventType.SESSION_END));
+    const sessionEndLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.SESSION_END}"`));
 
     expect(sessionEndLogs).toHaveLength(1);
     expect(sessionEndLogs[0]).toContain(`[TraceLog] ${EventType.SESSION_END} event:`);
