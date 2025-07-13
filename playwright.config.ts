@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   workers: process.env.CI ? 4 : undefined,
   reporter: process.env.CI ? [['github'], ['html']] : 'html',
   globalTimeout: process.env.CI ? 15 * 60 * 1000 : undefined,
@@ -31,25 +31,26 @@ export default defineConfig({
         ...devices['Desktop Firefox']
       },
     },
-
-    {
-      name: 'webkit',
-      use: {
-        ...devices['Desktop Safari']
-      },
-    },
     {
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5']
       },
     },
-    {
-      name: 'Mobile Safari',
-      use: {
-        ...devices['iPhone 12']
+    ...(!process.env.CI ? [
+      {
+        name: 'webkit',
+        use: {
+          ...devices['Desktop Safari']
+        },
       },
-    },
+      {
+        name: 'Mobile Safari',
+        use: {
+          ...devices['iPhone 12']
+        },
+      }
+    ] : []),
   ],
   webServer: {
     command: 'npm run serve:test',

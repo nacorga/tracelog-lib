@@ -62,6 +62,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwoff2-dev
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
         if: steps.cache-playwright.outputs.cache-hit != 'true'
