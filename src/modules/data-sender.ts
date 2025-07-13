@@ -157,7 +157,7 @@ class OptimizedStorage implements StorageManager {
       }
 
       let size = 0;
-      for (const value of this.memoryFallback) {
+      for (const value of this.memoryFallback.values()) {
         size += value.length;
       }
       return size;
@@ -347,7 +347,6 @@ export class DataSender {
       }
     }
 
-    // Fallback con fetch síncrono (menos confiable pero mejor que perder el evento)
     try {
       const response = await fetch(this.apiUrl, {
         method: 'POST',
@@ -359,12 +358,10 @@ export class DataSender {
       if (response.status >= 200 && response.status < 300) {
         this.clearPersistedEvents();
       } else {
-        // Como último recurso, persistir eventos y programar retry
         this.persistCriticalEvents(body);
         this.scheduleRetry(body);
       }
     } catch (error) {
-      // Último intento: persistir eventos críticos en localStorage
       this.persistCriticalEvents(body);
       this.scheduleRetry(body);
 
@@ -377,7 +374,6 @@ export class DataSender {
     }
   }
 
-  // Persistir eventos críticos en localStorage como respaldo
   persistCriticalEvents(body: TracelogQueue): void {
     try {
       const criticalEvents = body.events.filter(
@@ -407,16 +403,14 @@ export class DataSender {
     }
   }
 
-  // Limpiar eventos persistidos después de envío exitoso
   clearPersistedEvents(): void {
     try {
       window.localStorage.removeItem(`${LSKey.UserId}_critical_events`);
     } catch {
-      // Ignorar errores al limpiar localStorage
+      // Ignore errors when clearing localStorage
     }
   }
 
-  // Recuperar y enviar eventos críticos persistidos en inicialización
   async recoverPersistedEvents(): Promise<void> {
     try {
       const persistedData = window.localStorage.getItem(`${LSKey.UserId}_critical_events`);
@@ -424,7 +418,7 @@ export class DataSender {
       if (persistedData) {
         const data = JSON.parse(persistedData);
 
-        // Solo intentar recovery si los eventos son recientes (menos de 24 horas)
+        // Only try to recover if the events are recent (less than 24 hours)
         const isRecent = Date.now() - data.timestamp < 24 * 60 * 60 * 1000;
 
         if (isRecent && data.events.length > 0) {
@@ -446,7 +440,6 @@ export class DataSender {
             }
           }
         } else {
-          // Limpiar eventos antiguos
           this.clearPersistedEvents();
         }
       }
@@ -458,7 +451,6 @@ export class DataSender {
   }
 
   async sendError(error: TracelogAdminError): Promise<void> {
-    // Handle demo mode - log errors to console instead of sending to API
     if (this.isDemoMode) {
       console.error(error.message);
       return;

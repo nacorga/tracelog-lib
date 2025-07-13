@@ -141,25 +141,21 @@ export class Tracking {
   private setupCleanupListeners(): void {
     const cleanup = createCleanupHandler(this);
 
-    // Create cleanup function for beforeunload
     const beforeUnloadCleanup = (): void => {
       this.sessionManager?.setPageUnloading(true);
       cleanup();
     };
 
-    // Create cleanup function for pagehide
     const pageHideCleanup = (): void => {
       this.sessionManager?.setPageUnloading(true);
       cleanup();
     };
 
-    // Create cleanup function for unload
     const unloadCleanup = (): void => {
       this.sessionManager?.setPageUnloading(true);
       cleanup();
     };
 
-    // Create cleanup function for visibility change
     const visibilityChangeCleanup = (): void => {
       if (document.visibilityState === 'hidden') {
         this.handleInactivity(true);
@@ -169,13 +165,11 @@ export class Tracking {
       }
     };
 
-    // Add event listeners
     window.addEventListener('beforeunload', beforeUnloadCleanup);
     window.addEventListener('pagehide', pageHideCleanup);
     window.addEventListener('unload', unloadCleanup);
     document.addEventListener('visibilitychange', visibilityChangeCleanup);
 
-    // Store cleanup functions
     this.cleanupListeners.push(
       () => window.removeEventListener('beforeunload', beforeUnloadCleanup),
       () => window.removeEventListener('pagehide', pageHideCleanup),
@@ -184,7 +178,6 @@ export class Tracking {
     );
   }
 
-  // Event handlers
   private handleSessionEvent(eventType: EventType, trigger?: string): void {
     this.eventManager.handleEvent({
       evType: eventType,
@@ -207,7 +200,6 @@ export class Tracking {
     this.eventManager.handleEvent(event);
   }
 
-  // Private sync methods for internal use
   private isQaModeSync(): boolean {
     return this.configManager?.getConfig()?.qaMode || false;
   }
@@ -230,7 +222,12 @@ export class Tracking {
       severity: 'medium',
       context: 'tracking',
     };
-    await this.dataSender.sendError(adminError);
+
+    if (this.dataSender) {
+      await this.dataSender.sendError(adminError);
+    } else if (this.isQaModeSync()) {
+      console.error('[TraceLog] Error before DataSender init:', adminError);
+    }
   }
 
   // Public API methods with race condition protection
@@ -304,6 +301,7 @@ export class Tracking {
         events: events,
         ...(this.sessionManager.getGlobalMetadata() && { global_metadata: this.sessionManager.getGlobalMetadata() }),
       };
+
       await this.dataSender.sendEventsSynchronously(finalBatch);
       this.eventManager.clearEventsQueue();
     }
@@ -330,7 +328,6 @@ export class Tracking {
     this.urlManager.updateUrl(url);
   }
 
-  // Configuration access with race condition protection
   async getConfig() {
     await this.waitForInitialization();
     return this.configManager?.getConfig();
@@ -341,7 +338,6 @@ export class Tracking {
     return this.configManager?.getConfig()?.qaMode || false;
   }
 
-  // Cleanup
   cleanup(): void {
     if (!this.isInitialized) {
       return;
