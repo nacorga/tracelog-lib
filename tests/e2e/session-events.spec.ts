@@ -43,4 +43,31 @@ test.describe('Session Events - Demo Mode', () => {
     expect(pageViewEvent).toContain('"timestamp"');
     expect(pageViewEvent).toContain('"page_url"');
   });
+
+  test(`should log ${EventType.SESSION_END} on page unload`, async ({ page }) => {
+    const consoleLogs: string[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'log' && msg.text().includes('[TraceLog]')) {
+        consoleLogs.push(msg.text());
+      }
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.goto('about:blank');
+    await page.waitForTimeout(1000);
+
+    const sessionEndLogs = consoleLogs.filter((log) => log.includes(EventType.SESSION_END));
+
+    expect(sessionEndLogs).toHaveLength(1);
+    expect(sessionEndLogs[0]).toContain(`[TraceLog] ${EventType.SESSION_END} event:`);
+
+    const sessionEndEvent = sessionEndLogs[0];
+
+    expect(sessionEndEvent).toContain('"type"');
+    expect(sessionEndEvent).toContain('"timestamp"');
+    expect(sessionEndEvent).toContain('"page_url"');
+  });
 });

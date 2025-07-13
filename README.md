@@ -1,6 +1,6 @@
 # TraceLog client
 
-A lightweight, privacy-focused analytics and tracking client for web applications. The TraceLog client provides essential user interaction tracking capabilities while maintaining high performance and minimal bundle size.
+TraceLog is a powerful analytics library for tracking user interactions across your web applications.
 
 ## Important Note
 

@@ -20,26 +20,6 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
-        .section {
-            margin: 20px 0;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            background-color: #fafafa;
-        }
-        
-        .section h2 {
-            margin-top: 0;
-            color: #333;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 5px;
-        }
-        
-        .section h3 {
-            color: #555;
-            margin-top: 15px;
-        }
-        
         button {
             background-color: #007bff;
             color: white;
@@ -53,10 +33,15 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" style="height: 1200px;">
         <h1 data-testid="title">TraceLog E2E Test Page</h1>
-        <div class="section" style="height: 1000px;">
-        </div>
+        <button
+            id="test-button"
+            data-testid="test-button"
+            data-tracelog-name="test_button"
+            data-tracelog-value="test_value">
+            Test Button
+        </button>
     </div>
 
     <script type="module">
@@ -65,4 +50,3 @@
     </script>
 </body>
 </html> 
-
