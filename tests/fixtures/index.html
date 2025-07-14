@@ -51,10 +51,10 @@
     </div>
 
     <script type="module">
-        import { startTracking, sendCustomEvent } from './tracelog.js';
-        startTracking('demo');
+        import { TraceLog } from './tracelog.js';
+        TraceLog.startTracking('demo');
         document.getElementById('custom-event-btn')?.addEventListener('click', () => {
-            sendCustomEvent('playwright_event', { foo: 'bar' });
+            TraceLog.sendCustomEvent('playwright_event', { foo: 'bar' });
         });
     </script>
 </body>

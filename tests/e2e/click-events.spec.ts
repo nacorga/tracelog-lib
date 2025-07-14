@@ -32,7 +32,7 @@ test.describe('Click Events - Demo Mode', () => {
     expect(clickEvent).toContain('"page_url"');
     expect(clickEvent).toContain('"x"');
     expect(clickEvent).toContain('"y"');
-    expect(clickEvent).toContain('"elementTag"');
+    expect(clickEvent).toContain('"tag"');
 
     const customEvent = customLogs[0];
 

@@ -3,7 +3,6 @@ export interface AdminError {
   timestamp: number;
   userAgent: string;
   url: string;
-  api_key?: string;
   stack?: string;
   severity?: 'low' | 'medium' | 'high';
   context?: string;

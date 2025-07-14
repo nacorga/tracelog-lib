@@ -22,12 +22,11 @@ export class ConfigManager {
   private lastFetchAttempt = 0;
   private fetchAttempts = 0;
 
-  constructor(private readonly catchError: (error: { message: string; api_key?: string }) => Promise<void>) {
+  constructor(private readonly catchError: (error: { message: string }) => Promise<void>) {
     this.errorReporter = {
       reportError: (error) => {
         this.catchError({
           message: `[ConfigManager] ${error.message}`,
-          ...(this.id && { api_key: this.id }),
         }).catch(() => {
           // Silently handle error reporting failures
         });
