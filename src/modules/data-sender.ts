@@ -1,5 +1,5 @@
-import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX, LSKey } from '@/constants';
-import { TracelogQueue, TracelogAdminError, EventType } from '@/types';
+import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '@/constants';
+import { Queue, AdminError, EventType, StorageKey } from '@/types';
 
 interface StorageManager {
   set(key: string, value: unknown): boolean;
@@ -13,11 +13,9 @@ interface StorageManager {
 class OptimizedStorage implements StorageManager {
   private readonly available: boolean;
   private readonly memoryFallback: Map<string, string> = new Map();
-  private readonly compressionEnabled: boolean;
 
   constructor() {
     this.available = this.checkAvailability();
-    this.compressionEnabled = this.checkCompressionSupport();
   }
 
   private checkAvailability(): boolean {
@@ -29,15 +27,6 @@ class OptimizedStorage implements StorageManager {
     } catch {
       return false;
     }
-  }
-
-  private checkCompressionSupport(): boolean {
-    return typeof window !== 'undefined' && 'CompressionStream' in window;
-  }
-
-  // Compression disabled due to browser compatibility issues
-  private async compress(data: string): Promise<string> {
-    return data;
   }
 
   set(key: string, value: unknown): boolean {
@@ -208,7 +197,7 @@ export class DataSender {
     this.storage = new OptimizedStorage();
   }
 
-  async sendEventsQueue(body: TracelogQueue): Promise<boolean> {
+  async sendEventsQueue(body: Queue): Promise<boolean> {
     if (this.isDemoMode) {
       for (const event of body.events) {
         console.log(`[TraceLog] ${event.type} event:`, JSON.stringify(event));
@@ -250,7 +239,7 @@ export class DataSender {
     }
   }
 
-  async sendEventsSynchronously(body: TracelogQueue): Promise<boolean> {
+  async sendEventsSynchronously(body: Queue): Promise<boolean> {
     // Handle demo mode - log events to console instead of sending to API
     if (this.isDemoMode) {
       for (const event of body.events) {
@@ -303,7 +292,7 @@ export class DataSender {
     }
   }
 
-  private async collectEventsQueue(body: TracelogQueue): Promise<boolean> {
+  private async collectEventsQueue(body: Queue): Promise<boolean> {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
     if (navigator.sendBeacon) {
@@ -335,7 +324,7 @@ export class DataSender {
     }
   }
 
-  private async forceImmediateSend(body: TracelogQueue): Promise<void> {
+  private async forceImmediateSend(body: Queue): Promise<void> {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
     // Intentar sendBeacon nuevamente
@@ -374,7 +363,7 @@ export class DataSender {
     }
   }
 
-  persistCriticalEvents(body: TracelogQueue): void {
+  persistCriticalEvents(body: Queue): void {
     try {
       const criticalEvents = body.events.filter(
         (event) => event.type === EventType.SESSION_END || event.type === EventType.SESSION_START,
@@ -390,7 +379,7 @@ export class DataSender {
           ...(body.global_metadata && { global_metadata: body.global_metadata }),
         };
 
-        window.localStorage.setItem(`${LSKey.UserId}_critical_events`, JSON.stringify(persistedData));
+        window.localStorage.setItem(`${StorageKey.UserId}_critical_events`, JSON.stringify(persistedData));
 
         if (this.isQaMode()) {
           console.log('[TraceLog] Critical events persisted to localStorage');
@@ -405,7 +394,7 @@ export class DataSender {
 
   clearPersistedEvents(): void {
     try {
-      window.localStorage.removeItem(`${LSKey.UserId}_critical_events`);
+      window.localStorage.removeItem(`${StorageKey.UserId}_critical_events`);
     } catch {
       // Ignore errors when clearing localStorage
     }
@@ -413,7 +402,7 @@ export class DataSender {
 
   async recoverPersistedEvents(): Promise<void> {
     try {
-      const persistedData = window.localStorage.getItem(`${LSKey.UserId}_critical_events`);
+      const persistedData = window.localStorage.getItem(`${StorageKey.UserId}_critical_events`);
 
       if (persistedData) {
         const data = JSON.parse(persistedData);
@@ -422,7 +411,7 @@ export class DataSender {
         const isRecent = Date.now() - data.timestamp < 24 * 60 * 60 * 1000;
 
         if (isRecent && data.events.length > 0) {
-          const recoveryBody: TracelogQueue = {
+          const recoveryBody: Queue = {
             user_id: data.userId,
             session_id: data.sessionId,
             device: data.device,
@@ -450,7 +439,7 @@ export class DataSender {
     }
   }
 
-  async sendError(error: TracelogAdminError): Promise<void> {
+  async sendError(error: AdminError): Promise<void> {
     if (this.isDemoMode) {
       console.error(error.message);
       return;
@@ -484,7 +473,7 @@ export class DataSender {
     }
   }
 
-  private scheduleRetry(body: TracelogQueue): void {
+  private scheduleRetry(body: Queue): void {
     if (this.retryTimeoutId !== null) {
       return;
     }

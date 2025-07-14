@@ -19,32 +19,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Cache NPM registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Cache Playwright browsers
+        id: cache-playwright
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-browsers-
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
           registry-url: 'https://registry.npmjs.org/'
           scope: '@tracelog'
-          cache: 'npm'
-
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Cache build artifacts
-        uses: actions/cache@v4
-        with:
-          path: dist
-          key: ${{ runner.os }}-build-${{ hashFiles('src/**/*', 'tsconfig*.json', 'vite.config.mjs') }}
-          restore-keys: |
-            ${{ runner.os }}-build-
 
       - name: Build
         run: npm run build:all
@@ -53,6 +53,7 @@ jobs:
         run: npm run lint
 
       - name: Install Playwright browsers
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
       - name: Run E2E tests
@@ -60,32 +61,9 @@ jobs:
         env:
           CI: true
 
-      # - name: Cache Playwright browsers
-      #   id: cache-playwright
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       ~/.cache/ms-playwright
-      #     key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-playwright-
-
-      # - name: Install system dependencies
-      #   run: |
-      #     sudo apt-get update
-      #     sudo apt-get install -y libwoff2-dev
-
-      # - name: Install Playwright browsers
-      #   run: npx playwright install --with-deps
-      #   if: steps.cache-playwright.outputs.cache-hit != 'true'
-
-      # - name: Verify Playwright installation
-      #   run: npx playwright --version
-
-      # - name: Run E2E tests
-      #   run: npm run test:e2e
-      #   env:
-      #     CI: true
+      - name: Publish Playwright report to GitHub
+        if: always()
+        run: npx playwright show-report --output=github
 
       - name: Get current version
         id: current_version
@@ -95,29 +73,30 @@ jobs:
 
       - name: Generate RC version
         id: rc_version
+        if: ${{ success() }}
         run: |
           CURRENT_VERSION=${{ steps.current_version.outputs.current_version }}
           PR_NUMBER=${{ github.event.pull_request.number }}
           RUN_NUMBER=${{ github.run_number }}
-          
-          # Increment patch version and add RC
           IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
           NEW_PATCH=$((patch + 1))
           RC_VERSION="${major}.${minor}.${NEW_PATCH}-rc.${PR_NUMBER}.${RUN_NUMBER}"
-          
           echo "rc_version=$RC_VERSION" >> $GITHUB_OUTPUT
           echo "🔄 New RC version generated: $RC_VERSION"
           echo "📝 This is version #${RUN_NUMBER} of PR #${PR_NUMBER}"
 
       - name: Update package.json version
+        if: steps.rc_version.outcome == 'success'
         run: |
           RC_VERSION=${{ steps.rc_version.outputs.rc_version }}
           npm version $RC_VERSION --no-git-tag-version
 
       - name: Build the dist folder
+        if: steps.rc_version.outcome == 'success'
         run: npm run build-ugly
 
       - name: Publish RC to NPM
+        if: steps.rc_version.outcome == 'success'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -126,10 +105,11 @@ jobs:
           echo "🏷️ Tag 'rc' now points to: ${{ steps.rc_version.outputs.rc_version }}"
 
       - name: List RC versions for this PR
+        if: steps.rc_version.outcome == 'success'
         run: |
           PR_NUMBER=${{ github.event.pull_request.number }}
           echo "📋 RC versions for PR #${PR_NUMBER}:"
-          npm view @tracelog/client versions --json | jq -r '.[]' | grep -E "\-rc\.${PR_NUMBER}\." | sort -V || echo "This is the first RC version for this PR"
+          npm view @tracelog/client versions --json | jq -r '.[]' | grep -E "-rc\.${PR_NUMBER}\." | sort -V || echo "This is the first RC version for this PR"
 
       - name: Comment on PR
         uses: actions/github-script@v7

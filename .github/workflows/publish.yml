@@ -17,13 +17,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Cache NPM registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
           registry-url: 'https://registry.npmjs.org/'
           scope: '@tracelog'
-
 
       - name: Install dependencies
         run: npm ci
@@ -34,13 +41,27 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # - name: Install Playwright browsers
-      #   run: npx playwright install --with-deps
+      - name: Cache Playwright browsers
+        id: cache-playwright
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-browsers-
 
-      # - name: Run E2E tests
-      #   run: npm run test:e2e
-      #   env:
-      #     CI: true
+      - name: Install Playwright browsers
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Publish Playwright report to GitHub
+        if: always()
+        run: npx playwright show-report --output=github
 
       - name: Install standard-version
         run: npm install --save-dev standard-version
@@ -57,7 +78,7 @@ jobs:
           fi
 
       - name: Bump version
-        if: steps.check_changes.outputs.skip == 'false'
+        if: steps.check_changes.outputs.skip == 'false' && success()
         id: bump_version
         run: |
           git config --global user.email "github-actions@github.com"
@@ -72,14 +93,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get latest tag
-        if: steps.check_changes.outputs.skip == 'false'
+        if: steps.bump_version.outcome == 'success'
         id: get_tag
         run: |
           TAG=$(git describe --tags --abbrev=0)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        if: steps.check_changes.outputs.skip == 'false'
+        if: steps.bump_version.outcome == 'success'
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,25 +112,22 @@ jobs:
           prerelease: false
 
       - name: Build the dist folder
+        if: steps.bump_version.outcome == 'success'
         run: npm run build-ugly
 
       - name: Publish to NPM
+        if: steps.bump_version.outcome == 'success'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
 
       - name: Clean up RC versions
+        if: steps.bump_version.outcome == 'success'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          # Get the current version
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          
-          # Clean up previous RC versions using our script
           echo "🧹 Cleaning up RC versions..."
           node scripts/rc-manager.js cleanup || echo "No RC versions to clean"
-          
-          # Update the 'latest' tag to ensure it points to the new version
           npm dist-tag add @tracelog/client@$CURRENT_VERSION latest
-          
           echo "✅ Published version $CURRENT_VERSION as latest"

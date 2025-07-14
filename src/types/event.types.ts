@@ -14,12 +14,12 @@ export enum ScrollDirection {
 
 export type MetadataType = string | number | boolean | string[];
 
-export interface TracelogEventScrollData {
+export interface EventScrollData {
   depth: number;
   direction: ScrollDirection;
 }
 
-export interface TracelogEventClickData {
+export interface EventClickData {
   x: number;
   y: number;
   relativeX: number;
@@ -36,12 +36,25 @@ export interface TracelogEventClickData {
   elementDataAttributes?: Record<string, string>;
 }
 
-export interface TracelogEventCustomData {
+export interface ClickCoordinates {
+  x: number;
+  y: number;
+  relativeX: number;
+  relativeY: number;
+}
+
+export interface ClickTrackingElementData {
+  element: HTMLElement;
+  name: string;
+  value?: string;
+}
+
+export interface EventCustomData {
   name: string;
   metadata?: Record<string, MetadataType>;
 }
 
-export interface TracelogEventUtm {
+export interface EventUtm {
   source?: string;
   medium?: string;
   campaign?: string;
@@ -49,7 +62,7 @@ export interface TracelogEventUtm {
   content?: string;
 }
 
-export interface TracelogEventPageView {
+export interface EventPageView {
   referrer?: string;
   title?: string;
   pathname?: string;
@@ -57,30 +70,30 @@ export interface TracelogEventPageView {
   hash?: string;
 }
 
-export interface TracelogEventHandler {
+export interface EventHandler {
   evType: EventType;
   url?: string;
   fromUrl?: string;
   referrer?: string;
-  utm?: TracelogEventUtm;
-  scrollData?: TracelogEventScrollData;
-  clickData?: TracelogEventClickData;
-  customEvent?: TracelogEventCustomData;
-  pageView?: TracelogEventPageView;
+  utm?: EventUtm;
+  scrollData?: EventScrollData;
+  clickData?: EventClickData;
+  customEvent?: EventCustomData;
+  pageView?: EventPageView;
   trigger?: string;
 }
 
-export interface TracelogEvent {
+export interface EventData {
   type: EventType;
   page_url: string;
   timestamp: number;
   referrer?: string;
   from_page_url?: string;
-  scroll_data?: TracelogEventScrollData;
-  click_data?: TracelogEventClickData;
-  custom_event?: TracelogEventCustomData;
-  page_view?: TracelogEventPageView;
-  utm?: TracelogEventUtm;
+  scroll_data?: EventScrollData;
+  click_data?: EventClickData;
+  custom_event?: EventCustomData;
+  page_view?: EventPageView;
+  utm?: EventUtm;
   tags?: string[];
   excluded_route?: boolean;
 }

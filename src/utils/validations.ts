@@ -4,8 +4,7 @@ import {
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
 } from '../constants';
-import { EventType, MetadataType, ScrollDirection, TracelogEvent } from '../types/event.types';
-import { TracelogQueue } from '../types/queue.types';
+import { EventType, MetadataType, ScrollDirection, EventData, Queue } from '@/types';
 import { sanitizeMetadata } from './sanitize.utils';
 
 export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
@@ -50,7 +49,7 @@ export const isValidUrl = (url: string, allowedDomain: string): boolean => {
   }
 };
 
-export const isTracelogQueue = (value: unknown): value is TracelogQueue => {
+export const isTracelogQueue = (value: unknown): value is Queue => {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
@@ -76,7 +75,7 @@ export const isTracelogQueue = (value: unknown): value is TracelogQueue => {
   return true;
 };
 
-export const isTracelogEvent = (value: unknown): value is TracelogEvent => {
+export const isTracelogEvent = (value: unknown): value is EventData => {
   if (typeof value !== 'object' || value === null) {
     return false;
   }

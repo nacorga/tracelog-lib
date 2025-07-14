@@ -1,12 +1,5 @@
-import { TracelogConfig, EventType, TracelogEventScrollData } from '@/types';
-import {
-  ClickHandler,
-  ScrollHandler,
-  ScrollConfig,
-  InactivityHandler,
-  InactivityConfig,
-  InactivityData,
-} from '@/events';
+import { Config, EventType, EventScrollData, InactivityConfig, InactivityData } from '@/types';
+import { ClickHandler, ScrollHandler, ScrollConfig, InactivityHandler } from '@/events';
 
 export class TrackingManager {
   private readonly scrollHandler: ScrollHandler;
@@ -14,23 +7,21 @@ export class TrackingManager {
   private clickHandler?: (event: Event) => void;
 
   constructor(
-    private readonly config: TracelogConfig,
+    private readonly config: Config,
     private readonly handleEvent: (event: any) => void,
     private readonly handleInactivity: (isInactive: boolean) => void,
   ) {
-    // Initialize scroll handler
     const scrollConfig: ScrollConfig = {
       containerSelectors: this.config.scrollContainerSelectors,
     };
 
-    this.scrollHandler = new ScrollHandler(scrollConfig, (scrollData: TracelogEventScrollData) => {
+    this.scrollHandler = new ScrollHandler(scrollConfig, (scrollData: EventScrollData) => {
       this.handleEvent({
         evType: EventType.SCROLL,
         scrollData,
       });
     });
 
-    // Initialize inactivity handler
     const inactivityConfig: InactivityConfig = {
       timeout: this.config.sessionTimeout || 300_000, // Default 5 minutes
     };
@@ -62,7 +53,6 @@ export class TrackingManager {
       const relevantClickElement = ClickHandler.getRelevantClickElement(clickedElement);
       const coordinates = ClickHandler.calculateClickCoordinates(mouseEvent, clickedElement);
 
-      // Handle custom tracking attributes
       if (trackingElement) {
         const trackingData = ClickHandler.extractTrackingData(trackingElement);
         const attributeData = ClickHandler.createCustomEventData(trackingData);
@@ -76,7 +66,6 @@ export class TrackingManager {
         });
       }
 
-      // Handle regular click tracking
       const clickData = ClickHandler.generateClickData(clickedElement, relevantClickElement, coordinates);
 
       this.handleEvent({
@@ -118,6 +107,7 @@ export class TrackingManager {
       window.removeEventListener('click', this.clickHandler, true);
       this.clickHandler = undefined;
     }
+
     this.scrollHandler?.cleanup();
     this.inactivityHandler?.cleanup();
   }

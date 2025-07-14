@@ -1,12 +1,8 @@
 import { Tracking } from '@/tracking';
-import { TracelogAppConfig, MetadataType } from '@/types';
+import { AppConfig, MetadataType } from '@/types';
 
-export * from '@/types/config.types';
-export * from '@/types/event.types';
-export * from '@/types/queue.types';
-export * from '@/types/tag.types';
+export * as TraceLog from '@/types';
 
-// Singleton instance management
 let trackingInstance: Tracking | undefined;
 
 /**
@@ -14,7 +10,7 @@ let trackingInstance: Tracking | undefined;
  * @param id - Tracking ID
  * @param config - Optional configuration
  */
-export const startTracking = (id: string, config?: TracelogAppConfig): void => {
+export const startTracking = (id: string, config?: AppConfig): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -47,7 +43,6 @@ export const sendCustomEvent = (name: string, metadata?: Record<string, Metadata
   }
 
   try {
-    // Handle async operation without blocking
     trackingInstance.sendCustomEvent(name, metadata).catch((error) => {
       console.error('[TraceLog] Custom event failed:', error instanceof Error ? error.message : 'Unknown error');
     });

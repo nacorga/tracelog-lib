@@ -51,5 +51,6 @@ module.exports = {
     'playwright.config.ts',
     'vite.config.ts',
     'tests/**/*',
+    'scripts/**/*',
   ],
 };

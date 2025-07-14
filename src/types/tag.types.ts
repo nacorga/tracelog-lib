@@ -1,11 +1,11 @@
 import { EventType } from './event.types';
 
-export enum TracelogTagLogicalOperator {
+export enum TagLogicalOperator {
   AND = 'AND',
   OR = 'OR',
 }
 
-export enum TracelogTagConditionType {
+export enum TagConditionType {
   URL_MATCHES = 'url_matches',
   ELEMENT_MATCHES = 'element_matches',
   DEVICE_TYPE = 'device_type',
@@ -16,7 +16,7 @@ export enum TracelogTagConditionType {
   UTM_CAMPAIGN = 'utm_campaign',
 }
 
-export enum TracelogTagConditionOperator {
+export enum TagConditionOperator {
   EQUALS = 'equals',
   CONTAINS = 'contains',
   STARTS_WITH = 'starts_with',
@@ -28,19 +28,19 @@ export enum TracelogTagConditionOperator {
   NOT_EXISTS = 'not_exists',
 }
 
-export interface TracelogTag {
+export interface Tag {
   id: string;
   name: string;
   description?: string;
   triggerType: EventType;
-  logicalOperator: TracelogTagLogicalOperator;
-  conditions: TracelogTagCondition[];
+  logicalOperator: TagLogicalOperator;
+  conditions: TagCondition[];
   isActive: boolean;
 }
 
-export interface TracelogTagCondition {
-  type: TracelogTagConditionType;
-  operator: TracelogTagConditionOperator;
+export interface TagCondition {
+  type: TagConditionType;
+  operator: TagConditionOperator;
   value: string;
   caseSensitive?: boolean;
 }

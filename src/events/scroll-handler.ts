@@ -1,5 +1,5 @@
 import { SCROLL_DEBOUNCE_TIME } from '@/constants';
-import { ScrollDirection, TracelogEventScrollData } from '@/types';
+import { ScrollDirection, EventScrollData } from '@/types';
 
 export interface ScrollContainer {
   element: Window | HTMLElement;
@@ -22,7 +22,7 @@ export class ScrollHandler {
 
   constructor(
     private readonly config: ScrollConfig,
-    private readonly onScrollEvent: (data: TracelogEventScrollData) => void,
+    private readonly onScrollEvent: (data: EventScrollData) => void,
   ) {}
 
   init(): void {
@@ -110,7 +110,7 @@ export class ScrollHandler {
     }
   }
 
-  private calculateScrollData(container: ScrollContainer): TracelogEventScrollData | null {
+  private calculateScrollData(container: ScrollContainer): EventScrollData | null {
     const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
     const viewportHeight = this.getViewportHeight(element);

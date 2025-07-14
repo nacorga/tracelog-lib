@@ -1,4 +1,4 @@
-import { TracelogAppConfig, TracelogApiConfig, TracelogConfig } from '@/types';
+import { AppConfig, ApiConfig, Config } from '@/types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '@/constants';
 import { sanitizeApiConfig, isValidUrl } from '@/utils';
 import packageJson from '../../package.json';
@@ -8,13 +8,13 @@ interface ErrorReporter {
 }
 
 interface ConfigLoadResult {
-  config: TracelogConfig;
+  config: Config;
   errors: string[];
   warnings: string[];
 }
 
 export class ConfigManager {
-  private readonly config: TracelogConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
+  private readonly config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
   private readonly errorReporter: ErrorReporter;
   private readonly maxFetchAttempts = 3;
 
@@ -35,11 +35,11 @@ export class ConfigManager {
     };
   }
 
-  async loadConfig(id: string, config: TracelogAppConfig): Promise<TracelogConfig> {
+  async loadConfig(id: string, config: AppConfig): Promise<Config> {
     this.id = id;
 
     if (id === 'demo') {
-      const demoConfig: TracelogConfig = {
+      const demoConfig: Config = {
         ...DEFAULT_TRACKING_API_CONFIG,
         ...config,
         qaMode: true,
@@ -69,11 +69,11 @@ export class ConfigManager {
     return result.config;
   }
 
-  private async loadConfigWithValidation(id: string, config: TracelogAppConfig): Promise<ConfigLoadResult> {
+  private async loadConfigWithValidation(id: string, config: AppConfig): Promise<ConfigLoadResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    let finalConfig: TracelogConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...config };
+    let finalConfig: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...config };
 
     try {
       const validationResult = this.validateAppConfig(config);
@@ -114,7 +114,7 @@ export class ConfigManager {
     };
   }
 
-  private validateAppConfig(config: TracelogAppConfig): { errors: string[]; warnings: string[] } {
+  private validateAppConfig(config: AppConfig): { errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -147,7 +147,7 @@ export class ConfigManager {
     return { errors, warnings };
   }
 
-  private validateFinalConfig(config: TracelogConfig): { errors: string[]; warnings: string[] } {
+  private validateFinalConfig(config: Config): { errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -180,7 +180,7 @@ export class ConfigManager {
     return { errors, warnings };
   }
 
-  private applyConfigCorrections(config: TracelogConfig): TracelogConfig {
+  private applyConfigCorrections(config: Config): Config {
     const correctedConfig = { ...config };
 
     if (
@@ -202,7 +202,7 @@ export class ConfigManager {
     return correctedConfig;
   }
 
-  private async fetchConfigWithRetry(config: TracelogAppConfig): Promise<TracelogApiConfig | undefined> {
+  private async fetchConfigWithRetry(config: AppConfig): Promise<ApiConfig | undefined> {
     const now = Date.now();
 
     // Rate limiting (5 seconds)
@@ -225,7 +225,7 @@ export class ConfigManager {
     return this.fetchConfig(config);
   }
 
-  private async fetchConfig(_config: TracelogAppConfig): Promise<TracelogApiConfig | undefined> {
+  private async fetchConfig(_config: AppConfig): Promise<ApiConfig | undefined> {
     try {
       const configUrl = this.getConfigUrl();
 
@@ -269,7 +269,7 @@ export class ConfigManager {
       }
 
       const safeData = sanitizeApiConfig(data);
-      const apiConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...(safeData as TracelogApiConfig) };
+      const apiConfig = { ...DEFAULT_TRACKING_API_CONFIG, ...(safeData as ApiConfig) };
 
       this.fetchAttempts = 0;
 
@@ -382,7 +382,7 @@ export class ConfigManager {
     }
   }
 
-  getConfig(): TracelogConfig {
+  getConfig(): Config {
     return { ...this.config };
   }
 

@@ -1,32 +1,36 @@
-import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, DeviceType, UTM_PARAMS } from '@/constants';
+import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, UTM_PARAMS } from '@/constants';
 import {
-  TracelogEvent,
-  TracelogEventHandler,
-  TracelogQueue,
+  DeviceType,
+  EventData,
+  EventHandler,
+  Queue,
   EventType,
   MetadataType,
-  TracelogEventUtm,
-  TracelogConfig,
+  EventUtm,
+  Config,
   Timestamp,
+  TagConditionType,
+  TagLogicalOperator,
 } from '@/types';
 import { isEventValid } from '@/utils';
 import { TagManager } from './tag-manager';
 
 export class EventManager {
-  private eventsQueue: TracelogEvent[] = [];
+  private readonly utmParams: EventUtm | null | undefined;
+
+  private eventsQueue: EventData[] = [];
   private hasInitEventsQueueInterval = false;
   private eventsQueueIntervalId: number | null = null;
-  private lastEvent: TracelogEvent | null = null;
+  private lastEvent: EventData | null = null;
   private pageUrl = '';
-  private readonly utmParams: TracelogEventUtm | null | undefined;
 
   constructor(
-    private readonly config: TracelogConfig,
+    private readonly config: Config,
     private readonly getUserId: () => string,
     private readonly getSessionId: () => string | undefined,
     private readonly getDevice: () => DeviceType | undefined,
     private readonly getGlobalMetadata: () => Record<string, MetadataType> | undefined,
-    private readonly sendEventsQueue: (body: TracelogQueue) => Promise<boolean>,
+    private readonly sendEventsQueue: (body: Queue) => Promise<boolean>,
     private readonly sendError: (error: { message: string }) => Promise<void>,
     private readonly isQaMode: () => boolean,
     private readonly isExcludedUser: () => boolean,
@@ -36,7 +40,7 @@ export class EventManager {
     this.utmParams = this.getUTMParameters();
   }
 
-  handleEvent({ evType, url, fromUrl, scrollData, clickData, customEvent }: TracelogEventHandler): void {
+  handleEvent({ evType, url, fromUrl, scrollData, clickData, customEvent }: EventHandler): void {
     const eventUrl = url || this.pageUrl;
     const isDuplicatedEvent = this.isDuplicatedEvent({ evType, url: eventUrl, scrollData, clickData, customEvent });
 
@@ -83,7 +87,7 @@ export class EventManager {
 
     const isFirstEvent = evType === EventType.SESSION_START;
 
-    const payload: TracelogEvent = {
+    const payload: EventData = {
       type: evType,
       page_url: eventUrl,
       timestamp: Date.now() as Timestamp,
@@ -130,7 +134,7 @@ export class EventManager {
     this.pageUrl = url;
   }
 
-  getEventsQueue(): TracelogEvent[] {
+  getEventsQueue(): EventData[] {
     return this.eventsQueue;
   }
 
@@ -138,7 +142,7 @@ export class EventManager {
     this.eventsQueue = [];
   }
 
-  private sendEvent(payload: TracelogEvent): void {
+  private sendEvent(payload: EventData): void {
     if (this.isQaMode()) {
       console.log(`[TraceLog] ${payload.type} event:`, JSON.stringify(payload));
     } else {
@@ -174,7 +178,7 @@ export class EventManager {
     }
 
     // Use Set for O(1) lookup and more efficient deduplication
-    const uniqueEvents = new Map<string, TracelogEvent>();
+    const uniqueEvents = new Map<string, EventData>();
 
     for (const event of this.eventsQueue) {
       const key = `${event.type}_${event.timestamp}_${event.page_url}`;
@@ -189,7 +193,7 @@ export class EventManager {
     // Sort by timestamp for better server processing
     deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
 
-    const body: TracelogQueue = {
+    const body: Queue = {
       user_id: this.getUserId(),
       session_id: this.getSessionId()!,
       device: this.getDevice()!,
@@ -202,7 +206,7 @@ export class EventManager {
     this.eventsQueue = success ? [] : deduplicatedEvents;
   }
 
-  private isDuplicatedEvent({ evType, url, scrollData, clickData, customEvent }: TracelogEventHandler): boolean {
+  private isDuplicatedEvent({ evType, url, scrollData, clickData, customEvent }: EventHandler): boolean {
     if (!this.lastEvent) {
       return false;
     }
@@ -248,15 +252,15 @@ export class EventManager {
     }
   }
 
-  private getUTMParameters(): TracelogEventUtm | null {
+  private getUTMParameters(): EventUtm | null {
     const urlParameters = new URLSearchParams(window.location.search);
-    const utmParameters: Partial<Record<keyof TracelogEventUtm, string>> = {};
+    const utmParameters: Partial<Record<keyof EventUtm, string>> = {};
 
     for (const parameter of UTM_PARAMS) {
       const value = urlParameters.get(parameter);
 
       if (value) {
-        const key = parameter.split('utm_')[1] as keyof TracelogEventUtm;
+        const key = parameter.split('utm_')[1] as keyof EventUtm;
         utmParameters[key] = value;
       }
     }
@@ -264,7 +268,7 @@ export class EventManager {
     return Object.keys(utmParameters).length > 0 ? utmParameters : null;
   }
 
-  private getEventTags(event: TracelogEvent, deviceType: DeviceType): string[] {
+  private getEventTags(event: EventData, deviceType: DeviceType): string[] {
     switch (event.type) {
       case EventType.PAGE_VIEW: {
         return this.checkEventTypePageView(event, deviceType);
@@ -278,7 +282,7 @@ export class EventManager {
     }
   }
 
-  private checkEventTypePageView(event: TracelogEvent, deviceType: DeviceType): string[] {
+  private checkEventTypePageView(event: EventData, deviceType: DeviceType): string[] {
     const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) || [];
     if (tags.length === 0) {
       return [];
@@ -289,27 +293,27 @@ export class EventManager {
       const results: boolean[] = [];
       for (const condition of conditions) {
         switch (condition.type) {
-          case 'url_matches': {
+          case TagConditionType.URL_MATCHES: {
             results.push(TagManager.matchUrlMatches(condition, event.page_url));
 
             break;
           }
-          case 'device_type': {
+          case TagConditionType.DEVICE_TYPE: {
             results.push(TagManager.matchDeviceType(condition, deviceType));
 
             break;
           }
-          case 'utm_source': {
+          case TagConditionType.UTM_SOURCE: {
             results.push(TagManager.matchUtmCondition(condition, event.utm?.source));
 
             break;
           }
-          case 'utm_medium': {
+          case TagConditionType.UTM_MEDIUM: {
             results.push(TagManager.matchUtmCondition(condition, event.utm?.medium));
 
             break;
           }
-          case 'utm_campaign': {
+          case TagConditionType.UTM_CAMPAIGN: {
             results.push(TagManager.matchUtmCondition(condition, event.utm?.campaign));
 
             break;
@@ -319,7 +323,7 @@ export class EventManager {
 
       let isMatch = false;
 
-      isMatch = logicalOperator === 'AND' ? results.every(Boolean) : results.some(Boolean);
+      isMatch = logicalOperator === TagLogicalOperator.AND ? results.every(Boolean) : results.some(Boolean);
 
       if (isMatch) {
         matchedTagIds.push(id);
@@ -329,7 +333,7 @@ export class EventManager {
     return matchedTagIds;
   }
 
-  private checkEventTypeClick(event: TracelogEvent, deviceType: DeviceType): string[] {
+  private checkEventTypeClick(event: EventData, deviceType: DeviceType): string[] {
     const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) || [];
     if (tags.length === 0) {
       return [];
@@ -345,32 +349,32 @@ export class EventManager {
         }
         const clickData = event.click_data;
         switch (condition.type) {
-          case 'element_matches': {
+          case TagConditionType.ELEMENT_MATCHES: {
             results.push(TagManager.matchElementSelector(condition, clickData));
 
             break;
           }
-          case 'device_type': {
+          case TagConditionType.DEVICE_TYPE: {
             results.push(TagManager.matchDeviceType(condition, deviceType));
 
             break;
           }
-          case 'url_matches': {
+          case TagConditionType.URL_MATCHES: {
             results.push(TagManager.matchUrlMatches(condition, event.page_url));
 
             break;
           }
-          case 'utm_source': {
+          case TagConditionType.UTM_SOURCE: {
             results.push(TagManager.matchUtmCondition(condition, event.utm?.source));
 
             break;
           }
-          case 'utm_medium': {
+          case TagConditionType.UTM_MEDIUM: {
             results.push(TagManager.matchUtmCondition(condition, event.utm?.medium));
 
             break;
           }
-          case 'utm_campaign': {
+          case TagConditionType.UTM_CAMPAIGN: {
             results.push(TagManager.matchUtmCondition(condition, event.utm?.campaign));
 
             break;
@@ -380,7 +384,7 @@ export class EventManager {
 
       let isMatch = false;
 
-      isMatch = logicalOperator === 'AND' ? results.every(Boolean) : results.some(Boolean);
+      isMatch = logicalOperator === TagLogicalOperator.AND ? results.every(Boolean) : results.some(Boolean);
 
       if (isMatch) {
         matchedTagIds.push(id);

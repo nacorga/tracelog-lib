@@ -6,3 +6,14 @@ export interface SessionData {
   lastActivity: number;
   endTrigger?: string;
 }
+
+export interface InactivityConfig {
+  timeout: number;
+  events?: string[];
+}
+
+export interface InactivityData {
+  isInactive: boolean;
+  lastActivityTime: number;
+  inactiveDuration?: number;
+}

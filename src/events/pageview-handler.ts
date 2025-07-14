@@ -1,11 +1,11 @@
 import { UTM_PARAMS, SCROLL_DEBOUNCE_TIME } from '@/constants';
-import { TracelogEventUtm } from '@/types';
+import { EventUtm } from '@/types';
 
 export interface NavigationData {
   fromUrl: string;
   toUrl: string;
   referrer?: string;
-  utm?: TracelogEventUtm;
+  utm?: EventUtm;
 }
 
 export interface PageViewConfig {
@@ -32,7 +32,7 @@ const wildcardToRegex = (string_: string): RegExp =>
 
 export class PageViewHandler {
   private currentUrl = '';
-  private readonly utmParams: TracelogEventUtm | undefined = undefined;
+  private readonly utmParams: EventUtm | undefined = undefined;
 
   constructor(
     private readonly config: PageViewConfig,
@@ -52,7 +52,7 @@ export class PageViewHandler {
     return this.currentUrl;
   }
 
-  getUTMParams(): TracelogEventUtm | undefined {
+  getUTMParams(): EventUtm | undefined {
     return this.utmParams;
   }
 
@@ -115,15 +115,15 @@ export class PageViewHandler {
     }
   }
 
-  private extractUTMParameters(): TracelogEventUtm | undefined {
+  private extractUTMParameters(): EventUtm | undefined {
     const urlParameters = new URLSearchParams(window.location.search);
-    const utmParameters: Partial<Record<keyof TracelogEventUtm, string>> = {};
+    const utmParameters: Partial<Record<keyof EventUtm, string>> = {};
 
     for (const parameter of UTM_PARAMS) {
       const value = urlParameters.get(parameter);
 
       if (value) {
-        const key = parameter.split('utm_')[1] as keyof TracelogEventUtm;
+        const key = parameter.split('utm_')[1] as keyof EventUtm;
         utmParameters[key] = value;
       }
     }

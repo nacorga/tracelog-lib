@@ -1,9 +1,9 @@
-import { MetadataType, TracelogEvent } from './event.types';
+import { MetadataType, EventData } from './event.types';
 
-export interface TracelogQueue {
+export interface Queue {
   user_id: string;
   session_id: string;
   device: string;
-  events: TracelogEvent[];
+  events: EventData[];
   global_metadata?: Record<string, MetadataType>;
 }

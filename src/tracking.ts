@@ -1,6 +1,5 @@
 import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from '@/modules';
-import { DeviceType } from '@/constants';
-import { TracelogAppConfig, EventType, MetadataType, TracelogEventHandler, TracelogAdminError } from '@/types';
+import { AppConfig, EventType, MetadataType, EventHandler, AdminError, DeviceType } from '@/types';
 
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',
@@ -32,12 +31,11 @@ export class Tracking {
   private dataSender!: DataSender;
   private urlManager!: UrlManager;
 
-  constructor(id: string, config?: TracelogAppConfig) {
+  constructor(id: string, config?: AppConfig) {
     this.initializationPromise = this.initializeTracking(id, config);
   }
 
-  private async initializeTracking(id: string, config?: TracelogAppConfig): Promise<void> {
-    // Prevent multiple initialization attempts
+  private async initializeTracking(id: string, config?: AppConfig): Promise<void> {
     if (this.initializationState !== InitializationState.UNINITIALIZED) {
       return this.initializationPromise || Promise.resolve();
     }
@@ -107,30 +105,20 @@ export class Tracking {
   }
 
   private async startInitializationSequence(): Promise<void> {
-    // Execute in sequence to prevent race conditions
     try {
-      // 1. Recover any persisted events from previous sessions
       await this.dataSender.recoverPersistedEvents();
 
-      // 2. Check for unexpected session end from previous session
       const hadUnexpectedEnd = this.sessionManager.checkForUnexpectedSessionEnd();
+
       if (hadUnexpectedEnd) {
-        // Send the missed SESSION_END event
         this.handleSessionEvent(EventType.SESSION_END, 'unexpected_recovery');
       }
 
-      // 3. Start new session
       this.sessionManager.startSession();
-
-      // 4. Initialize URL tracking (will send initial PAGE_VIEW)
       this.urlManager.initialize();
-
-      // 5. Initialize tracking systems
       this.trackingManager.initScrollTracking();
       this.trackingManager.initInactivityTracking();
       this.trackingManager.initClickTracking();
-
-      // 6. Setup cleanup on page unload
       this.setupCleanupListeners();
     } catch (error) {
       console.error('[TraceLog] Initialization sequence failed:', error);
@@ -196,7 +184,7 @@ export class Tracking {
     });
   }
 
-  private handleTrackingEvent(event: TracelogEventHandler): void {
+  private handleTrackingEvent(event: EventHandler): void {
     this.eventManager.handleEvent(event);
   }
 
@@ -213,7 +201,7 @@ export class Tracking {
   }
 
   private async catchError(error: { message: string; api_key?: string }): Promise<void> {
-    const adminError: TracelogAdminError = {
+    const adminError: AdminError = {
       message: error.message,
       timestamp: Date.now(),
       userAgent: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent,
@@ -230,7 +218,6 @@ export class Tracking {
     }
   }
 
-  // Public API methods with race condition protection
   async sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): Promise<void> {
     await this.waitForInitialization();
 
@@ -241,7 +228,6 @@ export class Tracking {
     this.eventManager.sendCustomEvent(name, metadata);
   }
 
-  // Session management methods with race condition protection
   async startSession(): Promise<void> {
     await this.waitForInitialization();
 
@@ -262,7 +248,6 @@ export class Tracking {
     this.sessionManager.endSession('manual');
   }
 
-  // Utility methods with race condition protection
   async getSessionId(): Promise<string> {
     await this.waitForInitialization();
 
@@ -283,7 +268,6 @@ export class Tracking {
     return this.sessionManager?.getUserId() || '';
   }
 
-  // Data sending methods with race condition protection
   async forceImmediateSend(): Promise<void> {
     await this.waitForInitialization();
 
@@ -291,8 +275,8 @@ export class Tracking {
       return;
     }
 
-    // Create final batch with any remaining events
     const events = this.eventManager.getEventsQueue();
+
     if (events.length > 0) {
       const finalBatch = {
         user_id: this.sessionManager.getUserId(),
@@ -307,7 +291,6 @@ export class Tracking {
     }
   }
 
-  // Advanced methods with race condition protection
   async suppressNextScrollEvent(): Promise<void> {
     await this.waitForInitialization();
 
@@ -328,7 +311,7 @@ export class Tracking {
     this.urlManager.updateUrl(url);
   }
 
-  async getConfig() {
+  async getConfig(): Promise<AppConfig | undefined> {
     await this.waitForInitialization();
     return this.configManager?.getConfig();
   }
@@ -344,25 +327,13 @@ export class Tracking {
     }
 
     try {
-      // 1. End current session
       this.sessionManager?.endSession('page_unload');
-
-      // 2. Send any remaining events synchronously
       this.forceImmediateSendSync();
-
-      // 3. Cleanup tracking systems
       this.trackingManager?.cleanup();
-
-      // 4. Cleanup session system
       this.sessionManager?.cleanup();
-
-      // 5. Clear any timers
       this.eventManager?.cleanup();
-
-      // 6. Clear data sender
       this.dataSender?.cleanup();
 
-      // 7. Remove all event listeners
       for (const cleanup of this.cleanupListeners) {
         try {
           cleanup();
@@ -372,9 +343,8 @@ export class Tracking {
           }
         }
       }
-      this.cleanupListeners = [];
 
-      // 8. Reset state
+      this.cleanupListeners = [];
       this.isInitialized = false;
       this.isExcludedUser = false;
 
@@ -388,14 +358,13 @@ export class Tracking {
     }
   }
 
-  // Sync version for cleanup
   private forceImmediateSendSync(): void {
     if (!this.isInitialized) {
       return;
     }
 
-    // Create final batch with any remaining events
     const events = this.eventManager.getEventsQueue();
+
     if (events.length > 0) {
       const finalBatch = {
         user_id: this.sessionManager.getUserId(),
@@ -404,12 +373,12 @@ export class Tracking {
         events: events,
         ...(this.sessionManager.getGlobalMetadata() && { global_metadata: this.sessionManager.getGlobalMetadata() }),
       };
+
       this.dataSender.sendEventsSynchronously(finalBatch);
       this.eventManager.clearEventsQueue();
     }
   }
 
-  // Helper method to wait for initialization
   private async waitForInitialization(): Promise<void> {
     if (this.initializationState === InitializationState.INITIALIZED) {
       return;

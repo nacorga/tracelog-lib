@@ -1,17 +1,17 @@
-import { TracelogTag } from './tag.types';
+import { Tag } from './tag.types';
 import { MetadataType } from './event.types';
 
-export interface TracelogApiConfig {
+export interface ApiConfig {
   qaMode: boolean;
   samplingRate: number;
-  tags: TracelogTag[];
+  tags: Tag[];
   excludedUrlPaths: string[];
 }
 
-export interface TracelogAppConfig {
+export interface AppConfig {
   sessionTimeout?: number;
   globalMetadata?: Record<string, MetadataType>;
   scrollContainerSelectors?: string | string[];
 }
 
-export interface TracelogConfig extends TracelogApiConfig, TracelogAppConfig {}
+export interface Config extends ApiConfig, AppConfig {}

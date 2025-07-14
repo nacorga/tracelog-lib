@@ -1,4 +1,4 @@
-import { DeviceType } from '@/constants';
+import { DeviceType } from '@/types';
 
 let coarsePointerQuery: MediaQueryList | undefined;
 let noHoverQuery: MediaQueryList | undefined;

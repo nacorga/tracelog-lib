@@ -1,20 +1,12 @@
-export interface InactivityConfig {
-  timeout: number; // Timeout in milliseconds
-  events?: string[]; // Events to track for activity
-}
-
-export interface InactivityData {
-  isInactive: boolean;
-  lastActivityTime: number;
-  inactiveDuration?: number;
-}
+import { InactivityConfig, InactivityData } from '@/types';
 
 export class InactivityHandler {
+  private readonly defaultEvents = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart', 'touchmove'];
+  private readonly eventListeners: Map<string, EventListener> = new Map();
+
   private isInactive = false;
   private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
   private lastActivityTime: number = Date.now();
-  private readonly defaultEvents = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart', 'touchmove'];
-  private readonly eventListeners: Map<string, EventListener> = new Map();
   private eventsToTrack: string[] = [];
 
   constructor(
@@ -90,7 +82,7 @@ export class InactivityHandler {
 
   private setInactiveState(inactive: boolean): void {
     if (this.isInactive === inactive) {
-      return; // No change
+      return;
     }
 
     this.isInactive = inactive;
@@ -107,20 +99,17 @@ export class InactivityHandler {
   }
 
   cleanup(): void {
-    // Clear timer
     if (this.inactivityTimer) {
       clearTimeout(this.inactivityTimer);
       this.inactivityTimer = null;
     }
 
-    // Remove all event listeners
     for (const [event, listener] of this.eventListeners.entries()) {
       window.removeEventListener(event, listener, {
         capture: true,
       });
     }
 
-    // Clear collections
     this.eventListeners.clear();
     this.eventsToTrack = [];
   }
@@ -128,7 +117,7 @@ export class InactivityHandler {
   // Static utility methods for common inactivity scenarios
   static createStandardConfig(timeoutMinutes = 5): InactivityConfig {
     return {
-      timeout: timeoutMinutes * 60 * 1000, // Convert minutes to milliseconds
+      timeout: timeoutMinutes * 60 * 1000,
       events: ['mousemove', 'keydown', 'scroll', 'click', 'touchstart', 'touchmove'],
     };
   }

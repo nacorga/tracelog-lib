@@ -1,4 +1,4 @@
-export interface TracelogAdminError {
+export interface AdminError {
   message: string;
   timestamp: number;
   userAgent: string;

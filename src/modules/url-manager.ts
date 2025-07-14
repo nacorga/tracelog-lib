@@ -1,11 +1,11 @@
-import { TracelogConfig } from '@/types';
+import { Config } from '@/types';
 import { PageViewHandler, NavigationData, PageViewConfig } from '@/events';
 
 export class UrlManager {
   private readonly pageViewHandler: PageViewHandler;
 
   constructor(
-    private readonly config: TracelogConfig,
+    private readonly config: Config,
     private readonly sendPageViewEvent: (fromUrl: string, toUrl: string, referrer?: string, utm?: any) => void,
     private readonly suppressNextScrollEvent?: () => void,
   ) {
@@ -20,8 +20,6 @@ export class UrlManager {
 
   initialize(): void {
     this.pageViewHandler.init();
-
-    // Send initial page view
     const initialNavigation = this.pageViewHandler.handleInitialPageView();
     this.handleNavigation(initialNavigation);
   }
