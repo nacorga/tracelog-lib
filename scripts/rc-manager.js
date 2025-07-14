@@ -6,20 +6,20 @@ const packageJson = require('../package.json');
 const PACKAGE_NAME = packageJson.name;
 
 /**
- * Obtiene todas las versiones publicadas del paquete
+ * Get all published versions of the package
  */
 function getPublishedVersions() {
   try {
     const result = execSync(`npm view ${PACKAGE_NAME} versions --json`, { encoding: 'utf8' });
     return JSON.parse(result);
   } catch (error) {
-    console.error('Error obteniendo versiones:', error.message);
+    console.error('Error getting versions:', error.message);
     return [];
   }
 }
 
 /**
- * Filtra las versiones RC
+ * Filter RC versions
  */
 function getRCVersions() {
   const versions = getPublishedVersions();
@@ -27,68 +27,68 @@ function getRCVersions() {
 }
 
 /**
- * Limpia las versiones RC antiguas (deja solo las 3 más recientes)
+ * Clean old RC versions (keep the 3 most recent)
  */
 function cleanupOldRCs() {
   const rcVersions = getRCVersions();
   
   if (rcVersions.length <= 3) {
-    console.log('📝 No hay versiones RC antiguas para limpiar');
+    console.log('📝 No old RC versions to clean');
     return;
   }
   
-  // Ordenar por fecha de creación (más recientes primero)
+  // Sort by creation date (most recent first)
   rcVersions.sort((a, b) => {
     const aTime = new Date(execSync(`npm view ${PACKAGE_NAME}@${a} time.modified`, { encoding: 'utf8' }).trim());
     const bTime = new Date(execSync(`npm view ${PACKAGE_NAME}@${b} time.modified`, { encoding: 'utf8' }).trim());
     return bTime - aTime;
   });
   
-  // Mantener solo las 3 más recientes
+  // Keep only the 3 most recent
   const versionsToDelete = rcVersions.slice(3);
   
-  console.log(`🧹 Limpiando ${versionsToDelete.length} versiones RC antiguas...`);
+  console.log(`🧹 Cleaning ${versionsToDelete.length} old RC versions...`);
   
   versionsToDelete.forEach(version => {
     try {
       execSync(`npm unpublish ${PACKAGE_NAME}@${version}`, { stdio: 'inherit' });
-      console.log(`✅ Eliminada versión RC: ${version}`);
+      console.log(`✅ Deleted RC version: ${version}`);
     } catch (error) {
-      console.error(`❌ Error eliminando ${version}:`, error.message);
+      console.error(`❌ Error deleting ${version}:`, error.message);
     }
   });
 }
 
 /**
- * Lista todas las versiones RC disponibles
+ * List all RC versions available
  */
 function listRCVersions() {
   const rcVersions = getRCVersions();
   
   if (rcVersions.length === 0) {
-    console.log('📝 No hay versiones RC disponibles');
+    console.log('📝 No RC versions available');
     return;
   }
   
-  console.log('📦 Versiones RC disponibles:');
+  console.log('📦 RC versions available:');
   rcVersions.forEach(version => {
     console.log(`  - ${version}`);
   });
 }
 
 /**
- * Obtiene información sobre el tag RC actual
+ * Get information about the current RC tag
  */
 function getRCTagInfo() {
   try {
     const result = execSync(`npm view ${PACKAGE_NAME}@rc version`, { encoding: 'utf8' });
-    console.log(`🏷️  Tag RC actual apunta a: ${result.trim()}`);
+    console.log(`🏷️  Current RC tag points to: ${result.trim()}`);
   } catch (error) {
-    console.log('📝 No hay tag RC disponible');
+    console.log('📝 No RC tag available');
   }
 }
 
-// Manejo de argumentos de línea de comandos
+// Handle command line arguments
 const command = process.argv[2];
 
 switch (command) {
@@ -102,27 +102,27 @@ switch (command) {
     getRCTagInfo();
     break;
   case 'all':
-    console.log('=== Información de versiones RC ===');
+    console.log('=== RC versions information ===');
     listRCVersions();
-    console.log('\n=== Tag RC actual ===');
+    console.log('\n=== Current RC tag ===');
     getRCTagInfo();
     break;
   default:
     console.log(`
-📦 RC Manager para ${PACKAGE_NAME}
+📦 RC Manager for ${PACKAGE_NAME}
 
-Uso: node scripts/rc-manager.js <comando>
+Usage: node scripts/rc-manager.js <command>
 
-Comandos disponibles:
-  list    - Lista todas las versiones RC
-  cleanup - Limpia versiones RC antiguas (mantiene las 3 más recientes)
-  info    - Muestra información del tag RC actual
-  all     - Muestra toda la información
+Available commands:
+  list    - List all RC versions
+  cleanup - Clean old RC versions (keep the 3 most recent)
+  info    - Show information about the current RC tag
+ 
 
-Ejemplos:
+Examples:
   node scripts/rc-manager.js list
   node scripts/rc-manager.js cleanup
   node scripts/rc-manager.js info
 `);
     break;
-} 
+}
