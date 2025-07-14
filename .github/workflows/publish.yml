@@ -59,9 +59,12 @@ jobs:
         env:
           CI: true
 
-      - name: Publish Playwright report to GitHub
+      - name: Upload Playwright HTML report
         if: always()
-        run: npx playwright show-report --output=github
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report
+          path: playwright-report
 
       - name: Install standard-version
         run: npm install --save-dev standard-version
