@@ -169,20 +169,20 @@ The client automatically captures various types of events:
 
 ```typescript
 interface TracelogEventClickData {
-  x: number;                              // Absolute X coordinate
-  y: number;                              // Absolute Y coordinate
-  relativeX: number;                      // Relative X (0-1)
-  relativeY: number;                      // Relative Y (0-1)
-  elementTag?: string;                    // HTML tag name
-  elementId?: string;                     // Element ID
-  elementClass?: string;                  // Element class names
-  elementText?: string;                   // Element text content
-  elementHref?: string;                   // Link href attribute
-  elementTitle?: string;                  // Element title attribute
-  elementAlt?: string;                    // Image alt attribute
-  elementRole?: string;                   // ARIA role attribute
-  elementAriaLabel?: string;              // ARIA label
-  elementDataAttributes?: Record<string, string>; // Data attributes
+  x: number;  // Absolute X coordinate
+  y: number;  // Absolute Y coordinate
+  relativeX: number;  // Relative X (0-1)
+  relativeY: number;  // Relative Y (0-1)
+  id?: string;  // Element ID
+  class?: string;  // Element class names
+  tag?: string;  // HTML tag name
+  text?: string;  // Element text content
+  href?: string;  // Link href attribute
+  title?: string;  // Element title attribute
+  alt?: string;  // Image alt attribute
+  role?: string;  // ARIA role attribute
+  ariaLabel?: string;  // ARIA label
+  dataAttributes?: Record<string, string>; // Data attributes
 }
 ```
 
@@ -190,8 +190,8 @@ interface TracelogEventClickData {
 
 ```typescript
 interface TracelogEventScrollData {
-  depth: number;                          // Scroll depth percentage (0-100)
-  direction: 'up' | 'down';              // Scroll direction
+  depth: number; // Scroll depth percentage (0-100)
+  direction: 'up' | 'down'; // Scroll direction
 }
 ```
 
@@ -199,7 +199,7 @@ interface TracelogEventScrollData {
 
 ```typescript
 interface TracelogEventCustomData {
-  name: string;                           // Event name
+  name: string; // Event name
   metadata?: Record<string, MetadataType>; // Custom metadata
 }
 ```

@@ -200,13 +200,12 @@ export class Tracking {
     }
   }
 
-  private async catchError(error: { message: string; api_key?: string }): Promise<void> {
+  private async catchError(error: { message: string }): Promise<void> {
     const adminError: AdminError = {
       message: error.message,
       timestamp: Date.now(),
       userAgent: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent,
       url: typeof window === 'undefined' ? 'unknown' : window.location.href,
-      api_key: error.api_key,
       severity: 'medium',
       context: 'tracking',
     };

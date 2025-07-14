@@ -6,8 +6,8 @@ export class TagManager {
       return false;
     }
 
-    const targetValue = condition.caseSensitive ? condition.value : condition.value.toLowerCase();
-    const targetUrl = condition.caseSensitive ? url : url.toLowerCase();
+    const targetValue = condition.value.toLowerCase();
+    const targetUrl = url.toLowerCase();
 
     switch (condition.operator) {
       case TagConditionOperator.EQUALS: {
@@ -28,8 +28,7 @@ export class TagManager {
 
       case TagConditionOperator.REGEX: {
         try {
-          const flags = condition.caseSensitive ? 'g' : 'gi';
-          const regex = new RegExp(targetValue, flags);
+          const regex = new RegExp(targetValue, 'gi');
 
           return regex.test(targetUrl);
         } catch {
@@ -48,8 +47,8 @@ export class TagManager {
       return false;
     }
 
-    const targetValue = condition.caseSensitive ? condition.value : condition.value.toLowerCase();
-    const targetDevice = condition.caseSensitive ? deviceType : deviceType.toLowerCase();
+    const targetValue = condition.value.toLowerCase();
+    const targetDevice = deviceType.toLowerCase();
 
     switch (condition.operator) {
       case TagConditionOperator.EQUALS: {
@@ -70,8 +69,8 @@ export class TagManager {
 
       case TagConditionOperator.REGEX: {
         try {
-          const flags = condition.caseSensitive ? 'g' : 'gi';
-          const regex = new RegExp(targetValue, flags);
+          const regex = new RegExp(targetValue, 'gi');
+
           return regex.test(targetDevice);
         } catch {
           return false;
@@ -90,24 +89,24 @@ export class TagManager {
     }
 
     const elementData = [
-      clickData.elementId ?? '',
-      clickData.elementClass ?? '',
-      clickData.elementTag ?? '',
-      clickData.elementText ?? '',
-      clickData.elementHref ?? '',
-      clickData.elementTitle ?? '',
-      clickData.elementAlt ?? '',
-      clickData.elementRole ?? '',
-      clickData.elementAriaLabel ?? '',
-      ...Object.values(clickData.elementDataAttributes ?? {}),
+      clickData.id ?? '',
+      clickData.class ?? '',
+      clickData.tag ?? '',
+      clickData.text ?? '',
+      clickData.href ?? '',
+      clickData.title ?? '',
+      clickData.alt ?? '',
+      clickData.role ?? '',
+      clickData.ariaLabel ?? '',
+      ...Object.values(clickData.dataAttributes ?? {}),
     ].join(' ');
 
-    const targetValue = condition.caseSensitive ? condition.value : condition.value.toLowerCase();
-    const targetElementData = condition.caseSensitive ? elementData : elementData.toLowerCase();
+    const targetValue = condition.value.toLowerCase();
+    const targetElementData = elementData.toLowerCase();
 
     switch (condition.operator) {
       case TagConditionOperator.EQUALS: {
-        return this.checkElementFieldEquals(clickData, targetValue, condition.caseSensitive);
+        return this.checkElementFieldEquals(clickData, targetValue);
       }
 
       case TagConditionOperator.CONTAINS: {
@@ -124,8 +123,8 @@ export class TagManager {
 
       case TagConditionOperator.REGEX: {
         try {
-          const flags = condition.caseSensitive ? 'g' : 'gi';
-          const regex = new RegExp(targetValue, flags);
+          const regex = new RegExp(targetValue, 'gi');
+
           return regex.test(targetElementData);
         } catch {
           return false;
@@ -148,8 +147,8 @@ export class TagManager {
     }
 
     const value = utmValue ?? '';
-    const targetValue = condition.caseSensitive ? condition.value : condition.value.toLowerCase();
-    const targetUtmValue = condition.caseSensitive ? value : value.toLowerCase();
+    const targetValue = condition.value.toLowerCase();
+    const targetUtmValue = value.toLowerCase();
 
     switch (condition.operator) {
       case TagConditionOperator.EQUALS: {
@@ -170,8 +169,8 @@ export class TagManager {
 
       case TagConditionOperator.REGEX: {
         try {
-          const flags = condition.caseSensitive ? 'g' : 'gi';
-          const regex = new RegExp(targetValue, flags);
+          const regex = new RegExp(targetValue, 'gi');
+
           return regex.test(targetUtmValue);
         } catch {
           return false;
@@ -184,27 +183,23 @@ export class TagManager {
     }
   }
 
-  private static checkElementFieldEquals(
-    clickData: EventClickData,
-    targetValue: string,
-    caseSensitive?: boolean,
-  ): boolean {
+  private static checkElementFieldEquals(clickData: EventClickData, targetValue: string): boolean {
     const fields = [
-      clickData.elementId,
-      clickData.elementClass,
-      clickData.elementTag,
-      clickData.elementText,
-      clickData.elementHref,
-      clickData.elementTitle,
-      clickData.elementAlt,
-      clickData.elementRole,
-      clickData.elementAriaLabel,
+      clickData.id,
+      clickData.class,
+      clickData.tag,
+      clickData.text,
+      clickData.href,
+      clickData.title,
+      clickData.alt,
+      clickData.role,
+      clickData.ariaLabel,
     ];
 
     for (const field of fields) {
       if (field) {
-        const fieldValue = caseSensitive ? field : field.toLowerCase();
-        const target = caseSensitive ? targetValue : targetValue.toLowerCase();
+        const fieldValue = field.toLowerCase();
+        const target = targetValue.toLowerCase();
 
         if (fieldValue === target) {
           return true;
@@ -212,10 +207,11 @@ export class TagManager {
       }
     }
 
-    if (clickData.elementDataAttributes) {
-      for (const dataValue of Object.values(clickData.elementDataAttributes)) {
-        const fieldValue = caseSensitive ? dataValue : dataValue.toLowerCase();
-        const target = caseSensitive ? targetValue : targetValue.toLowerCase();
+    if (clickData.dataAttributes) {
+      for (const dataValue of Object.values(clickData.dataAttributes)) {
+        const fieldValue = dataValue.toLowerCase();
+        const target = targetValue.toLowerCase();
+
         if (fieldValue === target) {
           return true;
         }

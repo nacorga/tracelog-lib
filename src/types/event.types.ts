@@ -24,16 +24,16 @@ export interface EventClickData {
   y: number;
   relativeX: number;
   relativeY: number;
-  elementId?: string;
-  elementClass?: string;
-  elementTag?: string;
-  elementText?: string;
-  elementHref?: string;
-  elementTitle?: string;
-  elementAlt?: string;
-  elementRole?: string;
-  elementAriaLabel?: string;
-  elementDataAttributes?: Record<string, string>;
+  id?: string;
+  class?: string;
+  tag?: string;
+  text?: string;
+  href?: string;
+  title?: string;
+  alt?: string;
+  role?: string;
+  ariaLabel?: string;
+  dataAttributes?: Record<string, string>;
 }
 
 export interface ClickCoordinates {

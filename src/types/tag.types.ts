@@ -28,19 +28,22 @@ export enum TagConditionOperator {
   NOT_EXISTS = 'not_exists',
 }
 
-export interface Tag {
+export type TagConfig = Pick<Tag, 'triggerType' | 'logicalOperator' | 'conditions'> & {
   id: string;
+};
+
+export interface Tag {
+  key: string;
   name: string;
   description?: string;
+  active: boolean;
   triggerType: EventType;
-  logicalOperator: TagLogicalOperator;
+  logicalOperator?: TagLogicalOperator;
   conditions: TagCondition[];
-  isActive: boolean;
 }
 
 export interface TagCondition {
   type: TagConditionType;
   operator: TagConditionOperator;
   value: string;
-  caseSensitive?: boolean;
 }

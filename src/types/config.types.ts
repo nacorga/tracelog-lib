@@ -1,10 +1,10 @@
-import { Tag } from './tag.types';
+import { TagConfig } from './tag.types';
 import { MetadataType } from './event.types';
 
 export interface ApiConfig {
   qaMode: boolean;
   samplingRate: number;
-  tags: Tag[];
+  tags: TagConfig[];
   excludedUrlPaths: string[];
 }
 
