@@ -1,4 +1,4 @@
-import { DeviceType, TagCondition, EventClickData, TagConditionType, TagConditionOperator } from '@/types';
+import { DeviceType, TagCondition, EventClickData, TagConditionType, TagConditionOperator } from '../types';
 
 export class TagManager {
   static matchUrlMatches(condition: TagCondition, url: string): boolean {

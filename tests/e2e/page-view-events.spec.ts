@@ -1,5 +1,5 @@
-import { EventType } from '@/types';
 import { test, expect } from '@playwright/test';
+import { EventType } from '../../src/types';
 
 test.describe('Page View Events - Demo Mode', () => {
   test(`should log ${EventType.PAGE_VIEW} on SPA navigation`, async ({ page }) => {

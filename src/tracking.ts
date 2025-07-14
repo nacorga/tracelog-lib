@@ -1,5 +1,5 @@
-import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from '@/modules';
-import { AppConfig, EventType, MetadataType, EventHandler, AdminError, DeviceType } from '@/types';
+import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from './modules';
+import { AppConfig, EventType, MetadataType, EventHandler, AdminError, DeviceType } from './types';
 
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',

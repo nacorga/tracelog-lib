@@ -1,7 +1,7 @@
-import { Tracking } from '@/tracking';
-import { AppConfig, MetadataType } from '@/types';
+import { Tracking } from './tracking';
+import { AppConfig, MetadataType } from './types';
 
-export * as TraceLog from '@/types';
+export * as TraceLog from './types';
 
 let trackingInstance: Tracking | undefined;
 

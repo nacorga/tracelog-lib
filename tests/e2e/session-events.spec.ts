@@ -1,5 +1,5 @@
-import { EventType } from '@/types';
 import { test, expect } from '@playwright/test';
+import { EventType } from '../../src/types';
 
 test.describe('Session Events - Demo Mode', () => {
   test('Test works', async ({ page }) => {

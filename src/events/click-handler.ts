@@ -1,5 +1,5 @@
-import { HTML_DATA_ATTR_PREFIX } from '@/constants';
-import { ClickCoordinates, ClickTrackingElementData, EventClickData } from '@/types';
+import { HTML_DATA_ATTR_PREFIX } from '../constants';
+import { ClickCoordinates, ClickTrackingElementData, EventClickData } from '../types';
 
 const INTERACTIVE_SELECTORS = [
   'button',

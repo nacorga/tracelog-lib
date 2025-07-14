@@ -1,5 +1,5 @@
-import { EventType } from '@/types';
 import { test, expect } from '@playwright/test';
+import { EventType } from '../../src/types';
 
 test.describe('Click Events - Demo Mode', () => {
   test('should log click and custom events when interacting with elements', async ({ page }) => {

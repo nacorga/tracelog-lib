@@ -1,4 +1,4 @@
-import { InactivityConfig, InactivityData } from '@/types';
+import { InactivityConfig, InactivityData } from '../types';
 
 export class InactivityHandler {
   private readonly defaultEvents = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart', 'touchmove'];

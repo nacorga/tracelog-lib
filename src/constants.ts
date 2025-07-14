@@ -1,4 +1,4 @@
-import { ApiConfig, AppConfig } from '@/types';
+import { ApiConfig, AppConfig } from './types';
 
 // Performance constants
 export const EVENT_SENT_INTERVAL = 5000;

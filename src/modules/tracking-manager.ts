@@ -1,5 +1,5 @@
-import { Config, EventType, EventScrollData, InactivityConfig, InactivityData } from '@/types';
-import { ClickHandler, ScrollHandler, ScrollConfig, InactivityHandler } from '@/events';
+import { Config, EventType, EventScrollData, InactivityConfig, InactivityData } from '../types';
+import { ClickHandler, ScrollHandler, ScrollConfig, InactivityHandler } from '../events';
 
 export class TrackingManager {
   private readonly scrollHandler: ScrollHandler;

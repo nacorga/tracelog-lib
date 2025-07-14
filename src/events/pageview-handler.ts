@@ -1,5 +1,5 @@
-import { UTM_PARAMS, SCROLL_DEBOUNCE_TIME } from '@/constants';
-import { EventUtm } from '@/types';
+import { UTM_PARAMS, SCROLL_DEBOUNCE_TIME } from '../constants';
+import { EventUtm } from '../types';
 
 export interface NavigationData {
   fromUrl: string;

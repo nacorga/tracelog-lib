@@ -1,4 +1,4 @@
-import { ValidationError } from '@/types/error.types';
+import { ValidationError } from '../types';
 
 export const validateRequired = <T>(value: T, fieldName: string): NonNullable<T> => {
   if (value === null || value === undefined) {

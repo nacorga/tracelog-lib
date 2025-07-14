@@ -1,7 +1,7 @@
-import { DEFAULT_SAMPLING_RATE } from '@/constants';
-import { MetadataType, Config, EventType, SessionData, SessionEndTrigger, DeviceType, StorageKey } from '@/types';
-import { getDeviceType, isValidMetadata } from '@/utils';
-import { SessionHandler } from '@/events';
+import { DEFAULT_SAMPLING_RATE } from '../constants';
+import { MetadataType, Config, EventType, SessionData, SessionEndTrigger, DeviceType, StorageKey } from '../types';
+import { getDeviceType, isValidMetadata } from '../utils';
+import { SessionHandler } from '../events';
 import { IdManager } from './id-manager';
 
 export class SessionManager {

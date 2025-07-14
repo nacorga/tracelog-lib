@@ -1,6 +1,6 @@
-import { AppConfig, ApiConfig, Config } from '@/types';
-import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '@/constants';
-import { sanitizeApiConfig, isValidUrl } from '@/utils';
+import { AppConfig, ApiConfig, Config } from '../types';
+import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
+import { sanitizeApiConfig, isValidUrl } from '../utils';
 import packageJson from '../../package.json';
 
 interface ErrorReporter {

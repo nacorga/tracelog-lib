@@ -4,7 +4,7 @@ import {
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
 } from '../constants';
-import { EventType, MetadataType, ScrollDirection, EventData, Queue } from '@/types';
+import { EventType, MetadataType, ScrollDirection, EventData, Queue } from '../types';
 import { sanitizeMetadata } from './sanitize.utils';
 
 export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {

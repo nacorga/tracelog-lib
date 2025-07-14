@@ -1,5 +1,5 @@
-import { SCROLL_DEBOUNCE_TIME } from '@/constants';
-import { ScrollDirection, EventScrollData } from '@/types';
+import { SCROLL_DEBOUNCE_TIME } from '../constants';
+import { ScrollDirection, EventScrollData } from '../types';
 
 export interface ScrollContainer {
   element: Window | HTMLElement;

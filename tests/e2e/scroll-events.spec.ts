@@ -1,5 +1,5 @@
-import { EventType } from '@/types';
 import { test, expect } from '@playwright/test';
+import { EventType } from '../../src/types';
 
 test.describe('Scroll Events - Demo Mode', () => {
   test('should log scroll event on window scroll', async ({ page }) => {

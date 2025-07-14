@@ -1,5 +1,5 @@
-import { Config } from '@/types';
-import { PageViewHandler, NavigationData, PageViewConfig } from '@/events';
+import { Config } from '../types';
+import { PageViewHandler, NavigationData, PageViewConfig } from '../events';
 
 export class UrlManager {
   private readonly pageViewHandler: PageViewHandler;

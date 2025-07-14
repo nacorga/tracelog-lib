@@ -1,5 +1,5 @@
-import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '@/constants';
-import { Queue, AdminError, EventType, StorageKey } from '@/types';
+import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../constants';
+import { Queue, AdminError, EventType, StorageKey } from '../types';
 
 interface StorageManager {
   set(key: string, value: unknown): boolean;

@@ -1,4 +1,4 @@
-import { SessionData, SessionEndTrigger } from '@/types';
+import { SessionData, SessionEndTrigger } from '../types';
 
 interface HeartbeatData {
   sessionId: string;

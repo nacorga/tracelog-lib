@@ -1,4 +1,4 @@
-import { SessionId, Timestamp, URL as URLType, UserId } from '@/types/core.types';
+import { SessionId, Timestamp, URL as URLType, UserId } from '../types';
 
 export const createUserId = (id: string): UserId => {
   if (typeof id !== 'string' || id.length === 0) {

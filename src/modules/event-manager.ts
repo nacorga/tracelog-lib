@@ -1,4 +1,4 @@
-import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, UTM_PARAMS } from '@/constants';
+import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, UTM_PARAMS } from '../constants';
 import {
   DeviceType,
   EventData,
@@ -11,8 +11,8 @@ import {
   Timestamp,
   TagConditionType,
   TagLogicalOperator,
-} from '@/types';
-import { isEventValid } from '@/utils';
+} from '../types';
+import { isEventValid } from '../utils';
 import { TagManager } from './tag-manager';
 
 export class EventManager {
