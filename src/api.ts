@@ -1,7 +1,7 @@
 import { Tracking } from './tracking';
 import { AppConfig, MetadataType } from './types';
 
-export * from './types';
+export * as Types from './types';
 
 let trackingInstance: Tracking | undefined;
 
@@ -10,7 +10,7 @@ let trackingInstance: Tracking | undefined;
  * @param id - Tracking ID
  * @param config - Optional configuration
  */
-export const startTracking = (id: string, config?: AppConfig): void => {
+export const init = (id: string, config?: AppConfig): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }

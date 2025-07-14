@@ -1,4 +1,4 @@
-import { Config, EventType, EventScrollData, InactivityConfig, InactivityData } from '../types';
+import { Config, EventType, ScrollData, InactivityConfig, InactivityData } from '../types';
 import { ClickHandler, ScrollHandler, ScrollConfig, InactivityHandler } from '../events';
 import { CLICK_DEBOUNCE_TIME } from '../constants';
 
@@ -18,7 +18,7 @@ export class TrackingManager {
       containerSelectors: this.config.scrollContainerSelectors,
     };
 
-    this.scrollHandler = new ScrollHandler(scrollConfig, (scrollData: EventScrollData) => {
+    this.scrollHandler = new ScrollHandler(scrollConfig, (scrollData: ScrollData) => {
       this.handleEvent({
         evType: EventType.SCROLL,
         scrollData,

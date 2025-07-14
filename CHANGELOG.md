@@ -1,7 +1,41 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+
 ### 0.0.2 (2025-07-14)
+
+
+### Features
+
+* **api**: refactor public API structure and improve module organization ([0eb7fab](https://github.com/nacorga/tracelog-client/commit/0eb7fabc8e976dd3e3026f0bf4bdda390f25083e))
+* **tags**: enhance tag manager with simplified condition logic and improved element matching ([0eb7fab](https://github.com/nacorga/tracelog-client/commit/0eb7fabc8e976dd3e3026f0bf4bdda390f25083e))
+* **events**: simplify click event data structure with cleaner property names ([0eb7fab](https://github.com/nacorga/tracelog-client/commit/0eb7fabc8e976dd3e3026f0bf4bdda390f25083e))
+
+
+### Improvements
+
+* **scripts**: translate comments and console messages in rc-manager.js to English for consistency ([d9f05ae](https://github.com/nacorga/tracelog-client/commit/d9f05ae997b693df9c38cb20aa5406474e6b081c))
+
+
+### Breaking Changes
+
+* **events**: renamed click event properties for consistency:
+  - `elementTag` → `tag`
+  - `elementId` → `id` 
+  - `elementClass` → `class`
+  - `elementText` → `text`
+  - `elementHref` → `href`
+  - `elementTitle` → `title`
+  - `elementAlt` → `alt`
+  - `elementRole` → `role`
+  - `elementAriaLabel` → `ariaLabel`
+  - `elementDataAttributes` → `dataAttributes`
+
+
+### Bug Fixes
+
+* **config**: improve error handling and remove unnecessary API key references ([0eb7fab](https://github.com/nacorga/tracelog-client/commit/0eb7fabc8e976dd3e3026f0bf4bdda390f25083e))
+* **types**: update TagConfig and error types for better consistency ([0eb7fab](https://github.com/nacorga/tracelog-client/commit/0eb7fabc8e976dd3e3026f0bf4bdda390f25083e))
 
 ### 0.0.1 (2025-07-14)
 

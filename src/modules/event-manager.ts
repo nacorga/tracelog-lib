@@ -6,7 +6,7 @@ import {
   Queue,
   EventType,
   MetadataType,
-  EventUtm,
+  UTM,
   Config,
   Timestamp,
   TagConditionType,
@@ -16,7 +16,7 @@ import { isEventValid } from '../utils';
 import { TagManager } from './tag-manager';
 
 export class EventManager {
-  private readonly utmParams: EventUtm | null | undefined;
+  private readonly utmParams: UTM | null | undefined;
 
   private eventsQueue: EventData[] = [];
   private hasInitEventsQueueInterval = false;
@@ -252,15 +252,15 @@ export class EventManager {
     }
   }
 
-  private getUTMParameters(): EventUtm | null {
+  private getUTMParameters(): UTM | null {
     const urlParameters = new URLSearchParams(window.location.search);
-    const utmParameters: Partial<Record<keyof EventUtm, string>> = {};
+    const utmParameters: Partial<Record<keyof UTM, string>> = {};
 
     for (const parameter of UTM_PARAMS) {
       const value = urlParameters.get(parameter);
 
       if (value) {
-        const key = parameter.split('utm_')[1] as keyof EventUtm;
+        const key = parameter.split('utm_')[1] as keyof UTM;
         utmParameters[key] = value;
       }
     }

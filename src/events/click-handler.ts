@@ -1,5 +1,5 @@
 import { HTML_DATA_ATTR_PREFIX } from '../constants';
-import { ClickCoordinates, ClickTrackingElementData, EventClickData } from '../types';
+import { ClickCoordinates, ClickTrackingElementData, ClickData } from '../types';
 
 const INTERACTIVE_SELECTORS = [
   'button',
@@ -127,7 +127,7 @@ export const ClickHandler = {
     clickedElement: HTMLElement,
     relevantElement: HTMLElement,
     coordinates: ClickCoordinates,
-  ): EventClickData {
+  ): ClickData {
     const { x, y, relativeX, relativeY } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
     const attributes = this.extractElementAttributes(relevantElement);
