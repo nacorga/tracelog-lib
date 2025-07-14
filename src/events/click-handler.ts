@@ -66,18 +66,42 @@ export const ClickHandler = {
   },
 
   getRelevantText(clickedElement: HTMLElement, relevantElement: HTMLElement): string {
+    const MAX_TEXT_LENGTH = 255;
+    const LARGE_CONTAINER_TAGS = ['main', 'section', 'article', 'body', 'html', 'header', 'footer', 'aside', 'nav'];
     const clickedText = clickedElement.textContent?.trim() || '';
     const relevantText = relevantElement.textContent?.trim() || '';
 
-    if (clickedText && !relevantText) {
+    // If no text, return empty
+    if (!clickedText && !relevantText) {
+      return '';
+    }
+
+    // Strategy 1: If clicked element has reasonable text, use it
+    if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
       return clickedText;
     }
 
-    if (clickedText && relevantText && clickedText !== relevantText && relevantText.includes(clickedText)) {
-      return clickedText;
+    // Strategy 2: For large containers with excessive text, avoid using container text
+    const isLargeContainer = LARGE_CONTAINER_TAGS.includes(relevantElement.tagName.toLowerCase());
+    const hasExcessiveText = relevantText.length > MAX_TEXT_LENGTH * 2; // 510 chars
+
+    if (isLargeContainer && hasExcessiveText) {
+      // Use clicked element text if available and reasonable, otherwise empty
+      return clickedText && clickedText.length <= MAX_TEXT_LENGTH ? clickedText : '';
     }
 
-    return relevantText;
+    // Strategy 3: Use relevant text but truncate if needed
+    if (relevantText.length <= MAX_TEXT_LENGTH) {
+      return relevantText;
+    }
+
+    // Strategy 4: If clicked text is much shorter than relevant text, prefer clicked text
+    if (clickedText && clickedText.length < relevantText.length * 0.1) {
+      return clickedText.length <= MAX_TEXT_LENGTH ? clickedText : clickedText.slice(0, MAX_TEXT_LENGTH) + '...';
+    }
+
+    // Fallback: truncate relevant text
+    return relevantText.slice(0, MAX_TEXT_LENGTH) + '...';
   },
 
   extractElementAttributes(element: HTMLElement): Record<string, string> {
@@ -90,6 +114,7 @@ export const ClickHandler = {
 
     for (const attributeName of commonAttributes) {
       const value = element.getAttribute(attributeName);
+
       if (value) {
         result[attributeName] = value;
       }

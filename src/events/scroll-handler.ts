@@ -6,14 +6,11 @@ export interface ScrollContainer {
   lastScrollPos: number;
   debounceTimer: ReturnType<typeof setTimeout> | null;
   listener: EventListener;
-  animationFrameId: number | null;
-  isThrottled: boolean;
 }
 
 export interface ScrollConfig {
   containerSelectors?: string | string[];
   debounceTime?: number;
-  throttleTime?: number;
 }
 
 export class ScrollHandler {
@@ -60,36 +57,18 @@ export class ScrollHandler {
         return;
       }
 
-      // Cancel pending animation frame
-      if (container.animationFrameId) {
-        cancelAnimationFrame(container.animationFrameId);
+      if (container.debounceTimer) {
+        clearTimeout(container.debounceTimer);
       }
 
-      // Use requestAnimationFrame for better performance
-      container.animationFrameId = requestAnimationFrame(() => {
-        if (container.isThrottled) {
-          return;
+      container.debounceTimer = setTimeout(() => {
+        const scrollData = this.calculateScrollData(container);
+
+        if (scrollData) {
+          this.onScrollEvent(scrollData);
         }
-
-        container.isThrottled = true;
-
-        // Clear existing debounce timer
-        if (container.debounceTimer) {
-          clearTimeout(container.debounceTimer);
-        }
-
-        // Set new debounce timer
-        container.debounceTimer = setTimeout(() => {
-          const scrollData = this.calculateScrollData(container);
-          if (scrollData) {
-            this.onScrollEvent(scrollData);
-          }
-          container.debounceTimer = null;
-          container.isThrottled = false;
-        }, this.config.debounceTime || SCROLL_DEBOUNCE_TIME);
-
-        container.animationFrameId = null;
-      });
+        container.debounceTimer = null;
+      }, this.config.debounceTime || SCROLL_DEBOUNCE_TIME);
     };
 
     const container: ScrollContainer = {
@@ -97,8 +76,6 @@ export class ScrollHandler {
       lastScrollPos: 0,
       debounceTimer: null,
       listener: handleScroll,
-      animationFrameId: null,
-      isThrottled: false,
     };
 
     this.containers.push(container);
@@ -147,17 +124,10 @@ export class ScrollHandler {
 
   cleanup(): void {
     for (const container of this.containers) {
-      // Clear debounce timer
       if (container.debounceTimer) {
         clearTimeout(container.debounceTimer);
       }
 
-      // Cancel animation frame
-      if (container.animationFrameId) {
-        cancelAnimationFrame(container.animationFrameId);
-      }
-
-      // Remove event listener
       if (container.element instanceof Window) {
         window.removeEventListener('scroll', container.listener);
       } else {

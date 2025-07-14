@@ -1,10 +1,10 @@
 import { ApiConfig, AppConfig } from './types';
 
 // Performance constants
-export const EVENT_SENT_INTERVAL = 5000;
+export const EVENT_SENT_INTERVAL = 10_000;
 export const MAX_EVENTS_QUEUE_LENGTH = 500;
-export const SCROLL_DEBOUNCE_TIME = 100;
-export const CLICK_DEBOUNCE_TIME = 50;
+export const SCROLL_DEBOUNCE_TIME = 250;
+export const CLICK_DEBOUNCE_TIME = 100;
 export const RETRY_BACKOFF_INITIAL = 1000;
 export const RETRY_BACKOFF_MAX = 30_000;
 
