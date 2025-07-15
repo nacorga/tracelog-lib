@@ -323,6 +323,7 @@ export class Tracking {
     try {
       this.sessionManager?.endSession('page_unload');
       this.forceImmediateSendSync();
+      this.urlManager?.cleanup();
       this.trackingManager?.cleanup();
       this.sessionManager?.cleanup();
       this.eventManager?.cleanup();

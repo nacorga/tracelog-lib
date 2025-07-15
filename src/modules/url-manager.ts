@@ -36,6 +36,10 @@ export class UrlManager {
     this.pageViewHandler.updateUrl(url);
   }
 
+  cleanup(): void {
+    this.pageViewHandler.cleanup();
+  }
+
   isRouteExcluded(url: string): boolean {
     return PageViewHandler.isRouteExcluded(url, this.config.excludedUrlPaths || []);
   }

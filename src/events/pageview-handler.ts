@@ -1,4 +1,4 @@
-import { UTM_PARAMS, SCROLL_DEBOUNCE_TIME } from '../constants';
+import { UTM_PARAMS } from '../constants';
 import { UTM } from '../types';
 
 export interface NavigationData {
@@ -33,6 +33,9 @@ const wildcardToRegex = (string_: string): RegExp =>
 export class PageViewHandler {
   private currentUrl = '';
   private readonly utmParams: UTM | undefined = undefined;
+  private originalPushState?: typeof history.pushState;
+  private originalReplaceState?: typeof history.replaceState;
+  private popstateHandler?: (event: PopStateEvent) => void;
 
   constructor(
     private readonly config: PageViewConfig,
@@ -75,26 +78,28 @@ export class PageViewHandler {
 
   private setupNavigationTracking(): void {
     // Override history methods to track SPA navigation
-    const originalPushState = history.pushState;
-    const originalReplaceState = history.replaceState;
+    this.originalPushState = history.pushState;
+    this.originalReplaceState = history.replaceState;
 
     history.pushState = (...arguments_: Parameters<typeof history.pushState>): void => {
       const fromUrl = this.currentUrl;
-      originalPushState.apply(history, arguments_);
+      this.originalPushState!.apply(history, arguments_);
       this.handleNavigation(fromUrl, window.location.href);
     };
 
     history.replaceState = (...arguments_: Parameters<typeof history.replaceState>): void => {
       const fromUrl = this.currentUrl;
-      originalReplaceState.apply(history, arguments_);
+      this.originalReplaceState!.apply(history, arguments_);
       this.handleNavigation(fromUrl, window.location.href);
     };
 
     // Handle popstate events (back/forward buttons)
-    window.addEventListener('popstate', () => {
+    this.popstateHandler = () => {
       const fromUrl = this.currentUrl;
       this.handleNavigation(fromUrl, window.location.href);
-    });
+    };
+
+    window.addEventListener('popstate', this.popstateHandler);
   }
 
   private handleNavigation(fromUrl: string, toUrl: string): void {
@@ -111,7 +116,6 @@ export class PageViewHandler {
 
     if (this.config.onSuppressNextScroll) {
       this.config.onSuppressNextScroll();
-      setTimeout(() => {}, SCROLL_DEBOUNCE_TIME * 2);
     }
   }
 
@@ -153,5 +157,22 @@ export class PageViewHandler {
 
   updateUrl(url: string): void {
     this.currentUrl = url;
+  }
+
+  cleanup(): void {
+    if (this.originalPushState) {
+      history.pushState = this.originalPushState;
+      this.originalPushState = undefined;
+    }
+
+    if (this.originalReplaceState) {
+      history.replaceState = this.originalReplaceState;
+      this.originalReplaceState = undefined;
+    }
+
+    if (this.popstateHandler) {
+      window.removeEventListener('popstate', this.popstateHandler);
+      this.popstateHandler = undefined;
+    }
   }
 }
