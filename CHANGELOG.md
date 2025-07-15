@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file.
 ### [0.0.5](https://github.com/nacorga/tracelog-client/compare/v0.0.4...v0.0.5) (2025-07-15)
 
+
+### 👷‍ Builds
+
+* remove browser build from build:all script ([7393fcb](https://github.com/nacorga/tracelog-client/commit/7393fcb))
+
 ### [0.0.4](https://github.com/nacorga/tracelog-client/compare/v0.0.3...v0.0.4) (2025-07-15)
 
 ### 0.0.3 (2025-07-15)
