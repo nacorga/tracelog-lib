@@ -1,17 +1,21 @@
 import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../constants';
 import { Queue, AdminError, EventType, StorageKey } from '../types';
+import { SafeLocalStorage, StorageManager } from '../utils';
 
 export class DataSender {
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
   private lastSendAttempt = 0;
   private sendAttempts = 0;
+  private readonly storage: StorageManager;
 
   constructor(
     private readonly apiUrl: string,
     private readonly isQaMode: () => boolean,
     private readonly isDemoMode = false,
-  ) {}
+  ) {
+    this.storage = new SafeLocalStorage();
+  }
 
   async sendEventsQueue(body: Queue): Promise<boolean> {
     if (this.isDemoMode) {
@@ -195,10 +199,10 @@ export class DataSender {
           ...(body.global_metadata && { global_metadata: body.global_metadata }),
         };
 
-        window.localStorage.setItem(`${StorageKey.UserId}_critical_events`, JSON.stringify(persistedData));
+        this.storage.set(`${StorageKey.UserId}_critical_events`, persistedData);
 
         if (this.isQaMode()) {
-          console.log('[TraceLog] Critical events persisted to localStorage');
+          console.log('[TraceLog] Critical events persisted to storage');
         }
       }
     } catch (error) {
@@ -210,7 +214,7 @@ export class DataSender {
 
   clearPersistedEvents(): void {
     try {
-      window.localStorage.removeItem(`${StorageKey.UserId}_critical_events`);
+      this.storage.remove(`${StorageKey.UserId}_critical_events`);
     } catch {
       // Ignore errors when clearing localStorage
     }
@@ -218,10 +222,10 @@ export class DataSender {
 
   async recoverPersistedEvents(): Promise<void> {
     try {
-      const persistedData = window.localStorage.getItem(`${StorageKey.UserId}_critical_events`);
+      const persistedData = this.storage.get(`${StorageKey.UserId}_critical_events`);
 
       if (persistedData) {
-        const data = JSON.parse(persistedData);
+        const data = persistedData as any;
 
         // Only try to recover if the events are recent (less than 24 hours)
         const isRecent = Date.now() - data.timestamp < 24 * 60 * 60 * 1000;
