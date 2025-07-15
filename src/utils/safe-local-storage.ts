@@ -32,6 +32,7 @@ export class SafeLocalStorage implements StorageManager {
 
     try {
       serialized = JSON.stringify(value);
+      serialized ??= 'null';
     } catch {
       console.warn('[TraceLog] localStorage write failed');
       this.memoryFallback.set(key, '{}');
