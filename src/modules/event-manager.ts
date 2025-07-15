@@ -6,7 +6,7 @@ import {
   Queue,
   EventType,
   MetadataType,
-  EventUtm,
+  UTM,
   Config,
   Timestamp,
   TagConditionType,
@@ -16,7 +16,7 @@ import { isEventValid } from '../utils';
 import { TagManager } from './tag-manager';
 
 export class EventManager {
-  private readonly utmParams: EventUtm | null | undefined;
+  private readonly utmParams: UTM | null | undefined;
 
   private eventsQueue: EventData[] = [];
   private hasInitEventsQueueInterval = false;
@@ -48,7 +48,12 @@ export class EventManager {
       if (this.eventsQueue && this.eventsQueue.length > 0) {
         const lastEvent = this.eventsQueue.at(-1);
         if (lastEvent) {
-          lastEvent.timestamp = Date.now() as Timestamp;
+          const now = Date.now() as Timestamp;
+          lastEvent.timestamp = now;
+
+          if (this.lastEvent) {
+            this.lastEvent.timestamp = now;
+          }
         }
       }
 
@@ -112,7 +117,7 @@ export class EventManager {
     this.sendEvent(payload);
   }
 
-  sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): void {
+  customEventHandler(name: string, metadata?: Record<string, MetadataType>): void {
     const validationResult = isEventValid(name, metadata);
 
     if (validationResult.valid) {
@@ -125,7 +130,7 @@ export class EventManager {
       });
     } else if (this.isQaMode()) {
       console.error(
-        `TraceLog error: sendCustomEvent "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
+        `TraceLog error: custom event "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
       );
     }
   }
@@ -177,20 +182,30 @@ export class EventManager {
       return;
     }
 
-    // Use Set for O(1) lookup and more efficient deduplication
     const uniqueEvents = new Map<string, EventData>();
 
     for (const event of this.eventsQueue) {
-      const key = `${event.type}_${event.timestamp}_${event.page_url}`;
+      let key = `${event.type}_${event.page_url}`;
+
+      if (event.click_data) {
+        key += `_${event.click_data.x}_${event.click_data.y}`;
+      }
+
+      if (event.scroll_data) {
+        key += `_${event.scroll_data.depth}_${event.scroll_data.direction}`;
+      }
+
+      if (event.custom_event) {
+        key += `_${event.custom_event.name}`;
+      }
+
       if (!uniqueEvents.has(key)) {
         uniqueEvents.set(key, event);
       }
     }
 
-    // Convert back to array
     const deduplicatedEvents = [...uniqueEvents.values()];
 
-    // Sort by timestamp for better server processing
     deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
 
     const body: Queue = {
@@ -211,7 +226,6 @@ export class EventManager {
       return false;
     }
 
-    // Quick type check first
     if (this.lastEvent.type !== evType) {
       return false;
     }
@@ -252,15 +266,15 @@ export class EventManager {
     }
   }
 
-  private getUTMParameters(): EventUtm | null {
+  private getUTMParameters(): UTM | null {
     const urlParameters = new URLSearchParams(window.location.search);
-    const utmParameters: Partial<Record<keyof EventUtm, string>> = {};
+    const utmParameters: Partial<Record<keyof UTM, string>> = {};
 
     for (const parameter of UTM_PARAMS) {
       const value = urlParameters.get(parameter);
 
       if (value) {
-        const key = parameter.split('utm_')[1] as keyof EventUtm;
+        const key = parameter.split('utm_')[1] as keyof UTM;
         utmParameters[key] = value;
       }
     }

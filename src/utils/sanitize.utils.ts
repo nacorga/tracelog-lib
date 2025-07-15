@@ -1,4 +1,4 @@
-const ALLOWED_API_CONFIG_KEYS = ['tagsManager', 'samplingRate', 'qaMode', 'excludedUrlPaths'] as const;
+const ALLOWED_API_CONFIG_KEYS = ['tags', 'samplingRate', 'qaMode', 'excludedUrlPaths'] as const;
 
 // Security constants
 const MAX_STRING_LENGTH = 1000;
@@ -110,7 +110,7 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 export const sanitizeApiConfig = (
   data: unknown,
 ): Partial<{
-  tagsManager: unknown;
+  tags: unknown;
   samplingRate: unknown;
   qaMode: unknown;
   excludedUrlPaths: unknown;

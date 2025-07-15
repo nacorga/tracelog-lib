@@ -48,13 +48,20 @@
             data-testid="custom-event-btn">
             Send Custom Event
         </button>
+
+        <button
+            id="empty-name-btn"
+            data-testid="empty-name-btn"
+            data-tl-name="">
+            Empty Name
+        </button>
     </div>
 
     <script type="module">
         import { TraceLog } from './tracelog.js';
-        TraceLog.startTracking('demo');
+        TraceLog.init('demo');
         document.getElementById('custom-event-btn')?.addEventListener('click', () => {
-            TraceLog.sendCustomEvent('playwright_event', { foo: 'bar' });
+            TraceLog.event('playwright_event', { foo: 'bar' });
         });
     </script>
 </body>

@@ -13,7 +13,7 @@ This document provides comprehensive documentation for the TraceLog client API.
 
 ## Core Functions
 
-### `startTracking(id: string, config?: TracelogAppConfig): void`
+### `TraceLog.init(id: string, config?: TracelogAppConfig): void`
 
 Initializes the TraceLog client with the specified tracking ID and configuration.
 
@@ -27,13 +27,13 @@ Initializes the TraceLog client with the specified tracking ID and configuration
 #### Example
 
 ```typescript
-import { startTracking } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 // Basic initialization
-startTracking('my-app-tracking-id');
+TraceLog.init('my-app-tracking-id');
 
 // With configuration
-startTracking('my-app-tracking-id', {
+TraceLog.init('my-app-tracking-id', {
   sessionTimeout: 600000, // 10 minutes
   globalMetadata: {
     appVersion: '2.1.0',
@@ -56,14 +56,14 @@ startTracking('my-app-tracking-id', {
 
 ```typescript
 // The function will log errors to console but won't throw
-startTracking('invalid-id', {
+TraceLog.init('invalid-id', {
   sessionTimeout: 10000 // Will show warning: minimum is 30 seconds
 });
 ```
 
 ---
 
-### `sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): void`
+### `TraceLog.event(name: string, metadata?: Record<string, MetadataType>): void`
 
 Sends a custom event with optional metadata to the tracking system.
 
@@ -77,13 +77,13 @@ Sends a custom event with optional metadata to the tracking system.
 #### Example
 
 ```typescript
-import { sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 // Simple event
-sendCustomEvent('button_clicked');
+TraceLog.event('button_clicked');
 
 // Event with metadata
-sendCustomEvent('product_viewed', {
+TraceLog.event('product_viewed', {
   productId: 'prod-123',
   category: 'electronics',
   price: 299.99,
@@ -92,7 +92,7 @@ sendCustomEvent('product_viewed', {
 });
 
 // Complex event
-sendCustomEvent('user_interaction', {
+TraceLog.event('user_interaction', {
   action: 'form_submission',
   formId: 'contact-form',
   fields: ['name', 'email', 'message'],
@@ -113,8 +113,8 @@ sendCustomEvent('user_interaction', {
 
 ```typescript
 // Invalid events will be logged in QA mode
-sendCustomEvent('', { data: 'value' }); // Empty name - will be rejected
-sendCustomEvent('valid_event', { 
+TraceLog.event('', { data: 'value' }); // Empty name - will be rejected
+TraceLog.event('valid_event', { 
   invalid: undefined,  // Undefined values are filtered out
   valid: 'data'
 });
@@ -211,7 +211,7 @@ interface TracelogEventCustomData {
 Controls how long a session remains active without user interaction.
 
 ```typescript
-startTracking('my-id', {
+TraceLog.init('my-id', {
   sessionTimeout: 300000 // 5 minutes
 });
 ```
@@ -224,7 +224,7 @@ startTracking('my-id', {
 Metadata that gets attached to every event automatically.
 
 ```typescript
-startTracking('my-id', {
+TraceLog.init('my-id', {
   globalMetadata: {
     version: '1.0.0',
     environment: 'production',
@@ -242,12 +242,12 @@ Custom CSS selectors for elements that should be tracked for scroll events.
 
 ```typescript
 // Single selector
-startTracking('my-id', {
+TraceLog.init('my-id', {
   scrollContainerSelectors: '.main-content'
 });
 
 // Multiple selectors
-startTracking('my-id', {
+TraceLog.init('my-id', {
   scrollContainerSelectors: [
     '.main-content',
     '#sidebar',
@@ -270,7 +270,7 @@ The client automatically tracks several types of events:
 
 ### Custom Events
 
-- **CUSTOM**: Events sent via `sendCustomEvent()`
+- **CUSTOM**: Events sent via `TraceLog.event()`
 
 ## Error Handling
 
@@ -278,8 +278,8 @@ The client automatically tracks several types of events:
 
 ```typescript
 // The client will handle these gracefully
-startTracking(''); // Empty ID - logs error, doesn't initialize
-startTracking('valid-id', {
+TraceLog.init(''); // Empty ID - logs error, doesn't initialize
+TraceLog.init('valid-id', {
   sessionTimeout: 1000 // Too short - logs warning, uses minimum
 });
 ```
@@ -288,8 +288,8 @@ startTracking('valid-id', {
 
 ```typescript
 // These will be logged in development/QA mode
-sendCustomEvent(''); // Empty name
-sendCustomEvent('valid', {
+TraceLog.event(''); // Empty name
+TraceLog.event('valid', {
   invalidType: new Date() // Invalid metadata type
 });
 ```
@@ -307,28 +307,28 @@ The client handles network failures gracefully:
 
 ```typescript
 // Initialize as early as possible in your app
-import { startTracking } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
-startTracking('your-id', config);
+TraceLog.init('your-id', config);
 ```
 
 ### 2. Use Meaningful Event Names
 
 ```typescript
 // Good
-sendCustomEvent('product_purchased', { productId: '123' });
-sendCustomEvent('form_validation_error', { field: 'email' });
+TraceLog.event('product_purchased', { productId: '123' });
+TraceLog.event('form_validation_error', { field: 'email' });
 
 // Avoid
-sendCustomEvent('event1', { data: 'something' });
-sendCustomEvent('click', {}); // Too generic
+TraceLog.event('event1', { data: 'something' });
+TraceLog.event('click', {}); // Too generic
 ```
 
 ### 3. Structure Metadata Consistently
 
 ```typescript
 // Consistent naming and structure
-sendCustomEvent('user_action', {
+TraceLog.event('user_action', {
   action_type: 'button_click',
   element_id: 'subscribe-btn',
   section: 'hero',
@@ -340,7 +340,7 @@ sendCustomEvent('user_action', {
 
 ```typescript
 // Don't include PII in metadata
-sendCustomEvent('form_submitted', {
+TraceLog.event('form_submitted', {
   form_type: 'contact',
   field_count: 5,
   // Don't include: email, name, personal info
@@ -350,7 +350,7 @@ sendCustomEvent('form_submitted', {
 ### 5. Use Global Metadata for Common Properties
 
 ```typescript
-startTracking('id', {
+TraceLog.init('id', {
   globalMetadata: {
     app_version: '2.1.0',
     build_number: '145',

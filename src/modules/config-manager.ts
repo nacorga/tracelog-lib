@@ -1,7 +1,7 @@
 import { AppConfig, ApiConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
 import { sanitizeApiConfig, isValidUrl } from '../utils';
-import packageJson from '../../package.json';
+import { VERSION } from '../version';
 
 interface ErrorReporter {
   reportError(error: { message: string; context?: string; severity?: 'low' | 'medium' | 'high' }): void;
@@ -14,9 +14,10 @@ interface ConfigLoadResult {
 }
 
 export class ConfigManager {
-  private readonly config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
   private readonly errorReporter: ErrorReporter;
   private readonly maxFetchAttempts = 3;
+
+  private config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
 
   private id = '';
   private lastFetchAttempt = 0;
@@ -47,7 +48,9 @@ export class ConfigManager {
         excludedUrlPaths: [],
       };
 
-      return demoConfig;
+      this.config = demoConfig;
+
+      return this.config;
     }
 
     const result = await this.loadConfigWithValidation(id, config);
@@ -65,7 +68,9 @@ export class ConfigManager {
       });
     }
 
-    return result.config;
+    this.config = result.config;
+
+    return this.config;
   }
 
   private async loadConfigWithValidation(id: string, config: AppConfig): Promise<ConfigLoadResult> {
@@ -225,6 +230,8 @@ export class ConfigManager {
   }
 
   private async fetchConfig(_config: AppConfig): Promise<ApiConfig | undefined> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
     try {
       const configUrl = this.getConfigUrl();
 
@@ -239,18 +246,20 @@ export class ConfigManager {
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+      timeoutId = setTimeout(() => controller.abort(), 10_000);
 
       const response = await fetch(configUrl, {
         method: 'GET',
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': `TraceLog-Client/${packageJson.version}`,
+          'User-Agent': `TraceLog-Client/${VERSION}`,
         },
       });
 
       clearTimeout(timeoutId);
+      timeoutId = null;
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -274,6 +283,11 @@ export class ConfigManager {
 
       return apiConfig;
     } catch (error) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       this.errorReporter.reportError({
@@ -350,9 +364,14 @@ export class ConfigManager {
     try {
       const url = new URL(window.location.href);
       const host = url.hostname;
+
+      if (!host) {
+        return undefined;
+      }
+
       const parts = host.split('.');
 
-      if (parts.length === 0) {
+      if (parts.length < 2) {
         return undefined;
       }
 

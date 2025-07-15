@@ -1,5 +1,5 @@
 import { SCROLL_DEBOUNCE_TIME } from '../constants';
-import { ScrollDirection, EventScrollData } from '../types';
+import { ScrollDirection, ScrollData } from '../types';
 
 export interface ScrollContainer {
   element: Window | HTMLElement;
@@ -16,10 +16,11 @@ export interface ScrollConfig {
 export class ScrollHandler {
   private containers: ScrollContainer[] = [];
   private suppressNext = false;
+  private suppressTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly config: ScrollConfig,
-    private readonly onScrollEvent: (data: EventScrollData) => void,
+    private readonly onScrollEvent: (data: ScrollData) => void,
   ) {}
 
   init(): void {
@@ -42,7 +43,11 @@ export class ScrollHandler {
   suppressNextEvent(): void {
     this.suppressNext = true;
 
-    setTimeout(
+    if (this.suppressTimer) {
+      clearTimeout(this.suppressTimer);
+    }
+
+    this.suppressTimer = setTimeout(
       () => {
         this.suppressNext = false;
       },
@@ -87,7 +92,7 @@ export class ScrollHandler {
     }
   }
 
-  private calculateScrollData(container: ScrollContainer): EventScrollData | null {
+  private calculateScrollData(container: ScrollContainer): ScrollData | null {
     const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
     const viewportHeight = this.getViewportHeight(element);
@@ -136,5 +141,10 @@ export class ScrollHandler {
     }
 
     this.containers = [];
+
+    if (this.suppressTimer) {
+      clearTimeout(this.suppressTimer);
+      this.suppressTimer = null;
+    }
   }
 }

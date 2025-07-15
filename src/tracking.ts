@@ -20,7 +20,7 @@ export class Tracking {
   public isInitialized = false;
   public isExcludedUser = false;
 
-  private readonly initializationPromise: Promise<void> | null = null;
+  private readonly initializationPromise: Promise<void>;
 
   private cleanupListeners: (() => void)[] = [];
   private initializationState: InitializationState = InitializationState.UNINITIALIZED;
@@ -33,11 +33,19 @@ export class Tracking {
 
   constructor(id: string, config?: AppConfig) {
     this.initializationPromise = this.initializeTracking(id, config);
+    this.initializationPromise.catch((error) => {
+      console.error('[TraceLog] Initialization rejected:', error);
+      this.catchError({
+        message: error instanceof Error ? error.message : String(error),
+      }).catch(() => {
+        // ignore error reporting failures
+      });
+    });
   }
 
   private async initializeTracking(id: string, config?: AppConfig): Promise<void> {
     if (this.initializationState !== InitializationState.UNINITIALIZED) {
-      return this.initializationPromise || Promise.resolve();
+      return this.initializationPromise;
     }
 
     this.initializationState = InitializationState.INITIALIZING;
@@ -52,12 +60,7 @@ export class Tracking {
         throw new Error('Failed to get API URL');
       }
 
-      this.dataSender = new DataSender(
-        apiUrl,
-        () => mergedConfig.qaMode || false,
-        () => this.sessionManager?.getUserId() || '',
-        this.configManager.isDemoMode(),
-      );
+      this.dataSender = new DataSender(apiUrl, () => mergedConfig.qaMode || false, this.configManager.isDemoMode());
 
       this.sessionManager = new SessionManager(
         mergedConfig,
@@ -106,7 +109,7 @@ export class Tracking {
 
   private async startInitializationSequence(): Promise<void> {
     try {
-      await this.dataSender.recoverPersistedEvents();
+      await this.dataSender.recoverPersistedEvents(this.sessionManager.getUserId());
 
       const hadUnexpectedEnd = this.sessionManager.checkForUnexpectedSessionEnd();
 
@@ -182,6 +185,8 @@ export class Tracking {
       ...(referrer && { referrer }),
       ...(utm && { utm }),
     });
+
+    this.eventManager.updatePageUrl(toUrl);
   }
 
   private handleTrackingEvent(event: EventHandler): void {
@@ -217,14 +222,14 @@ export class Tracking {
     }
   }
 
-  async sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): Promise<void> {
+  async customEventHandler(name: string, metadata?: Record<string, MetadataType>): Promise<void> {
     await this.waitForInitialization();
 
     if (!this.isInitialized || this.isExcludedUser) {
       return;
     }
 
-    this.eventManager.sendCustomEvent(name, metadata);
+    this.eventManager.customEventHandler(name, metadata);
   }
 
   async startSession(): Promise<void> {
@@ -285,7 +290,7 @@ export class Tracking {
         ...(this.sessionManager.getGlobalMetadata() && { global_metadata: this.sessionManager.getGlobalMetadata() }),
       };
 
-      await this.dataSender.sendEventsSynchronously(finalBatch);
+      this.dataSender.sendEventsSynchronously(finalBatch);
       this.eventManager.clearEventsQueue();
     }
   }
@@ -308,6 +313,7 @@ export class Tracking {
     }
 
     this.urlManager.updateUrl(url);
+    this.eventManager.updatePageUrl(url);
   }
 
   async getConfig(): Promise<AppConfig | undefined> {
@@ -328,6 +334,7 @@ export class Tracking {
     try {
       this.sessionManager?.endSession('page_unload');
       this.forceImmediateSendSync();
+      this.urlManager?.cleanup();
       this.trackingManager?.cleanup();
       this.sessionManager?.cleanup();
       this.eventManager?.cleanup();
@@ -373,7 +380,12 @@ export class Tracking {
         ...(this.sessionManager.getGlobalMetadata() && { global_metadata: this.sessionManager.getGlobalMetadata() }),
       };
 
-      this.dataSender.sendEventsSynchronously(finalBatch);
+      const success = this.dataSender.sendEventsSynchronously(finalBatch);
+
+      if (!success) {
+        this.dataSender.persistCriticalEvents(finalBatch);
+      }
+
       this.eventManager.clearEventsQueue();
     }
   }
@@ -387,7 +399,7 @@ export class Tracking {
       throw new Error('[TraceLog] Initialization failed, cannot perform operation');
     }
 
-    if (this.initializationState === InitializationState.INITIALIZING && this.initializationPromise) {
+    if (this.initializationState === InitializationState.INITIALIZING) {
       try {
         await this.initializationPromise;
       } catch {

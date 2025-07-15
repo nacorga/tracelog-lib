@@ -1,4 +1,4 @@
-import { DeviceType, TagCondition, EventClickData, TagConditionType, TagConditionOperator } from '../types';
+import { DeviceType, TagCondition, ClickData, TagConditionType, TagConditionOperator } from '../types';
 
 export class TagManager {
   static matchUrlMatches(condition: TagCondition, url: string): boolean {
@@ -83,7 +83,7 @@ export class TagManager {
     }
   }
 
-  static matchElementSelector(condition: TagCondition, clickData: EventClickData): boolean {
+  static matchElementSelector(condition: TagCondition, clickData: ClickData): boolean {
     if (condition.type !== TagConditionType.ELEMENT_MATCHES) {
       return false;
     }
@@ -183,7 +183,7 @@ export class TagManager {
     }
   }
 
-  private static checkElementFieldEquals(clickData: EventClickData, targetValue: string): boolean {
+  private static checkElementFieldEquals(clickData: ClickData, targetValue: string): boolean {
     const fields = [
       clickData.id,
       clickData.class,

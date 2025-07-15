@@ -36,16 +36,16 @@ pnpm add @tracelog/client
 ```html
 <!-- ES Modules -->
 <script type="module">
-  import { startTracking, sendCustomEvent } from 'https://cdn.jsdelivr.net/npm/@tracelog/client@latest/dist/esm/public-api.js';
+  import { TraceLog } from 'https://cdn.jsdelivr.net/npm/@tracelog/client@latest/dist/esm/public-api.js';
   
-  startTracking('your-tracking-id');
+  TraceLog.init('your-tracking-id');
 </script>
 
 <!-- UMD (Legacy browsers) -->
 <script src="https://cdn.jsdelivr.net/npm/@tracelog/client@latest/dist/cjs/public-api.js"></script>
 <script>
-  const { startTracking, sendCustomEvent } = TraceLog;
-  startTracking('your-tracking-id');
+  const { init, event } = TraceLog;
+  init('your-tracking-id');
 </script>
 ```
 
@@ -61,10 +61,10 @@ npm install @tracelog/client
 
 ```jsx
 // src/tracking.js
-import { startTracking } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export const initializeTracking = () => {
-  startTracking('your-tracking-id', {
+  TraceLog.init('your-tracking-id', {
     globalMetadata: {
       framework: 'react',
       version: process.env.REACT_APP_VERSION
@@ -92,14 +92,14 @@ Create React App supports ES modules out of the box:
 ```jsx
 // src/hooks/useTracking.js
 import { useState, useEffect } from 'react';
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export const useTracking = () => {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     if (!isInitialized) {
-      startTracking(process.env.REACT_APP_TRACKING_ID, {
+      TraceLog.init(process.env.REACT_APP_TRACKING_ID, {
         globalMetadata: {
           environment: process.env.NODE_ENV
         }
@@ -108,10 +108,10 @@ export const useTracking = () => {
     }
   }, [isInitialized]);
 
-  return {
-    trackEvent: sendCustomEvent,
-    isInitialized
-  };
+      return {
+      trackEvent: TraceLog.event,
+      isInitialized
+    };
 };
 ```
 
@@ -125,13 +125,13 @@ npm install @tracelog/client
 
 ```javascript
 // src/plugins/tracking.js
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export default {
   install(app, options) {
     const { trackingId, config = {} } = options;
     
-    startTracking(trackingId, {
+    TraceLog.init(trackingId, {
       ...config,
       globalMetadata: {
         framework: 'vue',
@@ -140,9 +140,9 @@ export default {
       }
     });
 
-    app.config.globalProperties.$track = sendCustomEvent;
+    app.config.globalProperties.$track = TraceLog.event;
     app.provide('tracking', {
-      track: sendCustomEvent
+      track: TraceLog.event
     });
   }
 };
@@ -171,13 +171,13 @@ app.mount('#app');
 ```javascript
 // src/plugins/tracking.js
 import Vue from 'vue';
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 const TrackingPlugin = {
   install(Vue, options) {
-    startTracking(options.trackingId, options.config);
+    TraceLog.init(options.trackingId, options.config);
     
-    Vue.prototype.$track = sendCustomEvent;
+    Vue.prototype.$track = TraceLog.event;
   }
 };
 
@@ -201,7 +201,7 @@ npm install @tracelog/client
 ```typescript
 // src/app/services/tracking.service.ts
 import { Injectable } from '@angular/core';
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -216,7 +216,7 @@ export class TrackingService {
 
   private initialize(): void {
     if (!this.initialized && typeof window !== 'undefined') {
-      startTracking(environment.trackingId, {
+      TraceLog.init(environment.trackingId, {
         globalMetadata: {
           framework: 'angular',
           environment: environment.production ? 'production' : 'development'
@@ -227,7 +227,7 @@ export class TrackingService {
   }
 
   track(eventName: string, metadata?: Record<string, any>): void {
-    sendCustomEvent(eventName, metadata);
+    TraceLog.event(eventName, metadata);
   }
 }
 
@@ -274,12 +274,12 @@ npm install @tracelog/client
 
 ```javascript
 // src/lib/tracking.js
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 import { browser } from '$app/environment';
 
 export const initTracking = () => {
   if (browser) {
-    startTracking(import.meta.env.VITE_TRACKING_ID, {
+    TraceLog.init(import.meta.env.VITE_TRACKING_ID, {
       globalMetadata: {
         framework: 'svelte'
       }
@@ -287,7 +287,7 @@ export const initTracking = () => {
   }
 };
 
-export const track = sendCustomEvent;
+export const track = TraceLog.event;
 
 // src/app.html or src/hooks.client.js
 import { initTracking } from '$lib/tracking';
@@ -308,11 +308,11 @@ npm install @tracelog/client
 'use client';
 
 import { useEffect } from 'react';
-import { startTracking } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    startTracking(process.env.NEXT_PUBLIC_TRACKING_ID!, {
+    TraceLog.init(process.env.NEXT_PUBLIC_TRACKING_ID!, {
       globalMetadata: {
         framework: 'nextjs',
         environment: process.env.NODE_ENV
@@ -345,11 +345,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 // pages/_app.tsx
 import type { AppProps } from 'next/app';
 import { useEffect } from 'react';
-import { startTracking } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
-    startTracking(process.env.NEXT_PUBLIC_TRACKING_ID!, {
+    TraceLog.init(process.env.NEXT_PUBLIC_TRACKING_ID!, {
       globalMetadata: {
         framework: 'nextjs'
       }
@@ -368,12 +368,12 @@ npm install @tracelog/client
 
 ```javascript
 // plugins/tracking.client.js
-import { startTracking } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig();
   
-  startTracking(config.public.trackingId, {
+  TraceLog.init(config.public.trackingId, {
     globalMetadata: {
       framework: 'nuxt',
       environment: process.env.NODE_ENV
@@ -501,7 +501,7 @@ const trackingId = process.env.NODE_ENV === 'production'
   ? 'prod-tracking-id' 
   : 'dev-tracking-id';
 
-startTracking(trackingId, {
+TraceLog.init(trackingId, {
   globalMetadata: {
     environment: process.env.NODE_ENV
   }
@@ -524,13 +524,13 @@ Create a simple test to verify functionality:
 
 ```javascript
 // test-tracking.js
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 // Initialize
-startTracking('test-id');
+TraceLog.init('test-id');
 
 // Send test event
-sendCustomEvent('test_event', {
+TraceLog.event('test_event', {
   test: true,
   timestamp: Date.now()
 });
@@ -543,11 +543,11 @@ console.log('TraceLog client test completed');
 In development, events are logged to console:
 
 ```javascript
-startTracking('your-id', {
+TraceLog.init('your-id', {
   // Events will appear in browser console in development
 });
 
-sendCustomEvent('test', { data: 'value' });
+TraceLog.event('test', { data: 'value' });
 // Console output: [TraceLog] custom event: { name: 'test', metadata: { data: 'value' } }
 ```
 
@@ -591,17 +591,17 @@ ReferenceError: window is not defined
 ```javascript
 // React/Next.js
 useEffect(() => {
-  startTracking('your-id');
+  TraceLog.init('your-id');
 }, []);
 
 // Vue/Nuxt
 if (process.client) {
-  startTracking('your-id');
+  TraceLog.init('your-id');
 }
 
 // Generic
 if (typeof window !== 'undefined') {
-  startTracking('your-id');
+  TraceLog.init('your-id');
 }
 ```
 
@@ -612,7 +612,7 @@ If the TraceLog client seems too large:
 1. Check tree-shaking is enabled
 2. Import only what you need:
    ```javascript
-   import { startTracking, sendCustomEvent } from '@tracelog/client';
+   import { TraceLog } from '@tracelog/client';
    ```
 3. Verify your bundler configuration
 
@@ -620,7 +620,7 @@ If the TraceLog client seems too large:
 
 1. Check tracking ID is correct
 2. Verify network requests in DevTools
-3. Ensure `sendCustomEvent` is called after `startTracking`
+3. Ensure `event` is called after `init`
 4. Check browser console for errors
 
 ### Getting Help
@@ -638,13 +638,13 @@ For optimal performance:
 ```javascript
 // Initialize early but don't block rendering
 setTimeout(() => {
-  startTracking('your-id');
+  TraceLog.init('your-id');
 }, 0);
 
 // Or use requestIdleCallback if available
 if ('requestIdleCallback' in window) {
-  requestIdleCallback(() => startTracking('your-id'));
+  requestIdleCallback(() => TraceLog.init('your-id'));
 } else {
-  setTimeout(() => startTracking('your-id'), 0);
+  setTimeout(() => TraceLog.init('your-id'), 0);
 }
 ``` 

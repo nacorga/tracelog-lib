@@ -51,10 +51,10 @@ This will create the subdomain that points to our middleware service.
 ## Quick Start
 
 ```javascript
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 // Initialize tracking
-startTracking('your-tracking-id', {
+TraceLog.init('your-tracking-id', {
   sessionTimeout: 300000, // 5 minutes
   globalMetadata: {
     version: '1.0.0',
@@ -63,7 +63,7 @@ startTracking('your-tracking-id', {
 });
 
 // Send custom events
-sendCustomEvent('button_click', {
+TraceLog.event('button_click', {
   buttonId: 'subscribe-btn',
   section: 'hero',
   timestamp: Date.now()
@@ -74,7 +74,7 @@ sendCustomEvent('button_click', {
 
 ### Core Methods
 
-#### `startTracking(id: string, config?: TracelogAppConfig): void`
+#### `TraceLog.init(id: string, config?: TracelogAppConfig): void`
 
 Initializes the tracking system with the provided configuration.
 
@@ -82,7 +82,7 @@ Initializes the tracking system with the provided configuration.
 - `id` (string): Your unique tracking identifier
 - `config` (TracelogAppConfig, optional): Configuration options
 
-#### `sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): void`
+#### `TraceLog.event(name: string, metadata?: Record<string, MetadataType>): void`
 
 Sends a custom event with optional metadata.
 
