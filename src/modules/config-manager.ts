@@ -14,9 +14,10 @@ interface ConfigLoadResult {
 }
 
 export class ConfigManager {
-  private readonly config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
   private readonly errorReporter: ErrorReporter;
   private readonly maxFetchAttempts = 3;
+
+  private config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
 
   private id = '';
   private lastFetchAttempt = 0;
@@ -47,7 +48,9 @@ export class ConfigManager {
         excludedUrlPaths: [],
       };
 
-      return demoConfig;
+      this.config = demoConfig;
+
+      return this.config;
     }
 
     const result = await this.loadConfigWithValidation(id, config);
@@ -65,7 +68,9 @@ export class ConfigManager {
       });
     }
 
-    return result.config;
+    this.config = result.config;
+
+    return this.config;
   }
 
   private async loadConfigWithValidation(id: string, config: AppConfig): Promise<ConfigLoadResult> {
