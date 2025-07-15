@@ -230,6 +230,8 @@ export class ConfigManager {
   }
 
   private async fetchConfig(_config: AppConfig): Promise<ApiConfig | undefined> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
     try {
       const configUrl = this.getConfigUrl();
 
@@ -244,7 +246,8 @@ export class ConfigManager {
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+      timeoutId = setTimeout(() => controller.abort(), 10_000);
 
       const response = await fetch(configUrl, {
         method: 'GET',
@@ -256,6 +259,7 @@ export class ConfigManager {
       });
 
       clearTimeout(timeoutId);
+      timeoutId = null;
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -279,6 +283,11 @@ export class ConfigManager {
 
       return apiConfig;
     } catch (error) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       this.errorReporter.reportError({
