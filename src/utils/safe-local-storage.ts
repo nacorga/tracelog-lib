@@ -28,9 +28,17 @@ export class SafeLocalStorage implements StorageManager {
   }
 
   set(key: string, value: unknown): boolean {
-    try {
-      const serialized = JSON.stringify(value);
+    let serialized: string;
 
+    try {
+      serialized = JSON.stringify(value);
+    } catch {
+      console.warn('[TraceLog] localStorage write failed');
+      this.memoryFallback.set(key, '{}');
+      return true;
+    }
+
+    try {
       if (this.available) {
         const estimatedSize = serialized.length + key.length;
 
@@ -42,23 +50,25 @@ export class SafeLocalStorage implements StorageManager {
 
         window.localStorage.setItem(key, serialized);
         return true;
-      } else {
-        this.memoryFallback.set(key, serialized);
-        return true;
       }
+
+      this.memoryFallback.set(key, serialized);
+      return true;
     } catch {
       console.warn('[TraceLog] localStorage write failed');
 
       if (this.available) {
         this.cleanup();
+
         try {
-          window.localStorage.setItem(key, JSON.stringify(value));
+          window.localStorage.setItem(key, serialized);
         } catch {
-          this.memoryFallback.set(key, JSON.stringify(value));
+          this.memoryFallback.set(key, serialized);
         }
       } else {
-        this.memoryFallback.set(key, JSON.stringify(value));
+        this.memoryFallback.set(key, serialized);
       }
+
       return true;
     }
   }
