@@ -33,6 +33,14 @@ export class Tracking {
 
   constructor(id: string, config?: AppConfig) {
     this.initializationPromise = this.initializeTracking(id, config);
+    this.initializationPromise.catch((error) => {
+      console.error('[TraceLog] Initialization rejected:', error);
+      this.catchError({
+        message: error instanceof Error ? error.message : String(error),
+      }).catch(() => {
+        // ignore error reporting failures
+      });
+    });
   }
 
   private async initializeTracking(id: string, config?: AppConfig): Promise<void> {
