@@ -174,14 +174,14 @@ Create test files to verify functionality:
 
 ```javascript
 // test-example.js
-import { startTracking, sendCustomEvent } from './dist/cjs/public-api';
+import { TraceLog } from './dist/cjs/public-api';
 
 // Test basic functionality
-startTracking('test-id', {
+TraceLog.init('test-id', {
   globalMetadata: { test: true }
 });
 
-sendCustomEvent('test_event', {
+TraceLog.event('test_event', {
   action: 'manual_test',
   timestamp: Date.now()
 });
@@ -211,11 +211,11 @@ Monitor performance metrics:
 ```javascript
 // Performance test
 console.time('client-initialization');
-startTracking('perf-test');
+TraceLog.init('perf-test');
 console.timeEnd('client-initialization');
 
 console.time('event-sending');
-sendCustomEvent('perf_test', { data: 'test' });
+TraceLog.event('perf_test', { data: 'test' });
 console.timeEnd('event-sending');
 ```
 
@@ -241,7 +241,7 @@ interface EventData {
  * @param name - Event name identifier
  * @param metadata - Optional event metadata
  */
-export function sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): void;
+export function TraceLog.event(name: string, metadata?: Record<string, MetadataType>): void;
 
 // Avoid
 type EventData = {
@@ -358,8 +358,8 @@ A clear description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Call startTracking('id')
-2. Call sendCustomEvent('test')
+1. Call TraceLog.init('id')
+2. Call TraceLog.event('test')
 3. See error
 
 **Expected behavior**

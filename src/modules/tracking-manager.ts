@@ -1,4 +1,4 @@
-import { Config, EventType, EventScrollData, InactivityConfig, InactivityData } from '../types';
+import { Config, EventType, ScrollData, InactivityConfig, InactivityData } from '../types';
 import { ClickHandler, ScrollHandler, ScrollConfig, InactivityHandler } from '../events';
 import { CLICK_DEBOUNCE_TIME } from '../constants';
 
@@ -18,7 +18,7 @@ export class TrackingManager {
       containerSelectors: this.config.scrollContainerSelectors,
     };
 
-    this.scrollHandler = new ScrollHandler(scrollConfig, (scrollData: EventScrollData) => {
+    this.scrollHandler = new ScrollHandler(scrollConfig, (scrollData: ScrollData) => {
       this.handleEvent({
         evType: EventType.SCROLL,
         scrollData,
@@ -63,15 +63,18 @@ export class TrackingManager {
 
         if (trackingElement) {
           const trackingData = ClickHandler.extractTrackingData(trackingElement);
-          const attributeData = ClickHandler.createCustomEventData(trackingData);
 
-          this.handleEvent({
-            evType: EventType.CUSTOM,
-            customEvent: {
-              name: attributeData.name,
-              ...(attributeData.value && { metadata: { value: attributeData.value } }),
-            },
-          });
+          if (trackingData) {
+            const attributeData = ClickHandler.createCustomEventData(trackingData);
+
+            this.handleEvent({
+              evType: EventType.CUSTOM,
+              customEvent: {
+                name: attributeData.name,
+                ...(attributeData.value && { metadata: { value: attributeData.value } }),
+              },
+            });
+          }
         }
 
         const clickData = ClickHandler.generateClickData(clickedElement, relevantClickElement, coordinates);

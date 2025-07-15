@@ -18,14 +18,14 @@ This document provides practical examples for implementing the TraceLog client i
 ### Simple Implementation
 
 ```javascript
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 // Initialize tracking
-startTracking('your-app-id');
+TraceLog.init('your-app-id');
 
 // Track user actions
 document.getElementById('signup-btn').addEventListener('click', () => {
-  sendCustomEvent('signup_button_clicked', {
+  TraceLog.event('signup_button_clicked', {
     location: 'hero_section',
     variant: 'primary'
   });
@@ -35,9 +35,9 @@ document.getElementById('signup-btn').addEventListener('click', () => {
 ### With Configuration
 
 ```javascript
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
-startTracking('your-app-id', {
+TraceLog.init('your-app-id', {
   sessionTimeout: 1800000, // 30 minutes
   globalMetadata: {
     app_version: '2.1.0',
@@ -55,11 +55,11 @@ startTracking('your-app-id', {
 ```jsx
 // hooks/useTracking.js
 import { useEffect } from 'react';
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export const useTracking = (userId) => {
   useEffect(() => {
-    startTracking('your-app-id', {
+    TraceLog.init('your-app-id', {
       globalMetadata: {
         userId: userId,
         timestamp: Date.now()
@@ -68,7 +68,7 @@ export const useTracking = (userId) => {
   }, [userId]);
 
   const trackEvent = (eventName, metadata = {}) => {
-    sendCustomEvent(eventName, {
+    TraceLog.event(eventName, {
       ...metadata,
       component: 'react'
     });
@@ -127,18 +127,18 @@ function App() {
 
 ```javascript
 // plugins/tracking.js
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 export default {
   install(app, options) {
-    startTracking(options.trackingId, options.config);
+    TraceLog.init(options.trackingId, options.config);
 
     app.config.globalProperties.$track = (eventName, metadata) => {
-      sendCustomEvent(eventName, metadata);
+      TraceLog.event(eventName, metadata);
     };
 
     app.provide('track', (eventName, metadata) => {
-      sendCustomEvent(eventName, metadata);
+      TraceLog.event(eventName, metadata);
     });
   }
 };
@@ -194,7 +194,7 @@ export default {
 ```typescript
 // services/tracking.service.ts
 import { Injectable } from '@angular/core';
-import { startTracking, sendCustomEvent } from '@tracelog/client';
+import { TraceLog } from '@tracelog/client';
 
 @Injectable({
   providedIn: 'root'
@@ -204,13 +204,13 @@ export class TrackingService {
 
   initialize(trackingId: string, config = {}) {
     if (!this.initialized) {
-      startTracking(trackingId, config);
+      TraceLog.init(trackingId, config);
       this.initialized = true;
     }
   }
 
   track(eventName: string, metadata: Record<string, any> = {}) {
-    sendCustomEvent(eventName, {
+    TraceLog.event(eventName, {
       ...metadata,
       framework: 'angular',
       timestamp: Date.now()
@@ -260,7 +260,7 @@ export class AppComponent implements OnInit {
 // Auth tracking
 class AuthTracker {
   static trackLogin(method, success, userId = null) {
-    sendCustomEvent('user_login_attempt', {
+    TraceLog.event('user_login_attempt', {
       method: method, // 'email', 'google', 'facebook'
       success: success,
       userId: success ? userId : null,
@@ -269,7 +269,7 @@ class AuthTracker {
   }
 
   static trackLogout(userId) {
-    sendCustomEvent('user_logout', {
+    TraceLog.event('user_logout', {
       userId: userId,
       sessionDuration: this.getSessionDuration(),
       timestamp: Date.now()
@@ -277,7 +277,7 @@ class AuthTracker {
   }
 
   static trackRegistration(method, success, errors = []) {
-    sendCustomEvent('user_registration', {
+    TraceLog.event('user_registration', {
       method: method,
       success: success,
       errors: errors,
@@ -328,7 +328,7 @@ class NavigationTracker {
   trackPageView() {
     const timeOnPage = Date.now() - this.startTime;
     
-    sendCustomEvent('page_view', {
+    TraceLog.event('page_view', {
       path: window.location.pathname,
       search: window.location.search,
       hash: window.location.hash,
@@ -353,7 +353,7 @@ new NavigationTracker();
 class EcommerceTracker {
   // Product viewing
   static trackProductView(product) {
-    sendCustomEvent('product_viewed', {
+    TraceLog.event('product_viewed', {
       productId: product.id,
       productName: product.name,
       category: product.category,
@@ -367,7 +367,7 @@ class EcommerceTracker {
 
   // Add to cart
   static trackAddToCart(product, quantity = 1) {
-    sendCustomEvent('product_added_to_cart', {
+    TraceLog.event('product_added_to_cart', {
       productId: product.id,
       productName: product.name,
       price: product.price,
@@ -379,7 +379,7 @@ class EcommerceTracker {
 
   // Purchase tracking
   static trackPurchase(order) {
-    sendCustomEvent('purchase_completed', {
+    TraceLog.event('purchase_completed', {
       orderId: order.id,
       totalValue: order.total,
       currency: order.currency,
@@ -398,7 +398,7 @@ class EcommerceTracker {
 
   // Search tracking
   static trackSearch(query, resultsCount, filters = {}) {
-    sendCustomEvent('search_performed', {
+    TraceLog.event('search_performed', {
       query: query,
       resultsCount: resultsCount,
       filters: filters,
@@ -448,7 +448,7 @@ class FormTracker {
 
   setupFormTracking() {
     // Track form start
-    sendCustomEvent('form_started', {
+    TraceLog.event('form_started', {
       formName: this.formName,
       fieldCount: this.form.elements.length,
       timestamp: Date.now()
@@ -499,7 +499,7 @@ class FormTracker {
       timestamp: Date.now()
     });
 
-    sendCustomEvent('form_validation_error', {
+    TraceLog.event('form_validation_error', {
       formName: this.formName,
       fieldName: fieldName,
       errorMessage: errorMessage
@@ -511,7 +511,7 @@ class FormTracker {
     const completedFields = Object.keys(this.fieldInteractions)
       .filter(field => this.fieldInteractions[field].completed).length;
 
-    sendCustomEvent('form_submitted', {
+    TraceLog.event('form_submitted', {
       formName: this.formName,
       completionTime: completionTime,
       totalFields: this.form.elements.length,
@@ -582,7 +582,7 @@ class ContentTracker {
         
         this.achievedMilestones.add(milestone);
         
-        sendCustomEvent('content_milestone_reached', {
+        TraceLog.event('content_milestone_reached', {
           articleId: this.articleId,
           milestone: milestone,
           timeToReach: Date.now() - this.startTime,
@@ -628,7 +628,7 @@ class ContentTracker {
   trackArticleExit(activeTime) {
     const totalTime = Date.now() - this.startTime;
     
-    sendCustomEvent('article_exit', {
+    TraceLog.event('article_exit', {
       articleId: this.articleId,
       maxScrollPercentage: this.maxScroll,
       totalTime: totalTime,
@@ -659,7 +659,7 @@ class PerformanceTracker {
         const navigation = performance.getEntriesByType('navigation')[0];
         const paint = performance.getEntriesByType('paint');
         
-        sendCustomEvent('page_performance', {
+        TraceLog.event('page_performance', {
           loadTime: navigation.loadEventEnd - navigation.loadEventStart,
           domContentLoaded: navigation.domContentLoadedEventEnd - navigation.domContentLoadedEventStart,
           firstPaint: paint.find(p => p.name === 'first-paint')?.startTime,
@@ -675,7 +675,7 @@ class PerformanceTracker {
   static trackResourceErrors() {
     window.addEventListener('error', (event) => {
       if (event.target !== window) {
-        sendCustomEvent('resource_error', {
+        TraceLog.event('resource_error', {
           type: 'resource',
           source: event.target.src || event.target.href,
           tagName: event.target.tagName,
@@ -687,7 +687,7 @@ class PerformanceTracker {
 
   static trackJavaScriptErrors() {
     window.addEventListener('error', (event) => {
-      sendCustomEvent('javascript_error', {
+      TraceLog.event('javascript_error', {
         message: event.message,
         filename: event.filename,
         line: event.lineno,
@@ -698,7 +698,7 @@ class PerformanceTracker {
     });
 
     window.addEventListener('unhandledrejection', (event) => {
-      sendCustomEvent('promise_rejection', {
+      TraceLog.event('promise_rejection', {
         reason: event.reason?.toString() || 'Unhandled promise rejection',
         stack: event.reason?.stack
       });
@@ -717,7 +717,7 @@ class PerformanceTracker {
   }
 
   static sendWebVital(name, metric) {
-    sendCustomEvent('web_vital', {
+    TraceLog.event('web_vital', {
       name: name,
       value: metric.value,
       rating: this.getVitalRating(name, metric.value),
@@ -784,7 +784,7 @@ class TrackingEventDispatcher {
     }
 
     // Send to TraceLog
-    sendCustomEvent(eventName, processedData);
+    TraceLog.event(eventName, processedData);
 
     // Notify listeners
     const listeners = this.listeners.get(eventName) || [];
@@ -854,7 +854,7 @@ class ABTestTracker {
 
   trackExperimentExposure() {
     Object.keys(this.userVariants).forEach(experimentName => {
-      sendCustomEvent('experiment_exposure', {
+      TraceLog.event('experiment_exposure', {
         experimentName: experimentName,
         variant: this.userVariants[experimentName],
         userId: this.getUserId()
@@ -866,7 +866,7 @@ class ABTestTracker {
     const variant = this.userVariants[experimentName];
     
     if (variant) {
-      sendCustomEvent('experiment_conversion', {
+      TraceLog.event('experiment_conversion', {
         experimentName: experimentName,
         variant: variant,
         conversionType: conversionType,

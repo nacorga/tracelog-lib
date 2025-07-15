@@ -14,12 +14,12 @@ export enum ScrollDirection {
 
 export type MetadataType = string | number | boolean | string[];
 
-export interface EventScrollData {
+export interface ScrollData {
   depth: number;
   direction: ScrollDirection;
 }
 
-export interface EventClickData {
+export interface ClickData {
   x: number;
   y: number;
   relativeX: number;
@@ -49,12 +49,12 @@ export interface ClickTrackingElementData {
   value?: string;
 }
 
-export interface EventCustomData {
+export interface CustomEventData {
   name: string;
   metadata?: Record<string, MetadataType>;
 }
 
-export interface EventUtm {
+export interface UTM {
   source?: string;
   medium?: string;
   campaign?: string;
@@ -62,7 +62,7 @@ export interface EventUtm {
   content?: string;
 }
 
-export interface EventPageView {
+export interface PageViewData {
   referrer?: string;
   title?: string;
   pathname?: string;
@@ -75,11 +75,11 @@ export interface EventHandler {
   url?: string;
   fromUrl?: string;
   referrer?: string;
-  utm?: EventUtm;
-  scrollData?: EventScrollData;
-  clickData?: EventClickData;
-  customEvent?: EventCustomData;
-  pageView?: EventPageView;
+  utm?: UTM;
+  scrollData?: ScrollData;
+  clickData?: ClickData;
+  customEvent?: CustomEventData;
+  pageView?: PageViewData;
   trigger?: string;
 }
 
@@ -89,11 +89,11 @@ export interface EventData {
   timestamp: number;
   referrer?: string;
   from_page_url?: string;
-  scroll_data?: EventScrollData;
-  click_data?: EventClickData;
-  custom_event?: EventCustomData;
-  page_view?: EventPageView;
-  utm?: EventUtm;
+  scroll_data?: ScrollData;
+  click_data?: ClickData;
+  custom_event?: CustomEventData;
+  page_view?: PageViewData;
+  utm?: UTM;
   tags?: string[];
   excluded_route?: boolean;
 }

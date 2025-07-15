@@ -211,11 +211,11 @@ export const isValidEventName = (eventName: string): { valid: boolean; error?: s
 export const isValidMetadata = (
   eventName: string,
   metadata: Record<string, any>,
-  type?: string,
+  type?: 'globalMetadata' | 'customEvent',
 ): { valid: boolean; error?: string; sanitizedMetadata?: Record<string, any> } => {
   const sanitizedMetadata = sanitizeMetadata(metadata);
   const intro =
-    type && type === 'sendCustomEvent' ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
+    type && type === 'customEvent' ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
 
   if (!isOnlyPrimitiveFields(sanitizedMetadata)) {
     return {
@@ -298,5 +298,5 @@ export const isEventValid = (
     return { valid: true };
   }
 
-  return isValidMetadata(eventName, metadata, 'sendCustomEvent');
+  return isValidMetadata(eventName, metadata, 'customEvent');
 };

@@ -1,7 +1,7 @@
 import { Tracking } from './tracking';
 import { AppConfig, MetadataType } from './types';
 
-export * from './types';
+export * as Types from './types';
 
 let trackingInstance: Tracking | undefined;
 
@@ -10,7 +10,7 @@ let trackingInstance: Tracking | undefined;
  * @param id - Tracking ID
  * @param config - Optional configuration
  */
-export const startTracking = (id: string, config?: AppConfig): void => {
+export const init = (id: string, config?: AppConfig): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -32,18 +32,18 @@ export const startTracking = (id: string, config?: AppConfig): void => {
 };
 
 /**
- * Send custom event
+ * Create custom event
  * @param name - Event name
  * @param metadata - Optional metadata
  */
-export const sendCustomEvent = (name: string, metadata?: Record<string, MetadataType>): void => {
+export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
   if (!trackingInstance) {
-    console.warn('[TraceLog] Not initialized. Call startTracking first.');
+    console.warn('[TraceLog] Not initialized. Call init() first.');
     return;
   }
 
   try {
-    trackingInstance.sendCustomEvent(name, metadata).catch((error) => {
+    trackingInstance.customEventHandler(name, metadata).catch((error) => {
       console.error('[TraceLog] Custom event failed:', error instanceof Error ? error.message : 'Unknown error');
     });
   } catch (error) {

@@ -1,5 +1,5 @@
 import { HTML_DATA_ATTR_PREFIX } from '../constants';
-import { ClickCoordinates, ClickTrackingElementData, EventClickData } from '../types';
+import { ClickCoordinates, ClickTrackingElementData, ClickData } from '../types';
 
 const INTERACTIVE_SELECTORS = [
   'button',
@@ -50,12 +50,12 @@ export const ClickHandler = {
     return { x, y, relativeX, relativeY };
   },
 
-  extractTrackingData(trackingElement: HTMLElement): ClickTrackingElementData {
+  extractTrackingData(trackingElement: HTMLElement): ClickTrackingElementData | undefined {
     const name = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
     const value = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-value`);
 
     if (!name) {
-      throw new Error('Tracking element missing required name attribute');
+      return undefined;
     }
 
     return {
@@ -127,7 +127,7 @@ export const ClickHandler = {
     clickedElement: HTMLElement,
     relevantElement: HTMLElement,
     coordinates: ClickCoordinates,
-  ): EventClickData {
+  ): ClickData {
     const { x, y, relativeX, relativeY } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
     const attributes = this.extractElementAttributes(relevantElement);
