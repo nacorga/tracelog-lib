@@ -243,6 +243,12 @@ export class DataSender {
             if (this.isQaMode()) {
               console.log('[TraceLog] Successfully recovered and sent persisted critical events');
             }
+          } else {
+            if (this.isQaMode()) {
+              console.error('[TraceLog] Failed to send recovered events, scheduling retry');
+            }
+
+            this.scheduleRetry(recoveryBody);
           }
         } else {
           this.clearPersistedEvents();
