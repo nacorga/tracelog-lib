@@ -62,37 +62,12 @@ jobs:
         env:
           CI: true
 
-      - name: Check if release is needed
-        id: check_release
-        run: |
-          # Get the last release tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          echo "Last tag: $LAST_TAG"
-          
-          # Check if there are releasable commits since last tag
-          if [ -z "$LAST_TAG" ]; then
-            echo "No previous tags found, will create first release"
-            echo "needs_release=true" >> $GITHUB_OUTPUT
-          else
-            # Check for conventional commits since last tag
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --grep="^feat\|^fix\|^perf\|BREAKING CHANGE" || echo "")
-            if [ -n "$COMMITS" ]; then
-              echo "Found releasable commits since $LAST_TAG"
-              echo "needs_release=true" >> $GITHUB_OUTPUT
-            else
-              echo "No releasable commits found since $LAST_TAG"
-              echo "needs_release=false" >> $GITHUB_OUTPUT
-            fi
-          fi
-
       - name: Configure Git
-        if: steps.check_release.outputs.needs_release == 'true'
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "github-actions"
 
       - name: Generate release
-        if: steps.check_release.outputs.needs_release == 'true'
         id: bump_version
         run: |
           # Run standard-version without forcing patch
