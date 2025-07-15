@@ -355,9 +355,14 @@ export class ConfigManager {
     try {
       const url = new URL(window.location.href);
       const host = url.hostname;
+
+      if (!host) {
+        return undefined;
+      }
+
       const parts = host.split('.');
 
-      if (parts.length === 0) {
+      if (parts.length < 2) {
         return undefined;
       }
 
