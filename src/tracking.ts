@@ -52,12 +52,7 @@ export class Tracking {
         throw new Error('Failed to get API URL');
       }
 
-      this.dataSender = new DataSender(
-        apiUrl,
-        () => mergedConfig.qaMode || false,
-        () => this.sessionManager?.getUserId() || '',
-        this.configManager.isDemoMode(),
-      );
+      this.dataSender = new DataSender(apiUrl, () => mergedConfig.qaMode || false, this.configManager.isDemoMode());
 
       this.sessionManager = new SessionManager(
         mergedConfig,
