@@ -38,7 +38,7 @@ export const init = (id: string, config?: AppConfig): void => {
  */
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
   if (!trackingInstance) {
-    console.warn('[TraceLog] Not initialized. Call startTracking first.');
+    console.warn('[TraceLog] Not initialized. Call init() first.');
     return;
   }
 
