@@ -20,7 +20,7 @@ export class Tracking {
   public isInitialized = false;
   public isExcludedUser = false;
 
-  private readonly initializationPromise: Promise<void> | null = null;
+  private readonly initializationPromise: Promise<void>;
 
   private cleanupListeners: (() => void)[] = [];
   private initializationState: InitializationState = InitializationState.UNINITIALIZED;
@@ -37,7 +37,7 @@ export class Tracking {
 
   private async initializeTracking(id: string, config?: AppConfig): Promise<void> {
     if (this.initializationState !== InitializationState.UNINITIALIZED) {
-      return this.initializationPromise || Promise.resolve();
+      return this.initializationPromise;
     }
 
     this.initializationState = InitializationState.INITIALIZING;
@@ -387,7 +387,7 @@ export class Tracking {
       throw new Error('[TraceLog] Initialization failed, cannot perform operation');
     }
 
-    if (this.initializationState === InitializationState.INITIALIZING && this.initializationPromise) {
+    if (this.initializationState === InitializationState.INITIALIZING) {
       try {
         await this.initializationPromise;
       } catch {
