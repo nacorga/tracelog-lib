@@ -182,20 +182,30 @@ export class EventManager {
       return;
     }
 
-    // Use Set for O(1) lookup and more efficient deduplication
     const uniqueEvents = new Map<string, EventData>();
 
     for (const event of this.eventsQueue) {
-      const key = `${event.type}_${event.timestamp}_${event.page_url}`;
+      let key = `${event.type}_${event.page_url}`;
+
+      if (event.click_data) {
+        key += `_${event.click_data.x}_${event.click_data.y}`;
+      }
+
+      if (event.scroll_data) {
+        key += `_${event.scroll_data.depth}_${event.scroll_data.direction}`;
+      }
+
+      if (event.custom_event) {
+        key += `_${event.custom_event.name}`;
+      }
+
       if (!uniqueEvents.has(key)) {
         uniqueEvents.set(key, event);
       }
     }
 
-    // Convert back to array
     const deduplicatedEvents = [...uniqueEvents.values()];
 
-    // Sort by timestamp for better server processing
     deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
 
     const body: Queue = {
@@ -216,7 +226,6 @@ export class EventManager {
       return false;
     }
 
-    // Quick type check first
     if (this.lastEvent.type !== evType) {
       return false;
     }
