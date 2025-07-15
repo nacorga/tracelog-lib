@@ -177,6 +177,8 @@ export class Tracking {
       ...(referrer && { referrer }),
       ...(utm && { utm }),
     });
+
+    this.eventManager.updatePageUrl(toUrl);
   }
 
   private handleTrackingEvent(event: EventHandler): void {
@@ -303,6 +305,7 @@ export class Tracking {
     }
 
     this.urlManager.updateUrl(url);
+    this.eventManager.updatePageUrl(url);
   }
 
   async getConfig(): Promise<AppConfig | undefined> {
