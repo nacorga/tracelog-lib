@@ -101,7 +101,7 @@ export class Tracking {
 
   private async startInitializationSequence(): Promise<void> {
     try {
-      await this.dataSender.recoverPersistedEvents();
+      await this.dataSender.recoverPersistedEvents(this.sessionManager.getUserId());
 
       const hadUnexpectedEnd = this.sessionManager.checkForUnexpectedSessionEnd();
 

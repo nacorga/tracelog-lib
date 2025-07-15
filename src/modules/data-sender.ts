@@ -42,7 +42,7 @@ export class DataSender {
       this.retryDelay = RETRY_BACKOFF_INITIAL;
       this.sendAttempts = 0;
       this.clearRetryTimeout();
-      this.clearPersistedEvents();
+      this.clearPersistedEvents(body.user_id);
       return true;
     } else {
       // If there are critical events and sending failed, try different approach
@@ -78,7 +78,7 @@ export class DataSender {
       }
 
       if (success) {
-        this.clearPersistedEvents();
+        this.clearPersistedEvents(body.user_id);
       }
 
       return success;
@@ -98,7 +98,7 @@ export class DataSender {
       }
 
       if (success) {
-        this.clearPersistedEvents();
+        this.clearPersistedEvents(body.user_id);
       }
 
       return success;
@@ -146,11 +146,11 @@ export class DataSender {
   private async forceImmediateSend(body: Queue): Promise<void> {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
-    // Intentar sendBeacon nuevamente
     if (navigator.sendBeacon) {
       const success = navigator.sendBeacon(this.apiUrl, blob);
+
       if (success) {
-        this.clearPersistedEvents();
+        this.clearPersistedEvents(body.user_id);
         return;
       }
     }
@@ -164,7 +164,7 @@ export class DataSender {
       });
 
       if (response.status >= 200 && response.status < 300) {
-        this.clearPersistedEvents();
+        this.clearPersistedEvents(body.user_id);
       } else {
         this.persistCriticalEvents(body);
         this.scheduleRetry(body);
@@ -198,7 +198,7 @@ export class DataSender {
           ...(body.global_metadata && { global_metadata: body.global_metadata }),
         };
 
-        this.storage.set(`${StorageKey.UserId}_critical_events`, persistedData);
+        this.storage.set(`${StorageKey.UserId}_${body.user_id}_critical_events`, persistedData);
 
         if (this.isQaMode()) {
           console.log('[TraceLog] Critical events persisted to storage');
@@ -211,17 +211,17 @@ export class DataSender {
     }
   }
 
-  clearPersistedEvents(): void {
+  clearPersistedEvents(userId: string): void {
     try {
-      this.storage.remove(`${StorageKey.UserId}_critical_events`);
+      this.storage.remove(`${StorageKey.UserId}_${userId}_critical_events`);
     } catch {
       // Ignore errors when clearing localStorage
     }
   }
 
-  async recoverPersistedEvents(): Promise<void> {
+  async recoverPersistedEvents(userId: string): Promise<void> {
     try {
-      const persistedData = this.storage.get(`${StorageKey.UserId}_critical_events`);
+      const persistedData = this.storage.get(`${StorageKey.UserId}_${userId}_critical_events`);
 
       if (persistedData) {
         const data = persistedData as any;
@@ -241,7 +241,7 @@ export class DataSender {
           const success = await this.collectEventsQueue(recoveryBody);
 
           if (success) {
-            this.clearPersistedEvents();
+            this.clearPersistedEvents(userId);
 
             if (this.isQaMode()) {
               console.log('[TraceLog] Successfully recovered and sent persisted critical events');
@@ -254,7 +254,7 @@ export class DataSender {
             this.scheduleRetry(recoveryBody);
           }
         } else {
-          this.clearPersistedEvents();
+          this.clearPersistedEvents(userId);
         }
       }
     } catch (error) {
