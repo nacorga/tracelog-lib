@@ -16,6 +16,7 @@ export interface ScrollConfig {
 export class ScrollHandler {
   private containers: ScrollContainer[] = [];
   private suppressNext = false;
+  private suppressTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly config: ScrollConfig,
@@ -42,7 +43,11 @@ export class ScrollHandler {
   suppressNextEvent(): void {
     this.suppressNext = true;
 
-    setTimeout(
+    if (this.suppressTimer) {
+      clearTimeout(this.suppressTimer);
+    }
+
+    this.suppressTimer = setTimeout(
       () => {
         this.suppressNext = false;
       },
@@ -136,5 +141,10 @@ export class ScrollHandler {
     }
 
     this.containers = [];
+
+    if (this.suppressTimer) {
+      clearTimeout(this.suppressTimer);
+      this.suppressTimer = null;
+    }
   }
 }
