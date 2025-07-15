@@ -170,13 +170,13 @@ export class SessionManager {
 
   private validateGlobalMetadata(): void {
     if (Object.keys(this.config?.globalMetadata || {}).length > 0) {
-      const { valid, error } = isValidMetadata('globalMetadata', this.config!.globalMetadata || {});
+      const validationResult = isValidMetadata('globalMetadata', this.config!.globalMetadata || {});
 
-      if (valid) {
-        this.globalMetadata = this.config!.globalMetadata;
+      if (validationResult.valid) {
+        this.globalMetadata = validationResult.sanitizedMetadata;
       } else if (this.isQaMode()) {
         console.error(
-          `TraceLog error: globalMetadata object validation failed (${error || 'unknown error'}). Please, review your data and try again.`,
+          `TraceLog error: globalMetadata object validation failed (${validationResult.error || 'unknown error'}). Please, review your data and try again.`,
         );
       }
     }
