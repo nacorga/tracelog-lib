@@ -1,7 +1,7 @@
 import { AppConfig, ApiConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
 import { sanitizeApiConfig, isValidUrl } from '../utils';
-import packageJson from '../../package.json';
+import { VERSION } from '../version';
 
 interface ErrorReporter {
   reportError(error: { message: string; context?: string; severity?: 'low' | 'medium' | 'high' }): void;
@@ -246,7 +246,7 @@ export class ConfigManager {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': `TraceLog-Client/${packageJson.version}`,
+          'User-Agent': `TraceLog-Client/${VERSION}`,
         },
       });
 
