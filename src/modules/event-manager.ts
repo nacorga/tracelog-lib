@@ -112,7 +112,7 @@ export class EventManager {
     this.sendEvent(payload);
   }
 
-  sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): void {
+  customEventHandler(name: string, metadata?: Record<string, MetadataType>): void {
     const validationResult = isEventValid(name, metadata);
 
     if (validationResult.valid) {
@@ -125,7 +125,7 @@ export class EventManager {
       });
     } else if (this.isQaMode()) {
       console.error(
-        `TraceLog error: sendCustomEvent "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
+        `TraceLog error: custom event "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
       );
     }
   }

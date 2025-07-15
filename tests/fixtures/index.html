@@ -54,7 +54,7 @@
         import { TraceLog } from './tracelog.js';
         TraceLog.init('demo');
         document.getElementById('custom-event-btn')?.addEventListener('click', () => {
-            TraceLog.sendCustomEvent('playwright_event', { foo: 'bar' });
+            TraceLog.event('playwright_event', { foo: 'bar' });
         });
     </script>
 </body>

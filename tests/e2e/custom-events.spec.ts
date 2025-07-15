@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { EventType } from '../../src/types';
 
 test.describe('Custom Events - Demo Mode', () => {
-  test(`should log ${EventType.CUSTOM} event via sendCustomEvent`, async ({ page }) => {
+  test(`should log ${EventType.CUSTOM} event via event()`, async ({ page }) => {
     const consoleLogs: string[] = [];
 
     page.on('console', (msg) => {

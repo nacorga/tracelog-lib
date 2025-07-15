@@ -217,14 +217,14 @@ export class Tracking {
     }
   }
 
-  async sendCustomEvent(name: string, metadata?: Record<string, MetadataType>): Promise<void> {
+  async customEventHandler(name: string, metadata?: Record<string, MetadataType>): Promise<void> {
     await this.waitForInitialization();
 
     if (!this.isInitialized || this.isExcludedUser) {
       return;
     }
 
-    this.eventManager.sendCustomEvent(name, metadata);
+    this.eventManager.customEventHandler(name, metadata);
   }
 
   async startSession(): Promise<void> {
