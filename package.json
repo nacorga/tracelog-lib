@@ -6,7 +6,8 @@
   "module": "./dist/esm/src/public-api.js",
   "types": "./dist/esm/src/public-api.d.ts",
   "files": [
-    "dist"
+    "dist/esm",
+    "dist/cjs"
   ],
   "exports": {
     "import": "./dist/esm/src/public-api.js",

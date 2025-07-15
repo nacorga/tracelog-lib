@@ -12,9 +12,9 @@
     {"type": "chore", "section": "📦 Chores"},
     {"type": "revert", "section": "⏪ Reverts"}
   ],
-  "commitUrlFormat": "https://github.com/nacorga/tracelog-script/commit/{{hash}}",
-  "compareUrlFormat": "https://github.com/nacorga/tracelog-script/compare/{{previousTag}}...{{currentTag}}",
-  "issueUrlFormat": "https://github.com/nacorga/tracelog-script/issues/{{id}}",
+  "commitUrlFormat": "https://github.com/nacorga/tracelog-client/commit/{{hash}}",
+  "compareUrlFormat": "https://github.com/nacorga/tracelog-client/compare/{{previousTag}}...{{currentTag}}",
+  "issueUrlFormat": "https://github.com/nacorga/tracelog-client/issues/{{id}}",
   "skip": {
     "bump": false,
     "changelog": false,

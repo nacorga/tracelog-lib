@@ -1,7 +1,30 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+
 ### 0.0.3 (2025-07-15)
+
+
+### Features
+
+* add cleanup for page view handling ([d61a3ee](https://github.com/nacorga/tracelog-client/commit/d61a3ee9edb715ffbe095be6c1315dce35a114cf))
+* add version management by importing version from package.json ([6cca685](https://github.com/nacorga/tracelog-client/commit/6cca685a3d5057382af5e706733a43fd8325d682))
+* increase CLICK_DEBOUNCE_TIME to 500ms and enhance event timestamp handling in EventManager ([b7b48e1](https://github.com/nacorga/tracelog-client/commit/b7b48e1c1ce4c005e33cc8d872e8f6b28b5a438f))
+* update event manager to track page URL changes during navigation ([4fa9104](https://github.com/nacorga/tracelog-client/commit/4fa9104c31d5cb930cdda548c47ea5d06647eed3))
+
+
+### Bug Fixes
+
+* add error handling and retry scheduling for failed event sending in DataSender ([ceb2509](https://github.com/nacorga/tracelog-client/commit/ceb250939ad22f2a6946e71b415427faf0b67748))
+* add error handling for initialization promise in Tracking class ([ea4cd89](https://github.com/nacorga/tracelog-client/commit/ea4cd894f821c88d2fd56f38ae9f3f481a512d0d))
+* avoid double serialization in SafeLocalStorage ([dfdbe18](https://github.com/nacorga/tracelog-client/commit/dfdbe183afa618c41931de7abe468f683ab8dc83))
+* ensure null value is handled during serialization in SafeLocalStorage ([6c51148](https://github.com/nacorga/tracelog-client/commit/6c5114837cede574435cb37ec3a6a0df84482523))
+* ensure proper timeout handling in fetchConfig method of ConfigManager ([b2fcbc4](https://github.com/nacorga/tracelog-client/commit/b2fcbc49c281d826a0a61b305d67eb7a9927a6ee))
+* improve host validation in ConfigManager to ensure proper hostname structure ([5aeaafd](https://github.com/nacorga/tracelog-client/commit/5aeaafdf8eb6b042cb05ad206d557161f068f940))
+* update API configuration keys ([c589939](https://github.com/nacorga/tracelog-client/commit/c5899396b99fb8d684ed0747dc2c76bf84aa9d9c))
+* update extractTrackingData to return undefined instead of throwing an error for missing name attribute ([0991a91](https://github.com/nacorga/tracelog-client/commit/0991a915005eeb396d20a6b82aedae80bf7ab668))
+* update RC version generation to use workflow run count instead of run number ([919c7a0](https://github.com/nacorga/tracelog-client/commit/919c7a0a2ba52b1c309ee94c87655dcd1bcb6dc9))
+* use sanitized global metadata ([b769143](https://github.com/nacorga/tracelog-client/commit/b7691434c5990f5e6bc1f879e4f5f9e33ee5f078))
 
 ### 0.0.2 (2025-07-14)
 
