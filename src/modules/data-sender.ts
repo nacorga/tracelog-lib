@@ -59,18 +59,17 @@ export class DataSender {
     }
   }
 
-  async sendEventsSynchronously(body: Queue): Promise<boolean> {
-    // Handle demo mode - log events to console instead of sending to API
+  sendEventsSynchronously(body: Queue): boolean {
     if (this.isDemoMode) {
       for (const event of body.events) {
         console.log(`[TraceLog] ${event.type} event:`, JSON.stringify(event));
       }
-      return true; // Always return success for demo mode
+
+      return true;
     }
 
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
-    // Usar sendBeacon que es la opción más confiable para unload
     if (navigator.sendBeacon) {
       const success = navigator.sendBeacon(this.apiUrl, blob);
 
@@ -85,10 +84,10 @@ export class DataSender {
       return success;
     }
 
-    // Fallback para navegadores sin sendBeacon (muy raro)
     try {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', this.apiUrl, false); // false = synchronous
+
+      xhr.open('POST', this.apiUrl, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.send(JSON.stringify(body));
 

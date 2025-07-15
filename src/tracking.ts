@@ -282,7 +282,7 @@ export class Tracking {
         ...(this.sessionManager.getGlobalMetadata() && { global_metadata: this.sessionManager.getGlobalMetadata() }),
       };
 
-      await this.dataSender.sendEventsSynchronously(finalBatch);
+      this.dataSender.sendEventsSynchronously(finalBatch);
       this.eventManager.clearEventsQueue();
     }
   }
@@ -372,7 +372,12 @@ export class Tracking {
         ...(this.sessionManager.getGlobalMetadata() && { global_metadata: this.sessionManager.getGlobalMetadata() }),
       };
 
-      this.dataSender.sendEventsSynchronously(finalBatch);
+      const success = this.dataSender.sendEventsSynchronously(finalBatch);
+
+      if (!success) {
+        this.dataSender.persistCriticalEvents(finalBatch);
+      }
+
       this.eventManager.clearEventsQueue();
     }
   }
