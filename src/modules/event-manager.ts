@@ -48,7 +48,12 @@ export class EventManager {
       if (this.eventsQueue && this.eventsQueue.length > 0) {
         const lastEvent = this.eventsQueue.at(-1);
         if (lastEvent) {
-          lastEvent.timestamp = Date.now() as Timestamp;
+          const now = Date.now() as Timestamp;
+          lastEvent.timestamp = now;
+
+          if (this.lastEvent) {
+            this.lastEvent.timestamp = now;
+          }
         }
       }
 
