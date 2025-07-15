@@ -63,15 +63,18 @@ export class TrackingManager {
 
         if (trackingElement) {
           const trackingData = ClickHandler.extractTrackingData(trackingElement);
-          const attributeData = ClickHandler.createCustomEventData(trackingData);
 
-          this.handleEvent({
-            evType: EventType.CUSTOM,
-            customEvent: {
-              name: attributeData.name,
-              ...(attributeData.value && { metadata: { value: attributeData.value } }),
-            },
-          });
+          if (trackingData) {
+            const attributeData = ClickHandler.createCustomEventData(trackingData);
+
+            this.handleEvent({
+              evType: EventType.CUSTOM,
+              customEvent: {
+                name: attributeData.name,
+                ...(attributeData.value && { metadata: { value: attributeData.value } }),
+              },
+            });
+          }
         }
 
         const clickData = ClickHandler.generateClickData(clickedElement, relevantClickElement, coordinates);

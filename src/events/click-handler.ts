@@ -50,12 +50,12 @@ export const ClickHandler = {
     return { x, y, relativeX, relativeY };
   },
 
-  extractTrackingData(trackingElement: HTMLElement): ClickTrackingElementData {
+  extractTrackingData(trackingElement: HTMLElement): ClickTrackingElementData | undefined {
     const name = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
     const value = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-value`);
 
     if (!name) {
-      throw new Error('Tracking element missing required name attribute');
+      return undefined;
     }
 
     return {

@@ -39,4 +39,29 @@ test.describe('Click Events - Demo Mode', () => {
     expect(customEvent).toContain('"name"');
     expect(customEvent).toContain('"metadata"');
   });
+
+  test('should not throw when clicking element with empty data-tl-name', async ({ page }) => {
+    const consoleLogs: string[] = [];
+    const pageErrors: Error[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'log' && msg.text().includes('[TraceLog]')) {
+        consoleLogs.push(msg.text());
+      }
+    });
+
+    page.on('pageerror', (err) => {
+      pageErrors.push(err);
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.getByTestId('empty-name-btn').click();
+    await page.waitForTimeout(500);
+
+    const customLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.CUSTOM}"`));
+
+    expect(customLogs).toHaveLength(0);
+    expect(pageErrors).toHaveLength(0);
+  });
 });
