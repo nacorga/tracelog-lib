@@ -16,6 +16,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache NPM registry
         uses: actions/cache@v3
@@ -59,31 +62,46 @@ jobs:
         env:
           CI: true
 
-      - name: Install standard-version
-        run: npm install --save-dev standard-version
-
-      - name: Check for changes
-        id: check_changes
+      - name: Check if release is needed
+        id: check_release
         run: |
-          if git diff --quiet HEAD^ HEAD; then
-            echo "No changes detected, skipping version bump"
-            echo "skip=true" >> $GITHUB_OUTPUT
+          # Get the last release tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Last tag: $LAST_TAG"
+          
+          # Check if there are releasable commits since last tag
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous tags found, will create first release"
+            echo "needs_release=true" >> $GITHUB_OUTPUT
           else
-            echo "Changes detected, proceeding with version bump"
-            echo "skip=false" >> $GITHUB_OUTPUT
+            # Check for conventional commits since last tag
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --grep="^feat\|^fix\|^perf\|BREAKING CHANGE" || echo "")
+            if [ -n "$COMMITS" ]; then
+              echo "Found releasable commits since $LAST_TAG"
+              echo "needs_release=true" >> $GITHUB_OUTPUT
+            else
+              echo "No releasable commits found since $LAST_TAG"
+              echo "needs_release=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
-      - name: Bump version
-        if: steps.check_changes.outputs.skip == 'false' && success()
-        id: bump_version
+      - name: Configure Git
+        if: steps.check_release.outputs.needs_release == 'true'
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "github-actions"
+
+      - name: Generate release
+        if: steps.check_release.outputs.needs_release == 'true'
+        id: bump_version
+        run: |
+          # Run standard-version without forcing patch
           npx standard-version \
-            --release-as patch \
             --releaseCommitMessageFormat "chore(release): {{currentTag}} [skip ci]" \
             --no-verify \
             --tag-prefix "v"
+          
+          # Push the changes and tags
           git push --follow-tags origin main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,6 +112,7 @@ jobs:
         run: |
           TAG=$(git describe --tags --abbrev=0)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
 
       - name: Create Release
         if: steps.bump_version.outcome == 'success'
