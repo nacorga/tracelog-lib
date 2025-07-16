@@ -1,6 +1,13 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.1.0](https://github.com/nacorga/tracelog-client/compare/v0.0.6...v0.1.0) (2025-07-16)
+
+
+### Features
+
+* add benchmarking scripts and update README with performance metrics ([f2b0849](https://github.com/nacorga/tracelog-client/commit/f2b08497c279b8b2018585522efe018c45c2e2bc))
+
 ### [0.0.6](https://github.com/nacorga/tracelog-client/compare/v0.0.5...v0.0.6) (2025-07-16)
 
 
