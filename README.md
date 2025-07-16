@@ -1,147 +1,76 @@
-# TraceLog client
+Welcome to **TraceLog**, a web analytics platform that combines user behavior tracking with AI to provide deeper insights than traditional tools.
 
-TraceLog is a powerful analytics library for tracking user interactions across your web applications.
+This quick-start guide covers everything you need to integrate TraceLog into your project in minutes.
 
-## Important Note
+## 🔑 Before you begin
 
-To use TraceLog properly, you need to have an account created at [tracelog.io](https://tracelog.io). The account is required to access the dashboard and manage your tracking data.
+To fully leverage TraceLog, ensure you have:
 
-## Features
+* ✅ An account at [tracelog.io](https://tracelog.io) to access your dashboard and manage data.
+* ✅ Your unique TraceLog ID, available in your account after registration.
 
-- **🚀 Lightweight**: Minimal bundle size with tree-shaking support
-- **🔒 Privacy-First**: Built with user privacy and GDPR compliance in mind
-- **⚡ High Performance**: Optimized for speed with minimal overhead
-- **🛡️ Type Safe**: Full TypeScript support with comprehensive type definitions
-- **📱 Cross-Platform**: Works on all modern browsers and devices
-- **🎯 Simple API**: Easy-to-use interface with just two main methods
-- **⚙️ Configurable**: Flexible configuration options for different use cases
-- **🔄 Automatic Tracking**: Built-in session management and activity detection
-- **📊 Rich Data**: Comprehensive event data with metadata support
+## 📦 Installation
 
-## Getting Started
-
-### 1. Installation
+Add the TraceLog client to your project using your favorite package manager:
 
 ```bash
-# Using npm
 npm install @tracelog/client
 
-# Using yarn
+# or
+
 yarn add @tracelog/client
 
-# Using pnpm
+# or
+
 pnpm add @tracelog/client
 ```
 
-### 2. Subdomain Configuration
+## 🌐 Subdomain Setup (Important!)
 
-To ensure the tracking system works correctly and avoid blocks from browsers (Brave, Safari, etc.) or extensions (uBlock, AdBlock), **each client must create their own subdomain based on an unique TraceLog ID** from which to load the script and send events to the middleware. The subdomain must be part of the same domain where the application is hosted and where events are being collected.
+Modern browsers and ad blockers (Safari, Brave, uBlock, etc.) might restrict cross-origin tracking scripts. To avoid these issues, **set up your own dedicated subdomain using your TraceLog ID**.
 
-#### DNS Configuration
-Create a CNAME DNS record with the following configuration:
+### 🔧 DNS Configuration
 
-```bash
-Host:    YOUR_TRACELOG_ID
-Type:    CNAME
-Value:   mdw.tracelog.io
-```
+Create a `CNAME` record in your DNS settings:
 
-This will create the subdomain that points to our middleware service.
+| Host               | Type  | Value             |
+| ------------------ | ----- | ----------------- |
+| `YOUR_TRACELOG_ID` | CNAME | `mdw.tracelog.io` |
 
-## Quick Start
+Replace `YOUR_TRACELOG_ID` with your actual ID from your TraceLog account.
+This ensures seamless tracking across browsers.
+
+
+## 🎯 Quick Integration Example
+
+Initialize TraceLog in your app and start tracking immediately:
 
 ```javascript
 import { TraceLog } from '@tracelog/client';
 
 // Initialize tracking
 TraceLog.init('your-tracking-id', {
-  sessionTimeout: 300000, // 5 minutes
+  sessionTimeout: 300000, // Session timeout (e.g., 5 minutes)
   globalMetadata: {
     version: '1.0.0',
     environment: 'production'
   }
 });
 
-// Send custom events
+// Send your first custom event
 TraceLog.event('button_click', {
   buttonId: 'subscribe-btn',
-  section: 'hero',
-  timestamp: Date.now()
+  section: 'hero'
 });
 ```
 
-## API Reference
+That's it! 🎉 You're now tracking events in your application.
 
-### Core Methods
 
-#### `TraceLog.init(id: string, config?: TracelogAppConfig): void`
+## 📖 What's Next?
 
-Initializes the tracking system with the provided configuration.
+Dive deeper into TraceLog:
 
-**Parameters:**
-- `id` (string): Your unique tracking identifier
-- `config` (TracelogAppConfig, optional): Configuration options
-
-#### `TraceLog.event(name: string, metadata?: Record<string, MetadataType>): void`
-
-Sends a custom event with optional metadata.
-
-**Parameters:**
-- `name` (string): Event name identifier
-- `metadata` (Record<string, MetadataType>, optional): Additional event data
-
-For detailed API documentation, see [API.md](./API.md).
-
-## Configuration
-
-```typescript
-interface TracelogAppConfig {
-  sessionTimeout?: number;                    // Session timeout in milliseconds (default: 15 minutes)
-  globalMetadata?: Record<string, MetadataType>; // Global metadata for all events
-  scrollContainerSelectors?: string | string[]; // Custom scroll containers
-}
-```
-
-## Browser Compatibility
-
-The TraceLog client supports all modern browsers:
-
-- Chrome 60+
-- Firefox 55+
-- Safari 12+
-- Edge 79+
-
-## Performance
-
-- **Bundle Size**: ~15KB minified and gzipped
-- **Memory Usage**: < 1MB RAM overhead
-- **CPU Impact**: < 0.1% on average devices
-- **Network**: Batched requests with automatic optimization
-
-## Privacy & Security
-
-- **No PII Collection**: Does not collect personally identifiable information by default
-- **Data Minimization**: Only collects essential interaction data
-- **Secure Transmission**: All data encrypted in transit
-- **Configurable**: Full control over what data is collected
-- **GDPR Compliant**: Built with privacy regulations in mind
-
-## Examples
-
-For comprehensive examples and use cases, see [EXAMPLES.md](./EXAMPLES.md).
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-## License
-
-MIT License - see [LICENSE](./LICENSE) for details.
-
----
-
-## Support
-
-- **Documentation**: [Full Documentation](./API.md)
-- **Issues**: [GitHub Issues](https://github.com/nacorga/tracelog-script/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/nacorga/tracelog-script/discussions)
+* [Detailed API Reference](https://www.tracelog.io/docs?guide=api)
+* [Advanced Configuration](https://www.tracelog.io/docs?guide=advanced-configuration)
+* [Best Practices](https://www.tracelog.io/docs?guide=best-practices)

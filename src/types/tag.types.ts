@@ -28,7 +28,7 @@ export enum TagConditionOperator {
   NOT_EXISTS = 'not_exists',
 }
 
-export type TagConfig = Pick<Tag, 'triggerType' | 'logicalOperator' | 'conditions'> & {
+export type TagConfig = Pick<Tag, 'key' | 'triggerType' | 'logicalOperator' | 'conditions'> & {
   id: string;
 };
 
