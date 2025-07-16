@@ -77,7 +77,7 @@ jobs:
           # Get the number of previous workflow runs for this PR
           WORKFLOW_RUNS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/publish-rc.yml/runs?event=pull_request&branch=${{ github.head_ref }}" \
-            | jq '[.workflow_runs[] | select(.pull_requests[0].number == '$PR_NUMBER')] | length')
+            | jq "[.workflow_runs[] | select(.pull_requests[0].number == ${PR_NUMBER})] | length")
           
           # If we can't get the count, default to 1
           if [ -z "$WORKFLOW_RUNS" ] || [ "$WORKFLOW_RUNS" = "null" ]; then

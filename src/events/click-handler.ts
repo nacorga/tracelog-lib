@@ -71,7 +71,6 @@ export const ClickHandler = {
     const clickedText = clickedElement.textContent?.trim() || '';
     const relevantText = relevantElement.textContent?.trim() || '';
 
-    // If no text, return empty
     if (!clickedText && !relevantText) {
       return '';
     }

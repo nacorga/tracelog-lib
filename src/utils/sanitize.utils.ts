@@ -1,4 +1,7 @@
-const ALLOWED_API_CONFIG_KEYS = ['tags', 'samplingRate', 'qaMode', 'excludedUrlPaths'] as const;
+import { ApiConfig } from '../types/config.types';
+
+// Allowed API config keys for runtime validation
+const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>(['tags', 'samplingRate', 'qaMode', 'excludedUrlPaths']);
 
 // Security constants
 const MAX_STRING_LENGTH = 1000;
@@ -42,6 +45,34 @@ export const sanitizeString = (value: string): string => {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#x27;')
     .replaceAll('/', '&#x2F;');
+
+  return sanitized.trim();
+};
+
+/**
+ * Sanitizes a path string for route exclusion checks
+ */
+export const sanitizePathString = (value: string): string => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  if (value.length > MAX_STRING_LENGTH) {
+    value = value.slice(0, Math.max(0, MAX_STRING_LENGTH));
+  }
+
+  let sanitized = value;
+
+  for (const pattern of XSS_PATTERNS) {
+    sanitized = sanitized.replace(pattern, '');
+  }
+
+  sanitized = sanitized
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#x27;');
 
   return sanitized.trim();
 };
@@ -107,14 +138,7 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 /**
  * Sanitizes API configuration data with strict validation
  */
-export const sanitizeApiConfig = (
-  data: unknown,
-): Partial<{
-  tags: unknown;
-  samplingRate: unknown;
-  qaMode: unknown;
-  excludedUrlPaths: unknown;
-}> => {
+export const sanitizeApiConfig = (data: unknown): Partial<ApiConfig> => {
   const safeData: Record<string, unknown> = {};
 
   if (typeof data !== 'object' || data === null) {
@@ -123,17 +147,23 @@ export const sanitizeApiConfig = (
 
   try {
     for (const key of Object.keys(data)) {
-      if (ALLOWED_API_CONFIG_KEYS.includes(key as any)) {
+      if (ALLOWED_API_CONFIG_KEYS.has(key as keyof ApiConfig)) {
         const value = (data as Record<string, unknown>)[key];
-        const sanitizedValue = sanitizeValue(value);
 
-        if (sanitizedValue !== null) {
-          safeData[key] = sanitizedValue;
+        if (key === 'excludedUrlPaths') {
+          const paths: string[] = Array.isArray(value) ? (value as string[]) : typeof value === 'string' ? [value] : [];
+
+          safeData.excludedUrlPaths = paths.map((path) => sanitizePathString(String(path))).filter(Boolean);
+        } else {
+          const sanitizedValue = sanitizeValue(value);
+
+          if (sanitizedValue !== null) {
+            safeData[key] = sanitizedValue;
+          }
         }
       }
     }
   } catch (error) {
-    // Return empty object if sanitization fails
     console.warn('[TraceLog] API config sanitization failed:', error);
     return {};
   }
