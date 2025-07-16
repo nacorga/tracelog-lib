@@ -1,6 +1,12 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+### [0.0.6](https://github.com/nacorga/tracelog-client/compare/v0.0.5...v0.0.6) (2025-07-16)
+
+
+### Bug Fixes
+
+* excludedUrlPaths API config sanitization ([06a2531](https://github.com/nacorga/tracelog-client/commit/06a253169bfb102da6d8ecf6c6ff0c38a7e3c584))
 
 ### [0.0.5](https://github.com/nacorga/tracelog-client/compare/v0.0.4...v0.0.5) (2025-07-15)
 
