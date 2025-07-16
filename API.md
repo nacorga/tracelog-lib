@@ -367,7 +367,3 @@ if (process.env.NODE_ENV === 'development') {
   // Events will be logged to console instead of sent
 }
 ```
-
----
-
-For more examples and advanced usage, see [EXAMPLES.md](./EXAMPLES.md). 

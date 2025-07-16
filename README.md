@@ -135,10 +135,6 @@ The TraceLog client supports all modern browsers:
 - **Configurable**: Full control over what data is collected
 - **GDPR Compliant**: Built with privacy regulations in mind
 
-## Examples
-
-For comprehensive examples and use cases, see [EXAMPLES.md](./EXAMPLES.md).
-
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
