@@ -13,14 +13,10 @@ export class ConfigManager {
   private config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
   private id = '';
 
-  constructor(private readonly catchError: (error: { message: string }) => Promise<void>) {
+  constructor(private readonly catchError: (message: string) => void) {
     this.errorReporter = {
-      reportError: (error) => {
-        this.catchError({
-          message: `[ConfigManager] ${error.message}`,
-        }).catch(() => {
-          // Silently handle error reporting failures
-        });
+      reportError: (error: Error | string): void => {
+        this.catchError(typeof error === 'string' ? error : error.message);
       },
     };
 

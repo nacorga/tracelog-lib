@@ -31,7 +31,7 @@ export class EventManager {
     private readonly getDevice: () => DeviceType | undefined,
     private readonly getGlobalMetadata: () => Record<string, MetadataType> | undefined,
     private readonly sendEventsQueue: (body: Queue) => Promise<boolean>,
-    private readonly sendError: (error: { message: string }) => Promise<void>,
+    private readonly sendError: (message: string) => void,
     private readonly isQaMode: () => boolean,
     private readonly isExcludedUser: () => boolean,
     private readonly isRouteExcluded: (url: string) => boolean,
@@ -86,7 +86,7 @@ export class EventManager {
     }
 
     if (errorMessage) {
-      void this.sendError({ message: errorMessage });
+      this.sendError(errorMessage);
       return;
     }
 

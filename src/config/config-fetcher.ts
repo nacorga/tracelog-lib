@@ -5,7 +5,7 @@ import { VERSION } from '../version';
 import { IRateLimiter } from './rate-limiter';
 
 export interface IErrorReporter {
-  reportError(error: { message: string; context?: string; severity?: 'low' | 'medium' | 'high' }): void;
+  reportError(message: string): void;
 }
 
 export interface IConfigFetcher {
@@ -21,12 +21,9 @@ export class ConfigFetcher implements IConfigFetcher {
   async fetch(config: AppConfig, id?: string): Promise<ApiConfig | undefined> {
     if (!this.rateLimiter.canFetch()) {
       if (this.rateLimiter.hasExceededMaxAttempts()) {
-        this.errorReporter.reportError({
-          message: `Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`,
-          context: 'ConfigFetcher',
-          severity: 'high',
-        });
+        this.errorReporter.reportError(`Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`);
       }
+
       return undefined;
     }
 
@@ -206,11 +203,6 @@ export class ConfigFetcher implements IConfigFetcher {
   }
 
   private handleFetchError(error: unknown): void {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    this.errorReporter.reportError({
-      message: `Config fetch failed: ${errorMessage}`,
-      context: 'ConfigFetcher',
-      severity: 'medium',
-    });
+    this.errorReporter.reportError(`Config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
