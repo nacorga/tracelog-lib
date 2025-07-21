@@ -63,6 +63,14 @@ TraceLog.init('your-tracking-id', {
 - If `customApiConfigUrl` is provided, the SDK will fetch configuration from that URL once on initialization.
 - If `customApiConfigUrl` is omitted, the SDK will use the static apiConfig provided.
 
+#### Configuration Priority
+When both `customApiConfigUrl` and `apiConfig` are provided:
+1. **Remote config has priority**: Settings from `customApiConfigUrl` will override any matching properties in the static `apiConfig`
+2. **Static config as fallback**: Properties not present in the remote config will use values from `apiConfig`
+3. **Default values**: Any missing properties will use TraceLog's built-in defaults
+
+Example: If your static `apiConfig` sets `samplingRate: 0.5` but the remote config returns `samplingRate: 0.8`, the final value will be `0.8`.
+
 ### Limitations in Custom Mode
 - Configuration options managed from the TraceLog platform — such as tags, dashboards, or AI reports — are not available in this mode.
 - You are fully responsible for handling data, applying config, and managing downstream processing on your server.

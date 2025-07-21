@@ -1,5 +1,5 @@
-import { AppConfig, Config } from '../../types';
-import { DEFAULT_TRACKING_API_CONFIG } from '../../constants';
+import { AppConfig, Config } from '../types';
+import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
 import { CONFIG_CONSTANTS } from './config-constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher, IErrorReporter } from './config-fetcher';

@@ -1,7 +1,7 @@
 import { AppConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
 import { isValidUrl } from '../utils';
-import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory, IErrorReporter } from './config';
+import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory, IErrorReporter } from '../config';
 
 export class ConfigManager {
   private readonly errorReporter: IErrorReporter;

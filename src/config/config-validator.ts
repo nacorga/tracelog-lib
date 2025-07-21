@@ -1,5 +1,5 @@
-import { AppConfig } from '../../types';
-import { validateAppConfig } from '../../utils';
+import { AppConfig } from '../types';
+import { validateAppConfig } from '../utils';
 
 export interface IConfigValidator {
   validate(config: AppConfig): ValidationResult;

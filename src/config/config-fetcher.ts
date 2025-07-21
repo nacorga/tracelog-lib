@@ -1,7 +1,7 @@
-import { AppConfig, ApiConfig } from '../../types';
-import { DEFAULT_TRACKING_API_CONFIG } from '../../constants';
-import { sanitizeApiConfig, isValidUrl } from '../../utils';
-import { VERSION } from '../../version';
+import { AppConfig, ApiConfig } from '../types';
+import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
+import { sanitizeApiConfig, isValidUrl } from '../utils';
+import { VERSION } from '../version';
 import { CONFIG_CONSTANTS } from './config-constants';
 import { IRateLimiter } from './rate-limiter';
 
@@ -43,6 +43,7 @@ export class ConfigFetcher implements IConfigFetcher {
 
   private async performFetch(config: AppConfig, id?: string): Promise<ApiConfig | undefined> {
     const configUrl = this.buildConfigUrl(config, id);
+
     if (!configUrl) {
       throw new Error('Config URL is not valid or not allowed');
     }
@@ -116,8 +117,6 @@ export class ConfigFetcher implements IConfigFetcher {
         const isQaMode = urlParameters.get('qaMode') === 'true';
         const baseUrl = this.buildDynamicApiUrl(id);
 
-        console.log('urlParameters:', urlParameters);
-
         if (!baseUrl) {
           return undefined;
         }
@@ -163,8 +162,6 @@ export class ConfigFetcher implements IConfigFetcher {
 
       const cleanDomain = multiTlds.has(tld) && parts.length >= 3 ? parts.slice(-3).join('.') : tld;
       const apiUrl = `https://${id}.${cleanDomain}`;
-
-      console.log('apiUrl:', apiUrl);
 
       if (!this.validateApiUrl(apiUrl)) {
         return undefined;
