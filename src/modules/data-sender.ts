@@ -1,13 +1,14 @@
 import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../constants';
-import { Queue, AdminError, EventType, StorageKey } from '../types';
+import { Queue, EventType, StorageKey } from '../types';
 import { SafeLocalStorage, StorageManager } from '../utils';
 
 export class DataSender {
+  private readonly storage: StorageManager;
+
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
   private lastSendAttempt = 0;
   private sendAttempts = 0;
-  private readonly storage: StorageManager;
 
   constructor(
     private readonly apiUrl: string,
@@ -261,40 +262,6 @@ export class DataSender {
       if (this.isQaMode()) {
         console.error('[TraceLog] Failed to recover persisted events:', error);
       }
-    }
-  }
-
-  async sendError(error: AdminError): Promise<void> {
-    if (this.isDemoMode) {
-      console.error(error.message);
-      return;
-    }
-
-    const blob = new Blob([JSON.stringify(error)], { type: 'application/json' });
-
-    if (navigator.sendBeacon) {
-      const ok = navigator.sendBeacon(`${this.apiUrl}/error`, blob);
-
-      if (ok) {
-        return;
-      }
-    }
-
-    try {
-      await fetch(`${this.apiUrl}/error`, {
-        method: 'POST',
-        body: blob,
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    } catch (error) {
-      if (this.isQaMode()) {
-        console.error('TraceLog error: failed to send error', error instanceof Error ? error.message : 'Unknown error');
-      }
-    }
-
-    if (this.isQaMode()) {
-      console.error(error.message);
     }
   }
 

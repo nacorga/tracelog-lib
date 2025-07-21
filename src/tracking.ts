@@ -1,5 +1,5 @@
 import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from './modules';
-import { AppConfig, EventType, MetadataType, EventHandler, AdminError, DeviceType } from './types';
+import { AppConfig, EventType, MetadataType, EventHandler, DeviceType } from './types';
 import { NavigationData } from './events';
 
 enum InitializationState {
@@ -35,12 +35,7 @@ export class Tracking {
   constructor(id: string, config?: AppConfig) {
     this.initializationPromise = this.initializeTracking(id, config);
     this.initializationPromise.catch((error) => {
-      console.error('[TraceLog] Initialization rejected:', error);
-      this.catchError({
-        message: error instanceof Error ? error.message : String(error),
-      }).catch(() => {
-        // ignore error reporting failures
-      });
+      this.catchError(`[TraceLog] Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 
@@ -233,21 +228,8 @@ export class Tracking {
     }
   }
 
-  private async catchError(error: { message: string }): Promise<void> {
-    const adminError: AdminError = {
-      message: error.message,
-      timestamp: Date.now(),
-      userAgent: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent,
-      url: typeof window === 'undefined' ? 'unknown' : window.location.href,
-      severity: 'medium',
-      context: 'tracking',
-    };
-
-    if (this.dataSender) {
-      await this.dataSender.sendError(adminError);
-    } else if (this.isQaModeSync()) {
-      console.error('[TraceLog] Error before DataSender init:', adminError);
-    }
+  private catchError(message: string): void {
+    console.error(`[TraceLog] ${message}`);
   }
 
   async customEventHandler(name: string, metadata?: Record<string, MetadataType>): Promise<void> {

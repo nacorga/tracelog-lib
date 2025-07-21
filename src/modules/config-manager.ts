@@ -13,14 +13,10 @@ export class ConfigManager {
   private config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
   private id = '';
 
-  constructor(private readonly catchError: (error: { message: string }) => Promise<void>) {
+  constructor(private readonly catchError: (message: string) => void) {
     this.errorReporter = {
-      reportError: (error) => {
-        this.catchError({
-          message: `[ConfigManager] ${error.message}`,
-        }).catch(() => {
-          // Silently handle error reporting failures
-        });
+      reportError: (error: Error | string): void => {
+        this.catchError(typeof error === 'string' ? error : error.message);
       },
     };
 
@@ -46,8 +42,14 @@ export class ConfigManager {
   getApiUrl(): string | undefined {
     if (this.config.customApiUrl) {
       try {
-        new URL(this.config.customApiUrl);
-        return this.config.customApiUrl;
+        const url = new URL(this.config.customApiUrl);
+        const sanitized = url.href.replace(/\/$/, '');
+
+        if (isValidUrl(sanitized, url.hostname, this.config.allowHttp)) {
+          return sanitized;
+        }
+
+        return undefined;
       } catch {
         return undefined;
       }

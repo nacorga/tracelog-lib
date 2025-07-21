@@ -1,13 +1,3 @@
-export interface AdminError {
-  message: string;
-  timestamp: number;
-  userAgent: string;
-  url: string;
-  stack?: string;
-  severity?: 'low' | 'medium' | 'high';
-  context?: string;
-}
-
 export class ValidationError extends Error {
   constructor(
     message: string,

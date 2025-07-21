@@ -1,8 +1,8 @@
 import { AppConfig, Config } from '../types';
-import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
-import { CONFIG_CONSTANTS } from './config-constants';
+import { DEFAULT_TRACKING_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher, IErrorReporter } from './config-fetcher';
+import { isValidUrl } from '../utils';
 
 export abstract class ConfigLoader {
   abstract load(id: string, config: AppConfig): Promise<Config>;
@@ -10,9 +10,12 @@ export abstract class ConfigLoader {
 
 export class DemoConfigLoader extends ConfigLoader {
   async load(id: string, config: AppConfig): Promise<Config> {
+    const { apiConfig = {}, ...rest } = config;
+
     return {
       ...DEFAULT_TRACKING_API_CONFIG,
-      ...config,
+      ...apiConfig,
+      ...rest,
       qaMode: true,
       samplingRate: 1,
       tags: [],
@@ -39,25 +42,19 @@ export class CustomApiConfigLoader extends ConfigLoader {
       ...rest,
     };
 
-    // Validate configuration first
     await this.validateAndReport(config);
 
-    // Fetch remote config if needed
     if (customApiConfigUrl) {
       try {
         const remote = await this.fetcher.fetch(config, id);
 
         if (remote) {
           merged = { ...merged, ...remote };
-
-          console.log('[TraceLog] merged config:', JSON.stringify(merged));
         }
       } catch (error) {
-        this.errorReporter.reportError({
-          message: `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          context: 'CustomApiConfigLoader',
-          severity: 'medium',
-        });
+        this.errorReporter.reportError(
+          `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
       }
     }
 
@@ -68,11 +65,7 @@ export class CustomApiConfigLoader extends ConfigLoader {
     const result = this.validator.validate(config);
 
     if (result.errors.length > 0) {
-      console.error('[TraceLog] Configuration errors:', result.errors);
-      this.errorReporter.reportError({
-        message: `Configuration errors: ${result.errors.join('; ')}`,
-        severity: 'medium',
-      });
+      this.errorReporter.reportError(`Configuration errors: ${result.errors.join('; ')}`);
     }
 
     if (result.warnings.length > 0) {
@@ -91,17 +84,16 @@ export class CustomApiConfigLoader extends ConfigLoader {
       corrected.excludedUrlPaths = [];
     }
 
-    if (
-      typeof corrected.sessionTimeout !== 'number' ||
-      corrected.sessionTimeout < CONFIG_CONSTANTS.SESSION_TIMEOUT_MIN_MS
-    ) {
-      corrected.sessionTimeout = CONFIG_CONSTANTS.SESSION_TIMEOUT_DEFAULT_MS;
+    if (typeof corrected.sessionTimeout !== 'number' || corrected.sessionTimeout < SESSION_TIMEOUT_MIN_MS) {
+      corrected.sessionTimeout = SESSION_TIMEOUT_DEFAULT_MS;
     }
 
     if (corrected.customApiUrl) {
       try {
         const url = new URL(corrected.customApiUrl);
-        corrected.customApiUrl = url.href.replace(/\/$/, '');
+        const sanitized = url.href.replace(/\/$/, '');
+
+        corrected.customApiUrl = isValidUrl(sanitized, url.hostname, corrected.allowHttp) ? sanitized : undefined;
       } catch {
         corrected.customApiUrl = undefined;
       }
@@ -167,19 +159,13 @@ export class StandardConfigLoader extends ConfigLoader {
     }
 
     if (errors.length > 0) {
-      console.error('[TraceLog] Configuration errors:', errors);
-      this.errorReporter.reportError({
-        message: `Configuration errors: ${errors.join('; ')}`,
-        severity: 'medium',
-      });
+      this.errorReporter.reportError(`Configuration errors: ${errors.join('; ')}`);
     }
 
     return this.applyCorrections(finalConfig);
   }
 
   private applyCorrections(config: Config): Config {
-    // Same correction logic as CustomApiConfigLoader
-    // This could be extracted to a separate ConfigCorrector class
     const corrected = { ...config };
 
     if (typeof corrected.samplingRate !== 'number' || corrected.samplingRate < 0 || corrected.samplingRate > 1) {
@@ -190,11 +176,8 @@ export class StandardConfigLoader extends ConfigLoader {
       corrected.excludedUrlPaths = [];
     }
 
-    if (
-      typeof corrected.sessionTimeout !== 'number' ||
-      corrected.sessionTimeout < CONFIG_CONSTANTS.SESSION_TIMEOUT_MIN_MS
-    ) {
-      corrected.sessionTimeout = CONFIG_CONSTANTS.SESSION_TIMEOUT_DEFAULT_MS;
+    if (typeof corrected.sessionTimeout !== 'number' || corrected.sessionTimeout < SESSION_TIMEOUT_MIN_MS) {
+      corrected.sessionTimeout = SESSION_TIMEOUT_DEFAULT_MS;
     }
 
     return corrected;

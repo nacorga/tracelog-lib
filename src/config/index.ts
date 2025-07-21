@@ -1,6 +1,3 @@
-export { CONFIG_CONSTANTS } from './config-constants';
-export type { ConfigConstants } from './config-constants';
-
 export { ConfigValidator } from './config-validator';
 export type { IConfigValidator, ValidationResult } from './config-validator';
 

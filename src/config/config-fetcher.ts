@@ -1,12 +1,11 @@
 import { AppConfig, ApiConfig } from '../types';
-import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
 import { sanitizeApiConfig, isValidUrl, buildDynamicApiUrl } from '../utils';
+import { DEFAULT_TRACKING_API_CONFIG, FETCH_TIMEOUT_MS, MAX_FETCH_ATTEMPTS } from '../constants';
 import { VERSION } from '../version';
-import { CONFIG_CONSTANTS } from './config-constants';
 import { IRateLimiter } from './rate-limiter';
 
 export interface IErrorReporter {
-  reportError(error: { message: string; context?: string; severity?: 'low' | 'medium' | 'high' }): void;
+  reportError(message: string): void;
 }
 
 export interface IConfigFetcher {
@@ -22,12 +21,9 @@ export class ConfigFetcher implements IConfigFetcher {
   async fetch(config: AppConfig, id?: string): Promise<ApiConfig | undefined> {
     if (!this.rateLimiter.canFetch()) {
       if (this.rateLimiter.hasExceededMaxAttempts()) {
-        this.errorReporter.reportError({
-          message: `Max fetch attempts exceeded (${CONFIG_CONSTANTS.MAX_FETCH_ATTEMPTS})`,
-          context: 'ConfigFetcher',
-          severity: 'high',
-        });
+        this.errorReporter.reportError(`Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`);
       }
+
       return undefined;
     }
 
@@ -53,7 +49,7 @@ export class ConfigFetcher implements IConfigFetcher {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), CONFIG_CONSTANTS.FETCH_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     try {
       const response = await fetch(configUrl, {
@@ -167,11 +163,6 @@ export class ConfigFetcher implements IConfigFetcher {
   }
 
   private handleFetchError(error: unknown): void {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    this.errorReporter.reportError({
-      message: `Config fetch failed: ${errorMessage}`,
-      context: 'ConfigFetcher',
-      severity: 'medium',
-    });
+    this.errorReporter.reportError(`Config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
