@@ -148,6 +148,12 @@ export class EventManager {
     this.eventsQueue = [];
   }
 
+  logTransition(data: { from: string; to: string; type: string }): void {
+    if (this.isQaMode()) {
+      console.log('[TraceLog] navigation transition:', JSON.stringify(data));
+    }
+  }
+
   private sendEvent(payload: EventData): void {
     if (this.isQaMode()) {
       console.log(`[TraceLog] ${payload.type} event:`, JSON.stringify(payload));

@@ -7,6 +7,7 @@ export class UrlManager {
   constructor(
     private readonly config: Config,
     private readonly sendPageViewEvent: (fromUrl: string, toUrl: string, referrer?: string, utm?: any) => void,
+    private readonly notifyNavigation: (data: NavigationData) => void,
     private readonly suppressNextScrollEvent?: () => void,
   ) {
     const pageViewConfig: PageViewConfig = {
@@ -45,6 +46,8 @@ export class UrlManager {
   }
 
   private handleNavigation(data: NavigationData): void {
+    this.notifyNavigation(data);
+
     if (!this.isRouteExcluded(data.toUrl)) {
       this.sendPageViewEvent(data.fromUrl, data.toUrl, data.referrer, data.utm);
     }

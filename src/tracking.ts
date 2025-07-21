@@ -1,5 +1,6 @@
 import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from './modules';
 import { AppConfig, EventType, MetadataType, EventHandler, AdminError, DeviceType } from './types';
+import { NavigationData } from './events';
 
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',
@@ -81,8 +82,11 @@ export class Tracking {
         (url: string) => this.urlManager?.isRouteExcluded(url) || false,
       );
 
-      this.urlManager = new UrlManager(mergedConfig, this.handlePageViewEvent.bind(this), () =>
-        this.trackingManager?.suppressNextScrollEvent(),
+      this.urlManager = new UrlManager(
+        mergedConfig,
+        this.handlePageViewEvent.bind(this),
+        this.handleNavigationChange.bind(this),
+        () => this.trackingManager?.suppressNextScrollEvent(),
       );
 
       this.trackingManager = new TrackingManager(
@@ -117,7 +121,6 @@ export class Tracking {
         this.handleSessionEvent(EventType.SESSION_END, 'unexpected_recovery');
       }
 
-      this.sessionManager.startSession();
       this.urlManager.initialize();
       this.trackingManager.initScrollTracking();
       this.trackingManager.initInactivityTracking();
@@ -187,6 +190,31 @@ export class Tracking {
     });
 
     this.eventManager.updatePageUrl(toUrl);
+  }
+
+  private handleNavigationChange(data: NavigationData): void {
+    const fromExcluded = this.urlManager.isRouteExcluded(data.fromUrl);
+    const toExcluded = this.urlManager.isRouteExcluded(data.toUrl);
+
+    this.eventManager.updatePageUrl(data.toUrl);
+
+    if (fromExcluded !== toExcluded) {
+      this.eventManager.logTransition({
+        from: data.fromUrl,
+        to: data.toUrl,
+        type: toExcluded ? 'toExcluded' : 'fromExcluded',
+      });
+    }
+
+    if (toExcluded) {
+      this.sessionManager.pauseSession();
+    } else {
+      if (!this.sessionManager.hasSessionStarted()) {
+        this.sessionManager.startSession();
+      } else if (this.sessionManager.isPaused()) {
+        this.sessionManager.resumeSession();
+      }
+    }
   }
 
   private handleTrackingEvent(event: EventHandler): void {
