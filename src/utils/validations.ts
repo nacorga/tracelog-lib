@@ -36,14 +36,15 @@ export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
   return true;
 };
 
-export const isValidUrl = (url: string, allowedDomain: string): boolean => {
+export const isValidUrl = (url: string, allowedDomain: string, allowHttp = false): boolean => {
   try {
     const parsed = new URL(url);
     const isHttps = parsed.protocol === 'https:';
+    const isHttp = parsed.protocol === 'http:';
     const hostname = parsed.hostname;
     const isAllowedDomain = hostname === allowedDomain || hostname.endsWith('.' + allowedDomain);
 
-    return isHttps && isAllowedDomain;
+    return (isHttps || (allowHttp && isHttp)) && isAllowedDomain;
   } catch {
     return false;
   }
@@ -301,6 +302,64 @@ export const isEventValid = (
   return isValidMetadata(eventName, metadata, 'customEvent');
 };
 
+/**
+ * Validates a sampling rate value
+ */
+const validateSamplingRate = (samplingRate: unknown, errors: string[]): void => {
+  if (samplingRate !== undefined) {
+    if (typeof samplingRate !== 'number') {
+      errors.push('samplingRate must be a number');
+    } else if (samplingRate < 0 || samplingRate > 1) {
+      errors.push('samplingRate must be between 0 and 1');
+    }
+  }
+};
+
+/**
+ * Validates excluded URL paths array
+ */
+const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], prefix = ''): void => {
+  if (excludedUrlPaths !== undefined) {
+    if (Array.isArray(excludedUrlPaths)) {
+      for (const [index, path] of excludedUrlPaths.entries()) {
+        if (typeof path === 'string') {
+          try {
+            new RegExp(path);
+          } catch {
+            errors.push(`${prefix}excludedUrlPaths[${index}] is not a valid regex pattern`);
+          }
+        } else {
+          errors.push(`${prefix}excludedUrlPaths[${index}] must be a string`);
+        }
+      }
+    } else {
+      errors.push(`${prefix}excludedUrlPaths must be an array`);
+    }
+  }
+};
+
+/**
+ * Validates a URL field (customApiUrl or customApiConfigUrl)
+ */
+const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: string, errors: string[]): void => {
+  if (url !== undefined) {
+    if (typeof url === 'string') {
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          errors.push(`${fieldName} must use http or https`);
+        } else if (parsed.protocol === 'http:' && allowHttp !== true) {
+          errors.push(`${fieldName} using http requires allowHttp=true`);
+        }
+      } catch {
+        errors.push(`${fieldName} must be a valid URL`);
+      }
+    } else {
+      errors.push(`${fieldName} must be a string`);
+    }
+  }
+};
+
 export const validateAppConfig = (config: AppConfig): { errors: string[]; warnings: string[] } => {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -331,35 +390,9 @@ export const validateAppConfig = (config: AppConfig): { errors: string[]; warnin
     }
   }
 
-  if (config.customApiUrl !== undefined) {
-    if (typeof config.customApiUrl === 'string') {
-      try {
-        const parsed = new URL(config.customApiUrl);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          errors.push('customApiUrl must use http or https');
-        }
-      } catch {
-        errors.push('customApiUrl must be a valid URL');
-      }
-    } else {
-      errors.push('customApiUrl must be a string');
-    }
-  }
-
-  if (config.customApiConfigUrl !== undefined) {
-    if (typeof config.customApiConfigUrl === 'string') {
-      try {
-        const parsed = new URL(config.customApiConfigUrl);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          errors.push('customApiConfigUrl must use http or https');
-        }
-      } catch {
-        errors.push('customApiConfigUrl must be a valid URL');
-      }
-    } else {
-      errors.push('customApiConfigUrl must be a string');
-    }
-  }
+  // Use helper functions for common validations
+  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
+  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
 
   if (config.apiConfig !== undefined) {
     if (typeof config.apiConfig !== 'object' || config.apiConfig === null) {
@@ -367,9 +400,7 @@ export const validateAppConfig = (config: AppConfig): { errors: string[]; warnin
     } else {
       const { samplingRate, qaMode, tags, excludedUrlPaths } = config.apiConfig;
 
-      if (samplingRate !== undefined && (typeof samplingRate !== 'number' || samplingRate < 0 || samplingRate > 1)) {
-        errors.push('apiConfig.samplingRate must be between 0 and 1');
-      }
+      validateSamplingRate(samplingRate, errors);
 
       if (qaMode !== undefined && typeof qaMode !== 'boolean') {
         errors.push('apiConfig.qaMode must be a boolean');
@@ -379,23 +410,7 @@ export const validateAppConfig = (config: AppConfig): { errors: string[]; warnin
         errors.push('apiConfig.tags must be an array');
       }
 
-      if (excludedUrlPaths !== undefined) {
-        if (Array.isArray(excludedUrlPaths)) {
-          for (const [index, path] of excludedUrlPaths.entries()) {
-            if (typeof path === 'string') {
-              try {
-                new RegExp(path);
-              } catch {
-                errors.push(`apiConfig.excludedUrlPaths[${index}] is not a valid regex pattern`);
-              }
-            } else {
-              errors.push(`apiConfig.excludedUrlPaths[${index}] must be a string`);
-            }
-          }
-        } else {
-          errors.push('apiConfig.excludedUrlPaths must be an array');
-        }
-      }
+      validateExcludedUrlPaths(excludedUrlPaths, errors, 'apiConfig.');
     }
   }
 
@@ -406,53 +421,11 @@ export const validateFinalConfig = (config: Config): { errors: string[]; warning
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (config.samplingRate !== undefined) {
-    if (typeof config.samplingRate !== 'number') {
-      errors.push('samplingRate must be a number');
-    } else if (config.samplingRate < 0 || config.samplingRate > 1) {
-      errors.push('samplingRate must be between 0 and 1');
-    }
-  }
-
-  if (config.excludedUrlPaths !== undefined) {
-    if (Array.isArray(config.excludedUrlPaths)) {
-      for (const [index, path] of config.excludedUrlPaths.entries()) {
-        if (typeof path === 'string') {
-          try {
-            new RegExp(path);
-          } catch {
-            errors.push(`excludedUrlPaths[${index}] is not a valid regex pattern`);
-          }
-        } else {
-          errors.push(`excludedUrlPaths[${index}] must be a string`);
-        }
-      }
-    } else {
-      errors.push('excludedUrlPaths must be an array');
-    }
-  }
-
-  if (config.customApiUrl !== undefined) {
-    try {
-      const parsed = new URL(config.customApiUrl);
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        errors.push('customApiUrl must use http or https');
-      }
-    } catch {
-      errors.push('customApiUrl must be a valid URL');
-    }
-  }
-
-  if (config.customApiConfigUrl !== undefined) {
-    try {
-      const parsed = new URL(config.customApiConfigUrl);
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        errors.push('customApiConfigUrl must use http or https');
-      }
-    } catch {
-      errors.push('customApiConfigUrl must be a valid URL');
-    }
-  }
+  // Use helper functions for common validations
+  validateSamplingRate(config.samplingRate, errors);
+  validateExcludedUrlPaths(config.excludedUrlPaths, errors);
+  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
+  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
 
   return { errors, warnings };
 };

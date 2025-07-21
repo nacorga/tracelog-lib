@@ -58,6 +58,10 @@ export interface AppConfig {
    * these values override the defaults and no remote config will be fetched.
    */
   apiConfig?: Partial<ApiConfig>;
+  /**
+   * Allow HTTP requests to be made. This is useful for testing and development.
+   */
+  allowHttp?: boolean;
 }
 
 export type Config = ApiConfig & Omit<AppConfig, 'apiConfig'>;

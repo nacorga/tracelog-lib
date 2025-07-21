@@ -54,8 +54,7 @@ TraceLog.init('your-tracking-id', {
     samplingRate: 1,
     qaMode: false,
     excludedUrlPaths: ['/admin', '/debug'],
-    tags: ['marketing', 'beta']
-  },
+  }
 });
 ```
 
@@ -71,6 +70,7 @@ TraceLog.init('your-tracking-id', {
 ### Notes
 - When using this mode, TraceLog does not store or process any data.
 - If no valid config is provided, the SDK falls back to safe defaults: `samplingRate = 1`, `qaMode = false`, and no `excludedUrlPaths`.
+- If you provide endpoints with the `http` protocol, set `allowHttp: true` to explicitly permit them. This helps avoid accidental insecure traffic in production environments.
 
 
 ## 🎯 Quick Integration Example

@@ -198,6 +198,7 @@ export class ConfigManager {
     if (!config.customApiConfigUrl && config.customApiUrl) {
       return undefined;
     }
+
     const now = Date.now();
 
     // Rate limiting (5 seconds)
@@ -231,8 +232,9 @@ export class ConfigManager {
       }
 
       const allowedDomain = new URL(configUrl).hostname;
+      const allowHttp = config.allowHttp === true;
 
-      if (!isValidUrl(configUrl, allowedDomain)) {
+      if (!isValidUrl(configUrl, allowedDomain, allowHttp)) {
         throw new Error('Config URL failed security validation');
       }
 
