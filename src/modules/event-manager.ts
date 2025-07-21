@@ -106,11 +106,16 @@ export class EventManager {
       ...(removePageUrl && { excluded_route: true }),
     };
 
-    // Tags functionality enabled
     if (this.config?.tags?.length) {
       const matchedTags = this.getEventTags(payload, this.getDevice()!);
+
       if (matchedTags?.length) {
-        payload.tags = matchedTags;
+        payload.tags = this.isQaMode()
+          ? matchedTags.map((tag) => ({
+              id: tag,
+              name: this.config?.tags.find((t) => t.id === tag)?.name ?? '',
+            }))
+          : matchedTags;
       }
     }
 
