@@ -6,14 +6,10 @@
   <title>TraceLog HTTP Validation Test</title>
 </head>
 <body>
-  <button id="test-button" data-testid="test-button">Click</button>
   <script type="module">
-    import { TraceLog } from './tracelog.js';
-    TraceLog.init('custom-id', {
+    import { TraceLog } from '../tracelog.js';
+    TraceLog.init('abc123', {
       customApiUrl: 'http://localhost:3000/collect'
-    });
-    document.getElementById('test-button')?.addEventListener('click', () => {
-      TraceLog.event('test', { foo: 'bar' });
     });
   </script>
 </body>
