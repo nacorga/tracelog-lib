@@ -40,6 +40,38 @@ Create a `CNAME` record in your DNS settings:
 Replace `YOUR_TRACELOG_ID` with your actual ID from your TraceLog account.
 This ensures seamless tracking across browsers.
 
+## 🔀 Send events to your own server
+
+If you prefer to store analytics data on your own infrastructure, you can configure TraceLog to send events to a custom endpoint.
+
+```javascript
+TraceLog.init('your-tracking-id', {
+  customApiUrl: 'https://analytics.example.com/tracelog',
+  // Optionally load tracking config from your backend
+  customApiConfigUrl: 'https://analytics.example.com/tracelog/config',
+  // Or provide config manually
+  apiConfig: {
+    samplingRate: 1,
+    qaMode: false,
+    excludedUrlPaths: ['/admin', '/debug'],
+  }
+});
+```
+
+### How It Works
+- All events will be POSTed directly to `customApiUrl` instead of TraceLog’s servers.
+- If `customApiConfigUrl` is provided, the SDK will fetch configuration from that URL once on initialization.
+- If `customApiConfigUrl` is omitted, the SDK will use the static apiConfig provided.
+
+### Limitations in Custom Mode
+- Configuration options managed from the TraceLog platform — such as tags, dashboards, or AI reports — are not available in this mode.
+- You are fully responsible for handling data, applying config, and managing downstream processing on your server.
+
+### Notes
+- When using this mode, TraceLog does not store or process any data.
+- If no valid config is provided, the SDK falls back to safe defaults: `samplingRate = 1`, `qaMode = false`, and no `excludedUrlPaths`.
+- If you provide endpoints with the `http` protocol, set `allowHttp: true` to explicitly permit them. This helps avoid accidental insecure traffic in production environments.
+
 
 ## 🎯 Quick Integration Example
 

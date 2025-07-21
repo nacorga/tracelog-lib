@@ -1,6 +1,6 @@
 import { AppConfig, ApiConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
-import { sanitizeApiConfig, isValidUrl } from '../utils';
+import { sanitizeApiConfig, isValidUrl, validateFinalConfig, validateAppConfig } from '../utils';
 import { VERSION } from '../version';
 
 interface ErrorReporter {
@@ -53,6 +53,37 @@ export class ConfigManager {
       return this.config;
     }
 
+    if (config.customApiUrl) {
+      const { apiConfig = {}, customApiConfigUrl, ...rest } = config;
+
+      let merged: Config = {
+        ...DEFAULT_TRACKING_API_CONFIG,
+        ...apiConfig,
+        ...rest,
+      };
+
+      if (customApiConfigUrl) {
+        try {
+          const remote = await this.fetchConfigWithRetry(config);
+
+          if (remote) {
+            merged = { ...merged, ...remote };
+          }
+        } catch (error) {
+          console.error('[TraceLog] Custom config fetch failed:', error);
+
+          this.errorReporter.reportError({
+            message: `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            severity: 'medium',
+          });
+        }
+      }
+
+      this.config = this.applyConfigCorrections(merged);
+
+      return this.config;
+    }
+
     const result = await this.loadConfigWithValidation(id, config);
 
     if (result.warnings.length > 0) {
@@ -77,10 +108,15 @@ export class ConfigManager {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    let finalConfig: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...config };
+    const { apiConfig = {}, ...rest } = config;
+    let finalConfig: Config = {
+      ...DEFAULT_TRACKING_API_CONFIG,
+      ...apiConfig,
+      ...rest,
+    };
 
     try {
-      const validationResult = this.validateAppConfig(config);
+      const validationResult = validateAppConfig(config);
 
       errors.push(...validationResult.errors);
       warnings.push(...validationResult.warnings);
@@ -101,7 +137,7 @@ export class ConfigManager {
     }
 
     try {
-      const finalValidation = this.validateFinalConfig(finalConfig);
+      const finalValidation = validateFinalConfig(finalConfig);
 
       errors.push(...finalValidation.errors);
       warnings.push(...finalValidation.warnings);
@@ -116,72 +152,6 @@ export class ConfigManager {
       errors,
       warnings,
     };
-  }
-
-  private validateAppConfig(config: AppConfig): { errors: string[]; warnings: string[] } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    if (config.sessionTimeout !== undefined) {
-      if (typeof config.sessionTimeout !== 'number') {
-        errors.push('sessionTimeout must be a number');
-      } else if (config.sessionTimeout < 30_000) {
-        errors.push('sessionTimeout must be at least 30 seconds (30000ms)');
-      } else if (config.sessionTimeout > 24 * 60 * 60 * 1000) {
-        warnings.push('sessionTimeout is very long (>24 hours), consider reducing it');
-      }
-    }
-
-    if (config.globalMetadata !== undefined) {
-      if (typeof config.globalMetadata !== 'object' || config.globalMetadata === null) {
-        errors.push('globalMetadata must be an object');
-      } else {
-        const metadataSize = JSON.stringify(config.globalMetadata).length;
-
-        if (metadataSize > 10_240) {
-          errors.push('globalMetadata is too large (max 10KB)');
-        }
-
-        if (Object.keys(config.globalMetadata).length > 12) {
-          errors.push('globalMetadata has too many keys (max 12)');
-        }
-      }
-    }
-
-    return { errors, warnings };
-  }
-
-  private validateFinalConfig(config: Config): { errors: string[]; warnings: string[] } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    if (config.samplingRate !== undefined) {
-      if (typeof config.samplingRate !== 'number') {
-        errors.push('samplingRate must be a number');
-      } else if (config.samplingRate < 0 || config.samplingRate > 1) {
-        errors.push('samplingRate must be between 0 and 1');
-      }
-    }
-
-    if (config.excludedUrlPaths !== undefined) {
-      if (Array.isArray(config.excludedUrlPaths)) {
-        for (const [index, path] of config.excludedUrlPaths.entries()) {
-          if (typeof path === 'string') {
-            try {
-              new RegExp(path);
-            } catch {
-              errors.push(`excludedUrlPaths[${index}] is not a valid regex pattern`);
-            }
-          } else {
-            errors.push(`excludedUrlPaths[${index}] must be a string`);
-          }
-        }
-      } else {
-        errors.push('excludedUrlPaths must be an array');
-      }
-    }
-
-    return { errors, warnings };
   }
 
   private applyConfigCorrections(config: Config): Config {
@@ -203,10 +173,32 @@ export class ConfigManager {
       correctedConfig.sessionTimeout = 15 * 60 * 1000;
     }
 
+    if (correctedConfig.customApiUrl) {
+      try {
+        const url = new URL(correctedConfig.customApiUrl);
+        correctedConfig.customApiUrl = url.href.replace(/\/$/, '');
+      } catch {
+        correctedConfig.customApiUrl = undefined;
+      }
+    }
+
+    if (correctedConfig.customApiConfigUrl) {
+      try {
+        const url = new URL(correctedConfig.customApiConfigUrl);
+        correctedConfig.customApiConfigUrl = url.href.replace(/\/$/, '');
+      } catch {
+        correctedConfig.customApiConfigUrl = undefined;
+      }
+    }
+
     return correctedConfig;
   }
 
   private async fetchConfigWithRetry(config: AppConfig): Promise<ApiConfig | undefined> {
+    if (!config.customApiConfigUrl && config.customApiUrl) {
+      return undefined;
+    }
+
     const now = Date.now();
 
     // Rate limiting (5 seconds)
@@ -229,19 +221,20 @@ export class ConfigManager {
     return this.fetchConfig(config);
   }
 
-  private async fetchConfig(_config: AppConfig): Promise<ApiConfig | undefined> {
+  private async fetchConfig(config: AppConfig): Promise<ApiConfig | undefined> {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     try {
-      const configUrl = this.getConfigUrl();
+      const configUrl = this.getConfigUrl(config.customApiConfigUrl, config.customApiUrl);
 
       if (!configUrl) {
         throw new Error('Config URL is not valid or not allowed');
       }
 
       const allowedDomain = new URL(configUrl).hostname;
+      const allowHttp = config.allowHttp === true;
 
-      if (!isValidUrl(configUrl, allowedDomain)) {
+      if (!isValidUrl(configUrl, allowedDomain, allowHttp)) {
         throw new Error('Config URL failed security validation');
       }
 
@@ -304,7 +297,25 @@ export class ConfigManager {
     }
   }
 
-  private getConfigUrl(): string | undefined {
+  private getConfigUrl(customApiConfigUrl?: string, customApiUrl?: string): string | undefined {
+    if (customApiConfigUrl) {
+      try {
+        const url = new URL(customApiConfigUrl);
+        return url.href.replace(/\/$/, '');
+      } catch {
+        return undefined;
+      }
+    }
+
+    if (customApiUrl) {
+      try {
+        const url = new URL(customApiUrl);
+        return `${url.origin}${url.pathname.replace(/\/$/, '')}/config`;
+      } catch {
+        return undefined;
+      }
+    }
+
     if (!this.id) {
       return undefined;
     }
@@ -337,6 +348,15 @@ export class ConfigManager {
   }
 
   getApiUrl(): string | undefined {
+    if (this.config.customApiUrl) {
+      try {
+        new URL(this.config.customApiUrl);
+        return this.config.customApiUrl;
+      } catch {
+        return undefined;
+      }
+    }
+
     if (!this.id || this.isDemoMode()) {
       return undefined;
     }

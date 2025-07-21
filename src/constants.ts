@@ -30,6 +30,7 @@ export const DEFAULT_TRACKING_API_CONFIG: ApiConfig = {
 
 export const DEFAULT_TRACKING_APP_CONFIG: AppConfig = {
   sessionTimeout: 60_000 * 10,
+  allowHttp: false,
 };
 
 export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
