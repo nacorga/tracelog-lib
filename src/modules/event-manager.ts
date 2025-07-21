@@ -91,18 +91,19 @@ export class EventManager {
     }
 
     const isFirstEvent = evType === EventType.SESSION_START;
+    const removePageUrl = isRouteExcluded && isSessionEvent;
 
     const payload: EventData = {
       type: evType,
-      page_url: eventUrl,
+      page_url: removePageUrl ? '' : eventUrl,
       timestamp: Date.now() as Timestamp,
       ...(isFirstEvent && { referrer: document.referrer || 'Direct' }),
-      ...(fromUrl && { from_page_url: fromUrl }),
+      ...(fromUrl && !removePageUrl && { from_page_url: fromUrl }),
       ...(scrollData && { scroll_data: scrollData }),
       ...(clickData && { click_data: clickData }),
       ...(customEvent && { custom_event: customEvent }),
       ...(isFirstEvent && this.utmParams && { utm: this.utmParams }),
-      ...(isRouteExcluded && isSessionEvent && { excluded_route: true }),
+      ...(removePageUrl && { excluded_route: true }),
     };
 
     // Tags functionality enabled
@@ -145,6 +146,12 @@ export class EventManager {
 
   clearEventsQueue(): void {
     this.eventsQueue = [];
+  }
+
+  logTransition(data: { from: string; to: string; type: string }): void {
+    if (this.isQaMode()) {
+      console.log('[TraceLog] navigation transition:', JSON.stringify(data));
+    }
   }
 
   private sendEvent(payload: EventData): void {

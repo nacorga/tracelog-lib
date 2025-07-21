@@ -12,6 +12,8 @@ export class SessionManager {
   private readonly sessionHandler: SessionHandler;
   private sessionEndSent = false;
   private pageUnloading = false;
+  private paused = false;
+  private started = false;
 
   constructor(
     private readonly config: Config,
@@ -99,6 +101,8 @@ export class SessionManager {
 
   startSession(): void {
     this.sessionEndSent = false;
+    this.paused = false;
+    this.started = true;
     this.sessionHandler.startSession();
   }
 
@@ -125,12 +129,48 @@ export class SessionManager {
 
     this.sessionEndSent = true;
     this.sessionHandler.endSession(sessionTrigger);
+    this.started = false;
+    this.paused = false;
   }
 
   handleInactivity(isInactive: boolean): void {
     if (!isInactive) {
       this.sessionHandler.updateActivity();
     }
+  }
+
+  pauseSession(): void {
+    if (!this.started || this.paused) {
+      return;
+    }
+
+    this.paused = true;
+    this.sessionHandler.updateActivity();
+  }
+
+  resumeSession(): void {
+    if (!this.started || !this.paused) {
+      return;
+    }
+
+    const session = this.sessionHandler.getCurrentSession();
+    const timeout = this.config.sessionTimeout || 30 * 60 * 1000;
+
+    if (session && Date.now() - session.lastActivity > timeout) {
+      this.endSession('timeout');
+      this.startSession();
+    } else {
+      this.paused = false;
+      this.sessionHandler.updateActivity();
+    }
+  }
+
+  hasSessionStarted(): boolean {
+    return this.started;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   isSampledUser(): boolean {
@@ -184,5 +224,7 @@ export class SessionManager {
 
   cleanup(): void {
     this.sessionHandler?.cleanup();
+    this.started = false;
+    this.paused = false;
   }
 }
