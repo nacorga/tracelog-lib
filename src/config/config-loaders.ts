@@ -3,6 +3,7 @@ import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
 import { CONFIG_CONSTANTS } from './config-constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher, IErrorReporter } from './config-fetcher';
+import { isValidUrl } from '../utils';
 
 export abstract class ConfigLoader {
   abstract load(id: string, config: AppConfig): Promise<Config>;
@@ -101,7 +102,9 @@ export class CustomApiConfigLoader extends ConfigLoader {
     if (corrected.customApiUrl) {
       try {
         const url = new URL(corrected.customApiUrl);
-        corrected.customApiUrl = url.href.replace(/\/$/, '');
+        const sanitized = url.href.replace(/\/$/, '');
+
+        corrected.customApiUrl = isValidUrl(sanitized, url.hostname, corrected.allowHttp) ? sanitized : undefined;
       } catch {
         corrected.customApiUrl = undefined;
       }
