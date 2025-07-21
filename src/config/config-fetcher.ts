@@ -1,8 +1,7 @@
 import { AppConfig, ApiConfig } from '../types';
-import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
+import { DEFAULT_TRACKING_API_CONFIG, FETCH_TIMEOUT_MS, MAX_FETCH_ATTEMPTS } from '../constants';
 import { sanitizeApiConfig, isValidUrl } from '../utils';
 import { VERSION } from '../version';
-import { CONFIG_CONSTANTS } from './config-constants';
 import { IRateLimiter } from './rate-limiter';
 
 export interface IErrorReporter {
@@ -23,7 +22,7 @@ export class ConfigFetcher implements IConfigFetcher {
     if (!this.rateLimiter.canFetch()) {
       if (this.rateLimiter.hasExceededMaxAttempts()) {
         this.errorReporter.reportError({
-          message: `Max fetch attempts exceeded (${CONFIG_CONSTANTS.MAX_FETCH_ATTEMPTS})`,
+          message: `Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`,
           context: 'ConfigFetcher',
           severity: 'high',
         });
@@ -53,7 +52,7 @@ export class ConfigFetcher implements IConfigFetcher {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), CONFIG_CONSTANTS.FETCH_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     try {
       const response = await fetch(configUrl, {

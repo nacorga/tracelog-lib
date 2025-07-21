@@ -1,6 +1,11 @@
 import { ApiConfig, AppConfig } from './types';
 
 // Performance constants
+export const MAX_FETCH_ATTEMPTS = 3;
+export const RATE_LIMIT_MS = 5000;
+export const FETCH_TIMEOUT_MS = 10_000;
+export const SESSION_TIMEOUT_MIN_MS = 30_000;
+export const SESSION_TIMEOUT_DEFAULT_MS = 15 * 60 * 1000;
 export const EVENT_SENT_INTERVAL = 10_000;
 export const MAX_EVENTS_QUEUE_LENGTH = 500;
 export const SCROLL_DEBOUNCE_TIME = 250;
@@ -21,6 +26,10 @@ export const SIGNIFICANT_SCROLL_DELTA = 10;
 export const DUPLICATE_EVENT_THRESHOLD = 1000;
 export const BATCH_SIZE_THRESHOLD = 50;
 
+// UTM parameters
+export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+
+// Default tracking API config
 export const DEFAULT_TRACKING_API_CONFIG: ApiConfig = {
   qaMode: false,
   samplingRate: DEFAULT_SAMPLING_RATE,
@@ -28,9 +37,8 @@ export const DEFAULT_TRACKING_API_CONFIG: ApiConfig = {
   excludedUrlPaths: [],
 };
 
+// Default tracking app config
 export const DEFAULT_TRACKING_APP_CONFIG: AppConfig = {
-  sessionTimeout: 60_000 * 10,
+  sessionTimeout: SESSION_TIMEOUT_DEFAULT_MS,
   allowHttp: false,
 };
-
-export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];

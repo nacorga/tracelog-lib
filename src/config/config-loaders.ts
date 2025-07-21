@@ -1,6 +1,5 @@
 import { AppConfig, Config } from '../types';
-import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
-import { CONFIG_CONSTANTS } from './config-constants';
+import { DEFAULT_TRACKING_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher, IErrorReporter } from './config-fetcher';
 
@@ -91,11 +90,8 @@ export class CustomApiConfigLoader extends ConfigLoader {
       corrected.excludedUrlPaths = [];
     }
 
-    if (
-      typeof corrected.sessionTimeout !== 'number' ||
-      corrected.sessionTimeout < CONFIG_CONSTANTS.SESSION_TIMEOUT_MIN_MS
-    ) {
-      corrected.sessionTimeout = CONFIG_CONSTANTS.SESSION_TIMEOUT_DEFAULT_MS;
+    if (typeof corrected.sessionTimeout !== 'number' || corrected.sessionTimeout < SESSION_TIMEOUT_MIN_MS) {
+      corrected.sessionTimeout = SESSION_TIMEOUT_DEFAULT_MS;
     }
 
     if (corrected.customApiUrl) {
@@ -178,8 +174,6 @@ export class StandardConfigLoader extends ConfigLoader {
   }
 
   private applyCorrections(config: Config): Config {
-    // Same correction logic as CustomApiConfigLoader
-    // This could be extracted to a separate ConfigCorrector class
     const corrected = { ...config };
 
     if (typeof corrected.samplingRate !== 'number' || corrected.samplingRate < 0 || corrected.samplingRate > 1) {
@@ -190,11 +184,8 @@ export class StandardConfigLoader extends ConfigLoader {
       corrected.excludedUrlPaths = [];
     }
 
-    if (
-      typeof corrected.sessionTimeout !== 'number' ||
-      corrected.sessionTimeout < CONFIG_CONSTANTS.SESSION_TIMEOUT_MIN_MS
-    ) {
-      corrected.sessionTimeout = CONFIG_CONSTANTS.SESSION_TIMEOUT_DEFAULT_MS;
+    if (typeof corrected.sessionTimeout !== 'number' || corrected.sessionTimeout < SESSION_TIMEOUT_MIN_MS) {
+      corrected.sessionTimeout = SESSION_TIMEOUT_DEFAULT_MS;
     }
 
     return corrected;

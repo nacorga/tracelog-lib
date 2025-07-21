@@ -1,4 +1,4 @@
-import { DEFAULT_SAMPLING_RATE } from '../constants';
+import { DEFAULT_SAMPLING_RATE, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
 import { MetadataType, Config, EventType, SessionData, SessionEndTrigger, DeviceType, StorageKey } from '../types';
 import { getDeviceType, isValidMetadata } from '../utils';
 import { SessionHandler } from '../events';
@@ -154,7 +154,7 @@ export class SessionManager {
     }
 
     const session = this.sessionHandler.getCurrentSession();
-    const timeout = this.config.sessionTimeout || 30 * 60 * 1000;
+    const timeout = this.config.sessionTimeout || DEFAULT_TRACKING_APP_CONFIG.sessionTimeout || 15 * 60 * 1000;
 
     if (session && Date.now() - session.lastActivity > timeout) {
       this.endSession('timeout');

@@ -1,4 +1,4 @@
-import { CONFIG_CONSTANTS } from './config-constants';
+import { MAX_FETCH_ATTEMPTS, RATE_LIMIT_MS } from '../constants';
 
 export interface IRateLimiter {
   canFetch(): boolean;
@@ -16,8 +16,8 @@ export class RateLimiter implements IRateLimiter {
   canFetch(): boolean {
     const now = Date.now();
     const timeSinceLastAttempt = now - this.lastAttempt;
-    const hasExceededRateLimit = timeSinceLastAttempt < CONFIG_CONSTANTS.RATE_LIMIT_MS;
-    const hasExceededMaxAttempts = this.attempts >= CONFIG_CONSTANTS.MAX_FETCH_ATTEMPTS;
+    const hasExceededRateLimit = timeSinceLastAttempt < RATE_LIMIT_MS;
+    const hasExceededMaxAttempts = this.attempts >= MAX_FETCH_ATTEMPTS;
 
     return !hasExceededRateLimit && !hasExceededMaxAttempts;
   }
@@ -41,6 +41,6 @@ export class RateLimiter implements IRateLimiter {
   }
 
   hasExceededMaxAttempts(): boolean {
-    return this.attempts >= CONFIG_CONSTANTS.MAX_FETCH_ATTEMPTS;
+    return this.attempts >= MAX_FETCH_ATTEMPTS;
   }
 }

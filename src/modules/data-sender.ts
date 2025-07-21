@@ -265,7 +265,7 @@ export class DataSender {
   }
 
   async sendError(error: AdminError): Promise<void> {
-    if (this.isDemoMode) {
+    if (this.isDemoMode || this.isQaMode()) {
       console.error(error.message);
       return;
     }
