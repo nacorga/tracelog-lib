@@ -3,8 +3,9 @@ import { MetadataType, Config, EventType, SessionData, SessionEndTrigger, Device
 import { getDeviceType, isValidMetadata } from '../utils';
 import { SessionHandler } from '../events';
 import { IdManager } from './id-manager';
+import { Base } from '../base';
 
-export class SessionManager {
+export class SessionManager extends Base {
   private userId: string | undefined;
   private tempUserId: string | null = null;
   private readonly device: DeviceType | undefined;
@@ -20,6 +21,8 @@ export class SessionManager {
     private readonly sendSessionEvent: (eventType: EventType, trigger?: string) => void,
     private readonly isQaMode: () => boolean,
   ) {
+    super();
+
     this.userId = this.getUserId();
     this.device = getDeviceType();
     this.sessionHandler = new SessionHandler(this.userId, this.handleSessionData.bind(this), this.isQaMode);
@@ -95,7 +98,7 @@ export class SessionManager {
     this.pageUnloading = isUnloading;
 
     if (this.isQaMode()) {
-      console.log(`[TraceLog] Page unloading state changed: ${isUnloading}`);
+      this.log('info', `Page unloading state changed: ${isUnloading}`);
     }
   }
 
@@ -214,9 +217,10 @@ export class SessionManager {
 
       if (validationResult.valid) {
         this.globalMetadata = validationResult.sanitizedMetadata;
-      } else if (this.isQaMode()) {
-        console.error(
-          `TraceLog error: globalMetadata object validation failed (${validationResult.error || 'unknown error'}). Please, review your data and try again.`,
+      } else {
+        this.log(
+          'error',
+          `globalMetadata object validation failed (${validationResult.error || 'unknown error'}). Please, review your data and try again.`,
         );
       }
     }

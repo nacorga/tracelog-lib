@@ -1,6 +1,7 @@
 import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from './modules';
 import { AppConfig, EventType, MetadataType, EventHandler, DeviceType } from './types';
 import { NavigationData } from './events';
+import { Base } from './base';
 
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',
@@ -17,7 +18,7 @@ const createCleanupHandler = (tracker: Tracking): (() => void) => {
   };
 };
 
-export class Tracking {
+export class Tracking extends Base {
   public isInitialized = false;
   public isExcludedUser = false;
 
@@ -33,9 +34,13 @@ export class Tracking {
   private urlManager!: UrlManager;
 
   constructor(id: string, config?: AppConfig) {
-    this.initializationPromise = this.initializeTracking(id, config);
-    this.initializationPromise.catch((error) => {
-      this.catchError(`[TraceLog] Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
+    super();
+
+    this.initializationPromise = this.initializeTracking(id, config).catch((error) => {
+      this.log(
+        'error',
+        `[TraceLog] Initialization rejected: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
   }
 
@@ -47,7 +52,7 @@ export class Tracking {
     this.initializationState = InitializationState.INITIALIZING;
 
     try {
-      this.configManager = new ConfigManager(this.catchError.bind(this));
+      this.configManager = new ConfigManager();
 
       const mergedConfig = await this.configManager.loadConfig(id, config || {});
       const apiUrl = this.configManager.isDemoMode() ? 'demo' : this.configManager.getApiUrl();
@@ -71,7 +76,6 @@ export class Tracking {
         () => this.sessionManager.getDevice(),
         () => this.sessionManager.getGlobalMetadata(),
         this.dataSender.sendEventsQueue.bind(this.dataSender),
-        this.catchError.bind(this),
         () => mergedConfig.qaMode || false,
         () => !this.sessionManager.isSampledUser(),
         (url: string) => this.urlManager?.isRouteExcluded(url) || false,
@@ -97,11 +101,12 @@ export class Tracking {
       this.initializationState = InitializationState.INITIALIZED;
 
       if (this.isQaModeSync()) {
-        console.log('[TraceLog] Initialization completed successfully');
+        this.log('error', 'Initialization completed successfully');
       }
     } catch (error) {
       this.initializationState = InitializationState.FAILED;
-      console.error('[TraceLog] Initialization error:', error);
+      this.log('error', `Initialization error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
       throw error;
     }
   }
@@ -122,7 +127,8 @@ export class Tracking {
       this.trackingManager.initClickTracking();
       this.setupCleanupListeners();
     } catch (error) {
-      console.error('[TraceLog] Initialization sequence failed:', error);
+      this.log('error', `Initialization sequence failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
       throw error;
     }
   }
@@ -226,10 +232,6 @@ export class Tracking {
     } else {
       this.sessionManager.handleInactivity(false);
     }
-  }
-
-  private catchError(message: string): void {
-    console.error(`[TraceLog] ${message}`);
   }
 
   async customEventHandler(name: string, metadata?: Record<string, MetadataType>): Promise<void> {
@@ -355,7 +357,10 @@ export class Tracking {
           cleanup();
         } catch (error) {
           if (this.isQaModeSync()) {
-            console.error('[TraceLog] Error removing event listener:', error);
+            this.log(
+              'error',
+              `Error removing event listener: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            );
           }
         }
       }
@@ -363,13 +368,9 @@ export class Tracking {
       this.cleanupListeners = [];
       this.isInitialized = false;
       this.isExcludedUser = false;
-
-      if (this.isQaModeSync()) {
-        console.log('[TraceLog] Cleanup completed');
-      }
     } catch (error) {
       if (this.isQaModeSync()) {
-        console.error('[TraceLog] Cleanup error:', error);
+        this.log('error', `Cleanup error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
   }

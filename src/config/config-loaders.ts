@@ -1,8 +1,9 @@
 import { AppConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
 import { IConfigValidator } from './config-validator';
-import { IConfigFetcher, IErrorReporter } from './config-fetcher';
+import { IConfigFetcher } from './config-fetcher';
 import { isValidUrl } from '../utils';
+import { Base } from '../base';
 
 export abstract class ConfigLoader {
   abstract load(id: string, config: AppConfig): Promise<Config>;
@@ -24,11 +25,10 @@ export class DemoConfigLoader extends ConfigLoader {
   }
 }
 
-export class CustomApiConfigLoader extends ConfigLoader {
+export class CustomApiConfigLoader extends Base implements ConfigLoader {
   constructor(
     private readonly validator: IConfigValidator,
     private readonly fetcher: IConfigFetcher,
-    private readonly errorReporter: IErrorReporter,
   ) {
     super();
   }
@@ -52,9 +52,7 @@ export class CustomApiConfigLoader extends ConfigLoader {
           merged = { ...merged, ...remote };
         }
       } catch (error) {
-        this.errorReporter.reportError(
-          `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        );
+        this.log('error', `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
@@ -65,11 +63,11 @@ export class CustomApiConfigLoader extends ConfigLoader {
     const result = this.validator.validate(config);
 
     if (result.errors.length > 0) {
-      this.errorReporter.reportError(`Configuration errors: ${result.errors.join('; ')}`);
+      this.log('error', `Configuration errors: ${result.errors.join('; ')}`);
     }
 
     if (result.warnings.length > 0) {
-      console.warn('[TraceLog] Configuration warnings:', result.warnings);
+      this.log('warning', `Configuration warnings: ${result.warnings.join('; ')}`);
     }
   }
 
@@ -112,11 +110,10 @@ export class CustomApiConfigLoader extends ConfigLoader {
   }
 }
 
-export class StandardConfigLoader extends ConfigLoader {
+export class StandardConfigLoader extends Base implements ConfigLoader {
   constructor(
     private readonly validator: IConfigValidator,
     private readonly fetcher: IConfigFetcher,
-    private readonly errorReporter: IErrorReporter,
   ) {
     super();
   }
@@ -132,18 +129,18 @@ export class StandardConfigLoader extends ConfigLoader {
       ...rest,
     };
 
-    // Validate app config
     try {
       const validationResult = this.validator.validate(config);
+
       errors.push(...validationResult.errors);
       warnings.push(...validationResult.warnings);
     } catch (error) {
       errors.push(`Failed to validate app config: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Fetch remote config - NOW PASSING THE ID for dynamic URL building
     try {
       const remoteConfig = await this.fetcher.fetch(config, id);
+
       if (remoteConfig) {
         finalConfig = { ...finalConfig, ...remoteConfig };
       } else {
@@ -153,13 +150,12 @@ export class StandardConfigLoader extends ConfigLoader {
       errors.push(`Remote config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Report errors and warnings
     if (warnings.length > 0) {
-      console.warn('[TraceLog] Configuration warnings:', warnings);
+      this.log('warning', `Configuration warnings: ${warnings.join('; ')}`);
     }
 
     if (errors.length > 0) {
-      this.errorReporter.reportError(`Configuration errors: ${errors.join('; ')}`);
+      this.log('error', `Configuration errors: ${errors.join('; ')}`);
     }
 
     return this.applyCorrections(finalConfig);
@@ -184,12 +180,13 @@ export class StandardConfigLoader extends ConfigLoader {
   }
 }
 
-export class ConfigLoaderFactory {
+export class ConfigLoaderFactory extends Base {
   constructor(
     private readonly validator: IConfigValidator,
     private readonly fetcher: IConfigFetcher,
-    private readonly errorReporter: IErrorReporter,
-  ) {}
+  ) {
+    super();
+  }
 
   createLoader(id: string, config: AppConfig): ConfigLoader {
     if (id === 'demo') {
@@ -197,9 +194,9 @@ export class ConfigLoaderFactory {
     }
 
     if (config.customApiUrl) {
-      return new CustomApiConfigLoader(this.validator, this.fetcher, this.errorReporter);
+      return new CustomApiConfigLoader(this.validator, this.fetcher);
     }
 
-    return new StandardConfigLoader(this.validator, this.fetcher, this.errorReporter);
+    return new StandardConfigLoader(this.validator, this.fetcher);
   }
 }

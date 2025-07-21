@@ -1,5 +1,6 @@
 import { Tracking } from './tracking';
 import { AppConfig, MetadataType } from './types';
+import { logError } from './utils';
 
 export * as Types from './types';
 
@@ -20,14 +21,14 @@ export const init = (id: string, config?: AppConfig): void => {
   }
 
   if (config?.sessionTimeout && config.sessionTimeout < 30_000) {
-    console.warn('[TraceLog] sessionTimeout must be at least 30 seconds');
+    logError('Session timeout must be at least 30 seconds');
     return;
   }
 
   try {
     trackingInstance = new Tracking(id, config);
   } catch (error) {
-    console.error('[TraceLog] Initialization failed:', error instanceof Error ? error.message : 'Unknown error');
+    logError(`Initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
@@ -38,15 +39,15 @@ export const init = (id: string, config?: AppConfig): void => {
  */
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
   if (!trackingInstance) {
-    console.warn('[TraceLog] Not initialized. Call init() first.');
+    logError('Not initialized. Call init() first.');
     return;
   }
 
   try {
     trackingInstance.customEventHandler(name, metadata).catch((error) => {
-      console.error('[TraceLog] Custom event failed:', error instanceof Error ? error.message : 'Unknown error');
+      logError(`Custom event failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     });
   } catch (error) {
-    console.error('[TraceLog] Custom event failed:', error instanceof Error ? error.message : 'Unknown error');
+    logError(`Custom event failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };

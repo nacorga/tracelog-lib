@@ -5,7 +5,7 @@ export { RateLimiter } from './rate-limiter';
 export type { IRateLimiter } from './rate-limiter';
 
 export { ConfigFetcher } from './config-fetcher';
-export type { IConfigFetcher, IErrorReporter } from './config-fetcher';
+export type { IConfigFetcher } from './config-fetcher';
 
 export {
   ConfigLoader,

@@ -1,3 +1,4 @@
+import { Base } from '../base';
 import { SessionData, SessionEndTrigger } from '../types';
 import { SafeLocalStorage, StorageManager } from '../utils';
 
@@ -6,7 +7,7 @@ interface HeartbeatData {
   timestamp: number;
 }
 
-export class SessionHandler {
+export class SessionHandler extends Base {
   private readonly userId: string;
   private sessionData: SessionData | undefined = undefined;
   private heartbeatInterval: number | undefined = undefined;
@@ -18,6 +19,8 @@ export class SessionHandler {
     private readonly onSessionChange: (data: SessionData) => void,
     private readonly isQaMode: () => boolean,
   ) {
+    super();
+
     this.userId = userId;
     this.storage = new SafeLocalStorage();
 
@@ -33,17 +36,13 @@ export class SessionHandler {
         this.storage.clear();
       }
 
-      // Check storage size and clean if needed
+      // Check storage size and clean if needed (500KB limit)
       const storageSize = this.storage.getSize();
       if (storageSize > 500 * 1024) {
-        // 500KB limit
         this.storage.clear();
-        if (this.isQaMode()) {
-          console.log('[TraceLog] Performed storage cleanup due to size limit');
-        }
       }
     } catch {
-      console.warn('[TraceLog] Maintenance cleanup failed');
+      this.log('error', 'Maintenance cleanup failed');
     }
   }
 
@@ -73,11 +72,6 @@ export class SessionHandler {
       this.sessionData.endTrigger = trigger;
       this.stopHeartbeat();
       this.onSessionChange(this.sessionData);
-
-      if (this.isQaMode()) {
-        console.log('[TraceLog] Session ended:', this.sessionData.sessionId, 'trigger:', trigger);
-      }
-
       this.sessionData = undefined;
     }
   }
@@ -131,16 +125,11 @@ export class SessionHandler {
         if (timeSinceLastHeartbeat > 120_000) {
           this.clearHeartbeat();
 
-          if (this.isQaMode()) {
-            console.log('[TraceLog] Detected unexpected session end from previous session');
-          }
-
           return true;
         }
       }
     } catch {
-      // Ignore storage errors
-      console.warn('[TraceLog] Error checking for unexpected session end');
+      this.log('error', 'Error checking for unexpected session end');
     }
 
     return false;

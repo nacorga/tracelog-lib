@@ -1,3 +1,4 @@
+import { Base } from '../base';
 import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, UTM_PARAMS } from '../constants';
 import {
   DeviceType,
@@ -15,7 +16,7 @@ import {
 import { isEventValid } from '../utils';
 import { TagManager } from './tag-manager';
 
-export class EventManager {
+export class EventManager extends Base {
   private readonly utmParams: UTM | null | undefined;
 
   private eventsQueue: EventData[] = [];
@@ -31,11 +32,12 @@ export class EventManager {
     private readonly getDevice: () => DeviceType | undefined,
     private readonly getGlobalMetadata: () => Record<string, MetadataType> | undefined,
     private readonly sendEventsQueue: (body: Queue) => Promise<boolean>,
-    private readonly sendError: (message: string) => void,
     private readonly isQaMode: () => boolean,
     private readonly isExcludedUser: () => boolean,
     private readonly isRouteExcluded: (url: string) => boolean,
   ) {
+    super();
+
     this.pageUrl = window.location.href;
     this.utmParams = this.getUTMParameters();
   }
@@ -71,7 +73,7 @@ export class EventManager {
       return;
     }
 
-    let errorMessage: string | null = null;
+    let errorMessage: string | undefined;
 
     if (evType === EventType.SCROLL && !scrollData) {
       errorMessage = 'scrollData is required for SCROLL event. Event ignored.';
@@ -86,7 +88,7 @@ export class EventManager {
     }
 
     if (errorMessage) {
-      this.sendError(errorMessage);
+      this.log('error', errorMessage);
       return;
     }
 
@@ -135,8 +137,9 @@ export class EventManager {
         },
       });
     } else if (this.isQaMode()) {
-      console.error(
-        `TraceLog error: custom event "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
+      this.log(
+        'error',
+        `custom event "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
       );
     }
   }
@@ -155,13 +158,13 @@ export class EventManager {
 
   logTransition(data: { from: string; to: string; type: string }): void {
     if (this.isQaMode()) {
-      console.log('[TraceLog] navigation transition:', JSON.stringify(data));
+      this.log('info', `navigation transition: ${JSON.stringify(data)}`);
     }
   }
 
   private sendEvent(payload: EventData): void {
     if (this.isQaMode()) {
-      console.log(`[TraceLog] ${payload.type} event:`, JSON.stringify(payload));
+      this.log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
     } else {
       this.eventsQueue.push(payload);
 

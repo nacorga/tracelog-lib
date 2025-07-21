@@ -1,10 +1,10 @@
 import { AppConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
 import { isValidUrl, buildDynamicApiUrl } from '../utils';
-import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory, IErrorReporter } from '../config';
+import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory } from '../config';
+import { Base } from '../base';
 
-export class ConfigManager {
-  private readonly errorReporter: IErrorReporter;
+export class ConfigManager extends Base {
   private readonly validator: ConfigValidator;
   private readonly rateLimiter: RateLimiter;
   private readonly fetcher: ConfigFetcher;
@@ -13,17 +13,13 @@ export class ConfigManager {
   private config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
   private id = '';
 
-  constructor(private readonly catchError: (message: string) => void) {
-    this.errorReporter = {
-      reportError: (error: Error | string): void => {
-        this.catchError(typeof error === 'string' ? error : error.message);
-      },
-    };
+  constructor() {
+    super();
 
     this.validator = new ConfigValidator();
     this.rateLimiter = new RateLimiter();
-    this.fetcher = new ConfigFetcher(this.errorReporter, this.rateLimiter);
-    this.loaderFactory = new ConfigLoaderFactory(this.validator, this.fetcher, this.errorReporter);
+    this.fetcher = new ConfigFetcher(this.rateLimiter);
+    this.loaderFactory = new ConfigLoaderFactory(this.validator, this.fetcher);
   }
 
   async loadConfig(id: string, config: AppConfig): Promise<Config> {
@@ -33,7 +29,7 @@ export class ConfigManager {
     this.config = await loader.load(id, config);
 
     if (this.config.qaMode === true) {
-      console.log('[TraceLog] set config:', JSON.stringify(this.config));
+      this.log('info', `set config: ${JSON.stringify(this.config)}`);
     }
 
     return this.config;
