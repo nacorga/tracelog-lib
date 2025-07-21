@@ -40,6 +40,19 @@ Create a `CNAME` record in your DNS settings:
 Replace `YOUR_TRACELOG_ID` with your actual ID from your TraceLog account.
 This ensures seamless tracking across browsers.
 
+## 🔀 Send events to your own server
+
+If you prefer to store analytics data on your infrastructure, provide a custom
+endpoint when initializing TraceLog:
+
+```javascript
+TraceLog.init('your-tracking-id', {
+  customApiUrl: 'https://analytics.example.com/tracelog',
+});
+```
+
+All events will be POSTed directly to this URL instead of TraceLog's servers.
+
 
 ## 🎯 Quick Integration Example
 

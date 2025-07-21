@@ -53,6 +53,16 @@ export class ConfigManager {
       return this.config;
     }
 
+    if (config.customApiUrl) {
+      const merged: Config = {
+        ...DEFAULT_TRACKING_API_CONFIG,
+        ...config,
+      };
+
+      this.config = this.applyConfigCorrections(merged);
+      return this.config;
+    }
+
     const result = await this.loadConfigWithValidation(id, config);
 
     if (result.warnings.length > 0) {
@@ -148,6 +158,21 @@ export class ConfigManager {
       }
     }
 
+    if (config.customApiUrl !== undefined) {
+      if (typeof config.customApiUrl === 'string') {
+        try {
+          const parsed = new URL(config.customApiUrl);
+          if (!['http:', 'https:'].includes(parsed.protocol)) {
+            errors.push('customApiUrl must use http or https');
+          }
+        } catch {
+          errors.push('customApiUrl must be a valid URL');
+        }
+      } else {
+        errors.push('customApiUrl must be a string');
+      }
+    }
+
     return { errors, warnings };
   }
 
@@ -181,6 +206,17 @@ export class ConfigManager {
       }
     }
 
+    if (config.customApiUrl !== undefined) {
+      try {
+        const parsed = new URL(config.customApiUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          errors.push('customApiUrl must use http or https');
+        }
+      } catch {
+        errors.push('customApiUrl must be a valid URL');
+      }
+    }
+
     return { errors, warnings };
   }
 
@@ -203,10 +239,22 @@ export class ConfigManager {
       correctedConfig.sessionTimeout = 15 * 60 * 1000;
     }
 
+    if (correctedConfig.customApiUrl) {
+      try {
+        const url = new URL(correctedConfig.customApiUrl);
+        correctedConfig.customApiUrl = url.href.replace(/\/$/, '');
+      } catch {
+        correctedConfig.customApiUrl = undefined;
+      }
+    }
+
     return correctedConfig;
   }
 
   private async fetchConfigWithRetry(config: AppConfig): Promise<ApiConfig | undefined> {
+    if (config.customApiUrl) {
+      return undefined;
+    }
     const now = Date.now();
 
     // Rate limiting (5 seconds)
@@ -229,11 +277,11 @@ export class ConfigManager {
     return this.fetchConfig(config);
   }
 
-  private async fetchConfig(_config: AppConfig): Promise<ApiConfig | undefined> {
+  private async fetchConfig(config: AppConfig): Promise<ApiConfig | undefined> {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     try {
-      const configUrl = this.getConfigUrl();
+      const configUrl = this.getConfigUrl(config.customApiUrl);
 
       if (!configUrl) {
         throw new Error('Config URL is not valid or not allowed');
@@ -304,7 +352,16 @@ export class ConfigManager {
     }
   }
 
-  private getConfigUrl(): string | undefined {
+  private getConfigUrl(customApiUrl?: string): string | undefined {
+    if (customApiUrl) {
+      try {
+        const url = new URL(customApiUrl);
+        return `${url.origin}${url.pathname.replace(/\/$/, '')}/config`;
+      } catch {
+        return undefined;
+      }
+    }
+
     if (!this.id) {
       return undefined;
     }
@@ -337,6 +394,15 @@ export class ConfigManager {
   }
 
   getApiUrl(): string | undefined {
+    if (this.config.customApiUrl) {
+      try {
+        new URL(this.config.customApiUrl);
+        return this.config.customApiUrl;
+      } catch {
+        return undefined;
+      }
+    }
+
     if (!this.id || this.isDemoMode()) {
       return undefined;
     }
