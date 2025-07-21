@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TraceLog HTTP Validation Test</title>
+</head>
+<body>
+  <button id="test-button" data-testid="test-button">Click</button>
+  <script type="module">
+    import { TraceLog } from './tracelog.js';
+    TraceLog.init('custom-id', {
+      customApiUrl: 'http://localhost:3000/collect'
+    });
+    document.getElementById('test-button')?.addEventListener('click', () => {
+      TraceLog.event('test', { foo: 'bar' });
+    });
+  </script>
+</body>
+</html>
