@@ -42,26 +42,35 @@ This ensures seamless tracking across browsers.
 
 ## 🔀 Send events to your own server
 
-If you prefer to store analytics data on your infrastructure, provide a custom
-endpoint when initializing TraceLog:
+If you prefer to store analytics data on your own infrastructure, you can configure TraceLog to send events to a custom endpoint.
 
 ```javascript
 TraceLog.init('your-tracking-id', {
   customApiUrl: 'https://analytics.example.com/tracelog',
-  // When using a custom URL, supply your own API config
+  // Optionally load tracking config from your backend
+  customApiConfigUrl: 'https://analytics.example.com/tracelog/config',
+  // Or provide config manually
   apiConfig: {
     samplingRate: 1,
     qaMode: false,
+    excludedUrlPaths: ['/admin', '/debug'],
+    tags: ['marketing', 'beta']
   },
-  // Optionally fetch API config from your backend
-  customApiConfigUrl: 'https://analytics.example.com/tracelog/config',
 });
 ```
 
-All events will be POSTed directly to this URL instead of TraceLog's servers.
-If `customApiConfigUrl` is supplied, TraceLog will load API configuration from
-that endpoint so you can change settings dynamically. Otherwise, remote
-configuration is skipped and you must manage `apiConfig` values yourself.
+### How It Works
+- All events will be POSTed directly to `customApiUrl` instead of TraceLog’s servers.
+- If `customApiConfigUrl` is provided, the SDK will fetch configuration from that URL once on initialization.
+- If `customApiConfigUrl` is omitted, the SDK will use the static apiConfig provided.
+
+### Limitations in Custom Mode
+- Configuration options managed from the TraceLog platform — such as tags, dashboards, or AI reports — are not available in this mode.
+- You are fully responsible for handling data, applying config, and managing downstream processing on your server.
+
+### Notes
+- When using this mode, TraceLog does not store or process any data.
+- If no valid config is provided, the SDK falls back to safe defaults: `samplingRate = 1`, `qaMode = false`, and no `excludedUrlPaths`.
 
 
 ## 🎯 Quick Integration Example

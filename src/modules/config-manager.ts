@@ -1,6 +1,6 @@
 import { AppConfig, ApiConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
-import { sanitizeApiConfig, isValidUrl } from '../utils';
+import { sanitizeApiConfig, isValidUrl, validateFinalConfig, validateAppConfig } from '../utils';
 import { VERSION } from '../version';
 
 interface ErrorReporter {
@@ -55,6 +55,7 @@ export class ConfigManager {
 
     if (config.customApiUrl) {
       const { apiConfig = {}, customApiConfigUrl, ...rest } = config;
+
       let merged: Config = {
         ...DEFAULT_TRACKING_API_CONFIG,
         ...apiConfig,
@@ -70,6 +71,7 @@ export class ConfigManager {
           }
         } catch (error) {
           console.error('[TraceLog] Custom config fetch failed:', error);
+
           this.errorReporter.reportError({
             message: `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
             severity: 'medium',
@@ -78,6 +80,7 @@ export class ConfigManager {
       }
 
       this.config = this.applyConfigCorrections(merged);
+
       return this.config;
     }
 
@@ -113,7 +116,7 @@ export class ConfigManager {
     };
 
     try {
-      const validationResult = this.validateAppConfig(config);
+      const validationResult = validateAppConfig(config);
 
       errors.push(...validationResult.errors);
       warnings.push(...validationResult.warnings);
@@ -134,7 +137,7 @@ export class ConfigManager {
     }
 
     try {
-      const finalValidation = this.validateFinalConfig(finalConfig);
+      const finalValidation = validateFinalConfig(finalConfig);
 
       errors.push(...finalValidation.errors);
       warnings.push(...finalValidation.warnings);
@@ -149,162 +152,6 @@ export class ConfigManager {
       errors,
       warnings,
     };
-  }
-
-  private validateAppConfig(config: AppConfig): { errors: string[]; warnings: string[] } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    if (config.sessionTimeout !== undefined) {
-      if (typeof config.sessionTimeout !== 'number') {
-        errors.push('sessionTimeout must be a number');
-      } else if (config.sessionTimeout < 30_000) {
-        errors.push('sessionTimeout must be at least 30 seconds (30000ms)');
-      } else if (config.sessionTimeout > 24 * 60 * 60 * 1000) {
-        warnings.push('sessionTimeout is very long (>24 hours), consider reducing it');
-      }
-    }
-
-    if (config.globalMetadata !== undefined) {
-      if (typeof config.globalMetadata !== 'object' || config.globalMetadata === null) {
-        errors.push('globalMetadata must be an object');
-      } else {
-        const metadataSize = JSON.stringify(config.globalMetadata).length;
-
-        if (metadataSize > 10_240) {
-          errors.push('globalMetadata is too large (max 10KB)');
-        }
-
-        if (Object.keys(config.globalMetadata).length > 12) {
-          errors.push('globalMetadata has too many keys (max 12)');
-        }
-      }
-    }
-
-    if (config.customApiUrl !== undefined) {
-      if (typeof config.customApiUrl === 'string') {
-        try {
-          const parsed = new URL(config.customApiUrl);
-          if (!['http:', 'https:'].includes(parsed.protocol)) {
-            errors.push('customApiUrl must use http or https');
-          }
-        } catch {
-          errors.push('customApiUrl must be a valid URL');
-        }
-      } else {
-        errors.push('customApiUrl must be a string');
-      }
-    }
-
-    if (config.customApiConfigUrl !== undefined) {
-      if (typeof config.customApiConfigUrl === 'string') {
-        try {
-          const parsed = new URL(config.customApiConfigUrl);
-          if (!['http:', 'https:'].includes(parsed.protocol)) {
-            errors.push('customApiConfigUrl must use http or https');
-          }
-        } catch {
-          errors.push('customApiConfigUrl must be a valid URL');
-        }
-      } else {
-        errors.push('customApiConfigUrl must be a string');
-      }
-    }
-
-    if (config.apiConfig !== undefined) {
-      if (typeof config.apiConfig !== 'object' || config.apiConfig === null) {
-        errors.push('apiConfig must be an object');
-      } else {
-        const { samplingRate, qaMode, tags, excludedUrlPaths } = config.apiConfig;
-
-        if (samplingRate !== undefined && (typeof samplingRate !== 'number' || samplingRate < 0 || samplingRate > 1)) {
-          errors.push('apiConfig.samplingRate must be between 0 and 1');
-        }
-
-        if (qaMode !== undefined && typeof qaMode !== 'boolean') {
-          errors.push('apiConfig.qaMode must be a boolean');
-        }
-
-        if (tags !== undefined && !Array.isArray(tags)) {
-          errors.push('apiConfig.tags must be an array');
-        }
-
-        if (excludedUrlPaths !== undefined) {
-          if (Array.isArray(excludedUrlPaths)) {
-            for (const [index, path] of excludedUrlPaths.entries()) {
-              if (typeof path === 'string') {
-                try {
-                  new RegExp(path);
-                } catch {
-                  errors.push(`apiConfig.excludedUrlPaths[${index}] is not a valid regex pattern`);
-                }
-              } else {
-                errors.push(`apiConfig.excludedUrlPaths[${index}] must be a string`);
-              }
-            }
-          } else {
-            errors.push('apiConfig.excludedUrlPaths must be an array');
-          }
-        }
-      }
-    }
-
-    return { errors, warnings };
-  }
-
-  private validateFinalConfig(config: Config): { errors: string[]; warnings: string[] } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    if (config.samplingRate !== undefined) {
-      if (typeof config.samplingRate !== 'number') {
-        errors.push('samplingRate must be a number');
-      } else if (config.samplingRate < 0 || config.samplingRate > 1) {
-        errors.push('samplingRate must be between 0 and 1');
-      }
-    }
-
-    if (config.excludedUrlPaths !== undefined) {
-      if (Array.isArray(config.excludedUrlPaths)) {
-        for (const [index, path] of config.excludedUrlPaths.entries()) {
-          if (typeof path === 'string') {
-            try {
-              new RegExp(path);
-            } catch {
-              errors.push(`excludedUrlPaths[${index}] is not a valid regex pattern`);
-            }
-          } else {
-            errors.push(`excludedUrlPaths[${index}] must be a string`);
-          }
-        }
-      } else {
-        errors.push('excludedUrlPaths must be an array');
-      }
-    }
-
-    if (config.customApiUrl !== undefined) {
-      try {
-        const parsed = new URL(config.customApiUrl);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          errors.push('customApiUrl must use http or https');
-        }
-      } catch {
-        errors.push('customApiUrl must be a valid URL');
-      }
-    }
-
-    if (config.customApiConfigUrl !== undefined) {
-      try {
-        const parsed = new URL(config.customApiConfigUrl);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          errors.push('customApiConfigUrl must use http or https');
-        }
-      } catch {
-        errors.push('customApiConfigUrl must be a valid URL');
-      }
-    }
-
-    return { errors, warnings };
   }
 
   private applyConfigCorrections(config: Config): Config {
