@@ -1,6 +1,6 @@
 import { AppConfig, ApiConfig } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG } from '../constants';
-import { sanitizeApiConfig, isValidUrl } from '../utils';
+import { sanitizeApiConfig, isValidUrl, buildDynamicApiUrl } from '../utils';
 import { VERSION } from '../version';
 import { CONFIG_CONSTANTS } from './config-constants';
 import { IRateLimiter } from './rate-limiter';
@@ -115,7 +115,7 @@ export class ConfigFetcher implements IConfigFetcher {
       try {
         const urlParameters = new URLSearchParams(window.location.search);
         const isQaMode = urlParameters.get('qaMode') === 'true';
-        const baseUrl = this.buildDynamicApiUrl(id);
+        const baseUrl = buildDynamicApiUrl(id);
 
         if (!baseUrl) {
           return undefined;
@@ -140,46 +140,6 @@ export class ConfigFetcher implements IConfigFetcher {
     }
 
     return undefined;
-  }
-
-  private buildDynamicApiUrl(id: string): string | undefined {
-    try {
-      const url = new URL(window.location.href);
-      const host = url.hostname;
-
-      if (!host) {
-        return undefined;
-      }
-
-      const parts = host.split('.');
-
-      if (parts.length < 2) {
-        return undefined;
-      }
-
-      const tld = parts.slice(-2).join('.');
-      const multiTlds = new Set(['co.uk', 'com.au', 'co.jp', 'co.in', 'com.br', 'com.mx']);
-
-      const cleanDomain = multiTlds.has(tld) && parts.length >= 3 ? parts.slice(-3).join('.') : tld;
-      const apiUrl = `https://${id}.${cleanDomain}`;
-
-      if (!this.validateApiUrl(apiUrl)) {
-        return undefined;
-      }
-
-      return apiUrl;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private validateApiUrl(url: string): boolean {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-      return false;
-    }
   }
 
   private isUrlSecure(url: string, allowHttp = false): boolean {
