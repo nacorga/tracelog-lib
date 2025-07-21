@@ -1,6 +1,6 @@
 import { AppConfig, Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
-import { isValidUrl } from '../utils';
+import { isValidUrl, buildDynamicApiUrl } from '../utils';
 import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory, IErrorReporter } from '../config';
 
 export class ConfigManager {
@@ -60,7 +60,7 @@ export class ConfigManager {
     }
 
     try {
-      const apiUrl = this.buildDynamicApiUrl(this.id);
+      const apiUrl = buildDynamicApiUrl(this.id);
 
       if (!apiUrl) {
         return undefined;
@@ -75,46 +75,6 @@ export class ConfigManager {
       return apiUrl;
     } catch {
       return undefined;
-    }
-  }
-
-  private buildDynamicApiUrl(id: string): string | undefined {
-    try {
-      const url = new URL(window.location.href);
-      const host = url.hostname;
-
-      if (!host) {
-        return undefined;
-      }
-
-      const parts = host.split('.');
-
-      if (parts.length < 2) {
-        return undefined;
-      }
-
-      const tld = parts.slice(-2).join('.');
-      const multiTlds = new Set(['co.uk', 'com.au', 'co.jp', 'co.in', 'com.br', 'com.mx']);
-
-      const cleanDomain = multiTlds.has(tld) && parts.length >= 3 ? parts.slice(-3).join('.') : tld;
-      const apiUrl = `https://${id}.${cleanDomain}`;
-
-      if (!this.validateApiUrl(apiUrl)) {
-        return undefined;
-      }
-
-      return apiUrl;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private validateApiUrl(url: string): boolean {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-      return false;
     }
   }
 
