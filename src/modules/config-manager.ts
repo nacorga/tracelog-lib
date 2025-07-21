@@ -54,12 +54,28 @@ export class ConfigManager {
     }
 
     if (config.customApiUrl) {
-      const { apiConfig = {}, ...rest } = config;
-      const merged: Config = {
+      const { apiConfig = {}, customApiConfigUrl, ...rest } = config;
+      let merged: Config = {
         ...DEFAULT_TRACKING_API_CONFIG,
         ...apiConfig,
         ...rest,
       };
+
+      if (customApiConfigUrl) {
+        try {
+          const remote = await this.fetchConfigWithRetry(config);
+
+          if (remote) {
+            merged = { ...merged, ...remote };
+          }
+        } catch (error) {
+          console.error('[TraceLog] Custom config fetch failed:', error);
+          this.errorReporter.reportError({
+            message: `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            severity: 'medium',
+          });
+        }
+      }
 
       this.config = this.applyConfigCorrections(merged);
       return this.config;
@@ -180,6 +196,21 @@ export class ConfigManager {
       }
     }
 
+    if (config.customApiConfigUrl !== undefined) {
+      if (typeof config.customApiConfigUrl === 'string') {
+        try {
+          const parsed = new URL(config.customApiConfigUrl);
+          if (!['http:', 'https:'].includes(parsed.protocol)) {
+            errors.push('customApiConfigUrl must use http or https');
+          }
+        } catch {
+          errors.push('customApiConfigUrl must be a valid URL');
+        }
+      } else {
+        errors.push('customApiConfigUrl must be a string');
+      }
+    }
+
     if (config.apiConfig !== undefined) {
       if (typeof config.apiConfig !== 'object' || config.apiConfig === null) {
         errors.push('apiConfig must be an object');
@@ -262,6 +293,17 @@ export class ConfigManager {
       }
     }
 
+    if (config.customApiConfigUrl !== undefined) {
+      try {
+        const parsed = new URL(config.customApiConfigUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          errors.push('customApiConfigUrl must use http or https');
+        }
+      } catch {
+        errors.push('customApiConfigUrl must be a valid URL');
+      }
+    }
+
     return { errors, warnings };
   }
 
@@ -293,11 +335,20 @@ export class ConfigManager {
       }
     }
 
+    if (correctedConfig.customApiConfigUrl) {
+      try {
+        const url = new URL(correctedConfig.customApiConfigUrl);
+        correctedConfig.customApiConfigUrl = url.href.replace(/\/$/, '');
+      } catch {
+        correctedConfig.customApiConfigUrl = undefined;
+      }
+    }
+
     return correctedConfig;
   }
 
   private async fetchConfigWithRetry(config: AppConfig): Promise<ApiConfig | undefined> {
-    if (config.customApiUrl) {
+    if (!config.customApiConfigUrl && config.customApiUrl) {
       return undefined;
     }
     const now = Date.now();
@@ -326,7 +377,7 @@ export class ConfigManager {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     try {
-      const configUrl = this.getConfigUrl(config.customApiUrl);
+      const configUrl = this.getConfigUrl(config.customApiConfigUrl, config.customApiUrl);
 
       if (!configUrl) {
         throw new Error('Config URL is not valid or not allowed');
@@ -397,7 +448,16 @@ export class ConfigManager {
     }
   }
 
-  private getConfigUrl(customApiUrl?: string): string | undefined {
+  private getConfigUrl(customApiConfigUrl?: string, customApiUrl?: string): string | undefined {
+    if (customApiConfigUrl) {
+      try {
+        const url = new URL(customApiConfigUrl);
+        return url.href.replace(/\/$/, '');
+      } catch {
+        return undefined;
+      }
+    }
+
     if (customApiUrl) {
       try {
         const url = new URL(customApiUrl);

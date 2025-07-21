@@ -53,11 +53,15 @@ TraceLog.init('your-tracking-id', {
     samplingRate: 1,
     qaMode: false,
   },
+  // Optionally fetch API config from your backend
+  customApiConfigUrl: 'https://analytics.example.com/tracelog/config',
 });
 ```
 
 All events will be POSTed directly to this URL instead of TraceLog's servers.
-Remote configuration will be skipped, so adjust analytics behavior via `apiConfig` as needed.
+If `customApiConfigUrl` is supplied, TraceLog will load API configuration from
+that endpoint so you can change settings dynamically. Otherwise, remote
+configuration is skipped and you must manage `apiConfig` values yourself.
 
 
 ## 🎯 Quick Integration Example
