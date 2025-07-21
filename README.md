@@ -72,6 +72,11 @@ TraceLog.init('your-tracking-id', {
 - If no valid config is provided, the SDK falls back to safe defaults: `samplingRate = 1`, `qaMode = false`, and no `excludedUrlPaths`.
 - If you provide endpoints with the `http` protocol, set `allowHttp: true` to explicitly permit them. This helps avoid accidental insecure traffic in production environments.
 
+### Common Issues When Using Custom APIs
+- **CORS errors** – If your custom endpoints are on a different domain, make sure they send the proper `Access-Control-Allow-Origin` headers so browsers allow the requests.
+- **Invalid or unreachable URLs** – Double-check that `customApiUrl` and `customApiConfigUrl` are correct and that your server is running.
+- **Insecure protocol blocked** – When your site uses HTTPS, requests to an `http` endpoint will fail unless `allowHttp: true` is set.
+- **Malformed config** – Ensure `customApiConfigUrl` returns valid JSON; otherwise the SDK falls back to defaults.
 
 ## 🎯 Quick Integration Example
 
