@@ -48,10 +48,16 @@ endpoint when initializing TraceLog:
 ```javascript
 TraceLog.init('your-tracking-id', {
   customApiUrl: 'https://analytics.example.com/tracelog',
+  // When using a custom URL, supply your own API config
+  apiConfig: {
+    samplingRate: 1,
+    qaMode: false,
+  },
 });
 ```
 
 All events will be POSTed directly to this URL instead of TraceLog's servers.
+Remote configuration will be skipped, so adjust analytics behavior via `apiConfig` as needed.
 
 
 ## 🎯 Quick Integration Example

@@ -54,9 +54,11 @@ export class ConfigManager {
     }
 
     if (config.customApiUrl) {
+      const { apiConfig = {}, ...rest } = config;
       const merged: Config = {
         ...DEFAULT_TRACKING_API_CONFIG,
-        ...config,
+        ...apiConfig,
+        ...rest,
       };
 
       this.config = this.applyConfigCorrections(merged);
@@ -87,7 +89,12 @@ export class ConfigManager {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    let finalConfig: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...config };
+    const { apiConfig = {}, ...rest } = config;
+    let finalConfig: Config = {
+      ...DEFAULT_TRACKING_API_CONFIG,
+      ...apiConfig,
+      ...rest,
+    };
 
     try {
       const validationResult = this.validateAppConfig(config);
@@ -170,6 +177,44 @@ export class ConfigManager {
         }
       } else {
         errors.push('customApiUrl must be a string');
+      }
+    }
+
+    if (config.apiConfig !== undefined) {
+      if (typeof config.apiConfig !== 'object' || config.apiConfig === null) {
+        errors.push('apiConfig must be an object');
+      } else {
+        const { samplingRate, qaMode, tags, excludedUrlPaths } = config.apiConfig;
+
+        if (samplingRate !== undefined && (typeof samplingRate !== 'number' || samplingRate < 0 || samplingRate > 1)) {
+          errors.push('apiConfig.samplingRate must be between 0 and 1');
+        }
+
+        if (qaMode !== undefined && typeof qaMode !== 'boolean') {
+          errors.push('apiConfig.qaMode must be a boolean');
+        }
+
+        if (tags !== undefined && !Array.isArray(tags)) {
+          errors.push('apiConfig.tags must be an array');
+        }
+
+        if (excludedUrlPaths !== undefined) {
+          if (Array.isArray(excludedUrlPaths)) {
+            for (const [index, path] of excludedUrlPaths.entries()) {
+              if (typeof path === 'string') {
+                try {
+                  new RegExp(path);
+                } catch {
+                  errors.push(`apiConfig.excludedUrlPaths[${index}] is not a valid regex pattern`);
+                }
+              } else {
+                errors.push(`apiConfig.excludedUrlPaths[${index}] must be a string`);
+              }
+            }
+          } else {
+            errors.push('apiConfig.excludedUrlPaths must be an array');
+          }
+        }
       }
     }
 

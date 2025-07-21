@@ -17,6 +17,11 @@ export interface AppConfig {
    * default domain generation and use this URL directly.
    */
   customApiUrl?: string;
+  /**
+   * Provide API-level configuration when using a custom server. If set,
+   * these values override the defaults and no remote config will be fetched.
+   */
+  apiConfig?: Partial<ApiConfig>;
 }
 
-export interface Config extends ApiConfig, AppConfig {}
+export type Config = ApiConfig & Omit<AppConfig, 'apiConfig'>;
