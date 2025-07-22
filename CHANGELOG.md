@@ -1,6 +1,22 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.2.0](https://github.com/nacorga/tracelog-client/compare/v0.1.0...v0.2.0) (2025-07-22)
+
+
+### Features
+
+* add allowHttp configuration option and enhance URL validation ([1ea9220](https://github.com/nacorga/tracelog-client/commit/1ea922018fee1e8808a501b18bf96fcb1f9cad34))
+* allow custom event endpoint ([f033f13](https://github.com/nacorga/tracelog-client/commit/f033f13d72937ded2352fb65bbc7a46688d5f12c))
+* allow providing api config with custom endpoint ([57d6c9a](https://github.com/nacorga/tracelog-client/commit/57d6c9a30d2b5ad9424bb2d92af1c36b40ecf357))
+* anonymize session events on excluded paths ([75d798d](https://github.com/nacorga/tracelog-client/commit/75d798d8cd789d85364309f96b7ecaa89fbc49e3))
+* **config:** validate custom API URL protocol ([01bbab8](https://github.com/nacorga/tracelog-client/commit/01bbab8256aec1aeb368170715eaa400e9e62394))
+* enhance configuration validation and documentation for custom API settings ([54bfeee](https://github.com/nacorga/tracelog-client/commit/54bfeee333a98ada2cbfba90c2358e43c621d76c))
+* enhance tag handling in EventManager and update types for improved structure ([9ad262d](https://github.com/nacorga/tracelog-client/commit/9ad262d7cb7f4a687a918902974d85b28ca991fe))
+* handle sessions on excluded routes ([28206e8](https://github.com/nacorga/tracelog-client/commit/28206e8e0baa8ce4004d03582e28ba8018005034))
+* implement modular configuration management with fetcher, loader, and validator ([6439013](https://github.com/nacorga/tracelog-client/commit/64390135675fce603017f6e83ce55d3573aa3cbc))
+* support dynamic config via customApiConfigUrl ([f434127](https://github.com/nacorga/tracelog-client/commit/f434127d5ae55ed416c9690e5e251fe20c6f59df))
+
 ## [0.1.0](https://github.com/nacorga/tracelog-client/compare/v0.0.6...v0.1.0) (2025-07-16)
 
 
