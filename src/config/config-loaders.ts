@@ -52,7 +52,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
           merged = { ...merged, ...remote };
         }
       } catch (error) {
-        this.log('error', `Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw new Error(`Custom config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
@@ -63,11 +63,11 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     const result = this.validator.validate(config);
 
     if (result.errors.length > 0) {
-      this.log('error', `Configuration errors: ${result.errors.join('; ')}`);
+      throw new Error(`Configuration errors: ${result.errors.join('; ')}`);
     }
 
     if (result.warnings.length > 0) {
-      this.log('warning', `Configuration warnings: ${result.warnings.join('; ')}`);
+      throw new Error(`Configuration warnings: ${result.warnings.join('; ')}`);
     }
   }
 
@@ -151,11 +151,11 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     }
 
     if (warnings.length > 0) {
-      this.log('warning', `Configuration warnings: ${warnings.join('; ')}`);
+      throw new Error(`Configuration warnings: ${warnings.join('; ')}`);
     }
 
     if (errors.length > 0) {
-      this.log('error', `Configuration errors: ${errors.join('; ')}`);
+      throw new Error(`Configuration errors: ${errors.join('; ')}`);
     }
 
     return this.applyCorrections(finalConfig);

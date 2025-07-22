@@ -37,10 +37,7 @@ export class Tracking extends Base {
     super();
 
     this.initializationPromise = this.initializeTracking(id, config).catch((error) => {
-      this.log(
-        'error',
-        `[TraceLog] Initialization rejected: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.log('error', `Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 
@@ -105,7 +102,6 @@ export class Tracking extends Base {
       }
     } catch (error) {
       this.initializationState = InitializationState.FAILED;
-      this.log('error', `Initialization error: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
       throw error;
     }
@@ -407,19 +403,19 @@ export class Tracking extends Base {
     }
 
     if (this.initializationState === InitializationState.FAILED) {
-      throw new Error('[TraceLog] Initialization failed, cannot perform operation');
+      throw new Error('Initialization failed, cannot perform operation');
     }
 
     if (this.initializationState === InitializationState.INITIALIZING) {
       try {
         await this.initializationPromise;
       } catch {
-        throw new Error('[TraceLog] Initialization failed during wait');
+        throw new Error('Initialization failed during wait');
       }
     }
 
     if (this.initializationState === InitializationState.UNINITIALIZED) {
-      throw new Error('[TraceLog] Not initialized');
+      throw new Error('Not initialized');
     }
   }
 }
