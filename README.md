@@ -2,122 +2,90 @@ Welcome to **TraceLog**, a web analytics platform that combines user behavior tr
 
 This quick-start guide covers everything you need to integrate TraceLog into your project in minutes.
 
-## 🔑 Before you begin
+## 🔀 Choose Your Setup Mode
 
-To fully leverage TraceLog, ensure you have:
+### 🌐 **Option A: Managed** (Recommended)
+Dashboard, AI insights, easy setup. Data processed by TraceLog.
 
-* ✅ An account at [tracelog.io](https://tracelog.io) to access your dashboard and manage data.
-* ✅ Your unique TraceLog ID, available in your account after registration.
+### 🏠 **Option B: Self-Hosted**
+Full data control, no external dependencies. You manage everything.
 
 ## 📦 Installation
 
-Add the TraceLog client to your project using your favorite package manager:
-
 ```bash
 npm install @tracelog/client
-
-# or
-
-yarn add @tracelog/client
-
-# or
-
-pnpm add @tracelog/client
 ```
 
-## 🌐 Subdomain Setup (Important!)
+## 🌐 Option A: Managed
 
-Modern browsers and ad blockers (Safari, Brave, uBlock, etc.) might restrict cross-origin tracking scripts. To avoid these issues, **set up your own dedicated subdomain using your TraceLog ID**.
-
-### 🔧 DNS Configuration
-
-Create a `CNAME` record in your DNS settings:
-
-| Host               | Type  | Value             |
-| ------------------ | ----- | ----------------- |
-| `YOUR_TRACELOG_ID` | CNAME | `mdw.tracelog.io` |
-
-Replace `YOUR_TRACELOG_ID` with your actual ID from your TraceLog account.
-This ensures seamless tracking across browsers.
-
-## 🔀 Send events to your own server
-
-If you prefer to store analytics data on your own infrastructure, you can configure TraceLog to send events to a custom endpoint.
-
-```javascript
-TraceLog.init({
-  id: 'your-tracking-id',
-  customApiUrl: 'https://analytics.example.com/tracelog',
-  // Optionally load tracking config from your backend
-  customApiConfigUrl: 'https://analytics.example.com/tracelog/config',
-  // Or provide config manually
-  apiConfig: {
-    samplingRate: 1,
-    qaMode: false,
-    excludedUrlPaths: ['/admin', '/debug'],
-  }
-});
-```
-
-### How It Works
-- All events will be POSTed directly to `customApiUrl` instead of TraceLog’s servers.
-- If `customApiConfigUrl` is provided, the SDK will fetch configuration from that URL once on initialization.
-- If `customApiConfigUrl` is omitted, the SDK will use the static apiConfig provided.
-
-#### Configuration Priority
-When both `customApiConfigUrl` and `apiConfig` are provided:
-1. **Remote config has priority**: Settings from `customApiConfigUrl` will override any matching properties in the static `apiConfig`
-2. **Static config as fallback**: Properties not present in the remote config will use values from `apiConfig`
-3. **Default values**: Any missing properties will use TraceLog's built-in defaults
-
-Example: If your static `apiConfig` sets `samplingRate: 0.5` but the remote config returns `samplingRate: 0.8`, the final value will be `0.8`.
-
-### Limitations in Custom Mode
-- Configuration options managed from the TraceLog platform — such as tags, dashboards, or AI reports — are not available in this mode.
-- You are fully responsible for handling data, applying config, and managing downstream processing on your server.
-
-### Notes
-- When using this mode, TraceLog does not store or process any data.
-- If no valid config is provided, the SDK falls back to safe defaults: `samplingRate = 1`, `qaMode = false`, and no `excludedUrlPaths`.
-- If you provide endpoints with the `http` protocol, set `allowHttp: true` to explicitly permit them. This helps avoid accidental insecure traffic in production environments.
-
-### Common Issues When Using Custom APIs
-- **CORS errors** – If your custom endpoints are on a different domain, make sure they send the proper `Access-Control-Allow-Origin` headers so browsers allow the requests.
-- **Invalid or unreachable URLs** – Double-check that `customApiUrl` and `customApiConfigUrl` are correct and that your server is running.
-- **Insecure protocol blocked** – When your site uses HTTPS, requests to an `http` endpoint will fail unless `allowHttp: true` is set.
-- **Malformed config** – Ensure `customApiConfigUrl` returns valid JSON; otherwise the SDK falls back to defaults.
-
-## 🎯 Quick Integration Example
-
-Initialize TraceLog in your app and start tracking immediately:
+1. Sign up at [tracelog.io](https://tracelog.io)
+2. Get your Project ID from your dashboard
 
 ```javascript
 import { TraceLog } from '@tracelog/client';
 
-// Initialize tracking
 TraceLog.init({
-  id: 'your-tracking-id',
-  sessionTimeout: 300000, // Session timeout (e.g., 5 minutes)
-  globalMetadata: {
-    version: '1.0.0',
-    environment: 'production'
+  id: 'your-project-id' // Your Project ID from tracelog.io
+});
+
+TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
+```
+
+### Optional: Custom Subdomain
+
+Create `CNAME`: `analytics.yourdomain.com` → `mdw.tracelog.io` to bypass ad blockers.
+
+## 🏠 Option B: Self-Hosted
+
+**No TraceLog account needed** - all data goes to your servers.
+
+```javascript
+import { TraceLog } from '@tracelog/client';
+
+// Basic setup - events go to your API
+TraceLog.init({
+  customApiUrl: 'https://analytics.example.com/tracelog'
+});
+
+// With remote config from your backend
+TraceLog.init({
+  customApiUrl: 'https://analytics.example.com/tracelog',
+  customApiConfigUrl: 'https://analytics.example.com/config'
+});
+
+// With static config
+TraceLog.init({
+  customApiUrl: 'https://analytics.example.com/tracelog',
+  apiConfig: {
+    samplingRate: 1,
+    excludedUrlPaths: ['/admin']
   }
 });
 
-// Send your first custom event
-TraceLog.event('button_click', {
-  buttonId: 'subscribe-btn',
-  section: 'hero'
-});
+TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 ```
 
-That's it! 🎉 You're now tracking events in your application.
+### Configuration Rules
 
+**Self-hosted mode:**
+- ❌ Don't use `id` field (causes error)
+- ✅ `customApiUrl` is required
+- ⚠️ `customApiConfigUrl` only works with `customApiUrl`
 
-## 📖 What's Next?
+**Both modes:**
+- ⚠️ `TraceLog.init()` can only be called once
+- ⚠️ `sessionTimeout` uses milliseconds (min: 30000ms)
+- ⚠️ Use `allowHttp: true` only for development
 
-Dive deeper into TraceLog:
+### Troubleshooting
+- **CORS errors**: Add `Access-Control-Allow-Origin` headers to your server
+- **Config errors**: Ensure `customApiConfigUrl` returns valid JSON  
+- **HTTPS blocked**: Set `allowHttp: true` for development endpoints
 
-* [Detailed API Reference](https://www.tracelog.io/docs?guide=api)
-* [Advanced Configuration](https://www.tracelog.io/docs?guide=advanced-configuration)
+---
+
+## 📖 Documentation
+
+* [API Reference](https://www.tracelog.io/docs?guide=api)
+* [Advanced Configuration](https://www.tracelog.io/docs?guide=advanced-configuration)  
 * [Best Practices](https://www.tracelog.io/docs?guide=best-practices)
