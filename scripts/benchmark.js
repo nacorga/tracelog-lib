@@ -197,8 +197,9 @@ class BenchmarkRunner {
               // 1. INITIALIZATION BENCHMARKS
               console.log('🚀 Testing initialization performance...');
               const initStartTime = performance.now();
-              window.TraceLog.init('benchmark-test', {
-                globalMetadata: { 
+              window.TraceLog.init({
+                id: 'benchmark-test',
+                globalMetadata: {
                   test: true,
                   env: 'benchmark',
                   version: '1.0.0'

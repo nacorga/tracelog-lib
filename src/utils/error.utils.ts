@@ -1,5 +1,17 @@
 import { ValidationError } from '../types';
 
+export const logInfo = (message: string): void => {
+  console.log(`[TraceLog] ${message}`);
+};
+
+export const logWarning = (message: string): void => {
+  console.warn(`[TraceLog] ${message}`);
+};
+
+export const logError = (message: string): void => {
+  console.error(`[TraceLog] ${message}`);
+};
+
 export const validateRequired = <T>(value: T, fieldName: string): NonNullable<T> => {
   if (value === null || value === undefined) {
     throw new ValidationError(`${fieldName} is required`, fieldName, value);

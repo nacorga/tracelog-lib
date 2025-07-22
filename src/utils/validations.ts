@@ -4,7 +4,7 @@ import {
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
 } from '../constants';
-import { EventType, MetadataType, ScrollDirection, EventData, Queue } from '../types';
+import { EventType, MetadataType, ScrollDirection, EventData, Queue, AppConfig, Config } from '../types';
 import { sanitizeMetadata } from './sanitize.utils';
 
 export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
@@ -36,14 +36,15 @@ export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
   return true;
 };
 
-export const isValidUrl = (url: string, allowedDomain: string): boolean => {
+export const isValidUrl = (url: string, allowedDomain: string, allowHttp = false): boolean => {
   try {
     const parsed = new URL(url);
     const isHttps = parsed.protocol === 'https:';
+    const isHttp = parsed.protocol === 'http:';
     const hostname = parsed.hostname;
     const isAllowedDomain = hostname === allowedDomain || hostname.endsWith('.' + allowedDomain);
 
-    return isHttps && isAllowedDomain;
+    return (isHttps || (allowHttp && isHttp)) && isAllowedDomain;
   } catch {
     return false;
   }
@@ -299,4 +300,132 @@ export const isEventValid = (
   }
 
   return isValidMetadata(eventName, metadata, 'customEvent');
+};
+
+/**
+ * Validates a sampling rate value
+ */
+const validateSamplingRate = (samplingRate: unknown, errors: string[]): void => {
+  if (samplingRate !== undefined) {
+    if (typeof samplingRate !== 'number') {
+      errors.push('samplingRate must be a number');
+    } else if (samplingRate < 0 || samplingRate > 1) {
+      errors.push('samplingRate must be between 0 and 1');
+    }
+  }
+};
+
+/**
+ * Validates excluded URL paths array
+ */
+const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], prefix = ''): void => {
+  if (excludedUrlPaths !== undefined) {
+    if (Array.isArray(excludedUrlPaths)) {
+      for (const [index, path] of excludedUrlPaths.entries()) {
+        if (typeof path === 'string') {
+          try {
+            new RegExp(path);
+          } catch {
+            errors.push(`${prefix}excludedUrlPaths[${index}] is not a valid regex pattern`);
+          }
+        } else {
+          errors.push(`${prefix}excludedUrlPaths[${index}] must be a string`);
+        }
+      }
+    } else {
+      errors.push(`${prefix}excludedUrlPaths must be an array`);
+    }
+  }
+};
+
+/**
+ * Validates a URL field (customApiUrl or customApiConfigUrl)
+ */
+const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: string, errors: string[]): void => {
+  if (url !== undefined) {
+    if (typeof url === 'string') {
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          errors.push(`${fieldName} must use http or https`);
+        } else if (parsed.protocol === 'http:' && allowHttp !== true) {
+          errors.push(`${fieldName} using http requires allowHttp=true`);
+        }
+      } catch {
+        errors.push(`${fieldName} must be a valid URL`);
+      }
+    } else {
+      errors.push(`${fieldName} must be a string`);
+    }
+  }
+};
+
+export const validateAppConfig = (config: AppConfig): { errors: string[]; warnings: string[] } => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (config.sessionTimeout !== undefined) {
+    if (typeof config.sessionTimeout !== 'number') {
+      errors.push('sessionTimeout must be a number');
+    } else if (config.sessionTimeout < 30_000) {
+      errors.push('sessionTimeout must be at least 30 seconds (30000ms)');
+    } else if (config.sessionTimeout > 24 * 60 * 60 * 1000) {
+      warnings.push('sessionTimeout is very long (>24 hours), consider reducing it');
+    }
+  }
+
+  if (config.globalMetadata !== undefined) {
+    if (typeof config.globalMetadata !== 'object' || config.globalMetadata === null) {
+      errors.push('globalMetadata must be an object');
+    } else {
+      const metadataSize = JSON.stringify(config.globalMetadata).length;
+
+      if (metadataSize > 10_240) {
+        errors.push('globalMetadata is too large (max 10KB)');
+      }
+
+      if (Object.keys(config.globalMetadata).length > 12) {
+        errors.push('globalMetadata has too many keys (max 12)');
+      }
+    }
+  }
+
+  // Use helper functions for common validations
+  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
+  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
+
+  if (config.apiConfig !== undefined) {
+    if (typeof config.apiConfig !== 'object' || config.apiConfig === null) {
+      errors.push('apiConfig must be an object');
+    } else {
+      const { samplingRate, qaMode, tags, excludedUrlPaths } = config.apiConfig;
+
+      validateSamplingRate(samplingRate, errors);
+
+      if (qaMode !== undefined && typeof qaMode !== 'boolean') {
+        errors.push('apiConfig.qaMode must be a boolean');
+      }
+
+      if (tags !== undefined && !Array.isArray(tags)) {
+        errors.push('apiConfig.tags must be an array');
+      }
+
+      validateExcludedUrlPaths(excludedUrlPaths, errors, 'apiConfig.');
+    }
+  }
+
+  return { errors, warnings };
+};
+
+export const validateFinalConfig = (config: Config): { errors: string[]; warnings: string[] } => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Use helper functions for common validations
+  validateSamplingRate(config.samplingRate, errors);
+  validateExcludedUrlPaths(config.excludedUrlPaths, errors);
+  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
+  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
+
+  return { errors, warnings };
 };

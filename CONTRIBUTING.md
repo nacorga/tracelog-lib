@@ -177,7 +177,8 @@ Create test files to verify functionality:
 import { TraceLog } from './dist/cjs/public-api';
 
 // Test basic functionality
-TraceLog.init('test-id', {
+TraceLog.init({
+  id: 'test-id',
   globalMetadata: { test: true }
 });
 
@@ -211,7 +212,7 @@ Monitor performance metrics:
 ```javascript
 // Performance test
 console.time('client-initialization');
-TraceLog.init('perf-test');
+TraceLog.init({ id: 'perf-test' });
 console.timeEnd('client-initialization');
 
 console.time('event-sending');
@@ -358,7 +359,7 @@ A clear description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Call TraceLog.init('id')
+1. Call TraceLog.init({ id: 'id' })
 2. Call TraceLog.event('test')
 3. See error
 

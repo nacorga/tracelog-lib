@@ -1,5 +1,7 @@
 import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from './modules';
-import { AppConfig, EventType, MetadataType, EventHandler, AdminError, DeviceType } from './types';
+import { AppConfig, EventType, MetadataType, EventHandler, DeviceType } from './types';
+import { NavigationData } from './events';
+import { Base } from './base';
 
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',
@@ -16,7 +18,7 @@ const createCleanupHandler = (tracker: Tracking): (() => void) => {
   };
 };
 
-export class Tracking {
+export class Tracking extends Base {
   public isInitialized = false;
   public isExcludedUser = false;
 
@@ -31,19 +33,15 @@ export class Tracking {
   private dataSender!: DataSender;
   private urlManager!: UrlManager;
 
-  constructor(id: string, config?: AppConfig) {
-    this.initializationPromise = this.initializeTracking(id, config);
-    this.initializationPromise.catch((error) => {
-      console.error('[TraceLog] Initialization rejected:', error);
-      this.catchError({
-        message: error instanceof Error ? error.message : String(error),
-      }).catch(() => {
-        // ignore error reporting failures
-      });
+  constructor(config: AppConfig) {
+    super();
+
+    this.initializationPromise = this.initializeTracking(config).catch((error) => {
+      this.log('error', `Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 
-  private async initializeTracking(id: string, config?: AppConfig): Promise<void> {
+  private async initializeTracking(config: AppConfig): Promise<void> {
     if (this.initializationState !== InitializationState.UNINITIALIZED) {
       return this.initializationPromise;
     }
@@ -51,9 +49,9 @@ export class Tracking {
     this.initializationState = InitializationState.INITIALIZING;
 
     try {
-      this.configManager = new ConfigManager(this.catchError.bind(this));
+      this.configManager = new ConfigManager();
 
-      const mergedConfig = await this.configManager.loadConfig(id, config || {});
+      const mergedConfig = await this.configManager.loadConfig(config || {});
       const apiUrl = this.configManager.isDemoMode() ? 'demo' : this.configManager.getApiUrl();
 
       if (!apiUrl) {
@@ -75,14 +73,16 @@ export class Tracking {
         () => this.sessionManager.getDevice(),
         () => this.sessionManager.getGlobalMetadata(),
         this.dataSender.sendEventsQueue.bind(this.dataSender),
-        this.catchError.bind(this),
         () => mergedConfig.qaMode || false,
         () => !this.sessionManager.isSampledUser(),
         (url: string) => this.urlManager?.isRouteExcluded(url) || false,
       );
 
-      this.urlManager = new UrlManager(mergedConfig, this.handlePageViewEvent.bind(this), () =>
-        this.trackingManager?.suppressNextScrollEvent(),
+      this.urlManager = new UrlManager(
+        mergedConfig,
+        this.handlePageViewEvent.bind(this),
+        this.handleNavigationChange.bind(this),
+        () => this.trackingManager?.suppressNextScrollEvent(),
       );
 
       this.trackingManager = new TrackingManager(
@@ -98,11 +98,11 @@ export class Tracking {
       this.initializationState = InitializationState.INITIALIZED;
 
       if (this.isQaModeSync()) {
-        console.log('[TraceLog] Initialization completed successfully');
+        this.log('error', 'Initialization completed successfully');
       }
     } catch (error) {
       this.initializationState = InitializationState.FAILED;
-      console.error('[TraceLog] Initialization error:', error);
+
       throw error;
     }
   }
@@ -117,14 +117,14 @@ export class Tracking {
         this.handleSessionEvent(EventType.SESSION_END, 'unexpected_recovery');
       }
 
-      this.sessionManager.startSession();
       this.urlManager.initialize();
       this.trackingManager.initScrollTracking();
       this.trackingManager.initInactivityTracking();
       this.trackingManager.initClickTracking();
       this.setupCleanupListeners();
     } catch (error) {
-      console.error('[TraceLog] Initialization sequence failed:', error);
+      this.log('error', `Initialization sequence failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
       throw error;
     }
   }
@@ -189,6 +189,31 @@ export class Tracking {
     this.eventManager.updatePageUrl(toUrl);
   }
 
+  private handleNavigationChange(data: NavigationData): void {
+    const fromExcluded = this.urlManager.isRouteExcluded(data.fromUrl);
+    const toExcluded = this.urlManager.isRouteExcluded(data.toUrl);
+
+    this.eventManager.updatePageUrl(data.toUrl);
+
+    if (fromExcluded !== toExcluded) {
+      this.eventManager.logTransition({
+        from: data.fromUrl,
+        to: data.toUrl,
+        type: toExcluded ? 'toExcluded' : 'fromExcluded',
+      });
+    }
+
+    if (toExcluded) {
+      this.sessionManager.pauseSession();
+    } else {
+      if (!this.sessionManager.hasSessionStarted()) {
+        this.sessionManager.startSession();
+      } else if (this.sessionManager.isPaused()) {
+        this.sessionManager.resumeSession();
+      }
+    }
+  }
+
   private handleTrackingEvent(event: EventHandler): void {
     this.eventManager.handleEvent(event);
   }
@@ -202,23 +227,6 @@ export class Tracking {
       this.sessionManager.handleInactivity(true);
     } else {
       this.sessionManager.handleInactivity(false);
-    }
-  }
-
-  private async catchError(error: { message: string }): Promise<void> {
-    const adminError: AdminError = {
-      message: error.message,
-      timestamp: Date.now(),
-      userAgent: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent,
-      url: typeof window === 'undefined' ? 'unknown' : window.location.href,
-      severity: 'medium',
-      context: 'tracking',
-    };
-
-    if (this.dataSender) {
-      await this.dataSender.sendError(adminError);
-    } else if (this.isQaModeSync()) {
-      console.error('[TraceLog] Error before DataSender init:', adminError);
     }
   }
 
@@ -345,7 +353,10 @@ export class Tracking {
           cleanup();
         } catch (error) {
           if (this.isQaModeSync()) {
-            console.error('[TraceLog] Error removing event listener:', error);
+            this.log(
+              'error',
+              `Error removing event listener: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            );
           }
         }
       }
@@ -353,13 +364,9 @@ export class Tracking {
       this.cleanupListeners = [];
       this.isInitialized = false;
       this.isExcludedUser = false;
-
-      if (this.isQaModeSync()) {
-        console.log('[TraceLog] Cleanup completed');
-      }
     } catch (error) {
       if (this.isQaModeSync()) {
-        console.error('[TraceLog] Cleanup error:', error);
+        this.log('error', `Cleanup error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
   }
@@ -396,19 +403,19 @@ export class Tracking {
     }
 
     if (this.initializationState === InitializationState.FAILED) {
-      throw new Error('[TraceLog] Initialization failed, cannot perform operation');
+      throw new Error('Initialization failed, cannot perform operation');
     }
 
     if (this.initializationState === InitializationState.INITIALIZING) {
       try {
         await this.initializationPromise;
       } catch {
-        throw new Error('[TraceLog] Initialization failed during wait');
+        throw new Error('Initialization failed during wait');
       }
     }
 
     if (this.initializationState === InitializationState.UNINITIALIZED) {
-      throw new Error('[TraceLog] Not initialized');
+      throw new Error('Not initialized');
     }
   }
 }

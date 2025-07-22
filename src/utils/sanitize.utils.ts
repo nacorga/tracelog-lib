@@ -1,4 +1,5 @@
 import { ApiConfig } from '../types/config.types';
+import { logError } from './error.utils';
 
 // Allowed API config keys for runtime validation
 const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>(['tags', 'samplingRate', 'qaMode', 'excludedUrlPaths']);
@@ -95,10 +96,10 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
   }
 
   if (typeof value === 'number') {
-    // Validate number ranges
     if (!Number.isFinite(value) || value < -Number.MAX_SAFE_INTEGER || value > Number.MAX_SAFE_INTEGER) {
       return 0;
     }
+
     return value;
   }
 
@@ -107,22 +108,22 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
   }
 
   if (Array.isArray(value)) {
-    // Limit array length
     const limitedArray = value.slice(0, MAX_ARRAY_LENGTH);
+
     return limitedArray.map((item) => sanitizeValue(item, depth + 1)).filter((item) => item !== null);
   }
 
   if (typeof value === 'object') {
     const sanitizedObject: Record<string, unknown> = {};
     const entries = Object.entries(value);
-
-    // Limit object properties
     const limitedEntries = entries.slice(0, 20);
 
     for (const [key, value_] of limitedEntries) {
       const sanitizedKey = sanitizeString(key);
+
       if (sanitizedKey) {
         const sanitizedValue = sanitizeValue(value_, depth + 1);
+
         if (sanitizedValue !== null) {
           sanitizedObject[sanitizedKey] = sanitizedValue;
         }
@@ -164,7 +165,8 @@ export const sanitizeApiConfig = (data: unknown): Partial<ApiConfig> => {
       }
     }
   } catch (error) {
-    console.warn('[TraceLog] API config sanitization failed:', error);
+    logError(`API config sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
     return {};
   }
 
@@ -181,9 +183,11 @@ export const sanitizeMetadata = (metadata: unknown): Record<string, unknown> => 
 
   try {
     const sanitized = sanitizeValue(metadata);
+
     return typeof sanitized === 'object' && sanitized !== null ? (sanitized as Record<string, unknown>) : {};
   } catch (error) {
-    console.warn('[TraceLog] Metadata sanitization failed:', error);
+    logError(`Metadata sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
     return {};
   }
 };

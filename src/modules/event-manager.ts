@@ -1,3 +1,4 @@
+import { Base } from '../base';
 import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, UTM_PARAMS } from '../constants';
 import {
   DeviceType,
@@ -15,7 +16,7 @@ import {
 import { isEventValid } from '../utils';
 import { TagManager } from './tag-manager';
 
-export class EventManager {
+export class EventManager extends Base {
   private readonly utmParams: UTM | null | undefined;
 
   private eventsQueue: EventData[] = [];
@@ -31,11 +32,12 @@ export class EventManager {
     private readonly getDevice: () => DeviceType | undefined,
     private readonly getGlobalMetadata: () => Record<string, MetadataType> | undefined,
     private readonly sendEventsQueue: (body: Queue) => Promise<boolean>,
-    private readonly sendError: (error: { message: string }) => Promise<void>,
     private readonly isQaMode: () => boolean,
     private readonly isExcludedUser: () => boolean,
     private readonly isRouteExcluded: (url: string) => boolean,
   ) {
+    super();
+
     this.pageUrl = window.location.href;
     this.utmParams = this.getUTMParameters();
   }
@@ -71,7 +73,7 @@ export class EventManager {
       return;
     }
 
-    let errorMessage: string | null = null;
+    let errorMessage: string | undefined;
 
     if (evType === EventType.SCROLL && !scrollData) {
       errorMessage = 'scrollData is required for SCROLL event. Event ignored.';
@@ -86,30 +88,36 @@ export class EventManager {
     }
 
     if (errorMessage) {
-      void this.sendError({ message: errorMessage });
+      this.log('error', errorMessage);
       return;
     }
 
     const isFirstEvent = evType === EventType.SESSION_START;
+    const removePageUrl = isRouteExcluded && isSessionEvent;
 
     const payload: EventData = {
       type: evType,
-      page_url: eventUrl,
+      page_url: removePageUrl ? '' : eventUrl,
       timestamp: Date.now() as Timestamp,
       ...(isFirstEvent && { referrer: document.referrer || 'Direct' }),
-      ...(fromUrl && { from_page_url: fromUrl }),
+      ...(fromUrl && !removePageUrl && { from_page_url: fromUrl }),
       ...(scrollData && { scroll_data: scrollData }),
       ...(clickData && { click_data: clickData }),
       ...(customEvent && { custom_event: customEvent }),
       ...(isFirstEvent && this.utmParams && { utm: this.utmParams }),
-      ...(isRouteExcluded && isSessionEvent && { excluded_route: true }),
+      ...(removePageUrl && { excluded_route: true }),
     };
 
-    // Tags functionality enabled
     if (this.config?.tags?.length) {
       const matchedTags = this.getEventTags(payload, this.getDevice()!);
+
       if (matchedTags?.length) {
-        payload.tags = matchedTags;
+        payload.tags = this.isQaMode()
+          ? matchedTags.map((tag) => ({
+              id: tag,
+              name: this.config?.tags.find((t) => t.id === tag)?.name ?? '',
+            }))
+          : matchedTags;
       }
     }
 
@@ -129,8 +137,9 @@ export class EventManager {
         },
       });
     } else if (this.isQaMode()) {
-      console.error(
-        `TraceLog error: custom event "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
+      this.log(
+        'error',
+        `custom event "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
       );
     }
   }
@@ -147,9 +156,15 @@ export class EventManager {
     this.eventsQueue = [];
   }
 
+  logTransition(data: { from: string; to: string; type: string }): void {
+    if (this.isQaMode()) {
+      this.log('info', `navigation transition: ${JSON.stringify(data)}`);
+    }
+  }
+
   private sendEvent(payload: EventData): void {
     if (this.isQaMode()) {
-      console.log(`[TraceLog] ${payload.type} event:`, JSON.stringify(payload));
+      this.log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
     } else {
       this.eventsQueue.push(payload);
 

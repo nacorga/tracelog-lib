@@ -19,7 +19,7 @@ test.describe('Duplicate Events - Demo Mode', () => {
     await page.getByTestId('test-button').click();
     await page.waitForTimeout(150);
     await page.getByTestId('test-button').click();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(CLICK_DEBOUNCE_TIME + 200);
 
     const clickLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.CLICK}"`));
 

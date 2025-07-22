@@ -40,6 +40,52 @@ Create a `CNAME` record in your DNS settings:
 Replace `YOUR_TRACELOG_ID` with your actual ID from your TraceLog account.
 This ensures seamless tracking across browsers.
 
+## 🔀 Send events to your own server
+
+If you prefer to store analytics data on your own infrastructure, you can configure TraceLog to send events to a custom endpoint.
+
+```javascript
+TraceLog.init({
+  id: 'your-tracking-id',
+  customApiUrl: 'https://analytics.example.com/tracelog',
+  // Optionally load tracking config from your backend
+  customApiConfigUrl: 'https://analytics.example.com/tracelog/config',
+  // Or provide config manually
+  apiConfig: {
+    samplingRate: 1,
+    qaMode: false,
+    excludedUrlPaths: ['/admin', '/debug'],
+  }
+});
+```
+
+### How It Works
+- All events will be POSTed directly to `customApiUrl` instead of TraceLog’s servers.
+- If `customApiConfigUrl` is provided, the SDK will fetch configuration from that URL once on initialization.
+- If `customApiConfigUrl` is omitted, the SDK will use the static apiConfig provided.
+
+#### Configuration Priority
+When both `customApiConfigUrl` and `apiConfig` are provided:
+1. **Remote config has priority**: Settings from `customApiConfigUrl` will override any matching properties in the static `apiConfig`
+2. **Static config as fallback**: Properties not present in the remote config will use values from `apiConfig`
+3. **Default values**: Any missing properties will use TraceLog's built-in defaults
+
+Example: If your static `apiConfig` sets `samplingRate: 0.5` but the remote config returns `samplingRate: 0.8`, the final value will be `0.8`.
+
+### Limitations in Custom Mode
+- Configuration options managed from the TraceLog platform — such as tags, dashboards, or AI reports — are not available in this mode.
+- You are fully responsible for handling data, applying config, and managing downstream processing on your server.
+
+### Notes
+- When using this mode, TraceLog does not store or process any data.
+- If no valid config is provided, the SDK falls back to safe defaults: `samplingRate = 1`, `qaMode = false`, and no `excludedUrlPaths`.
+- If you provide endpoints with the `http` protocol, set `allowHttp: true` to explicitly permit them. This helps avoid accidental insecure traffic in production environments.
+
+### Common Issues When Using Custom APIs
+- **CORS errors** – If your custom endpoints are on a different domain, make sure they send the proper `Access-Control-Allow-Origin` headers so browsers allow the requests.
+- **Invalid or unreachable URLs** – Double-check that `customApiUrl` and `customApiConfigUrl` are correct and that your server is running.
+- **Insecure protocol blocked** – When your site uses HTTPS, requests to an `http` endpoint will fail unless `allowHttp: true` is set.
+- **Malformed config** – Ensure `customApiConfigUrl` returns valid JSON; otherwise the SDK falls back to defaults.
 
 ## 🎯 Quick Integration Example
 
@@ -49,7 +95,8 @@ Initialize TraceLog in your app and start tracking immediately:
 import { TraceLog } from '@tracelog/client';
 
 // Initialize tracking
-TraceLog.init('your-tracking-id', {
+TraceLog.init({
+  id: 'your-tracking-id',
   sessionTimeout: 300000, // Session timeout (e.g., 5 minutes)
   globalMetadata: {
     version: '1.0.0',

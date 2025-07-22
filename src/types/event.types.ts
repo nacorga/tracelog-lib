@@ -94,6 +94,6 @@ export interface EventData {
   custom_event?: CustomEventData;
   page_view?: PageViewData;
   utm?: UTM;
-  tags?: string[];
+  tags?: string[] | { id: string; name: string }[];
   excluded_route?: boolean;
 }

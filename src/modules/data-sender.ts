@@ -1,26 +1,30 @@
+import { Base } from '../base';
 import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../constants';
-import { Queue, AdminError, EventType, StorageKey } from '../types';
+import { Queue, EventType, StorageKey } from '../types';
 import { SafeLocalStorage, StorageManager } from '../utils';
 
-export class DataSender {
+export class DataSender extends Base {
+  private readonly storage: StorageManager;
+
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
   private lastSendAttempt = 0;
   private sendAttempts = 0;
-  private readonly storage: StorageManager;
 
   constructor(
     private readonly apiUrl: string,
     private readonly isQaMode: () => boolean,
     private readonly isDemoMode = false,
   ) {
+    super();
+
     this.storage = new SafeLocalStorage();
   }
 
   async sendEventsQueue(body: Queue): Promise<boolean> {
     if (this.isDemoMode) {
       for (const event of body.events) {
-        console.log(`[TraceLog] ${event.type} event:`, JSON.stringify(event));
+        this.log('info', `${event.type} event: ${JSON.stringify(event)}`);
       }
 
       return true;
@@ -62,7 +66,7 @@ export class DataSender {
   sendEventsSynchronously(body: Queue): boolean {
     if (this.isDemoMode) {
       for (const event of body.events) {
-        console.log(`[TraceLog] ${event.type} event:`, JSON.stringify(event));
+        this.log('info', `${event.type} event: ${JSON.stringify(event)}`);
       }
 
       return true;
@@ -72,10 +76,6 @@ export class DataSender {
 
     if (navigator.sendBeacon) {
       const success = navigator.sendBeacon(this.apiUrl, blob);
-
-      if (this.isQaMode()) {
-        console.log(`[TraceLog] Synchronous send via sendBeacon: ${success ? 'SUCCESS' : 'FAILED'}`);
-      }
 
       if (success) {
         this.clearPersistedEvents(body.user_id);
@@ -93,19 +93,13 @@ export class DataSender {
 
       const success = xhr.status >= 200 && xhr.status < 300;
 
-      if (this.isQaMode()) {
-        console.log(`[TraceLog] Synchronous send via XHR: ${success ? 'SUCCESS' : 'FAILED'}`);
-      }
-
       if (success) {
         this.clearPersistedEvents(body.user_id);
       }
 
       return success;
     } catch (error) {
-      if (this.isQaMode()) {
-        console.error('[TraceLog] Synchronous send failed:', error);
-      }
+      this.log('error', `Synchronous send failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
       return false;
     }
@@ -132,12 +126,7 @@ export class DataSender {
 
       return response.status >= 200 && response.status < 300;
     } catch (error) {
-      if (this.isQaMode()) {
-        console.error(
-          'TraceLog error: failed to send events queue',
-          error instanceof Error ? error.message : 'Unknown error',
-        );
-      }
+      this.log('error', `Failed to send events queue: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
       return false;
     }
@@ -173,12 +162,10 @@ export class DataSender {
       this.persistCriticalEvents(body);
       this.scheduleRetry(body);
 
-      if (this.isQaMode()) {
-        console.error(
-          'TraceLog error: failed to force send critical events, persisting to localStorage',
-          error instanceof Error ? error.message : 'Unknown error',
-        );
-      }
+      this.log(
+        'error',
+        `Failed to force send critical events, persisting to localStorage: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -199,15 +186,12 @@ export class DataSender {
         };
 
         this.storage.set(`${StorageKey.UserId}_${body.user_id}_critical_events`, persistedData);
-
-        if (this.isQaMode()) {
-          console.log('[TraceLog] Critical events persisted to storage');
-        }
       }
     } catch (error) {
-      if (this.isQaMode()) {
-        console.error('[TraceLog] Failed to persist critical events:', error);
-      }
+      this.log(
+        'error',
+        `Failed to persist critical events: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -242,15 +226,8 @@ export class DataSender {
 
           if (success) {
             this.clearPersistedEvents(userId);
-
-            if (this.isQaMode()) {
-              console.log('[TraceLog] Successfully recovered and sent persisted critical events');
-            }
           } else {
-            if (this.isQaMode()) {
-              console.error('[TraceLog] Failed to send recovered events, scheduling retry');
-            }
-
+            this.log('error', 'Failed to send recovered events, scheduling retry');
             this.scheduleRetry(recoveryBody);
           }
         } else {
@@ -258,43 +235,10 @@ export class DataSender {
         }
       }
     } catch (error) {
-      if (this.isQaMode()) {
-        console.error('[TraceLog] Failed to recover persisted events:', error);
-      }
-    }
-  }
-
-  async sendError(error: AdminError): Promise<void> {
-    if (this.isDemoMode) {
-      console.error(error.message);
-      return;
-    }
-
-    const blob = new Blob([JSON.stringify(error)], { type: 'application/json' });
-
-    if (navigator.sendBeacon) {
-      const ok = navigator.sendBeacon(`${this.apiUrl}/error`, blob);
-
-      if (ok) {
-        return;
-      }
-    }
-
-    try {
-      await fetch(`${this.apiUrl}/error`, {
-        method: 'POST',
-        body: blob,
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    } catch (error) {
-      if (this.isQaMode()) {
-        console.error('TraceLog error: failed to send error', error instanceof Error ? error.message : 'Unknown error');
-      }
-    }
-
-    if (this.isQaMode()) {
-      console.error(error.message);
+      this.log(
+        'error',
+        `Failed to recover persisted events: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 

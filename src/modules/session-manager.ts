@@ -1,10 +1,11 @@
-import { DEFAULT_SAMPLING_RATE } from '../constants';
+import { DEFAULT_SAMPLING_RATE, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
 import { MetadataType, Config, EventType, SessionData, SessionEndTrigger, DeviceType, StorageKey } from '../types';
 import { getDeviceType, isValidMetadata } from '../utils';
 import { SessionHandler } from '../events';
 import { IdManager } from './id-manager';
+import { Base } from '../base';
 
-export class SessionManager {
+export class SessionManager extends Base {
   private userId: string | undefined;
   private tempUserId: string | null = null;
   private readonly device: DeviceType | undefined;
@@ -12,12 +13,16 @@ export class SessionManager {
   private readonly sessionHandler: SessionHandler;
   private sessionEndSent = false;
   private pageUnloading = false;
+  private paused = false;
+  private started = false;
 
   constructor(
     private readonly config: Config,
     private readonly sendSessionEvent: (eventType: EventType, trigger?: string) => void,
     private readonly isQaMode: () => boolean,
   ) {
+    super();
+
     this.userId = this.getUserId();
     this.device = getDeviceType();
     this.sessionHandler = new SessionHandler(this.userId, this.handleSessionData.bind(this), this.isQaMode);
@@ -93,12 +98,14 @@ export class SessionManager {
     this.pageUnloading = isUnloading;
 
     if (this.isQaMode()) {
-      console.log(`[TraceLog] Page unloading state changed: ${isUnloading}`);
+      this.log('info', `Page unloading state changed: ${isUnloading}`);
     }
   }
 
   startSession(): void {
     this.sessionEndSent = false;
+    this.paused = false;
+    this.started = true;
     this.sessionHandler.startSession();
   }
 
@@ -125,12 +132,48 @@ export class SessionManager {
 
     this.sessionEndSent = true;
     this.sessionHandler.endSession(sessionTrigger);
+    this.started = false;
+    this.paused = false;
   }
 
   handleInactivity(isInactive: boolean): void {
     if (!isInactive) {
       this.sessionHandler.updateActivity();
     }
+  }
+
+  pauseSession(): void {
+    if (!this.started || this.paused) {
+      return;
+    }
+
+    this.paused = true;
+    this.sessionHandler.updateActivity();
+  }
+
+  resumeSession(): void {
+    if (!this.started || !this.paused) {
+      return;
+    }
+
+    const session = this.sessionHandler.getCurrentSession();
+    const timeout = this.config.sessionTimeout || DEFAULT_TRACKING_APP_CONFIG.sessionTimeout || 15 * 60 * 1000;
+
+    if (session && Date.now() - session.lastActivity > timeout) {
+      this.endSession('timeout');
+      this.startSession();
+    } else {
+      this.paused = false;
+      this.sessionHandler.updateActivity();
+    }
+  }
+
+  hasSessionStarted(): boolean {
+    return this.started;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   isSampledUser(): boolean {
@@ -174,9 +217,10 @@ export class SessionManager {
 
       if (validationResult.valid) {
         this.globalMetadata = validationResult.sanitizedMetadata;
-      } else if (this.isQaMode()) {
-        console.error(
-          `TraceLog error: globalMetadata object validation failed (${validationResult.error || 'unknown error'}). Please, review your data and try again.`,
+      } else {
+        this.log(
+          'error',
+          `globalMetadata object validation failed (${validationResult.error || 'unknown error'}). Please, review your data and try again.`,
         );
       }
     }
@@ -184,5 +228,7 @@ export class SessionManager {
 
   cleanup(): void {
     this.sessionHandler?.cleanup();
+    this.started = false;
+    this.paused = false;
   }
 }

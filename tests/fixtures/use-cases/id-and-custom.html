@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invalid Config Test</title>
+</head>
+<body>
+  <script type="module">
+    import { TraceLog } from '../tracelog.js';
+    TraceLog.init({
+      id: 'abc123',
+      customApiUrl: 'https://analytics.example.com/tracelog'
+    });
+  </script>
+</body>
+</html>
