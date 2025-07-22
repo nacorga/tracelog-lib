@@ -26,6 +26,10 @@ export interface ApiConfig {
 
 export interface AppConfig {
   /**
+   * Unique project identifier. Required when not using a customApiUrl.
+   */
+  id?: string;
+  /**
    * Session timeout in minutes. After this period of inactivity,
    * a new session will be started for subsequent events.
    * @default 30

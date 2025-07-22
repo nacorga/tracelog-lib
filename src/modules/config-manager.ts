@@ -22,11 +22,12 @@ export class ConfigManager extends Base {
     this.loaderFactory = new ConfigLoaderFactory(this.validator, this.fetcher);
   }
 
-  async loadConfig(id: string, config: AppConfig): Promise<Config> {
-    this.id = id;
+  async loadConfig(config: AppConfig): Promise<Config> {
+    this.id = config.id ?? '';
 
-    const loader = this.loaderFactory.createLoader(id, config);
-    this.config = await loader.load(id, config);
+    const loader = this.loaderFactory.createLoader(config);
+
+    this.config = await loader.load(config);
 
     if (this.config.qaMode === true) {
       this.log('info', `set config: ${JSON.stringify(this.config)}`);
@@ -95,7 +96,7 @@ export class ConfigManager extends Base {
       issues.push('Max fetch attempts exceeded');
     }
 
-    if (!this.id) {
+    if (!this.id && !this.config.customApiUrl) {
       issues.push('Missing configuration ID');
     }
 

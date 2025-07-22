@@ -45,7 +45,8 @@ This ensures seamless tracking across browsers.
 If you prefer to store analytics data on your own infrastructure, you can configure TraceLog to send events to a custom endpoint.
 
 ```javascript
-TraceLog.init('your-tracking-id', {
+TraceLog.init({
+  id: 'your-tracking-id',
   customApiUrl: 'https://analytics.example.com/tracelog',
   // Optionally load tracking config from your backend
   customApiConfigUrl: 'https://analytics.example.com/tracelog/config',
@@ -94,7 +95,8 @@ Initialize TraceLog in your app and start tracking immediately:
 import { TraceLog } from '@tracelog/client';
 
 // Initialize tracking
-TraceLog.init('your-tracking-id', {
+TraceLog.init({
+  id: 'your-tracking-id',
   sessionTimeout: 300000, // Session timeout (e.g., 5 minutes)
   globalMetadata: {
     version: '1.0.0',

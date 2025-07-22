@@ -33,15 +33,15 @@ export class Tracking extends Base {
   private dataSender!: DataSender;
   private urlManager!: UrlManager;
 
-  constructor(id: string, config?: AppConfig) {
+  constructor(config: AppConfig) {
     super();
 
-    this.initializationPromise = this.initializeTracking(id, config).catch((error) => {
+    this.initializationPromise = this.initializeTracking(config).catch((error) => {
       this.log('error', `Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 
-  private async initializeTracking(id: string, config?: AppConfig): Promise<void> {
+  private async initializeTracking(config: AppConfig): Promise<void> {
     if (this.initializationState !== InitializationState.UNINITIALIZED) {
       return this.initializationPromise;
     }
@@ -51,7 +51,7 @@ export class Tracking extends Base {
     try {
       this.configManager = new ConfigManager();
 
-      const mergedConfig = await this.configManager.loadConfig(id, config || {});
+      const mergedConfig = await this.configManager.loadConfig(config || {});
       const apiUrl = this.configManager.isDemoMode() ? 'demo' : this.configManager.getApiUrl();
 
       if (!apiUrl) {

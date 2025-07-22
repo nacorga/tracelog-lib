@@ -6,11 +6,11 @@ import { isValidUrl } from '../utils';
 import { Base } from '../base';
 
 export abstract class ConfigLoader {
-  abstract load(id: string, config: AppConfig): Promise<Config>;
+  abstract load(config: AppConfig): Promise<Config>;
 }
 
 export class DemoConfigLoader extends ConfigLoader {
-  async load(id: string, config: AppConfig): Promise<Config> {
+  async load(config: AppConfig): Promise<Config> {
     const { apiConfig = {}, ...rest } = config;
 
     return {
@@ -33,7 +33,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     super();
   }
 
-  async load(id: string, config: AppConfig): Promise<Config> {
+  async load(config: AppConfig): Promise<Config> {
     const { apiConfig = {}, customApiConfigUrl, ...rest } = config;
 
     let merged: Config = {
@@ -46,7 +46,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
 
     if (customApiConfigUrl) {
       try {
-        const remote = await this.fetcher.fetch(config, id);
+        const remote = await this.fetcher.fetch(config);
 
         if (remote) {
           merged = { ...merged, ...remote };
@@ -118,7 +118,11 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     super();
   }
 
-  async load(id: string, config: AppConfig): Promise<Config> {
+  async load(config: AppConfig): Promise<Config> {
+    if (!config.id) {
+      throw new Error('Tracking ID is required when not using customApiUrl');
+    }
+
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -139,7 +143,7 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     }
 
     try {
-      const remoteConfig = await this.fetcher.fetch(config, id);
+      const remoteConfig = await this.fetcher.fetch(config);
 
       if (remoteConfig) {
         finalConfig = { ...finalConfig, ...remoteConfig };
@@ -188,8 +192,8 @@ export class ConfigLoaderFactory extends Base {
     super();
   }
 
-  createLoader(id: string, config: AppConfig): ConfigLoader {
-    if (id === 'demo') {
+  createLoader(config: AppConfig): ConfigLoader {
+    if (config.id === 'demo') {
       return new DemoConfigLoader();
     }
 

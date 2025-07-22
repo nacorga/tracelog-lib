@@ -11,7 +11,7 @@ let trackingInstance: Tracking | undefined;
  * @param id - Tracking ID
  * @param config - Optional configuration
  */
-export const init = (id: string, config?: AppConfig): void => {
+export const init = (config: AppConfig): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -25,8 +25,13 @@ export const init = (id: string, config?: AppConfig): void => {
     return;
   }
 
+  if (!config?.id && !config?.customApiUrl) {
+    logError('Tracking ID is required when customApiUrl is not provided');
+    return;
+  }
+
   try {
-    trackingInstance = new Tracking(id, config);
+    trackingInstance = new Tracking(config);
   } catch (error) {
     logError(`Initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

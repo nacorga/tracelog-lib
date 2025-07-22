@@ -6,7 +6,7 @@ import { IRateLimiter } from './rate-limiter';
 import { Base } from '../base';
 
 export interface IConfigFetcher {
-  fetch(config: AppConfig, id?: string): Promise<ApiConfig | undefined>;
+  fetch(config: AppConfig): Promise<ApiConfig | undefined>;
 }
 
 export class ConfigFetcher extends Base implements IConfigFetcher {
@@ -14,7 +14,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     super();
   }
 
-  async fetch(config: AppConfig, id?: string): Promise<ApiConfig | undefined> {
+  async fetch(config: AppConfig): Promise<ApiConfig | undefined> {
     if (!this.rateLimiter.canFetch()) {
       if (this.rateLimiter.hasExceededMaxAttempts()) {
         this.log('error', `Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`);
@@ -26,15 +26,15 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     this.rateLimiter.recordAttempt();
 
     try {
-      return await this.performFetch(config, id);
+      return await this.performFetch(config);
     } catch (error) {
       this.handleFetchError(error);
       throw error;
     }
   }
 
-  private async performFetch(config: AppConfig, id?: string): Promise<ApiConfig | undefined> {
-    const configUrl = this.buildConfigUrl(config, id);
+  private async performFetch(config: AppConfig): Promise<ApiConfig | undefined> {
+    const configUrl = this.buildConfigUrl(config);
 
     if (!configUrl) {
       throw new Error('Config URL is not valid or not allowed');
@@ -81,7 +81,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
   }
 
-  private buildConfigUrl(config: AppConfig, id?: string): string | undefined {
+  private buildConfigUrl(config: AppConfig): string | undefined {
     // Handle custom API config URL
     if (config.customApiConfigUrl) {
       try {
@@ -103,11 +103,11 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
 
     // Handle standard case: build dynamic URL based on current domain and ID
-    if (id) {
+    if (config.id) {
       try {
         const urlParameters = new URLSearchParams(window.location.search);
         const isQaMode = urlParameters.get('qaMode') === 'true';
-        const baseUrl = buildDynamicApiUrl(id);
+        const baseUrl = buildDynamicApiUrl(config.id);
 
         if (!baseUrl) {
           return undefined;
