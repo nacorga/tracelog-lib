@@ -20,13 +20,25 @@ export const init = (config: AppConfig): void => {
     return;
   }
 
-  if (config?.sessionTimeout && config.sessionTimeout < 30_000) {
-    logError('Session timeout must be at least 30 seconds');
+  const usingCustomServer = Boolean(config?.customApiUrl || config?.customApiConfigUrl);
+
+  if (usingCustomServer && config?.id) {
+    logError('Invalid configuration: id cannot be used with customApiUrl and/or customApiConfigUrl');
     return;
   }
 
-  if (!config?.id && !config?.customApiUrl) {
+  if (!usingCustomServer && !config?.id) {
     logError('Tracking ID is required when customApiUrl is not provided');
+    return;
+  }
+
+  if (config?.customApiConfigUrl && !config?.customApiUrl) {
+    logError('customApiConfigUrl requires customApiUrl to be set');
+    return;
+  }
+
+  if (config?.sessionTimeout && config.sessionTimeout < 30_000) {
+    logError('Session timeout must be at least 30 seconds');
     return;
   }
 

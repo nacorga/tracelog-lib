@@ -3,15 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TraceLog Client Remote Config Test</title>
+  <title>Invalid Config Test</title>
 </head>
 <body>
   <script type="module">
     import { TraceLog } from '../tracelog.js';
     TraceLog.init({
-      customApiUrl: 'http://localhost:3000/collect',
-      customApiConfigUrl: 'http://localhost:3000/json/client-remote-config.json',
-      allowHttp: true,
+      id: 'abc123',
+      customApiUrl: 'https://analytics.example.com/tracelog'
     });
   </script>
 </body>
