@@ -31,7 +31,7 @@ TraceLog.init({
 TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 ```
 
-### Optional: Custom Subdomain
+### Optional: Set Up a Custom Subdomain for Browser Compatibility
 
 To prevent browser restrictions, it’s highly recommended to create a CNAME record in your DNS settings:
 
