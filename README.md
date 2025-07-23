@@ -92,6 +92,6 @@ TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 
 ## 📖 Documentation
 
-* [API Reference](https://www.tracelog.io/docs?guide=api)
-* [Advanced Configuration](https://www.tracelog.io/docs?guide=advanced-configuration)  
-* [Best Practices](https://www.tracelog.io/docs?guide=best-practices)
+* [API Reference](https://www.tracelog.io/docs/api)
+* [Advanced Configuration](https://www.tracelog.io/docs/advanced-configuration)  
+* [Best Practices](https://www.tracelog.io/docs/best-practices)
