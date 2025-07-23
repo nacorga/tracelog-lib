@@ -58,14 +58,29 @@ export interface AppConfig {
    */
   customApiConfigUrl?: string;
   /**
-   * Provide API-level configuration when using a custom server. If set,
-   * these values override the defaults and no remote config will be fetched.
+   * Enables QA mode for testing and debugging purposes.
+   * When enabled, events may be processed differently for development environments.
    */
-  apiConfig?: Partial<ApiConfig>;
+  qaMode?: boolean;
+  /**
+   * Sampling rate as a percentage (0-1) to control how many events are sent.
+   * A value of 1 means all events are sent, while 0.5 means only half of events are sent.
+   */
+  samplingRate?: number;
+  /**
+   * Array of tag configurations for categorizing and filtering events.
+   * Tags help organize and segment tracking data for analysis.
+   */
+  tags?: TagConfig[];
+  /**
+   * Array of URL path patterns to exclude from tracking.
+   * Events will not be sent for pages matching these patterns.
+   */
+  excludedUrlPaths?: string[];
   /**
    * Allow HTTP requests to be made. This is useful for testing and development.
    */
   allowHttp?: boolean;
 }
 
-export type Config = ApiConfig & Omit<AppConfig, 'apiConfig'>;
+export type Config = ApiConfig & Omit<AppConfig, keyof ApiConfig>;

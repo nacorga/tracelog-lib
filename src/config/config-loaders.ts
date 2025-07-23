@@ -11,12 +11,9 @@ export abstract class ConfigLoader {
 
 export class DemoConfigLoader extends ConfigLoader {
   async load(config: AppConfig): Promise<Config> {
-    const { apiConfig = {}, ...rest } = config;
-
     return {
       ...DEFAULT_TRACKING_API_CONFIG,
-      ...apiConfig,
-      ...rest,
+      ...config,
       qaMode: true,
       samplingRate: 1,
       tags: [],
@@ -34,12 +31,11 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
   }
 
   async load(config: AppConfig): Promise<Config> {
-    const { apiConfig = {}, customApiConfigUrl, ...rest } = config;
+    const { customApiConfigUrl } = config;
 
     let merged: Config = {
       ...DEFAULT_TRACKING_API_CONFIG,
-      ...apiConfig,
-      ...rest,
+      ...config,
     };
 
     await this.validateAndReport(config);
@@ -126,11 +122,9 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    const { apiConfig = {}, ...rest } = config;
     let finalConfig: Config = {
       ...DEFAULT_TRACKING_API_CONFIG,
-      ...apiConfig,
-      ...rest,
+      ...config,
     };
 
     try {

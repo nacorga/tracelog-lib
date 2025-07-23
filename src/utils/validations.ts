@@ -394,25 +394,17 @@ export const validateAppConfig = (config: AppConfig): { errors: string[]; warnin
   validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
   validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
 
-  if (config.apiConfig !== undefined) {
-    if (typeof config.apiConfig !== 'object' || config.apiConfig === null) {
-      errors.push('apiConfig must be an object');
-    } else {
-      const { samplingRate, qaMode, tags, excludedUrlPaths } = config.apiConfig;
+  validateSamplingRate(config.samplingRate, errors);
 
-      validateSamplingRate(samplingRate, errors);
-
-      if (qaMode !== undefined && typeof qaMode !== 'boolean') {
-        errors.push('apiConfig.qaMode must be a boolean');
-      }
-
-      if (tags !== undefined && !Array.isArray(tags)) {
-        errors.push('apiConfig.tags must be an array');
-      }
-
-      validateExcludedUrlPaths(excludedUrlPaths, errors, 'apiConfig.');
-    }
+  if (config.qaMode !== undefined && typeof config.qaMode !== 'boolean') {
+    errors.push('qaMode must be a boolean');
   }
+
+  if (config.tags !== undefined && !Array.isArray(config.tags)) {
+    errors.push('tags must be an array');
+  }
+
+  validateExcludedUrlPaths(config.excludedUrlPaths, errors);
 
   return { errors, warnings };
 };

@@ -62,10 +62,8 @@ TraceLog.init({
 // With static config
 TraceLog.init({
   customApiUrl: 'https://analytics.example.com/tracelog',
-  apiConfig: {
-    samplingRate: 1,
-    excludedUrlPaths: ['/admin']
-  }
+  samplingRate: 1,
+  excludedUrlPaths: ['/admin']
 });
 
 TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
