@@ -1,4 +1,4 @@
-import { AppConfig, ApiConfig } from '../types';
+import { Config, ApiConfig } from '../types';
 import { sanitizeApiConfig, isValidUrl, buildDynamicApiUrl } from '../utils';
 import { DEFAULT_TRACKING_API_CONFIG, FETCH_TIMEOUT_MS, MAX_FETCH_ATTEMPTS } from '../constants';
 import { VERSION } from '../version';
@@ -6,7 +6,7 @@ import { IRateLimiter } from './rate-limiter';
 import { Base } from '../base';
 
 export interface IConfigFetcher {
-  fetch(config: AppConfig): Promise<ApiConfig | undefined>;
+  fetch(config: Config): Promise<ApiConfig | undefined>;
 }
 
 export class ConfigFetcher extends Base implements IConfigFetcher {
@@ -14,7 +14,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     super();
   }
 
-  async fetch(config: AppConfig): Promise<ApiConfig | undefined> {
+  async fetch(config: Config): Promise<ApiConfig | undefined> {
     if (!this.rateLimiter.canFetch()) {
       if (this.rateLimiter.hasExceededMaxAttempts()) {
         this.log('error', `Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`);
@@ -33,7 +33,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
   }
 
-  private async performFetch(config: AppConfig): Promise<ApiConfig | undefined> {
+  private async performFetch(config: Config): Promise<ApiConfig | undefined> {
     const configUrl = this.buildConfigUrl(config);
 
     if (!configUrl) {
@@ -81,7 +81,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
   }
 
-  private buildConfigUrl(config: AppConfig): string | undefined {
+  private buildConfigUrl(config: Config): string | undefined {
     // Handle remote config URL
     if (config.remoteConfigApiUrl) {
       try {

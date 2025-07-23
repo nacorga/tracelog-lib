@@ -1,4 +1,4 @@
-import { ApiConfig, AppConfig } from './types';
+import { ApiConfig, Config } from './types';
 
 // Performance constants
 export const MAX_FETCH_ATTEMPTS = 3;
@@ -38,7 +38,7 @@ export const DEFAULT_TRACKING_API_CONFIG: ApiConfig = {
 };
 
 // Default tracking app config
-export const DEFAULT_TRACKING_APP_CONFIG: AppConfig = {
+export const DEFAULT_TRACKING_APP_CONFIG: Config = {
   sessionTimeout: SESSION_TIMEOUT_DEFAULT_MS,
   allowHttp: false,
 };

@@ -1,5 +1,5 @@
 import { Tracking } from './tracking';
-import { AppConfig, MetadataType } from './types';
+import { Config, MetadataType } from './types';
 import { logError } from './utils';
 
 export * as Types from './types';
@@ -11,7 +11,7 @@ let trackingInstance: Tracking | undefined;
  * @param id - Tracking ID
  * @param config - Optional configuration
  */
-export const init = (config: AppConfig): void => {
+export const init = (config: Config): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }

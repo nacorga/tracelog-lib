@@ -1,4 +1,4 @@
-import { AppConfig, Config } from '../types';
+import { Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher } from './config-fetcher';
@@ -6,11 +6,11 @@ import { isValidUrl } from '../utils';
 import { Base } from '../base';
 
 export abstract class ConfigLoader {
-  abstract load(config: AppConfig): Promise<Config>;
+  abstract load(config: Config): Promise<Config>;
 }
 
 export class DemoConfigLoader extends ConfigLoader {
-  async load(config: AppConfig): Promise<Config> {
+  async load(config: Config): Promise<Config> {
     return {
       ...DEFAULT_TRACKING_API_CONFIG,
       ...config,
@@ -30,7 +30,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     super();
   }
 
-  async load(config: AppConfig): Promise<Config> {
+  async load(config: Config): Promise<Config> {
     const { remoteConfigApiUrl } = config;
 
     let merged: Config = {
@@ -55,7 +55,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     return this.applyCorrections(merged);
   }
 
-  private async validateAndReport(config: AppConfig): Promise<void> {
+  private async validateAndReport(config: Config): Promise<void> {
     const result = this.validator.validate(config);
 
     if (result.errors.length > 0) {
@@ -114,7 +114,7 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     super();
   }
 
-  async load(config: AppConfig): Promise<Config> {
+  async load(config: Config): Promise<Config> {
     if (!config.id) {
       throw new Error('Tracking ID is required when not using apiUrl');
     }
@@ -186,7 +186,7 @@ export class ConfigLoaderFactory extends Base {
     super();
   }
 
-  createLoader(config: AppConfig): ConfigLoader {
+  createLoader(config: Config): ConfigLoader {
     if (config.id === 'demo') {
       return new DemoConfigLoader();
     }

@@ -4,7 +4,7 @@ import {
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
 } from '../constants';
-import { EventType, MetadataType, ScrollDirection, EventData, Queue, AppConfig, Config } from '../types';
+import { EventType, MetadataType, ScrollDirection, EventData, Queue, Config } from '../types';
 import { sanitizeMetadata } from './sanitize.utils';
 
 export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
@@ -360,7 +360,7 @@ const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: st
   }
 };
 
-export const validateAppConfig = (config: AppConfig): { errors: string[]; warnings: string[] } => {
+export const validateConfig = (config: Config): { errors: string[]; warnings: string[] } => {
   const errors: string[] = [];
   const warnings: string[] = [];
 

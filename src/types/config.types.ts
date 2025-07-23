@@ -24,7 +24,7 @@ export interface ApiConfig {
   excludedUrlPaths: string[];
 }
 
-export interface AppConfig extends ApiConfig {
+export interface Config extends ApiConfig {
   /**
    * Unique project identifier. Required when not using `apiUrl`.
    */
@@ -62,5 +62,3 @@ export interface AppConfig extends ApiConfig {
    */
   allowHttp?: boolean;
 }
-
-export type Config = ApiConfig & Omit<AppConfig, keyof ApiConfig>;

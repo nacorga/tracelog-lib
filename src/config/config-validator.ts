@@ -1,8 +1,8 @@
-import { AppConfig } from '../types';
-import { validateAppConfig } from '../utils';
+import { Config } from '../types';
+import { validateConfig } from '../utils';
 
 export interface IConfigValidator {
-  validate(config: AppConfig): ValidationResult;
+  validate(config: Config): ValidationResult;
 }
 
 export interface ValidationResult {
@@ -12,9 +12,9 @@ export interface ValidationResult {
 }
 
 export class ConfigValidator implements IConfigValidator {
-  validate(config: AppConfig): ValidationResult {
+  validate(config: Config): ValidationResult {
     try {
-      const result = validateAppConfig(config);
+      const result = validateConfig(config);
 
       return {
         errors: result.errors,
@@ -30,7 +30,7 @@ export class ConfigValidator implements IConfigValidator {
     }
   }
 
-  validateAndReport(config: AppConfig, reportCallback: (result: ValidationResult) => void): ValidationResult {
+  validateAndReport(config: Config, reportCallback: (result: ValidationResult) => void): ValidationResult {
     const result = this.validate(config);
     reportCallback(result);
     return result;
