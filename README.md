@@ -33,7 +33,13 @@ TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 
 ### Optional: Custom Subdomain
 
-Create `CNAME`: `analytics.yourdomain.com` → `mdw.tracelog.io` to bypass ad blockers.
+To prevent browser restrictions, it’s highly recommended to create a CNAME record in your DNS settings:
+
+| Host               | Type  | Value             |
+| ------------------ | ----- | ----------------- |
+| `YOUR_TRACELOG_ID` | CNAME | `mdw.tracelog.io` |
+
+Replace `YOUR_TRACELOG_ID` with the ID provided in your TraceLog account. This setup helps ensure reliable event tracking across all browsers.
 
 ## 🏠 Option B: Self-Hosted
 
