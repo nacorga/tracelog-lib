@@ -31,7 +31,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
   }
 
   async load(config: AppConfig): Promise<Config> {
-    const { customApiConfigUrl } = config;
+    const { remoteConfigApiUrl } = config;
 
     let merged: Config = {
       ...DEFAULT_TRACKING_API_CONFIG,
@@ -40,7 +40,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
 
     await this.validateAndReport(config);
 
-    if (customApiConfigUrl) {
+    if (remoteConfigApiUrl) {
       try {
         const remote = await this.fetcher.fetch(config);
 
@@ -82,23 +82,23 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
       corrected.sessionTimeout = SESSION_TIMEOUT_DEFAULT_MS;
     }
 
-    if (corrected.customApiUrl) {
+    if (corrected.apiUrl) {
       try {
-        const url = new URL(corrected.customApiUrl);
+        const url = new URL(corrected.apiUrl);
         const sanitized = url.href.replace(/\/$/, '');
 
-        corrected.customApiUrl = isValidUrl(sanitized, url.hostname, corrected.allowHttp) ? sanitized : undefined;
+        corrected.apiUrl = isValidUrl(sanitized, url.hostname, corrected.allowHttp) ? sanitized : undefined;
       } catch {
-        corrected.customApiUrl = undefined;
+        corrected.apiUrl = undefined;
       }
     }
 
-    if (corrected.customApiConfigUrl) {
+    if (corrected.remoteConfigApiUrl) {
       try {
-        const url = new URL(corrected.customApiConfigUrl);
-        corrected.customApiConfigUrl = url.href.replace(/\/$/, '');
+        const url = new URL(corrected.remoteConfigApiUrl);
+        corrected.remoteConfigApiUrl = url.href.replace(/\/$/, '');
       } catch {
-        corrected.customApiConfigUrl = undefined;
+        corrected.remoteConfigApiUrl = undefined;
       }
     }
 
@@ -116,7 +116,7 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
 
   async load(config: AppConfig): Promise<Config> {
     if (!config.id) {
-      throw new Error('Tracking ID is required when not using customApiUrl');
+      throw new Error('Tracking ID is required when not using apiUrl');
     }
 
     const errors: string[] = [];
@@ -191,7 +191,7 @@ export class ConfigLoaderFactory extends Base {
       return new DemoConfigLoader();
     }
 
-    if (config.customApiUrl) {
+    if (config.apiUrl) {
       return new CustomApiConfigLoader(this.validator, this.fetcher);
     }
 

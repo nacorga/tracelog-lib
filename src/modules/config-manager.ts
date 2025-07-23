@@ -37,9 +37,9 @@ export class ConfigManager extends Base {
   }
 
   getApiUrl(): string | undefined {
-    if (this.config.customApiUrl) {
+    if (this.config.apiUrl) {
       try {
-        const url = new URL(this.config.customApiUrl);
+        const url = new URL(this.config.apiUrl);
         const sanitized = url.href.replace(/\/$/, '');
 
         if (isValidUrl(sanitized, url.hostname, this.config.allowHttp)) {
@@ -96,7 +96,7 @@ export class ConfigManager extends Base {
       issues.push('Max fetch attempts exceeded');
     }
 
-    if (!this.id && !this.config.customApiUrl) {
+    if (!this.id && !this.config.apiUrl) {
       issues.push('Missing configuration ID');
     }
 

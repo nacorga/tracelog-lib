@@ -82,10 +82,10 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
   }
 
   private buildConfigUrl(config: AppConfig): string | undefined {
-    // Handle custom API config URL
-    if (config.customApiConfigUrl) {
+    // Handle remote config URL
+    if (config.remoteConfigApiUrl) {
       try {
-        const url = new URL(config.customApiConfigUrl);
+        const url = new URL(config.remoteConfigApiUrl);
         return url.href.replace(/\/$/, '');
       } catch {
         return undefined;
@@ -93,9 +93,9 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
 
     // Handle custom API URL (derive config URL from it)
-    if (config.customApiUrl) {
+    if (config.apiUrl) {
       try {
-        const url = new URL(config.customApiUrl);
+        const url = new URL(config.apiUrl);
         return `${url.origin}${url.pathname.replace(/\/$/, '')}/config`;
       } catch {
         return undefined;

@@ -339,7 +339,7 @@ const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], p
 };
 
 /**
- * Validates a URL field (customApiUrl or customApiConfigUrl)
+ * Validates a URL field (apiUrl or remoteConfigApiUrl)
  */
 const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: string, errors: string[]): void => {
   if (url !== undefined) {
@@ -391,8 +391,8 @@ export const validateAppConfig = (config: AppConfig): { errors: string[]; warnin
   }
 
   // Use helper functions for common validations
-  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
-  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
+  validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
+  validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
 
   validateSamplingRate(config.samplingRate, errors);
 
@@ -416,8 +416,8 @@ export const validateFinalConfig = (config: Config): { errors: string[]; warning
   // Use helper functions for common validations
   validateSamplingRate(config.samplingRate, errors);
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
-  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
-  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
+  validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
+  validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
 
   return { errors, warnings };
 };
