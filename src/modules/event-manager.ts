@@ -113,9 +113,9 @@ export class EventManager extends Base {
 
       if (matchedTags?.length) {
         payload.tags = this.isQaMode()
-          ? matchedTags.map((tag) => ({
-              id: tag,
-              name: this.config?.tags?.find((t) => t.id === tag)?.name ?? '',
+          ? matchedTags.map((id) => ({
+              id,
+              key: this.config?.tags?.find((t) => t.id === id)?.key ?? '',
             }))
           : matchedTags;
       }
@@ -313,13 +313,17 @@ export class EventManager extends Base {
 
   private checkEventTypePageView(event: EventData, deviceType: DeviceType): string[] {
     const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) || [];
+
     if (tags.length === 0) {
       return [];
     }
+
     const matchedTagIds: string[] = [];
+
     for (const tag of tags) {
       const { id, logicalOperator, conditions } = tag;
       const results: boolean[] = [];
+
       for (const condition of conditions) {
         switch (condition.type) {
           case TagConditionType.URL_MATCHES: {
@@ -364,19 +368,25 @@ export class EventManager extends Base {
 
   private checkEventTypeClick(event: EventData, deviceType: DeviceType): string[] {
     const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) || [];
+
     if (tags.length === 0) {
       return [];
     }
+
     const matchedTagIds: string[] = [];
+
     for (const tag of tags) {
       const { id, logicalOperator, conditions } = tag;
       const results: boolean[] = [];
+
       for (const condition of conditions) {
         if (!event.click_data) {
           results.push(false);
           continue;
         }
+
         const clickData = event.click_data;
+
         switch (condition.type) {
           case TagConditionType.ELEMENT_MATCHES: {
             results.push(TagManager.matchElementSelector(condition, clickData));
