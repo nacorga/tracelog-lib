@@ -1,8 +1,6 @@
+import { ALLOWED_API_CONFIG_KEYS } from '../constants';
 import { ApiConfig } from '../types/config.types';
 import { logError } from './error.utils';
-
-// Allowed API config keys for runtime validation
-const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>(['tags', 'samplingRate', 'qaMode', 'excludedUrlPaths']);
 
 // Security constants
 const MAX_STRING_LENGTH = 1000;

@@ -1,5 +1,5 @@
 import { Config } from '../types';
-import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
+import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
 import { isValidUrl, buildDynamicApiUrl } from '../utils';
 import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory } from '../config';
 import { Base } from '../base';
@@ -10,7 +10,7 @@ export class ConfigManager extends Base {
   private readonly fetcher: ConfigFetcher;
   private readonly loaderFactory: ConfigLoaderFactory;
 
-  private config: Config = { ...DEFAULT_TRACKING_API_CONFIG, ...DEFAULT_TRACKING_APP_CONFIG };
+  private config: Config = { ...DEFAULT_API_CONFIG, ...DEFAULT_CONFIG };
   private id = '';
 
   constructor() {

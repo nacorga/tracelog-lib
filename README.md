@@ -78,12 +78,12 @@ TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 
 **Both modes:**
 - ⚠️ `TraceLog.init()` can only be called once
-- ⚠️ `sessionTimeout` uses milliseconds (min: 30000ms)
+- ⚠️ `sessionTimeout` uses milliseconds (default: 900000ms = 15min)
 - ⚠️ Use `allowHttp: true` only for development
 
 ### Troubleshooting
 - **CORS errors**: Add `Access-Control-Allow-Origin` headers to your server
-- **Config errors**: Ensure `remoteConfigApiUrl` returns valid JSON
+- **Config errors**: Ensure `remoteConfigApiUrl` returns valid JSON  
 - **HTTPS blocked**: Set `allowHttp: true` for development endpoints
 
 ---

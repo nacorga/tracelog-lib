@@ -1,5 +1,5 @@
 import { Config } from '../types';
-import { DEFAULT_TRACKING_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
+import { DEFAULT_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher } from './config-fetcher';
 import { isValidUrl } from '../utils';
@@ -12,7 +12,7 @@ export abstract class ConfigLoader {
 export class DemoConfigLoader extends ConfigLoader {
   async load(config: Config): Promise<Config> {
     return {
-      ...DEFAULT_TRACKING_API_CONFIG,
+      ...DEFAULT_API_CONFIG,
       ...config,
       qaMode: true,
       samplingRate: 1,
@@ -34,7 +34,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     const { remoteConfigApiUrl } = config;
 
     let merged: Config = {
-      ...DEFAULT_TRACKING_API_CONFIG,
+      ...DEFAULT_API_CONFIG,
       ...config,
     };
 
@@ -63,7 +63,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     }
 
     if (result.warnings.length > 0) {
-      throw new Error(`Configuration warnings: ${result.warnings.join('; ')}`);
+      this.log('warning', `Configuration warnings: ${result.warnings.join('; ')}`);
     }
   }
 
@@ -123,7 +123,7 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     const warnings: string[] = [];
 
     let finalConfig: Config = {
-      ...DEFAULT_TRACKING_API_CONFIG,
+      ...DEFAULT_API_CONFIG,
       ...config,
     };
 
@@ -149,7 +149,7 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     }
 
     if (warnings.length > 0) {
-      throw new Error(`Configuration warnings: ${warnings.join('; ')}`);
+      this.log('warning', `Configuration warnings: ${warnings.join('; ')}`);
     }
 
     if (errors.length > 0) {

@@ -1,10 +1,11 @@
 import {
+  ALLOWED_API_CONFIG_KEYS,
   MAX_CUSTOM_EVENT_ARRAY_SIZE,
   MAX_CUSTOM_EVENT_KEYS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
 } from '../constants';
-import { EventType, MetadataType, ScrollDirection, EventData, Queue, Config } from '../types';
+import { EventType, MetadataType, ScrollDirection, EventData, Queue, Config, ApiConfig } from '../types';
 import { sanitizeMetadata } from './sanitize.utils';
 
 export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
@@ -302,9 +303,6 @@ export const isEventValid = (
   return isValidMetadata(eventName, metadata, 'customEvent');
 };
 
-/**
- * Validates a sampling rate value
- */
 const validateSamplingRate = (samplingRate: unknown, errors: string[]): void => {
   if (samplingRate !== undefined) {
     if (typeof samplingRate !== 'number') {
@@ -315,9 +313,6 @@ const validateSamplingRate = (samplingRate: unknown, errors: string[]): void => 
   }
 };
 
-/**
- * Validates excluded URL paths array
- */
 const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], prefix = ''): void => {
   if (excludedUrlPaths !== undefined) {
     if (Array.isArray(excludedUrlPaths)) {
@@ -338,9 +333,6 @@ const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], p
   }
 };
 
-/**
- * Validates a URL field (apiUrl or remoteConfigApiUrl)
- */
 const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: string, errors: string[]): void => {
   if (url !== undefined) {
     if (typeof url === 'string') {
@@ -390,7 +382,6 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
     }
   }
 
-  // Use helper functions for common validations
   validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
   validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
 
@@ -413,11 +404,61 @@ export const validateFinalConfig = (config: Config): { errors: string[]; warning
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Use helper functions for common validations
   validateSamplingRate(config.samplingRate, errors);
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
   validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
   validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
 
   return { errors, warnings };
+};
+
+export const isValidConfigApiResponse = (value: unknown): value is ApiConfig => {
+  if (typeof value !== 'object' || !value) {
+    return false;
+  }
+
+  const response = value as Record<string, any>;
+
+  try {
+    for (const key of Object.keys(response)) {
+      if (ALLOWED_API_CONFIG_KEYS.has(key as keyof ApiConfig)) {
+        const value = response[key];
+
+        switch (key) {
+          case 'tags': {
+            if (value?.length && !Array.isArray(value)) {
+              return false;
+            }
+
+            break;
+          }
+          case 'samplingRate': {
+            if (value && typeof value !== 'number') {
+              return false;
+            }
+
+            break;
+          }
+          case 'qaMode': {
+            if (value && typeof value !== 'boolean') {
+              return false;
+            }
+
+            break;
+          }
+          case 'excludedUrlPaths': {
+            if (value?.length && !Array.isArray(value)) {
+              return false;
+            }
+
+            break;
+          }
+        }
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 };
