@@ -20,10 +20,10 @@ export const init = (config: Config): void => {
     return;
   }
 
-  const usingCustomServer = Boolean(config?.apiUrl || config?.remoteConfigApiUrl);
+  const usingCustomServer = Boolean(config?.apiUrl ?? config?.remoteConfigApiUrl);
 
   if (usingCustomServer && config?.id) {
-    logError('Invalid configuration: id cannot be used with apiUrl and/or remoteConfigApiUrl');
+    logError('Invalid configuration: id cannot be used with apiUrl or remoteConfigApiUrl');
     return;
   }
 

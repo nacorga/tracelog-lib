@@ -15,6 +15,6 @@ test.describe('Invalid Configuration', () => {
     await page.waitForTimeout(500);
 
     expect(consoleErrors).toHaveLength(1);
-    expect(consoleErrors[0]).toBe('[TraceLog] Invalid configuration: id cannot be used with apiUrl and/or remoteConfigApiUrl');
+    expect(consoleErrors[0]).toBe('[TraceLog] Invalid configuration: id cannot be used with apiUrl or remoteConfigApiUrl');
   });
 });
