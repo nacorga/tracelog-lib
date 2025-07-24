@@ -37,7 +37,7 @@ test.describe('API Config', () => {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statusCode: 200, data: { qaMode: true, samplingRate: 0.33 } }),
+        body: JSON.stringify({ qaMode: true, samplingRate: 0.33 }),
       });
     });
 
@@ -49,5 +49,6 @@ test.describe('API Config', () => {
 
     expect(configLog).toContain('"qaMode":true');
     expect(configLog).toContain('"samplingRate":0.33');
+    expect(configLog).toContain('"sessionTimeout":40000');
   });
 });

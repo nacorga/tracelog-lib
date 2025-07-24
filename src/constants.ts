@@ -1,4 +1,4 @@
-import { ApiConfig, AppConfig } from './types';
+import { ApiConfig, Config } from './types';
 
 // Performance constants
 export const MAX_FETCH_ATTEMPTS = 3;
@@ -29,16 +29,20 @@ export const BATCH_SIZE_THRESHOLD = 50;
 // UTM parameters
 export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 
-// Default tracking API config
-export const DEFAULT_TRACKING_API_CONFIG: ApiConfig = {
+// Allowed API config keys for runtime validation
+export const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>(['tags', 'samplingRate', 'qaMode', 'excludedUrlPaths']);
+
+// Default API config
+export const DEFAULT_API_CONFIG: ApiConfig = {
   qaMode: false,
   samplingRate: DEFAULT_SAMPLING_RATE,
   tags: [],
   excludedUrlPaths: [],
 };
 
-// Default tracking app config
-export const DEFAULT_TRACKING_APP_CONFIG: AppConfig = {
+// Default config
+export const DEFAULT_CONFIG: Config = {
+  ...DEFAULT_API_CONFIG,
   sessionTimeout: SESSION_TIMEOUT_DEFAULT_MS,
   allowHttp: false,
 };

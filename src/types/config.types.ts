@@ -24,9 +24,9 @@ export interface ApiConfig {
   excludedUrlPaths: string[];
 }
 
-export interface AppConfig {
+export interface Config extends ApiConfig {
   /**
-   * Unique project identifier. Required when not using a customApiUrl.
+   * Unique project identifier. Required when not using `apiUrl`.
    */
   id?: string;
   /**
@@ -50,22 +50,15 @@ export interface AppConfig {
    * Custom URL to send tracking events. When set, TraceLog will bypass the
    * default domain generation and use this URL directly.
    */
-  customApiUrl?: string;
+  apiUrl?: string;
   /**
    * When sending events to your own server, specify where to fetch
    * API-level configuration. This allows dynamic updates from your backend.
-   * If omitted, no remote config will be fetched when using `customApiUrl`.
+   * If omitted, no remote config will be fetched when using `apiUrl`.
    */
-  customApiConfigUrl?: string;
-  /**
-   * Provide API-level configuration when using a custom server. If set,
-   * these values override the defaults and no remote config will be fetched.
-   */
-  apiConfig?: Partial<ApiConfig>;
+  remoteConfigApiUrl?: string;
   /**
    * Allow HTTP requests to be made. This is useful for testing and development.
    */
   allowHttp?: boolean;
 }
-
-export type Config = ApiConfig & Omit<AppConfig, 'apiConfig'>;

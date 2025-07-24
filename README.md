@@ -50,22 +50,20 @@ import { TraceLog } from '@tracelog/client';
 
 // Basic setup - events go to your API
 TraceLog.init({
-  customApiUrl: 'https://analytics.example.com/tracelog'
+  apiUrl: 'https://analytics.example.com/tracelog'
 });
 
 // With remote config from your backend
 TraceLog.init({
-  customApiUrl: 'https://analytics.example.com/tracelog',
-  customApiConfigUrl: 'https://analytics.example.com/config'
+  apiUrl: 'https://analytics.example.com/tracelog',
+  remoteConfigApiUrl: 'https://analytics.example.com/config'
 });
 
 // With static config
 TraceLog.init({
-  customApiUrl: 'https://analytics.example.com/tracelog',
-  apiConfig: {
-    samplingRate: 1,
-    excludedUrlPaths: ['/admin']
-  }
+  apiUrl: 'https://analytics.example.com/tracelog',
+  samplingRate: 1,
+  excludedUrlPaths: ['/admin']
 });
 
 TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
@@ -75,17 +73,17 @@ TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 
 **Self-hosted mode:**
 - ❌ Don't use `id` field (causes error)
-- ✅ `customApiUrl` is required
-- ⚠️ `customApiConfigUrl` only works with `customApiUrl`
+- ✅ `apiUrl` is required
+- ⚠️ `remoteConfigApiUrl` only works with `apiUrl`
 
 **Both modes:**
 - ⚠️ `TraceLog.init()` can only be called once
-- ⚠️ `sessionTimeout` uses milliseconds (min: 30000ms)
+- ⚠️ `sessionTimeout` uses milliseconds (default: 900000ms = 15min)
 - ⚠️ Use `allowHttp: true` only for development
 
 ### Troubleshooting
 - **CORS errors**: Add `Access-Control-Allow-Origin` headers to your server
-- **Config errors**: Ensure `customApiConfigUrl` returns valid JSON  
+- **Config errors**: Ensure `remoteConfigApiUrl` returns valid JSON  
 - **HTTPS blocked**: Set `allowHttp: true` for development endpoints
 
 ---

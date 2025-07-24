@@ -1,12 +1,12 @@
-import { AppConfig, ApiConfig } from '../types';
-import { sanitizeApiConfig, isValidUrl, buildDynamicApiUrl } from '../utils';
-import { DEFAULT_TRACKING_API_CONFIG, FETCH_TIMEOUT_MS, MAX_FETCH_ATTEMPTS } from '../constants';
+import { Config, ApiConfig } from '../types';
+import { sanitizeApiConfig, isValidUrl, buildDynamicApiUrl, isValidConfigApiResponse } from '../utils';
+import { DEFAULT_API_CONFIG, FETCH_TIMEOUT_MS, MAX_FETCH_ATTEMPTS } from '../constants';
 import { VERSION } from '../version';
 import { IRateLimiter } from './rate-limiter';
 import { Base } from '../base';
 
 export interface IConfigFetcher {
-  fetch(config: AppConfig): Promise<ApiConfig | undefined>;
+  fetch(config: Config): Promise<ApiConfig | undefined>;
 }
 
 export class ConfigFetcher extends Base implements IConfigFetcher {
@@ -14,7 +14,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     super();
   }
 
-  async fetch(config: AppConfig): Promise<ApiConfig | undefined> {
+  async fetch(config: Config): Promise<ApiConfig | undefined> {
     if (!this.rateLimiter.canFetch()) {
       if (this.rateLimiter.hasExceededMaxAttempts()) {
         this.log('error', `Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`);
@@ -33,7 +33,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
   }
 
-  private async performFetch(config: AppConfig): Promise<ApiConfig | undefined> {
+  private async performFetch(config: Config): Promise<ApiConfig | undefined> {
     const configUrl = this.buildConfigUrl(config);
 
     if (!configUrl) {
@@ -81,11 +81,11 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
   }
 
-  private buildConfigUrl(config: AppConfig): string | undefined {
-    // Handle custom API config URL
-    if (config.customApiConfigUrl) {
+  private buildConfigUrl(config: Config): string | undefined {
+    // Handle remote config URL
+    if (config.remoteConfigApiUrl) {
       try {
-        const url = new URL(config.customApiConfigUrl);
+        const url = new URL(config.remoteConfigApiUrl);
         return url.href.replace(/\/$/, '');
       } catch {
         return undefined;
@@ -93,9 +93,9 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
     }
 
     // Handle custom API URL (derive config URL from it)
-    if (config.customApiUrl) {
+    if (config.apiUrl) {
       try {
-        const url = new URL(config.customApiUrl);
+        const url = new URL(config.apiUrl);
         return `${url.origin}${url.pathname.replace(/\/$/, '')}/config`;
       } catch {
         return undefined;
@@ -144,18 +144,15 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
   }
 
   private parseApiResponse(json: any): ApiConfig {
-    const { statusCode, data } = json;
+    const isValid = isValidConfigApiResponse(json);
 
-    if (data === undefined || data === null || typeof statusCode !== 'number') {
-      throw new Error('Config API response missing required properties');
+    if (!isValid) {
+      throw new Error('Invalid Config API response');
     }
 
-    if (statusCode !== 200) {
-      throw new Error(`Invalid Config API response status code: ${statusCode}`);
-    }
+    const safeData = sanitizeApiConfig(json);
 
-    const safeData = sanitizeApiConfig(data);
-    return { ...DEFAULT_TRACKING_API_CONFIG, ...(safeData as ApiConfig) };
+    return { ...DEFAULT_API_CONFIG, ...(safeData as ApiConfig) };
   }
 
   private handleFetchError(error: unknown): void {

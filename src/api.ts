@@ -1,5 +1,5 @@
 import { Tracking } from './tracking';
-import { AppConfig, MetadataType } from './types';
+import { Config, MetadataType } from './types';
 import { logError } from './utils';
 
 export * as Types from './types';
@@ -11,7 +11,7 @@ let trackingInstance: Tracking | undefined;
  * @param id - Tracking ID
  * @param config - Optional configuration
  */
-export const init = (config: AppConfig): void => {
+export const init = (config: Config): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -20,20 +20,20 @@ export const init = (config: AppConfig): void => {
     return;
   }
 
-  const usingCustomServer = Boolean(config?.customApiUrl || config?.customApiConfigUrl);
+  const usingCustomServer = Boolean(config?.apiUrl ?? config?.remoteConfigApiUrl);
 
   if (usingCustomServer && config?.id) {
-    logError('Invalid configuration: id cannot be used with customApiUrl and/or customApiConfigUrl');
+    logError('Invalid configuration: id cannot be used with apiUrl or remoteConfigApiUrl');
     return;
   }
 
   if (!usingCustomServer && !config?.id) {
-    logError('Tracking ID is required when customApiUrl is not provided');
+    logError('Tracking ID is required when apiUrl is not provided');
     return;
   }
 
-  if (config?.customApiConfigUrl && !config?.customApiUrl) {
-    logError('customApiConfigUrl requires customApiUrl to be set');
+  if (config?.remoteConfigApiUrl && !config?.apiUrl) {
+    logError('remoteConfigApiUrl requires apiUrl to be set');
     return;
   }
 
