@@ -1,6 +1,14 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+### [0.2.5](https://github.com/nacorga/tracelog-client/compare/v0.2.4...v0.2.5) (2025-07-24)
+
+
+### Bug Fixes
+
+* handle optional chaining in event manager and improve error handling in sanitization functions ([6fead86](https://github.com/nacorga/tracelog-client/commit/6fead86928491b0412dda82cd3ea6191789aaaca))
+* make ApiConfig properties optional and improve validation logic ([0f10c74](https://github.com/nacorga/tracelog-client/commit/0f10c7429e157ea54b8fb8194194edda622c9bdc))
+
 ### [0.2.4](https://github.com/nacorga/tracelog-client/compare/v0.2.3...v0.2.4) (2025-07-24)
 
 
