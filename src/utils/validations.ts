@@ -1,5 +1,4 @@
 import {
-  ALLOWED_API_CONFIG_KEYS,
   MAX_CUSTOM_EVENT_ARRAY_SIZE,
   MAX_CUSTOM_EVENT_KEYS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
@@ -421,40 +420,13 @@ export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
     const response = json as Record<string, unknown>;
 
     const result: Record<keyof ApiConfig, boolean> = {
-      qaMode: false,
-      samplingRate: false,
-      tags: false,
-      excludedUrlPaths: false,
+      qaMode: response['qaMode'] === undefined || typeof response['qaMode'] === 'boolean',
+      samplingRate:
+        response['samplingRate'] === undefined ||
+        (typeof response['samplingRate'] === 'number' && response['samplingRate'] > 0 && response['samplingRate'] <= 1),
+      tags: response['tags'] === undefined || Array.isArray(response['tags']),
+      excludedUrlPaths: response['excludedUrlPaths'] === undefined || Array.isArray(response['excludedUrlPaths']),
     };
-
-    for (const key of Object.keys(response)) {
-      if (ALLOWED_API_CONFIG_KEYS.has(key as keyof ApiConfig)) {
-        const value = response[key];
-
-        switch (key) {
-          case 'tags': {
-            result[key] = value === undefined || Array.isArray(value);
-
-            break;
-          }
-          case 'samplingRate': {
-            result[key] = value === undefined || typeof value === 'number';
-
-            break;
-          }
-          case 'qaMode': {
-            result[key] = value === undefined || typeof value === 'boolean';
-
-            break;
-          }
-          case 'excludedUrlPaths': {
-            result[key] = value === undefined || Array.isArray(value);
-
-            break;
-          }
-        }
-      }
-    }
 
     return Object.values(result).every(Boolean);
   } catch {
