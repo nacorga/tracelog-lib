@@ -1,5 +1,5 @@
 import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from './modules';
-import { AppConfig, EventType, MetadataType, EventHandler, DeviceType } from './types';
+import { Config, EventType, MetadataType, EventHandler, DeviceType } from './types';
 import { NavigationData } from './events';
 import { Base } from './base';
 
@@ -33,7 +33,7 @@ export class Tracking extends Base {
   private dataSender!: DataSender;
   private urlManager!: UrlManager;
 
-  constructor(config: AppConfig) {
+  constructor(config: Config) {
     super();
 
     this.initializationPromise = this.initializeTracking(config).catch((error) => {
@@ -41,7 +41,7 @@ export class Tracking extends Base {
     });
   }
 
-  private async initializeTracking(config: AppConfig): Promise<void> {
+  private async initializeTracking(config: Config): Promise<void> {
     if (this.initializationState !== InitializationState.UNINITIALIZED) {
       return this.initializationPromise;
     }
@@ -324,7 +324,7 @@ export class Tracking extends Base {
     this.eventManager.updatePageUrl(url);
   }
 
-  async getConfig(): Promise<AppConfig | undefined> {
+  async getConfig(): Promise<Config | undefined> {
     await this.waitForInitialization();
     return this.configManager?.getConfig();
   }

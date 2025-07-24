@@ -9,12 +9,10 @@
   <script type="module">
     import { TraceLog } from '../tracelog.js';
     TraceLog.init({
-      customApiUrl: 'https://analytics.example.com/tracelog',
-      apiConfig: {
-        qaMode: true,
-        samplingRate: 0.7,
-        excludedUrlPaths: ['/admin', '/debug'],
-      }
+      apiUrl: 'https://analytics.example.com/tracelog',
+      qaMode: true,
+      samplingRate: 0.7,
+      excludedUrlPaths: ['/admin', '/debug'],
     });
   </script>
 </body>

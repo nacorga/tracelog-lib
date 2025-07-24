@@ -1,4 +1,4 @@
-import { AppConfig, Config } from '../types';
+import { Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, DEFAULT_TRACKING_APP_CONFIG } from '../constants';
 import { isValidUrl, buildDynamicApiUrl } from '../utils';
 import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory } from '../config';
@@ -22,7 +22,7 @@ export class ConfigManager extends Base {
     this.loaderFactory = new ConfigLoaderFactory(this.validator, this.fetcher);
   }
 
-  async loadConfig(config: AppConfig): Promise<Config> {
+  async loadConfig(config: Config): Promise<Config> {
     this.id = config.id ?? '';
 
     const loader = this.loaderFactory.createLoader(config);
@@ -37,9 +37,9 @@ export class ConfigManager extends Base {
   }
 
   getApiUrl(): string | undefined {
-    if (this.config.customApiUrl) {
+    if (this.config.apiUrl) {
       try {
-        const url = new URL(this.config.customApiUrl);
+        const url = new URL(this.config.apiUrl);
         const sanitized = url.href.replace(/\/$/, '');
 
         if (isValidUrl(sanitized, url.hostname, this.config.allowHttp)) {
@@ -96,7 +96,7 @@ export class ConfigManager extends Base {
       issues.push('Max fetch attempts exceeded');
     }
 
-    if (!this.id && !this.config.customApiUrl) {
+    if (!this.id && !this.config.apiUrl) {
       issues.push('Missing configuration ID');
     }
 

@@ -4,7 +4,7 @@ import {
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
 } from '../constants';
-import { EventType, MetadataType, ScrollDirection, EventData, Queue, AppConfig, Config } from '../types';
+import { EventType, MetadataType, ScrollDirection, EventData, Queue, Config } from '../types';
 import { sanitizeMetadata } from './sanitize.utils';
 
 export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
@@ -339,7 +339,7 @@ const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], p
 };
 
 /**
- * Validates a URL field (customApiUrl or customApiConfigUrl)
+ * Validates a URL field (apiUrl or remoteConfigApiUrl)
  */
 const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: string, errors: string[]): void => {
   if (url !== undefined) {
@@ -360,7 +360,7 @@ const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: st
   }
 };
 
-export const validateAppConfig = (config: AppConfig): { errors: string[]; warnings: string[] } => {
+export const validateConfig = (config: Config): { errors: string[]; warnings: string[] } => {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -391,28 +391,20 @@ export const validateAppConfig = (config: AppConfig): { errors: string[]; warnin
   }
 
   // Use helper functions for common validations
-  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
-  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
+  validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
+  validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
 
-  if (config.apiConfig !== undefined) {
-    if (typeof config.apiConfig !== 'object' || config.apiConfig === null) {
-      errors.push('apiConfig must be an object');
-    } else {
-      const { samplingRate, qaMode, tags, excludedUrlPaths } = config.apiConfig;
+  validateSamplingRate(config.samplingRate, errors);
 
-      validateSamplingRate(samplingRate, errors);
-
-      if (qaMode !== undefined && typeof qaMode !== 'boolean') {
-        errors.push('apiConfig.qaMode must be a boolean');
-      }
-
-      if (tags !== undefined && !Array.isArray(tags)) {
-        errors.push('apiConfig.tags must be an array');
-      }
-
-      validateExcludedUrlPaths(excludedUrlPaths, errors, 'apiConfig.');
-    }
+  if (config.qaMode !== undefined && typeof config.qaMode !== 'boolean') {
+    errors.push('qaMode must be a boolean');
   }
+
+  if (config.tags !== undefined && !Array.isArray(config.tags)) {
+    errors.push('tags must be an array');
+  }
+
+  validateExcludedUrlPaths(config.excludedUrlPaths, errors);
 
   return { errors, warnings };
 };
@@ -424,8 +416,8 @@ export const validateFinalConfig = (config: Config): { errors: string[]; warning
   // Use helper functions for common validations
   validateSamplingRate(config.samplingRate, errors);
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
-  validateUrl(config.customApiUrl, config.allowHttp, 'customApiUrl', errors);
-  validateUrl(config.customApiConfigUrl, config.allowHttp, 'customApiConfigUrl', errors);
+  validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
+  validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
 
   return { errors, warnings };
 };

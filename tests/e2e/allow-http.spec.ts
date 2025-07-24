@@ -15,6 +15,6 @@ test.describe('Allow HTTP Validation', () => {
     await page.waitForTimeout(500);
 
     expect(consoleErrors).toHaveLength(1);
-    expect(consoleErrors[0]).toBe('[TraceLog] Initialization rejected: Configuration errors: customApiUrl using http requires allowHttp=true');
+    expect(consoleErrors[0]).toBe('[TraceLog] Initialization rejected: Configuration errors: apiUrl using http requires allowHttp=true');
   });
 });

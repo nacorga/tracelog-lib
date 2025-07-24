@@ -1,4 +1,4 @@
-import { AppConfig, Config } from '../types';
+import { Config } from '../types';
 import { DEFAULT_TRACKING_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher } from './config-fetcher';
@@ -6,17 +6,14 @@ import { isValidUrl } from '../utils';
 import { Base } from '../base';
 
 export abstract class ConfigLoader {
-  abstract load(config: AppConfig): Promise<Config>;
+  abstract load(config: Config): Promise<Config>;
 }
 
 export class DemoConfigLoader extends ConfigLoader {
-  async load(config: AppConfig): Promise<Config> {
-    const { apiConfig = {}, ...rest } = config;
-
+  async load(config: Config): Promise<Config> {
     return {
       ...DEFAULT_TRACKING_API_CONFIG,
-      ...apiConfig,
-      ...rest,
+      ...config,
       qaMode: true,
       samplingRate: 1,
       tags: [],
@@ -33,18 +30,17 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     super();
   }
 
-  async load(config: AppConfig): Promise<Config> {
-    const { apiConfig = {}, customApiConfigUrl, ...rest } = config;
+  async load(config: Config): Promise<Config> {
+    const { remoteConfigApiUrl } = config;
 
     let merged: Config = {
       ...DEFAULT_TRACKING_API_CONFIG,
-      ...apiConfig,
-      ...rest,
+      ...config,
     };
 
     await this.validateAndReport(config);
 
-    if (customApiConfigUrl) {
+    if (remoteConfigApiUrl) {
       try {
         const remote = await this.fetcher.fetch(config);
 
@@ -59,7 +55,7 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
     return this.applyCorrections(merged);
   }
 
-  private async validateAndReport(config: AppConfig): Promise<void> {
+  private async validateAndReport(config: Config): Promise<void> {
     const result = this.validator.validate(config);
 
     if (result.errors.length > 0) {
@@ -86,23 +82,23 @@ export class CustomApiConfigLoader extends Base implements ConfigLoader {
       corrected.sessionTimeout = SESSION_TIMEOUT_DEFAULT_MS;
     }
 
-    if (corrected.customApiUrl) {
+    if (corrected.apiUrl) {
       try {
-        const url = new URL(corrected.customApiUrl);
+        const url = new URL(corrected.apiUrl);
         const sanitized = url.href.replace(/\/$/, '');
 
-        corrected.customApiUrl = isValidUrl(sanitized, url.hostname, corrected.allowHttp) ? sanitized : undefined;
+        corrected.apiUrl = isValidUrl(sanitized, url.hostname, corrected.allowHttp) ? sanitized : undefined;
       } catch {
-        corrected.customApiUrl = undefined;
+        corrected.apiUrl = undefined;
       }
     }
 
-    if (corrected.customApiConfigUrl) {
+    if (corrected.remoteConfigApiUrl) {
       try {
-        const url = new URL(corrected.customApiConfigUrl);
-        corrected.customApiConfigUrl = url.href.replace(/\/$/, '');
+        const url = new URL(corrected.remoteConfigApiUrl);
+        corrected.remoteConfigApiUrl = url.href.replace(/\/$/, '');
       } catch {
-        corrected.customApiConfigUrl = undefined;
+        corrected.remoteConfigApiUrl = undefined;
       }
     }
 
@@ -118,19 +114,17 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     super();
   }
 
-  async load(config: AppConfig): Promise<Config> {
+  async load(config: Config): Promise<Config> {
     if (!config.id) {
-      throw new Error('Tracking ID is required when not using customApiUrl');
+      throw new Error('Tracking ID is required when not using apiUrl');
     }
 
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    const { apiConfig = {}, ...rest } = config;
     let finalConfig: Config = {
       ...DEFAULT_TRACKING_API_CONFIG,
-      ...apiConfig,
-      ...rest,
+      ...config,
     };
 
     try {
@@ -192,12 +186,12 @@ export class ConfigLoaderFactory extends Base {
     super();
   }
 
-  createLoader(config: AppConfig): ConfigLoader {
+  createLoader(config: Config): ConfigLoader {
     if (config.id === 'demo') {
       return new DemoConfigLoader();
     }
 
-    if (config.customApiUrl) {
+    if (config.apiUrl) {
       return new CustomApiConfigLoader(this.validator, this.fetcher);
     }
 

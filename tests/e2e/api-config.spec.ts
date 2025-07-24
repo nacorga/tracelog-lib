@@ -49,5 +49,6 @@ test.describe('API Config', () => {
 
     expect(configLog).toContain('"qaMode":true');
     expect(configLog).toContain('"samplingRate":0.33');
+    expect(configLog).toContain('"sessionTimeout":40000');
   });
 });
