@@ -1,6 +1,13 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+### [0.2.6](https://github.com/nacorga/tracelog-client/compare/v0.2.5...v0.2.6) (2025-07-24)
+
+
+### Bug Fixes
+
+* update tag structure in EventManager to use 'key' instead of 'name' and adjust related types ([d56e050](https://github.com/nacorga/tracelog-client/commit/d56e05004819a231aa1a527b2c0925aa1f2e612e))
+
 ### [0.2.5](https://github.com/nacorga/tracelog-client/compare/v0.2.4...v0.2.5) (2025-07-24)
 
 
