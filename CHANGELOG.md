@@ -1,6 +1,13 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+### [0.2.4](https://github.com/nacorga/tracelog-client/compare/v0.2.3...v0.2.4) (2025-07-24)
+
+
+### Bug Fixes
+
+* update error message for invalid configuration to use 'or' instead of 'and/or' ([cbb2c13](https://github.com/nacorga/tracelog-client/commit/cbb2c1389d08ec81403dc7eecdc6d14cf584c680))
+
 ### [0.2.3](https://github.com/nacorga/tracelog-client/compare/v0.2.2...v0.2.3) (2025-07-23)
 
 ### [0.2.2](https://github.com/nacorga/tracelog-client/compare/v0.2.1...v0.2.2) (2025-07-23)
