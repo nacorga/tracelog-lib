@@ -412,44 +412,43 @@ export const validateFinalConfig = (config: Config): { errors: string[]; warning
   return { errors, warnings };
 };
 
-export const isValidConfigApiResponse = (value: unknown): value is ApiConfig => {
-  if (typeof value !== 'object' || !value) {
-    return false;
-  }
-
-  const response = value as Record<string, any>;
-
+export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
   try {
+    if (typeof json !== 'object' || !json) {
+      return false;
+    }
+
+    const response = json as Record<string, unknown>;
+
+    const result: Record<keyof ApiConfig, boolean> = {
+      qaMode: false,
+      samplingRate: false,
+      tags: false,
+      excludedUrlPaths: false,
+    };
+
     for (const key of Object.keys(response)) {
       if (ALLOWED_API_CONFIG_KEYS.has(key as keyof ApiConfig)) {
         const value = response[key];
 
         switch (key) {
           case 'tags': {
-            if (value?.length && !Array.isArray(value)) {
-              return false;
-            }
+            result[key] = value === undefined || Array.isArray(value);
 
             break;
           }
           case 'samplingRate': {
-            if (value && typeof value !== 'number') {
-              return false;
-            }
+            result[key] = value === undefined || typeof value === 'number';
 
             break;
           }
           case 'qaMode': {
-            if (value && typeof value !== 'boolean') {
-              return false;
-            }
+            result[key] = value === undefined || typeof value === 'boolean';
 
             break;
           }
           case 'excludedUrlPaths': {
-            if (value?.length && !Array.isArray(value)) {
-              return false;
-            }
+            result[key] = value === undefined || Array.isArray(value);
 
             break;
           }
@@ -457,7 +456,7 @@ export const isValidConfigApiResponse = (value: unknown): value is ApiConfig => 
       }
     }
 
-    return true;
+    return Object.values(result).every(Boolean);
   } catch {
     return false;
   }
