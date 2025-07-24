@@ -1,6 +1,5 @@
 import { ALLOWED_API_CONFIG_KEYS } from '../constants';
 import { ApiConfig } from '../types/config.types';
-import { logError } from './error.utils';
 
 // Security constants
 const MAX_STRING_LENGTH = 1000;
@@ -137,7 +136,7 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 /**
  * Sanitizes API configuration data with strict validation
  */
-export const sanitizeApiConfig = (data: unknown): Partial<ApiConfig> => {
+export const sanitizeApiConfig = (data: unknown): ApiConfig => {
   const safeData: Record<string, unknown> = {};
 
   if (typeof data !== 'object' || data === null) {
@@ -163,9 +162,7 @@ export const sanitizeApiConfig = (data: unknown): Partial<ApiConfig> => {
       }
     }
   } catch (error) {
-    logError(`API config sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-
-    return {};
+    throw new Error(`API config sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   return safeData;
@@ -184,9 +181,7 @@ export const sanitizeMetadata = (metadata: unknown): Record<string, unknown> => 
 
     return typeof sanitized === 'object' && sanitized !== null ? (sanitized as Record<string, unknown>) : {};
   } catch (error) {
-    logError(`Metadata sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-
-    return {};
+    throw new Error(`Metadata sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 

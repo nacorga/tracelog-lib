@@ -1,5 +1,4 @@
 import {
-  ALLOWED_API_CONFIG_KEYS,
   MAX_CUSTOM_EVENT_ARRAY_SIZE,
   MAX_CUSTOM_EVENT_KEYS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
@@ -412,52 +411,24 @@ export const validateFinalConfig = (config: Config): { errors: string[]; warning
   return { errors, warnings };
 };
 
-export const isValidConfigApiResponse = (value: unknown): value is ApiConfig => {
-  if (typeof value !== 'object' || !value) {
-    return false;
-  }
-
-  const response = value as Record<string, any>;
-
+export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
   try {
-    for (const key of Object.keys(response)) {
-      if (ALLOWED_API_CONFIG_KEYS.has(key as keyof ApiConfig)) {
-        const value = response[key];
-
-        switch (key) {
-          case 'tags': {
-            if (value?.length && !Array.isArray(value)) {
-              return false;
-            }
-
-            break;
-          }
-          case 'samplingRate': {
-            if (value && typeof value !== 'number') {
-              return false;
-            }
-
-            break;
-          }
-          case 'qaMode': {
-            if (value && typeof value !== 'boolean') {
-              return false;
-            }
-
-            break;
-          }
-          case 'excludedUrlPaths': {
-            if (value?.length && !Array.isArray(value)) {
-              return false;
-            }
-
-            break;
-          }
-        }
-      }
+    if (typeof json !== 'object' || !json) {
+      return false;
     }
 
-    return true;
+    const response = json as Record<string, unknown>;
+
+    const result: Record<keyof ApiConfig, boolean> = {
+      qaMode: response['qaMode'] === undefined || typeof response['qaMode'] === 'boolean',
+      samplingRate:
+        response['samplingRate'] === undefined ||
+        (typeof response['samplingRate'] === 'number' && response['samplingRate'] > 0 && response['samplingRate'] <= 1),
+      tags: response['tags'] === undefined || Array.isArray(response['tags']),
+      excludedUrlPaths: response['excludedUrlPaths'] === undefined || Array.isArray(response['excludedUrlPaths']),
+    };
+
+    return Object.values(result).every(Boolean);
   } catch {
     return false;
   }

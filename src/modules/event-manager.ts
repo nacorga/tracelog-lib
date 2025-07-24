@@ -115,7 +115,7 @@ export class EventManager extends Base {
         payload.tags = this.isQaMode()
           ? matchedTags.map((tag) => ({
               id: tag,
-              name: this.config?.tags.find((t) => t.id === tag)?.name ?? '',
+              name: this.config?.tags?.find((t) => t.id === tag)?.name ?? '',
             }))
           : matchedTags;
       }
