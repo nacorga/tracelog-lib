@@ -2,7 +2,7 @@ import { Config } from '../types';
 import { DEFAULT_API_CONFIG, SESSION_TIMEOUT_DEFAULT_MS, SESSION_TIMEOUT_MIN_MS } from '../constants';
 import { IConfigValidator } from './config-validator';
 import { IConfigFetcher } from './config-fetcher';
-import { Base } from '../base';
+import { log } from '../utils/logger';
 
 export abstract class ConfigLoader {
   abstract load(config: Config): Promise<Config>;
@@ -21,13 +21,11 @@ export class DemoConfigLoader extends ConfigLoader {
   }
 }
 
-export class StandardConfigLoader extends Base implements ConfigLoader {
+export class StandardConfigLoader implements ConfigLoader {
   constructor(
     private readonly validator: IConfigValidator,
     private readonly fetcher: IConfigFetcher,
-  ) {
-    super();
-  }
+  ) {}
 
   async load(config: Config): Promise<Config> {
     if (!config.id) {
@@ -64,7 +62,7 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
     }
 
     if (warnings.length > 0) {
-      this.log('warning', `Configuration warnings: ${warnings.join('; ')}`);
+      log('warning', `Configuration warnings: ${warnings.join('; ')}`);
     }
 
     if (errors.length > 0) {
@@ -93,13 +91,11 @@ export class StandardConfigLoader extends Base implements ConfigLoader {
   }
 }
 
-export class ConfigLoaderFactory extends Base {
+export class ConfigLoaderFactory {
   constructor(
     private readonly validator: IConfigValidator,
     private readonly fetcher: IConfigFetcher,
-  ) {
-    super();
-  }
+  ) {}
 
   createLoader(config: Config): ConfigLoader {
     if (config.id === 'demo') {

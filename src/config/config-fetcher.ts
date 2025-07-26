@@ -3,21 +3,19 @@ import { sanitizeApiConfig, isValidUrl, buildDynamicApiUrl, isValidConfigApiResp
 import { DEFAULT_API_CONFIG, FETCH_TIMEOUT_MS, MAX_FETCH_ATTEMPTS } from '../constants';
 import { VERSION } from '../version';
 import { IRateLimiter } from './rate-limiter';
-import { Base } from '../base';
+import { log } from '../utils/logger';
 
 export interface IConfigFetcher {
   fetch(config: Config): Promise<ApiConfig | undefined>;
 }
 
-export class ConfigFetcher extends Base implements IConfigFetcher {
-  constructor(private readonly rateLimiter: IRateLimiter) {
-    super();
-  }
+export class ConfigFetcher implements IConfigFetcher {
+  constructor(private readonly rateLimiter: IRateLimiter) {}
 
   async fetch(config: Config): Promise<ApiConfig | undefined> {
     if (!this.rateLimiter.canFetch()) {
       if (this.rateLimiter.hasExceededMaxAttempts()) {
-        this.log('error', `Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`);
+        log('error', `Max fetch attempts exceeded (${MAX_FETCH_ATTEMPTS})`);
       }
 
       return undefined;
@@ -136,6 +134,6 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
   }
 
   private handleFetchError(error: unknown): void {
-    this.log('error', `Config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    log('error', `Config fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

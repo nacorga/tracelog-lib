@@ -16,7 +16,7 @@ export class UrlManager {
       onSuppressNextScroll: this.suppressNextScrollEvent,
     };
 
-    this.pageViewHandler = new PageViewHandler(pageViewConfig, this.handleNavigation.bind(this));
+    this.pageViewHandler = new PageViewHandler(pageViewConfig, this.handleNavigation);
   }
 
   initialize(): void {
@@ -45,11 +45,11 @@ export class UrlManager {
     return PageViewHandler.isRouteExcluded(url, this.config.excludedUrlPaths || []);
   }
 
-  private handleNavigation(data: NavigationData): void {
+  private readonly handleNavigation = (data: NavigationData): void => {
     this.notifyNavigation(data);
 
     if (!this.isRouteExcluded(data.toUrl)) {
       this.sendPageViewEvent(data.fromUrl, data.toUrl, data.referrer, data.utm);
     }
-  }
+  };
 }

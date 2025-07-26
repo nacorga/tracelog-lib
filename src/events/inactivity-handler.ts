@@ -49,7 +49,7 @@ export class InactivityHandler {
   private setupActivityListeners(): void {
     this.eventsToTrack = this.config.events || this.defaultEvents;
 
-    const handleActivity = this.handleUserActivity.bind(this);
+    const handleActivity = this.handleUserActivity;
 
     for (const event of this.eventsToTrack) {
       this.eventListeners.set(event, handleActivity);
@@ -60,7 +60,7 @@ export class InactivityHandler {
     }
   }
 
-  private handleUserActivity(): void {
+  private readonly handleUserActivity = (): void => {
     this.lastActivityTime = Date.now();
 
     if (this.isInactive) {
@@ -68,7 +68,7 @@ export class InactivityHandler {
     }
 
     this.resetInactivityTimer();
-  }
+  };
 
   private resetInactivityTimer(): void {
     if (this.inactivityTimer) {

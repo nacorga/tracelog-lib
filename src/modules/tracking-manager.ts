@@ -29,7 +29,7 @@ export class TrackingManager {
       timeout: this.config.sessionTimeout || 300_000, // Default 5 minutes
     };
 
-    this.inactivityHandler = new InactivityHandler(inactivityConfig, this.handleInactivityChange.bind(this));
+    this.inactivityHandler = new InactivityHandler(inactivityConfig, this.handleInactivityChange);
   }
 
   initScrollTracking(): void {
@@ -112,9 +112,9 @@ export class TrackingManager {
     this.inactivityHandler.updateTimeout(timeoutMs);
   }
 
-  private handleInactivityChange(data: InactivityData): void {
+  private readonly handleInactivityChange = (data: InactivityData): void => {
     this.handleInactivity(data.isInactive);
-  }
+  };
 
   cleanup(): void {
     if (this.clickHandler) {

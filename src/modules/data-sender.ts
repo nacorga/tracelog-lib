@@ -1,9 +1,9 @@
-import { Base } from '../base';
+import { log } from '../utils/logger';
 import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../constants';
 import { Queue, EventType, StorageKey } from '../types';
 import { SafeLocalStorage, StorageManager } from '../utils';
 
-export class DataSender extends Base {
+export class DataSender {
   private readonly storage: StorageManager;
 
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
@@ -16,15 +16,13 @@ export class DataSender extends Base {
     private readonly isQaMode: () => boolean,
     private readonly isDemoMode = false,
   ) {
-    super();
-
     this.storage = new SafeLocalStorage();
   }
 
   async sendEventsQueue(body: Queue): Promise<boolean> {
     if (this.isDemoMode) {
       for (const event of body.events) {
-        this.log('info', `${event.type} event: ${JSON.stringify(event)}`);
+        log('info', `${event.type} event: ${JSON.stringify(event)}`);
       }
 
       return true;
@@ -66,7 +64,7 @@ export class DataSender extends Base {
   sendEventsSynchronously(body: Queue): boolean {
     if (this.isDemoMode) {
       for (const event of body.events) {
-        this.log('info', `${event.type} event: ${JSON.stringify(event)}`);
+        log('info', `${event.type} event: ${JSON.stringify(event)}`);
       }
 
       return true;
@@ -99,7 +97,7 @@ export class DataSender extends Base {
 
       return success;
     } catch (error) {
-      this.log('error', `Synchronous send failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      log('error', `Synchronous send failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
       return false;
     }
@@ -126,7 +124,7 @@ export class DataSender extends Base {
 
       return response.status >= 200 && response.status < 300;
     } catch (error) {
-      this.log('error', `Failed to send events queue: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      log('error', `Failed to send events queue: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
       return false;
     }
@@ -162,7 +160,7 @@ export class DataSender extends Base {
       this.persistCriticalEvents(body);
       this.scheduleRetry(body);
 
-      this.log(
+      log(
         'error',
         `Failed to force send critical events, persisting to localStorage: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
@@ -188,10 +186,7 @@ export class DataSender extends Base {
         this.storage.set(`${StorageKey.UserId}_${body.user_id}_critical_events`, persistedData);
       }
     } catch (error) {
-      this.log(
-        'error',
-        `Failed to persist critical events: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      log('error', `Failed to persist critical events: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -227,7 +222,7 @@ export class DataSender extends Base {
           if (success) {
             this.clearPersistedEvents(userId);
           } else {
-            this.log('error', 'Failed to send recovered events, scheduling retry');
+            log('error', 'Failed to send recovered events, scheduling retry');
             this.scheduleRetry(recoveryBody);
           }
         } else {
@@ -235,10 +230,7 @@ export class DataSender extends Base {
         }
       }
     } catch (error) {
-      this.log(
-        'error',
-        `Failed to recover persisted events: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      log('error', `Failed to recover persisted events: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
