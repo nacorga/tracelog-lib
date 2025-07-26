@@ -1,4 +1,4 @@
-import { Base } from '../base';
+import { log } from '../utils/logger';
 import { MAX_EVENTS_QUEUE_LENGTH, EVENT_SENT_INTERVAL, UTM_PARAMS } from '../constants';
 import {
   DeviceType,
@@ -16,7 +16,7 @@ import {
 import { isEventValid } from '../utils';
 import { TagManager } from './tag-manager';
 
-export class EventManager extends Base {
+export class EventManager {
   private readonly utmParams: UTM | null | undefined;
 
   private eventsQueue: EventData[] = [];
@@ -36,8 +36,6 @@ export class EventManager extends Base {
     private readonly isExcludedUser: () => boolean,
     private readonly isRouteExcluded: (url: string) => boolean,
   ) {
-    super();
-
     this.pageUrl = window.location.href;
     this.utmParams = this.getUTMParameters();
   }
@@ -88,7 +86,7 @@ export class EventManager extends Base {
     }
 
     if (errorMessage) {
-      this.log('error', errorMessage);
+      log('error', errorMessage);
       return;
     }
 
@@ -137,7 +135,7 @@ export class EventManager extends Base {
         },
       });
     } else if (this.isQaMode()) {
-      this.log(
+      log(
         'error',
         `custom event "${name}" validation failed (${validationResult.error || 'unknown error'}). Please, review your event data and try again.`,
       );
@@ -158,13 +156,13 @@ export class EventManager extends Base {
 
   logTransition(data: { from: string; to: string; type: string }): void {
     if (this.isQaMode()) {
-      this.log('info', `navigation transition: ${JSON.stringify(data)}`);
+      log('info', `navigation transition: ${JSON.stringify(data)}`);
     }
   }
 
   private sendEvent(payload: EventData): void {
     if (this.isQaMode()) {
-      this.log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
+      log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
     } else {
       this.eventsQueue.push(payload);
 

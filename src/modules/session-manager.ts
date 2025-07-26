@@ -3,9 +3,9 @@ import { MetadataType, Config, EventType, SessionData, SessionEndTrigger, Device
 import { getDeviceType, isValidMetadata } from '../utils';
 import { SessionHandler } from '../events';
 import { IdManager } from './id-manager';
-import { Base } from '../base';
+import { log } from '../utils/logger';
 
-export class SessionManager extends Base {
+export class SessionManager {
   private userId: string | undefined;
   private tempUserId: string | null = null;
   private readonly device: DeviceType | undefined;
@@ -21,11 +21,9 @@ export class SessionManager extends Base {
     private readonly sendSessionEvent: (eventType: EventType, trigger?: string) => void,
     private readonly isQaMode: () => boolean,
   ) {
-    super();
-
     this.userId = this.getUserId();
     this.device = getDeviceType();
-    this.sessionHandler = new SessionHandler(this.userId, this.handleSessionData.bind(this), this.isQaMode);
+    this.sessionHandler = new SessionHandler(this.userId, this.handleSessionData, this.isQaMode);
   }
 
   initialize(): void {
@@ -98,7 +96,7 @@ export class SessionManager extends Base {
     this.pageUnloading = isUnloading;
 
     if (this.isQaMode()) {
-      this.log('info', `Page unloading state changed: ${isUnloading}`);
+      log('info', `Page unloading state changed: ${isUnloading}`);
     }
   }
 
@@ -199,7 +197,7 @@ export class SessionManager extends Base {
     return this.sessionHandler.checkForUnexpectedSessionEnd();
   }
 
-  private handleSessionData(sessionData: SessionData): void {
+  private readonly handleSessionData = (sessionData: SessionData): void => {
     const eventType: EventType = sessionData.endTrigger ? EventType.SESSION_END : EventType.SESSION_START;
 
     let triggerString: string | undefined;
@@ -209,7 +207,7 @@ export class SessionManager extends Base {
     }
 
     this.sendSessionEvent(eventType, triggerString);
-  }
+  };
 
   private validateGlobalMetadata(): void {
     if (Object.keys(this.config?.globalMetadata || {}).length > 0) {
@@ -218,7 +216,7 @@ export class SessionManager extends Base {
       if (validationResult.valid) {
         this.globalMetadata = validationResult.sanitizedMetadata;
       } else {
-        this.log(
+        log(
           'error',
           `globalMetadata object validation failed (${validationResult.error || 'unknown error'}). Please, review your data and try again.`,
         );

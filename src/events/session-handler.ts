@@ -1,4 +1,4 @@
-import { Base } from '../base';
+import { log } from '../utils/logger';
 import { SessionData, SessionEndTrigger } from '../types';
 import { SafeLocalStorage, StorageManager } from '../utils';
 
@@ -7,7 +7,7 @@ interface HeartbeatData {
   timestamp: number;
 }
 
-export class SessionHandler extends Base {
+export class SessionHandler {
   private readonly userId: string;
   private sessionData: SessionData | undefined = undefined;
   private heartbeatInterval: number | undefined = undefined;
@@ -19,8 +19,6 @@ export class SessionHandler extends Base {
     private readonly onSessionChange: (data: SessionData) => void,
     private readonly isQaMode: () => boolean,
   ) {
-    super();
-
     this.userId = userId;
     this.storage = new SafeLocalStorage();
 
@@ -42,7 +40,7 @@ export class SessionHandler extends Base {
         this.storage.clear();
       }
     } catch {
-      this.log('error', 'Maintenance cleanup failed');
+      log('error', 'Maintenance cleanup failed');
     }
   }
 
@@ -129,7 +127,7 @@ export class SessionHandler extends Base {
         }
       }
     } catch {
-      this.log('error', 'Error checking for unexpected session end');
+      log('error', 'Error checking for unexpected session end');
     }
 
     return false;

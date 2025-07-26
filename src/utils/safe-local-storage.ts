@@ -1,4 +1,4 @@
-import { Base } from '../base';
+import { log } from './logger';
 
 export interface StorageManager {
   set(key: string, value: unknown): boolean;
@@ -9,12 +9,11 @@ export interface StorageManager {
   getSize(): number;
 }
 
-export class SafeLocalStorage extends Base implements StorageManager {
+export class SafeLocalStorage implements StorageManager {
   private readonly available: boolean;
   private readonly memoryFallback: Map<string, string> = new Map();
 
   constructor() {
-    super();
     this.available = this.checkAvailability();
   }
 
@@ -26,7 +25,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
       window.localStorage.removeItem(testKey);
       return true;
     } catch {
-      this.log('warning', 'localStorage not available, using memory fallback');
+      log('warning', 'localStorage not available, using memory fallback');
 
       return false;
     }
@@ -39,7 +38,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
       serialized = JSON.stringify(value);
       serialized ??= 'null';
     } catch {
-      this.log('error', 'localStorage write failed');
+      log('error', 'localStorage write failed');
       this.memoryFallback.set(key, '{}');
 
       return true;
@@ -50,7 +49,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
         const estimatedSize = serialized.length + key.length;
 
         if (estimatedSize > 1024 * 1024) {
-          this.log('warning', 'Data too large for localStorage, using memory fallback');
+          log('warning', 'Data too large for localStorage, using memory fallback');
           this.memoryFallback.set(key, serialized);
 
           return true;
@@ -63,7 +62,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
       this.memoryFallback.set(key, serialized);
       return true;
     } catch {
-      this.log('error', 'localStorage write failed');
+      log('error', 'localStorage write failed');
 
       if (this.available) {
         this.cleanup();
@@ -95,7 +94,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
 
       return serialized ? JSON.parse(serialized) : undefined;
     } catch {
-      this.log('error', 'localStorage read failed');
+      log('error', 'localStorage read failed');
 
       return undefined;
     }
@@ -109,7 +108,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
       this.memoryFallback.delete(key);
       return true;
     } catch {
-      this.log('error', 'localStorage remove failed');
+      log('error', 'localStorage remove failed');
 
       return false;
     }
@@ -133,7 +132,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
 
       this.memoryFallback.clear();
     } catch {
-      this.log('error', 'localStorage clear failed');
+      log('error', 'localStorage clear failed');
     }
   }
 
@@ -184,7 +183,7 @@ export class SafeLocalStorage extends Base implements StorageManager {
         }
       }
     } catch {
-      this.log('error', 'localStorage cleanup failed');
+      log('error', 'localStorage cleanup failed');
     }
   }
 }

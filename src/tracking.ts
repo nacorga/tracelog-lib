@@ -1,7 +1,7 @@
 import { ConfigManager, SessionManager, EventManager, TrackingManager, DataSender, UrlManager } from './modules';
 import { Config, EventType, MetadataType, EventHandler, DeviceType } from './types';
 import { NavigationData } from './events';
-import { Base } from './base';
+import { log } from './utils/logger';
 
 enum InitializationState {
   UNINITIALIZED = 'uninitialized',
@@ -18,7 +18,7 @@ const createCleanupHandler = (tracker: Tracking): (() => void) => {
   };
 };
 
-export class Tracking extends Base {
+export class Tracking {
   public isInitialized = false;
   public isExcludedUser = false;
 
@@ -34,10 +34,8 @@ export class Tracking extends Base {
   private urlManager!: UrlManager;
 
   constructor(config: Config) {
-    super();
-
     this.initializationPromise = this.initializeTracking(config).catch((error) => {
-      this.log('error', `Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
+      log('error', `Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 
@@ -62,7 +60,7 @@ export class Tracking extends Base {
 
       this.sessionManager = new SessionManager(
         mergedConfig,
-        this.handleSessionEvent.bind(this),
+        this.handleSessionEvent,
         () => mergedConfig.qaMode || false,
       );
 
@@ -72,24 +70,17 @@ export class Tracking extends Base {
         () => this.sessionManager.getSessionId(),
         () => this.sessionManager.getDevice(),
         () => this.sessionManager.getGlobalMetadata(),
-        this.dataSender.sendEventsQueue.bind(this.dataSender),
+        (body) => this.dataSender.sendEventsQueue(body),
         () => mergedConfig.qaMode || false,
         () => !this.sessionManager.isSampledUser(),
         (url: string) => this.urlManager?.isRouteExcluded(url) || false,
       );
 
-      this.urlManager = new UrlManager(
-        mergedConfig,
-        this.handlePageViewEvent.bind(this),
-        this.handleNavigationChange.bind(this),
-        () => this.trackingManager?.suppressNextScrollEvent(),
+      this.urlManager = new UrlManager(mergedConfig, this.handlePageViewEvent, this.handleNavigationChange, () =>
+        this.trackingManager?.suppressNextScrollEvent(),
       );
 
-      this.trackingManager = new TrackingManager(
-        mergedConfig,
-        this.handleTrackingEvent.bind(this),
-        this.handleInactivity.bind(this),
-      );
+      this.trackingManager = new TrackingManager(mergedConfig, this.handleTrackingEvent, this.handleInactivity);
 
       await this.startInitializationSequence();
 
@@ -98,7 +89,7 @@ export class Tracking extends Base {
       this.initializationState = InitializationState.INITIALIZED;
 
       if (this.isQaModeSync()) {
-        this.log('error', 'Initialization completed successfully');
+        log('error', 'Initialization completed successfully');
       }
     } catch (error) {
       this.initializationState = InitializationState.FAILED;
@@ -123,7 +114,7 @@ export class Tracking extends Base {
       this.trackingManager.initClickTracking();
       this.setupCleanupListeners();
     } catch (error) {
-      this.log('error', `Initialization sequence failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      log('error', `Initialization sequence failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
       throw error;
     }
@@ -169,15 +160,15 @@ export class Tracking extends Base {
     );
   }
 
-  private handleSessionEvent(eventType: EventType, trigger?: string): void {
+  private handleSessionEvent = (eventType: EventType, trigger?: string): void => {
     this.eventManager.handleEvent({
       evType: eventType,
       url: this.urlManager?.getCurrentUrl(),
       ...(trigger && { trigger }),
     });
-  }
+  };
 
-  private handlePageViewEvent(fromUrl: string, toUrl: string, referrer?: string, utm?: any): void {
+  private handlePageViewEvent = (fromUrl: string, toUrl: string, referrer?: string, utm?: any): void => {
     this.eventManager.handleEvent({
       evType: EventType.PAGE_VIEW,
       url: toUrl,
@@ -187,9 +178,9 @@ export class Tracking extends Base {
     });
 
     this.eventManager.updatePageUrl(toUrl);
-  }
+  };
 
-  private handleNavigationChange(data: NavigationData): void {
+  private handleNavigationChange = (data: NavigationData): void => {
     const fromExcluded = this.urlManager.isRouteExcluded(data.fromUrl);
     const toExcluded = this.urlManager.isRouteExcluded(data.toUrl);
 
@@ -212,23 +203,23 @@ export class Tracking extends Base {
         this.sessionManager.resumeSession();
       }
     }
-  }
+  };
 
-  private handleTrackingEvent(event: EventHandler): void {
+  private handleTrackingEvent = (event: EventHandler): void => {
     this.eventManager.handleEvent(event);
-  }
+  };
 
   private isQaModeSync(): boolean {
     return this.configManager?.getConfig()?.qaMode || false;
   }
 
-  private async handleInactivity(isInactive: boolean): Promise<void> {
+  private handleInactivity = async (isInactive: boolean): Promise<void> => {
     if (isInactive) {
       this.sessionManager.handleInactivity(true);
     } else {
       this.sessionManager.handleInactivity(false);
     }
-  }
+  };
 
   async customEventHandler(name: string, metadata?: Record<string, MetadataType>): Promise<void> {
     await this.waitForInitialization();
@@ -353,10 +344,7 @@ export class Tracking extends Base {
           cleanup();
         } catch (error) {
           if (this.isQaModeSync()) {
-            this.log(
-              'error',
-              `Error removing event listener: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            );
+            log('error', `Error removing event listener: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         }
       }
@@ -366,7 +354,7 @@ export class Tracking extends Base {
       this.isExcludedUser = false;
     } catch (error) {
       if (this.isQaModeSync()) {
-        this.log('error', `Cleanup error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        log('error', `Cleanup error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
   }

@@ -2,9 +2,9 @@ import { Config } from '../types';
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
 import { isValidUrl, buildDynamicApiUrl } from '../utils';
 import { ConfigValidator, RateLimiter, ConfigFetcher, ConfigLoaderFactory } from '../config';
-import { Base } from '../base';
+import { log } from '../utils/logger';
 
-export class ConfigManager extends Base {
+export class ConfigManager {
   private readonly validator: ConfigValidator;
   private readonly rateLimiter: RateLimiter;
   private readonly fetcher: ConfigFetcher;
@@ -14,8 +14,6 @@ export class ConfigManager extends Base {
   private id = '';
 
   constructor() {
-    super();
-
     this.validator = new ConfigValidator();
     this.rateLimiter = new RateLimiter();
     this.fetcher = new ConfigFetcher(this.rateLimiter);
@@ -30,7 +28,7 @@ export class ConfigManager extends Base {
     this.config = await loader.load(config);
 
     if (this.config.qaMode === true) {
-      this.log('info', `set config: ${JSON.stringify(this.config)}`);
+      log('info', `set config: ${JSON.stringify(this.config)}`);
     }
 
     return this.config;
