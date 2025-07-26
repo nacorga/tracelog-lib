@@ -20,20 +20,8 @@ export const init = (config: Config): void => {
     return;
   }
 
-  const usingCustomServer = Boolean(config?.apiUrl ?? config?.remoteConfigApiUrl);
-
-  if (usingCustomServer && config?.id) {
-    logError('Invalid configuration: id cannot be used with apiUrl or remoteConfigApiUrl');
-    return;
-  }
-
-  if (!usingCustomServer && !config?.id) {
-    logError('Tracking ID is required when apiUrl is not provided');
-    return;
-  }
-
-  if (config?.remoteConfigApiUrl && !config?.apiUrl) {
-    logError('remoteConfigApiUrl requires apiUrl to be set');
+  if (!config?.id) {
+    logError('Tracking ID is required');
     return;
   }
 

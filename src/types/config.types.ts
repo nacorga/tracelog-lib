@@ -26,7 +26,7 @@ export interface ApiConfig {
 
 export interface Config extends ApiConfig {
   /**
-   * Unique project identifier. Required when not using `apiUrl`.
+   * Unique project identifier.
    */
   id?: string;
   /**
@@ -46,17 +46,6 @@ export interface Config extends ApiConfig {
    * instead of the default window scroll.
    */
   scrollContainerSelectors?: string | string[];
-  /**
-   * Custom URL to send tracking events. When set, TraceLog will bypass the
-   * default domain generation and use this URL directly.
-   */
-  apiUrl?: string;
-  /**
-   * When sending events to your own server, specify where to fetch
-   * API-level configuration. This allows dynamic updates from your backend.
-   * If omitted, no remote config will be fetched when using `apiUrl`.
-   */
-  remoteConfigApiUrl?: string;
   /**
    * Allow HTTP requests to be made. This is useful for testing and development.
    */
