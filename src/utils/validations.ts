@@ -332,25 +332,6 @@ const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], p
   }
 };
 
-const validateUrl = (url: unknown, allowHttp: boolean | undefined, fieldName: string, errors: string[]): void => {
-  if (url !== undefined) {
-    if (typeof url === 'string') {
-      try {
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          errors.push(`${fieldName} must use http or https`);
-        } else if (parsed.protocol === 'http:' && allowHttp !== true) {
-          errors.push(`${fieldName} using http requires allowHttp=true`);
-        }
-      } catch {
-        errors.push(`${fieldName} must be a valid URL`);
-      }
-    } else {
-      errors.push(`${fieldName} must be a string`);
-    }
-  }
-};
-
 export const validateConfig = (config: Config): { errors: string[]; warnings: string[] } => {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -381,8 +362,7 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
     }
   }
 
-  validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
-  validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
+  // No custom API endpoints supported
 
   validateSamplingRate(config.samplingRate, errors);
 
@@ -405,8 +385,7 @@ export const validateFinalConfig = (config: Config): { errors: string[]; warning
 
   validateSamplingRate(config.samplingRate, errors);
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
-  validateUrl(config.apiUrl, config.allowHttp, 'apiUrl', errors);
-  validateUrl(config.remoteConfigApiUrl, config.allowHttp, 'remoteConfigApiUrl', errors);
+  // No custom API endpoints supported
 
   return { errors, warnings };
 };

@@ -82,27 +82,7 @@ export class ConfigFetcher extends Base implements IConfigFetcher {
   }
 
   private buildConfigUrl(config: Config): string | undefined {
-    // Handle remote config URL
-    if (config.remoteConfigApiUrl) {
-      try {
-        const url = new URL(config.remoteConfigApiUrl);
-        return url.href.replace(/\/$/, '');
-      } catch {
-        return undefined;
-      }
-    }
-
-    // Handle custom API URL (derive config URL from it)
-    if (config.apiUrl) {
-      try {
-        const url = new URL(config.apiUrl);
-        return `${url.origin}${url.pathname.replace(/\/$/, '')}/config`;
-      } catch {
-        return undefined;
-      }
-    }
-
-    // Handle standard case: build dynamic URL based on current domain and ID
+    // Build dynamic URL based on current domain and ID
     if (config.id) {
       try {
         const urlParameters = new URLSearchParams(window.location.search);
