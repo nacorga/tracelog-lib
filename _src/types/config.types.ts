@@ -1,7 +1,7 @@
-import { MetadataType } from './common.types';
+import { MetadataType } from './event.types';
 import { TagConfig } from './tag.types';
 
-export type Config = ApiConfig & AppConfig;
+export type Config = AppConfig & ApiConfig;
 
 export interface ApiConfig {
   /**
@@ -30,7 +30,7 @@ export interface AppConfig {
   /**
    * Unique project identifier.
    */
-  id: string;
+  id?: string;
   /**
    * Session timeout in minutes. After this period of inactivity,
    * a new session will be started for subsequent events.

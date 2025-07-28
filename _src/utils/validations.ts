@@ -3,11 +3,8 @@ import {
   MAX_CUSTOM_EVENT_KEYS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
-} from '../app.constants';
-import { MetadataType } from '../types/common.types';
-import { Config, ApiConfig } from '../types/config.types';
-import { EventData, EventType, ScrollDirection } from '../types/event.types';
-import { Queue } from '../types/queue.types';
+} from '../constants';
+import { EventType, MetadataType, ScrollDirection, EventData, Queue, Config, ApiConfig } from '../types';
 import { sanitizeMetadata } from './sanitize.utils';
 
 export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
@@ -39,13 +36,15 @@ export const isOnlyPrimitiveFields = (object: Record<string, any>): boolean => {
   return true;
 };
 
-export const isValidUrl = (url: string, allowHttp = false): boolean => {
+export const isValidUrl = (url: string, allowedDomain: string, allowHttp = false): boolean => {
   try {
     const parsed = new URL(url);
     const isHttps = parsed.protocol === 'https:';
     const isHttp = parsed.protocol === 'http:';
+    const hostname = parsed.hostname;
+    const isAllowedDomain = hostname === allowedDomain || hostname.endsWith('.' + allowedDomain);
 
-    return isHttps || (allowHttp && isHttp);
+    return (isHttps || (allowHttp && isHttp)) && isAllowedDomain;
   } catch {
     return false;
   }

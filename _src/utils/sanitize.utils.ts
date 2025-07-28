@@ -1,4 +1,4 @@
-import { ALLOWED_API_CONFIG_KEYS } from '../app.constants';
+import { ALLOWED_API_CONFIG_KEYS } from '../constants';
 import { ApiConfig } from '../types/config.types';
 
 // Security constants
