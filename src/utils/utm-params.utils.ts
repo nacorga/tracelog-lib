@@ -1,7 +1,7 @@
 import { UTM_PARAMS } from '../app.constants';
 import { UTM } from '../types/event.types';
 
-export const getUTMParameters = (): UTM | null => {
+export const getUTMParameters = (): UTM | undefined => {
   const urlParams = new URLSearchParams(window.location.search);
   const utmParams: Partial<Record<keyof UTM, string>> = {};
 
@@ -15,5 +15,5 @@ export const getUTMParameters = (): UTM | null => {
     }
   });
 
-  return Object.keys(utmParams).length ? utmParams : null;
+  return Object.keys(utmParams).length ? utmParams : undefined;
 };

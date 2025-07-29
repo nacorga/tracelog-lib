@@ -1,4 +1,4 @@
-import { Storage } from '../types/storage.types';
+import { Storage, StorageType } from '../types/storage.types';
 import { log } from '../utils/log.utils';
 
 class BrowserStorage implements Storage {
@@ -60,7 +60,7 @@ class MemoryStorage implements Storage {
   }
 }
 
-const createStorage = (type: 'localStorage' | 'sessionStorage'): Storage => {
+const createStorage = (type: StorageType.LocalStorage | StorageType.SessionStorage): Storage => {
   try {
     const storage = window[type];
 
@@ -75,5 +75,5 @@ const createStorage = (type: 'localStorage' | 'sessionStorage'): Storage => {
   }
 };
 
-export const persistentStorage = createStorage('localStorage');
-export const sessionSorage = createStorage('sessionStorage');
+export const persistentStorage = createStorage(StorageType.LocalStorage);
+export const sessionSorage = createStorage(StorageType.SessionStorage);

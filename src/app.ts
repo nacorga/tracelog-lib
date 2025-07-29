@@ -1,6 +1,9 @@
-import { DEFAULT_CONFIG, SESSION_TIMEOUT_MIN_MS } from './app.constants';
+import { DEFAULT_CONFIG, SCROLL_DEBOUNCE_TIME, SESSION_TIMEOUT_MIN_MS } from './app.constants';
+import { PageViewHandler } from './handlers/page-view-handler';
 import { ApiManager } from './services/api-manager';
 import { ConfigManager } from './services/config-manager';
+import { EventManager } from './services/event-manager';
+import { SamplingManager } from './services/sampling-manager';
 import { SessionManager } from './services/session-manager';
 import { UserManager } from './services/user-manager';
 import { MetadataType } from './types/common.types';
@@ -14,21 +17,36 @@ import { getUTMParameters } from './utils/utm-params.utils';
 let app: App;
 
 export class App {
-  private apiUrl = '';
-  private config: Config = DEFAULT_CONFIG;
+  private samplingManager!: SamplingManager;
+  private eventManager!: EventManager;
+
+  private pageViewHandler!: PageViewHandler;
+
+  private apiUrl!: string;
+  private config!: Config;
   private sessionId: string | null = null;
-  private userId = '';
+  private userId!: string;
   private globalMetadata: Record<string, MetadataType> = {};
   private device: DeviceType = DeviceType.Unknown;
-  private utmParams: UTM | null = null;
+
+  private suppressNextScroll = false;
 
   async init(appConfig: AppConfig): Promise<void> {
     this.setApiUrl(appConfig.id);
     await this.setConfig(appConfig);
     this.initSessionManager();
     this.setUserId();
-    this.utmParams = getUTMParameters();
+    this.setManagers();
     this.device = getDeviceType();
+    this.initHandlers();
+  }
+
+  event(eventName: string, payload: EventPayload = {}): void {
+    if (!this.samplingManager.isSampledIn(this.userId)) {
+      return;
+    }
+
+    this.eventManager.track(this.userId, eventName, payload);
   }
 
   private setApiUrl(id: string): void {
@@ -70,6 +88,29 @@ export class App {
   private setUserId(): void {
     const userManager = new UserManager();
     this.userId = userManager.getUserId();
+  }
+
+  private setManagers(): void {
+    this.samplingManager = new SamplingManager(this.config);
+    this.eventManager = new EventManager();
+  }
+
+  private initHandlers(): void {
+    this.initPageViewHandler();
+  }
+
+  private initPageViewHandler(): void {
+    const onPageViewTrack = (): void => {
+      this.suppressNextScroll = true;
+
+      setTimeout(() => {
+        this.suppressNextScroll = false;
+      }, SCROLL_DEBOUNCE_TIME * 2);
+    };
+
+    const pageViewHandler = new PageViewHandler(this.config, this.eventManager, onPageViewTrack);
+
+    pageViewHandler.startTracking();
   }
 }
 

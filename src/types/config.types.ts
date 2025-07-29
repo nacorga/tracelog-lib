@@ -52,4 +52,8 @@ export interface AppConfig {
    * Allow HTTP requests to be made. This is useful for testing and development.
    */
   allowHttp?: boolean;
+  /**
+   * Array of query parameters to be removed from the URL.
+   */
+  sensitiveQueryParams?: string[];
 }

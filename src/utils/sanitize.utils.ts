@@ -1,4 +1,5 @@
 import { ALLOWED_API_CONFIG_KEYS } from '../app.constants';
+import { MetadataType } from '../types/common.types';
 import { ApiConfig } from '../types/config.types';
 
 // Security constants
@@ -20,7 +21,7 @@ const XSS_PATTERNS = [
  * Sanitizes a string value to prevent XSS attacks
  */
 export const sanitizeString = (value: string): string => {
-  if (typeof value !== 'string') {
+  if (!value || typeof value !== 'string' || value.trim().length === 0) {
     return '';
   }
 
@@ -171,7 +172,7 @@ export const sanitizeApiConfig = (data: unknown): ApiConfig => {
 /**
  * Sanitizes user metadata for custom events
  */
-export const sanitizeMetadata = (metadata: unknown): Record<string, unknown> => {
+export const sanitizeMetadata = (metadata: unknown): Record<string, MetadataType> => {
   if (typeof metadata !== 'object' || metadata === null) {
     return {};
   }
@@ -179,7 +180,7 @@ export const sanitizeMetadata = (metadata: unknown): Record<string, unknown> => 
   try {
     const sanitized = sanitizeValue(metadata);
 
-    return typeof sanitized === 'object' && sanitized !== null ? (sanitized as Record<string, unknown>) : {};
+    return typeof sanitized === 'object' && sanitized !== null ? (sanitized as Record<string, MetadataType>) : {};
   } catch (error) {
     throw new Error(`Metadata sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
