@@ -1,21 +1,20 @@
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG, DEFAULT_DEMO_CONFIG, DEFAULT_TEST_CONFIG } from '../app.constants';
 import { ApiConfig, AppConfig, Config } from '../types/config.types';
 import { sanitizeApiConfig } from '../utils/sanitize.utils';
-import { isValidUrl } from '../utils/validations';
-import { StateManager } from './state-manager';
+import { isValidUrl } from '../utils/validations.utils';
 
-export class ConfigManager extends StateManager {
-  async set(appConfig: AppConfig): Promise<void> {
+export class ConfigManager {
+  async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
     const config = ['demo', 'test'].includes(appConfig.id)
       ? this.getDefaultConfig(appConfig.id)
-      : await this.load(appConfig);
+      : await this.load(apiUrl, appConfig);
 
-    this.setState('config', config);
+    return config;
   }
 
-  private async load(appConfig: AppConfig): Promise<Config> {
+  private async load(apiUrl: string, appConfig: AppConfig): Promise<Config> {
     try {
-      const configUrl = this.getUrl();
+      const configUrl = this.getUrl(apiUrl);
 
       if (!configUrl) {
         throw new Error('Config URL is not valid or not allowed');
@@ -45,11 +44,11 @@ export class ConfigManager extends StateManager {
     }
   }
 
-  private getUrl(): string {
+  private getUrl(apiUrl: string): string {
     const urlParameters = new URLSearchParams(window.location.search);
     const isQaMode = urlParameters.get('qaMode') === 'true';
 
-    let configUrl = `${this.getState('apiUrl')}/config`;
+    let configUrl = `${apiUrl}/config`;
 
     if (isQaMode) {
       configUrl += '?qaMode=true';

@@ -1,5 +1,8 @@
 import { ApiConfig, Config } from './types/config.types';
 
+// Storage keys
+export const USER_ID_KEY = 'tl:uid';
+
 // Performance constants
 export const MAX_FETCH_ATTEMPTS = 3;
 export const RATE_LIMIT_MS = 5000;
@@ -41,8 +44,9 @@ export const DEFAULT_API_CONFIG: ApiConfig = {
 };
 
 // Default config
-export const DEFAULT_CONFIG: Omit<Config, 'id'> = {
+export const DEFAULT_CONFIG: Config = {
   ...DEFAULT_API_CONFIG,
+  id: 'default',
   sessionTimeout: SESSION_TIMEOUT_DEFAULT_MS,
   allowHttp: false,
 };
