@@ -1,0 +1,19 @@
+import { UTM_PARAMS } from '../app.constants';
+import { UTM } from '../types/event.types';
+
+export const getUTMParameters = (): UTM | null => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const utmParams: Partial<Record<keyof UTM, string>> = {};
+
+  UTM_PARAMS.forEach((param) => {
+    const value = urlParams.get(param);
+
+    if (value) {
+      const key = param.split('utm_')[1] as keyof UTM;
+
+      utmParams[key] = value;
+    }
+  });
+
+  return Object.keys(utmParams).length ? utmParams : null;
+};

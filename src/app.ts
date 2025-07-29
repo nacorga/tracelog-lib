@@ -1,24 +1,34 @@
-import { SESSION_TIMEOUT_MIN_MS } from './app.constants';
+import { DEFAULT_CONFIG, SESSION_TIMEOUT_MIN_MS } from './app.constants';
 import { ApiManager } from './services/api-manager';
 import { ConfigManager } from './services/config-manager';
 import { SessionManager } from './services/session-manager';
 import { UserManager } from './services/user-manager';
+import { MetadataType } from './types/common.types';
 import { AppConfig, Config } from './types/config.types';
+import { DeviceType } from './types/device.types';
+import { UTM } from './types/event.types';
+import { getDeviceType } from './utils/device-detector.utils';
 import { log } from './utils/log.utils';
+import { getUTMParameters } from './utils/utm-params.utils';
 
 let app: App;
 
 export class App {
-  private apiUrl: string | undefined;
-  private config: Config | undefined;
+  private apiUrl = '';
+  private config: Config = DEFAULT_CONFIG;
   private sessionId: string | null = null;
-  private userId: string | undefined;
+  private userId = '';
+  private globalMetadata: Record<string, MetadataType> = {};
+  private device: DeviceType = DeviceType.Unknown;
+  private utmParams: UTM | null = null;
 
   async init(appConfig: AppConfig): Promise<void> {
     this.setApiUrl(appConfig.id);
     await this.setConfig(appConfig);
     this.initSessionManager();
     this.setUserId();
+    this.utmParams = getUTMParameters();
+    this.device = getDeviceType();
   }
 
   private setApiUrl(id: string): void {
