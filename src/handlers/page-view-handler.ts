@@ -1,4 +1,4 @@
-import { EventManager } from '../services/event-manager';
+import { EventManager } from '../managers/event-manager';
 import { Config } from '../types/config.types';
 import { EventType } from '../types/event.types';
 import { normalizeUrl } from '../utils/url.utils';

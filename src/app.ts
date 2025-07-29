@@ -1,32 +1,31 @@
-import { DEFAULT_CONFIG, SCROLL_DEBOUNCE_TIME, SESSION_TIMEOUT_MIN_MS } from './app.constants';
+import { SCROLL_DEBOUNCE_TIME, SESSION_TIMEOUT_MIN_MS } from './app.constants';
 import { PageViewHandler } from './handlers/page-view-handler';
-import { ApiManager } from './services/api-manager';
-import { ConfigManager } from './services/config-manager';
-import { EventManager } from './services/event-manager';
-import { SamplingManager } from './services/sampling-manager';
-import { SessionManager } from './services/session-manager';
-import { UserManager } from './services/user-manager';
+import { ApiManager } from './managers/api-manager';
+import { ConfigManager } from './managers/config-manager';
+import { EventManager } from './managers/event-manager';
+import { SamplingManager } from './managers/sampling-manager';
+import { SessionManager } from './managers/session-manager';
+import { TagsManager } from './managers/tags-manager';
+import { UserManager } from './managers/user-manager';
+import { DataSender } from './services/data-sender';
 import { MetadataType } from './types/common.types';
 import { AppConfig, Config } from './types/config.types';
 import { DeviceType } from './types/device.types';
-import { UTM } from './types/event.types';
 import { getDeviceType } from './utils/device-detector.utils';
 import { log } from './utils/log.utils';
-import { getUTMParameters } from './utils/utm-params.utils';
 
 let app: App;
 
 export class App {
   private samplingManager!: SamplingManager;
   private eventManager!: EventManager;
-
-  private pageViewHandler!: PageViewHandler;
+  private dataSender!: DataSender;
+  private tagsManager!: TagsManager;
 
   private apiUrl!: string;
   private config!: Config;
   private sessionId: string | null = null;
   private userId!: string;
-  private globalMetadata: Record<string, MetadataType> = {};
   private device: DeviceType = DeviceType.Unknown;
 
   private suppressNextScroll = false;
@@ -36,12 +35,12 @@ export class App {
     await this.setConfig(appConfig);
     this.initSessionManager();
     this.setUserId();
-    this.setManagers();
     this.device = getDeviceType();
+    await this.setManagers();
     this.initHandlers();
   }
 
-  event(eventName: string, payload: EventPayload = {}): void {
+  event(eventName: string, payload: Record<string, MetadataType> = {}): void {
     if (!this.samplingManager.isSampledIn(this.userId)) {
       return;
     }
@@ -90,13 +89,54 @@ export class App {
     this.userId = userManager.getUserId();
   }
 
-  private setManagers(): void {
-    this.samplingManager = new SamplingManager(this.config);
-    this.eventManager = new EventManager();
+  private async setManagers(): Promise<void> {
+    this.setSamplingManager();
+    this.setTagsManager();
+    this.setDataSender();
+    this.setEventManager();
+
+    try {
+      await this.dataSender.recoverPersistedEvents();
+    } catch (error) {
+      log(
+        'error',
+        `Failed to recover persisted events during initialization: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
   }
 
   private initHandlers(): void {
     this.initPageViewHandler();
+  }
+
+  private setSamplingManager(): void {
+    this.samplingManager = new SamplingManager(this.config);
+  }
+
+  private setTagsManager(): void {
+    this.tagsManager = new TagsManager(this.config);
+  }
+
+  private setDataSender(): void {
+    this.dataSender = new DataSender(this.config, {
+      apiUrl: this.apiUrl,
+      userId: this.userId,
+    });
+  }
+
+  private setEventManager(): void {
+    const data = {
+      userId: this.userId,
+      sessionId: this.sessionId as string,
+      device: this.device,
+    };
+
+    const managers = {
+      tags: this.tagsManager,
+      dataSender: this.dataSender,
+    };
+
+    this.eventManager = new EventManager(this.config, data, managers);
   }
 
   private initPageViewHandler(): void {
@@ -126,6 +166,9 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
 };
 
 export const getApp = (): App => {
-  if (!app) throw new Error('App no ha sido inicializada. Llama a init() primero.');
+  if (!app) {
+    throw new Error('App not initialized');
+  }
+
   return app;
 };

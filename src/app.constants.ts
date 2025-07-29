@@ -1,7 +1,9 @@
 import { ApiConfig, Config } from './types/config.types';
 
 // Storage keys
-export const USER_ID_KEY = 'tl:uid';
+export const STORAGE_BASE_KEY = 'tl';
+export const USER_ID_KEY = `${STORAGE_BASE_KEY}:uid`;
+export const QUEUE_KEY = `${STORAGE_BASE_KEY}:queue`;
 
 // Performance constants
 export const MAX_FETCH_ATTEMPTS = 3;

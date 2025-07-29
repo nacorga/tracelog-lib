@@ -1,20 +1,23 @@
-import { RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../app.constants';
+import { QUEUE_KEY, RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../app.constants';
 import { Config } from '../types/config.types';
 import { Queue } from '../types/queue.types';
-import { persistentStorage } from './storage-manager';
+import { persistentStorage } from '../managers/storage-manager';
 import { log } from '../utils/log.utils';
+import { EventData } from '../types/event.types';
 
 export class DataSender {
   private readonly config: Config;
-  private readonly data: { apiUrl: string };
+  private readonly data: { apiUrl: string; userId: string };
+  private readonly queueStorageKey: string;
 
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
   private lastSendAttempt = 0;
 
-  constructor(config: Config, data: { apiUrl: string }) {
+  constructor(config: Config, data: { apiUrl: string; userId: string }) {
     this.config = config;
     this.data = data;
+    this.queueStorageKey = `${QUEUE_KEY}_${data.userId}`;
   }
 
   async sendEventsQueue(body: Queue): Promise<boolean> {
@@ -36,7 +39,7 @@ export class DataSender {
 
     if (success) {
       this.resetRetryState();
-      this.clearPersistedEvents(body.user_id);
+      this.clearPersistedEvents();
       return true;
     } else {
       this.handleSendFailure(body);
@@ -83,10 +86,9 @@ export class DataSender {
   //   }
   // }
 
-  async recoverPersistedEvents(userId: string): Promise<void> {
+  async recoverPersistedEvents(): Promise<void> {
     try {
-      const storageKey = `tl:queue_${userId}`;
-      const persistedDataString = persistentStorage.getItem(storageKey);
+      const persistedDataString = persistentStorage.getItem(this.queueStorageKey);
 
       if (persistedDataString) {
         const data = JSON.parse(persistedDataString);
@@ -106,23 +108,19 @@ export class DataSender {
           const success = await this.sendWithPriority(recoveryBody);
 
           if (success) {
-            this.clearPersistedEvents(userId);
+            this.clearPersistedEvents();
           } else {
             log('error', 'Failed to send recovered events, scheduling retry');
             this.scheduleRetry(recoveryBody);
           }
         } else {
-          this.clearPersistedEvents(userId);
+          this.clearPersistedEvents();
         }
       }
     } catch (error) {
       log('error', `Failed to recover persisted events: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
-
-  // cleanup(): void {
-  //   this.clearRetryTimeout();
-  // }
 
   private async sendWithPriority(body: Queue): Promise<boolean> {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
@@ -149,7 +147,7 @@ export class DataSender {
     }
   }
 
-  private logDemoEvents(events: any[]): void {
+  private logDemoEvents(events: EventData[]): void {
     for (const event of events) {
       log('info', `${event.type} event: ${JSON.stringify(event)}`);
     }
@@ -171,17 +169,15 @@ export class DataSender {
         ...(body.global_metadata && { global_metadata: body.global_metadata }),
       };
 
-      const storageKey = `tl_queue_${body.user_id}`;
-      persistentStorage.setItem(storageKey, JSON.stringify(persistedData));
+      persistentStorage.setItem(this.queueStorageKey, JSON.stringify(persistedData));
     } catch (error) {
       log('error', `Failed to persist events: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  private clearPersistedEvents(userId: string): void {
+  private clearPersistedEvents(): void {
     try {
-      const storageKey = `tl_queue_${userId}`;
-      persistentStorage.removeItem(storageKey);
+      persistentStorage.removeItem(this.queueStorageKey);
     } catch {
       // Ignore errors when clearing localStorage
     }
