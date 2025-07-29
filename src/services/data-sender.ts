@@ -1,9 +1,14 @@
-import { QUEUE_KEY, RETRY_BACKOFF_INITIAL, RETRY_BACKOFF_MAX } from '../app.constants';
+import { QUEUE_KEY } from '../app.constants';
 import { Config } from '../types/config.types';
 import { Queue } from '../types/queue.types';
 import { persistentStorage } from '../managers/storage-manager';
 import { log } from '../utils/log.utils';
 import { EventData } from '../types/event.types';
+
+const RETRY_BACKOFF_INITIAL = 1000;
+const RETRY_BACKOFF_MAX = 30_000;
+const RATE_LIMIT_INTERVAL = 1000;
+const EVENT_EXPIRY_HOURS = 24;
 
 export class DataSender {
   private readonly config: Config;
@@ -26,131 +31,100 @@ export class DataSender {
       return true;
     }
 
-    const now = Date.now();
-
-    // Rate limiting: prevent too frequent sends
-    if (now - this.lastSendAttempt < 1000) {
+    if (!this.canSendNow()) {
       return false;
     }
 
-    this.lastSendAttempt = now;
+    this.lastSendAttempt = Date.now();
 
-    const success = await this.sendWithPriority(body);
+    try {
+      const success = await this.sendWithPriority(body);
 
-    if (success) {
-      this.resetRetryState();
-      this.clearPersistedEvents();
-      return true;
-    } else {
+      if (success) {
+        this.resetRetryState();
+        this.clearPersistedEvents();
+      } else {
+        this.handleSendFailure(body);
+      }
+
+      return success;
+    } catch (error) {
+      this.logError('Failed to send events queue', error);
       this.handleSendFailure(body);
       return false;
     }
   }
 
-  // sendEventsSynchronously(body: Queue): boolean {
-  //   if (this.config.id === 'demo') {
-  //     this.logDemoEvents(body.events);
-  //     return true;
-  //   }
-
-  //   const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
-
-  //   // Try beacon first
-  //   if (navigator.sendBeacon) {
-  //     const success = navigator.sendBeacon(this.data.apiUrl, blob);
-  //     if (success) {
-  //       this.clearPersistedEvents(body.user_id);
-  //       return true;
-  //     }
-  //   }
-
-  //   // Fallback to synchronous XHR
-  //   try {
-  //     const xhr = new XMLHttpRequest();
-  //     xhr.open('POST', this.data.apiUrl, false);
-  //     xhr.setRequestHeader('Content-Type', 'application/json');
-  //     xhr.send(JSON.stringify(body));
-
-  //     const success = xhr.status >= 200 && xhr.status < 300;
-  //     if (success) {
-  //       this.clearPersistedEvents(body.user_id);
-  //     } else {
-  //       this.persistFailedEvents(body);
-  //     }
-
-  //     return success;
-  //   } catch (error) {
-  //     log('error', `Synchronous send failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  //     this.persistFailedEvents(body);
-  //     return false;
-  //   }
-  // }
-
   async recoverPersistedEvents(): Promise<void> {
     try {
-      const persistedDataString = persistentStorage.getItem(this.queueStorageKey);
+      const persistedData = this.getPersistedData();
 
-      if (persistedDataString) {
-        const data = JSON.parse(persistedDataString);
+      if (!persistedData || !this.isDataRecent(persistedData) || persistedData.events.length === 0) {
+        this.clearPersistedEvents();
+        return;
+      }
 
-        // Only try to recover if the events are recent (less than 24 hours)
-        const isRecent = Date.now() - data.timestamp < 24 * 60 * 60 * 1000;
+      const recoveryBody = this.createRecoveryBody(persistedData);
+      const success = await this.sendWithPriority(recoveryBody);
 
-        if (isRecent && data.events.length > 0) {
-          const recoveryBody: Queue = {
-            user_id: data.userId,
-            session_id: data.sessionId,
-            device: data.device,
-            events: data.events,
-            ...(data.global_metadata && { global_metadata: data.global_metadata }),
-          };
-
-          const success = await this.sendWithPriority(recoveryBody);
-
-          if (success) {
-            this.clearPersistedEvents();
-          } else {
-            log('error', 'Failed to send recovered events, scheduling retry');
-            this.scheduleRetry(recoveryBody);
-          }
-        } else {
-          this.clearPersistedEvents();
-        }
+      if (success) {
+        this.clearPersistedEvents();
+      } else {
+        log('error', 'Failed to send recovered events, scheduling retry');
+        this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
-      log('error', `Failed to recover persisted events: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logError('Failed to recover persisted events', error);
     }
+  }
+
+  private canSendNow(): boolean {
+    return Date.now() - this.lastSendAttempt >= RATE_LIMIT_INTERVAL;
   }
 
   private async sendWithPriority(body: Queue): Promise<boolean> {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
-    if (navigator.sendBeacon) {
-      const success = navigator.sendBeacon(this.data.apiUrl, blob);
-
-      if (success) {
-        return true;
-      }
+    // Try sendBeacon first (most reliable for page unload)
+    if (navigator.sendBeacon && navigator.sendBeacon(this.data.apiUrl, blob)) {
+      return true;
     }
 
-    try {
-      const response = await fetch(this.data.apiUrl, {
-        method: 'POST',
-        body: blob,
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    // Fallback to fetch
+    const response = await fetch(this.data.apiUrl, {
+      method: 'POST',
+      body: blob,
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+    });
 
-      return response.status >= 200 && response.status < 300;
-    } catch (error) {
-      throw new Error(`Failed to send events: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return response.ok;
+  }
+
+  private getPersistedData(): any | null {
+    const persistedDataString = persistentStorage.getItem(this.queueStorageKey);
+    return persistedDataString ? JSON.parse(persistedDataString) : null;
+  }
+
+  private isDataRecent(data: any): boolean {
+    const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
+    return ageInHours < EVENT_EXPIRY_HOURS;
+  }
+
+  private createRecoveryBody(data: any): Queue {
+    return {
+      user_id: data.userId,
+      session_id: data.sessionId,
+      device: data.device,
+      events: data.events,
+      ...(data.global_metadata && { global_metadata: data.global_metadata }),
+    };
   }
 
   private logDemoEvents(events: EventData[]): void {
-    for (const event of events) {
+    events.forEach((event) => {
       log('info', `${event.type} event: ${JSON.stringify(event)}`);
-    }
+    });
   }
 
   private handleSendFailure(body: Queue): void {
@@ -171,7 +145,7 @@ export class DataSender {
 
       persistentStorage.setItem(this.queueStorageKey, JSON.stringify(persistedData));
     } catch (error) {
-      log('error', `Failed to persist events: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logError('Failed to persist events', error);
     }
   }
 
@@ -179,7 +153,7 @@ export class DataSender {
     try {
       persistentStorage.removeItem(this.queueStorageKey);
     } catch {
-      // Ignore errors when clearing localStorage
+      // Ignore errors when clearing storage
     }
   }
 
@@ -206,5 +180,10 @@ export class DataSender {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
+  }
+
+  private logError(message: string, error: unknown): void {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log('error', `${message}: ${errorMessage}`);
   }
 }
