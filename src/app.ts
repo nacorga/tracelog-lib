@@ -11,16 +11,32 @@ import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 
-let app: App;
+let app: App | null = null;
+let isInitializing = false;
 
 export class App extends StateManager {
+  private isInitialized = false;
   private eventManager!: EventManager;
   private suppressNextScroll = false;
 
   async init(appConfig: AppConfig): Promise<void> {
-    await this.setState(appConfig);
-    this.setManagers();
-    this.initHandlers();
+    if (this.isInitialized) {
+      throw new Error('App is already initialized');
+    }
+
+    if (!appConfig?.id) {
+      throw new Error('Invalid app config: id is required');
+    }
+
+    try {
+      await this.setState(appConfig);
+      this.setManagers();
+      this.initHandlers();
+      this.isInitialized = true;
+    } catch (error) {
+      this.isInitialized = false;
+      throw error;
+    }
   }
 
   private async setState(appConfig: AppConfig): Promise<void> {
@@ -99,13 +115,27 @@ export class App extends StateManager {
 }
 
 export const init = async (appConfig: AppConfig): Promise<void> => {
+  if (app) {
+    throw new Error('App is already initialized. Call getApp() to get the existing instance.');
+  }
+
+  if (isInitializing) {
+    throw new Error('App initialization is already in progress');
+  }
+
+  isInitializing = true;
+
   const instance = new App();
 
   try {
     await instance.init(appConfig);
     app = instance;
   } catch (error) {
-    log('error', `Initialization rejected: ${error instanceof Error ? error.message : String(error)}`);
+    app = null;
+    log('error', `Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
+  } finally {
+    isInitializing = false;
   }
 };
 
