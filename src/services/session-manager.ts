@@ -44,14 +44,10 @@ export class SessionManager {
     return generateUUID();
   }
 
-  endSession(sessionId: string): void {
+  endSession(): number {
     if (this.sessionStartTime === 0) {
-      return;
+      return 0;
     }
-
-    const durationMs = Date.now() - this.sessionStartTime;
-
-    console.log('Session ended', { sessionId, durationMs });
 
     this.sessionStartTime = 0;
     this.isSessionActive = false;
@@ -60,6 +56,10 @@ export class SessionManager {
       clearTimeout(this.inactivityTimer);
       this.inactivityTimer = null;
     }
+
+    const durationMs = Date.now() - this.sessionStartTime;
+
+    return durationMs;
   }
 
   private detectDeviceCapabilities(): DeviceCapabilities {

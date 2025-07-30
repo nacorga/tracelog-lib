@@ -1,18 +1,18 @@
-import { EventManager } from '../managers/event-manager';
-import { Config } from '../types/config.types';
 import { EventType } from '../types/event.types';
 import { normalizeUrl } from '../utils/url.utils';
 import { getUTMParameters } from '../utils/utm-params.utils';
+import { StateManager } from '../services/state-manager';
+import { EventManager } from '../services/event-manager';
 
-export class PageViewHandler {
-  private readonly config: Config;
+export class PageViewHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly onTrack: () => void;
 
   private lastUrl: string;
 
-  constructor(config: Config, eventManager: EventManager, onTrack: () => void) {
-    this.config = config;
+  constructor(eventManager: EventManager, onTrack: () => void) {
+    super();
+
     this.eventManager = eventManager;
     this.onTrack = onTrack;
     this.lastUrl = '';
@@ -37,16 +37,16 @@ export class PageViewHandler {
     };
   }
 
-  private trackCurrentPage(): void {
+  private async trackCurrentPage(): Promise<void> {
     const rawUrl = window.location.href;
-    const normalizedUrl = normalizeUrl(rawUrl, this.config.sensitiveQueryParams);
+    const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 
     if (this.lastUrl !== normalizedUrl) {
       const fromUrl = this.lastUrl;
 
       this.lastUrl = normalizedUrl;
 
-      this.eventManager.track({
+      await this.eventManager.track({
         type: EventType.PAGE_VIEW,
         page_url: this.lastUrl,
         from_page_url: fromUrl,

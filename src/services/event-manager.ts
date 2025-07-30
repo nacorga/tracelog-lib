@@ -1,34 +1,43 @@
 import { EVENT_SENT_INTERVAL, MAX_EVENTS_QUEUE_LENGTH } from '../app.constants';
-import { Config } from '../types/config.types';
-import { DeviceType } from '../types/device.types';
 import { EventData, EventType } from '../types/event.types';
 import { Queue } from '../types/queue.types';
 import { log } from '../utils/log.utils';
 import { isUrlPathExcluded } from '../utils/url.utils';
 import { DataSender } from './data-sender';
+import { SamplingManager } from './sampling-manager';
+import { StateManager } from './state-manager';
 import { TagsManager } from './tags-manager';
 
-export class EventManager {
-  private readonly config: Config;
-  private readonly data: { userId: string; sessionId: string; device: DeviceType };
-  private readonly managers: { tags: TagsManager; dataSender: DataSender };
+export class EventManager extends StateManager {
+  private readonly samplingManager: SamplingManager;
+  private readonly tagsManager: TagsManager;
+  private readonly dataSender: DataSender;
 
   private eventsQueue: EventData[] = [];
   private lastEvent: EventData | null = null;
-  private hasInitEventsQueueInterval = false;
   private eventsQueueIntervalId: number | null = null;
 
-  constructor(
-    config: Config,
-    data: { userId: string; sessionId: string; device: DeviceType },
-    managers: { tags: TagsManager; dataSender: DataSender },
-  ) {
-    this.config = config;
-    this.data = data;
-    this.managers = managers;
+  constructor() {
+    super();
+
+    this.samplingManager = new SamplingManager();
+    this.tagsManager = new TagsManager();
+    this.dataSender = new DataSender();
   }
 
-  track({ type, page_url, from_page_url, scroll_data, click_data, custom_event, utm }: Partial<EventData>): void {
+  async track({
+    type,
+    page_url,
+    from_page_url,
+    scroll_data,
+    click_data,
+    custom_event,
+    utm,
+  }: Partial<EventData>): Promise<void> {
+    if (!this.samplingManager.isSampledIn()) {
+      return;
+    }
+
     const isDuplicatedEvent = this.isDuplicatedEvent({ type, page_url, scroll_data, click_data, custom_event });
 
     if (isDuplicatedEvent) {
@@ -49,7 +58,7 @@ export class EventManager {
       return;
     }
 
-    const isRouteExcluded = isUrlPathExcluded(page_url as string, this.config.excludedUrlPaths);
+    const isRouteExcluded = isUrlPathExcluded(page_url as string, this.get('config').excludedUrlPaths);
     const isSessionEvent = [EventType.SESSION_START, EventType.SESSION_END].includes(type as EventType);
 
     if (isRouteExcluded && !isSessionEvent) {
@@ -72,25 +81,26 @@ export class EventManager {
       ...(removePageUrl && { excluded_route: true }),
     };
 
-    if (this.config?.tags?.length) {
-      const matchedTags = this.managers.tags.getEventTagsIds(payload, this.data.device);
+    if (this.get('config')?.tags?.length) {
+      const matchedTags = this.tagsManager.getEventTagsIds(payload, this.get('device'));
 
       if (matchedTags?.length) {
-        payload.tags = this.config.qaMode
+        payload.tags = this.get('config')?.qaMode
           ? matchedTags.map((id) => ({
               id,
-              key: this.config?.tags?.find((t) => t.id === id)?.key ?? '',
+              key: this.get('config')?.tags?.find((t) => t.id === id)?.key ?? '',
             }))
           : matchedTags;
       }
     }
 
     this.lastEvent = payload;
-    this.processAndSend(payload);
+
+    await this.processAndSend(payload);
   }
 
-  private processAndSend(payload: EventData): void {
-    if (this.config.qaMode) {
+  private async processAndSend(payload: EventData): Promise<void> {
+    if (this.get('config')?.qaMode) {
       log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
     } else {
       this.eventsQueue.push(payload);
@@ -104,17 +114,19 @@ export class EventManager {
       }
 
       if (payload.type === EventType.SESSION_END && this.eventsQueue.length > 0) {
-        this.sendEventsQueue();
+        await this.sendEventsQueue();
       }
     }
   }
 
   private initEventsQueueInterval(): void {
-    this.hasInitEventsQueueInterval = true;
+    if (this.eventsQueueIntervalId) {
+      return;
+    }
 
-    this.eventsQueueIntervalId = window.setInterval(() => {
+    this.eventsQueueIntervalId = window.setInterval(async () => {
       if (this.eventsQueue.length > 0) {
-        this.sendEventsQueue();
+        await this.sendEventsQueue();
       }
     }, EVENT_SENT_INTERVAL);
   }
@@ -151,31 +163,17 @@ export class EventManager {
     deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
 
     const body: Queue = {
-      user_id: this.data.userId,
-      session_id: this.data.sessionId,
-      device: this.data.device,
+      user_id: this.get('userId'),
+      session_id: this.get('sessionId') as string,
+      device: this.get('device'),
       events: deduplicatedEvents,
-      ...(this.config.globalMetadata && { global_metadata: this.config.globalMetadata }),
+      ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
     };
 
-    const success = await this.managers.dataSender.sendEventsQueue(body);
+    const success = await this.dataSender.sendEventsQueue(body);
 
     this.eventsQueue = success ? [] : deduplicatedEvents;
   }
-
-  // private processAndSend(event: BaseEvent): void {
-  //   if (!this.identityManager) {
-  //     return;
-  //   }
-  //   const trackedEvent: TrackedEvent = {
-  //     ...event,
-  //     timestamp: Date.now(),
-  //     userId: this.identityManager.getUserId(),
-  //     sessionId: this.identityManager.getSessionId(),
-  //   };
-
-  //   this.dataSender.send(trackedEvent);
-  // }
 
   private isDuplicatedEvent({ type, page_url, scroll_data, click_data, custom_event }: Partial<EventData>): boolean {
     if (!this.lastEvent) {

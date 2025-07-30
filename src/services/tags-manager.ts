@@ -1,15 +1,9 @@
-import { Config } from '../types/config.types';
 import { DeviceType } from '../types/device.types';
 import { ClickData, EventData, EventType } from '../types/event.types';
 import { TagCondition, TagConditionOperator, TagConditionType, TagLogicalOperator } from '../types/tag.types';
+import { StateManager } from './state-manager';
 
-export class TagsManager {
-  private readonly config: Config;
-
-  constructor(config: Config) {
-    this.config = config;
-  }
-
+export class TagsManager extends StateManager {
   getEventTagsIds(event: EventData, deviceType: DeviceType): string[] {
     switch (event.type) {
       case EventType.PAGE_VIEW: {
@@ -25,7 +19,7 @@ export class TagsManager {
   }
 
   private checkEventTypePageView(event: EventData, deviceType: DeviceType): string[] {
-    const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) || [];
+    const tags = this.get('config')?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) ?? [];
 
     if (tags.length === 0) {
       return [];
@@ -80,7 +74,7 @@ export class TagsManager {
   }
 
   private checkEventTypeClick(event: EventData, deviceType: DeviceType): string[] {
-    const tags = this.config?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) || [];
+    const tags = this.get('config')?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) ?? [];
 
     if (tags.length === 0) {
       return [];

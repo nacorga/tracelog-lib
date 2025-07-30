@@ -1,33 +1,33 @@
 import { QUEUE_KEY } from '../app.constants';
-import { Config } from '../types/config.types';
 import { Queue } from '../types/queue.types';
-import { persistentStorage } from '../managers/storage-manager';
+import { persistentStorage } from './storage-manager';
 import { log } from '../utils/log.utils';
 import { EventData } from '../types/event.types';
+import { StateManager } from './state-manager';
 
 const RETRY_BACKOFF_INITIAL = 1000;
 const RETRY_BACKOFF_MAX = 30_000;
 const RATE_LIMIT_INTERVAL = 1000;
 const EVENT_EXPIRY_HOURS = 24;
 
-export class DataSender {
-  private readonly config: Config;
-  private readonly data: { apiUrl: string; userId: string };
+export class DataSender extends StateManager {
   private readonly queueStorageKey: string;
 
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
   private lastSendAttempt = 0;
 
-  constructor(config: Config, data: { apiUrl: string; userId: string }) {
-    this.config = config;
-    this.data = data;
-    this.queueStorageKey = `${QUEUE_KEY}_${data.userId}`;
+  constructor() {
+    super();
+
+    this.queueStorageKey = `${QUEUE_KEY}_${this.get('userId')}`;
+    this.recoverPersistedEvents();
   }
 
-  async sendEventsQueue(body: Queue): Promise<boolean> {
-    if (this.config.id === 'demo') {
+  sendEventsQueue(body: Queue): boolean {
+    if (this.get('config')?.id === 'demo') {
       this.logDemoEvents(body.events);
+
       return true;
     }
 
@@ -38,7 +38,7 @@ export class DataSender {
     this.lastSendAttempt = Date.now();
 
     try {
-      const success = await this.sendWithPriority(body);
+      const success = this.sendQueue(body);
 
       if (success) {
         this.resetRetryState();
@@ -48,29 +48,29 @@ export class DataSender {
       }
 
       return success;
-    } catch (error) {
-      this.logError('Failed to send events queue', error);
+    } catch {
       this.handleSendFailure(body);
+
       return false;
     }
   }
 
-  async recoverPersistedEvents(): Promise<void> {
+  recoverPersistedEvents(): void {
     try {
       const persistedData = this.getPersistedData();
 
       if (!persistedData || !this.isDataRecent(persistedData) || persistedData.events.length === 0) {
         this.clearPersistedEvents();
+
         return;
       }
 
       const recoveryBody = this.createRecoveryBody(persistedData);
-      const success = await this.sendWithPriority(recoveryBody);
+      const success = this.sendQueue(recoveryBody);
 
       if (success) {
         this.clearPersistedEvents();
       } else {
-        log('error', 'Failed to send recovered events, scheduling retry');
         this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
@@ -82,23 +82,14 @@ export class DataSender {
     return Date.now() - this.lastSendAttempt >= RATE_LIMIT_INTERVAL;
   }
 
-  private async sendWithPriority(body: Queue): Promise<boolean> {
+  private sendQueue(body: Queue): boolean {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
-    // Try sendBeacon first (most reliable for page unload)
-    if (navigator.sendBeacon && navigator.sendBeacon(this.data.apiUrl, blob)) {
+    if (navigator.sendBeacon && navigator.sendBeacon(this.get('apiUrl'), blob)) {
       return true;
     }
 
-    // Fallback to fetch
-    const response = await fetch(this.data.apiUrl, {
-      method: 'POST',
-      body: blob,
-      keepalive: true,
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    return response.ok;
+    return false;
   }
 
   private getPersistedData(): any | null {
