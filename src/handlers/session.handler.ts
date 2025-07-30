@@ -1,8 +1,9 @@
-import { SESSION_TIMEOUT_MIN_MS } from '../app.constants';
 import { EventManager } from '../services/event-manager';
 import { SessionManager } from '../services/session-manager';
 import { StateManager } from '../services/state-manager';
 import { EventType } from '../types/event.types';
+
+const SESSION_TIMEOUT_MIN_MS = 30_000;
 
 export class SessionHandler extends StateManager {
   private readonly eventManager: EventManager;

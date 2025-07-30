@@ -9,15 +9,12 @@ export const QUEUE_KEY = `${STORAGE_BASE_KEY}:queue`;
 export const MAX_FETCH_ATTEMPTS = 3;
 export const RATE_LIMIT_MS = 5000;
 export const FETCH_TIMEOUT_MS = 10_000;
-export const SESSION_TIMEOUT_MIN_MS = 30_000;
 export const SESSION_TIMEOUT_DEFAULT_MS = 15 * 60 * 1000;
 export const EVENT_SENT_INTERVAL = 10_000;
 export const MAX_EVENTS_QUEUE_LENGTH = 500;
 export const SCROLL_DEBOUNCE_TIME = 250;
-export const CLICK_DEBOUNCE_TIME = 500;
 
 // Security and validation constants
-export const HTML_DATA_ATTR_PREFIX = 'data-tl';
 export const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
 export const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024;
 export const MAX_CUSTOM_EVENT_KEYS = 10;

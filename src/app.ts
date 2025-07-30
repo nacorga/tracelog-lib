@@ -9,6 +9,7 @@ import { UserManager } from './services/user.manager';
 import { StateManager } from './services/state-manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
+import { ClickHandler } from './handlers/click.handler';
 
 let app: App;
 
@@ -58,8 +59,9 @@ export class App extends StateManager {
   }
 
   private initHandlers(): void {
-    this.initPageViewHandler();
     this.initSessionHandler();
+    this.initPageViewHandler();
+    this.initClickHandler();
   }
 
   private setEventManager(): void {
@@ -86,6 +88,13 @@ export class App extends StateManager {
     setTimeout(() => {
       this.suppressNextScroll = false;
     }, SCROLL_DEBOUNCE_TIME * 2);
+  }
+
+  private initClickHandler(): void {
+    const onClickTrack = (): void => {};
+    const clickHandler = new ClickHandler(this.eventManager, onClickTrack);
+
+    clickHandler.startTracking();
   }
 }
 
