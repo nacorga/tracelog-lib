@@ -37,7 +37,7 @@ export class PageViewHandler extends StateManager {
     };
   }
 
-  private async trackCurrentPage(): Promise<void> {
+  private trackCurrentPage(): void {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 
@@ -46,7 +46,7 @@ export class PageViewHandler extends StateManager {
 
       this.lastUrl = normalizedUrl;
 
-      await this.eventManager.track({
+      this.eventManager.track({
         type: EventType.PAGE_VIEW,
         page_url: this.lastUrl,
         from_page_url: fromUrl,

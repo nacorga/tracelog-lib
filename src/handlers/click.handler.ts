@@ -19,16 +19,14 @@ const INTERACTIVE_SELECTORS = [
 
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;
-  private readonly onTrack: () => void;
 
   private clickHandler?: (event: Event) => void;
   private clickDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(eventManager: EventManager, onTrack: () => void) {
+  constructor(eventManager: EventManager) {
     super();
 
     this.eventManager = eventManager;
-    this.onTrack = onTrack;
   }
 
   startTracking(): void {
@@ -74,8 +72,6 @@ export class ClickHandler extends StateManager {
           page_url: window.location.href,
           click_data: clickData,
         });
-
-        this.onTrack();
 
         this.clickDebounceTimer = null;
       }, CLICK_DEBOUNCE_TIME);

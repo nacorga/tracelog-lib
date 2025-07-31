@@ -7,15 +7,13 @@ const SESSION_TIMEOUT_MIN_MS = 30_000;
 
 export class SessionHandler extends StateManager {
   private readonly eventManager: EventManager;
-  private readonly onTrack: () => void;
 
   private sessionManager: SessionManager | null = null;
 
-  constructor(eventManager: EventManager, onTrack: () => void) {
+  constructor(eventManager: EventManager) {
     super();
 
     this.eventManager = eventManager;
-    this.onTrack = onTrack;
   }
 
   startTracking(): void {
@@ -50,12 +48,10 @@ export class SessionHandler extends StateManager {
     );
   }
 
-  private async trackSession(eventType: EventType.SESSION_START | EventType.SESSION_END): Promise<void> {
-    await this.eventManager.track({
+  private trackSession(eventType: EventType.SESSION_START | EventType.SESSION_END): void {
+    this.eventManager.track({
       type: eventType,
     });
-
-    this.onTrack();
   }
 
   stopTracking(): void {

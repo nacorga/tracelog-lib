@@ -12,14 +12,12 @@ interface ScrollContainer {
 
 export class ScrollHandler extends StateManager {
   private readonly eventManager: EventManager;
-  private readonly onTrack: () => void;
   private readonly containers: ScrollContainer[] = [];
 
-  constructor(eventManager: EventManager, onTrack: () => void) {
+  constructor(eventManager: EventManager) {
     super();
 
     this.eventManager = eventManager;
-    this.onTrack = onTrack;
   }
 
   startTracking(): void {
@@ -59,8 +57,6 @@ export class ScrollHandler extends StateManager {
             type: EventType.SCROLL,
             scroll_data: scrollData,
           });
-
-          this.onTrack();
         }
 
         container.debounceTimer = null;

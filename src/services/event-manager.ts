@@ -25,15 +25,7 @@ export class EventManager extends StateManager {
     this.dataSender = new DataSender();
   }
 
-  async track({
-    type,
-    page_url,
-    from_page_url,
-    scroll_data,
-    click_data,
-    custom_event,
-    utm,
-  }: Partial<EventData>): Promise<void> {
+  track({ type, page_url, from_page_url, scroll_data, click_data, custom_event, utm }: Partial<EventData>): void {
     if (!this.samplingManager.isSampledIn()) {
       return;
     }
@@ -96,10 +88,10 @@ export class EventManager extends StateManager {
 
     this.lastEvent = payload;
 
-    await this.processAndSend(payload);
+    this.processAndSend(payload);
   }
 
-  private async processAndSend(payload: EventData): Promise<void> {
+  private processAndSend(payload: EventData): void {
     if (this.get('config')?.qaMode) {
       log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
     } else {
@@ -114,7 +106,7 @@ export class EventManager extends StateManager {
       }
 
       if (payload.type === EventType.SESSION_END && this.eventsQueue.length > 0) {
-        await this.sendEventsQueue();
+        this.sendEventsQueue();
       }
     }
   }
@@ -124,14 +116,14 @@ export class EventManager extends StateManager {
       return;
     }
 
-    this.eventsQueueIntervalId = window.setInterval(async () => {
+    this.eventsQueueIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
-        await this.sendEventsQueue();
+        this.sendEventsQueue();
       }
     }, EVENT_SENT_INTERVAL);
   }
 
-  private async sendEventsQueue(): Promise<void> {
+  private sendEventsQueue(): void {
     if (this.eventsQueue.length === 0) {
       return;
     }
@@ -170,7 +162,7 @@ export class EventManager extends StateManager {
       ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
     };
 
-    const success = await this.dataSender.sendEventsQueue(body);
+    const success = this.dataSender.sendEventsQueue(body);
 
     this.eventsQueue = success ? [] : deduplicatedEvents;
   }

@@ -87,8 +87,7 @@ export class App extends StateManager {
   }
 
   private initSessionHandler(): void {
-    const onSessionTrack = (): void => {};
-    const sessionHandler = new SessionHandler(this.eventManager, onSessionTrack);
+    const sessionHandler = new SessionHandler(this.eventManager);
 
     sessionHandler.startTracking();
   }
@@ -113,15 +112,13 @@ export class App extends StateManager {
   }
 
   private initClickHandler(): void {
-    const onClickTrack = (): void => {};
-    const clickHandler = new ClickHandler(this.eventManager, onClickTrack);
+    const clickHandler = new ClickHandler(this.eventManager);
 
     clickHandler.startTracking();
   }
 
   private initScrollHandler(): void {
-    const onScrollTrack = (): void => {};
-    const scrollHandler = new ScrollHandler(this.eventManager, onScrollTrack);
+    const scrollHandler = new ScrollHandler(this.eventManager);
 
     scrollHandler.startTracking();
   }
