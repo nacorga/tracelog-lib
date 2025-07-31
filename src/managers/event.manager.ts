@@ -1,14 +1,12 @@
 import { EVENT_SENT_INTERVAL, MAX_EVENTS_QUEUE_LENGTH } from '../app.constants';
 import { CustomEventData, EventData, EventType } from '../types/event.types';
 import { Queue } from '../types/queue.types';
-import { log } from '../utils/log.utils';
-import { isUrlPathExcluded } from '../utils/url.utils';
 import { SenderManager } from './sender.manager';
 import { SamplingManager } from './sampling.manager';
 import { StateManager } from './state.manager';
 import { TagsManager } from './tags.manager';
 import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
-import { getUTMParameters } from '../utils/utm-params.utils';
+import { getUTMParameters, isUrlPathExcluded, log } from '../utils';
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;

@@ -51,7 +51,6 @@ export const DEFAULT_DEMO_CONFIG: Config = {
   ...DEFAULT_CONFIG,
   id: 'demo',
   qaMode: true,
-  allowHttp: true,
 };
 
 // Test config

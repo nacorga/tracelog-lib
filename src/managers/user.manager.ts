@@ -1,5 +1,5 @@
 import { USER_ID_KEY } from '../app.constants';
-import { generateUUID } from '../utils/uuid.utils';
+import { generateUUID } from '../utils';
 import { persistentStorage } from './storage.manager';
 
 export class UserManager {

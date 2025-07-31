@@ -3,7 +3,7 @@ import { EventManager } from '../managers/event.manager';
 import { SessionManager } from '../managers/session.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType } from '../types/event.types';
-import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from '../utils/safe-local-storage';
+import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from '../utils';
 
 interface StoredSession {
   sessionId: string;
@@ -109,7 +109,6 @@ export class SessionHandler extends StateManager {
           this.clearPersistedSession();
         }
       } catch {
-        // Invalid stored data, clear it
         this.clearPersistedSession();
       }
     }

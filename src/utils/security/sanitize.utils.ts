@@ -1,6 +1,6 @@
-import { ALLOWED_API_CONFIG_KEYS } from '../app.constants';
-import { MetadataType } from '../types/common.types';
-import { ApiConfig } from '../types/config.types';
+import { ALLOWED_API_CONFIG_KEYS } from '../../app.constants';
+import { MetadataType } from '../../types/common.types';
+import { ApiConfig } from '../../types/config.types';
 
 // Security constants
 const MAX_STRING_LENGTH = 1000;
@@ -19,6 +19,8 @@ const XSS_PATTERNS = [
 
 /**
  * Sanitizes a string value to prevent XSS attacks
+ * @param value - The string to sanitize
+ * @returns The sanitized string
  */
 export const sanitizeString = (value: string): string => {
   if (!value || typeof value !== 'string' || value.trim().length === 0) {
@@ -50,6 +52,8 @@ export const sanitizeString = (value: string): string => {
 
 /**
  * Sanitizes a path string for route exclusion checks
+ * @param value - The path string to sanitize
+ * @returns The sanitized path string
  */
 export const sanitizePathString = (value: string): string => {
   if (typeof value !== 'string') {
@@ -78,6 +82,9 @@ export const sanitizePathString = (value: string): string => {
 
 /**
  * Sanitizes any value recursively with depth protection
+ * @param value - The value to sanitize
+ * @param depth - Current recursion depth
+ * @returns The sanitized value
  */
 const sanitizeValue = (value: unknown, depth = 0): unknown => {
   // Prevent infinite recursion
@@ -136,6 +143,8 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 
 /**
  * Sanitizes API configuration data with strict validation
+ * @param data - The API config data to sanitize
+ * @returns The sanitized API config
  */
 export const sanitizeApiConfig = (data: unknown): ApiConfig => {
   const safeData: Record<string, unknown> = {};
@@ -171,6 +180,8 @@ export const sanitizeApiConfig = (data: unknown): ApiConfig => {
 
 /**
  * Sanitizes user metadata for custom events
+ * @param metadata - The metadata to sanitize
+ * @returns The sanitized metadata
  */
 export const sanitizeMetadata = (metadata: unknown): Record<string, MetadataType> => {
   if (typeof metadata !== 'object' || metadata === null) {
@@ -188,6 +199,8 @@ export const sanitizeMetadata = (metadata: unknown): Record<string, MetadataType
 
 /**
  * Sanitizes URL strings for tracking
+ * @param url - The URL to sanitize
+ * @returns The sanitized URL
  */
 export const sanitizeUrl = (url: string): string => {
   if (typeof url !== 'string') {

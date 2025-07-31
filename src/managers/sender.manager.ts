@@ -1,9 +1,9 @@
 import { QUEUE_KEY } from '../app.constants';
 import { Queue } from '../types/queue.types';
 import { persistentStorage } from './storage.manager';
-import { log } from '../utils/log.utils';
 import { EventData } from '../types/event.types';
 import { StateManager } from './state.manager';
+import { log } from '../utils';
 
 const RETRY_BACKOFF_INITIAL = 1000;
 const RETRY_BACKOFF_MAX = 30_000;

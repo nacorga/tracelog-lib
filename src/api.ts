@@ -1,8 +1,8 @@
 import { App } from './app';
 import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
-import { log } from './utils/log.utils';
-import { validateAndNormalizeConfig } from './utils/config-validation.utils';
+import { log } from './utils';
+import { validateAndNormalizeConfig } from './utils/validations';
 
 export * as Types from './types';
 

@@ -1,5 +1,5 @@
 import { Storage, StorageType } from '../types/storage.types';
-import { log } from '../utils/log.utils';
+import { log } from '../utils';
 
 class BrowserStorage implements Storage {
   private readonly storage: Storage;

@@ -1,4 +1,4 @@
-import { DeviceType } from '../types/device.types';
+import { DeviceType } from '../../types/device.types';
 
 let coarsePointerQuery: MediaQueryList | undefined;
 let noHoverQuery: MediaQueryList | undefined;
@@ -17,6 +17,10 @@ interface NavigatorWithUserAgentData extends Navigator {
   };
 }
 
+/**
+ * Detects the device type based on screen size, user agent, and browser capabilities
+ * @returns The detected device type
+ */
 export const getDeviceType = (): DeviceType => {
   try {
     const nav = navigator as NavigatorWithUserAgentData;
@@ -49,6 +53,6 @@ export const getDeviceType = (): DeviceType => {
 
     return DeviceType.Desktop;
   } catch {
-    return DeviceType.Unknown;
+    return DeviceType.Desktop;
   }
 };

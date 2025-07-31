@@ -1,6 +1,10 @@
-import { UTM_PARAMS } from '../app.constants';
-import { UTM } from '../types/event.types';
+import { UTM_PARAMS } from '../../app.constants';
+import { UTM } from '../../types/event.types';
 
+/**
+ * Extracts UTM parameters from the current URL
+ * @returns UTM parameters object or undefined if none found
+ */
 export const getUTMParameters = (): UTM | undefined => {
   const urlParams = new URLSearchParams(window.location.search);
   const utmParams: Partial<Record<keyof UTM, string>> = {};

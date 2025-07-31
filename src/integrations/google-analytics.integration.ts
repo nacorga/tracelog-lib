@@ -1,6 +1,6 @@
 import { StateManager } from '../managers/state.manager';
 import { MetadataType } from '../types';
-import { log } from '../utils/log.utils';
+import { log } from '../utils';
 
 declare global {
   interface Window {

@@ -1,3 +1,7 @@
+/**
+ * Generates a RFC4122 compliant UUID v4
+ * @returns A UUID string
+ */
 export const generateUUID = (): string => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;

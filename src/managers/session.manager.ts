@@ -9,8 +9,7 @@ import {
   VisibilityListenerManager,
 } from '../listeners';
 import { DeviceType } from '../types/device.types';
-import { getDeviceType } from '../utils/device-detector.utils';
-import { generateUUID } from '../utils/uuid.utils';
+import { generateUUID, getDeviceType } from '../utils';
 import { StateManager } from './state.manager';
 
 interface SessionConfig {

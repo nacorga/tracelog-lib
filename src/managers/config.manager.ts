@@ -1,7 +1,7 @@
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG, DEFAULT_DEMO_CONFIG, DEFAULT_TEST_CONFIG } from '../app.constants';
 import { ApiConfig, AppConfig, Config } from '../types/config.types';
-import { sanitizeApiConfig } from '../utils/sanitize.utils';
-import { isValidUrl } from '../utils/validations.utils';
+import { sanitizeApiConfig } from '../utils';
+import { isValidUrl } from '../utils/validations';
 
 export class ConfigManager {
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {

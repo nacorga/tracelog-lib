@@ -1,5 +1,9 @@
 const memoryFallback = new Map<string, string>();
 
+/**
+ * Checks if localStorage is available and functional
+ * @returns True if localStorage is available
+ */
 const isLocalStorageAvailable = (): boolean => {
   try {
     const test = '__localStorage_test__';
@@ -13,6 +17,11 @@ const isLocalStorageAvailable = (): boolean => {
   }
 };
 
+/**
+ * Safely retrieves an item from localStorage with memory fallback
+ * @param key - The storage key
+ * @returns The stored value or null if not found
+ */
 export const safeLocalStorageGet = (key: string): string | null => {
   try {
     if (isLocalStorageAvailable()) {
@@ -25,6 +34,12 @@ export const safeLocalStorageGet = (key: string): string | null => {
   }
 };
 
+/**
+ * Safely stores an item in localStorage with memory fallback
+ * @param key - The storage key
+ * @param value - The value to store
+ * @returns True if the operation was successful
+ */
 export const safeLocalStorageSet = (key: string, value: string): boolean => {
   try {
     if (isLocalStorageAvailable()) {
@@ -42,6 +57,11 @@ export const safeLocalStorageSet = (key: string, value: string): boolean => {
   }
 };
 
+/**
+ * Safely removes an item from localStorage with memory fallback
+ * @param key - The storage key
+ * @returns True if the operation was successful
+ */
 export const safeLocalStorageRemove = (key: string): boolean => {
   try {
     if (isLocalStorageAvailable()) {

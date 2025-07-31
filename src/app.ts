@@ -3,17 +3,16 @@ import { ApiManager } from './managers/api.manager';
 import { ConfigManager } from './managers/config.manager';
 import { EventManager } from './managers/event.manager';
 import { AppConfig } from './types/config.types';
-import { getDeviceType } from './utils/device-detector.utils';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { isEventValid } from './utils/validations.utils';
+import { isEventValid } from './utils/validations';
 import { EventType } from './types/event.types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { normalizeUrl } from './utils/url.utils';
+import { getDeviceType, normalizeUrl } from './utils';
 
 export class App extends StateManager {
   private isInitialized = false;
