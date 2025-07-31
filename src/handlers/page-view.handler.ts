@@ -9,6 +9,8 @@ export class PageViewHandler extends StateManager {
   private readonly onTrack: () => void;
 
   private lastUrl: string;
+  private originalPushState?: typeof window.history.pushState;
+  private originalReplaceState?: typeof window.history.replaceState;
 
   constructor(eventManager: EventManager, onTrack: () => void) {
     super();
@@ -28,7 +30,26 @@ export class PageViewHandler extends StateManager {
     this.patchHistory('replaceState');
   }
 
+  stopTracking(): void {
+    window.removeEventListener('popstate', this.trackCurrentPage);
+    window.removeEventListener('hashchange', this.trackCurrentPage);
+
+    // Restore original history methods
+    if (this.originalPushState) {
+      window.history.pushState = this.originalPushState;
+    }
+    if (this.originalReplaceState) {
+      window.history.replaceState = this.originalReplaceState;
+    }
+  }
+
   private patchHistory(method: 'pushState' | 'replaceState'): void {
+    if (method === 'pushState' && !this.originalPushState) {
+      this.originalPushState = window.history.pushState;
+    } else if (method === 'replaceState' && !this.originalReplaceState) {
+      this.originalReplaceState = window.history.replaceState;
+    }
+
     const original = window.history[method];
 
     window.history[method] = (...args: [unknown, string, string | URL | null | undefined]): void => {
@@ -37,7 +58,7 @@ export class PageViewHandler extends StateManager {
     };
   }
 
-  private trackCurrentPage(): void {
+  private readonly trackCurrentPage = (): void => {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 
@@ -55,5 +76,5 @@ export class PageViewHandler extends StateManager {
 
       this.onTrack();
     }
-  }
+  };
 }

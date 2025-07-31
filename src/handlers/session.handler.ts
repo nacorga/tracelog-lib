@@ -55,10 +55,16 @@ export class SessionHandler extends StateManager {
   }
 
   stopTracking(): void {
-    if (this.sessionManager && this.get('sessionId')) {
-      this.sessionManager.endSession();
-      this.trackSession(EventType.SESSION_END);
-      this.set('sessionId', null);
+    if (this.sessionManager) {
+      if (this.get('sessionId')) {
+        this.sessionManager.endSession();
+        this.trackSession(EventType.SESSION_END);
+        this.set('sessionId', null);
+      }
+
+      // Properly destroy the session manager to clean up all listeners
+      this.sessionManager.destroy();
+      this.sessionManager = null;
     }
   }
 }

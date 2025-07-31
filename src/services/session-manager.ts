@@ -213,4 +213,79 @@ export class SessionManager {
       }
     }
   }
+
+  destroy(): void {
+    // Clear any active timers
+    if (this.inactivityTimer) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
+
+    if (this.throttleTimeout) {
+      clearTimeout(this.throttleTimeout);
+      this.throttleTimeout = null;
+    }
+
+    // Remove all activity listeners
+    window.removeEventListener('scroll', this.handleActivity);
+    window.removeEventListener('resize', this.handleActivity);
+    window.removeEventListener('focus', this.handleActivity);
+
+    if (this.deviceCapabilities.hasTouch) {
+      window.removeEventListener('touchstart', this.handleActivity);
+      window.removeEventListener('touchmove', this.handleActivity);
+      window.removeEventListener('touchend', this.handleActivity);
+      window.removeEventListener('orientationchange', this.handleActivity);
+
+      if ('DeviceMotionEvent' in window) {
+        window.removeEventListener('devicemotion', this.throttledDeviceMotion.bind(this));
+      }
+    }
+
+    if (this.deviceCapabilities.hasMouse) {
+      window.removeEventListener('mousemove', this.handleActivity);
+      window.removeEventListener('mousedown', this.handleActivity);
+      window.removeEventListener('wheel', this.handleActivity);
+    } else {
+      window.removeEventListener('click', this.handleActivity);
+    }
+
+    if (this.deviceCapabilities.hasKeyboard) {
+      window.removeEventListener('keydown', this.handleActivity);
+      window.removeEventListener('keypress', this.handleActivity);
+    }
+
+    if (this.deviceCapabilities.isMobile) {
+      window.removeEventListener('pageshow', this.handleActivity);
+      window.removeEventListener('pagehide', this.handleActivity);
+    }
+
+    // Remove visibility listeners
+    if ('visibilityState' in document) {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+
+    window.removeEventListener('blur', this.handleVisibilityChange);
+    window.removeEventListener('focus', this.handleActivity);
+    window.removeEventListener('beforeunload', this.handleActivity);
+
+    if ('onLine' in navigator) {
+      window.removeEventListener('online', this.handleActivity);
+    }
+
+    // Mobile-specific cleanup
+    if (this.deviceCapabilities.isMobile) {
+      document.removeEventListener('pause', this.handleVisibilityChange);
+      document.removeEventListener('resume', this.handleActivity);
+
+      if ('orientation' in screen) {
+        screen.orientation.removeEventListener('change', this.handleActivity);
+      }
+    }
+
+    // Reset state
+    this.isSessionActive = false;
+    this.lastActivityTime = 0;
+    this.sessionStartTime = 0;
+  }
 }

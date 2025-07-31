@@ -1,4 +1,4 @@
-import { SCROLL_DEBOUNCE_TIME } from '../app.constants';
+import { SCROLL_DEBOUNCE_TIME, SIGNIFICANT_SCROLL_DELTA } from '../app.constants';
 import { EventManager } from '../services/event-manager';
 import { StateManager } from '../services/state-manager';
 import { EventType, ScrollData, ScrollDirection } from '../types/event.types';
@@ -37,11 +37,33 @@ export class ScrollHandler extends StateManager {
     }
   }
 
+  stopTracking(): void {
+    for (const container of this.containers) {
+      if (container.debounceTimer) {
+        clearTimeout(container.debounceTimer);
+      }
+
+      if (container.element instanceof Window) {
+        window.removeEventListener('scroll', container.listener);
+      } else {
+        container.element.removeEventListener('scroll', container.listener);
+      }
+    }
+
+    this.containers.length = 0;
+  }
+
   private setupScrollContainer(element: Window | HTMLElement): void {
+    const container: ScrollContainer = {
+      element,
+      lastScrollPos: 0,
+      debounceTimer: null,
+      listener: () => {}, // Will be set below
+    };
+
     const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {
         this.set('suppressNextScroll', false);
-
         return;
       }
 
@@ -63,13 +85,7 @@ export class ScrollHandler extends StateManager {
       }, SCROLL_DEBOUNCE_TIME);
     };
 
-    const container: ScrollContainer = {
-      element,
-      lastScrollPos: 0,
-      debounceTimer: null,
-      listener: handleScroll,
-    };
-
+    container.listener = handleScroll;
     this.containers.push(container);
 
     if (element instanceof Window) {
@@ -93,7 +109,7 @@ export class ScrollHandler extends StateManager {
 
     // Only update if scroll position changed significantly
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
-    if (positionDelta < 10) {
+    if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
       return null;
     }
 

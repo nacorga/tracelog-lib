@@ -32,9 +32,9 @@ export interface AppConfig {
    */
   id: string;
   /**
-   * Session timeout in minutes. After this period of inactivity,
+   * Session timeout in milliseconds. After this period of inactivity,
    * a new session will be started for subsequent events.
-   * @default 30
+   * @default 900000 (15 minutes)
    */
   sessionTimeout?: number;
   /**

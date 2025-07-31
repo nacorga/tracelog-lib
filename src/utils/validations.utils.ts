@@ -212,9 +212,9 @@ export const isValidEventName = (eventName: string): { valid: boolean; error?: s
 
 export const isValidMetadata = (
   eventName: string,
-  metadata: Record<string, any>,
+  metadata: Record<string, unknown>,
   type?: 'globalMetadata' | 'customEvent',
-): { valid: boolean; error?: string; sanitizedMetadata?: Record<string, any> } => {
+): { valid: boolean; error?: string; sanitizedMetadata?: Record<string, MetadataType> } => {
   const sanitizedMetadata = sanitizeMetadata(metadata);
   const intro =
     type && type === 'customEvent' ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
@@ -288,8 +288,8 @@ export const isValidMetadata = (
 
 export const isEventValid = (
   eventName: string,
-  metadata?: Record<string, any>,
-): { valid: boolean; error?: string; sanitizedMetadata?: Record<string, any> } => {
+  metadata?: Record<string, unknown>,
+): { valid: boolean; error?: string; sanitizedMetadata?: Record<string, MetadataType> } => {
   const nameValidation = isValidEventName(eventName);
 
   if (!nameValidation.valid) {

@@ -4,25 +4,27 @@ import { ConfigManager } from './services/config-manager';
 import { EventManager } from './services/event-manager';
 import { AppConfig } from './types/config.types';
 import { getDeviceType } from './utils/device-detector.utils';
-import { log } from './utils/log.utils';
 import { UserManager } from './services/user.manager';
 import { StateManager } from './services/state-manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-
-let app: App | null = null;
-let isInitializing = false;
+import { isEventValid } from './utils/validations.utils';
+import { EventType } from './types/event.types';
 
 export class App extends StateManager {
   private isInitialized = false;
   private eventManager!: EventManager;
+  private sessionHandler!: SessionHandler;
+  private pageViewHandler!: PageViewHandler;
+  private clickHandler!: ClickHandler;
+  private scrollHandler!: ScrollHandler;
   private suppressNextScrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {
-      throw new Error('App is already initialized');
+      return;
     }
 
     if (!appConfig?.id) {
@@ -38,6 +40,31 @@ export class App extends StateManager {
       this.isInitialized = false;
       throw error;
     }
+  }
+
+  sendCustomEvent(name: string, metadata?: Record<string, unknown>): void {
+    const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
+
+    if (valid) {
+      this.eventManager.track({
+        type: EventType.CUSTOM,
+        custom_event: {
+          name,
+          ...(sanitizedMetadata && { metadata: sanitizedMetadata }),
+        },
+      });
+    } else if (this.get('config')?.qaMode) {
+      throw new Error(
+        `custom event "${name}" validation failed (${error ?? 'unknown error'}). Please, review your event data and try again.`,
+      );
+    }
+  }
+
+  destroy(): void {
+    this.sessionHandler.stopTracking();
+    this.pageViewHandler.stopTracking();
+    this.clickHandler.stopTracking();
+    this.scrollHandler.stopTracking();
   }
 
   private async setState(appConfig: AppConfig): Promise<void> {
@@ -87,16 +114,15 @@ export class App extends StateManager {
   }
 
   private initSessionHandler(): void {
-    const sessionHandler = new SessionHandler(this.eventManager);
-
-    sessionHandler.startTracking();
+    this.sessionHandler = new SessionHandler(this.eventManager);
+    this.sessionHandler.startTracking();
   }
 
   private initPageViewHandler(): void {
     const onPageViewTrack = (): void => this.onPageViewTrack();
-    const pageViewHandler = new PageViewHandler(this.eventManager, onPageViewTrack);
 
-    pageViewHandler.startTracking();
+    this.pageViewHandler = new PageViewHandler(this.eventManager, onPageViewTrack);
+    this.pageViewHandler.startTracking();
   }
 
   private onPageViewTrack(): void {
@@ -112,47 +138,12 @@ export class App extends StateManager {
   }
 
   private initClickHandler(): void {
-    const clickHandler = new ClickHandler(this.eventManager);
-
-    clickHandler.startTracking();
+    this.clickHandler = new ClickHandler(this.eventManager);
+    this.clickHandler.startTracking();
   }
 
   private initScrollHandler(): void {
-    const scrollHandler = new ScrollHandler(this.eventManager);
-
-    scrollHandler.startTracking();
+    this.scrollHandler = new ScrollHandler(this.eventManager);
+    this.scrollHandler.startTracking();
   }
 }
-
-export const init = async (appConfig: AppConfig): Promise<void> => {
-  if (app) {
-    throw new Error('App is already initialized. Call getApp() to get the existing instance.');
-  }
-
-  if (isInitializing) {
-    throw new Error('App initialization is already in progress');
-  }
-
-  isInitializing = true;
-
-  const instance = new App();
-
-  try {
-    await instance.init(appConfig);
-    app = instance;
-  } catch (error) {
-    app = null;
-    log('error', `Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
-    throw error;
-  } finally {
-    isInitializing = false;
-  }
-};
-
-export const getApp = (): App => {
-  if (!app) {
-    throw new Error('App not initialized');
-  }
-
-  return app;
-};

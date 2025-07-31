@@ -4,6 +4,7 @@ import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from
 
 const HTML_DATA_ATTR_PREFIX = 'data-tl';
 const CLICK_DEBOUNCE_TIME = 500;
+const MAX_TEXT_LENGTH = 255;
 const INTERACTIVE_SELECTORS = [
   'button',
   'a',
@@ -78,6 +79,18 @@ export class ClickHandler extends StateManager {
     };
 
     window.addEventListener('click', this.clickHandler, true);
+  }
+
+  stopTracking(): void {
+    if (this.clickHandler) {
+      window.removeEventListener('click', this.clickHandler, true);
+      this.clickHandler = undefined;
+    }
+
+    if (this.clickDebounceTimer) {
+      clearTimeout(this.clickDebounceTimer);
+      this.clickDebounceTimer = null;
+    }
   }
 
   private findTrackingElement(element: HTMLElement): HTMLElement | undefined {
@@ -163,7 +176,6 @@ export class ClickHandler extends StateManager {
   }
 
   private getRelevantText(clickedElement: HTMLElement, relevantElement: HTMLElement): string {
-    const MAX_TEXT_LENGTH = 255;
     const LARGE_CONTAINER_TAGS = ['main', 'section', 'article', 'body', 'html', 'header', 'footer', 'aside', 'nav'];
     const clickedText = clickedElement.textContent?.trim() ?? '';
     const relevantText = relevantElement.textContent?.trim() ?? '';
