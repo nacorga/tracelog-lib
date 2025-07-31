@@ -97,6 +97,10 @@ export class EventManager extends StateManager {
   private processAndSend(payload: EventData): void {
     if (this.get('config')?.qaMode) {
       log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
+
+      if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
+        log('info', `Google Analytics event: ${JSON.stringify(payload)}`);
+      }
     } else {
       this.eventsQueue.push(payload);
 
