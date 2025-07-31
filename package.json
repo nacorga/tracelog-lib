@@ -39,10 +39,6 @@
     "rc:cleanup:pr": "echo 'Usage: npm run rc:cleanup:pr -- pr:123' && node scripts/rc-manager.js cleanup",
     "rc:info": "node scripts/rc-manager.js info",
     "rc:all": "node scripts/rc-manager.js all",
-    "benchmark": "node scripts/benchmark.js",
-    "benchmark:size": "node scripts/benchmark.js --size-only",
-    "benchmark:performance": "node scripts/benchmark.js --performance-only",
-    "test:cicd": "bash scripts/test-cicd.sh",
     "prepare": "husky"
   },
   "devDependencies": {
