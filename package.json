@@ -1,7 +1,7 @@
 {
   "name": "@tracelog/client",
   "license": "MIT",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "main": "./dist/cjs/src/public-api.js",
   "module": "./dist/esm/src/public-api.js",
   "types": "./dist/esm/src/public-api.d.ts",
@@ -35,11 +35,13 @@
     "test:e2e": "npm run build:browser && cp dist/browser/tracelog.js tests/fixtures/tracelog.js && playwright test",
     "rc:list": "node scripts/rc-manager.js list",
     "rc:cleanup": "node scripts/rc-manager.js cleanup",
+    "rc:cleanup:pr": "node scripts/rc-manager.js cleanup",
     "rc:info": "node scripts/rc-manager.js info",
     "rc:all": "node scripts/rc-manager.js all",
     "benchmark": "node scripts/benchmark.js",
     "benchmark:size": "node scripts/benchmark.js --size-only",
     "benchmark:performance": "node scripts/benchmark.js --performance-only",
+    "test:cicd": "bash scripts/test-cicd.sh",
     "prepare": "husky"
   },
   "devDependencies": {
