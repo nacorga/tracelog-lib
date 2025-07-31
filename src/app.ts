@@ -10,6 +10,7 @@ import { StateManager } from './services/state-manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
+import { ScrollHandler } from './handlers/scroll.handler';
 
 let app: App | null = null;
 let isInitializing = false;
@@ -17,7 +18,7 @@ let isInitializing = false;
 export class App extends StateManager {
   private isInitialized = false;
   private eventManager!: EventManager;
-  private suppressNextScroll = false;
+  private suppressNextScrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {
@@ -78,6 +79,7 @@ export class App extends StateManager {
     this.initSessionHandler();
     this.initPageViewHandler();
     this.initClickHandler();
+    this.initScrollHandler();
   }
 
   private setEventManager(): void {
@@ -99,10 +101,14 @@ export class App extends StateManager {
   }
 
   private onPageViewTrack(): void {
-    this.suppressNextScroll = true;
+    this.set('suppressNextScroll', true);
 
-    setTimeout(() => {
-      this.suppressNextScroll = false;
+    if (this.suppressNextScrollTimer) {
+      clearTimeout(this.suppressNextScrollTimer);
+    }
+
+    this.suppressNextScrollTimer = setTimeout(() => {
+      this.set('suppressNextScroll', false);
     }, SCROLL_DEBOUNCE_TIME * 2);
   }
 
@@ -111,6 +117,13 @@ export class App extends StateManager {
     const clickHandler = new ClickHandler(this.eventManager, onClickTrack);
 
     clickHandler.startTracking();
+  }
+
+  private initScrollHandler(): void {
+    const onScrollTrack = (): void => {};
+    const scrollHandler = new ScrollHandler(this.eventManager, onScrollTrack);
+
+    scrollHandler.startTracking();
   }
 }
 

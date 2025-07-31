@@ -70,19 +70,6 @@ export interface PageViewData {
   hash?: string;
 }
 
-// export interface EventHandler {
-//   evType: EventType;
-//   url: string;
-//   fromUrl?: string;
-//   referrer?: string;
-//   utm?: UTM;
-//   scrollData?: ScrollData;
-//   clickData?: ClickData;
-//   customEvent?: CustomEventData;
-//   pageView?: PageViewData;
-//   trigger?: string;
-// }
-
 export interface EventData {
   type: EventType;
   page_url: string;
