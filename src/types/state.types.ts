@@ -7,5 +7,6 @@ export interface State {
   sessionId: string | null;
   userId: string;
   device: DeviceType;
+  pageUrl: string;
   suppressNextScroll: boolean;
 }

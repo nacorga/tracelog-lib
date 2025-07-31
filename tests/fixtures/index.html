@@ -59,10 +59,31 @@
 
     <script type="module">
         import { TraceLog } from './tracelog.js';
-        TraceLog.init({ id: 'demo' });
-        document.getElementById('custom-event-btn')?.addEventListener('click', () => {
-            TraceLog.event('playwright_event', { foo: 'bar' });
-        });
+        
+        async function initializeTraceLog() {
+            try {
+                await TraceLog.init({ id: 'demo' });
+
+                console.log('TraceLog initialized successfully');
+                
+                document.getElementById('custom-event-btn')?.addEventListener('click', () => {
+                    try {
+                        TraceLog.event('playwright_event', { foo: 'bar' });
+                        console.log('Custom event sent successfully');
+                    } catch (error) {
+                        console.error('Error sending custom event:', error);
+                    }
+                });
+            } catch (error) {
+                console.error('Error initializing TraceLog:', error);
+            }
+        }
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeTraceLog);
+        } else {
+            initializeTraceLog();
+        }
     </script>
 </body>
 </html> 

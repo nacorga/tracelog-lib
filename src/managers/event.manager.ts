@@ -8,6 +8,7 @@ import { SamplingManager } from './sampling.manager';
 import { StateManager } from './state.manager';
 import { TagsManager } from './tags.manager';
 import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
+import { getUTMParameters } from '../utils/utm-params.utils';
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
@@ -28,7 +29,7 @@ export class EventManager extends StateManager {
     this.dataSender = new SenderManager();
   }
 
-  track({ type, page_url, from_page_url, scroll_data, click_data, custom_event, utm }: Partial<EventData>): void {
+  track({ type, page_url, from_page_url, scroll_data, click_data, custom_event }: Partial<EventData>): void {
     if (!this.samplingManager.isSampledIn()) {
       return;
     }
@@ -62,17 +63,18 @@ export class EventManager extends StateManager {
 
     const isFirstEvent = type === EventType.SESSION_START;
     const removePageUrl = isRouteExcluded && isSessionEvent;
+    const utmParams = isFirstEvent ? getUTMParameters() : undefined;
 
     const payload: EventData = {
       type: type as EventType,
-      page_url: removePageUrl ? '' : (page_url as string),
+      page_url: removePageUrl ? '' : (page_url as string) || this.get('pageUrl'),
       timestamp: Date.now(),
       ...(isFirstEvent && { referrer: document.referrer || 'Direct' }),
       ...(from_page_url && !removePageUrl && { from_page_url }),
       ...(scroll_data && { scroll_data }),
       ...(click_data && { click_data }),
       ...(custom_event && { custom_event }),
-      ...(isFirstEvent && utm && { utm }),
+      ...(utmParams && { utm: utmParams }),
       ...(removePageUrl && { excluded_route: true }),
     };
 

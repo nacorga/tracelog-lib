@@ -13,6 +13,7 @@ import { ScrollHandler } from './handlers/scroll.handler';
 import { isEventValid } from './utils/validations.utils';
 import { EventType } from './types/event.types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
+import { normalizeUrl } from './utils/url.utils';
 
 export class App extends StateManager {
   private isInitialized = false;
@@ -83,6 +84,7 @@ export class App extends StateManager {
     await this.setConfig(appConfig);
     this.setUserId();
     this.setDevice();
+    this.setPageUrl();
   }
 
   private setApiUrl(id: string): void {
@@ -107,6 +109,11 @@ export class App extends StateManager {
   private setDevice(): void {
     const device = getDeviceType();
     this.set('device', device);
+  }
+
+  private setPageUrl(): void {
+    const initialUrl = normalizeUrl(window.location.href, this.get('config').sensitiveQueryParams);
+    this.set('pageUrl', initialUrl);
   }
 
   private setIntegrations(): void {

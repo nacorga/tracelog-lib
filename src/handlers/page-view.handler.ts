@@ -1,6 +1,5 @@
 import { EventType } from '../types/event.types';
 import { normalizeUrl } from '../utils/url.utils';
-import { getUTMParameters } from '../utils/utm-params.utils';
 import { StateManager } from '../managers/state.manager';
 import { EventManager } from '../managers/event.manager';
 
@@ -8,7 +7,6 @@ export class PageViewHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly onTrack: () => void;
 
-  private lastUrl: string;
   private originalPushState?: typeof window.history.pushState;
   private originalReplaceState?: typeof window.history.replaceState;
 
@@ -17,10 +15,10 @@ export class PageViewHandler extends StateManager {
 
     this.eventManager = eventManager;
     this.onTrack = onTrack;
-    this.lastUrl = '';
   }
 
   startTracking(): void {
+    this.trackInitialPageView();
     this.trackCurrentPage();
 
     window.addEventListener('popstate', this.trackCurrentPage);
@@ -34,10 +32,10 @@ export class PageViewHandler extends StateManager {
     window.removeEventListener('popstate', this.trackCurrentPage);
     window.removeEventListener('hashchange', this.trackCurrentPage);
 
-    // Restore original history methods
     if (this.originalPushState) {
       window.history.pushState = this.originalPushState;
     }
+
     if (this.originalReplaceState) {
       window.history.replaceState = this.originalReplaceState;
     }
@@ -62,19 +60,27 @@ export class PageViewHandler extends StateManager {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 
-    if (this.lastUrl !== normalizedUrl) {
-      const fromUrl = this.lastUrl;
+    if (this.get('pageUrl') !== normalizedUrl) {
+      const fromUrl = this.get('pageUrl');
 
-      this.lastUrl = normalizedUrl;
+      this.set('pageUrl', normalizedUrl);
 
       this.eventManager.track({
         type: EventType.PAGE_VIEW,
-        page_url: this.lastUrl,
+        page_url: this.get('pageUrl'),
         from_page_url: fromUrl,
-        utm: getUTMParameters(),
       });
 
       this.onTrack();
     }
   };
+
+  private trackInitialPageView(): void {
+    this.eventManager.track({
+      type: EventType.PAGE_VIEW,
+      page_url: this.get('pageUrl'),
+    });
+
+    this.onTrack();
+  }
 }

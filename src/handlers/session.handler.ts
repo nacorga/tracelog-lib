@@ -55,12 +55,26 @@ export class SessionHandler extends StateManager {
     };
 
     this.sessionManager = new SessionManager(onActivity, onInactivity);
+    this.startInitialSession();
   }
 
   private trackSession(eventType: EventType.SESSION_START | EventType.SESSION_END): void {
     this.eventManager.track({
       type: eventType,
     });
+  }
+
+  private startInitialSession(): void {
+    if (this.get('sessionId')) {
+      return;
+    }
+
+    const newSessionId = this.sessionManager!.startSession();
+
+    this.set('sessionId', newSessionId);
+    this.trackSession(EventType.SESSION_START);
+    this.persistSession(newSessionId);
+    this.startHeartbeat();
   }
 
   stopTracking(): void {

@@ -1,13 +1,13 @@
 import { State } from '../types/state.types';
 
-export abstract class StateManager {
-  private state: State = {} as State;
+const globalState: State = {} as State;
 
+export abstract class StateManager {
   protected get<T extends keyof State>(key: T): State[T] {
-    return this.state[key];
+    return globalState[key];
   }
 
   protected set<T extends keyof State>(key: T, value: State[T]): void {
-    this.state[key] = value;
+    globalState[key] = value;
   }
 }
