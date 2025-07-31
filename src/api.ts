@@ -2,6 +2,7 @@ import { App } from './app';
 import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
 import { log } from './utils/log.utils';
+import { validateAndNormalizeConfig } from './utils/config-validation.utils';
 
 export * as Types from './types';
 
@@ -27,9 +28,10 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
 
     isInitializing = true;
 
+    const validatedConfig = validateAndNormalizeConfig(appConfig);
     const instance = new App();
 
-    await instance.init(appConfig);
+    await instance.init(validatedConfig);
 
     app = instance;
   } catch (error) {
