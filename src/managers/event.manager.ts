@@ -92,11 +92,6 @@ export class EventManager extends StateManager {
     this.lastEvent = payload;
 
     this.processAndSend(payload);
-
-    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
-      const customEvent = payload.custom_event as CustomEventData;
-      this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
-    }
   }
 
   private processAndSend(payload: EventData): void {
@@ -115,6 +110,12 @@ export class EventManager extends StateManager {
 
       if (payload.type === EventType.SESSION_END && this.eventsQueue.length > 0) {
         this.sendEventsQueue();
+      }
+
+      if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
+        const customEvent = payload.custom_event as CustomEventData;
+
+        this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
       }
     }
   }
