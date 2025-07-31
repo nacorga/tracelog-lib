@@ -1,7 +1,7 @@
 import { DeviceType } from '../types/device.types';
 import { ClickData, EventData, EventType } from '../types/event.types';
 import { TagCondition, TagConditionOperator, TagConditionType, TagLogicalOperator } from '../types/tag.types';
-import { StateManager } from './state-manager';
+import { StateManager } from './state.manager';
 
 export class TagsManager extends StateManager {
   getEventTagsIds(event: EventData, deviceType: DeviceType): string[] {

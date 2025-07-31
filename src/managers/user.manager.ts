@@ -1,6 +1,6 @@
 import { USER_ID_KEY } from '../app.constants';
 import { generateUUID } from '../utils/uuid.utils';
-import { persistentStorage } from './storage-manager';
+import { persistentStorage } from './storage.manager';
 
 export class UserManager {
   private readonly userId: string;

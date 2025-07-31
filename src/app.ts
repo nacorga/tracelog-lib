@@ -1,11 +1,11 @@
 import { SCROLL_DEBOUNCE_TIME } from './app.constants';
-import { ApiManager } from './services/api-manager';
-import { ConfigManager } from './services/config-manager';
-import { EventManager } from './services/event-manager';
+import { ApiManager } from './managers/api.manager';
+import { ConfigManager } from './managers/config.manager';
+import { EventManager } from './managers/event.manager';
 import { AppConfig } from './types/config.types';
 import { getDeviceType } from './utils/device-detector.utils';
-import { UserManager } from './services/user.manager';
-import { StateManager } from './services/state-manager';
+import { UserManager } from './managers/user.manager';
+import { StateManager } from './managers/state.manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';

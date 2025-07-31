@@ -1,7 +1,7 @@
 import { SESSION_HEARTBEAT_INTERVAL_MS, SESSION_STORAGE_KEY, SESSION_TIMEOUT_MS } from '../app.constants';
-import { EventManager } from '../services/event-manager';
-import { SessionManager } from '../services/session-manager';
-import { StateManager } from '../services/state-manager';
+import { EventManager } from '../managers/event.manager';
+import { SessionManager } from '../managers/session.manager';
+import { StateManager } from '../managers/state.manager';
 import { EventType } from '../types/event.types';
 import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from '../utils/safe-local-storage';
 

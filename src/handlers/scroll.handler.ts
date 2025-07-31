@@ -1,6 +1,6 @@
 import { SCROLL_DEBOUNCE_TIME, SIGNIFICANT_SCROLL_DELTA } from '../app.constants';
-import { EventManager } from '../services/event-manager';
-import { StateManager } from '../services/state-manager';
+import { EventManager } from '../managers/event.manager';
+import { StateManager } from '../managers/state.manager';
 import { EventType, ScrollData, ScrollDirection } from '../types/event.types';
 
 interface ScrollContainer {

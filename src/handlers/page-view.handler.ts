@@ -1,8 +1,8 @@
 import { EventType } from '../types/event.types';
 import { normalizeUrl } from '../utils/url.utils';
 import { getUTMParameters } from '../utils/utm-params.utils';
-import { StateManager } from '../services/state-manager';
-import { EventManager } from '../services/event-manager';
+import { StateManager } from '../managers/state.manager';
+import { EventManager } from '../managers/event.manager';
 
 export class PageViewHandler extends StateManager {
   private readonly eventManager: EventManager;

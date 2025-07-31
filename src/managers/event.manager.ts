@@ -3,15 +3,15 @@ import { EventData, EventType } from '../types/event.types';
 import { Queue } from '../types/queue.types';
 import { log } from '../utils/log.utils';
 import { isUrlPathExcluded } from '../utils/url.utils';
-import { DataSender } from './data-sender';
-import { SamplingManager } from './sampling-manager';
-import { StateManager } from './state-manager';
-import { TagsManager } from './tags-manager';
+import { SenderManager } from './sender.manager';
+import { SamplingManager } from './sampling.manager';
+import { StateManager } from './state.manager';
+import { TagsManager } from './tags.manager';
 
 export class EventManager extends StateManager {
   private readonly samplingManager: SamplingManager;
   private readonly tagsManager: TagsManager;
-  private readonly dataSender: DataSender;
+  private readonly dataSender: SenderManager;
 
   private eventsQueue: EventData[] = [];
   private lastEvent: EventData | null = null;
@@ -22,7 +22,7 @@ export class EventManager extends StateManager {
 
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
-    this.dataSender = new DataSender();
+    this.dataSender = new SenderManager();
   }
 
   track({ type, page_url, from_page_url, scroll_data, click_data, custom_event, utm }: Partial<EventData>): void {
