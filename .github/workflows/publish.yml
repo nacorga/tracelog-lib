@@ -1,16 +1,21 @@
-name: Version & Publish Package
+name: Build, Test & Publish
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
   packages: write
+  pull-requests: write
 
 jobs:
-  version_and_publish:
+  test_and_publish:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,6 +33,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
 
+      - name: Cache Playwright browsers
+        id: cache-playwright
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-browsers-
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -44,15 +58,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Cache Playwright browsers
-        id: cache-playwright
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-browsers-
-
       - name: Install Playwright browsers
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
@@ -62,12 +67,106 @@ jobs:
         env:
           CI: true
 
+      # RC Version for Pull Requests
+      - name: Generate RC version
+        if: github.event_name == 'pull_request'
+        id: rc_version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          COMMIT_SHA=${{ github.event.pull_request.head.sha }}
+          SHORT_SHA=${COMMIT_SHA:0:7}
+          
+          # Use timestamp for uniqueness instead of counting workflow runs
+          TIMESTAMP=$(date +%s)
+          
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((patch + 1))
+          RC_VERSION="${major}.${minor}.${NEW_PATCH}-rc.${PR_NUMBER}.${TIMESTAMP}"
+          echo "rc_version=$RC_VERSION" >> $GITHUB_OUTPUT
+          echo "🔄 New RC version generated: $RC_VERSION"
+          echo "📝 Based on commit: $SHORT_SHA"
+
+      - name: Update package.json for RC
+        if: github.event_name == 'pull_request' && steps.rc_version.outcome == 'success'
+        run: |
+          RC_VERSION=${{ steps.rc_version.outputs.rc_version }}
+          npm version $RC_VERSION --no-git-tag-version
+
+      - name: Build for RC
+        if: github.event_name == 'pull_request' && steps.rc_version.outcome == 'success'
+        run: npm run build-ugly
+
+      - name: Publish RC to NPM
+        if: github.event_name == 'pull_request' && steps.rc_version.outcome == 'success'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish --access public --tag rc
+          echo "📦 Published RC: ${{ steps.rc_version.outputs.rc_version }}"
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && steps.rc_version.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const rcVersion = '${{ steps.rc_version.outputs.rc_version }}';
+            const prNumber = '${{ github.event.pull_request.number }}';
+            const commitSha = '${{ github.event.pull_request.head.sha }}';
+            const shortSha = commitSha.substring(0, 7);
+            
+            // Extract timestamp from version (e.g., 1.2.3-rc.123.1609459200 -> 1609459200)
+            const timestampMatch = rcVersion.match(/-rc\.\d+\.(\d+)$/);
+            const timestamp = timestampMatch ? timestampMatch[1] : 'unknown';
+            const date = new Date(parseInt(timestamp) * 1000).toLocaleString();
+            
+            const comment = `🚀 **New RC version published!**
+            
+            **Version:** \`${rcVersion}\`
+            **NPM Tag:** \`rc\`
+            **Commit:** \`${shortSha}\`
+            **Generated:** ${date}
+            
+            **Install this RC version:**
+            \`\`\`bash
+            # Specific version
+            npm install @tracelog/client@${rcVersion}
+            
+            # Latest RC version (auto-updated)
+            npm install @tracelog/client@rc
+            \`\`\`
+            
+            ✨ **Each push to this PR will generate a new RC version automatically.**`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      # Production Release for main branch
+      - name: Check if release commit
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: check_release
+        run: |
+          COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
+          if [[ "$COMMIT_MESSAGE" =~ \[skip\ ci\] ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "🔄 Skipping workflow for release commit"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "✅ Proceeding with release workflow"
+          fi
+
       - name: Configure Git
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_release.outputs.skip == 'false'
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "github-actions"
 
       - name: Generate release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_release.outputs.skip == 'false'
         id: bump_version
         run: |
           # Run standard-version without forcing patch
@@ -82,7 +181,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get latest tag
-        if: steps.bump_version.outcome == 'success'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_release.outputs.skip == 'false' && steps.bump_version.outcome == 'success'
         id: get_tag
         run: |
           TAG=$(git describe --tags --abbrev=0)
@@ -90,29 +189,63 @@ jobs:
           echo "Generated tag: $TAG"
 
       - name: Create Release
-        if: steps.bump_version.outcome == 'success'
-        uses: actions/create-release@v1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_release.outputs.skip == 'false' && steps.bump_version.outcome == 'success'
+        uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.get_tag.outputs.tag }}
-          release_name: ${{ steps.get_tag.outputs.tag }}
-          body_path: CHANGELOG.md
-          draft: false
-          prerelease: false
+          script: |
+            const tag = '${{ steps.get_tag.outputs.tag }}';
+            const fs = require('fs');
+            
+            // Read changelog content
+            let releaseBody = '';
+            try {
+              const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+              // Extract content for the current version
+              const lines = changelog.split('\n');
+              let capturing = false;
+              let bodyLines = [];
+              
+              for (const line of lines) {
+                if (line.startsWith('## ') || line.startsWith('# ')) {
+                  if (capturing) break;
+                  if (line.includes(tag.replace('v', ''))) {
+                    capturing = true;
+                    continue;
+                  }
+                }
+                if (capturing && line.trim()) {
+                  bodyLines.push(line);
+                }
+              }
+              releaseBody = bodyLines.join('\n').trim();
+            } catch (error) {
+              releaseBody = `Release ${tag}`;
+            }
+            
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              body: releaseBody || `Release ${tag}`,
+              draft: false,
+              prerelease: false
+            });
 
-      - name: Build the dist folder
-        if: steps.bump_version.outcome == 'success'
+      - name: Build for production
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_release.outputs.skip == 'false' && steps.bump_version.outcome == 'success'
         run: npm run build-ugly
 
       - name: Publish to NPM
-        if: steps.bump_version.outcome == 'success'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_release.outputs.skip == 'false' && steps.bump_version.outcome == 'success'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
 
       - name: Clean up RC versions
-        if: steps.bump_version.outcome == 'success'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_release.outputs.skip == 'false' && steps.bump_version.outcome == 'success'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
