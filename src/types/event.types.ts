@@ -1,3 +1,5 @@
+import { MetadataType } from './common.types';
+
 export enum EventType {
   PAGE_VIEW = 'page_view',
   CLICK = 'click',
@@ -11,8 +13,6 @@ export enum ScrollDirection {
   UP = 'up',
   DOWN = 'down',
 }
-
-export type MetadataType = string | number | boolean | string[];
 
 export interface ScrollData {
   depth: number;
