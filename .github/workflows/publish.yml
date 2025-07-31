@@ -250,7 +250,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          echo "🧹 Cleaning up RC versions..."
-          node scripts/rc-manager.js cleanup || echo "No RC versions to clean"
+          echo "🧹 Cleaning up ALL RC versions for new release..."
+          node scripts/rc-manager.js cleanup all || echo "No RC versions to clean"
           npm dist-tag add @tracelog/client@$CURRENT_VERSION latest
           echo "✅ Published version $CURRENT_VERSION as latest"
