@@ -64,6 +64,10 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
     app.sendCustomEvent(name, metadata);
   } catch (error) {
     log('error', `Event tracking failed: ${error instanceof Error ? error.message : String(error)}`);
+
+    if (error instanceof Error && error.message === 'App not initialized') {
+      throw error;
+    }
   }
 };
 
