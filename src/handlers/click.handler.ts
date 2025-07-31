@@ -1,9 +1,9 @@
+import { CLICK_DEBOUNCE_TIME } from '../app.constants';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types/event.types';
 
 const HTML_DATA_ATTR_PREFIX = 'data-tl';
-const CLICK_DEBOUNCE_TIME = 500;
 const MAX_TEXT_LENGTH = 255;
 const INTERACTIVE_SELECTORS = [
   'button',

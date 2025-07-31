@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { EventType } from '../../src/types';
-import { CLICK_DEBOUNCE_TIME } from '../../src/constants';
+import { CLICK_DEBOUNCE_TIME } from '../../src/app.constants';
 
 test.describe('Duplicate Events - Demo Mode', () => {
   test(`should ignore repeated clicks occurring within ${CLICK_DEBOUNCE_TIME}ms of the last event`, async ({ page }) => {
