@@ -12,9 +12,11 @@ import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { isEventValid } from './utils/validations.utils';
 import { EventType } from './types/event.types';
+import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 
 export class App extends StateManager {
   private isInitialized = false;
+  private googleAnalytics: GoogleAnalyticsIntegration | null = null;
   private eventManager!: EventManager;
   private sessionHandler!: SessionHandler;
   private pageViewHandler!: PageViewHandler;
@@ -33,6 +35,7 @@ export class App extends StateManager {
 
     try {
       await this.setState(appConfig);
+      this.setIntegrations();
       this.setManagers();
       this.initHandlers();
       this.isInitialized = true;
@@ -61,6 +64,14 @@ export class App extends StateManager {
   }
 
   destroy(): void {
+    if (!this.isInitialized) {
+      return;
+    }
+
+    if (this.googleAnalytics) {
+      this.googleAnalytics.cleanup();
+    }
+
     this.sessionHandler.stopTracking();
     this.pageViewHandler.stopTracking();
     this.clickHandler.stopTracking();
@@ -98,6 +109,14 @@ export class App extends StateManager {
     this.set('device', device);
   }
 
+  private setIntegrations(): void {
+    const measurementId = this.get('config').integrations?.googleAnalytics?.measurementId;
+
+    if (measurementId?.trim()) {
+      this.googleAnalytics = new GoogleAnalyticsIntegration();
+    }
+  }
+
   private setManagers(): void {
     this.setEventManager();
   }
@@ -110,7 +129,7 @@ export class App extends StateManager {
   }
 
   private setEventManager(): void {
-    this.eventManager = new EventManager();
+    this.eventManager = new EventManager(this.googleAnalytics);
   }
 
   private initSessionHandler(): void {

@@ -56,4 +56,19 @@ export interface AppConfig {
    * Array of query parameters to be removed from the URL.
    */
   sensitiveQueryParams?: string[];
+  /**
+   * Optional integrations configuration.
+   */
+  integrations?: {
+    /**
+     * Google Analytics integration configuration.
+     */
+    googleAnalytics?: {
+      /**
+       * Google Analytics measurement ID.
+       * Required for initializing the Google Analytics integration.
+       */
+      measurementId: string;
+    };
+  };
 }

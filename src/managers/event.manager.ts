@@ -1,5 +1,5 @@
 import { EVENT_SENT_INTERVAL, MAX_EVENTS_QUEUE_LENGTH } from '../app.constants';
-import { EventData, EventType } from '../types/event.types';
+import { CustomEventData, EventData, EventType } from '../types/event.types';
 import { Queue } from '../types/queue.types';
 import { log } from '../utils/log.utils';
 import { isUrlPathExcluded } from '../utils/url.utils';
@@ -7,8 +7,10 @@ import { SenderManager } from './sender.manager';
 import { SamplingManager } from './sampling.manager';
 import { StateManager } from './state.manager';
 import { TagsManager } from './tags.manager';
+import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
 
 export class EventManager extends StateManager {
+  private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
   private readonly samplingManager: SamplingManager;
   private readonly tagsManager: TagsManager;
   private readonly dataSender: SenderManager;
@@ -17,9 +19,10 @@ export class EventManager extends StateManager {
   private lastEvent: EventData | null = null;
   private eventsQueueIntervalId: number | null = null;
 
-  constructor() {
+  constructor(googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 
+    this.googleAnalytics = googleAnalytics;
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager();
@@ -89,6 +92,11 @@ export class EventManager extends StateManager {
     this.lastEvent = payload;
 
     this.processAndSend(payload);
+
+    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
+      const customEvent = payload.custom_event as CustomEventData;
+      this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
+    }
   }
 
   private processAndSend(payload: EventData): void {
