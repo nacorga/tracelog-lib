@@ -5,6 +5,7 @@ import { log } from './utils';
 import { validateAndNormalizeConfig } from './utils/validations';
 
 export * as Types from './types';
+export { SESSION_TIMEOUT_MS } from './app.constants';
 
 let app: App | null = null;
 let isInitializing = false;
