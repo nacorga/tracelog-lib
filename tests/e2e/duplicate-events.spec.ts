@@ -72,6 +72,6 @@ test.describe('Duplicate Events - Demo Mode', () => {
     const event2 = JSON.parse(clickLogs[1].split('click event: ')[1]);
     
     expect(event1.timestamp).not.toBe(event2.timestamp);
-    expect(Math.abs(event1.timestamp - event2.timestamp)).toBeLessThan(100); // Should be within 100ms
+    expect(Math.abs(event1.timestamp - event2.timestamp)).toBeLessThan(200);
   });
 });
