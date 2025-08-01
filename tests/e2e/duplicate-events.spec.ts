@@ -64,17 +64,14 @@ test.describe('Duplicate Events - Demo Mode', () => {
     await page.getByTestId('test-button').click();
     await page.waitForTimeout(200);
 
-    const clickLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.CLICK}"`));
-    
-    // Current behavior: tracks both clicks as separate events
-    // This reflects that the simplified ClickHandler processes all clicks immediately
+    const clickLogs = consoleLogs.filter((log) => log.includes(`"type":"${EventType.CLICK}"`));    
+
     expect(clickLogs).toHaveLength(2);
     
-    // Verify events have different timestamps
     const event1 = JSON.parse(clickLogs[0].split('click event: ')[1]);
     const event2 = JSON.parse(clickLogs[1].split('click event: ')[1]);
     
     expect(event1.timestamp).not.toBe(event2.timestamp);
-    expect(Math.abs(event1.timestamp - event2.timestamp)).toBeLessThan(150); // Should be within 150ms
+    expect(Math.abs(event1.timestamp - event2.timestamp)).toBeLessThan(100); // Should be within 100ms
   });
 });

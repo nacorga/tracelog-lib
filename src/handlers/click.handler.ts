@@ -10,11 +10,32 @@ const INTERACTIVE_SELECTORS = [
   'input[type="button"]',
   'input[type="submit"]',
   'input[type="reset"]',
+  'input[type="checkbox"]',
+  'input[type="radio"]',
+  'select',
+  'textarea',
   '[role="button"]',
+  '[role="link"]',
+  '[role="tab"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[routerLink]',
+  '[ng-click]',
+  '[data-action]',
+  '[data-click]',
+  '[data-navigate]',
+  '[data-toggle]',
   '[onclick]',
+  '.btn',
+  '.button',
+  '.clickable',
+  '.nav-link',
+  '.menu-item',
   '[data-testid]',
-  '[tabindex]',
-  '[id]',
+  '[tabindex="0"]',
 ];
 
 export class ClickHandler extends StateManager {
@@ -89,14 +110,25 @@ export class ClickHandler extends StateManager {
   }
 
   private getRelevantClickElement(element: HTMLElement): HTMLElement {
-    if (INTERACTIVE_SELECTORS.some((selector) => element.matches(selector))) {
-      return element;
+    for (const selector of INTERACTIVE_SELECTORS) {
+      try {
+        if (element.matches(selector)) {
+          return element;
+        }
+      } catch {
+        continue;
+      }
     }
 
     for (const selector of INTERACTIVE_SELECTORS) {
-      const parent = element.closest(selector) as HTMLElement;
-      if (parent) {
-        return parent;
+      try {
+        const parent = element.closest(selector) as HTMLElement;
+
+        if (parent && parent !== element) {
+          return parent;
+        }
+      } catch {
+        continue;
       }
     }
 
