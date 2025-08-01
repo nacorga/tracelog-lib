@@ -124,7 +124,7 @@ export class ClickHandler extends StateManager {
       try {
         const parent = element.closest(selector) as HTMLElement;
 
-        if (parent && parent !== element) {
+        if (parent) {
           return parent;
         }
       } catch {

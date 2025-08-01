@@ -89,9 +89,8 @@ export class EventManager extends StateManager {
       }
     }
 
-    this.processAndSend(payload);
-
     this.lastEvent = payload;
+    this.processAndSend(payload);
   }
 
   private processAndSend(payload: EventData): void {
