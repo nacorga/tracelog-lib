@@ -36,18 +36,17 @@ export class EventManager extends StateManager {
     const isDuplicatedEvent = this.isDuplicatedEvent({ type, page_url, scroll_data, click_data, custom_event });
 
     if (isDuplicatedEvent) {
+      const now = Date.now();
+
       if (this.eventsQueue && this.eventsQueue.length > 0) {
         const lastEvent = this.eventsQueue.at(-1);
-
         if (lastEvent) {
-          const now = Date.now();
-
           lastEvent.timestamp = now;
-
-          if (this.lastEvent) {
-            this.lastEvent.timestamp = now;
-          }
         }
+      }
+
+      if (this.lastEvent) {
+        this.lastEvent.timestamp = now;
       }
 
       return;
@@ -90,9 +89,9 @@ export class EventManager extends StateManager {
       }
     }
 
-    this.lastEvent = payload;
-
     this.processAndSend(payload);
+
+    this.lastEvent = payload;
   }
 
   private processAndSend(payload: EventData): void {
@@ -206,7 +205,17 @@ export class EventManager extends StateManager {
       }
 
       case EventType.CLICK: {
-        return this.lastEvent.click_data?.x === click_data?.x && this.lastEvent.click_data?.y === click_data?.y;
+        // For clicks, check if they're approximately at the same location and have similar data
+        const coordinatesMatch =
+          Math.abs((this.lastEvent.click_data?.x ?? 0) - (click_data?.x ?? 0)) <= 5 &&
+          Math.abs((this.lastEvent.click_data?.y ?? 0) - (click_data?.y ?? 0)) <= 5;
+
+        const elementMatch =
+          this.lastEvent.click_data?.tag === click_data?.tag &&
+          this.lastEvent.click_data?.id === click_data?.id &&
+          this.lastEvent.click_data?.text === click_data?.text;
+
+        return coordinatesMatch && elementMatch;
       }
 
       case EventType.SCROLL: {
