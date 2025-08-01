@@ -1,30 +1,11 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
-## [0.3.0](https://github.com/nacorga/tracelog-client/compare/v0.2.5...v0.3.0) (2025-07-31)
-
-
-### Features
-
-* add debounce time constants for click and scroll events ([130775d](https://github.com/nacorga/tracelog-client/commit/130775d5fce3869bd16a00473e34a69b58a06a79))
-* add Google Analytics logging for custom events in processAndSend method ([880f831](https://github.com/nacorga/tracelog-client/commit/880f831b03ba7059e290a68485e27e7a9e340f38))
-* add scroll tracking functionality with debounce handling ([222fd2d](https://github.com/nacorga/tracelog-client/commit/222fd2dc70e2bdbc8dd0d8dc96e9e29fb2dd6f70))
-* enhance app initialization with error handling and state management ([7ecf1ad](https://github.com/nacorga/tracelog-client/commit/7ecf1add3336ef08a3c87f7a9a9e21cb982eb38c))
-* enhance page URL tracking and session management; improve error handling in initialization ([ab877a9](https://github.com/nacorga/tracelog-client/commit/ab877a9a821f0f4b69cb4d96c6b200d843622738))
-* enhance session management with device detection and UTM parameters integration ([eb8dad5](https://github.com/nacorga/tracelog-client/commit/eb8dad5928956aed20309f0223d798b790248325))
-* enhance session management with new listener managers and local storage fallback ([0038c81](https://github.com/nacorga/tracelog-client/commit/0038c814c01b93df041c3e20ab7e1ba9eed91a9a))
-* implement app initialization, event tracking, and session management with cleanup methods ([cf645c2](https://github.com/nacorga/tracelog-client/commit/cf645c25ca53f5c23f4a9de7d868f438789152c9))
-* implement click tracking handler and enhance session management ([c406963](https://github.com/nacorga/tracelog-client/commit/c40696340bff85f29af7444c3dcf8e1db6e46831))
-* implement event tracking and sampling management with page view handling ([7d5d5f4](https://github.com/nacorga/tracelog-client/commit/7d5d5f412ec8111e84a5282c9a2986e6290baa67))
-* initial set up ([9a6a3f4](https://github.com/nacorga/tracelog-client/commit/9a6a3f42afdc01b1a7dc6f4b46c121889554daa4))
-* integrate Google Analytics for event tracking and add configuration options ([c41cf28](https://github.com/nacorga/tracelog-client/commit/c41cf2822381f31fa0d9c99e93ecf31e6bbf82ca))
-* move Google Analytics custom event tracking to processAndSend method ([05f3853](https://github.com/nacorga/tracelog-client/commit/05f3853acee976a936aa5cdf2b5f9f28312a4bef))
-* refactor app structure for improved organization ([20be03a](https://github.com/nacorga/tracelog-client/commit/20be03a3cd5c66851ef98d3a6dbe4c4ecc64703e))
+### [0.2.6](https://github.com/nacorga/tracelog-client/compare/v0.2.5...v0.2.6) (2025-07-24)
 
 
 ### Bug Fixes
 
-* improve error handling in event tracking for uninitialized app ([82aeaf5](https://github.com/nacorga/tracelog-client/commit/82aeaf5eadbf7807cdbbeda66996dd0460d0e666))
 * update tag structure in EventManager to use 'key' instead of 'name' and adjust related types ([d56e050](https://github.com/nacorga/tracelog-client/commit/d56e05004819a231aa1a527b2c0925aa1f2e612e))
 
 ### [0.2.5](https://github.com/nacorga/tracelog-client/compare/v0.2.4...v0.2.5) (2025-07-24)
