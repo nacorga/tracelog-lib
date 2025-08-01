@@ -15,7 +15,6 @@ export const SESSION_HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
 export const SIGNIFICANT_SCROLL_DELTA = 10;
 export const DUPLICATE_EVENT_THRESHOLD = 1000;
 export const BATCH_SIZE_THRESHOLD = 50;
-export const CLICK_DEBOUNCE_TIME = 500;
 export const SCROLL_DEBOUNCE_TIME = 250;
 
 // Security and validation constants

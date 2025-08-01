@@ -1,4 +1,3 @@
-import { CLICK_DEBOUNCE_TIME } from '../app.constants';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types/event.types';
@@ -11,18 +10,38 @@ const INTERACTIVE_SELECTORS = [
   'input[type="button"]',
   'input[type="submit"]',
   'input[type="reset"]',
+  'input[type="checkbox"]',
+  'input[type="radio"]',
+  'select',
+  'textarea',
   '[role="button"]',
+  '[role="link"]',
+  '[role="tab"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[routerLink]',
+  '[ng-click]',
+  '[data-action]',
+  '[data-click]',
+  '[data-navigate]',
+  '[data-toggle]',
   '[onclick]',
+  '.btn',
+  '.button',
+  '.clickable',
+  '.nav-link',
+  '.menu-item',
   '[data-testid]',
-  '[tabindex]',
-  '[id]',
+  '[tabindex="0"]',
 ];
 
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;
 
   private clickHandler?: (event: Event) => void;
-  private clickDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(eventManager: EventManager) {
     super();
@@ -36,46 +55,38 @@ export class ClickHandler extends StateManager {
     }
 
     this.clickHandler = (event: Event): void => {
-      if (this.clickDebounceTimer) {
-        clearTimeout(this.clickDebounceTimer);
+      const mouseEvent = event as MouseEvent;
+      const clickedElement = mouseEvent.target as HTMLElement;
+
+      if (!clickedElement) return;
+
+      const trackingElement = this.findTrackingElement(clickedElement);
+      const relevantClickElement = this.getRelevantClickElement(clickedElement);
+      const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);
+
+      if (trackingElement) {
+        const trackingData = this.extractTrackingData(trackingElement);
+
+        if (trackingData) {
+          const attributeData = this.createCustomEventData(trackingData);
+
+          this.eventManager.track({
+            type: EventType.CUSTOM,
+            custom_event: {
+              name: attributeData.name,
+              ...(attributeData.value && { metadata: { value: attributeData.value } }),
+            },
+          });
+        }
       }
 
-      this.clickDebounceTimer = setTimeout(() => {
-        const mouseEvent = event as MouseEvent;
-        const clickedElement = mouseEvent.target as HTMLElement;
+      const clickData = this.generateClickData(clickedElement, relevantClickElement, coordinates);
 
-        if (!clickedElement) return;
-
-        const trackingElement = this.findTrackingElement(clickedElement);
-        const relevantClickElement = this.getRelevantClickElement(clickedElement);
-        const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);
-
-        if (trackingElement) {
-          const trackingData = this.extractTrackingData(trackingElement);
-
-          if (trackingData) {
-            const attributeData = this.createCustomEventData(trackingData);
-
-            this.eventManager.track({
-              type: EventType.CUSTOM,
-              custom_event: {
-                name: attributeData.name,
-                ...(attributeData.value && { metadata: { value: attributeData.value } }),
-              },
-            });
-          }
-        }
-
-        const clickData = this.generateClickData(clickedElement, relevantClickElement, coordinates);
-
-        this.eventManager.track({
-          type: EventType.CLICK,
-          page_url: window.location.href,
-          click_data: clickData,
-        });
-
-        this.clickDebounceTimer = null;
-      }, CLICK_DEBOUNCE_TIME);
+      this.eventManager.track({
+        type: EventType.CLICK,
+        page_url: window.location.href,
+        click_data: clickData,
+      });
     };
 
     window.addEventListener('click', this.clickHandler, true);
@@ -85,11 +96,6 @@ export class ClickHandler extends StateManager {
     if (this.clickHandler) {
       window.removeEventListener('click', this.clickHandler, true);
       this.clickHandler = undefined;
-    }
-
-    if (this.clickDebounceTimer) {
-      clearTimeout(this.clickDebounceTimer);
-      this.clickDebounceTimer = null;
     }
   }
 
@@ -104,14 +110,25 @@ export class ClickHandler extends StateManager {
   }
 
   private getRelevantClickElement(element: HTMLElement): HTMLElement {
-    if (INTERACTIVE_SELECTORS.some((selector) => element.matches(selector))) {
-      return element;
+    for (const selector of INTERACTIVE_SELECTORS) {
+      try {
+        if (element.matches(selector)) {
+          return element;
+        }
+      } catch {
+        continue;
+      }
     }
 
     for (const selector of INTERACTIVE_SELECTORS) {
-      const parent = element.closest(selector) as HTMLElement;
-      if (parent) {
-        return parent;
+      try {
+        const parent = element.closest(selector) as HTMLElement;
+
+        if (parent) {
+          return parent;
+        }
+      } catch {
+        continue;
       }
     }
 
