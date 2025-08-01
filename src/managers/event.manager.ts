@@ -66,7 +66,7 @@ export class EventManager extends StateManager {
 
     const payload: EventData = {
       type: type as EventType,
-      page_url: removePageUrl ? '' : (page_url as string) || this.get('pageUrl'),
+      page_url: removePageUrl ? 'excluded' : (page_url as string) || this.get('pageUrl'),
       timestamp: Date.now(),
       ...(isFirstEvent && { referrer: document.referrer || 'Direct' }),
       ...(from_page_url && !removePageUrl && { from_page_url }),
