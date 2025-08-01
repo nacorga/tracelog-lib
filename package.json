@@ -1,7 +1,7 @@
 {
   "name": "@tracelog/client",
   "license": "MIT",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "main": "./dist/cjs/public-api.js",
   "module": "./dist/esm/public-api.js",
   "types": "./dist/esm/public-api.d.ts",

@@ -1,6 +1,8 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+### [0.3.4](https://github.com/nacorga/tracelog-client/compare/v0.3.3...v0.3.4) (2025-08-01)
+
 ### [0.3.3](https://github.com/nacorga/tracelog-client/compare/v0.3.2...v0.3.3) (2025-08-01)
 
 
