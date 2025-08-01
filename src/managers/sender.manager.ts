@@ -27,8 +27,8 @@ export class SenderManager extends StateManager {
   }
 
   sendEventsQueue(body: Queue): boolean {
-    if (this.get('config')?.id === 'demo') {
-      this.logDemoEvents(body.events);
+    if (['demo', 'test'].includes(this.get('config')?.id)) {
+      this.logEvents(body.events);
 
       return true;
     }
@@ -114,7 +114,7 @@ export class SenderManager extends StateManager {
     };
   }
 
-  private logDemoEvents(events: EventData[]): void {
+  private logEvents(events: EventData[]): void {
     events.forEach((event) => {
       log('info', `${event.type} event: ${JSON.stringify(event)}`);
     });
