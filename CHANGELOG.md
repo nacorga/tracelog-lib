@@ -1,6 +1,13 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+### [0.3.3](https://github.com/nacorga/tracelog-client/compare/v0.3.2...v0.3.3) (2025-08-01)
+
+
+### Bug Fixes
+
+* update page_url assignment to handle excluded routes correctly ([573f56c](https://github.com/nacorga/tracelog-client/commit/573f56cb08559b0990b422e04cda8736c4ff9ef0))
+
 ### [0.3.2](https://github.com/nacorga/tracelog-client/compare/v0.3.1...v0.3.2) (2025-08-01)
 
 
