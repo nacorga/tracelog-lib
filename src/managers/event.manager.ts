@@ -1,4 +1,4 @@
-import { EVENT_SENT_INTERVAL, MAX_EVENTS_QUEUE_LENGTH } from '../app.constants';
+import { EVENT_SENT_INTERVAL, EVENT_SENT_INTERVAL_TEST, MAX_EVENTS_QUEUE_LENGTH } from '../app.constants';
 import { CustomEventData, EventData, EventType } from '../types/event.types';
 import { Queue } from '../types/queue.types';
 import { SenderManager } from './sender.manager';
@@ -102,26 +102,26 @@ export class EventManager extends StateManager {
       if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
         log('info', `Google Analytics event: ${JSON.stringify(payload)}`);
       }
-    } else {
-      this.eventsQueue.push(payload);
+    }
 
-      if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
-        this.eventsQueue.shift();
-      }
+    this.eventsQueue.push(payload);
 
-      if (!this.eventsQueueIntervalId) {
-        this.initEventsQueueInterval();
-      }
+    if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
+      this.eventsQueue.shift();
+    }
 
-      if (payload.type === EventType.SESSION_END && this.eventsQueue.length > 0) {
-        this.sendEventsQueue();
-      }
+    if (!this.eventsQueueIntervalId) {
+      this.initEventsQueueInterval();
+    }
 
-      if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
-        const customEvent = payload.custom_event as CustomEventData;
+    if (payload.type === EventType.SESSION_END && this.eventsQueue.length > 0) {
+      this.sendEventsQueue();
+    }
 
-        this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
-      }
+    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
+      const customEvent = payload.custom_event as CustomEventData;
+
+      this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
     }
   }
 
@@ -130,11 +130,13 @@ export class EventManager extends StateManager {
       return;
     }
 
+    const interval = this.get('config')?.id === 'test' ? EVENT_SENT_INTERVAL_TEST : EVENT_SENT_INTERVAL;
+
     this.eventsQueueIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
         this.sendEventsQueue();
       }
-    }, EVENT_SENT_INTERVAL);
+    }, interval);
   }
 
   private sendEventsQueue(): void {

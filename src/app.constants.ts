@@ -8,6 +8,7 @@ export const SESSION_STORAGE_KEY = `${STORAGE_BASE_KEY}:session`;
 
 // Performance constants
 export const EVENT_SENT_INTERVAL = 10000;
+export const EVENT_SENT_INTERVAL_TEST = 2500;
 export const MAX_EVENTS_QUEUE_LENGTH = 500;
 export const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 export const SESSION_HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
@@ -58,6 +59,4 @@ export const DEFAULT_TEST_CONFIG: Config = {
   ...DEFAULT_CONFIG,
   id: 'test',
   qaMode: true,
-  allowHttp: true,
-  sessionTimeout: 2500,
 };

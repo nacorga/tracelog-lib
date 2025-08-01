@@ -1,7 +1,6 @@
 import { QUEUE_KEY } from '../app.constants';
 import { Queue } from '../types/queue.types';
 import { StorageManager } from './storage.manager';
-import { EventData } from '../types/event.types';
 import { StateManager } from './state.manager';
 import { log } from '../utils';
 
@@ -28,7 +27,7 @@ export class SenderManager extends StateManager {
 
   sendEventsQueue(body: Queue): boolean {
     if (['demo', 'test'].includes(this.get('config')?.id)) {
-      this.logEvents(body.events);
+      this.logQueue(body);
 
       return true;
     }
@@ -114,10 +113,17 @@ export class SenderManager extends StateManager {
     };
   }
 
-  private logEvents(events: EventData[]): void {
-    events.forEach((event) => {
-      log('info', `${event.type} event: ${JSON.stringify(event)}`);
-    });
+  private logQueue(queue: Queue): void {
+    log(
+      'info',
+      `Queue structure: ${JSON.stringify({
+        user_id: queue.user_id,
+        session_id: queue.session_id,
+        device: queue.device,
+        events_count: queue.events.length,
+        has_global_metadata: !!queue.global_metadata,
+      })}`,
+    );
   }
 
   private handleSendFailure(body: Queue): void {
