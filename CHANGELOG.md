@@ -1,6 +1,13 @@
 # 📦 Changelog
 
 All notable changes to this project will be documented in this file.
+### [0.3.2](https://github.com/nacorga/tracelog-client/compare/v0.3.1...v0.3.2) (2025-08-01)
+
+
+### Bug Fixes
+
+* correct paths in package.json and disable sourcemaps in vite.config ([b8e97f5](https://github.com/nacorga/tracelog-client/commit/b8e97f58adf49b191dc87640516f579fb4f3547b))
+
 ### [0.3.1](https://github.com/nacorga/tracelog-client/compare/v0.3.0...v0.3.1) (2025-08-01)
 
 ## [0.3.0](https://github.com/nacorga/tracelog-client/compare/v0.2.6...v0.3.0) (2025-08-01)
