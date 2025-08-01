@@ -7,9 +7,6 @@ This quick-start guide covers everything you need to integrate TraceLog into you
 ### 🌐 **Option A: Managed** (Recommended)
 Dashboard, AI insights, easy setup. Data processed by TraceLog.
 
-### 🏠 **Option B: Self-Hosted**
-Full data control, no external dependencies. You manage everything.
-
 ## 📦 Installation
 
 ```bash
@@ -41,50 +38,6 @@ To prevent browser restrictions, it’s highly recommended to create a CNAME rec
 
 Replace `YOUR_TRACELOG_ID` with the ID provided in your TraceLog account. This setup helps ensure reliable event tracking across all browsers.
 
-## 🏠 Option B: Self-Hosted
-
-**No TraceLog account needed** - all data goes to your servers.
-
-```javascript
-import { TraceLog } from '@tracelog/client';
-
-// Basic setup - events go to your API
-TraceLog.init({
-  apiUrl: 'https://analytics.example.com/tracelog'
-});
-
-// With remote config from your backend
-TraceLog.init({
-  apiUrl: 'https://analytics.example.com/tracelog',
-  remoteConfigApiUrl: 'https://analytics.example.com/config'
-});
-
-// With static config
-TraceLog.init({
-  apiUrl: 'https://analytics.example.com/tracelog',
-  samplingRate: 1,
-  excludedUrlPaths: ['/admin']
-});
-
-TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
-```
-
-### Configuration Rules
-
-**Self-hosted mode:**
-- ❌ Don't use `id` field (causes error)
-- ✅ `apiUrl` is required
-- ⚠️ `remoteConfigApiUrl` only works with `apiUrl`
-
-**Both modes:**
-- ⚠️ `TraceLog.init()` can only be called once
-- ⚠️ `sessionTimeout` uses milliseconds (default: 900000ms = 15min)
-- ⚠️ Use `allowHttp: true` only for development
-
-### Troubleshooting
-- **CORS errors**: Add `Access-Control-Allow-Origin` headers to your server
-- **Config errors**: Ensure `remoteConfigApiUrl` returns valid JSON  
-- **HTTPS blocked**: Set `allowHttp: true` for development endpoints
 
 ---
 

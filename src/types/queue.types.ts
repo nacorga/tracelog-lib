@@ -1,4 +1,5 @@
-import { MetadataType, EventData } from './event.types';
+import { MetadataType } from './common.types';
+import { EventData } from './event.types';
 
 export interface Queue {
   user_id: string;

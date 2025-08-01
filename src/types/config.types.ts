@@ -1,5 +1,7 @@
+import { MetadataType } from './common.types';
 import { TagConfig } from './tag.types';
-import { MetadataType } from './event.types';
+
+export type Config = ApiConfig & AppConfig;
 
 export interface ApiConfig {
   /**
@@ -24,15 +26,15 @@ export interface ApiConfig {
   excludedUrlPaths?: string[];
 }
 
-export interface Config extends ApiConfig {
+export interface AppConfig {
   /**
-   * Unique project identifier. Required when not using `apiUrl`.
+   * Unique project identifier.
    */
-  id?: string;
+  id: string;
   /**
-   * Session timeout in minutes. After this period of inactivity,
+   * Session timeout in milliseconds. After this period of inactivity,
    * a new session will be started for subsequent events.
-   * @default 30
+   * @default 900000 (15 minutes)
    */
   sessionTimeout?: number;
   /**
@@ -47,18 +49,26 @@ export interface Config extends ApiConfig {
    */
   scrollContainerSelectors?: string | string[];
   /**
-   * Custom URL to send tracking events. When set, TraceLog will bypass the
-   * default domain generation and use this URL directly.
-   */
-  apiUrl?: string;
-  /**
-   * When sending events to your own server, specify where to fetch
-   * API-level configuration. This allows dynamic updates from your backend.
-   * If omitted, no remote config will be fetched when using `apiUrl`.
-   */
-  remoteConfigApiUrl?: string;
-  /**
    * Allow HTTP requests to be made. This is useful for testing and development.
    */
   allowHttp?: boolean;
+  /**
+   * Array of query parameters to be removed from the URL.
+   */
+  sensitiveQueryParams?: string[];
+  /**
+   * Optional integrations configuration.
+   */
+  integrations?: {
+    /**
+     * Google Analytics integration configuration.
+     */
+    googleAnalytics?: {
+      /**
+       * Google Analytics measurement ID.
+       * Required for initializing the Google Analytics integration.
+       */
+      measurementId: string;
+    };
+  };
 }

@@ -1,70 +1,93 @@
-import { Tracking } from './tracking';
-import { Config, MetadataType } from './types';
-import { logError } from './utils';
+import { App } from './app';
+import { MetadataType } from './types/common.types';
+import { AppConfig } from './types/config.types';
+import { log } from './utils';
+import { validateAndNormalizeConfig } from './utils/validations';
 
 export * as Types from './types';
 
-let trackingInstance: Tracking | undefined;
+let app: App | null = null;
+let isInitializing = false;
 
 /**
- * Initialize tracking with configuration
- * @param id - Tracking ID
- * @param config - Optional configuration
+ * Initializes the tracelog app with the provided configuration.
+ * @param appConfig - The configuration object for the app
+ * @throws {Error} If the app is already initialized or initialization is in progress
+ * @example
+ * await init({ id: 'my-project-id' });
  */
-export const init = (config: Config): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (trackingInstance) {
-    return;
-  }
-
-  const usingCustomServer = Boolean(config?.apiUrl ?? config?.remoteConfigApiUrl);
-
-  if (usingCustomServer && config?.id) {
-    logError('Invalid configuration: id cannot be used with apiUrl or remoteConfigApiUrl');
-    return;
-  }
-
-  if (!usingCustomServer && !config?.id) {
-    logError('Tracking ID is required when apiUrl is not provided');
-    return;
-  }
-
-  if (config?.remoteConfigApiUrl && !config?.apiUrl) {
-    logError('remoteConfigApiUrl requires apiUrl to be set');
-    return;
-  }
-
-  if (config?.sessionTimeout && config.sessionTimeout < 30_000) {
-    logError('Session timeout must be at least 30 seconds');
-    return;
-  }
-
+export const init = async (appConfig: AppConfig): Promise<void> => {
   try {
-    trackingInstance = new Tracking(config);
+    if (app) {
+      throw new Error('App is already initialized. Call getApp() to get the existing instance.');
+    }
+
+    if (isInitializing) {
+      throw new Error('App initialization is already in progress');
+    }
+
+    isInitializing = true;
+
+    const validatedConfig = validateAndNormalizeConfig(appConfig);
+    const instance = new App();
+
+    await instance.init(validatedConfig);
+
+    app = instance;
   } catch (error) {
-    logError(`Initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    app = null;
+
+    log('error', `Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
+  } finally {
+    isInitializing = false;
   }
 };
 
 /**
- * Create custom event
- * @param name - Event name
- * @param metadata - Optional metadata
+ * Sends a custom event with the specified name and metadata.
+ * @param name - The name of the custom event.
+ * @param metadata - Optional metadata to attach to the event.
+ * @example
+ * // Send a custom event with metadata
+ * event('user_signup', { method: 'email', plan: 'premium' });
+ * @example
+ * // Send a custom event without metadata
+ * event('user_login');
+ * @remarks
+ * This function should be called after the app has been initialized using the `init` function.
  */
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
-  if (!trackingInstance) {
-    logError('Not initialized. Call init() first.');
-    return;
-  }
-
   try {
-    trackingInstance.customEventHandler(name, metadata).catch((error) => {
-      logError(`Custom event failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    });
+    if (!app) {
+      throw new Error('App not initialized');
+    }
+
+    app.sendCustomEvent(name, metadata);
   } catch (error) {
-    logError(`Custom event failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    log('error', `Event tracking failed: ${error instanceof Error ? error.message : String(error)}`);
+
+    if (error instanceof Error && error.message === 'App not initialized') {
+      throw error;
+    }
+  }
+};
+
+/**
+ * Destroys the current app instance and cleans up resources.
+ * @example
+ * destroy(); // Safely cleanup the app
+ */
+export const destroy = (): void => {
+  try {
+    if (!app) {
+      throw new Error('App not initialized');
+    }
+
+    app.destroy();
+    app = null;
+    isInitializing = false;
+  } catch (error) {
+    log('error', `Cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };

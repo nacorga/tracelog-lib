@@ -3,11 +3,6 @@ import { resolve } from 'path';
 import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      '@': resolve(fileURLToPath(new URL('.', import.meta.url)), './src'),
-    },
-  },
   build: {
     lib: {
       entry: resolve(fileURLToPath(new URL('.', import.meta.url)), 'src/public-api.ts'),
@@ -25,6 +20,6 @@ export default defineConfig({
     },
     target: 'es2022',
     minify: false,
-    sourcemap: false,
+    sourcemap: true,
   },
-}); 
+});

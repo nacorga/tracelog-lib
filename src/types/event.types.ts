@@ -1,3 +1,5 @@
+import { MetadataType } from './common.types';
+
 export enum EventType {
   PAGE_VIEW = 'page_view',
   CLICK = 'click',
@@ -11,8 +13,6 @@ export enum ScrollDirection {
   UP = 'up',
   DOWN = 'down',
 }
-
-export type MetadataType = string | number | boolean | string[];
 
 export interface ScrollData {
   depth: number;
@@ -68,19 +68,6 @@ export interface PageViewData {
   pathname?: string;
   search?: string;
   hash?: string;
-}
-
-export interface EventHandler {
-  evType: EventType;
-  url?: string;
-  fromUrl?: string;
-  referrer?: string;
-  utm?: UTM;
-  scrollData?: ScrollData;
-  clickData?: ClickData;
-  customEvent?: CustomEventData;
-  pageView?: PageViewData;
-  trigger?: string;
 }
 
 export interface EventData {
