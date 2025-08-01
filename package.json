@@ -2,16 +2,16 @@
   "name": "@tracelog/client",
   "license": "MIT",
   "version": "0.3.1",
-  "main": "./dist/cjs/src/public-api.js",
-  "module": "./dist/esm/src/public-api.js",
-  "types": "./dist/esm/src/public-api.d.ts",
+  "main": "./dist/cjs/public-api.js",
+  "module": "./dist/esm/public-api.js",
+  "types": "./dist/esm/public-api.d.ts",
   "files": [
     "dist/esm",
     "dist/cjs"
   ],
   "exports": {
-    "import": "./dist/esm/src/public-api.js",
-    "require": "./dist/cjs/src/public-api.js"
+    "import": "./dist/esm/public-api.js",
+    "require": "./dist/cjs/public-api.js"
   },
   "publishConfig": {
     "access": "public"
