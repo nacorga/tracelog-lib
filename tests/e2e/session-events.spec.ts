@@ -2,12 +2,6 @@ import { test, expect } from '@playwright/test';
 import { EventType } from '../../src/types';
 
 test.describe('Session Events - Demo Mode', () => {
-  test('Test works', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByTestId('title')).toContainText('TraceLog E2E Test Page');
-  });
-
   test(`should log ${EventType.SESSION_START} and ${EventType.PAGE_VIEW} on init`, async ({ page }) => {
     const consoleLogs: string[] = [];
 

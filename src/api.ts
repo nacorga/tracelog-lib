@@ -80,11 +80,12 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
  */
 export const destroy = (): void => {
   try {
-    if (app) {
-      app.destroy();
-      app = null;
+    if (!app) {
+      throw new Error('App not initialized');
     }
 
+    app.destroy();
+    app = null;
     isInitializing = false;
   } catch (error) {
     log('error', `Cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
