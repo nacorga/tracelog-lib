@@ -1,20 +1,18 @@
 import { USER_ID_KEY } from '../app.constants';
 import { generateUUID } from '../utils';
-import { persistentStorage } from './storage.manager';
+import { StateManager } from './state.manager';
+import { StorageManager } from './storage.manager';
 
-export class UserManager {
-  private readonly userId: string;
+export class UserManager extends StateManager {
+  private readonly storageManager: StorageManager;
 
-  constructor() {
-    this.userId = this.getOrInitializeUserId();
+  constructor(storageManager: StorageManager) {
+    super();
+    this.storageManager = storageManager;
   }
 
-  getUserId(): string {
-    return this.userId;
-  }
-
-  private getOrInitializeUserId(): string {
-    const storedUserId = persistentStorage.getItem(USER_ID_KEY);
+  getId(): string {
+    const storedUserId = this.storageManager.getItem(USER_ID_KEY);
 
     if (storedUserId) {
       return storedUserId;
@@ -22,7 +20,7 @@ export class UserManager {
 
     const newUserId = generateUUID();
 
-    persistentStorage.setItem(USER_ID_KEY, newUserId);
+    this.storageManager.setItem(USER_ID_KEY, newUserId);
 
     return newUserId;
   }

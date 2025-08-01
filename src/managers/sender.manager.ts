@@ -1,6 +1,6 @@
 import { QUEUE_KEY } from '../app.constants';
 import { Queue } from '../types/queue.types';
-import { persistentStorage } from './storage.manager';
+import { StorageManager } from './storage.manager';
 import { EventData } from '../types/event.types';
 import { StateManager } from './state.manager';
 import { log } from '../utils';
@@ -11,15 +11,17 @@ const RATE_LIMIT_INTERVAL = 1000;
 const EVENT_EXPIRY_HOURS = 24;
 
 export class SenderManager extends StateManager {
+  private readonly storeManager: StorageManager;
   private readonly queueStorageKey: string;
 
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
   private lastSendAttempt = 0;
 
-  constructor() {
+  constructor(storeManager: StorageManager) {
     super();
 
+    this.storeManager = storeManager;
     this.queueStorageKey = `${QUEUE_KEY}_${this.get('userId')}`;
     this.recoverPersistedEvents();
   }
@@ -93,7 +95,7 @@ export class SenderManager extends StateManager {
   }
 
   private getPersistedData(): any | null {
-    const persistedDataString = persistentStorage.getItem(this.queueStorageKey);
+    const persistedDataString = this.storeManager.getItem(this.queueStorageKey);
     return persistedDataString ? JSON.parse(persistedDataString) : null;
   }
 
@@ -134,18 +136,14 @@ export class SenderManager extends StateManager {
         ...(body.global_metadata && { global_metadata: body.global_metadata }),
       };
 
-      persistentStorage.setItem(this.queueStorageKey, JSON.stringify(persistedData));
+      this.storeManager.setItem(this.queueStorageKey, JSON.stringify(persistedData));
     } catch (error) {
       this.logError('Failed to persist events', error);
     }
   }
 
   private clearPersistedEvents(): void {
-    try {
-      persistentStorage.removeItem(this.queueStorageKey);
-    } catch {
-      // Ignore errors when clearing storage
-    }
+    this.storeManager.removeItem(this.queueStorageKey);
   }
 
   private resetRetryState(): void {

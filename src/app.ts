@@ -13,10 +13,12 @@ import { isEventValid } from './utils/validations';
 import { EventType } from './types/event.types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import { getDeviceType, normalizeUrl } from './utils';
+import { StorageManager } from './managers/storage.manager';
 
 export class App extends StateManager {
   private isInitialized = false;
   private googleAnalytics: GoogleAnalyticsIntegration | null = null;
+  private storageManager!: StorageManager;
   private eventManager!: EventManager;
   private sessionHandler!: SessionHandler;
   private pageViewHandler!: PageViewHandler;
@@ -34,9 +36,10 @@ export class App extends StateManager {
     }
 
     try {
+      this.initStorage();
       await this.setState(appConfig);
       this.setIntegrations();
-      this.setManagers();
+      this.setEventManager();
       this.initHandlers();
       this.isInitialized = true;
     } catch (error) {
@@ -99,8 +102,8 @@ export class App extends StateManager {
   }
 
   private setUserId(): void {
-    const userManager = new UserManager();
-    const userId = userManager.getUserId();
+    const userManager = new UserManager(this.storageManager);
+    const userId = userManager.getId();
 
     this.set('userId', userId);
   }
@@ -123,10 +126,6 @@ export class App extends StateManager {
     }
   }
 
-  private setManagers(): void {
-    this.setEventManager();
-  }
-
   private initHandlers(): void {
     this.initSessionHandler();
     this.initPageViewHandler();
@@ -134,12 +133,16 @@ export class App extends StateManager {
     this.initScrollHandler();
   }
 
+  private initStorage(): void {
+    this.storageManager = new StorageManager();
+  }
+
   private setEventManager(): void {
-    this.eventManager = new EventManager(this.googleAnalytics);
+    this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
   }
 
   private initSessionHandler(): void {
-    this.sessionHandler = new SessionHandler(this.eventManager);
+    this.sessionHandler = new SessionHandler(this.storageManager, this.eventManager);
     this.sessionHandler.startTracking();
   }
 

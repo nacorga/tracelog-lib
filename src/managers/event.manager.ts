@@ -7,6 +7,7 @@ import { StateManager } from './state.manager';
 import { TagsManager } from './tags.manager';
 import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
 import { getUTMParameters, isUrlPathExcluded, log } from '../utils';
+import { StorageManager } from './storage.manager';
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
@@ -18,13 +19,13 @@ export class EventManager extends StateManager {
   private lastEvent: EventData | null = null;
   private eventsQueueIntervalId: number | null = null;
 
-  constructor(googleAnalytics: GoogleAnalyticsIntegration | null = null) {
+  constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 
     this.googleAnalytics = googleAnalytics;
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
-    this.dataSender = new SenderManager();
+    this.dataSender = new SenderManager(storeManager);
   }
 
   track({ type, page_url, from_page_url, scroll_data, click_data, custom_event }: Partial<EventData>): void {

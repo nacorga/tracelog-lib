@@ -1,79 +1,62 @@
-import { Storage, StorageType } from '../types/storage.types';
-import { log } from '../utils';
+export class StorageManager {
+  private readonly storage: globalThis.Storage | null = null;
+  private readonly fallbackStorage = new Map<string, string>();
 
-class BrowserStorage implements Storage {
-  private readonly storage: Storage;
-
-  constructor(storage: Storage) {
-    this.storage = storage;
+  constructor() {
+    this.storage = this.init();
   }
 
-  public getItem(key: string): string | null {
+  getItem(key: string): string | null {
     try {
-      return this.storage.getItem(key);
-    } catch (error) {
-      log(
-        'error',
-        `Error getting item from ${this.storage}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      if (this.storage) {
+        return this.storage.getItem(key);
+      }
 
+      return this.fallbackStorage.get(key) ?? null;
+    } catch {
+      return this.fallbackStorage.get(key) ?? null;
+    }
+  }
+
+  setItem(key: string, value: string): void {
+    try {
+      if (this.storage) {
+        this.storage.setItem(key, value);
+
+        return;
+      }
+
+      this.fallbackStorage.set(key, value);
+    } catch {
+      this.fallbackStorage.set(key, value);
+    }
+  }
+
+  removeItem(key: string): void {
+    try {
+      if (this.storage) {
+        this.storage.removeItem(key);
+
+        return;
+      }
+
+      this.fallbackStorage.delete(key);
+    } catch {
+      this.fallbackStorage.delete(key);
+    }
+  }
+
+  private init(): globalThis.Storage | null {
+    try {
+      const test = '__storage_test__';
+      const storage = window['localStorage'];
+
+      storage.setItem(test, test);
+      storage.removeItem(test);
+
+      return storage;
+    } catch {
       return null;
     }
   }
-
-  public setItem(key: string, value: string): void {
-    try {
-      this.storage.setItem(key, value);
-    } catch (error) {
-      log(
-        'error',
-        `Error setting item in ${this.storage}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-  }
-
-  public removeItem(key: string): void {
-    try {
-      this.storage.removeItem(key);
-    } catch (error) {
-      log(
-        'error',
-        `Error removing item from ${this.storage}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-  }
 }
-
-class MemoryStorage implements Storage {
-  private state: Record<string, string> = {};
-
-  public getItem(key: string): string | null {
-    return this.state[key] || null;
-  }
-
-  public setItem(key: string, value: string): void {
-    this.state[key] = value;
-  }
-
-  public removeItem(key: string): void {
-    delete this.state[key];
-  }
-}
-
-const createStorage = (type: StorageType.LocalStorage | StorageType.SessionStorage): Storage => {
-  try {
-    const storage = window[type];
-
-    return new BrowserStorage(storage);
-  } catch (error) {
-    log(
-      'error',
-      `${type} is not available. Falling back to memory storage. ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
-
-    return new MemoryStorage();
-  }
-};
-
-export const persistentStorage = createStorage(StorageType.LocalStorage);
-export const sessionSorage = createStorage(StorageType.SessionStorage);

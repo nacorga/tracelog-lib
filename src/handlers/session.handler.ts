@@ -2,8 +2,8 @@ import { SESSION_HEARTBEAT_INTERVAL_MS, SESSION_STORAGE_KEY, SESSION_TIMEOUT_MS 
 import { EventManager } from '../managers/event.manager';
 import { SessionManager } from '../managers/session.manager';
 import { StateManager } from '../managers/state.manager';
+import { StorageManager } from '../managers/storage.manager';
 import { EventType } from '../types/event.types';
-import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from '../utils';
 
 interface StoredSession {
   sessionId: string;
@@ -13,14 +13,16 @@ interface StoredSession {
 
 export class SessionHandler extends StateManager {
   private readonly eventManager: EventManager;
+  private readonly storageManager: StorageManager;
 
   private sessionManager: SessionManager | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(eventManager: EventManager) {
+  constructor(storageManager: StorageManager, eventManager: EventManager) {
     super();
 
     this.eventManager = eventManager;
+    this.storageManager = storageManager;
   }
 
   startTracking(): void {
@@ -93,7 +95,7 @@ export class SessionHandler extends StateManager {
   }
 
   private checkOrphanedSessions(): void {
-    const storedSessionData = safeLocalStorageGet(SESSION_STORAGE_KEY);
+    const storedSessionData = this.storageManager.getItem(SESSION_STORAGE_KEY);
 
     if (storedSessionData) {
       try {
@@ -121,24 +123,24 @@ export class SessionHandler extends StateManager {
       lastHeartbeat: Date.now(),
     };
 
-    safeLocalStorageSet(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
+    this.storageManager.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
   }
 
   private clearPersistedSession(): void {
-    safeLocalStorageRemove(SESSION_STORAGE_KEY);
+    this.storageManager.removeItem(SESSION_STORAGE_KEY);
   }
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
 
     this.heartbeatInterval = setInterval(() => {
-      const storedSessionData = safeLocalStorageGet(SESSION_STORAGE_KEY);
+      const storedSessionData = this.storageManager.getItem(SESSION_STORAGE_KEY);
 
       if (storedSessionData) {
         try {
           const session: StoredSession = JSON.parse(storedSessionData);
           session.lastHeartbeat = Date.now();
-          safeLocalStorageSet(SESSION_STORAGE_KEY, JSON.stringify(session));
+          this.storageManager.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
         } catch {
           this.clearPersistedSession();
         }
