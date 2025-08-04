@@ -19,8 +19,12 @@ let isInitializing = false;
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
   try {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      throw new Error('This library can only be used in a browser environment');
+    }
+
     if (app) {
-      throw new Error('App is already initialized. Call getApp() to get the existing instance.');
+      return;
     }
 
     if (isInitializing) {
@@ -39,7 +43,6 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     app = null;
 
     log('error', `Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
-    throw error;
   } finally {
     isInitializing = false;
   }

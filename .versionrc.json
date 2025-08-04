@@ -2,14 +2,14 @@
   "types": [
     {"type": "feat", "section": "✨ Features", "hidden": false},
     {"type": "fix", "section": "🐛 Bug Fixes", "hidden": false},
-    {"type": "docs", "section": "📚 Documentation", "hidden": false},
-    {"type": "style", "section": "💎 Styles", "hidden": false},
-    {"type": "refactor", "section": "♻️ Code Refactoring", "hidden": false},
     {"type": "perf", "section": "⚡ Performance Improvements", "hidden": false},
+    {"type": "refactor", "section": "♻️ Code Refactoring", "hidden": false},
+    {"type": "docs", "section": "📚 Documentation", "hidden": false},
     {"type": "test", "section": "✅ Tests", "hidden": false},
-    {"type": "build", "section": "👷‍ Builds", "hidden": false},
-    {"type": "ci", "section": "🔧 Continuous Integration", "hidden": false},
-    {"type": "chore", "section": "📦 Chores", "hidden": false},
+    {"type": "build", "section": "🏗️ Build System", "hidden": true},
+    {"type": "ci", "section": "👷 CI/CD", "hidden": true},
+    {"type": "chore", "section": "🔧 Maintenance", "hidden": true},
+    {"type": "style", "section": "� Code Style", "hidden": true},
     {"type": "revert", "section": "⏪ Reverts", "hidden": false}
   ],
   "commitUrlFormat": "https://github.com/nacorga/tracelog-client/commit/{{hash}}",
@@ -38,14 +38,17 @@
       "type": "json"
     }
   ],
-  "header": "# 📦 Changelog\n\nAll notable changes to this project will be documented in this file.",
+  "header": "# 📦 Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).",
   "preset": "conventionalcommits",
   "conventionalcommits": {
-    "includeInert": true,
-    "skipUnstable": false,
+    "includeInert": false,
+    "skipUnstable": true,
     "parserOpts": {
       "mergePattern": "^Merge pull request #(\\d+) from (.*)$",
       "mergeCorrespondence": ["id", "source"]
+    },
+    "writerOpts": {
+      "commitsSort": ["scope", "subject"]
     }
   }
 }
