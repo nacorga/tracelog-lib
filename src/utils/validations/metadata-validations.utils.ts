@@ -3,14 +3,11 @@ import {
   MAX_CUSTOM_EVENT_KEYS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
-} from '../../app.constants';
-import { MetadataType } from '../../types/common.types';
+  MAX_STRING_LENGTH,
+} from '../../constants';
+import { MetadataType } from '../../types';
 import { sanitizeMetadata } from '../security/sanitize.utils';
 import { isOnlyPrimitiveFields } from './type-guards.utils';
-
-/**
- * Metadata validation utilities
- */
 
 /**
  * Validates an event name
@@ -127,10 +124,10 @@ export const isValidMetadata = (
       }
     }
 
-    if (typeof value === 'string' && value.length > 1000) {
+    if (typeof value === 'string' && value.length > MAX_STRING_LENGTH) {
       return {
         valid: false,
-        error: `${intro}: property "${key}" is too long (max 1000 characters).`,
+        error: `${intro}: property "${key}" is too long (max ${MAX_STRING_LENGTH} characters).`,
       };
     }
   }

@@ -1,4 +1,4 @@
-import { USER_ID_KEY } from '../app.constants';
+import { USER_ID_KEY } from '../constants';
 import { generateUUID } from '../utils';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';

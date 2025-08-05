@@ -1,6 +1,13 @@
-import { DeviceType } from '../types/device.types';
-import { ClickData, EventData, EventType } from '../types/event.types';
-import { TagCondition, TagConditionOperator, TagConditionType, TagLogicalOperator } from '../types/tag.types';
+import {
+  DeviceType,
+  ClickData,
+  EventData,
+  EventType,
+  TagCondition,
+  TagConditionOperator,
+  TagConditionType,
+  TagLogicalOperator,
+} from '../types';
 import { StateManager } from './state.manager';
 
 export class TagsManager extends StateManager {

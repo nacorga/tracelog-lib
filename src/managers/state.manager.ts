@@ -1,4 +1,4 @@
-import { State } from '../types/state.types';
+import { State } from '../types';
 
 const globalState: State = {} as State;
 

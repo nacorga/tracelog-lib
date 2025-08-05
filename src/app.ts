@@ -1,4 +1,3 @@
-import { SCROLL_DEBOUNCE_TIME } from './app.constants';
 import { ApiManager } from './managers/api.manager';
 import { ConfigManager } from './managers/config.manager';
 import { EventManager } from './managers/event.manager';
@@ -14,6 +13,7 @@ import { EventType } from './types/event.types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import { getDeviceType, normalizeUrl } from './utils';
 import { StorageManager } from './managers/storage.manager';
+import { SCROLL_DEBOUNCE_TIME_MS } from './constants';
 
 export class App extends StateManager {
   private isInitialized = false;
@@ -162,7 +162,7 @@ export class App extends StateManager {
 
     this.suppressNextScrollTimer = setTimeout(() => {
       this.set('suppressNextScroll', false);
-    }, SCROLL_DEBOUNCE_TIME * 2);
+    }, SCROLL_DEBOUNCE_TIME_MS * 2);
   }
 
   private initClickHandler(): void {

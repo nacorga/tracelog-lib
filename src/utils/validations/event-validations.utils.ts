@@ -1,9 +1,5 @@
-import { MetadataType } from '../../types/common.types';
+import { MetadataType } from '../../types';
 import { isValidEventName, isValidMetadata } from './metadata-validations.utils';
-
-/**
- * Event validation utilities
- */
 
 /**
  * Validates a complete event with name and optional metadata

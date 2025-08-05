@@ -1,4 +1,4 @@
-import { DEFAULT_SAMPLING_RATE } from '../app.constants';
+import { DEFAULT_SAMPLING_RATE } from '../constants';
 import { StateManager } from './state.manager';
 
 export class SamplingManager extends StateManager {

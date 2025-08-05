@@ -1,4 +1,4 @@
-import { UTM_PARAMS } from '../../app.constants';
+import { UTM_PARAMS } from '../../constants';
 import { UTM } from '../../types/event.types';
 
 /**

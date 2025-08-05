@@ -1,13 +1,14 @@
-import { QUEUE_KEY } from '../app.constants';
-import { Queue } from '../types/queue.types';
+import {
+  QUEUE_KEY,
+  RETRY_BACKOFF_INITIAL,
+  RETRY_BACKOFF_MAX,
+  RATE_LIMIT_INTERVAL,
+  EVENT_EXPIRY_HOURS,
+} from '../constants';
+import { Queue } from '../types';
+import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
-import { log } from '../utils';
-
-const RETRY_BACKOFF_INITIAL = 1000;
-const RETRY_BACKOFF_MAX = 30_000;
-const RATE_LIMIT_INTERVAL = 1000;
-const EVENT_EXPIRY_HOURS = 24;
 
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
