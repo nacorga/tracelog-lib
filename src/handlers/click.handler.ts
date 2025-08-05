@@ -1,42 +1,7 @@
+import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH, INTERACTIVE_SELECTORS } from '../constants';
+import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types/event.types';
-
-const HTML_DATA_ATTR_PREFIX = 'data-tl';
-const MAX_TEXT_LENGTH = 255;
-const INTERACTIVE_SELECTORS = [
-  'button',
-  'a',
-  'input[type="button"]',
-  'input[type="submit"]',
-  'input[type="reset"]',
-  'input[type="checkbox"]',
-  'input[type="radio"]',
-  'select',
-  'textarea',
-  '[role="button"]',
-  '[role="link"]',
-  '[role="tab"]',
-  '[role="menuitem"]',
-  '[role="option"]',
-  '[role="checkbox"]',
-  '[role="radio"]',
-  '[role="switch"]',
-  '[routerLink]',
-  '[ng-click]',
-  '[data-action]',
-  '[data-click]',
-  '[data-navigate]',
-  '[data-toggle]',
-  '[onclick]',
-  '.btn',
-  '.button',
-  '.clickable',
-  '.nav-link',
-  '.menu-item',
-  '[data-testid]',
-  '[tabindex="0"]',
-];
 
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;

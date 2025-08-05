@@ -26,18 +26,18 @@ export default defineConfig({
       },
     },
     {
-      name: 'firefox',
-      use: {
-        ...devices['Desktop Firefox']
-      },
-    },
-    {
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5']
       },
     },
     ...(!process.env.CI ? [
+      {
+        name: 'firefox',
+        use: {
+          ...devices['Desktop Firefox']
+        },
+      },
       {
         name: 'webkit',
         use: {

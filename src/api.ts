@@ -4,8 +4,8 @@ import { AppConfig } from './types/config.types';
 import { log } from './utils';
 import { validateAndNormalizeConfig } from './utils/validations';
 
-export * as Types from './types';
-export { SESSION_TIMEOUT_MS } from './app.constants';
+export * as Types from './app.types';
+export * as Constants from './app.constants';
 
 let app: App | null = null;
 let isInitializing = false;

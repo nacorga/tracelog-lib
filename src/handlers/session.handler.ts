@@ -1,9 +1,9 @@
-import { SESSION_HEARTBEAT_INTERVAL_MS, SESSION_STORAGE_KEY, SESSION_TIMEOUT_MS } from '../app.constants';
+import { SESSION_HEARTBEAT_INTERVAL_MS, SESSION_STORAGE_KEY, DEFAULT_SESSION_TIMEOUT_MS } from '../constants';
+import { EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { SessionManager } from '../managers/session.manager';
 import { StateManager } from '../managers/state.manager';
 import { StorageManager } from '../managers/storage.manager';
-import { EventType } from '../types/event.types';
 
 interface StoredSession {
   sessionId: string;
@@ -102,7 +102,7 @@ export class SessionHandler extends StateManager {
         const session: StoredSession = JSON.parse(storedSessionData);
         const now = Date.now();
         const timeSinceLastHeartbeat = now - session.lastHeartbeat;
-        const sessionTimeout = this.get('config')?.sessionTimeout ?? SESSION_TIMEOUT_MS;
+        const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
 
         // If more than session timeout has passed, consider it orphaned
         if (timeSinceLastHeartbeat > sessionTimeout) {

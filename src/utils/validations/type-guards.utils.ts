@@ -1,10 +1,4 @@
-import { EventData, EventType, ScrollDirection } from '../../types/event.types';
-import { MetadataType } from '../../types/common.types';
-import { Queue } from '../../types/queue.types';
-
-/**
- * Type guard utilities for runtime type checking
- */
+import { EventData, EventType, ScrollDirection, MetadataType, Queue } from '../../types';
 
 /**
  * Checks if an object contains only primitive fields (string, number, boolean, or string arrays)

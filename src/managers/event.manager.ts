@@ -1,13 +1,17 @@
-import { EVENT_SENT_INTERVAL, EVENT_SENT_INTERVAL_TEST, MAX_EVENTS_QUEUE_LENGTH } from '../app.constants';
-import { CustomEventData, EventData, EventType } from '../types/event.types';
-import { Queue } from '../types/queue.types';
+import {
+  EVENT_SENT_INTERVAL_MS,
+  EVENT_SENT_INTERVAL_TEST_MS,
+  MAX_EVENTS_QUEUE_LENGTH,
+  DUPLICATE_EVENT_THRESHOLD_MS,
+} from '../constants';
+import { Queue, CustomEventData, EventData, EventType } from '../types';
+import { getUTMParameters, isUrlPathExcluded, log } from '../utils';
 import { SenderManager } from './sender.manager';
 import { SamplingManager } from './sampling.manager';
 import { StateManager } from './state.manager';
 import { TagsManager } from './tags.manager';
-import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
-import { getUTMParameters, isUrlPathExcluded, log } from '../utils';
 import { StorageManager } from './storage.manager';
+import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
@@ -128,7 +132,7 @@ export class EventManager extends StateManager {
       return;
     }
 
-    const interval = this.get('config')?.id === 'test' ? EVENT_SENT_INTERVAL_TEST : EVENT_SENT_INTERVAL;
+    const interval = this.get('config')?.id === 'test' ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
 
     this.eventsQueueIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
@@ -192,9 +196,8 @@ export class EventManager extends StateManager {
 
     const currentTime = Date.now();
     const timeDiff = currentTime - this.lastEvent.timestamp;
-    const timeDiffThreshold = 1000;
 
-    if (timeDiff >= timeDiffThreshold) {
+    if (timeDiff >= DUPLICATE_EVENT_THRESHOLD_MS) {
       return false;
     }
 

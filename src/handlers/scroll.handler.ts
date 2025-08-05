@@ -1,7 +1,7 @@
-import { SCROLL_DEBOUNCE_TIME, SIGNIFICANT_SCROLL_DELTA } from '../app.constants';
+import { SCROLL_DEBOUNCE_TIME_MS, SIGNIFICANT_SCROLL_DELTA } from '../constants';
+import { EventType, ScrollData, ScrollDirection } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { EventType, ScrollData, ScrollDirection } from '../types/event.types';
 
 interface ScrollContainer {
   element: Window | HTMLElement;
@@ -82,7 +82,7 @@ export class ScrollHandler extends StateManager {
         }
 
         container.debounceTimer = null;
-      }, SCROLL_DEBOUNCE_TIME);
+      }, SCROLL_DEBOUNCE_TIME_MS);
     };
 
     container.listener = handleScroll;

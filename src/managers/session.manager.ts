@@ -1,4 +1,11 @@
-import { SESSION_TIMEOUT_MS } from '../app.constants';
+import {
+  DEFAULT_MOTION_THRESHOLD,
+  DEFAULT_SESSION_TIMEOUT_MS,
+  DEFAULT_THROTTLE_DELAY_MS,
+  DEFAULT_VISIBILITY_TIMEOUT_MS,
+} from '../constants';
+import { DeviceType } from '../types';
+import { generateUUID, getDeviceType } from '../utils';
 import {
   ActivityListenerManager,
   EventListenerManager,
@@ -8,8 +15,6 @@ import {
   UnloadListenerManager,
   VisibilityListenerManager,
 } from '../listeners';
-import { DeviceType } from '../types/device.types';
-import { generateUUID, getDeviceType } from '../utils';
 import { StateManager } from './state.manager';
 
 interface SessionConfig {
@@ -25,13 +30,6 @@ interface DeviceCapabilities {
   hasKeyboard: boolean;
   isMobile: boolean;
 }
-
-export const DEFAULT_SESSION_CONFIG: SessionConfig = {
-  timeout: 30_000,
-  throttleDelay: 1000,
-  visibilityTimeout: 2000,
-  motionThreshold: 2,
-};
 
 export class SessionManager extends StateManager {
   private readonly config: SessionConfig;
@@ -49,7 +47,13 @@ export class SessionManager extends StateManager {
   constructor(onActivity: () => void, onInactivity: () => void) {
     super();
 
-    this.config = { ...DEFAULT_SESSION_CONFIG, timeout: this.get('config')?.sessionTimeout ?? SESSION_TIMEOUT_MS };
+    this.config = {
+      throttleDelay: DEFAULT_THROTTLE_DELAY_MS,
+      visibilityTimeout: DEFAULT_VISIBILITY_TIMEOUT_MS,
+      motionThreshold: DEFAULT_MOTION_THRESHOLD,
+      timeout: this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS,
+    };
+
     this.onActivity = onActivity;
     this.onInactivity = onInactivity;
     this.deviceCapabilities = this.detectDeviceCapabilities();

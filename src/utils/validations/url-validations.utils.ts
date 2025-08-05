@@ -1,8 +1,4 @@
 /**
- * URL validation utilities
- */
-
-/**
  * Validates if a URL is valid and optionally allows HTTP URLs
  * @param url - The URL to validate
  * @param allowHttp - Whether to allow HTTP URLs (default: false)

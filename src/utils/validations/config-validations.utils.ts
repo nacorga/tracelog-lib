@@ -1,27 +1,10 @@
-import { SESSION_TIMEOUT_MS } from '../../app.constants';
-import { AppConfig, Config, ApiConfig } from '../../types/config.types';
-
-/**
- * Configuration validation utilities
- */
-
-const VALIDATION_CONSTANTS = {
-  MIN_SESSION_TIMEOUT: 60000, // 1 minute minimum
-  MAX_SESSION_TIMEOUT: 86400000, // 24 hours maximum
-  MIN_SAMPLING_RATE: 0,
-  MAX_SAMPLING_RATE: 1,
-  MIN_PROJECT_ID_LENGTH: 3,
-  MAX_PROJECT_ID_LENGTH: 100,
-} as const;
-
-const VALIDATION_MESSAGES = {
-  MISSING_PROJECT_ID: 'Project ID is required',
-  INVALID_PROJECT_ID: `Project ID must be between ${VALIDATION_CONSTANTS.MIN_PROJECT_ID_LENGTH} and ${VALIDATION_CONSTANTS.MAX_PROJECT_ID_LENGTH} characters`,
-  INVALID_SESSION_TIMEOUT: `Session timeout must be between ${VALIDATION_CONSTANTS.MIN_SESSION_TIMEOUT}ms (1 minute) and ${VALIDATION_CONSTANTS.MAX_SESSION_TIMEOUT}ms (24 hours)`,
-  INVALID_SAMPLING_RATE: `Sampling rate must be between ${VALIDATION_CONSTANTS.MIN_SAMPLING_RATE} and ${VALIDATION_CONSTANTS.MAX_SAMPLING_RATE}`,
-  INVALID_GOOGLE_ANALYTICS_ID: 'Google Analytics measurement ID is required when integration is enabled',
-  INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
-} as const;
+import {
+  DEFAULT_SESSION_TIMEOUT_MS,
+  MAX_SESSION_TIMEOUT_MS,
+  MIN_SESSION_TIMEOUT_MS,
+  VALIDATION_MESSAGES,
+} from '../../constants';
+import { AppConfig, Config, ApiConfig } from '../../types';
 
 /**
  * Validates the app configuration object
@@ -33,19 +16,11 @@ export const validateAppConfig = (config: AppConfig): void => {
     throw new Error(VALIDATION_MESSAGES.MISSING_PROJECT_ID);
   }
 
-  if (
-    typeof config.id !== 'string' ||
-    config.id.length < VALIDATION_CONSTANTS.MIN_PROJECT_ID_LENGTH ||
-    config.id.length > VALIDATION_CONSTANTS.MAX_PROJECT_ID_LENGTH
-  ) {
-    throw new Error(VALIDATION_MESSAGES.INVALID_PROJECT_ID);
-  }
-
   if (config.sessionTimeout !== undefined) {
     if (
       typeof config.sessionTimeout !== 'number' ||
-      config.sessionTimeout < VALIDATION_CONSTANTS.MIN_SESSION_TIMEOUT ||
-      config.sessionTimeout > VALIDATION_CONSTANTS.MAX_SESSION_TIMEOUT
+      config.sessionTimeout < MIN_SESSION_TIMEOUT_MS ||
+      config.sessionTimeout > MAX_SESSION_TIMEOUT_MS
     ) {
       throw new Error(VALIDATION_MESSAGES.INVALID_SESSION_TIMEOUT);
     }
@@ -135,7 +110,7 @@ export const validateAndNormalizeConfig = (config: AppConfig): AppConfig => {
   return {
     ...config,
     id: config.id.trim(),
-    sessionTimeout: config.sessionTimeout ?? SESSION_TIMEOUT_MS,
+    sessionTimeout: config.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS,
     globalMetadata: config.globalMetadata ?? {},
     sensitiveQueryParams: config.sensitiveQueryParams ?? [],
   };
@@ -194,9 +169,9 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
   if (config.sessionTimeout !== undefined) {
     if (typeof config.sessionTimeout !== 'number') {
       errors.push('sessionTimeout must be a number');
-    } else if (config.sessionTimeout < 30_000) {
+    } else if (config.sessionTimeout < MIN_SESSION_TIMEOUT_MS) {
       errors.push('sessionTimeout must be at least 30 seconds (30000ms)');
-    } else if (config.sessionTimeout > 24 * 60 * 60 * 1000) {
+    } else if (config.sessionTimeout > MAX_SESSION_TIMEOUT_MS) {
       warnings.push('sessionTimeout is very long (>24 hours), consider reducing it');
     }
   }

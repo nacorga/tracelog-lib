@@ -1,4 +1,4 @@
-import { isValidUrl } from '../utils/validations';
+import { isValidUrl } from '../utils';
 
 export class ApiManager {
   getUrl(id: string): string {

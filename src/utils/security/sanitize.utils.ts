@@ -1,21 +1,12 @@
-import { ALLOWED_API_CONFIG_KEYS } from '../../app.constants';
+import {
+  ALLOWED_API_CONFIG_KEYS,
+  MAX_ARRAY_LENGTH,
+  MAX_OBJECT_DEPTH,
+  MAX_STRING_LENGTH,
+  XSS_PATTERNS,
+} from '../../constants';
 import { MetadataType } from '../../types/common.types';
 import { ApiConfig } from '../../types/config.types';
-
-// Security constants
-const MAX_STRING_LENGTH = 1000;
-const MAX_ARRAY_LENGTH = 100;
-const MAX_OBJECT_DEPTH = 3;
-
-// XSS prevention patterns
-const XSS_PATTERNS = [
-  /<script[^>]*>.*?<\/script>/gi,
-  /javascript:/gi,
-  /on\w+\s*=/gi,
-  /<iframe[^>]*>.*?<\/iframe>/gi,
-  /data:text\/html/gi,
-  /vbscript:/gi,
-];
 
 /**
  * Sanitizes a string value to prevent XSS attacks
