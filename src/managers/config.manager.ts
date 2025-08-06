@@ -1,11 +1,11 @@
-import { DEFAULT_API_CONFIG, DEFAULT_CONFIG, DEFAULT_DEMO_CONFIG, DEFAULT_TEST_CONFIG } from '../constants';
+import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
 import { ApiConfig, AppConfig, Config } from '../types';
 import { isValidUrl, sanitizeApiConfig } from '../utils';
 
 export class ConfigManager {
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
     const config = ['demo', 'test'].includes(appConfig.id)
-      ? this.getDefaultConfig(appConfig.id)
+      ? this.getDefaultConfig(appConfig)
       : await this.load(apiUrl, appConfig);
 
     return config;
@@ -28,16 +28,17 @@ export class ConfigManager {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data: ApiConfig = await response.json();
+      const rawData = await response.json();
 
-      if (data === undefined || data === null) {
-        throw new Error('Invalid config API response');
+      if (rawData === undefined || rawData === null || typeof rawData !== 'object' || Array.isArray(rawData)) {
+        throw new Error('Invalid config API response: expected object');
       }
 
-      const safeApiConfig = sanitizeApiConfig(data);
-      const apiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
+      const safeApiConfig = sanitizeApiConfig(rawData);
+      const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
+      const finalConfig: Config = { ...apiConfig, ...appConfig };
 
-      return { ...apiConfig, ...appConfig };
+      return finalConfig;
     } catch (error) {
       throw new Error(`Failed to load config: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -60,12 +61,12 @@ export class ConfigManager {
     return configUrl;
   }
 
-  private getDefaultConfig(id: string): Config {
+  private getDefaultConfig(appConfig: AppConfig): Config {
     const configRecords: Record<string, Config> = {
-      ['demo']: DEFAULT_DEMO_CONFIG,
-      ['test']: DEFAULT_TEST_CONFIG,
+      ['demo']: DEFAULT_CONFIG({ ...appConfig, qaMode: true }),
+      ['test']: DEFAULT_CONFIG({ ...appConfig, qaMode: true }),
     };
 
-    return configRecords[id] ?? DEFAULT_CONFIG;
+    return configRecords[appConfig.id] ?? DEFAULT_CONFIG(appConfig);
   }
 }
