@@ -30,7 +30,7 @@ export class ConfigManager {
 
       const rawData = await response.json();
 
-      if (rawData === undefined || rawData === null || typeof rawData !== 'object') {
+      if (rawData === undefined || rawData === null || typeof rawData !== 'object' || Array.isArray(rawData)) {
         throw new Error('Invalid config API response: expected object');
       }
 
