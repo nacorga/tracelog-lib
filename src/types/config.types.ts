@@ -28,7 +28,6 @@ export interface ApiConfig {
    * Flag to indicate if IP addresses should be excluded from tracking.
    * When true, IP addresses will not be collected or sent with events.
    * This is useful for privacy compliance and reducing data exposure.
-   * @default false
    */
   ipExcluded?: boolean;
 }
