@@ -245,6 +245,7 @@ export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
         (typeof response['samplingRate'] === 'number' && response['samplingRate'] > 0 && response['samplingRate'] <= 1),
       tags: response['tags'] === undefined || Array.isArray(response['tags']),
       excludedUrlPaths: response['excludedUrlPaths'] === undefined || Array.isArray(response['excludedUrlPaths']),
+      ipExcluded: response['ipExcluded'] === undefined || typeof response['ipExcluded'] === 'boolean',
     };
 
     return Object.values(result).every(Boolean);

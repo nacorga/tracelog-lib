@@ -119,9 +119,10 @@ export class App extends StateManager {
   }
 
   private setIntegrations(): void {
+    const isIPExcluded = this.get('config').ipExcluded;
     const measurementId = this.get('config').integrations?.googleAnalytics?.measurementId;
 
-    if (measurementId?.trim()) {
+    if (!isIPExcluded && measurementId?.trim()) {
       this.googleAnalytics = new GoogleAnalyticsIntegration();
     }
   }
