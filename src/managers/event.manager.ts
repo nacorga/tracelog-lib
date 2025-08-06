@@ -98,12 +98,18 @@ export class EventManager extends StateManager {
   }
 
   private processAndSend(payload: EventData): void {
-    if (this.get('config')?.qaMode) {
+    const isQAMode = this.get('config')?.qaMode;
+
+    if (isQAMode) {
       log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
 
       if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
         log('info', `Google Analytics event: ${JSON.stringify(payload)}`);
       }
+    }
+
+    if (this.get('config')?.ipExcluded) {
+      return;
     }
 
     this.eventsQueue.push(payload);
@@ -120,7 +126,7 @@ export class EventManager extends StateManager {
       this.sendEventsQueue();
     }
 
-    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
+    if (!isQAMode && !this.get('config')?.ipExcluded && this.googleAnalytics && payload.type === EventType.CUSTOM) {
       const customEvent = payload.custom_event as CustomEventData;
 
       this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});

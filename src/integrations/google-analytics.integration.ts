@@ -14,7 +14,9 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
   constructor() {
     super();
+  }
 
+  async initialize(): Promise<void> {
     if (this.isInitialized) {
       return;
     }
@@ -23,7 +25,6 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
     if (!measurementId?.trim()) {
       log('warning', 'Google Analytics initialization skipped: measurementId not configured');
-
       return;
     }
 
@@ -31,13 +32,16 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
     if (!userId?.trim()) {
       log('warning', 'Google Analytics initialization skipped: userId not available');
-
       return;
     }
 
-    this.loadScript(measurementId);
-    this.configureGtag(measurementId, userId);
-    this.isInitialized = true;
+    try {
+      await this.loadScript(measurementId);
+      this.configureGtag(measurementId, userId);
+      this.isInitialized = true;
+    } catch (error) {
+      log('warning', `Google Analytics initialization failed: ${error instanceof Error ? error.message : error}`);
+    }
   }
 
   trackEvent(eventName: string, metadata: Record<string, MetadataType>): void {
@@ -71,35 +75,51 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
   }
 
-  private loadScript(measurementId: string): void {
+  private async loadScript(measurementId: string): Promise<void> {
     if (document.getElementById('tracelog-ga-script')) {
       return;
     }
 
-    try {
-      const script = document.createElement('script');
+    const existingGAScript = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
 
-      script.id = 'tracelog-ga-script';
-      script.async = true;
-      script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-
-      script.onerror = (): void => {
-        log('warning', 'Failed to load Google Analytics script');
-      };
-
-      document.head.appendChild(script);
-    } catch (error) {
-      log('warning', `Error loading Google Analytics script: ${error instanceof Error ? error.message : error}`);
+    if (existingGAScript) {
+      log('info', 'Google Analytics script already loaded from external source');
+      return;
     }
+
+    return new Promise((resolve, reject) => {
+      try {
+        const script = document.createElement('script');
+
+        script.id = 'tracelog-ga-script';
+        script.async = true;
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+
+        script.onload = (): void => {
+          resolve();
+        };
+
+        script.onerror = (): void => {
+          reject(new Error('Failed to load Google Analytics script'));
+        };
+
+        document.head.appendChild(script);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
 
   private configureGtag(measurementId: string, userId: string): void {
-    window.gtag =
-      window.gtag ??
-      function (...args: unknown[]): void {
+    window.dataLayer = window.dataLayer ?? [];
+
+    if (!window.gtag || typeof window.gtag !== 'function') {
+      window.gtag = function (...args: unknown[]): void {
         (window.dataLayer = window.dataLayer ?? []).push(args);
       };
-    window.gtag('js', new Date());
+      window.gtag('js', new Date());
+    }
+
     window.gtag('config', measurementId, {
       user_id: userId,
     });

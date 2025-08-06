@@ -38,7 +38,7 @@ export class App extends StateManager {
     try {
       this.initStorage();
       await this.setState(appConfig);
-      this.setIntegrations();
+      await this.setIntegrations();
       this.setEventManager();
       this.initHandlers();
       this.isInitialized = true;
@@ -118,11 +118,13 @@ export class App extends StateManager {
     this.set('pageUrl', initialUrl);
   }
 
-  private setIntegrations(): void {
+  private async setIntegrations(): Promise<void> {
+    const isIPExcluded = this.get('config').ipExcluded;
     const measurementId = this.get('config').integrations?.googleAnalytics?.measurementId;
 
-    if (measurementId?.trim()) {
+    if (!isIPExcluded && measurementId?.trim()) {
       this.googleAnalytics = new GoogleAnalyticsIntegration();
+      await this.googleAnalytics.initialize();
     }
   }
 
