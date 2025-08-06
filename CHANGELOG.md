@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.4.0](https://github.com/nacorga/tracelog-client/compare/v0.3.7...v0.4.0) (2025-08-06)
+
+
+### Features
+
+* add IP exclusion feature for Google Analytics tracking and update config validation ([b2d966e](https://github.com/nacorga/tracelog-client/commit/b2d966e2a92bba4bd1d80943925c89de37bac179))
+
+
+### Bug Fixes
+
+* ensure Google Analytics integration initializes correctly and respects IP exclusion in event tracking ([3ed8ed5](https://github.com/nacorga/tracelog-client/commit/3ed8ed5e906ae0257fa9757dab57eb9aade54093))
+
 ### [0.3.7](https://github.com/nacorga/tracelog-client/compare/v0.3.6...v0.3.7) (2025-08-06)
 
 
