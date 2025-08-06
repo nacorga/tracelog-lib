@@ -9,21 +9,9 @@ export const DEFAULT_API_CONFIG: ApiConfig = {
   excludedUrlPaths: [],
 };
 
-export const DEFAULT_CONFIG: Config = {
+export const DEFAULT_CONFIG = (config: Config): Config => ({
   ...DEFAULT_API_CONFIG,
-  id: 'default',
+  ...config,
   sessionTimeout: DEFAULT_SESSION_TIMEOUT_MS,
   allowHttp: false,
-};
-
-export const DEFAULT_DEMO_CONFIG: Config = {
-  ...DEFAULT_CONFIG,
-  id: 'demo',
-  qaMode: true,
-};
-
-export const DEFAULT_TEST_CONFIG: Config = {
-  ...DEFAULT_CONFIG,
-  id: 'test',
-  qaMode: true,
-};
+});
