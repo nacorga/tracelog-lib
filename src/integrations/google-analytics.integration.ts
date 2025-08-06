@@ -14,11 +14,9 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
   constructor() {
     super();
-
-    void this.initialize();
   }
 
-  private async initialize(): Promise<void> {
+  async initialize(): Promise<void> {
     if (this.isInitialized) {
       return;
     }
@@ -117,7 +115,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
     if (!window.gtag || typeof window.gtag !== 'function') {
       window.gtag = function (...args: unknown[]): void {
-        window.dataLayer!.push(args);
+        (window.dataLayer = window.dataLayer ?? []).push(args);
       };
       window.gtag('js', new Date());
     }

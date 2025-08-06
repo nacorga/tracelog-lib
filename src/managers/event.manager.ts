@@ -126,7 +126,7 @@ export class EventManager extends StateManager {
       this.sendEventsQueue();
     }
 
-    if (!isQAMode && this.googleAnalytics && payload.type === EventType.CUSTOM) {
+    if (!isQAMode && !this.get('config')?.ipExcluded && this.googleAnalytics && payload.type === EventType.CUSTOM) {
       const customEvent = payload.custom_event as CustomEventData;
 
       this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
