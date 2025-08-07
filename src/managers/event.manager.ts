@@ -102,13 +102,9 @@ export class EventManager extends StateManager {
 
     if (isQAMode) {
       log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
-
-      if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
-        log('info', `Google Analytics event: ${JSON.stringify(payload)}`);
-      }
     }
 
-    if (this.get('config')?.ipExcluded) {
+    if (!isQAMode && this.get('config')?.ipExcluded) {
       return;
     }
 
@@ -126,9 +122,17 @@ export class EventManager extends StateManager {
       this.sendEventsQueue();
     }
 
-    if (!isQAMode && !this.get('config')?.ipExcluded && this.googleAnalytics && payload.type === EventType.CUSTOM) {
+    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
       const customEvent = payload.custom_event as CustomEventData;
 
+      this.trackGoogleAnalyticsEvent(customEvent);
+    }
+  }
+
+  private trackGoogleAnalyticsEvent(customEvent: CustomEventData): void {
+    if (this.get('config').qaMode) {
+      log('info', `Google Analytics event: ${JSON.stringify(customEvent)}`);
+    } else if (this.googleAnalytics) {
       this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
     }
   }

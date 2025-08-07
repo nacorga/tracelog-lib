@@ -1,9 +1,4 @@
-import {
-  DEFAULT_SESSION_TIMEOUT_MS,
-  MAX_SESSION_TIMEOUT_MS,
-  MIN_SESSION_TIMEOUT_MS,
-  VALIDATION_MESSAGES,
-} from '../../constants';
+import { MAX_SESSION_TIMEOUT_MS, MIN_SESSION_TIMEOUT_MS, VALIDATION_MESSAGES } from '../../constants';
 import { AppConfig, Config, ApiConfig } from '../../types';
 
 /**
@@ -110,7 +105,6 @@ export const validateAndNormalizeConfig = (config: AppConfig): AppConfig => {
   return {
     ...config,
     id: config.id.trim(),
-    sessionTimeout: config.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS,
     globalMetadata: config.globalMetadata ?? {},
     sensitiveQueryParams: config.sensitiveQueryParams ?? [],
   };

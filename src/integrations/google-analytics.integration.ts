@@ -25,6 +25,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
     if (!measurementId?.trim()) {
       log('warning', 'Google Analytics initialization skipped: measurementId not configured');
+
       return;
     }
 
@@ -32,10 +33,15 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
     if (!userId?.trim()) {
       log('warning', 'Google Analytics initialization skipped: userId not available');
+
       return;
     }
 
     try {
+      if (this.isScriptAlreadyLoaded()) {
+        return;
+      }
+
       await this.loadScript(measurementId);
       this.configureGtag(measurementId, userId);
       this.isInitialized = true;
@@ -75,18 +81,23 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
   }
 
-  private async loadScript(measurementId: string): Promise<void> {
+  private isScriptAlreadyLoaded(): boolean {
     if (document.getElementById('tracelog-ga-script')) {
-      return;
+      return true;
     }
 
     const existingGAScript = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
 
     if (existingGAScript) {
-      log('info', 'Google Analytics script already loaded from external source');
-      return;
+      log('warning', 'Google Analytics script already loaded from external source');
+
+      return true;
     }
 
+    return false;
+  }
+
+  private async loadScript(measurementId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         const script = document.createElement('script');
@@ -111,17 +122,17 @@ export class GoogleAnalyticsIntegration extends StateManager {
   }
 
   private configureGtag(measurementId: string, userId: string): void {
-    window.dataLayer = window.dataLayer ?? [];
+    const gaScriptConfig = document.createElement('script');
 
-    if (!window.gtag || typeof window.gtag !== 'function') {
-      window.gtag = function (...args: unknown[]): void {
-        (window.dataLayer = window.dataLayer ?? []).push(args);
-      };
-      window.gtag('js', new Date());
-    }
+    gaScriptConfig.innerHTML = `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '${measurementId}', {
+        'user_id': '${userId}'
+      });
+    `;
 
-    window.gtag('config', measurementId, {
-      user_id: userId,
-    });
+    document.head.appendChild(gaScriptConfig);
   }
 }
