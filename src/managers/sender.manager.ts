@@ -27,9 +27,13 @@ export class SenderManager extends StateManager {
   }
 
   sendEventsQueue(body: Queue): boolean {
-    if (this.get('config')?.qaMode) {
-      this.logQueue(body);
+    const isQAMode = this.get('config')?.qaMode;
 
+    if (isQAMode) {
+      this.logQueue(body);
+    }
+
+    if (isQAMode || ['demo', 'test'].includes(this.get('config').id)) {
       return true;
     }
 
@@ -115,15 +119,17 @@ export class SenderManager extends StateManager {
   }
 
   private logQueue(queue: Queue): void {
+    const queueStructure = {
+      user_id: queue.user_id,
+      session_id: queue.session_id,
+      device: queue.device,
+      events_count: queue.events.length,
+      has_global_metadata: !!queue.global_metadata,
+    };
+
     log(
       'info',
-      `Queue structure: ${JSON.stringify({
-        user_id: queue.user_id,
-        session_id: queue.session_id,
-        device: queue.device,
-        events_count: queue.events.length,
-        has_global_metadata: !!queue.global_metadata,
-      })}`,
+      `Queue structure: ${this.get('config')?.id === 'test' ? JSON.stringify(queueStructure) : queueStructure}`,
     );
   }
 
