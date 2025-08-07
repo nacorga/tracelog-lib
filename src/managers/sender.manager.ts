@@ -127,10 +127,7 @@ export class SenderManager extends StateManager {
       has_global_metadata: !!queue.global_metadata,
     };
 
-    log(
-      'info',
-      `Queue structure: ${this.get('config')?.id === 'test' ? JSON.stringify(queueStructure) : queueStructure}`,
-    );
+    log('info', `Queue structure: ${JSON.stringify(queueStructure)}`);
   }
 
   private handleSendFailure(body: Queue): void {
