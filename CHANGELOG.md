@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### [0.4.2](https://github.com/nacorga/tracelog-client/compare/v0.4.1...v0.4.2) (2025-08-08)
+
+
+### Bug Fixes
+
+* add 'ipExcluded' to allowed API config keys and enhance tags handling in sanitizeApiConfig ([ae9c2fe](https://github.com/nacorga/tracelog-client/commit/ae9c2fee741c00a1351b2886adfb44021c893619))
+* enhance session event handling and update state management for event tracking ([a3e3e3e](https://github.com/nacorga/tracelog-client/commit/a3e3e3e1a7b4554de1a413f95dae404ec8bcee30))
+* refine handling of 'from_page_url' in event payload to exclude routes ([2da25ee](https://github.com/nacorga/tracelog-client/commit/2da25ee0f6e10b1c893c8905ea0f7a3b90ba0f96))
+
 ### [0.4.1](https://github.com/nacorga/tracelog-client/compare/v0.4.0...v0.4.1) (2025-08-07)
 
 
