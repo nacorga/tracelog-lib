@@ -81,7 +81,7 @@ export class EventManager extends StateManager {
       page_url: isRouteExcluded ? 'excluded' : (page_url as string) || this.get('pageUrl'),
       timestamp: Date.now(),
       ...(isSessionStartEvent && { referrer: document.referrer || 'Direct' }),
-      ...(from_page_url && { from_page_url }),
+      ...(from_page_url && !isRouteExcluded ? { from_page_url } : {}),
       ...(scroll_data && { scroll_data }),
       ...(click_data && { click_data }),
       ...(custom_event && { custom_event }),
