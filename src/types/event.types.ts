@@ -82,5 +82,4 @@ export interface EventData {
   page_view?: PageViewData;
   utm?: UTM;
   tags?: string[] | { id: string; key: string }[];
-  excluded_route?: boolean;
 }

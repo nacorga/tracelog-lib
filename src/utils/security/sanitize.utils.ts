@@ -153,6 +153,10 @@ export const sanitizeApiConfig = (data: unknown): ApiConfig => {
           const paths: string[] = Array.isArray(value) ? (value as string[]) : typeof value === 'string' ? [value] : [];
 
           safeData.excludedUrlPaths = paths.map((path) => sanitizePathString(String(path))).filter(Boolean);
+        } else if (key === 'tags') {
+          if (Array.isArray(value)) {
+            safeData.tags = value;
+          }
         } else {
           const sanitizedValue = sanitizeValue(value);
 

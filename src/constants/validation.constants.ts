@@ -7,7 +7,13 @@ import {
 } from './limits.constants';
 
 // Allowed API config keys for runtime validation
-export const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>(['tags', 'samplingRate', 'qaMode', 'excludedUrlPaths']);
+export const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>([
+  'tags',
+  'samplingRate',
+  'qaMode',
+  'excludedUrlPaths',
+  'ipExcluded',
+]);
 
 // Validation error messages
 export const VALIDATION_MESSAGES = {

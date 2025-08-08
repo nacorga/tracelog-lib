@@ -8,5 +8,6 @@ export interface State {
   userId: string;
   device: DeviceType;
   pageUrl: string;
+  hasStartSession: boolean;
   suppressNextScroll: boolean;
 }

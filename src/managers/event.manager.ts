@@ -57,27 +57,35 @@ export class EventManager extends StateManager {
     }
 
     const isRouteExcluded = isUrlPathExcluded(page_url as string, this.get('config').excludedUrlPaths);
-    const isSessionEvent = [EventType.SESSION_START, EventType.SESSION_END].includes(type as EventType);
+    const hasStartSession = this.get('hasStartSession');
+    const isSessionEndEvent = type == EventType.SESSION_END;
 
-    if (isRouteExcluded && !isSessionEvent) {
+    if (isRouteExcluded && (!isSessionEndEvent || (isSessionEndEvent && !hasStartSession))) {
+      if (this.get('config')?.qaMode) {
+        log('info', `Event ${type} on excluded route: ${page_url}`);
+      }
+
       return;
     }
 
-    const isFirstEvent = type === EventType.SESSION_START;
-    const removePageUrl = isRouteExcluded && isSessionEvent;
-    const utmParams = isFirstEvent ? getUTMParameters() : undefined;
+    const isSessionStartEvent = type === EventType.SESSION_START;
+
+    if (isSessionStartEvent) {
+      this.set('hasStartSession', true);
+    }
+
+    const utmParams = isSessionStartEvent ? getUTMParameters() : undefined;
 
     const payload: EventData = {
       type: type as EventType,
-      page_url: removePageUrl ? 'excluded' : (page_url as string) || this.get('pageUrl'),
+      page_url: isRouteExcluded ? 'excluded' : (page_url as string) || this.get('pageUrl'),
       timestamp: Date.now(),
-      ...(isFirstEvent && { referrer: document.referrer || 'Direct' }),
-      ...(from_page_url && !removePageUrl && { from_page_url }),
+      ...(isSessionStartEvent && { referrer: document.referrer || 'Direct' }),
+      ...(from_page_url && !isRouteExcluded ? { from_page_url } : {}),
       ...(scroll_data && { scroll_data }),
       ...(click_data && { click_data }),
       ...(custom_event && { custom_event }),
       ...(utmParams && { utm: utmParams }),
-      ...(removePageUrl && { excluded_route: true }),
     };
 
     if (this.get('config')?.tags?.length) {
