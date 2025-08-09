@@ -143,8 +143,8 @@ export class ClickHandler extends StateManager {
     const alt = relevantElement.getAttribute('alt');
     const role = relevantElement.getAttribute('role');
     const ariaLabel = relevantElement.getAttribute('aria-label');
-    const classNameValue = relevantElement.className;
-    const classNameString = typeof classNameValue === 'string' ? classNameValue : String(classNameValue);
+    const className =
+      typeof relevantElement.className === 'string' ? relevantElement.className : String(relevantElement.className);
 
     return {
       x,
@@ -153,7 +153,7 @@ export class ClickHandler extends StateManager {
       relativeY,
       tag: relevantElement.tagName.toLowerCase(),
       ...(relevantElement.id && { id: relevantElement.id }),
-      ...(relevantElement.className && { class: classNameString }),
+      ...(relevantElement.className && { class: className }),
       ...(text && { text }),
       ...(href && { href }),
       ...(title && { title }),

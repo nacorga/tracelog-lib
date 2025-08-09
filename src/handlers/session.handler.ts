@@ -17,7 +17,7 @@ export class SessionHandler extends StateManager {
   private readonly sessionStorageKey: string;
 
   private sessionManager: SessionManager | null = null;
-  private heartbeatInterval: number | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(storageManager: StorageManager, eventManager: EventManager) {
     super();
@@ -106,9 +106,7 @@ export class SessionHandler extends StateManager {
         const timeSinceLastHeartbeat = now - session.lastHeartbeat;
         const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
 
-        // If more than session timeout has passed, consider it orphaned
         if (timeSinceLastHeartbeat > sessionTimeout) {
-          // Track the missed session_end event
           this.trackSession(EventType.SESSION_END);
           this.clearPersistedSession();
         }
@@ -135,7 +133,7 @@ export class SessionHandler extends StateManager {
   private startHeartbeat(): void {
     this.stopHeartbeat();
 
-    this.heartbeatInterval = window.setInterval(() => {
+    this.heartbeatInterval = setInterval(() => {
       const storedSessionData = this.storageManager.getItem(this.sessionStorageKey);
 
       if (storedSessionData) {
@@ -152,7 +150,7 @@ export class SessionHandler extends StateManager {
 
   private stopHeartbeat(): void {
     if (this.heartbeatInterval) {
-      window.clearInterval(this.heartbeatInterval);
+      clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
   }
