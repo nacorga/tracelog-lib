@@ -21,7 +21,13 @@ export class ClickHandler extends StateManager {
 
     this.clickHandler = (event: Event): void => {
       const mouseEvent = event as MouseEvent;
-      const clickedElement = mouseEvent.target as HTMLElement;
+      const target = mouseEvent.target as EventTarget | null;
+      const clickedElement =
+        target instanceof HTMLElement
+          ? target
+          : target instanceof Node && target.parentElement instanceof HTMLElement
+            ? target.parentElement
+            : null;
 
       if (!clickedElement) return;
 
@@ -49,7 +55,6 @@ export class ClickHandler extends StateManager {
 
       this.eventManager.track({
         type: EventType.CLICK,
-        page_url: window.location.href,
         click_data: clickData,
       });
     };
@@ -138,6 +143,8 @@ export class ClickHandler extends StateManager {
     const alt = relevantElement.getAttribute('alt');
     const role = relevantElement.getAttribute('role');
     const ariaLabel = relevantElement.getAttribute('aria-label');
+    const className =
+      typeof relevantElement.className === 'string' ? relevantElement.className : String(relevantElement.className);
 
     return {
       x,
@@ -146,7 +153,7 @@ export class ClickHandler extends StateManager {
       relativeY,
       tag: relevantElement.tagName.toLowerCase(),
       ...(relevantElement.id && { id: relevantElement.id }),
-      ...(relevantElement.className && { class: relevantElement.className }),
+      ...(relevantElement.className && { class: className }),
       ...(text && { text }),
       ...(href && { href }),
       ...(title && { title }),

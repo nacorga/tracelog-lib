@@ -56,7 +56,8 @@ export class EventManager extends StateManager {
       return;
     }
 
-    const isRouteExcluded = isUrlPathExcluded(page_url as string, this.get('config').excludedUrlPaths);
+    const effectivePageUrl = (page_url as string) || this.get('pageUrl');
+    const isRouteExcluded = isUrlPathExcluded(effectivePageUrl, this.get('config').excludedUrlPaths);
     const hasStartSession = this.get('hasStartSession');
     const isSessionEndEvent = type == EventType.SESSION_END;
 
@@ -78,7 +79,7 @@ export class EventManager extends StateManager {
 
     const payload: EventData = {
       type: type as EventType,
-      page_url: isRouteExcluded ? 'excluded' : (page_url as string) || this.get('pageUrl'),
+      page_url: isRouteExcluded ? 'excluded' : effectivePageUrl,
       timestamp: Date.now(),
       ...(isSessionStartEvent && { referrer: document.referrer || 'Direct' }),
       ...(from_page_url && !isRouteExcluded ? { from_page_url } : {}),
@@ -103,6 +104,13 @@ export class EventManager extends StateManager {
 
     this.lastEvent = payload;
     this.processAndSend(payload);
+  }
+
+  stop(): void {
+    if (this.eventsQueueIntervalId) {
+      clearInterval(this.eventsQueueIntervalId);
+      this.eventsQueueIntervalId = null;
+    }
   }
 
   private processAndSend(payload: EventData): void {
@@ -225,7 +233,6 @@ export class EventManager extends StateManager {
       }
 
       case EventType.CLICK: {
-        // For clicks, check if they're approximately at the same location and have similar data
         const coordinatesMatch =
           Math.abs((this.lastEvent.click_data?.x ?? 0) - (click_data?.x ?? 0)) <= 5 &&
           Math.abs((this.lastEvent.click_data?.y ?? 0) - (click_data?.y ?? 0)) <= 5;

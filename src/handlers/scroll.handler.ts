@@ -56,9 +56,9 @@ export class ScrollHandler extends StateManager {
   private setupScrollContainer(element: Window | HTMLElement): void {
     const container: ScrollContainer = {
       element,
-      lastScrollPos: 0,
+      lastScrollPos: this.getScrollTop(element),
       debounceTimer: null,
-      listener: () => {}, // Will be set below
+      listener: () => {},
     };
 
     const handleScroll = (): void => {

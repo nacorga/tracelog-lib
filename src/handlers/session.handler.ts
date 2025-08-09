@@ -14,6 +14,7 @@ interface StoredSession {
 export class SessionHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly storageManager: StorageManager;
+  private readonly sessionStorageKey: string;
 
   private sessionManager: SessionManager | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -23,6 +24,7 @@ export class SessionHandler extends StateManager {
 
     this.eventManager = eventManager;
     this.storageManager = storageManager;
+    this.sessionStorageKey = SESSION_STORAGE_KEY(this.get('config')?.id);
   }
 
   startTracking(): void {
@@ -95,7 +97,7 @@ export class SessionHandler extends StateManager {
   }
 
   private checkOrphanedSessions(): void {
-    const storedSessionData = this.storageManager.getItem(SESSION_STORAGE_KEY);
+    const storedSessionData = this.storageManager.getItem(this.sessionStorageKey);
 
     if (storedSessionData) {
       try {
@@ -104,9 +106,7 @@ export class SessionHandler extends StateManager {
         const timeSinceLastHeartbeat = now - session.lastHeartbeat;
         const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
 
-        // If more than session timeout has passed, consider it orphaned
         if (timeSinceLastHeartbeat > sessionTimeout) {
-          // Track the missed session_end event
           this.trackSession(EventType.SESSION_END);
           this.clearPersistedSession();
         }
@@ -123,24 +123,24 @@ export class SessionHandler extends StateManager {
       lastHeartbeat: Date.now(),
     };
 
-    this.storageManager.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
+    this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(sessionData));
   }
 
   private clearPersistedSession(): void {
-    this.storageManager.removeItem(SESSION_STORAGE_KEY);
+    this.storageManager.removeItem(this.sessionStorageKey);
   }
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
 
     this.heartbeatInterval = setInterval(() => {
-      const storedSessionData = this.storageManager.getItem(SESSION_STORAGE_KEY);
+      const storedSessionData = this.storageManager.getItem(this.sessionStorageKey);
 
       if (storedSessionData) {
         try {
           const session: StoredSession = JSON.parse(storedSessionData);
           session.lastHeartbeat = Date.now();
-          this.storageManager.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+          this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(session));
         } catch {
           this.clearPersistedSession();
         }

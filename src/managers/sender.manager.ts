@@ -5,7 +5,7 @@ import {
   RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
 } from '../constants';
-import { Queue } from '../types';
+import { PersistedQueueData, Queue } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -22,7 +22,7 @@ export class SenderManager extends StateManager {
     super();
 
     this.storeManager = storeManager;
-    this.queueStorageKey = `${QUEUE_KEY}_${this.get('userId')}`;
+    this.queueStorageKey = `${QUEUE_KEY(this.get('config')?.id)}:${this.get('userId')}`;
     this.recoverPersistedEvents();
   }
 
@@ -72,7 +72,7 @@ export class SenderManager extends StateManager {
       }
 
       const recoveryBody = this.createRecoveryBody(persistedData);
-      const success = this.sendQueue(recoveryBody);
+      const success = this.sendEventsQueue(recoveryBody);
 
       if (success) {
         this.clearPersistedEvents();
@@ -91,24 +91,32 @@ export class SenderManager extends StateManager {
   private sendQueue(body: Queue): boolean {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
-    if (navigator.sendBeacon && navigator.sendBeacon(this.get('apiUrl'), blob)) {
+    if (typeof navigator.sendBeacon !== 'function') {
+      log('warning', 'navigator.sendBeacon is not available in this environment');
+
+      return false;
+    }
+
+    if (navigator.sendBeacon(this.get('apiUrl'), blob)) {
       return true;
     }
 
     return false;
   }
 
-  private getPersistedData(): any | null {
+  private getPersistedData(): PersistedQueueData | null {
     const persistedDataString = this.storeManager.getItem(this.queueStorageKey);
-    return persistedDataString ? JSON.parse(persistedDataString) : null;
+
+    return persistedDataString ? (JSON.parse(persistedDataString) as PersistedQueueData) : null;
   }
 
-  private isDataRecent(data: any): boolean {
+  private isDataRecent(data: PersistedQueueData): boolean {
     const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
+
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
 
-  private createRecoveryBody(data: any): Queue {
+  private createRecoveryBody(data: PersistedQueueData): Queue {
     return {
       user_id: data.userId,
       session_id: data.sessionId,
@@ -119,11 +127,14 @@ export class SenderManager extends StateManager {
   }
 
   private logQueue(queue: Queue): void {
+    const events = queue.events;
     const queueStructure = {
       user_id: queue.user_id,
       session_id: queue.session_id,
       device: queue.device,
-      events_count: queue.events.length,
+      events_count: events.length,
+      first_type: events[0]?.type ?? null,
+      last_type: events.length > 0 ? events[events.length - 1]?.type : null,
       has_global_metadata: !!queue.global_metadata,
     };
 
@@ -137,7 +148,7 @@ export class SenderManager extends StateManager {
 
   private persistFailedEvents(body: Queue): void {
     try {
-      const persistedData = {
+      const persistedData: PersistedQueueData = {
         userId: body.user_id,
         sessionId: body.session_id,
         device: body.device,
