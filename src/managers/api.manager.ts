@@ -1,23 +1,13 @@
-import { isValidUrl } from '../utils';
+import { getApiUrl, isValidUrl } from '../utils';
 
 export class ApiManager {
-  getUrl(id: string): string {
-    const url = new URL(window.location.href);
-    const host = url.hostname;
-    const parts = host.split('.');
+  getUrl(id: string, allowHttp = false): string {
+    const url = getApiUrl(id, allowHttp);
 
-    if (parts.length === 0) {
+    if (!isValidUrl(url, allowHttp)) {
       throw new Error('Invalid URL');
     }
 
-    const cleanDomain = parts.slice(-2).join('.');
-    const apiUrl = `https://${id}.${cleanDomain}`;
-    const isValid = isValidUrl(apiUrl);
-
-    if (!isValid) {
-      throw new Error('Invalid URL');
-    }
-
-    return apiUrl;
+    return url;
   }
 }

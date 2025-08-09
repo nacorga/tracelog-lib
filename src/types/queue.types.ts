@@ -9,3 +9,12 @@ export interface Queue {
   events: EventData[];
   global_metadata?: Record<string, MetadataType>;
 }
+
+export interface PersistedQueueData {
+  userId: string;
+  sessionId: string;
+  device: Queue['device'];
+  events: Queue['events'];
+  timestamp: number;
+  global_metadata?: Queue['global_metadata'];
+}

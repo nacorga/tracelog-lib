@@ -12,7 +12,7 @@ export class UserManager extends StateManager {
   }
 
   getId(): string {
-    const storedUserId = this.storageManager.getItem(USER_ID_KEY);
+    const storedUserId = this.storageManager.getItem(USER_ID_KEY(this.get('config')?.id));
 
     if (storedUserId) {
       return storedUserId;
@@ -20,7 +20,7 @@ export class UserManager extends StateManager {
 
     const newUserId = generateUUID();
 
-    this.storageManager.setItem(USER_ID_KEY, newUserId);
+    this.storageManager.setItem(USER_ID_KEY(this.get('config')?.id), newUserId);
 
     return newUserId;
   }

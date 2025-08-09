@@ -5,7 +5,7 @@ import { isValidUrl } from '../validations';
  * @param id - The project ID
  * @returns The generated API URL
  */
-export const getApiUrl = (id: string): string => {
+export const getApiUrl = (id: string, allowHttp = false): string => {
   const url = new URL(window.location.href);
   const host = url.hostname;
   const parts = host.split('.');
@@ -15,8 +15,9 @@ export const getApiUrl = (id: string): string => {
   }
 
   const cleanDomain = parts.slice(-2).join('.');
-  const apiUrl = `https://${id}.${cleanDomain}`;
-  const isValid = isValidUrl(apiUrl);
+  const protocol = allowHttp && url.protocol === 'http:' ? 'http' : 'https';
+  const apiUrl = `${protocol}://${id}.${cleanDomain}`;
+  const isValid = isValidUrl(apiUrl, allowHttp);
 
   if (!isValid) {
     throw new Error('Invalid URL');
@@ -68,7 +69,13 @@ export const isUrlPathExcluded = (url: string, excludedPaths: string[] = []): bo
     return false;
   }
 
-  const path = new URL(url, window.location.origin).pathname;
+  let path: string;
+
+  try {
+    path = new URL(url, window.location.origin).pathname;
+  } catch {
+    return false;
+  }
 
   const isRegularExpression = (value: unknown): value is RegExp =>
     typeof value === 'object' && value !== undefined && typeof (value as RegExp).test === 'function';

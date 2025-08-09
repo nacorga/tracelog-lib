@@ -75,23 +75,49 @@ export class App extends StateManager {
       this.googleAnalytics.cleanup();
     }
 
-    this.sessionHandler.stopTracking();
-    this.pageViewHandler.stopTracking();
-    this.clickHandler.stopTracking();
-    this.scrollHandler.stopTracking();
+    if (this.sessionHandler) {
+      this.sessionHandler.stopTracking();
+    }
+
+    if (this.pageViewHandler) {
+      this.pageViewHandler.stopTracking();
+    }
+
+    if (this.clickHandler) {
+      this.clickHandler.stopTracking();
+    }
+
+    if (this.scrollHandler) {
+      this.scrollHandler.stopTracking();
+    }
+
+    if (this.suppressNextScrollTimer) {
+      clearTimeout(this.suppressNextScrollTimer);
+      this.suppressNextScrollTimer = null;
+    }
+
+    if (this.eventManager) {
+      this.eventManager.stop();
+    }
+
+    this.set('hasStartSession', false);
+    this.set('suppressNextScroll', false);
+    this.set('sessionId', null);
+
+    this.isInitialized = false;
   }
 
   private async setState(appConfig: AppConfig): Promise<void> {
-    this.setApiUrl(appConfig.id);
+    this.setApiUrl(appConfig.id, appConfig.allowHttp);
     await this.setConfig(appConfig);
     this.setUserId();
     this.setDevice();
     this.setPageUrl();
   }
 
-  private setApiUrl(id: string): void {
+  private setApiUrl(id: string, allowHttp = false): void {
     const apiManager = new ApiManager();
-    this.set('apiUrl', apiManager.getUrl(id));
+    this.set('apiUrl', apiManager.getUrl(id, allowHttp));
   }
 
   private async setConfig(appConfig: AppConfig): Promise<void> {
