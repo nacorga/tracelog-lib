@@ -14,6 +14,7 @@ import { GoogleAnalyticsIntegration } from './integrations/google-analytics.inte
 import { getDeviceType, normalizeUrl } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS } from './constants';
+import { PerformanceHandler } from './handlers/performance.handler';
 
 export class App extends StateManager {
   private isInitialized = false;
@@ -24,6 +25,7 @@ export class App extends StateManager {
   private pageViewHandler!: PageViewHandler;
   private clickHandler!: ClickHandler;
   private scrollHandler!: ScrollHandler;
+  private performanceHandler!: PerformanceHandler;
   private suppressNextScrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   async init(appConfig: AppConfig): Promise<void> {
@@ -40,7 +42,7 @@ export class App extends StateManager {
       await this.setState(appConfig);
       await this.setIntegrations();
       this.setEventManager();
-      this.initHandlers();
+      await this.initHandlers();
       this.isInitialized = true;
     } catch (error) {
       this.isInitialized = false;
@@ -89,6 +91,10 @@ export class App extends StateManager {
 
     if (this.scrollHandler) {
       this.scrollHandler.stopTracking();
+    }
+
+    if (this.performanceHandler) {
+      this.performanceHandler.stopTracking();
     }
 
     if (this.suppressNextScrollTimer) {
@@ -154,11 +160,12 @@ export class App extends StateManager {
     }
   }
 
-  private initHandlers(): void {
+  private async initHandlers(): Promise<void> {
     this.initSessionHandler();
     this.initPageViewHandler();
     this.initClickHandler();
     this.initScrollHandler();
+    await this.initPerformanceHandler();
   }
 
   private initStorage(): void {
@@ -201,5 +208,10 @@ export class App extends StateManager {
   private initScrollHandler(): void {
     this.scrollHandler = new ScrollHandler(this.eventManager);
     this.scrollHandler.startTracking();
+  }
+
+  private async initPerformanceHandler(): Promise<void> {
+    this.performanceHandler = new PerformanceHandler(this.eventManager);
+    await this.performanceHandler.startTracking();
   }
 }
