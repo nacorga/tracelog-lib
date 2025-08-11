@@ -1,6 +1,10 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType, NavigationId, VitalSample } from '../types';
+import { LONG_TASK_THROTTLE_MS } from '../constants';
+import { PRECISION_FOUR_DECIMALS, PRECISION_TWO_DECIMALS } from '../constants';
+
+type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
 
 export class PerformanceHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -28,7 +32,9 @@ export class PerformanceHandler extends StateManager {
         void error;
       }
     }
+
     this.observers = [];
+
     this.reportedByNav.clear();
   }
 
@@ -39,8 +45,12 @@ export class PerformanceHandler extends StateManager {
       (list) => {
         const entries = list.getEntries();
         const last = entries[entries.length - 1] as (PerformanceEntry & { startTime: number }) | undefined;
-        if (!last) return;
-        this.sendVital({ type: 'LCP', value: last.startTime });
+
+        if (!last) {
+          return;
+        }
+
+        this.sendVital({ type: 'LCP', value: Number(last.startTime.toFixed(PRECISION_TWO_DECIMALS)) });
       },
       { type: 'largest-contentful-paint', buffered: true },
       true,
@@ -48,16 +58,22 @@ export class PerformanceHandler extends StateManager {
 
     // CLS (layout-shift)
     let clsValue = 0;
+
     this.safeObserve(
       'layout-shift',
       (list) => {
-        for (const entry of list.getEntries() as PerformanceEntry[] & { value?: number; hadRecentInput?: boolean }[]) {
-          const e = entry as PerformanceEntry & { value?: number; hadRecentInput?: boolean };
-          if ((e.hadRecentInput as boolean | undefined) === true) continue;
-          const v = typeof e.value === 'number' ? e.value : 0;
-          clsValue += v;
+        const entries = list.getEntries() as LayoutShiftEntry[];
+
+        for (const entry of entries) {
+          if (entry.hadRecentInput === true) {
+            continue;
+          }
+
+          const value = typeof entry.value === 'number' ? entry.value : 0;
+          clsValue += value;
         }
-        this.sendVital({ type: 'CLS', value: Number(clsValue.toFixed(4)) });
+
+        this.sendVital({ type: 'CLS', value: Number(clsValue.toFixed(PRECISION_FOUR_DECIMALS)) });
       },
       { type: 'layout-shift', buffered: true },
     );
@@ -68,7 +84,7 @@ export class PerformanceHandler extends StateManager {
       (list) => {
         for (const entry of list.getEntries()) {
           if (entry.name === 'first-contentful-paint') {
-            this.sendVital({ type: 'FCP', value: entry.startTime });
+            this.sendVital({ type: 'FCP', value: Number(entry.startTime.toFixed(PRECISION_TWO_DECIMALS)) });
           }
         }
       },
@@ -82,12 +98,14 @@ export class PerformanceHandler extends StateManager {
       (list) => {
         let worst = 0;
         const entries = list.getEntries() as Array<{ startTime: number; processingEnd?: number }>;
+
         for (const entry of entries) {
           const dur = (entry.processingEnd ?? 0) - (entry.startTime ?? 0);
           worst = Math.max(worst, dur);
         }
+
         if (worst > 0) {
-          this.sendVital({ type: 'INP', value: Number(worst.toFixed(2)) });
+          this.sendVital({ type: 'INP', value: Number(worst.toFixed(PRECISION_TWO_DECIMALS)) });
         }
       },
       { type: 'event', buffered: true },
@@ -96,26 +114,20 @@ export class PerformanceHandler extends StateManager {
 
   private async initWebVitals(): Promise<void> {
     try {
-      const webVitals = (await import('web-vitals')) as unknown as {
-        onLCP: (cb: (metric: { value: number }) => void) => void;
-        onCLS: (cb: (metric: { value: number }) => void) => void;
-        onFCP: (cb: (metric: { value: number }) => void) => void;
-        onTTFB: (cb: (metric: { value: number }) => void) => void;
-        onINP: (cb: (metric: { value: number }) => void) => void;
-      };
+      const { onLCP, onCLS, onFCP, onTTFB, onINP } = await import('web-vitals');
 
       const report =
         (type: VitalSample['type']) =>
         (metric: { value: number }): void => {
-          const value = Number(metric.value.toFixed(2));
+          const value = Number(metric.value.toFixed(PRECISION_TWO_DECIMALS));
           this.sendVital({ type, value });
         };
 
-      webVitals.onLCP(report('LCP'));
-      webVitals.onCLS(report('CLS'));
-      webVitals.onFCP(report('FCP'));
-      webVitals.onTTFB(report('TTFB'));
-      webVitals.onINP(report('INP'));
+      onLCP(report('LCP'));
+      onCLS(report('CLS'));
+      onFCP(report('FCP'));
+      onTTFB(report('TTFB'));
+      onINP(report('INP'));
     } catch {
       this.observeWebVitalsFallback();
     }
@@ -124,9 +136,14 @@ export class PerformanceHandler extends StateManager {
   private reportTTFB(): void {
     try {
       const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-      if (!nav) return;
+
+      if (!nav) {
+        return;
+      }
+
       const ttfb = nav.responseStart;
-      this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(2)) });
+
+      this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
     } catch (error) {
       void error;
     }
@@ -137,10 +154,12 @@ export class PerformanceHandler extends StateManager {
       'longtask',
       (list) => {
         const entries = list.getEntries() as Array<{ duration: number }>;
+
         for (const entry of entries) {
-          const duration = Number(entry.duration.toFixed(2));
+          const duration = Number(entry.duration.toFixed(PRECISION_TWO_DECIMALS));
           const now = Date.now();
-          if (now - this.lastLongTaskSentAt >= 1000) {
+
+          if (now - this.lastLongTaskSentAt >= LONG_TASK_THROTTLE_MS) {
             this.trackWebVital('LONG_TASK', duration);
             this.lastLongTaskSentAt = now;
           }
@@ -155,11 +174,19 @@ export class PerformanceHandler extends StateManager {
     const key = `${sample.type}`;
 
     if (navId) {
-      if (!this.reportedByNav.has(navId)) this.reportedByNav.set(navId, new Set());
+      if (!this.reportedByNav.has(navId)) {
+        this.reportedByNav.set(navId, new Set());
+      }
+
       const sent = this.reportedByNav.get(navId)!;
-      if (sent.has(key)) return;
+
+      if (sent.has(key)) {
+        return;
+      }
+
       sent.add(key);
     }
+
     this.trackWebVital(sample.type, sample.value);
   }
 
@@ -173,7 +200,11 @@ export class PerformanceHandler extends StateManager {
   private getNavigationId(): string | null {
     try {
       const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-      if (!nav) return null;
+
+      if (!nav) {
+        return null;
+      }
+
       return `${Math.round(nav.startTime)}_${window.location.pathname}`;
     } catch {
       return null;
@@ -188,11 +219,13 @@ export class PerformanceHandler extends StateManager {
   ): void {
     try {
       if (typeof PerformanceObserver === 'undefined') return;
-      const supported = (PerformanceObserver as unknown as { supportedEntryTypes?: readonly string[] })
-        .supportedEntryTypes as string[] | undefined;
+      const supported = PerformanceObserver.supportedEntryTypes;
+
       if (supported && !supported.includes(type)) return;
+
       const obs = new PerformanceObserver((list, observer) => {
         cb(list, observer);
+
         if (once) {
           try {
             observer.disconnect();
@@ -201,8 +234,12 @@ export class PerformanceHandler extends StateManager {
           }
         }
       });
+
       obs.observe((options ?? { type, buffered: true }) as PerformanceObserverInit);
-      this.observers.push(obs);
+
+      if (!once) {
+        this.observers.push(obs);
+      }
     } catch (error) {
       void error;
     }

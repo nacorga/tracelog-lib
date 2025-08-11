@@ -76,7 +76,7 @@ TraceLog automatically captures:
 - **Clicks** - Button and link interactions  
 - **Scrolling** - Scroll depth and engagement
 - **Sessions** - User session start/end
-- **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB y Long Tasks
+- **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB and Long Tasks
 
 ## 🎯 Custom Events
 

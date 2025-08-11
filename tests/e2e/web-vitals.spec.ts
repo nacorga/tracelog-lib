@@ -1,7 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { EventType } from '../../src/types';
 
-const parseTracelogPayloads = (logs: string[], type: EventType): any[] => {
+type WebVitalsPayload = {
+  type: EventType;
+  web_vitals?: { type?: string; value?: number };
+};
+
+const parseTracelogPayloads = (logs: string[], type: EventType): WebVitalsPayload[] => {
   const matches = logs.filter((log) => log.includes(`[TraceLog] ${type} event:`));
   return matches.map((log) => {
     const json = log.split(`[TraceLog] ${type} event:`)[1];
@@ -10,7 +15,7 @@ const parseTracelogPayloads = (logs: string[], type: EventType): any[] => {
     } catch {
       return null;
     }
-  }).filter((p): p is Record<string, unknown> => !!p);
+  }).filter((p): p is WebVitalsPayload => !!p);
 };
 
 test.describe('Web Vitals - Test Mode', () => {
@@ -33,7 +38,7 @@ test.describe('Web Vitals - Test Mode', () => {
 
     expect(payloads.length).toBeGreaterThan(0);
 
-    const first = payloads[0] as { type: string; web_vitals?: { type?: string; value?: number } };
+    const first = payloads[0];
     expect(first.type).toBe(EventType.WEB_VITALS);
     expect(first.web_vitals?.type).toBeDefined();
   });
@@ -46,7 +51,6 @@ test.describe('Web Vitals - Test Mode', () => {
 
     const supportsLongTask = await page.evaluate(() => {
       try {
-        // @ts-ignore
         const supported = (window.PerformanceObserver && PerformanceObserver.supportedEntryTypes) || [];
         return Array.isArray(supported) && supported.includes('longtask');
       } catch {
