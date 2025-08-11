@@ -28,8 +28,8 @@ export class PerformanceHandler extends StateManager {
     for (const obs of this.observers) {
       try {
         obs.disconnect();
-      } catch (error) {
-        void error;
+      } catch {
+        // Intentionally ignore disconnect errors
       }
     }
 
@@ -144,8 +144,8 @@ export class PerformanceHandler extends StateManager {
       const ttfb = nav.responseStart;
 
       this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
-    } catch (error) {
-      void error;
+    } catch {
+      // Intentionally ignored
     }
   }
 
@@ -229,8 +229,8 @@ export class PerformanceHandler extends StateManager {
         if (once) {
           try {
             observer.disconnect();
-          } catch (error) {
-            void error;
+          } catch {
+            // Intentionally ignored
           }
         }
       });
@@ -240,8 +240,8 @@ export class PerformanceHandler extends StateManager {
       if (!once) {
         this.observers.push(obs);
       }
-    } catch (error) {
-      void error;
+    } catch {
+      // Intentionally ignored
     }
   }
 }
