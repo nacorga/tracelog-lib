@@ -32,12 +32,27 @@ export class EventManager extends StateManager {
     this.dataSender = new SenderManager(storeManager);
   }
 
-  track({ type, page_url, from_page_url, scroll_data, click_data, custom_event }: Partial<EventData>): void {
-    if (!this.samplingManager.isSampledIn()) {
+  track({
+    type,
+    page_url,
+    from_page_url,
+    scroll_data,
+    click_data,
+    custom_event,
+    web_vitals,
+  }: Partial<EventData>): void {
+    if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
       return;
     }
 
-    const isDuplicatedEvent = this.isDuplicatedEvent({ type, page_url, scroll_data, click_data, custom_event });
+    const isDuplicatedEvent = this.isDuplicatedEvent({
+      type,
+      page_url,
+      scroll_data,
+      click_data,
+      custom_event,
+      web_vitals,
+    });
 
     if (isDuplicatedEvent) {
       const now = Date.now();
@@ -87,6 +102,7 @@ export class EventManager extends StateManager {
       ...(click_data && { click_data }),
       ...(custom_event && { custom_event }),
       ...(utmParams && { utm: utmParams }),
+      ...(web_vitals && { web_vitals }),
     };
 
     if (this.get('config')?.tags?.length) {
@@ -189,6 +205,10 @@ export class EventManager extends StateManager {
         key += `_${event.custom_event.name}`;
       }
 
+      if (event.web_vitals) {
+        key += `_${event.web_vitals.type}`;
+      }
+
       if (!uniqueEvents.has(key)) {
         uniqueEvents.set(key, event);
       }
@@ -211,7 +231,14 @@ export class EventManager extends StateManager {
     this.eventsQueue = success ? [] : deduplicatedEvents;
   }
 
-  private isDuplicatedEvent({ type, page_url, scroll_data, click_data, custom_event }: Partial<EventData>): boolean {
+  private isDuplicatedEvent({
+    type,
+    page_url,
+    scroll_data,
+    click_data,
+    custom_event,
+    web_vitals,
+  }: Partial<EventData>): boolean {
     if (!this.lastEvent) {
       return false;
     }
@@ -254,6 +281,10 @@ export class EventManager extends StateManager {
 
       case EventType.CUSTOM: {
         return this.lastEvent.custom_event?.name === custom_event?.name;
+      }
+
+      case EventType.WEB_VITALS: {
+        return this.lastEvent.web_vitals?.type === web_vitals?.type;
       }
 
       default: {

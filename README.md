@@ -44,7 +44,7 @@ TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 ```javascript
 await TraceLog.init({
   id: 'your-project-id',
-  
+
   // Session timeout (default: 15 minutes)
   sessionTimeout: 900000,
   
@@ -76,6 +76,7 @@ TraceLog automatically captures:
 - **Clicks** - Button and link interactions  
 - **Scrolling** - Scroll depth and engagement
 - **Sessions** - User session start/end
+- **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB and Long Tasks
 
 ## 🎯 Custom Events
 
