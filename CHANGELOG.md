@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.0](https://github.com/nacorga/tracelog-client/compare/v0.4.3...v0.5.0) (2025-08-11)
+
+
+### Features
+
+* add web vitals sampling configuration and update event sampling logic ([42b0522](https://github.com/nacorga/tracelog-client/commit/42b05220016e5bae18dda7e15e536bfe62bec9bc))
+* web vitals tracking and performance handler implementation ([4fa4bd4](https://github.com/nacorga/tracelog-client/commit/4fa4bd40aba6b0b677a6b8af958083d3e66b74ee))
+
 ### [0.4.3](https://github.com/nacorga/tracelog-client/compare/v0.4.2...v0.4.3) (2025-08-09)
 
 ### [0.4.2](https://github.com/nacorga/tracelog-client/compare/v0.4.1...v0.4.2) (2025-08-08)
