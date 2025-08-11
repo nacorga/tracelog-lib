@@ -1,5 +1,7 @@
 import { MetadataType } from './common.types';
 
+export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
+
 export enum EventType {
   PAGE_VIEW = 'page_view',
   CLICK = 'click',
@@ -7,6 +9,7 @@ export enum EventType {
   SESSION_START = 'session_start',
   SESSION_END = 'session_end',
   CUSTOM = 'custom',
+  WEB_VITALS = 'web_vitals',
 }
 
 export enum ScrollDirection {
@@ -54,6 +57,11 @@ export interface CustomEventData {
   metadata?: Record<string, MetadataType>;
 }
 
+export interface WebVitalsData {
+  type: WebVitalType;
+  value?: number;
+}
+
 export interface UTM {
   source?: string;
   medium?: string;
@@ -79,6 +87,7 @@ export interface EventData {
   scroll_data?: ScrollData;
   click_data?: ClickData;
   custom_event?: CustomEventData;
+  web_vitals?: WebVitalsData;
   page_view?: PageViewData;
   utm?: UTM;
   tags?: string[] | { id: string; key: string }[];

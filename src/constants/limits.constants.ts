@@ -28,3 +28,7 @@ export const MAX_TEXT_LENGTH = 255; // For click tracking text content
 export const MAX_STRING_LENGTH = 1000;
 export const MAX_ARRAY_LENGTH = 100;
 export const MAX_OBJECT_DEPTH = 3;
+
+// Precision for numeric metrics
+export const PRECISION_TWO_DECIMALS = 2 as const;
+export const PRECISION_FOUR_DECIMALS = 4 as const;
