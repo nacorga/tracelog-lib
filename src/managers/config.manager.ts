@@ -62,9 +62,15 @@ export class ConfigManager {
   }
 
   private getDefaultConfig(appConfig: AppConfig): Config {
+    const defaultConfig: Config = DEFAULT_CONFIG({
+      ...appConfig,
+      qaMode: true,
+      errorSampling: 1,
+    });
+
     const configRecords: Record<string, Config> = {
-      ['demo']: DEFAULT_CONFIG({ ...appConfig, qaMode: true }),
-      ['test']: DEFAULT_CONFIG({ ...appConfig, qaMode: true }),
+      ['demo']: defaultConfig,
+      ['test']: defaultConfig,
     };
 
     return configRecords[appConfig.id] ?? DEFAULT_CONFIG(appConfig);

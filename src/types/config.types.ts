@@ -30,6 +30,12 @@ export interface ApiConfig {
    * This is useful for privacy compliance and reducing data exposure.
    */
   ipExcluded?: boolean;
+  /**
+   * Sampling rate for error events (0-1).
+   * Controls how many error and network error events are captured.
+   * @default 0.1 for production, 1.0 for QA mode
+   */
+  errorSampling?: number;
 }
 
 export interface AppConfig {

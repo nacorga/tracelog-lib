@@ -10,11 +10,18 @@ export enum EventType {
   SESSION_END = 'session_end',
   CUSTOM = 'custom',
   WEB_VITALS = 'web_vitals',
+  ERROR = 'error',
 }
 
 export enum ScrollDirection {
   UP = 'up',
   DOWN = 'down',
+}
+
+export enum ErrorType {
+  JS_ERROR = 'js_error',
+  PROMISE_REJECTION = 'promise_rejection',
+  NETWORK_ERROR = 'network_error',
 }
 
 export interface ScrollData {
@@ -62,6 +69,16 @@ export interface WebVitalsData {
   value?: number;
 }
 
+export interface ErrorData {
+  type: ErrorType;
+  message: string;
+  method?: string;
+  url?: string;
+  status?: number;
+  statusText?: string;
+  duration?: number;
+}
+
 export interface UTM {
   source?: string;
   medium?: string;
@@ -89,6 +106,7 @@ export interface EventData {
   custom_event?: CustomEventData;
   web_vitals?: WebVitalsData;
   page_view?: PageViewData;
+  error_data?: ErrorData;
   utm?: UTM;
   tags?: string[] | { id: string; key: string }[];
 }
