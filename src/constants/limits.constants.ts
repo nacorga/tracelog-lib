@@ -33,6 +33,6 @@ export const MAX_OBJECT_DEPTH = 3;
 export const PRECISION_TWO_DECIMALS = 2 as const;
 export const PRECISION_FOUR_DECIMALS = 4 as const;
 
-//Web vitals sampling
+// Web vitals sampling
 export const WEB_VITALS_SAMPLING = 0.75 as const;
 export const WEB_VITALS_LONG_TASK_SAMPLING = 0.2 as const;

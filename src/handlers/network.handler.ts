@@ -84,14 +84,14 @@ export class NetworkHandler extends StateManager {
       user?: string | null,
       password?: string | null,
     ): void {
-      const isAsync = async ?? true;
+      const asyncMode = async ?? true;
       const extendedThis = this as ExtendedXHR;
 
       extendedThis._tracelogStartTime = Date.now();
       extendedThis._tracelogMethod = method.toUpperCase();
       extendedThis._tracelogUrl = url.toString();
 
-      return handler.originalXHROpen.call(this, method, url, isAsync, user, password);
+      return handler.originalXHROpen.call(this, method, url, asyncMode, user, password);
     };
 
     XMLHttpRequest.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null): void {
