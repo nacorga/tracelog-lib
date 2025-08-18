@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### [0.5.1](https://github.com/nacorga/tracelog-client/compare/v0.5.0...v0.5.1) (2025-08-18)
+
+
+### Bug Fixes
+
+* enforce value as a required number in WebVitalsData and enhance validation in trackWebVital method ([ca9035b](https://github.com/nacorga/tracelog-client/commit/ca9035bc55a358e5e14d08667565b3def700a5de))
+* validate value type in trackWebVital method to ensure only numbers are processed ([813d159](https://github.com/nacorga/tracelog-client/commit/813d159e9417cd8f1e40682b35f957fdfe87947c))
+
 ## [0.5.0](https://github.com/nacorga/tracelog-client/compare/v0.4.3...v0.5.0) (2025-08-11)
 
 
