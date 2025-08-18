@@ -41,7 +41,7 @@ export class EventManager extends StateManager {
     custom_event,
     web_vitals,
   }: Partial<EventData>): void {
-    if (!this.samplingManager.isSampledIn()) {
+    if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
       return;
     }
 

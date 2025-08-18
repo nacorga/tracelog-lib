@@ -28,8 +28,8 @@ export class PerformanceHandler extends StateManager {
     for (const obs of this.observers) {
       try {
         obs.disconnect();
-      } catch (error) {
-        void error;
+      } catch {
+        // Intentionally ignore disconnect errors
       }
     }
 
@@ -144,8 +144,8 @@ export class PerformanceHandler extends StateManager {
       const ttfb = nav.responseStart;
 
       this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
-    } catch (error) {
-      void error;
+    } catch {
+      // Intentionally ignored
     }
   }
 
@@ -191,9 +191,16 @@ export class PerformanceHandler extends StateManager {
   }
 
   private trackWebVital(type: WebVitalType, value?: number): void {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return;
+    }
+
     this.eventManager.track({
       type: EventType.WEB_VITALS,
-      web_vitals: { type, ...(typeof value === 'number' ? { value } : {}) },
+      web_vitals: {
+        type,
+        value,
+      },
     });
   }
 
@@ -229,8 +236,8 @@ export class PerformanceHandler extends StateManager {
         if (once) {
           try {
             observer.disconnect();
-          } catch (error) {
-            void error;
+          } catch {
+            // Intentionally ignored
           }
         }
       });
@@ -240,8 +247,8 @@ export class PerformanceHandler extends StateManager {
       if (!once) {
         this.observers.push(obs);
       }
-    } catch (error) {
-      void error;
+    } catch {
+      // Intentionally ignored
     }
   }
 }
