@@ -1,0 +1,100 @@
+---
+alwaysApply: true
+---
+
+# TraceLog Client Project Context
+
+## Overview
+TraceLog is a web analytics platform that combines user behavior tracking with AI to provide deeper insights than traditional tools. This is the TypeScript client library that enables developers to integrate TraceLog tracking into their web applications.
+
+## Project Structure
+
+### Core Architecture
+- **Main Entry**: `src/public-api.ts` → exports everything from `src/api.ts`
+- **Application Core**: `src/app.ts` - Main App class that orchestrates all functionality
+- **Type System**: Comprehensive TypeScript types in `src/types/`
+
+### Key Directories
+- `src/handlers/` - Event handlers for different tracking types (clicks, scrolls, page views, performance, errors, sessions, network)
+- `src/managers/` - Core business logic managers (API, config, events, sampling, storage, state, etc.)
+- `src/listeners/` - Browser event listeners for activity, input, touch, unload, visibility
+- `src/integrations/` - Third-party integrations (currently Google Analytics)
+- `src/utils/` - Utility functions organized by domain (browser, data, logging, network, security, validations)
+- `src/constants/` - Application constants organized by domain
+
+### Event Tracking System
+The library tracks multiple event types automatically:
+- **Page Views** - Navigation between pages
+- **Clicks** - Button and link interactions with detailed metadata
+- **Scrolling** - Scroll depth and engagement tracking
+- **Sessions** - User session lifecycle management
+- **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB, Long Tasks
+- **Errors** - JavaScript errors, promise rejections, network errors
+- **Custom Events** - Developer-defined events with metadata
+
+## Configuration & Features
+
+### Key Configuration Options
+- `sessionTimeout` - Session timeout (default: 15 minutes)
+- `globalMetadata` - Data added to every event
+- `scrollContainerSelectors` - Track scrolling in specific containers
+- `sensitiveQueryParams` - Remove sensitive data from URLs
+- `samplingRate` - Control event sampling (0-1)
+- `errorSampling` - Control error event sampling (0.1 default, 1.0 in QA)
+- `integrations.googleAnalytics` - Google Analytics integration
+
+### Build System
+- **TypeScript**: Multiple build targets (ESM, CJS, Browser)
+- **Vite**: Browser build configuration
+- **Testing**: Playwright for E2E tests
+- **Quality**: ESLint, Prettier, Husky hooks
+- **Publishing**: Standard-version for releases
+
+## Code Patterns & Conventions
+
+### Manager Pattern
+Core functionality is organized into managers that handle specific concerns:
+- `ApiManager` - API endpoint management
+- `ConfigManager` - Configuration fetching and merging
+- `EventManager` - Event queuing and sending
+- `StateManager` - Application state management
+- `StorageManager` - Browser storage abstraction
+- `UserManager` - User identification
+- `SessionManager` - Session lifecycle
+- `SamplingManager` - Event sampling logic
+
+### Handler Pattern
+Event handlers follow a consistent pattern:
+- Implement `startTracking()` and `stopTracking()` methods
+- Use listeners to capture browser events
+- Transform raw events into structured `EventData`
+- Send events via `EventManager`
+
+### Type Safety
+- Comprehensive TypeScript types for all data structures
+- Event types defined in enums (`EventType`, `ErrorType`, `ScrollDirection`)
+- Validation utilities for runtime type checking
+- Sanitization for security
+
+### Error Handling
+- Robust error handling throughout the application
+- Error sampling to prevent spam
+- Network error tracking
+- Graceful degradation when tracking fails
+
+## Testing Strategy
+- **E2E Tests**: Comprehensive Playwright tests covering all event types
+- **Test Fixtures**: HTML pages for testing different scenarios
+- **Coverage**: Code coverage tracking with detailed reports
+
+## Security & Privacy
+- URL sanitization to remove sensitive query parameters
+- IP exclusion capabilities
+- Data validation and sanitization
+- HTTPS enforcement (with allowHttp option for development)
+
+## Dependencies
+- **Runtime**: Only `web-vitals` for performance tracking
+- **Development**: TypeScript, ESLint, Prettier, Playwright, Vite, and build tools
+
+This is a production-ready, well-architected web analytics library with comprehensive event tracking, strong typing, robust error handling, and extensive testing.
