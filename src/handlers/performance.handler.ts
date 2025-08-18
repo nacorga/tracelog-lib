@@ -191,7 +191,7 @@ export class PerformanceHandler extends StateManager {
   }
 
   private trackWebVital(type: WebVitalType, value?: number): void {
-    if (typeof value !== 'number') {
+    if (typeof value !== 'number' || !isFinite(value)) {
       return;
     }
 
