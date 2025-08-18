@@ -74,8 +74,10 @@ export class NetworkHandler extends StateManager {
   }
 
   private interceptXHR(): void {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const handler = this;
+    const trackNetworkError = this.trackNetworkError.bind(this);
+    const normalizeUrlForTracking = this.normalizeUrlForTracking.bind(this);
+    const originalXHROpen = this.originalXHROpen;
+    const originalXHRSend = this.originalXHRSend;
 
     XMLHttpRequest.prototype.open = function (
       method: string,
@@ -91,7 +93,7 @@ export class NetworkHandler extends StateManager {
       extendedThis._tracelogMethod = method.toUpperCase();
       extendedThis._tracelogUrl = url.toString();
 
-      return handler.originalXHROpen.call(this, method, url, asyncMode, user, password);
+      return originalXHROpen.call(this, method, url, asyncMode, user, password);
     };
 
     XMLHttpRequest.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null): void {
@@ -102,14 +104,14 @@ export class NetworkHandler extends StateManager {
 
       const originalOnReadyStateChange = xhr.onreadystatechange;
 
-      xhr.onreadystatechange = function (ev: Event): void {
+      xhr.onreadystatechange = (ev: Event): void => {
         if (xhr.readyState === XMLHttpRequest.DONE) {
           const duration = Date.now() - startTime;
 
           if (xhr.status === 0 || xhr.status >= 400) {
-            handler.trackNetworkError(
+            trackNetworkError(
               method,
-              handler.normalizeUrlForTracking(url),
+              normalizeUrlForTracking(url),
               xhr.status,
               xhr.statusText || 'Request Failed',
               duration,
@@ -122,7 +124,7 @@ export class NetworkHandler extends StateManager {
         }
       };
 
-      return handler.originalXHRSend.call(this, body);
+      return originalXHRSend.call(this, body);
     };
   }
 
