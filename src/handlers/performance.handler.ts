@@ -191,9 +191,16 @@ export class PerformanceHandler extends StateManager {
   }
 
   private trackWebVital(type: WebVitalType, value?: number): void {
+    if (typeof value !== 'number') {
+      return;
+    }
+
     this.eventManager.track({
       type: EventType.WEB_VITALS,
-      web_vitals: { type, ...(typeof value === 'number' ? { value } : {}) },
+      web_vitals: {
+        type,
+        value,
+      },
     });
   }
 
