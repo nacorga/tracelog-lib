@@ -66,7 +66,7 @@ export interface CustomEventData {
 
 export interface WebVitalsData {
   type: WebVitalType;
-  value?: number;
+  value: number;
 }
 
 export interface ErrorData {
