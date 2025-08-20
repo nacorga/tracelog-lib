@@ -55,6 +55,30 @@
             data-tl-name="">
             Empty Name
         </button>
+
+        <button
+            id="trigger-js-error-btn"
+            data-testid="trigger-js-error-btn">
+            Trigger JS Error
+        </button>
+
+        <button
+            id="trigger-promise-rejection-btn"
+            data-testid="trigger-promise-rejection-btn">
+            Trigger Promise Rejection
+        </button>
+
+        <button
+            id="trigger-network-error-btn"
+            data-testid="trigger-network-error-btn">
+            Trigger Network Error
+        </button>
+
+        <button
+            id="trigger-xhr-error-btn"
+            data-testid="trigger-xhr-error-btn">
+            Trigger XHR Error
+        </button>
     </div>
 
     <script type="module">
@@ -73,6 +97,27 @@
                     } catch (error) {
                         console.error('Error sending custom event:', error);
                     }
+                });
+
+                document.getElementById('trigger-js-error-btn')?.addEventListener('click', () => {
+                    // @ts-ignore - Intentionally accessing undefined property
+                    window.nonExistentObject.someProperty;
+                });
+
+                document.getElementById('trigger-promise-rejection-btn')?.addEventListener('click', () => {
+                    Promise.reject(new Error('Test promise rejection from button'));
+                });
+
+                document.getElementById('trigger-network-error-btn')?.addEventListener('click', () => {
+                    fetch('/button-triggered-error-endpoint').catch(() => {
+                        console.log('Network error triggered');
+                    });
+                });
+
+                document.getElementById('trigger-xhr-error-btn')?.addEventListener('click', () => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', '/button-triggered-xhr-error');
+                    xhr.send();
                 });
             } catch (error) {
                 console.error('Error initializing TraceLog:', error);

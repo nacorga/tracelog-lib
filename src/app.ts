@@ -15,6 +15,8 @@ import { getDeviceType, normalizeUrl } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS } from './constants';
 import { PerformanceHandler } from './handlers/performance.handler';
+import { ErrorHandler } from './handlers/error.handler';
+import { NetworkHandler } from './handlers/network.handler';
 
 export class App extends StateManager {
   private isInitialized = false;
@@ -26,6 +28,8 @@ export class App extends StateManager {
   private clickHandler!: ClickHandler;
   private scrollHandler!: ScrollHandler;
   private performanceHandler!: PerformanceHandler;
+  private errorHandler!: ErrorHandler;
+  private networkHandler!: NetworkHandler;
   private suppressNextScrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   async init(appConfig: AppConfig): Promise<void> {
@@ -97,6 +101,14 @@ export class App extends StateManager {
       this.performanceHandler.stopTracking();
     }
 
+    if (this.errorHandler) {
+      this.errorHandler.stopTracking();
+    }
+
+    if (this.networkHandler) {
+      this.networkHandler.stopTracking();
+    }
+
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
@@ -166,6 +178,8 @@ export class App extends StateManager {
     this.initClickHandler();
     this.initScrollHandler();
     await this.initPerformanceHandler();
+    this.initErrorHandler();
+    this.initNetworkHandler();
   }
 
   private initStorage(): void {
@@ -213,5 +227,15 @@ export class App extends StateManager {
   private async initPerformanceHandler(): Promise<void> {
     this.performanceHandler = new PerformanceHandler(this.eventManager);
     await this.performanceHandler.startTracking();
+  }
+
+  private initErrorHandler(): void {
+    this.errorHandler = new ErrorHandler(this.eventManager);
+    this.errorHandler.startTracking();
+  }
+
+  private initNetworkHandler(): void {
+    this.networkHandler = new NetworkHandler(this.eventManager);
+    this.networkHandler.startTracking();
   }
 }
