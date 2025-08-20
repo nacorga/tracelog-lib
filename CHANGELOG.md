@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.0](https://github.com/nacorga/tracelog-client/compare/v0.5.1...v0.6.0) (2025-08-20)
+
+
+### Features
+
+* implement error and network handling with sampling configuration ([f2b92e0](https://github.com/nacorga/tracelog-client/commit/f2b92e0c0a1c72503d270641d559659114c3ee80))
+
+
+### Bug Fixes
+
+* improve variable naming for clarity and enhance value validation in trackWebVital method ([2017c62](https://github.com/nacorga/tracelog-client/commit/2017c62f3f63fe07b95bb45ef44474c1cf373ccd))
+
 ### [0.5.1](https://github.com/nacorga/tracelog-client/compare/v0.5.0...v0.5.1) (2025-08-18)
 
 
