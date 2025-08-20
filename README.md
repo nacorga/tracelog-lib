@@ -45,7 +45,7 @@ TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
 await TraceLog.init({
   id: 'your-project-id',
 
-  // Session timeout (default: 15 minutes)
+  // Session timeout in ms (default: 15 minutes)
   sessionTimeout: 900000,
   
   // Data added to every event
@@ -59,6 +59,9 @@ await TraceLog.init({
   
   // Remove sensitive data from URLs
   sensitiveQueryParams: ['token', 'password'],
+
+  // Sampling rate for how many error events are captured (0-1)
+  errorSampling: 0.6;
   
   // Third-party integration
   integrations: {
