@@ -61,7 +61,7 @@ await TraceLog.init({
   sensitiveQueryParams: ['token', 'password'],
 
   // Sampling rate for how many error events are captured (0-1)
-  errorSampling: 0.6;
+  errorSampling: 0.6,
   
   // Third-party integration
   integrations: {
