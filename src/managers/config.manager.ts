@@ -36,7 +36,9 @@ export class ConfigManager {
 
       const safeApiConfig = sanitizeApiConfig(rawData);
       const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
-      const finalConfig: Config = { ...apiConfig, ...appConfig };
+      const mergedConfig: Config = { ...apiConfig, ...appConfig };
+      const errorSampling = mergedConfig.qaMode ? 1 : (mergedConfig.errorSampling ?? 0.1);
+      const finalConfig: Config = { ...mergedConfig, errorSampling };
 
       return finalConfig;
     } catch (error) {

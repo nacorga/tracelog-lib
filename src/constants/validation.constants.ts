@@ -22,4 +22,5 @@ export const VALIDATION_MESSAGES = {
   INVALID_SAMPLING_RATE: `Sampling rate must be between ${MIN_SAMPLING_RATE} and ${MAX_SAMPLING_RATE}`,
   INVALID_GOOGLE_ANALYTICS_ID: 'Google Analytics measurement ID is required when integration is enabled',
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
+  INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
 } as const;

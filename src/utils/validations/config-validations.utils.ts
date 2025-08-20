@@ -46,6 +46,12 @@ export const validateAppConfig = (config: AppConfig): void => {
       }
     }
   }
+
+  if (config.errorSampling !== undefined) {
+    if (typeof config.errorSampling !== 'number' || config.errorSampling < 0 || config.errorSampling > 1) {
+      throw new Error(VALIDATION_MESSAGES.INVALID_ERROR_SAMPLING_RATE);
+    }
+  }
 };
 
 /**
@@ -240,11 +246,6 @@ export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
       tags: response['tags'] === undefined || Array.isArray(response['tags']),
       excludedUrlPaths: response['excludedUrlPaths'] === undefined || Array.isArray(response['excludedUrlPaths']),
       ipExcluded: response['ipExcluded'] === undefined || typeof response['ipExcluded'] === 'boolean',
-      errorSampling:
-        response['errorSampling'] === undefined ||
-        (typeof response['errorSampling'] === 'number' &&
-          response['errorSampling'] >= 0 &&
-          response['errorSampling'] <= 1),
     };
 
     return Object.values(result).every(Boolean);
