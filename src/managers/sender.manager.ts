@@ -5,7 +5,7 @@ import {
   RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
 } from '../constants';
-import { PersistedQueueData, Queue } from '../types';
+import { PersistedQueueData, BaseEventsQueueDto } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -26,7 +26,7 @@ export class SenderManager extends StateManager {
     this.recoverPersistedEvents();
   }
 
-  sendEventsQueue(body: Queue): boolean {
+  sendEventsQueue(body: BaseEventsQueueDto): boolean {
     const isQAMode = this.get('config')?.qaMode;
 
     if (isQAMode) {
@@ -88,7 +88,7 @@ export class SenderManager extends StateManager {
     return Date.now() - this.lastSendAttempt >= RATE_LIMIT_INTERVAL;
   }
 
-  private sendQueue(body: Queue): boolean {
+  private sendQueue(body: BaseEventsQueueDto): boolean {
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
 
     if (typeof navigator.sendBeacon !== 'function') {
@@ -116,7 +116,7 @@ export class SenderManager extends StateManager {
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
 
-  private createRecoveryBody(data: PersistedQueueData): Queue {
+  private createRecoveryBody(data: PersistedQueueData): BaseEventsQueueDto {
     return {
       user_id: data.userId,
       session_id: data.sessionId,
@@ -126,7 +126,7 @@ export class SenderManager extends StateManager {
     };
   }
 
-  private logQueue(queue: Queue): void {
+  private logQueue(queue: BaseEventsQueueDto): void {
     const events = queue.events;
     const queueStructure = {
       user_id: queue.user_id,
@@ -141,12 +141,12 @@ export class SenderManager extends StateManager {
     log('info', `Queue structure: ${JSON.stringify(queueStructure)}`);
   }
 
-  private handleSendFailure(body: Queue): void {
+  private handleSendFailure(body: BaseEventsQueueDto): void {
     this.persistFailedEvents(body);
     this.scheduleRetry(body);
   }
 
-  private persistFailedEvents(body: Queue): void {
+  private persistFailedEvents(body: BaseEventsQueueDto): void {
     try {
       const persistedData: PersistedQueueData = {
         userId: body.user_id,
@@ -172,7 +172,7 @@ export class SenderManager extends StateManager {
     this.clearRetryTimeout();
   }
 
-  private scheduleRetry(body: Queue): void {
+  private scheduleRetry(body: BaseEventsQueueDto): void {
     if (this.retryTimeoutId !== null) {
       return;
     }

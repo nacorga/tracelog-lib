@@ -1,4 +1,4 @@
-import { EventType } from '../types';
+import { EventType, PageViewData } from '../types';
 import { normalizeUrl } from '../utils';
 import { StateManager } from '../managers/state.manager';
 import { EventManager } from '../managers/event.manager';
@@ -69,6 +69,7 @@ export class PageViewHandler extends StateManager {
         type: EventType.PAGE_VIEW,
         page_url: this.get('pageUrl'),
         from_page_url: fromUrl,
+        page_view: this.extractPageViewData(),
       });
 
       this.onTrack();
@@ -79,8 +80,21 @@ export class PageViewHandler extends StateManager {
     this.eventManager.track({
       type: EventType.PAGE_VIEW,
       page_url: this.get('pageUrl'),
+      page_view: this.extractPageViewData(),
     });
 
     this.onTrack();
+  }
+
+  private extractPageViewData(): PageViewData {
+    const location = window.location;
+
+    return {
+      referrer: document.referrer || undefined,
+      title: document.title || undefined,
+      pathname: location.pathname || undefined,
+      search: location.search || undefined,
+      hash: location.hash || undefined,
+    };
   }
 }
