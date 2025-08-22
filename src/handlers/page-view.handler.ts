@@ -69,7 +69,7 @@ export class PageViewHandler extends StateManager {
         type: EventType.PAGE_VIEW,
         page_url: this.get('pageUrl'),
         from_page_url: fromUrl,
-        page_view: this.extractPageViewData(),
+        ...(this.extractPageViewData() && { page_view: this.extractPageViewData() }),
       });
 
       this.onTrack();
@@ -80,21 +80,23 @@ export class PageViewHandler extends StateManager {
     this.eventManager.track({
       type: EventType.PAGE_VIEW,
       page_url: this.get('pageUrl'),
-      page_view: this.extractPageViewData(),
+      ...(this.extractPageViewData() && { page_view: this.extractPageViewData() }),
     });
 
     this.onTrack();
   }
 
-  private extractPageViewData(): PageViewData {
+  private extractPageViewData(): PageViewData | undefined {
     const location = window.location;
 
-    return {
-      referrer: document.referrer || undefined,
-      title: document.title || undefined,
-      pathname: location.pathname || undefined,
-      search: location.search || undefined,
-      hash: location.hash || undefined,
+    const data: PageViewData = {
+      ...(document.referrer && { referrer: document.referrer }),
+      ...(document.title && { title: document.title }),
+      ...(location.pathname && { pathname: location.pathname }),
+      ...(location.search && { search: location.search }),
+      ...(location.hash && { hash: location.hash }),
     };
+
+    return Object.values(data).some((value) => !!value) ? data : undefined;
   }
 }
