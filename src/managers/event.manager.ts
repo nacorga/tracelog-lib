@@ -4,7 +4,7 @@ import {
   MAX_EVENTS_QUEUE_LENGTH,
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants';
-import { Queue, CustomEventData, EventData, EventType } from '../types';
+import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
 import { getUTMParameters, isUrlPathExcluded, log } from '../utils';
 import { SenderManager } from './sender.manager';
 import { SamplingManager } from './sampling.manager';
@@ -218,7 +218,7 @@ export class EventManager extends StateManager {
 
     deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
 
-    const body: Queue = {
+    const body: BaseEventsQueueDto = {
       user_id: this.get('userId'),
       session_id: this.get('sessionId') as string,
       device: this.get('device'),

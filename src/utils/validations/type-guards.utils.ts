@@ -1,4 +1,4 @@
-import { EventData, EventType, ScrollDirection, MetadataType, Queue } from '../../types';
+import { EventData, EventType, ScrollDirection, MetadataType, BaseEventsQueueDto } from '../../types';
 
 /**
  * Checks if an object contains only primitive fields (string, number, boolean, or string arrays)
@@ -156,7 +156,7 @@ export const isTracelogEvent = (value: unknown): value is EventData => {
  * @param value - Value to check
  * @returns True if the value is a valid TraceLog queue
  */
-export const isTracelogQueue = (value: unknown): value is Queue => {
+export const isTracelogQueue = (value: unknown): value is BaseEventsQueueDto => {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
