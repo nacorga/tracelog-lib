@@ -84,12 +84,7 @@ export class SessionHandler extends StateManager {
   stopTracking(): void {
     if (this.sessionManager) {
       if (this.get('sessionId')) {
-        const result = this.sessionManager.endSessionManagedSync('manual_stop');
-
-        if (this.get('config')?.qaMode) {
-          log('info', `Manual stop session end result: ${result}`);
-        }
-
+        this.sessionManager.endSessionManagedSync('manual_stop');
         this.clearPersistedSession();
         this.stopHeartbeat();
       }

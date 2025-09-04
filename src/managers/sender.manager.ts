@@ -6,7 +6,7 @@ import {
   EVENT_EXPIRY_HOURS,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto } from '../types';
-import { log, logUnknownError } from '../utils';
+import { log, logUnknown } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -57,7 +57,7 @@ export class SenderManager extends StateManager {
         this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
-      logUnknownError('Failed to recover persisted events', error);
+      logUnknown('error', 'Failed to recover persisted events', error);
     }
   }
 
@@ -79,7 +79,7 @@ export class SenderManager extends StateManager {
 
       return response.ok;
     } catch (error) {
-      logUnknownError('Failed to send events async', error);
+      logUnknown('error', 'Failed to send events async', error);
 
       return false;
     }
@@ -108,14 +108,15 @@ export class SenderManager extends StateManager {
   private sendSyncXHR(url: string, payload: string): boolean {
     try {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', url, false); // Synchronous
+
+      xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.timeout = 2000; // 2 second timeout
+      xhr.timeout = 2000;
       xhr.send(payload);
 
       return xhr.status >= 200 && xhr.status < 300;
     } catch (error) {
-      logUnknownError('Sync XHR failed', error);
+      logUnknown('error', 'Sync XHR failed', error);
 
       return false;
     }
@@ -123,6 +124,7 @@ export class SenderManager extends StateManager {
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
     const baseUrl = this.get('apiUrl') ?? 'https://api.tracelog.io';
+
     return {
       url: `${baseUrl}/events`,
       payload: JSON.stringify(body),
@@ -184,7 +186,7 @@ export class SenderManager extends StateManager {
 
       this.storeManager.setItem(this.queueStorageKey, JSON.stringify(persistedData));
     } catch (error) {
-      logUnknownError('Failed to persist events', error);
+      logUnknown('error', 'Failed to persist events', error);
     }
   }
 
@@ -213,6 +215,7 @@ export class SenderManager extends StateManager {
   private async executeSend(body: BaseEventsQueueDto, sendFn: () => Promise<boolean>): Promise<boolean> {
     if (this.shouldSkipSend()) {
       this.logQueue(body);
+
       return true;
     }
 
@@ -235,6 +238,7 @@ export class SenderManager extends StateManager {
       return success;
     } catch {
       this.handleSendFailure(body);
+
       return false;
     }
   }
@@ -242,6 +246,7 @@ export class SenderManager extends StateManager {
   private executeSendSync(body: BaseEventsQueueDto, sendFn: () => boolean): boolean {
     if (this.shouldSkipSend()) {
       this.logQueue(body);
+
       return true;
     }
 
@@ -264,6 +269,7 @@ export class SenderManager extends StateManager {
       return success;
     } catch {
       this.handleSendFailure(body);
+
       return false;
     }
   }
@@ -272,6 +278,7 @@ export class SenderManager extends StateManager {
     const config = this.get('config');
     const isQAMode = config?.qaMode ?? false;
     const isTestMode = ['demo', 'test'].includes(config?.id ?? '');
+
     return isQAMode || isTestMode;
   }
 

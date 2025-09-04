@@ -24,7 +24,13 @@ export const log = (type: LogType, message: string): void => {
   }
 };
 
-export const logUnknownError = (message: string, error: unknown): void => {
+/**
+ * Logs an unknown message
+ * @param type - The type of log (info, warning, error)
+ * @param message - The message to log
+ * @param error - The error to log
+ */
+export const logUnknown = (type: LogType, message: string, error: unknown): void => {
   let errorMsg: string;
 
   try {
@@ -33,5 +39,5 @@ export const logUnknownError = (message: string, error: unknown): void => {
     errorMsg = 'Unknown error';
   }
 
-  log('error', `${message}: ${errorMsg}`);
+  log(type, `${message}: ${errorMsg}`);
 };

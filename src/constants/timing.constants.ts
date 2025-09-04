@@ -22,3 +22,6 @@ export const EVENT_EXPIRY_HOURS = 24;
 
 // Performance metrics
 export const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;
+
+// Session end coordination
+export const SESSION_END_PRIORITY_DELAY_MS = 100;

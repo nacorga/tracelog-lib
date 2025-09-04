@@ -1,7 +1,7 @@
 import { App } from './app';
 import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
-import { logUnknownError } from './utils';
+import { logUnknown } from './utils';
 import { validateAndNormalizeConfig } from './utils/validations';
 
 export * as Types from './app.types';
@@ -42,7 +42,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
   } catch (error) {
     app = null;
 
-    logUnknownError('Initialization failed', error);
+    logUnknown('error', 'Initialization failed', error);
   } finally {
     isInitializing = false;
   }
@@ -69,7 +69,7 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
 
     app.sendCustomEvent(name, metadata);
   } catch (error) {
-    logUnknownError('Event tracking failed', error);
+    logUnknown('error', 'Event tracking failed', error);
 
     if (error instanceof Error && error.message === 'App not initialized') {
       throw error;
@@ -92,6 +92,6 @@ export const destroy = (): void => {
     app = null;
     isInitializing = false;
   } catch (error) {
-    logUnknownError('Cleanup failed', error);
+    logUnknown('error', 'Cleanup failed', error);
   }
 };

@@ -40,7 +40,26 @@ export interface AppConfig {
   /**
    * Session timeout in milliseconds. After this period of inactivity,
    * a new session will be started for subsequent events.
+   *
+   * **Timeout Guidelines:**
+   * - **15 minutes (default)**: Recommended for most applications, aligns with security best practices
+   * - **30 minutes**: Standard for content-heavy sites (matches Google Analytics default)
+   * - **45-60 minutes**: Consider for sites with long-form content, videos, or documentation
+   * - **5-10 minutes**: Use for security-sensitive applications requiring frequent re-authentication
+   *
+   * **Impact on Analytics:**
+   * - Shorter timeouts = Higher session count, higher bounce rate, potentially lower conversion rates
+   * - Longer timeouts = Lower session count, more accurate user journey tracking, better conversion attribution
+   *
+   * **When to Adjust:**
+   * - Match your application's auto-logout timeout if applicable
+   * - Increase for content where users frequently pause (tutorials, long articles, videos)
+   * - Decrease for applications with sensitive data or frequent security requirements
+   * - Monitor bounce rates and conversion funnels when changing this value
+   *
    * @default 900000 (15 minutes)
+   * @min 30000 (30 seconds)
+   * @max 86400000 (24 hours)
    */
   sessionTimeout?: number;
   /**
