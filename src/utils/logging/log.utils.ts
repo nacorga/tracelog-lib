@@ -23,3 +23,15 @@ export const log = (type: LogType, message: string): void => {
     console.error(buildMessage(message));
   }
 };
+
+export const logUnknownError = (message: string, error: unknown): void => {
+  let errorMsg: string;
+
+  try {
+    errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+  } catch {
+    errorMsg = 'Unknown error';
+  }
+
+  log('error', `${message}: ${errorMsg}`);
+};

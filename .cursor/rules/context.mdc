@@ -15,8 +15,8 @@ TraceLog is a web analytics platform that combines user behavior tracking with A
 - **Type System**: Comprehensive TypeScript types in `src/types/`
 
 ### Key Directories
-- `src/handlers/` - Event handlers for different tracking types (clicks, scrolls, page views, performance, errors, sessions, network)
-- `src/managers/` - Core business logic managers (API, config, events, sampling, storage, state, etc.)
+- `src/handlers/` - Event handlers with multi-fallback page unload support (clicks, scrolls, page views, performance, errors, sessions, network)
+- `src/managers/` - Core business logic managers with centralized session management and progressive sending (API, config, events, sampling, storage, state, etc.)
 - `src/listeners/` - Browser event listeners for activity, input, touch, unload, visibility
 - `src/integrations/` - Third-party integrations (currently Google Analytics)
 - `src/utils/` - Utility functions organized by domain (browser, data, logging, network, security, validations)
@@ -56,19 +56,20 @@ The library tracks multiple event types automatically:
 Core functionality is organized into managers that handle specific concerns:
 - `ApiManager` - API endpoint management
 - `ConfigManager` - Configuration fetching and merging
-- `EventManager` - Event queuing and sending
+- `EventManager` - Event queuing, sending, and immediate flush capabilities
 - `StateManager` - Application state management
 - `StorageManager` - Browser storage abstraction
 - `UserManager` - User identification
 - `SessionManager` - Session lifecycle
 - `SamplingManager` - Event sampling logic
+- `SenderManager` - Progressive data transmission (sendBeacon → syncXHR → fetch)
 
 ### Handler Pattern
 Event handlers follow a consistent pattern:
 - Implement `startTracking()` and `stopTracking()` methods
-- Use listeners to capture browser events
+- Use listeners to capture browser events with multi-fallback support for critical events
 - Transform raw events into structured `EventData`
-- Send events via `EventManager`
+- Send events via `EventManager` with automatic deduplication
 
 ### Type Safety
 - Comprehensive TypeScript types for all data structures
@@ -96,5 +97,3 @@ Event handlers follow a consistent pattern:
 ## Dependencies
 - **Runtime**: Only `web-vitals` for performance tracking
 - **Development**: TypeScript, ESLint, Prettier, Playwright, Vite, and build tools
-
-This is a production-ready, well-architected web analytics library with comprehensive event tracking, strong typing, robust error handling, and extensive testing.

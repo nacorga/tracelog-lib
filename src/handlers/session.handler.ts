@@ -1,9 +1,11 @@
 import { SESSION_HEARTBEAT_INTERVAL_MS, SESSION_STORAGE_KEY, DEFAULT_SESSION_TIMEOUT_MS } from '../constants';
 import { EventType } from '../types';
+import { SessionEndConfig } from '../types/session.types';
 import { EventManager } from '../managers/event.manager';
 import { SessionManager } from '../managers/session.manager';
 import { StateManager } from '../managers/state.manager';
 import { StorageManager } from '../managers/storage.manager';
+import { log } from '../utils';
 
 interface StoredSession {
   sessionId: string;
@@ -51,20 +53,56 @@ export class SessionHandler extends StateManager {
         return;
       }
 
-      this.sessionManager!.endSession();
-      this.trackSession(EventType.SESSION_END);
-      this.clearPersistedSession();
-      this.stopHeartbeat();
-      this.set('sessionId', null);
+      this.sessionManager!.endSessionManaged('inactivity').then((result) => {
+        if (this.get('config')?.qaMode) {
+          log('info', `Inactivity session end result: ${result}`);
+        }
+
+        this.clearPersistedSession();
+        this.stopHeartbeat();
+      });
     };
 
-    this.sessionManager = new SessionManager(onActivity, onInactivity);
+    const sessionEndConfig: Partial<SessionEndConfig> = {
+      enablePageUnloadHandlers: true,
+      debugMode: this.get('config')?.qaMode ?? false,
+      syncTimeoutMs: 2000,
+      maxRetries: 3,
+    };
+
+    this.sessionManager = new SessionManager(
+      onActivity,
+      onInactivity,
+      this.eventManager,
+      this.storageManager,
+      sessionEndConfig,
+    );
+
     this.startInitialSession();
+  }
+
+  stopTracking(): void {
+    if (this.sessionManager) {
+      if (this.get('sessionId')) {
+        const result = this.sessionManager.endSessionManagedSync('manual_stop');
+
+        if (this.get('config')?.qaMode) {
+          log('info', `Manual stop session end result: ${result}`);
+        }
+
+        this.clearPersistedSession();
+        this.stopHeartbeat();
+      }
+
+      this.sessionManager.destroy();
+      this.sessionManager = null;
+    }
   }
 
   private trackSession(eventType: EventType.SESSION_START | EventType.SESSION_END): void {
     this.eventManager.track({
       type: eventType,
+      ...(eventType === EventType.SESSION_END && { session_end_reason: 'orphaned_cleanup' }),
     });
   }
 
@@ -79,21 +117,6 @@ export class SessionHandler extends StateManager {
     this.trackSession(EventType.SESSION_START);
     this.persistSession(newSessionId);
     this.startHeartbeat();
-  }
-
-  stopTracking(): void {
-    if (this.sessionManager) {
-      if (this.get('sessionId')) {
-        this.sessionManager.endSession();
-        this.trackSession(EventType.SESSION_END);
-        this.clearPersistedSession();
-        this.stopHeartbeat();
-        this.set('sessionId', null);
-      }
-
-      this.sessionManager.destroy();
-      this.sessionManager = null;
-    }
   }
 
   private checkOrphanedSessions(): void {
@@ -140,6 +163,7 @@ export class SessionHandler extends StateManager {
         try {
           const session: StoredSession = JSON.parse(storedSessionData);
           session.lastHeartbeat = Date.now();
+
           this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(session));
         } catch {
           this.clearPersistedSession();

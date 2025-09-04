@@ -1,5 +1,5 @@
 import { MetadataType } from '../types';
-import { log } from '../utils';
+import { log, logUnknownError } from '../utils';
 import { StateManager } from '../managers/state.manager';
 
 declare global {
@@ -46,7 +46,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
       this.configureGtag(measurementId, userId);
       this.isInitialized = true;
     } catch (error) {
-      log('warning', `Google Analytics initialization failed: ${error instanceof Error ? error.message : error}`);
+      logUnknownError('Google Analytics initialization failed', error);
     }
   }
 
@@ -64,10 +64,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
     try {
       window.gtag('event', eventName, metadata);
     } catch (error) {
-      log(
-        'warning',
-        `Error tracking Google Analytics event (${eventName}): ${error instanceof Error ? error.message : error}`,
-      );
+      logUnknownError(`Error tracking Google Analytics event (${eventName})`, error);
     }
   }
 

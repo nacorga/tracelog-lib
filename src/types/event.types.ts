@@ -1,4 +1,5 @@
 import { MetadataType } from './common.types';
+import { SessionEndReason } from './session.types';
 
 export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
 
@@ -106,6 +107,7 @@ export interface EventData {
   custom_event?: CustomEventData;
   web_vitals?: WebVitalsData;
   page_view?: PageViewData;
+  session_end_reason?: SessionEndReason;
   error_data?: ErrorData;
   utm?: UTM;
   tags?: string[] | { id: string; key: string }[];

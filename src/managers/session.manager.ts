@@ -4,8 +4,9 @@ import {
   DEFAULT_THROTTLE_DELAY_MS,
   DEFAULT_VISIBILITY_TIMEOUT_MS,
 } from '../constants';
-import { DeviceType } from '../types';
-import { generateUUID, getDeviceType } from '../utils';
+import { DeviceType, EventType } from '../types';
+import { generateUUID, getDeviceType, log, logUnknownError } from '../utils';
+import { SessionEndReason, SessionEndConfig, SessionEndResult, SessionEndStats } from '../types/session.types';
 import {
   ActivityListenerManager,
   EventListenerManager,
@@ -16,6 +17,8 @@ import {
   VisibilityListenerManager,
 } from '../listeners';
 import { StateManager } from './state.manager';
+import { EventManager } from './event.manager';
+import { StorageManager } from './storage.manager';
 
 interface SessionConfig {
   timeout: number;
@@ -33,10 +36,12 @@ interface DeviceCapabilities {
 
 export class SessionManager extends StateManager {
   private readonly config: SessionConfig;
+  private readonly eventManager: EventManager | null = null;
+  private readonly storageManager: StorageManager | null = null;
+  private readonly listenerManagers: EventListenerManager[] = [];
+  private readonly deviceCapabilities: DeviceCapabilities;
   private readonly onActivity: () => void;
   private readonly onInactivity: () => void;
-  private readonly deviceCapabilities: DeviceCapabilities;
-  private readonly listenerManagers: EventListenerManager[] = [];
 
   private isSessionActive = false;
   private lastActivityTime = 0;
@@ -44,7 +49,31 @@ export class SessionManager extends StateManager {
   private sessionStartTime = 0;
   private throttleTimeout: number | null = null;
 
-  constructor(onActivity: () => void, onInactivity: () => void) {
+  // Session End Management
+  private pendingSessionEnd = false;
+  private sessionEndPromise: Promise<SessionEndResult> | null = null;
+  private cleanupHandlers: (() => void)[] = [];
+  private readonly sessionEndConfig: SessionEndConfig;
+  private readonly sessionEndStats: SessionEndStats = {
+    totalSessionEnds: 0,
+    successfulEnds: 0,
+    failedEnds: 0,
+    duplicatePrevented: 0,
+    reasonCounts: {
+      inactivity: 0,
+      page_unload: 0,
+      manual_stop: 0,
+      orphaned_cleanup: 0,
+    },
+  };
+
+  constructor(
+    onActivity: () => void,
+    onInactivity: () => void,
+    eventManager?: EventManager,
+    storageManager?: StorageManager,
+    sessionEndConfig?: Partial<SessionEndConfig>,
+  ) {
     super();
 
     this.config = {
@@ -54,12 +83,26 @@ export class SessionManager extends StateManager {
       timeout: this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS,
     };
 
+    this.sessionEndConfig = {
+      enablePageUnloadHandlers: true,
+      syncTimeoutMs: 1000,
+      maxRetries: 2,
+      debugMode: false,
+      ...sessionEndConfig,
+    };
+
     this.onActivity = onActivity;
     this.onInactivity = onInactivity;
+    this.eventManager = eventManager ?? null;
+    this.storageManager = storageManager ?? null;
     this.deviceCapabilities = this.detectDeviceCapabilities();
 
     this.initializeListenerManagers();
     this.setupAllListeners();
+
+    if (this.sessionEndConfig.enablePageUnloadHandlers) {
+      this.setupPageUnloadHandlers();
+    }
   }
 
   startSession(): string {
@@ -93,6 +136,10 @@ export class SessionManager extends StateManager {
     this.clearTimers();
     this.cleanupAllListeners();
     this.resetState();
+    this.cleanupHandlers.forEach((cleanup) => cleanup());
+    this.cleanupHandlers = [];
+    this.pendingSessionEnd = false;
+    this.sessionEndPromise = null;
   }
 
   private detectDeviceCapabilities(): DeviceCapabilities {
@@ -155,7 +202,6 @@ export class SessionManager extends StateManager {
   private readonly handleActivity = (): void => {
     const now = Date.now();
 
-    // Throttling: avoid processing very frequent activity
     if (now - this.lastActivityTime < this.config.throttleDelay) {
       return;
     }
@@ -165,7 +211,6 @@ export class SessionManager extends StateManager {
     if (this.isSessionActive) {
       this.resetInactivityTimer();
     } else {
-      // Use throttling for onActivity callback
       if (this.throttleTimeout) {
         clearTimeout(this.throttleTimeout);
       }
@@ -183,15 +228,14 @@ export class SessionManager extends StateManager {
 
   private readonly handleVisibilityChange = (): void => {
     if (document.hidden) {
-      // Hidden page: reduce inactivity timeout
       if (this.isSessionActive) {
         if (this.inactivityTimer) {
           clearTimeout(this.inactivityTimer);
         }
+
         this.inactivityTimer = window.setTimeout(this.handleInactivity, this.config.visibilityTimeout);
       }
     } else {
-      // Visible page: treat as activity
       this.handleActivity();
     }
   };
@@ -203,4 +247,227 @@ export class SessionManager extends StateManager {
 
     this.inactivityTimer = window.setTimeout(this.handleInactivity, this.config.timeout);
   };
+
+  async endSessionManaged(reason: SessionEndReason): Promise<SessionEndResult> {
+    this.sessionEndStats.totalSessionEnds++;
+    this.sessionEndStats.reasonCounts[reason]++;
+
+    if (this.pendingSessionEnd) {
+      this.sessionEndStats.duplicatePrevented++;
+
+      if (this.sessionEndConfig.debugMode) {
+        log('info', `Session end already pending, waiting for completion. Reason: ${reason}`);
+      }
+
+      if (this.sessionEndPromise) {
+        return await this.sessionEndPromise;
+      }
+
+      return {
+        success: false,
+        reason,
+        timestamp: Date.now(),
+        eventsFlushed: 0,
+        method: 'async',
+      };
+    }
+
+    this.pendingSessionEnd = true;
+    this.sessionEndPromise = this.performSessionEnd(reason, 'async');
+
+    try {
+      const result = await this.sessionEndPromise;
+      return result;
+    } finally {
+      this.pendingSessionEnd = false;
+      this.sessionEndPromise = null;
+    }
+  }
+
+  endSessionManagedSync(reason: SessionEndReason): SessionEndResult {
+    this.sessionEndStats.totalSessionEnds++;
+    this.sessionEndStats.reasonCounts[reason]++;
+
+    if (this.pendingSessionEnd) {
+      this.sessionEndStats.duplicatePrevented++;
+
+      if (this.sessionEndConfig.debugMode) {
+        log('warning', `Sync session end called while async end pending. Forcing sync end. Reason: ${reason}`);
+      }
+    }
+
+    this.pendingSessionEnd = true;
+
+    try {
+      return this.performSessionEndSync(reason);
+    } finally {
+      this.pendingSessionEnd = false;
+      this.sessionEndPromise = null;
+    }
+  }
+
+  isPendingSessionEnd(): boolean {
+    return this.pendingSessionEnd;
+  }
+
+  private async performSessionEnd(reason: SessionEndReason, method: 'async' | 'sync'): Promise<SessionEndResult> {
+    const timestamp = Date.now();
+
+    let eventsFlushed = 0;
+
+    try {
+      if (this.sessionEndConfig.debugMode) {
+        log('info', `Starting ${method} session end. Reason: ${reason}`);
+      }
+
+      if (this.eventManager) {
+        this.eventManager.track({
+          type: EventType.SESSION_END,
+          session_end_reason: reason,
+        });
+
+        eventsFlushed = this.eventManager.getQueueLength();
+
+        const flushResult = await this.eventManager.flushImmediately();
+
+        this.endSession();
+        this.set('sessionId', null);
+        this.set('hasStartSession', false);
+
+        const result: SessionEndResult = {
+          success: flushResult,
+          reason,
+          timestamp,
+          eventsFlushed,
+          method,
+        };
+
+        if (flushResult) {
+          this.sessionEndStats.successfulEnds++;
+        } else {
+          this.sessionEndStats.failedEnds++;
+        }
+
+        return result;
+      }
+
+      const result: SessionEndResult = {
+        success: true,
+        reason,
+        timestamp,
+        eventsFlushed: 0,
+        method,
+      };
+
+      this.sessionEndStats.successfulEnds++;
+      return result;
+    } catch (error) {
+      this.sessionEndStats.failedEnds++;
+
+      if (this.sessionEndConfig.debugMode) {
+        logUnknownError('Session end failed', error);
+      }
+
+      return {
+        success: false,
+        reason,
+        timestamp,
+        eventsFlushed,
+        method,
+      };
+    }
+  }
+
+  private performSessionEndSync(reason: SessionEndReason): SessionEndResult {
+    const timestamp = Date.now();
+
+    let eventsFlushed = 0;
+
+    try {
+      if (this.eventManager) {
+        this.eventManager.track({
+          type: EventType.SESSION_END,
+          session_end_reason: reason,
+        });
+
+        eventsFlushed = this.eventManager.getQueueLength();
+
+        const success = this.eventManager.flushImmediatelySync();
+
+        this.endSession();
+        this.set('sessionId', null);
+        this.set('hasStartSession', false);
+
+        const result: SessionEndResult = {
+          success,
+          reason,
+          timestamp,
+          eventsFlushed,
+          method: 'sync',
+        };
+
+        if (success) {
+          this.sessionEndStats.successfulEnds++;
+        } else {
+          this.sessionEndStats.failedEnds++;
+        }
+
+        return result;
+      }
+
+      const result: SessionEndResult = {
+        success: true,
+        reason,
+        timestamp,
+        eventsFlushed: 0,
+        method: 'sync',
+      };
+
+      this.sessionEndStats.successfulEnds++;
+      return result;
+    } catch {
+      this.sessionEndStats.failedEnds++;
+      return {
+        success: false,
+        reason,
+        timestamp,
+        eventsFlushed,
+        method: 'sync',
+      };
+    }
+  }
+
+  private setupPageUnloadHandlers(): void {
+    const beforeUnloadHandler = (): void => {
+      if (this.get('sessionId')) {
+        this.endSessionManagedSync('page_unload');
+      }
+    };
+
+    const pageHideHandler = (event: PageTransitionEvent): void => {
+      if (this.get('sessionId') && !event.persisted) {
+        this.endSessionManagedSync('page_unload');
+      }
+    };
+
+    const visibilityChangeHandler = (): void => {
+      if (document.visibilityState === 'hidden' && this.get('sessionId')) {
+        setTimeout(() => {
+          if (document.visibilityState === 'hidden' && this.get('sessionId')) {
+            this.endSessionManagedSync('page_unload');
+          }
+        }, 1000);
+      }
+    };
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    window.addEventListener('pagehide', pageHideHandler as EventListener);
+    document.addEventListener('visibilitychange', visibilityChangeHandler);
+
+    this.cleanupHandlers.push(
+      () => window.removeEventListener('beforeunload', beforeUnloadHandler),
+      () => window.removeEventListener('pagehide', pageHideHandler as EventListener),
+      () => document.removeEventListener('visibilitychange', visibilityChangeHandler),
+    );
+  }
 }
