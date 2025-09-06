@@ -41,6 +41,7 @@ export class EventManager extends StateManager {
     custom_event,
     web_vitals,
     session_end_reason,
+    session_start_recovered,
   }: Partial<EventData>): void {
     if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
       return;
@@ -54,6 +55,7 @@ export class EventManager extends StateManager {
       custom_event,
       web_vitals,
       session_end_reason,
+      session_start_recovered,
     });
 
     if (isDuplicatedEvent) {
@@ -106,6 +108,7 @@ export class EventManager extends StateManager {
       ...(utmParams && { utm: utmParams }),
       ...(web_vitals && { web_vitals }),
       ...(session_end_reason && { session_end_reason }),
+      ...(session_start_recovered && { session_start_recovered }),
     };
 
     if (this.get('config')?.tags?.length) {
@@ -283,6 +286,7 @@ export class EventManager extends StateManager {
     custom_event,
     web_vitals,
     session_end_reason,
+    session_start_recovered,
   }: Partial<EventData>): boolean {
     if (!this.lastEvent) {
       return false;
@@ -330,6 +334,10 @@ export class EventManager extends StateManager {
 
       case EventType.WEB_VITALS: {
         return this.lastEvent.web_vitals?.type === web_vitals?.type;
+      }
+
+      case EventType.SESSION_START: {
+        return this.lastEvent.session_start_recovered === session_start_recovered;
       }
 
       case EventType.SESSION_END: {

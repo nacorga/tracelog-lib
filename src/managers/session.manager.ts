@@ -7,7 +7,13 @@ import {
 } from '../constants';
 import { DeviceType, EventType } from '../types';
 import { generateUUID, getDeviceType, log, logUnknown } from '../utils';
-import { SessionEndReason, SessionEndConfig, SessionEndResult, SessionEndStats } from '../types/session.types';
+import {
+  SessionEndReason,
+  SessionEndConfig,
+  SessionEndResult,
+  SessionEndStats,
+  SessionContext,
+} from '../types/session.types';
 import {
   ActivityListenerManager,
   EventListenerManager,
@@ -19,6 +25,9 @@ import {
 } from '../listeners';
 import { StateManager } from './state.manager';
 import { EventManager } from './event.manager';
+import { CrossTabSessionManager } from './cross-tab-session.manager';
+import { SessionRecoveryManager } from './session-recovery.manager';
+import { StorageManager } from './storage.manager';
 
 interface SessionConfig {
   timeout: number;
@@ -37,10 +46,15 @@ interface DeviceCapabilities {
 export class SessionManager extends StateManager {
   private readonly config: SessionConfig;
   private readonly eventManager: EventManager | null = null;
+  private readonly storageManager: StorageManager | null = null;
   private readonly listenerManagers: EventListenerManager[] = [];
   private readonly deviceCapabilities: DeviceCapabilities;
   private readonly onActivity: () => void;
   private readonly onInactivity: () => void;
+
+  // Cross-tab and recovery managers
+  private crossTabManager: CrossTabSessionManager | null = null;
+  private recoveryManager: SessionRecoveryManager | null = null;
 
   private isSessionActive = false;
   private lastActivityTime = 0;
@@ -59,6 +73,7 @@ export class SessionManager extends StateManager {
     manual_stop: 3,
     orphaned_cleanup: 2,
     inactivity: 1,
+    tab_closed: 1,
   };
   private readonly sessionEndStats: SessionEndStats = {
     totalSessionEnds: 0,
@@ -70,6 +85,7 @@ export class SessionManager extends StateManager {
       page_unload: 0,
       manual_stop: 0,
       orphaned_cleanup: 0,
+      tab_closed: 0,
     },
   };
 
@@ -77,6 +93,7 @@ export class SessionManager extends StateManager {
     onActivity: () => void,
     onInactivity: () => void,
     eventManager?: EventManager,
+    storageManager?: StorageManager,
     sessionEndConfig?: Partial<SessionEndConfig>,
   ) {
     super();
@@ -99,7 +116,11 @@ export class SessionManager extends StateManager {
     this.onActivity = onActivity;
     this.onInactivity = onInactivity;
     this.eventManager = eventManager ?? null;
+    this.storageManager = storageManager ?? null;
     this.deviceCapabilities = this.detectDeviceCapabilities();
+
+    // Initialize cross-tab and recovery managers
+    this.initializeCrossTabAndRecoveryManagers();
 
     this.initializeListenerManagers();
     this.setupAllListeners();
@@ -109,13 +130,164 @@ export class SessionManager extends StateManager {
     }
   }
 
-  startSession(): string {
-    this.sessionStartTime = Date.now();
-    this.isSessionActive = true;
+  /**
+   * Initialize cross-tab and recovery managers
+   */
+  private initializeCrossTabAndRecoveryManagers(): void {
+    if (!this.storageManager) return;
+
+    const projectId = this.get('config')?.id;
+    if (!projectId) return;
+
+    try {
+      // Initialize session recovery manager (always enabled)
+      this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager ?? undefined);
+
+      // Initialize cross-tab session manager (always enabled)
+      this.crossTabManager = new CrossTabSessionManager(
+        this.storageManager,
+        projectId,
+        {
+          debugMode: this.sessionEndConfig.debugMode,
+        },
+        {
+          onSessionStart: (sessionId: string): void => {
+            this.set('sessionId', sessionId);
+            this.onActivity();
+          },
+          onSessionEnd: (reason: string): void => {
+            this.handleCrossTabSessionEnd(reason);
+          },
+          onTabActivity: (): void => {
+            this.handleCrossTabActivity();
+          },
+        },
+      );
+
+      if (this.sessionEndConfig.debugMode) {
+        log('info', 'Cross-tab and recovery managers initialized');
+      }
+    } catch (error) {
+      if (this.sessionEndConfig.debugMode) {
+        logUnknown('warning', 'Failed to initialize cross-tab managers', error);
+      }
+    }
+  }
+
+  /**
+   * Handle cross-tab session end
+   */
+  private handleCrossTabSessionEnd(reason: string): void {
+    if (this.sessionEndConfig.debugMode) {
+      log('info', `Cross-tab session end: ${reason}`);
+    }
+
+    // Store session context for recovery
+    this.storeSessionContextForRecovery();
+
+    // End local session
+    this.onInactivity();
+  }
+
+  /**
+   * Handle cross-tab activity
+   */
+  private handleCrossTabActivity(): void {
+    // Update local activity time
     this.lastActivityTime = Date.now();
+
+    // Reset inactivity timer based on cross-tab activity
+    this.resetInactivityTimer();
+  }
+
+  /**
+   * Store session context for recovery
+   */
+  private storeSessionContextForRecovery(): void {
+    if (!this.recoveryManager) return;
+
+    const sessionId = this.get('sessionId');
+    if (!sessionId) return;
+
+    const sessionContext: SessionContext = {
+      sessionId,
+      startTime: this.sessionStartTime,
+      lastActivity: this.lastActivityTime,
+      tabCount: 1, // This will be updated by cross-tab manager
+      recoveryAttempts: 0,
+      metadata: {
+        userAgent: navigator.userAgent,
+        pageUrl: this.get('pageUrl'),
+      },
+    };
+
+    this.recoveryManager.storeSessionContextForRecovery(sessionContext);
+  }
+
+  startSession(): {
+    sessionId: string;
+    recoveryData?: {
+      recovered: boolean;
+    };
+  } {
+    const now = Date.now();
+
+    // Attempt session recovery first
+    let sessionId = '';
+    let wasRecovered = false;
+    let recoveryData:
+      | {
+          recovered: boolean;
+        }
+      | undefined;
+
+    if (this.recoveryManager?.hasRecoverableSession()) {
+      const recoveryResult = this.recoveryManager.attemptSessionRecovery('');
+
+      if (recoveryResult.recovered && recoveryResult.recoveredSessionId) {
+        sessionId = recoveryResult.recoveredSessionId;
+        wasRecovered = true;
+        recoveryData = recoveryResult.recoveryData;
+
+        // Update session timing from recovery context
+        if (recoveryResult.context) {
+          this.sessionStartTime = recoveryResult.context.startTime;
+          this.lastActivityTime = now;
+        } else {
+          this.sessionStartTime = now;
+          this.lastActivityTime = now;
+        }
+
+        if (this.sessionEndConfig.debugMode) {
+          log('info', `Session recovered: ${sessionId}`);
+        }
+      }
+    }
+
+    // If no recovery, create new session
+    if (!wasRecovered) {
+      sessionId = generateUUID();
+      this.sessionStartTime = now;
+      this.lastActivityTime = now;
+      recoveryData = { recovered: false };
+
+      if (this.sessionEndConfig.debugMode) {
+        log('info', `New session started: ${sessionId}`);
+      }
+    }
+
+    this.isSessionActive = true;
     this.resetInactivityTimer();
 
-    return generateUUID();
+    // Store session context for future recovery
+    this.storeSessionContextForRecovery();
+
+    // Update cross-tab manager if available
+    if (this.crossTabManager) {
+      this.crossTabManager.updateSessionActivity();
+    }
+
+    return { sessionId, recoveryData };
   }
 
   endSession(): number {
@@ -144,6 +316,17 @@ export class SessionManager extends StateManager {
     this.cleanupHandlers = [];
     this.pendingSessionEnd = false;
     this.sessionEndPromise = null;
+
+    // Cleanup cross-tab and recovery managers
+    if (this.crossTabManager) {
+      this.crossTabManager.destroy();
+      this.crossTabManager = null;
+    }
+
+    if (this.recoveryManager) {
+      this.recoveryManager.cleanupOldRecoveryAttempts();
+      this.recoveryManager = null;
+    }
   }
 
   private detectDeviceCapabilities(): DeviceCapabilities {
@@ -249,13 +432,21 @@ export class SessionManager extends StateManager {
       clearTimeout(this.inactivityTimer);
     }
 
+    // Get effective timeout considering cross-tab activity
+    let effectiveTimeout = this.config.timeout;
+
+    if (this.crossTabManager) {
+      const crossTabTimeout = this.crossTabManager.getEffectiveSessionTimeout();
+      effectiveTimeout = Math.max(effectiveTimeout, crossTabTimeout);
+    }
+
     this.inactivityTimer = window.setTimeout(() => {
       setTimeout(() => {
         if (this.isSessionActive) {
           this.handleInactivity();
         }
       }, SESSION_END_PRIORITY_DELAY_MS);
-    }, this.config.timeout);
+    }, effectiveTimeout);
   };
 
   clearInactivityTimer(): void {

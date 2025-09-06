@@ -107,6 +107,7 @@ export interface EventData {
   custom_event?: CustomEventData;
   web_vitals?: WebVitalsData;
   page_view?: PageViewData;
+  session_start_recovered?: boolean;
   session_end_reason?: SessionEndReason;
   error_data?: ErrorData;
   utm?: UTM;

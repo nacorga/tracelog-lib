@@ -1,4 +1,4 @@
-export type SessionEndReason = 'inactivity' | 'page_unload' | 'manual_stop' | 'orphaned_cleanup';
+export type SessionEndReason = 'inactivity' | 'page_unload' | 'manual_stop' | 'orphaned_cleanup' | 'tab_closed';
 
 export interface SessionEndConfig {
   enablePageUnloadHandlers: boolean;
@@ -21,4 +21,50 @@ export interface SessionEndStats {
   failedEnds: number;
   duplicatePrevented: number;
   reasonCounts: Record<SessionEndReason, number>;
+}
+
+// Cross-tab session management types
+export interface CrossTabSessionConfig {
+  tabHeartbeatIntervalMs: number;
+  tabElectionTimeoutMs: number;
+  debugMode: boolean;
+}
+
+export interface TabInfo {
+  id: string;
+  lastHeartbeat: number;
+  isLeader: boolean;
+  sessionId: string;
+  startTime: number;
+}
+
+export interface CrossTabMessage {
+  type: 'heartbeat' | 'session_start' | 'session_end' | 'tab_closing' | 'election_request' | 'election_response';
+  tabId: string;
+  sessionId?: string;
+  timestamp: number;
+  data?: Record<string, unknown>;
+}
+
+// Session recovery types
+export interface SessionRecoveryConfig {
+  recoveryWindowMs: number;
+  maxRecoveryAttempts: number;
+  contextPreservation: boolean;
+}
+
+export interface SessionContext {
+  sessionId: string;
+  startTime: number;
+  lastActivity: number;
+  tabCount: number;
+  recoveryAttempts: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RecoveryAttempt {
+  sessionId: string;
+  timestamp: number;
+  attempt: number;
+  context: SessionContext;
 }
