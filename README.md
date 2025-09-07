@@ -74,12 +74,13 @@ await TraceLog.init({
 
 ## 📊 Automatic Tracking
 
-TraceLog automatically captures:
-- **Page visits** - Navigation between pages
-- **Clicks** - Button and link interactions  
-- **Scrolling** - Scroll depth and engagement
-- **Sessions** - User session start/end
-- **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB and Long Tasks
+ TraceLog automatically captures:
+ - **Page visits** - Navigation between pages
+ - **Clicks** - Button and link interactions
+ - **Scrolling** - Scroll depth and engagement
+ - **Sessions** - User session start/end
+ - **Session Recovery** - Resume previous session context when recovery data is available (`hasRecoverableSession()` returns false when no data exists)
+ - **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB and Long Tasks
 
 ## 🎯 Custom Events
 
