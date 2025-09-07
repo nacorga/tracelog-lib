@@ -327,8 +327,9 @@ export class CrossTabSessionManager extends StateManager {
       this.tabInfo.sessionId = '';
       this.storeTabInfo();
 
-      // Start a new session if none exists
       const sessionContext = this.getStoredSessionContext();
+
+      // Start a new session if none exists
       if (!sessionContext) {
         if (this.broadcastChannel) {
           this.startLeaderElection();
