@@ -116,9 +116,7 @@ export class SessionManager extends StateManager {
     this.storageManager = storageManager ?? null;
     this.deviceCapabilities = this.detectDeviceCapabilities();
 
-    // Initialize recovery manager
     this.initializeRecoveryManager();
-
     this.initializeListenerManagers();
     this.setupAllListeners();
 
@@ -329,6 +327,7 @@ export class SessionManager extends StateManager {
     } else {
       if (this.throttleTimeout) {
         clearTimeout(this.throttleTimeout);
+        this.throttleTimeout = null;
       }
 
       this.throttleTimeout = window.setTimeout(() => {
@@ -347,6 +346,7 @@ export class SessionManager extends StateManager {
       if (this.isSessionActive) {
         if (this.inactivityTimer) {
           clearTimeout(this.inactivityTimer);
+          this.inactivityTimer = null;
         }
 
         this.inactivityTimer = window.setTimeout(this.handleInactivity, this.config.visibilityTimeout);
