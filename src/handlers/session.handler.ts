@@ -122,7 +122,6 @@ export class SessionHandler extends StateManager {
     }
 
     if (this.crossTabSessionManager) {
-      this.crossTabSessionManager.endSession('manual_stop');
       this.crossTabSessionManager.destroy();
       this.crossTabSessionManager = null;
     }
