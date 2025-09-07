@@ -326,6 +326,16 @@ export class CrossTabSessionManager extends StateManager {
     if (!this.isTabLeader) {
       this.tabInfo.sessionId = '';
       this.storeTabInfo();
+
+      // Start a new session if none exists
+      const sessionContext = this.getStoredSessionContext();
+      if (!sessionContext) {
+        if (this.broadcastChannel) {
+          this.startLeaderElection();
+        } else {
+          this.becomeLeader();
+        }
+      }
     }
   }
 
