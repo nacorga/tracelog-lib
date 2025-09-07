@@ -523,8 +523,13 @@ export class CrossTabSessionManager extends StateManager {
   private getStoredSessionContext(): SessionContext | null {
     try {
       const stored = this.storageManager.getItem(CROSS_TAB_SESSION_KEY(this.projectId));
+
       return stored ? JSON.parse(stored) : null;
-    } catch {
+    } catch (error) {
+      if (this.config.debugMode) {
+        logUnknown('warning', 'Failed to parse stored session context', error);
+      }
+
       return null;
     }
   }

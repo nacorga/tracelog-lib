@@ -5,6 +5,7 @@ import {
   RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
   SYNC_XHR_TIMEOUT_MS,
+  API_BASE_URL,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto } from '../types';
 import { log, logUnknown } from '../utils';
@@ -124,7 +125,7 @@ export class SenderManager extends StateManager {
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
-    const baseUrl = this.get('apiUrl') ?? 'https://api.tracelog.io';
+    const baseUrl = this.get('apiUrl') ?? API_BASE_URL;
 
     return {
       url: `${baseUrl}/events`,

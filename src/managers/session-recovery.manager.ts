@@ -220,7 +220,17 @@ export class SessionRecoveryManager extends StateManager {
     try {
       const stored = this.storageManager.getItem(SESSION_RECOVERY_KEY(this.projectId));
       return stored ? JSON.parse(stored) : [];
-    } catch {
+    } catch (error) {
+      if (this.debugMode) {
+        const stored = this.storageManager.getItem(SESSION_RECOVERY_KEY(this.projectId));
+
+        logUnknown(
+          'warning',
+          `Failed to parse stored recovery attempts for projectId ${this.projectId}. Data: ${stored}`,
+          error,
+        );
+      }
+
       return [];
     }
   }
