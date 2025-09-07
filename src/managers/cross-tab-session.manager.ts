@@ -19,6 +19,8 @@ export class CrossTabSessionManager extends StateManager {
   private readonly tabInfo: TabInfo;
   private readonly projectId: string;
 
+  private leaderTabId: string | null = null;
+
   private isTabLeader = false;
   private heartbeatInterval: number | null = null;
   private electionTimeout: number | null = null;
@@ -174,6 +176,7 @@ export class CrossTabSessionManager extends StateManager {
   private becomeLeader(): void {
     this.isTabLeader = true;
     this.tabInfo.isLeader = true;
+    this.leaderTabId = this.tabId;
 
     if (this.config.debugMode) {
       log('info', `Tab ${this.tabId} became session leader`);
@@ -321,20 +324,35 @@ export class CrossTabSessionManager extends StateManager {
   /**
    * Handle session end message from another tab
    */
-  private handleSessionEndMessage(_message: CrossTabMessage): void {
-    // Only end session if we're not the leader or if the message is from the leader
-    if (!this.isTabLeader) {
-      this.tabInfo.sessionId = '';
-      this.storeTabInfo();
+  private handleSessionEndMessage(message: CrossTabMessage): void {
+    // Ignore if this tab is the leader
+    if (this.isTabLeader) {
+      if (this.config.debugMode) {
+        log('info', `Ignoring session end message from ${message.tabId} (this tab is leader)`);
+      }
+      return;
+    }
 
-      // Start a new session if none exists
-      const sessionContext = this.getStoredSessionContext();
-      if (!sessionContext) {
-        if (this.broadcastChannel) {
-          this.startLeaderElection();
-        } else {
-          this.becomeLeader();
-        }
+    // Verify the message is from the current leader
+    if (!this.leaderTabId || message.tabId !== this.leaderTabId) {
+      if (this.config.debugMode) {
+        const extra = this.leaderTabId ? `; leader is ${this.leaderTabId}` : '';
+        log('info', `Ignoring session end message from ${message.tabId}${extra}`);
+      }
+      return;
+    }
+
+    this.tabInfo.sessionId = '';
+    this.storeTabInfo();
+    this.leaderTabId = null;
+
+    // Start a new session if none exists
+    const sessionContext = this.getStoredSessionContext();
+    if (!sessionContext) {
+      if (this.broadcastChannel) {
+        this.startLeaderElection();
+      } else {
+        this.becomeLeader();
       }
     }
   }
@@ -384,6 +402,7 @@ export class CrossTabSessionManager extends StateManager {
       // Another tab is already the leader
       this.isTabLeader = false;
       this.tabInfo.isLeader = false;
+      this.leaderTabId = message.tabId;
 
       // Clear election timeout
       if (this.electionTimeout) {
