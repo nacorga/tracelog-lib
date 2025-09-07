@@ -591,9 +591,7 @@ export class SessionManager extends StateManager {
 
         const success = this.eventManager.flushImmediatelySync();
 
-        this.endSession();
-        this.set('sessionId', null);
-        this.set('hasStartSession', false);
+        this.cleanupSession();
 
         const result: SessionEndResult = {
           success,
@@ -612,6 +610,8 @@ export class SessionManager extends StateManager {
         return result;
       }
 
+      this.cleanupSession();
+
       const result: SessionEndResult = {
         success: true,
         reason,
@@ -623,8 +623,14 @@ export class SessionManager extends StateManager {
       this.sessionEndStats.successfulEnds++;
 
       return result;
-    } catch {
+    } catch (error) {
       this.sessionEndStats.failedEnds++;
+
+      this.cleanupSession();
+
+      if (this.sessionEndConfig.debugMode) {
+        logUnknown('error', 'Session end failed', error);
+      }
 
       return {
         success: false,
