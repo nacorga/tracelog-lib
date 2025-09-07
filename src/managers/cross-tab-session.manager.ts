@@ -1,6 +1,12 @@
 import { TAB_HEARTBEAT_INTERVAL_MS, TAB_ELECTION_TIMEOUT_MS, DEFAULT_SESSION_TIMEOUT_MS } from '../constants';
 import { BROADCAST_CHANNEL_NAME, CROSS_TAB_SESSION_KEY, TAB_INFO_KEY } from '../constants/storage.constants';
-import { CrossTabSessionConfig, TabInfo, CrossTabMessage, SessionContext } from '../types/session.types';
+import {
+  CrossTabSessionConfig,
+  TabInfo,
+  CrossTabMessage,
+  SessionContext,
+  SessionEndReason,
+} from '../types/session.types';
 import { generateUUID, log, logUnknown } from '../utils';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -20,7 +26,7 @@ export class CrossTabSessionManager extends StateManager {
 
   // Callbacks
   private readonly onSessionStart: ((sessionId: string) => void) | null = null;
-  private readonly onSessionEnd: ((reason: string) => void) | null = null;
+  private readonly onSessionEnd: ((reason: SessionEndReason) => void) | null = null;
   private readonly onTabActivity: (() => void) | null = null;
 
   constructor(
@@ -29,7 +35,7 @@ export class CrossTabSessionManager extends StateManager {
     config?: Partial<CrossTabSessionConfig>,
     callbacks?: {
       onSessionStart?: (sessionId: string) => void;
-      onSessionEnd?: (reason: string) => void;
+      onSessionEnd?: (reason: SessionEndReason) => void;
       onTabActivity?: () => void;
     },
   ) {
@@ -423,7 +429,7 @@ export class CrossTabSessionManager extends StateManager {
   /**
    * End session and notify other tabs
    */
-  endSession(reason: string): void {
+  endSession(reason: SessionEndReason): void {
     if (this.config.debugMode) {
       log('info', `Ending cross-tab session: ${reason}`);
     }

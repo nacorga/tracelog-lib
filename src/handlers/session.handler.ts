@@ -1,9 +1,10 @@
 import { SESSION_HEARTBEAT_INTERVAL_MS, SESSION_STORAGE_KEY, DEFAULT_SESSION_TIMEOUT_MS } from '../constants';
 import { EventType } from '../types';
-import { SessionEndConfig } from '../types/session.types';
+import { CrossTabSessionConfig, SessionEndConfig, SessionEndReason } from '../types/session.types';
 import { EventManager } from '../managers/event.manager';
 import { SessionManager } from '../managers/session.manager';
 import { SessionRecoveryManager } from '../managers/session-recovery.manager';
+import { CrossTabSessionManager } from '../managers/cross-tab-session.manager';
 import { StateManager } from '../managers/state.manager';
 import { StorageManager } from '../managers/storage.manager';
 import { log } from '../utils';
@@ -21,6 +22,7 @@ export class SessionHandler extends StateManager {
 
   private sessionManager: SessionManager | null = null;
   private recoveryManager: SessionRecoveryManager | null = null;
+  private crossTabSessionManager: CrossTabSessionManager | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(storageManager: StorageManager, eventManager: EventManager) {
@@ -33,7 +35,8 @@ export class SessionHandler extends StateManager {
     const projectId = this.get('config')?.id;
 
     if (projectId) {
-      this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager);
+      this.initializeSessionRecoveryManager(projectId);
+      this.initializeCrossTabSessionManager(projectId);
     }
   }
 
@@ -45,6 +48,10 @@ export class SessionHandler extends StateManager {
     this.checkOrphanedSessions();
 
     const onActivity = (): void => {
+      if (this.crossTabSessionManager) {
+        this.crossTabSessionManager.updateSessionActivity();
+      }
+
       if (this.get('sessionId')) {
         return;
       }
@@ -62,9 +69,21 @@ export class SessionHandler extends StateManager {
         return;
       }
 
+      if (this.crossTabSessionManager && this.crossTabSessionManager.getEffectiveSessionTimeout() > 0) {
+        if (this.get('config')?.qaMode) {
+          log('info', 'Session kept alive by cross-tab activity');
+        }
+
+        return;
+      }
+
       this.sessionManager!.endSessionManaged('inactivity').then((result) => {
         if (this.get('config')?.qaMode) {
           log('info', `Inactivity session end result: ${result}`);
+        }
+
+        if (this.crossTabSessionManager) {
+          this.crossTabSessionManager.endSession('inactivity');
         }
 
         this.clearPersistedSession();
@@ -102,22 +121,67 @@ export class SessionHandler extends StateManager {
       this.sessionManager = null;
     }
 
+    if (this.crossTabSessionManager) {
+      this.crossTabSessionManager.endSession('manual_stop');
+      this.crossTabSessionManager.destroy();
+      this.crossTabSessionManager = null;
+    }
+
     if (this.recoveryManager) {
       this.recoveryManager.cleanupOldRecoveryAttempts();
       this.recoveryManager = null;
     }
   }
 
+  private initializeSessionRecoveryManager(projectId: string): void {
+    this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager);
+  }
+
+  private initializeCrossTabSessionManager(projectId: string): void {
+    const config: Partial<CrossTabSessionConfig> = { debugMode: this.get('config')?.qaMode ?? false };
+
+    const onSessionStart = (sessionId: string): void => {
+      if (this.get('config')?.qaMode) {
+        log('info', `Cross-tab session started: ${sessionId}`);
+      }
+
+      this.set('sessionId', sessionId);
+      this.persistSession(sessionId);
+    };
+
+    const onSessionEnd = (reason: SessionEndReason): void => {
+      if (this.get('config')?.qaMode) {
+        log('info', `Cross-tab session ended: ${reason}`);
+      }
+
+      this.clearPersistedSession();
+      this.trackSession(EventType.SESSION_END, undefined, reason);
+    };
+
+    const onTabActivity = (): void => {
+      if (this.get('config')?.qaMode) {
+        log('info', 'Cross-tab activity detected');
+      }
+    };
+
+    const callbacks = {
+      onSessionStart,
+      onSessionEnd,
+      onTabActivity,
+    };
+
+    this.crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
+  }
+
   private trackSession(
     eventType: EventType.SESSION_START | EventType.SESSION_END,
-    recoveryData?: {
-      recovered: boolean;
-    },
+    recoveryData?: { recovered: boolean },
+    sessionEndReason?: SessionEndReason,
   ): void {
     this.eventManager.track({
       type: eventType,
       ...(eventType === EventType.SESSION_START && recoveryData && { session_start: recoveryData }),
-      ...(eventType === EventType.SESSION_END && { session_end_reason: 'orphaned_cleanup' }),
+      ...(eventType === EventType.SESSION_END && { session_end_reason: sessionEndReason ?? 'orphaned_cleanup' }),
     });
   }
 
@@ -148,7 +212,6 @@ export class SessionHandler extends StateManager {
           const canRecover = this.recoveryManager?.hasRecoverableSession();
 
           if (canRecover) {
-            // Store session context for potential recovery
             if (this.recoveryManager) {
               const sessionContext = {
                 sessionId: session.sessionId,
@@ -170,7 +233,6 @@ export class SessionHandler extends StateManager {
             }
           }
 
-          // End the orphaned session
           this.trackSession(EventType.SESSION_END);
           this.clearPersistedSession();
 

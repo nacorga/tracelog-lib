@@ -25,7 +25,6 @@ import {
 } from '../listeners';
 import { StateManager } from './state.manager';
 import { EventManager } from './event.manager';
-import { CrossTabSessionManager } from './cross-tab-session.manager';
 import { SessionRecoveryManager } from './session-recovery.manager';
 import { StorageManager } from './storage.manager';
 
@@ -52,8 +51,7 @@ export class SessionManager extends StateManager {
   private readonly onActivity: () => void;
   private readonly onInactivity: () => void;
 
-  // Cross-tab and recovery managers
-  private crossTabManager: CrossTabSessionManager | null = null;
+  // Recovery manager
   private recoveryManager: SessionRecoveryManager | null = null;
 
   private isSessionActive = false;
@@ -119,8 +117,8 @@ export class SessionManager extends StateManager {
     this.storageManager = storageManager ?? null;
     this.deviceCapabilities = this.detectDeviceCapabilities();
 
-    // Initialize cross-tab and recovery managers
-    this.initializeCrossTabAndRecoveryManagers();
+    // Initialize recovery manager
+    this.initializeRecoveryManager();
 
     this.initializeListenerManagers();
     this.setupAllListeners();
@@ -131,9 +129,9 @@ export class SessionManager extends StateManager {
   }
 
   /**
-   * Initialize cross-tab and recovery managers
+   * Initialize recovery manager
    */
-  private initializeCrossTabAndRecoveryManagers(): void {
+  private initializeRecoveryManager(): void {
     if (!this.storageManager) return;
 
     const projectId = this.get('config')?.id;
@@ -143,61 +141,14 @@ export class SessionManager extends StateManager {
       // Initialize session recovery manager (always enabled)
       this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager ?? undefined);
 
-      // Initialize cross-tab session manager (always enabled)
-      this.crossTabManager = new CrossTabSessionManager(
-        this.storageManager,
-        projectId,
-        {
-          debugMode: this.sessionEndConfig.debugMode,
-        },
-        {
-          onSessionStart: (sessionId: string): void => {
-            this.set('sessionId', sessionId);
-            this.onActivity();
-          },
-          onSessionEnd: (reason: string): void => {
-            this.handleCrossTabSessionEnd(reason);
-          },
-          onTabActivity: (): void => {
-            this.handleCrossTabActivity();
-          },
-        },
-      );
-
       if (this.sessionEndConfig.debugMode) {
-        log('info', 'Cross-tab and recovery managers initialized');
+        log('info', 'Recovery manager initialized');
       }
     } catch (error) {
       if (this.sessionEndConfig.debugMode) {
-        logUnknown('warning', 'Failed to initialize cross-tab managers', error);
+        logUnknown('warning', 'Failed to initialize recovery manager', error);
       }
     }
-  }
-
-  /**
-   * Handle cross-tab session end
-   */
-  private handleCrossTabSessionEnd(reason: string): void {
-    if (this.sessionEndConfig.debugMode) {
-      log('info', `Cross-tab session end: ${reason}`);
-    }
-
-    // Store session context for recovery
-    this.storeSessionContextForRecovery();
-
-    // End local session
-    this.onInactivity();
-  }
-
-  /**
-   * Handle cross-tab activity
-   */
-  private handleCrossTabActivity(): void {
-    // Update local activity time
-    this.lastActivityTime = Date.now();
-
-    // Reset inactivity timer based on cross-tab activity
-    this.resetInactivityTimer();
   }
 
   /**
@@ -282,11 +233,6 @@ export class SessionManager extends StateManager {
     // Store session context for future recovery
     this.storeSessionContextForRecovery();
 
-    // Update cross-tab manager if available
-    if (this.crossTabManager) {
-      this.crossTabManager.updateSessionActivity();
-    }
-
     return { sessionId, recoveryData };
   }
 
@@ -317,11 +263,7 @@ export class SessionManager extends StateManager {
     this.pendingSessionEnd = false;
     this.sessionEndPromise = null;
 
-    // Cleanup cross-tab and recovery managers
-    if (this.crossTabManager) {
-      this.crossTabManager.destroy();
-      this.crossTabManager = null;
-    }
+    // Cleanup recovery manager
 
     if (this.recoveryManager) {
       this.recoveryManager.cleanupOldRecoveryAttempts();
@@ -432,13 +374,8 @@ export class SessionManager extends StateManager {
       clearTimeout(this.inactivityTimer);
     }
 
-    // Get effective timeout considering cross-tab activity
-    let effectiveTimeout = this.config.timeout;
-
-    if (this.crossTabManager) {
-      const crossTabTimeout = this.crossTabManager.getEffectiveSessionTimeout();
-      effectiveTimeout = Math.max(effectiveTimeout, crossTabTimeout);
-    }
+    // Use standard session timeout
+    const effectiveTimeout = this.config.timeout;
 
     this.inactivityTimer = window.setTimeout(() => {
       setTimeout(() => {

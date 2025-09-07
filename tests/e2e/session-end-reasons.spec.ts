@@ -37,7 +37,7 @@ test.describe('Session End Reasons', () => {
     }
   });
 
-  test('should end session with "inactivity" reason on navigation timeout', async ({ page }) => {
+  test('should end session with "page_unload" reason on navigation', async ({ page }) => {
     const consoleLogs: string[] = [];
 
     page.on('console', (msg) => {
@@ -51,18 +51,18 @@ test.describe('Session End Reasons', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
 
-    // Navigate away - this typically triggers inactivity before page_unload
+    // Navigate away - this triggers page_unload
     await page.goto('about:blank');
     await page.waitForTimeout(2000);
 
-    // Find session end logs with inactivity reason
+    // Find session end logs with page_unload reason
     const sessionEndLogs = consoleLogs.filter(log => 
       log.includes(`"type":"${EventType.SESSION_END}"`) && 
-      log.includes('"session_end_reason":"inactivity"')
+      log.includes('"session_end_reason":"page_unload"')
     );
 
     expect(sessionEndLogs.length).toBeGreaterThanOrEqual(1);
-    expect(sessionEndLogs[0]).toContain('"session_end_reason":"inactivity"');
+    expect(sessionEndLogs[0]).toContain('"session_end_reason":"page_unload"');
   });
 
   test('should include session_end_reason in all session end events', async ({ page }) => {
