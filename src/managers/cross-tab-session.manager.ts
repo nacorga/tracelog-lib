@@ -25,6 +25,7 @@ export class CrossTabSessionManager extends StateManager {
   private heartbeatInterval: number | null = null;
   private electionTimeout: number | null = null;
   private cleanupTimeout: number | null = null;
+  private sessionEnded = false;
 
   constructor(
     storageManager: StorageManager,
@@ -330,6 +331,7 @@ export class CrossTabSessionManager extends StateManager {
       if (this.config.debugMode) {
         log('info', `Ignoring session end message from ${message.tabId} (this tab is leader)`);
       }
+
       return;
     }
 
@@ -339,6 +341,7 @@ export class CrossTabSessionManager extends StateManager {
         const extra = this.leaderTabId ? `; leader is ${this.leaderTabId}` : '';
         log('info', `Ignoring session end message from ${message.tabId}${extra}`);
       }
+
       return;
     }
 
@@ -346,8 +349,9 @@ export class CrossTabSessionManager extends StateManager {
     this.storeTabInfo();
     this.leaderTabId = null;
 
-    // Start a new session if none exists
     const sessionContext = this.getStoredSessionContext();
+
+    // Start a new session if none exists
     if (!sessionContext) {
       if (this.broadcastChannel) {
         this.startLeaderElection();
@@ -460,6 +464,12 @@ export class CrossTabSessionManager extends StateManager {
    * End session and notify other tabs
    */
   endSession(reason: SessionEndReason): void {
+    if (this.sessionEnded) {
+      return;
+    }
+
+    this.sessionEnded = true;
+
     if (this.config.debugMode) {
       log('info', `Ending cross-tab session: ${reason}`);
     }

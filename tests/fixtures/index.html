@@ -84,6 +84,9 @@
     <script type="module">
         import { TraceLog } from './tracelog.js';
         
+        // Make TraceLog available globally for e2e tests
+        window.TraceLog = TraceLog;
+        
         async function initializeTraceLog() {
             try {
                 await TraceLog.init({ id: 'test' });
