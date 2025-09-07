@@ -80,8 +80,8 @@ test.describe('Session Recovery', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);
 
-    // Clear logs and reload page
-    consoleLogs.length = 0;
+    consoleLogs.splice(0);
+
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);
@@ -121,8 +121,8 @@ test.describe('Session Recovery', () => {
       localStorage.clear();
     });
 
-    // Reload page
-    consoleLogs.length = 0;
+    consoleLogs.splice(0);
+
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);

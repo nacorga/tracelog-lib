@@ -71,8 +71,8 @@ export class CrossTabSessionManager extends StateManager {
     try {
       const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME(this.projectId));
 
-      // Set up listeners after the channel is created and assigned
-      setTimeout(() => this.setupBroadcastListeners(), 0);
+      // Defer listener setup to ensure this.broadcastChannel is assigned before setupBroadcastListeners() executes
+      queueMicrotask(() => this.setupBroadcastListeners());
 
       return channel;
     } catch (error) {

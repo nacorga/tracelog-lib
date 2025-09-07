@@ -105,6 +105,12 @@ export class SenderManager extends StateManager {
     return navigator.sendBeacon(url, payload);
   }
 
+  /**
+   * Synchronous XMLHttpRequest is deprecated and can freeze the browser UI.
+   * We use it here as a last-resort fallback for critical event transmission,
+   * such as during page unload, when sendBeacon is unavailable or fails.
+   * This ensures that events are sent even if the page is about to be closed.
+   */
   private sendSyncXHR(url: string, payload: string): boolean {
     try {
       const xhr = new XMLHttpRequest();

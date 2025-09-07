@@ -15,7 +15,7 @@ test.describe('Page View Events - Demo Mode', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
 
-    consoleLogs.length = 0;
+    consoleLogs.splice(0);
 
     await page.evaluate(() => {
       history.pushState({}, '', '/second-page');

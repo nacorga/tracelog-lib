@@ -31,19 +31,8 @@ export class SessionRecoveryManager extends StateManager {
     this.projectId = projectId;
     this.debugMode = this.get('config')?.qaMode ?? false;
 
-    const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
-    const calculatedRecoveryWindow = sessionTimeout * SESSION_RECOVERY_WINDOW_MULTIPLIER;
-    const boundedRecoveryWindow = Math.min(calculatedRecoveryWindow, MAX_SESSION_RECOVERY_WINDOW_MS);
-
-    if (this.debugMode && calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
-      log(
-        'warning',
-        `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`,
-      );
-    }
-
     this.config = {
-      recoveryWindowMs: boundedRecoveryWindow,
+      recoveryWindowMs: this.calculateRecoveryWindow(),
       maxRecoveryAttempts: MAX_SESSION_RECOVERY_ATTEMPTS,
       contextPreservation: true,
       ...config,
@@ -133,6 +122,24 @@ export class SessionRecoveryManager extends StateManager {
       recoveredSessionId,
       context: recoveryAttempt.context,
     };
+  }
+
+  /**
+   * Calculate the recovery window with bounds checking
+   */
+  private calculateRecoveryWindow(): number {
+    const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+    const calculatedRecoveryWindow = sessionTimeout * SESSION_RECOVERY_WINDOW_MULTIPLIER;
+    const boundedRecoveryWindow = Math.min(calculatedRecoveryWindow, MAX_SESSION_RECOVERY_WINDOW_MS);
+
+    if (this.debugMode && calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
+      log(
+        'warning',
+        `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`,
+      );
+    }
+
+    return boundedRecoveryWindow;
   }
 
   /**
