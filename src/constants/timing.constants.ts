@@ -22,3 +22,16 @@ export const EVENT_EXPIRY_HOURS = 24;
 
 // Performance metrics
 export const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;
+
+// Session end coordination
+export const SESSION_END_PRIORITY_DELAY_MS = 100;
+
+// Cross-tab session management
+export const TAB_HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
+export const TAB_ELECTION_TIMEOUT_MS = 2000; // 2 seconds
+export const TAB_CLEANUP_DELAY_MS = 1000; // 1 second
+
+// Session recovery
+export const SESSION_RECOVERY_WINDOW_MULTIPLIER = 2; // 2x session timeout
+export const MAX_SESSION_RECOVERY_ATTEMPTS = 3;
+export const MAX_SESSION_RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours max
