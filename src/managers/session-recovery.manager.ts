@@ -276,10 +276,16 @@ export class SessionRecoveryManager extends StateManager {
   }
 
   /**
-   * Check if there's a recoverable session
+   * Check if there's a recoverable session.
+   * Returns false when no recovery attempts are stored.
    */
   hasRecoverableSession(): boolean {
     const lastAttempt = this.getLastRecoveryAttempt();
+
+    if (!lastAttempt) {
+      return false;
+    }
+
     return this.canAttemptRecovery(lastAttempt);
   }
 
