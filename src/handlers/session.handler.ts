@@ -59,7 +59,7 @@ export class SessionHandler extends StateManager {
       const sessionResult = this.sessionManager!.startSession();
 
       this.set('sessionId', sessionResult.sessionId);
-      this.trackSession(EventType.SESSION_START, sessionResult.recoveryData);
+      this.trackSession(EventType.SESSION_START, sessionResult.recoveryData?.recovered);
       this.persistSession(sessionResult.sessionId);
       this.startHeartbeat();
     };
@@ -155,7 +155,7 @@ export class SessionHandler extends StateManager {
       }
 
       this.clearPersistedSession();
-      this.trackSession(EventType.SESSION_END, undefined, reason);
+      this.trackSession(EventType.SESSION_END, false, reason);
     };
 
     const onTabActivity = (): void => {
@@ -175,12 +175,13 @@ export class SessionHandler extends StateManager {
 
   private trackSession(
     eventType: EventType.SESSION_START | EventType.SESSION_END,
-    recoveryData?: { recovered: boolean },
+    sessionStartRecovered = false,
     sessionEndReason?: SessionEndReason,
   ): void {
     this.eventManager.track({
       type: eventType,
-      ...(eventType === EventType.SESSION_START && recoveryData && { session_start: recoveryData }),
+      ...(eventType === EventType.SESSION_START &&
+        sessionStartRecovered && { session_start_recovered: sessionStartRecovered }),
       ...(eventType === EventType.SESSION_END && { session_end_reason: sessionEndReason ?? 'orphaned_cleanup' }),
     });
   }
@@ -193,7 +194,7 @@ export class SessionHandler extends StateManager {
     const sessionResult = this.sessionManager!.startSession();
 
     this.set('sessionId', sessionResult.sessionId);
-    this.trackSession(EventType.SESSION_START, sessionResult.recoveryData);
+    this.trackSession(EventType.SESSION_START, sessionResult.recoveryData?.recovered);
     this.persistSession(sessionResult.sessionId);
     this.startHeartbeat();
   }

@@ -3,7 +3,6 @@ import {
   DEFAULT_SESSION_TIMEOUT_MS,
   DEFAULT_THROTTLE_DELAY_MS,
   DEFAULT_VISIBILITY_TIMEOUT_MS,
-  SESSION_END_PRIORITY_DELAY_MS,
 } from '../constants';
 import { DeviceType, EventType } from '../types';
 import { generateUUID, getDeviceType, log, logUnknown } from '../utils';
@@ -263,8 +262,6 @@ export class SessionManager extends StateManager {
     this.pendingSessionEnd = false;
     this.sessionEndPromise = null;
 
-    // Cleanup recovery manager
-
     if (this.recoveryManager) {
       this.recoveryManager.cleanupOldRecoveryAttempts();
       this.recoveryManager = null;
@@ -380,7 +377,7 @@ export class SessionManager extends StateManager {
       if (this.isSessionActive) {
         this.handleInactivity();
       }
-    }, effectiveTimeout + SESSION_END_PRIORITY_DELAY_MS);
+    }, effectiveTimeout);
   };
 
   clearInactivityTimer(): void {

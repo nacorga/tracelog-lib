@@ -2,6 +2,7 @@ import {
   DEFAULT_SESSION_TIMEOUT_MS,
   SESSION_RECOVERY_WINDOW_MULTIPLIER,
   MAX_SESSION_RECOVERY_ATTEMPTS,
+  MAX_SESSION_RECOVERY_WINDOW_MS,
 } from '../constants';
 import { SESSION_RECOVERY_KEY } from '../constants/storage.constants';
 import { SessionRecoveryConfig, SessionContext, RecoveryAttempt } from '../types/session.types';
@@ -31,9 +32,18 @@ export class SessionRecoveryManager extends StateManager {
     this.debugMode = this.get('config')?.qaMode ?? false;
 
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+    const calculatedRecoveryWindow = sessionTimeout * SESSION_RECOVERY_WINDOW_MULTIPLIER;
+    const boundedRecoveryWindow = Math.min(calculatedRecoveryWindow, MAX_SESSION_RECOVERY_WINDOW_MS);
+
+    if (this.debugMode && calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
+      log(
+        'warning',
+        `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`,
+      );
+    }
 
     this.config = {
-      recoveryWindowMs: sessionTimeout * SESSION_RECOVERY_WINDOW_MULTIPLIER,
+      recoveryWindowMs: boundedRecoveryWindow,
       maxRecoveryAttempts: MAX_SESSION_RECOVERY_ATTEMPTS,
       contextPreservation: true,
       ...config,

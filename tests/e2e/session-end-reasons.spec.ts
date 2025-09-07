@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { EventType } from '../../src/types';
+import { DEFAULT_SESSION_TIMEOUT_MS } from '../../src/constants';
 
 test.describe('Session End Reasons', () => {
   test('should handle session end with proper reason tracking', async ({ page }) => {
@@ -185,15 +186,16 @@ test.describe('Session End Reasons', () => {
     await page.waitForLoadState('domcontentloaded');
 
     // Create an orphaned session by setting expired session data in localStorage
-    await page.evaluate(() => {
-      const expiredTime = Date.now() - (20 * 60 * 1000); // 20 minutes ago
+    await page.evaluate((defaultSessionTimeout) => {
+      // Set expiry time to be greater than session timeout to ensure it's considered expired
+      const expiredTime = Date.now() - (defaultSessionTimeout + 5 * 60 * 1000); // Session timeout + 5 minutes ago
       const sessionData = {
         sessionId: 'orphaned-session-id',
         startTime: expiredTime,
         lastHeartbeat: expiredTime
       };
       localStorage.setItem('tl:session', JSON.stringify(sessionData));
-    });
+    }, DEFAULT_SESSION_TIMEOUT_MS);
 
     // Reload page to trigger potential orphaned session cleanup
     await page.reload();

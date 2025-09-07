@@ -34,3 +34,4 @@ export const TAB_CLEANUP_DELAY_MS = 1000; // 1 second
 // Session recovery
 export const SESSION_RECOVERY_WINDOW_MULTIPLIER = 2; // 2x session timeout
 export const MAX_SESSION_RECOVERY_ATTEMPTS = 3;
+export const MAX_SESSION_RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours max
