@@ -493,7 +493,7 @@ export class CrossTabSessionManager extends StateManager {
   /**
    * Announce session end to other tabs
    */
-  private announceSessionEnd(reason: string): void {
+  private announceSessionEnd(reason: SessionEndReason): void {
     if (!this.broadcastChannel) return;
 
     const message: CrossTabMessage = {

@@ -57,9 +57,6 @@ export class SessionRecoveryManager extends StateManager {
     recovered: boolean;
     recoveredSessionId?: string;
     context?: SessionContext;
-    recoveryData?: {
-      recovered: boolean;
-    };
   } {
     if (this.debugMode) {
       log('info', 'Attempting session recovery');
@@ -77,7 +74,6 @@ export class SessionRecoveryManager extends StateManager {
 
       return {
         recovered: false,
-        recoveryData: { recovered: false },
       };
     }
 
@@ -90,7 +86,6 @@ export class SessionRecoveryManager extends StateManager {
 
       return {
         recovered: false,
-        recoveryData: { recovered: false },
       };
     }
 
@@ -105,7 +100,6 @@ export class SessionRecoveryManager extends StateManager {
 
       return {
         recovered: false,
-        recoveryData: { recovered: false },
       };
     }
 
@@ -129,9 +123,6 @@ export class SessionRecoveryManager extends StateManager {
     recoveryAttempts.push(recoveryAttempt);
     this.storeRecoveryAttempts(recoveryAttempts);
 
-    // Get recovery data for session_start event
-    const recoveryData = this.getRecoveryData();
-
     if (this.debugMode) {
       log('info', `Session recovery successful: recovery of session ${recoveredSessionId}`);
     }
@@ -140,7 +131,6 @@ export class SessionRecoveryManager extends StateManager {
       recovered: true,
       recoveredSessionId,
       context: recoveryAttempt.context,
-      recoveryData,
     };
   }
 
@@ -201,21 +191,6 @@ export class SessionRecoveryManager extends StateManager {
         logUnknown('warning', 'Failed to store session context for recovery', error);
       }
     }
-  }
-
-  /**
-   * Get recovery data for session_start event
-   */
-  private getRecoveryData(): {
-    recovered: boolean;
-  } {
-    if (this.debugMode) {
-      log('info', 'Session recovery data prepared');
-    }
-
-    return {
-      recovered: true,
-    };
   }
 
   /**

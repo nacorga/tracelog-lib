@@ -59,7 +59,7 @@ export class SessionHandler extends StateManager {
       const sessionResult = this.sessionManager!.startSession();
 
       this.set('sessionId', sessionResult.sessionId);
-      this.trackSession(EventType.SESSION_START, sessionResult.recoveryData?.recovered);
+      this.trackSession(EventType.SESSION_START, sessionResult.recovered);
       this.persistSession(sessionResult.sessionId);
       this.startHeartbeat();
     };
@@ -79,7 +79,7 @@ export class SessionHandler extends StateManager {
 
       this.sessionManager!.endSessionManaged('inactivity').then((result) => {
         if (this.get('config')?.qaMode) {
-          log('info', `Inactivity session end result: ${result}`);
+          log('info', `Inactivity session end result: ${JSON.stringify(result)}`);
         }
 
         if (this.crossTabSessionManager) {
@@ -112,7 +112,7 @@ export class SessionHandler extends StateManager {
   stopTracking(): void {
     if (this.sessionManager) {
       if (this.get('sessionId')) {
-        this.sessionManager.endSessionManagedSync('manual_stop');
+        this.sessionManager.endSessionSafely('manual_stop', { forceSync: true });
         this.clearPersistedSession();
         this.stopHeartbeat();
       }
@@ -194,7 +194,7 @@ export class SessionHandler extends StateManager {
     const sessionResult = this.sessionManager!.startSession();
 
     this.set('sessionId', sessionResult.sessionId);
-    this.trackSession(EventType.SESSION_START, sessionResult.recoveryData?.recovered);
+    this.trackSession(EventType.SESSION_START, sessionResult.recovered);
     this.persistSession(sessionResult.sessionId);
     this.startHeartbeat();
   }

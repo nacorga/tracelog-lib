@@ -174,22 +174,12 @@ export class SessionManager extends StateManager {
     this.recoveryManager.storeSessionContextForRecovery(sessionContext);
   }
 
-  startSession(): {
-    sessionId: string;
-    recoveryData?: {
-      recovered: boolean;
-    };
-  } {
+  startSession(): { sessionId: string; recovered?: boolean } {
     const now = Date.now();
 
     // Attempt session recovery first
     let sessionId = '';
     let wasRecovered = false;
-    let recoveryData:
-      | {
-          recovered: boolean;
-        }
-      | undefined;
 
     if (this.recoveryManager?.hasRecoverableSession()) {
       const recoveryResult = this.recoveryManager.attemptSessionRecovery('');
@@ -197,7 +187,6 @@ export class SessionManager extends StateManager {
       if (recoveryResult.recovered && recoveryResult.recoveredSessionId) {
         sessionId = recoveryResult.recoveredSessionId;
         wasRecovered = true;
-        recoveryData = recoveryResult.recoveryData;
 
         // Update session timing from recovery context
         if (recoveryResult.context) {
@@ -219,7 +208,6 @@ export class SessionManager extends StateManager {
       sessionId = generateUUID();
       this.sessionStartTime = now;
       this.lastActivityTime = now;
-      recoveryData = { recovered: false };
 
       if (this.sessionEndConfig.debugMode) {
         log('info', `New session started: ${sessionId}`);
@@ -232,7 +220,7 @@ export class SessionManager extends StateManager {
     // Store session context for future recovery
     this.storeSessionContextForRecovery();
 
-    return { sessionId, recoveryData };
+    return { sessionId, recovered: wasRecovered };
   }
 
   endSession(): number {
@@ -447,45 +435,20 @@ export class SessionManager extends StateManager {
     }
   }
 
-  endSessionManagedSync(reason: SessionEndReason): SessionEndResult {
-    this.sessionEndStats.totalSessionEnds++;
-    this.sessionEndStats.reasonCounts[reason]++;
+  endSessionSafely(
+    reason: SessionEndReason,
+    options?: {
+      forceSync?: boolean;
+      allowSync?: boolean;
+    },
+  ): Promise<SessionEndResult> | SessionEndResult {
+    const shouldUseSync = options?.forceSync ?? (options?.allowSync && ['page_unload', 'tab_closed'].includes(reason));
 
-    if (this.pendingSessionEnd) {
-      this.sessionEndStats.duplicatePrevented++;
-
-      if (this.sessionEndConfig.debugMode) {
-        log('warning', `Sync session end called while async end pending. Forcing sync end. Reason: ${reason}`);
-      }
+    if (shouldUseSync) {
+      return this.endSessionManagedSync(reason);
     }
 
-    if (!this.shouldProceedWithSessionEnd(reason)) {
-      if (this.sessionEndConfig.debugMode) {
-        log(
-          'info',
-          `Sync session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
-        );
-      }
-
-      return {
-        success: false,
-        reason,
-        timestamp: Date.now(),
-        eventsFlushed: 0,
-        method: 'sync',
-      };
-    }
-
-    this.sessionEndReason = reason;
-    this.pendingSessionEnd = true;
-
-    try {
-      return this.performSessionEndSync(reason);
-    } finally {
-      this.pendingSessionEnd = false;
-      this.sessionEndPromise = null;
-      this.sessionEndReason = null;
-    }
+    return this.endSessionManaged(reason);
   }
 
   isPendingSessionEnd(): boolean {
@@ -561,6 +524,47 @@ export class SessionManager extends StateManager {
     }
   }
 
+  private endSessionManagedSync(reason: SessionEndReason): SessionEndResult {
+    this.sessionEndStats.totalSessionEnds++;
+    this.sessionEndStats.reasonCounts[reason]++;
+
+    if (this.pendingSessionEnd) {
+      this.sessionEndStats.duplicatePrevented++;
+
+      if (this.sessionEndConfig.debugMode) {
+        log('warning', `Sync session end called while async end pending. Forcing sync end. Reason: ${reason}`);
+      }
+    }
+
+    if (!this.shouldProceedWithSessionEnd(reason)) {
+      if (this.sessionEndConfig.debugMode) {
+        log(
+          'info',
+          `Sync session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
+        );
+      }
+
+      return {
+        success: false,
+        reason,
+        timestamp: Date.now(),
+        eventsFlushed: 0,
+        method: 'sync',
+      };
+    }
+
+    this.sessionEndReason = reason;
+    this.pendingSessionEnd = true;
+
+    try {
+      return this.performSessionEndSync(reason);
+    } finally {
+      this.pendingSessionEnd = false;
+      this.sessionEndPromise = null;
+      this.sessionEndReason = null;
+    }
+  }
+
   private performSessionEndSync(reason: SessionEndReason): SessionEndResult {
     const timestamp = Date.now();
 
@@ -632,7 +636,7 @@ export class SessionManager extends StateManager {
 
       unloadHandled = true;
       this.clearInactivityTimer();
-      this.endSessionManagedSync('page_unload');
+      this.endSessionSafely('page_unload', { forceSync: true });
     };
 
     // Primary handler for modern browsers
