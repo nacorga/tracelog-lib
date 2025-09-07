@@ -23,6 +23,7 @@ export class CrossTabSessionManager extends StateManager {
   private heartbeatInterval: number | null = null;
   private electionTimeout: number | null = null;
   private cleanupTimeout: number | null = null;
+  private sessionEnded = false;
 
   constructor(
     storageManager: StorageManager,
@@ -441,6 +442,12 @@ export class CrossTabSessionManager extends StateManager {
    * End session and notify other tabs
    */
   endSession(reason: SessionEndReason): void {
+    if (this.sessionEnded) {
+      return;
+    }
+
+    this.sessionEnded = true;
+
     if (this.config.debugMode) {
       log('info', `Ending cross-tab session: ${reason}`);
     }
