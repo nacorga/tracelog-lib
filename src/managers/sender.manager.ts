@@ -4,6 +4,7 @@ import {
   RETRY_BACKOFF_MAX,
   RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
+  SYNC_XHR_TIMEOUT_MS,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto } from '../types';
 import { log, logUnknown } from '../utils';
@@ -114,11 +115,10 @@ export class SenderManager extends StateManager {
   private sendSyncXHR(url: string, payload: string): boolean {
     try {
       const xhr = new XMLHttpRequest();
-      const timeout = 2000;
 
       xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.timeout = timeout;
+      xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);
 
       return xhr.status >= 200 && xhr.status < 300;

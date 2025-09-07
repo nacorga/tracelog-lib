@@ -71,8 +71,7 @@ export class CrossTabSessionManager extends StateManager {
     try {
       const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME(this.projectId));
 
-      // Defer listener setup to ensure this.broadcastChannel is assigned before setupBroadcastListeners() executes
-      queueMicrotask(() => this.setupBroadcastListeners());
+      this.setupBroadcastListeners(channel);
 
       return channel;
     } catch (error) {
@@ -233,14 +232,13 @@ export class CrossTabSessionManager extends StateManager {
   /**
    * Setup BroadcastChannel event listeners
    */
-  private setupBroadcastListeners(): void {
-    if (!this.broadcastChannel) return;
-
-    this.broadcastChannel.addEventListener('message', (event: MessageEvent<CrossTabMessage>) => {
+  private setupBroadcastListeners(channel: BroadcastChannel): void {
+    channel.addEventListener('message', (event: MessageEvent<CrossTabMessage>) => {
       const message = event.data;
 
-      // Ignore messages from this tab
-      if (message.tabId === this.tabId) return;
+      if (message.tabId === this.tabId) {
+        return;
+      }
 
       this.handleCrossTabMessage(message);
     });

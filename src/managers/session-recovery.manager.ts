@@ -3,6 +3,7 @@ import {
   SESSION_RECOVERY_WINDOW_MULTIPLIER,
   MAX_SESSION_RECOVERY_ATTEMPTS,
   MAX_SESSION_RECOVERY_WINDOW_MS,
+  MIN_SESSION_RECOVERY_WINDOW_MS,
 } from '../constants';
 import { SESSION_RECOVERY_KEY } from '../constants/storage.constants';
 import { SessionRecoveryConfig, SessionContext, RecoveryAttempt } from '../types/session.types';
@@ -130,13 +131,23 @@ export class SessionRecoveryManager extends StateManager {
   private calculateRecoveryWindow(): number {
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
     const calculatedRecoveryWindow = sessionTimeout * SESSION_RECOVERY_WINDOW_MULTIPLIER;
-    const boundedRecoveryWindow = Math.min(calculatedRecoveryWindow, MAX_SESSION_RECOVERY_WINDOW_MS);
+    const boundedRecoveryWindow = Math.max(
+      Math.min(calculatedRecoveryWindow, MAX_SESSION_RECOVERY_WINDOW_MS),
+      MIN_SESSION_RECOVERY_WINDOW_MS,
+    );
 
-    if (this.debugMode && calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
-      log(
-        'warning',
-        `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`,
-      );
+    if (this.debugMode) {
+      if (calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
+        log(
+          'warning',
+          `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`,
+        );
+      } else if (calculatedRecoveryWindow < MIN_SESSION_RECOVERY_WINDOW_MS) {
+        log(
+          'warning',
+          `Recovery window increased to minimum ${MIN_SESSION_RECOVERY_WINDOW_MS}ms (2min). Calculated: ${calculatedRecoveryWindow}ms`,
+        );
+      }
     }
 
     return boundedRecoveryWindow;

@@ -70,7 +70,7 @@ export class SessionManager extends StateManager {
     manual_stop: 3,
     orphaned_cleanup: 2,
     inactivity: 1,
-    tab_closed: 1,
+    tab_closed: 0,
   };
   private readonly sessionEndStats: SessionEndStats = {
     totalSessionEnds: 0,
