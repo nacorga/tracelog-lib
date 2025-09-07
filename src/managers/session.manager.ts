@@ -477,6 +477,7 @@ export class SessionManager extends StateManager {
         const flushResult = await this.eventManager.flushImmediately();
 
         this.endSession();
+        this.clearTimers();
         this.set('sessionId', null);
         this.set('hasStartSession', false);
 
@@ -497,6 +498,11 @@ export class SessionManager extends StateManager {
         return result;
       }
 
+      this.endSession();
+      this.clearTimers();
+      this.set('sessionId', null);
+      this.set('hasStartSession', false);
+
       const result: SessionEndResult = {
         success: true,
         reason,
@@ -514,6 +520,11 @@ export class SessionManager extends StateManager {
       if (this.sessionEndConfig.debugMode) {
         logUnknown('error', 'Session end failed', error);
       }
+
+      this.endSession();
+      this.clearTimers();
+      this.set('sessionId', null);
+      this.set('hasStartSession', false);
 
       return {
         success: false,
