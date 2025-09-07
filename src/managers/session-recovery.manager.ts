@@ -297,23 +297,4 @@ export class SessionRecoveryManager extends StateManager {
       log('info', 'Cleared all recovery data');
     }
   }
-
-  /**
-   * Get recovery statistics for debugging
-   */
-  getRecoveryStats(): {
-    totalAttempts: number;
-    successfulRecoveries: number;
-    failedRecoveries: number;
-    lastRecoveryTime: number | null;
-  } {
-    const attempts = this.getStoredRecoveryAttempts();
-
-    return {
-      totalAttempts: attempts.length,
-      successfulRecoveries: attempts.filter((a) => a.attempt > 0).length,
-      failedRecoveries: 0, // This would need to be tracked separately
-      lastRecoveryTime: attempts.length > 0 ? attempts[attempts.length - 1].timestamp : null,
-    };
-  }
 }
