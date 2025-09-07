@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.7.0](https://github.com/nacorga/tracelog-client/compare/v0.6.2...v0.7.0) (2025-09-07)
+
+
+### Features
+
+* enhance session management with cross-tab support and recovery mechanisms ([6a00ef5](https://github.com/nacorga/tracelog-client/commit/6a00ef5d0a6309e78392a1b1cbcad084735eedc0))
+* enhance session recovery with maximum recovery window and improved tracking ([92deed1](https://github.com/nacorga/tracelog-client/commit/92deed1ff7b2320ade08af7cc9603831b2372526))
+* implement cross-tab session management and session recovery features ([030ba67](https://github.com/nacorga/tracelog-client/commit/030ba678a489caf830d19eb736d954dc2edd5a3c))
+* session end improvement ([fefd506](https://github.com/nacorga/tracelog-client/commit/fefd506e5ba078f66f79bf323b766ad0c558cdc1))
+
+
+### Bug Fixes
+
+* cleanup session on sync end errors ([6a25d0e](https://github.com/nacorga/tracelog-client/commit/6a25d0ef7e6e068d2d620313b685672dbf9ee66f))
+* validate session end leader ([869dd99](https://github.com/nacorga/tracelog-client/commit/869dd99ac8b6f750805d0424aa2c3a38230fe7bb))
+
 ### [0.6.2](https://github.com/nacorga/tracelog-client/compare/v0.6.1...v0.6.2) (2025-08-22)
 
 ### [0.6.1](https://github.com/nacorga/tracelog-client/compare/v0.6.0...v0.6.1) (2025-08-20)
