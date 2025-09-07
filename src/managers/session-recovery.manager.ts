@@ -281,6 +281,7 @@ export class SessionRecoveryManager extends StateManager {
    */
   hasRecoverableSession(): boolean {
     const lastAttempt = this.getLastRecoveryAttempt();
+
     if (!lastAttempt) {
       return false;
     }
