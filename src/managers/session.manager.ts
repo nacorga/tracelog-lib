@@ -476,10 +476,7 @@ export class SessionManager extends StateManager {
 
         const flushResult = await this.eventManager.flushImmediately();
 
-        this.endSession();
-        this.clearTimers();
-        this.set('sessionId', null);
-        this.set('hasStartSession', false);
+        this.cleanupSession();
 
         const result: SessionEndResult = {
           success: flushResult,
@@ -498,10 +495,7 @@ export class SessionManager extends StateManager {
         return result;
       }
 
-      this.endSession();
-      this.clearTimers();
-      this.set('sessionId', null);
-      this.set('hasStartSession', false);
+      this.cleanupSession();
 
       const result: SessionEndResult = {
         success: true,
@@ -521,10 +515,7 @@ export class SessionManager extends StateManager {
         logUnknown('error', 'Session end failed', error);
       }
 
-      this.endSession();
-      this.clearTimers();
-      this.set('sessionId', null);
-      this.set('hasStartSession', false);
+      this.cleanupSession();
 
       return {
         success: false,
@@ -534,6 +525,13 @@ export class SessionManager extends StateManager {
         method,
       };
     }
+  }
+
+  private cleanupSession(): void {
+    this.endSession();
+    this.clearTimers();
+    this.set('sessionId', null);
+    this.set('hasStartSession', false);
   }
 
   private endSessionManagedSync(reason: SessionEndReason): SessionEndResult {
