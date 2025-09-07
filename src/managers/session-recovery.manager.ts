@@ -177,9 +177,10 @@ export class SessionRecoveryManager extends StateManager {
       // Add to recovery attempts (keep only the latest few)
       recoveryAttempts.push(recoveryAttempt);
 
-      // Keep only the last 5 recovery attempts to avoid storage bloat
-      if (recoveryAttempts.length > 5) {
-        recoveryAttempts.splice(0, recoveryAttempts.length - 5);
+      const maxStoredRecoveryAttempts = 5;
+
+      if (recoveryAttempts.length > maxStoredRecoveryAttempts) {
+        recoveryAttempts.splice(0, recoveryAttempts.length - maxStoredRecoveryAttempts);
       }
 
       this.storeRecoveryAttempts(recoveryAttempts);

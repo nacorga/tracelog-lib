@@ -108,10 +108,11 @@ export class SenderManager extends StateManager {
   private sendSyncXHR(url: string, payload: string): boolean {
     try {
       const xhr = new XMLHttpRequest();
+      const timeout = 2000;
 
       xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.timeout = 2000;
+      xhr.timeout = timeout;
       xhr.send(payload);
 
       return xhr.status >= 200 && xhr.status < 300;

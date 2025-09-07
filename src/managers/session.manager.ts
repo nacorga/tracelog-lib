@@ -361,13 +361,11 @@ export class SessionManager extends StateManager {
       clearTimeout(this.inactivityTimer);
     }
 
-    const effectiveTimeout = this.config.timeout;
-
     this.inactivityTimer = window.setTimeout(() => {
       if (this.isSessionActive) {
         this.handleInactivity();
       }
-    }, effectiveTimeout);
+    }, this.config.timeout);
   };
 
   clearInactivityTimer(): void {
