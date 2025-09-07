@@ -14,7 +14,7 @@ import { StorageManager } from './storage.manager';
 export class CrossTabSessionManager extends StateManager {
   private readonly config: CrossTabSessionConfig;
   private readonly storageManager: StorageManager;
-  private readonly broadcastChannel: BroadcastChannel | null = null;
+  private readonly broadcastChannel: BroadcastChannel | null;
   private readonly tabId: string;
   private readonly projectId: string;
 
@@ -52,12 +52,10 @@ export class CrossTabSessionManager extends StateManager {
       ...config,
     };
 
-    // Initialize callbacks
     this.onSessionStart = callbacks?.onSessionStart ?? null;
     this.onSessionEnd = callbacks?.onSessionEnd ?? null;
     this.onTabActivity = callbacks?.onTabActivity ?? null;
 
-    // Initialize tab info
     this.tabInfo = {
       id: this.tabId,
       lastHeartbeat: Date.now(),
@@ -66,19 +64,33 @@ export class CrossTabSessionManager extends StateManager {
       startTime: Date.now(),
     };
 
-    // Initialize BroadcastChannel if supported
-    if (this.isBroadcastChannelSupported()) {
-      try {
-        this.broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME(this.projectId));
-        this.setupBroadcastListeners();
-      } catch (error) {
-        if (this.config.debugMode) {
-          logUnknown('warning', 'Failed to initialize BroadcastChannel', error);
-        }
-      }
-    }
+    this.broadcastChannel = this.initializeBroadcastChannel();
 
     this.initialize();
+  }
+
+  /**
+   * Initialize BroadcastChannel if supported
+   */
+  private initializeBroadcastChannel(): BroadcastChannel | null {
+    if (!this.isBroadcastChannelSupported()) {
+      return null;
+    }
+
+    try {
+      const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME(this.projectId));
+
+      // Set up listeners after the channel is created and assigned
+      setTimeout(() => this.setupBroadcastListeners(), 0);
+
+      return channel;
+    } catch (error) {
+      if (this.config.debugMode) {
+        logUnknown('warning', 'Failed to initialize BroadcastChannel', error);
+      }
+
+      return null;
+    }
   }
 
   /**

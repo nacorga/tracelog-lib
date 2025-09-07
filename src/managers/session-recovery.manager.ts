@@ -15,6 +15,7 @@ export class SessionRecoveryManager extends StateManager {
   private readonly storageManager: StorageManager;
   private readonly eventManager: EventManager | null;
   private readonly projectId: string;
+  private readonly debugMode: boolean;
 
   constructor(
     storageManager: StorageManager,
@@ -27,6 +28,7 @@ export class SessionRecoveryManager extends StateManager {
     this.storageManager = storageManager;
     this.eventManager = eventManager ?? null;
     this.projectId = projectId;
+    this.debugMode = this.get('config')?.qaMode ?? false;
 
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
 
@@ -49,9 +51,7 @@ export class SessionRecoveryManager extends StateManager {
       recovered: boolean;
     };
   } {
-    const debugMode = this.get('config')?.qaMode ?? false;
-
-    if (debugMode) {
+    if (this.debugMode) {
       log('info', 'Attempting session recovery');
     }
 
@@ -61,7 +61,7 @@ export class SessionRecoveryManager extends StateManager {
 
     // Check if we can recover
     if (!this.canAttemptRecovery(lastAttempt)) {
-      if (debugMode) {
+      if (this.debugMode) {
         log('info', 'Session recovery not possible - outside recovery window or max attempts reached');
       }
 
@@ -74,7 +74,7 @@ export class SessionRecoveryManager extends StateManager {
     // Get the last session context
     const lastSessionContext = lastAttempt?.context;
     if (!lastSessionContext) {
-      if (debugMode) {
+      if (this.debugMode) {
         log('info', 'No session context available for recovery');
       }
 
@@ -89,7 +89,7 @@ export class SessionRecoveryManager extends StateManager {
     const timeSinceLastActivity = now - lastSessionContext.lastActivity;
 
     if (timeSinceLastActivity > this.config.recoveryWindowMs) {
-      if (debugMode) {
+      if (this.debugMode) {
         log('info', 'Session recovery failed - outside recovery window');
       }
 
@@ -122,7 +122,7 @@ export class SessionRecoveryManager extends StateManager {
     // Get recovery data for session_start event
     const recoveryData = this.getRecoveryData();
 
-    if (debugMode) {
+    if (this.debugMode) {
       log('info', `Session recovery successful: recovery of session ${recoveredSessionId}`);
     }
 
@@ -162,8 +162,6 @@ export class SessionRecoveryManager extends StateManager {
    * Store session context for potential recovery
    */
   storeSessionContextForRecovery(sessionContext: SessionContext): void {
-    const debugMode = this.get('config')?.qaMode ?? false;
-
     try {
       const recoveryAttempts = this.getStoredRecoveryAttempts();
 
@@ -185,11 +183,11 @@ export class SessionRecoveryManager extends StateManager {
 
       this.storeRecoveryAttempts(recoveryAttempts);
 
-      if (debugMode) {
+      if (this.debugMode) {
         log('info', `Stored session context for recovery: ${sessionContext.sessionId}`);
       }
     } catch (error) {
-      if (debugMode) {
+      if (this.debugMode) {
         logUnknown('warning', 'Failed to store session context for recovery', error);
       }
     }
@@ -201,9 +199,7 @@ export class SessionRecoveryManager extends StateManager {
   private getRecoveryData(): {
     recovered: boolean;
   } {
-    const debugMode = this.get('config')?.qaMode ?? false;
-
-    if (debugMode) {
+    if (this.debugMode) {
       log('info', 'Session recovery data prepared');
     }
 
@@ -231,8 +227,7 @@ export class SessionRecoveryManager extends StateManager {
     try {
       this.storageManager.setItem(SESSION_RECOVERY_KEY(this.projectId), JSON.stringify(attempts));
     } catch (error) {
-      const debugMode = this.get('config')?.qaMode ?? false;
-      if (debugMode) {
+      if (this.debugMode) {
         logUnknown('warning', 'Failed to store recovery attempts', error);
       }
     }
@@ -259,8 +254,7 @@ export class SessionRecoveryManager extends StateManager {
     if (validAttempts.length !== attempts.length) {
       this.storeRecoveryAttempts(validAttempts);
 
-      const debugMode = this.get('config')?.qaMode ?? false;
-      if (debugMode) {
+      if (this.debugMode) {
         log('info', `Cleaned up ${attempts.length - validAttempts.length} old recovery attempts`);
       }
     }
@@ -294,8 +288,7 @@ export class SessionRecoveryManager extends StateManager {
   clearRecoveryData(): void {
     this.storageManager.removeItem(SESSION_RECOVERY_KEY(this.projectId));
 
-    const debugMode = this.get('config')?.qaMode ?? false;
-    if (debugMode) {
+    if (this.debugMode) {
       log('info', 'Cleared all recovery data');
     }
   }

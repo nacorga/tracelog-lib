@@ -226,6 +226,14 @@ export class EventManager extends StateManager {
       return;
     }
 
+    if (!this.get('sessionId')) {
+      if (this.get('config')?.qaMode) {
+        log('info', `Queue pending: ${this.eventsQueue.length} events waiting for active session`);
+      }
+
+      return;
+    }
+
     const body = this.buildEventsPayload();
     const success = this.dataSender.sendEventsQueue(body);
 
@@ -264,7 +272,7 @@ export class EventManager extends StateManager {
 
     return {
       user_id: this.get('userId'),
-      session_id: this.get('sessionId') ?? '',
+      session_id: this.get('sessionId') as string,
       device: this.get('device'),
       events: deduplicatedEvents,
       ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
