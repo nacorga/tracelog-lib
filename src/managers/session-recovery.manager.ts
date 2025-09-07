@@ -53,7 +53,7 @@ export class SessionRecoveryManager extends StateManager {
   /**
    * Attempt to recover a session
    */
-  attemptSessionRecovery(currentSessionId: string): {
+  attemptSessionRecovery(currentSessionId?: string): {
     recovered: boolean;
     recoveredSessionId?: string;
     context?: SessionContext;
@@ -79,6 +79,7 @@ export class SessionRecoveryManager extends StateManager {
 
     // Get the last session context
     const lastSessionContext = lastAttempt?.context;
+
     if (!lastSessionContext) {
       if (this.debugMode) {
         log('info', 'No session context available for recovery');
@@ -109,7 +110,7 @@ export class SessionRecoveryManager extends StateManager {
 
     // Create recovery attempt record
     const recoveryAttempt: RecoveryAttempt = {
-      sessionId: currentSessionId,
+      sessionId: currentSessionId ?? recoveredSessionId,
       timestamp: now,
       attempt: attemptNumber,
       context: {
@@ -119,8 +120,8 @@ export class SessionRecoveryManager extends StateManager {
       },
     };
 
-    // Store recovery attempt
     recoveryAttempts.push(recoveryAttempt);
+
     this.storeRecoveryAttempts(recoveryAttempts);
 
     if (this.debugMode) {

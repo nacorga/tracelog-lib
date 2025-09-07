@@ -182,7 +182,7 @@ export class SessionManager extends StateManager {
     let wasRecovered = false;
 
     if (this.recoveryManager?.hasRecoverableSession()) {
-      const recoveryResult = this.recoveryManager.attemptSessionRecovery('');
+      const recoveryResult = this.recoveryManager.attemptSessionRecovery();
 
       if (recoveryResult.recovered && recoveryResult.recoveredSessionId) {
         sessionId = recoveryResult.recoveredSessionId;
@@ -206,6 +206,7 @@ export class SessionManager extends StateManager {
     // If no recovery, create new session
     if (!wasRecovered) {
       sessionId = generateUUID();
+
       this.sessionStartTime = now;
       this.lastActivityTime = now;
 
@@ -215,6 +216,7 @@ export class SessionManager extends StateManager {
     }
 
     this.isSessionActive = true;
+
     this.resetInactivityTimer();
 
     // Store session context for future recovery

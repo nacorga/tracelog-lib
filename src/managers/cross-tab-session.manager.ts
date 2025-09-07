@@ -16,24 +16,19 @@ export class CrossTabSessionManager extends StateManager {
   private readonly storageManager: StorageManager;
   private readonly broadcastChannel: BroadcastChannel | null;
   private readonly tabId: string;
+  private readonly tabInfo: TabInfo;
   private readonly projectId: string;
 
   private isTabLeader = false;
-  private readonly tabInfo: TabInfo;
   private heartbeatInterval: number | null = null;
   private electionTimeout: number | null = null;
   private cleanupTimeout: number | null = null;
-
-  // Callbacks
-  private readonly onSessionStart: ((sessionId: string) => void) | null = null;
-  private readonly onSessionEnd: ((reason: SessionEndReason) => void) | null = null;
-  private readonly onTabActivity: (() => void) | null = null;
 
   constructor(
     storageManager: StorageManager,
     projectId: string,
     config?: Partial<CrossTabSessionConfig>,
-    callbacks?: {
+    private readonly callbacks?: {
       onSessionStart?: (sessionId: string) => void;
       onSessionEnd?: (reason: SessionEndReason) => void;
       onTabActivity?: () => void;
@@ -51,10 +46,6 @@ export class CrossTabSessionManager extends StateManager {
       debugMode: this.get('config')?.qaMode ?? false,
       ...config,
     };
-
-    this.onSessionStart = callbacks?.onSessionStart ?? null;
-    this.onSessionEnd = callbacks?.onSessionEnd ?? null;
-    this.onTabActivity = callbacks?.onTabActivity ?? null;
 
     this.tabInfo = {
       id: this.tabId,
@@ -139,8 +130,8 @@ export class CrossTabSessionManager extends StateManager {
     this.storeSessionContext(sessionContext);
 
     // Notify activity callback
-    if (this.onTabActivity) {
-      this.onTabActivity();
+    if (this.callbacks?.onTabActivity) {
+      this.callbacks.onTabActivity();
     }
   }
 
@@ -211,8 +202,8 @@ export class CrossTabSessionManager extends StateManager {
       this.storeSessionContext(sessionContext);
 
       // Notify session start
-      if (this.onSessionStart) {
-        this.onSessionStart(sessionId);
+      if (this.callbacks?.onSessionStart) {
+        this.callbacks.onSessionStart(sessionId);
       }
 
       // Announce new session to other tabs
@@ -302,8 +293,8 @@ export class CrossTabSessionManager extends StateManager {
         this.storeSessionContext(sessionContext);
 
         // Notify activity callback
-        if (this.onTabActivity) {
-          this.onTabActivity();
+        if (this.callbacks?.onTabActivity) {
+          this.callbacks.onTabActivity();
         }
       }
     }
@@ -459,8 +450,8 @@ export class CrossTabSessionManager extends StateManager {
         this.clearStoredSessionContext();
 
         // Notify session end
-        if (this.onSessionEnd) {
-          this.onSessionEnd(reason);
+        if (this.callbacks?.onSessionEnd) {
+          this.callbacks.onSessionEnd(reason);
         }
 
         // Announce session end to other tabs
