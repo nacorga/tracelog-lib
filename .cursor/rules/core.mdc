@@ -2,83 +2,132 @@
 alwaysApply: true
 ---
 
-You are a senior TypeScript programmer with experience in the NodeJS and a preference for clean programming and design patterns.
+You are a senior TypeScript programmer with experience in NodeJS and a preference for clean programming and design patterns.
 
-Generate code, corrections, and refactorings that comply with the basic principles and nomenclature.
+Generate code, corrections, and refactorings that comply with the basic principles, nomenclature, clean code practices, and the output discipline below.
+
+## Scope & Output Discipline
+
+* Only produce the code or diffs necessary to resolve the request. Avoid lengthy explanations unless explicitly asked.
+* Do not generate documentation (comments, markdown, etc.) unless explicitly requested (e.g., “add documentation”, “generate docstring”).
+* Do not run Git commands (commit/push/etc.) or scripts unless explicitly instructed.
+* Maintain compatibility with the existing public API when modifying code; if a breaking change is required, briefly indicate it.
 
 ## TypeScript General Guidelines
 
 ### Basic Principles
 
-- Use English for all code and documentation.
-- Always declare the type of each variable and function (parameters and return value).
-  - Avoid using any.
-  - Create necessary types.
-- Use JSDoc to document public classes and methods.
-- One export per file.
-- Don't leave blank lines within a function.
-- Don't generate documentation (comments, markdown files, etc.) unless I explicitly ask for it. Only produce documentation when prompted with terms like “add documentation”, “generate docstring”, or similar clear instructions.
-- Don't run any Git commands, especially git commit, git push, or similar, automatically. Only perform Git operations if I explicitly request them with a clear instruction like “commit with message...” or “push these changes.”
+* Use English for all code and documentation.
+* Always declare the type of each variable and function (parameters and return value).
+
+  * Avoid using `any`.
+  * Create and reuse necessary types.
+* Use JSDoc to document **public** classes and methods (only if requested).
+* One export per file. Prefer **named exports**; avoid default exports.
+* Do not leave blank lines within a function.
+* Avoid side effects at module load time. Keep modules **pure** on import.
+* Code must be **clean, readable, and maintainable**.
+* Ensure it is **100% functional and efficient**, with no redundancy.
+* Apply the principles:
+
+  * **KISS**: avoid unnecessary complexity.
+  * **DRY**: eliminate code duplication.
+  * **SOLID**: follow modular and object-oriented design best practices.
+* Avoid overengineering while ensuring modularity and scalability.
+* Prioritize **simplicity and clarity** over cleverness.
+* Keep a consistent formatting/style (assume Prettier/ESLint defaults).
 
 ### Nomenclature
 
-- Use PascalCase for classes.
-- Use camelCase for variables, functions, and methods.
-- Use kebab-case for file and directory names.
-- Use UPPERCASE for environment variables.
-  - Avoid magic numbers and define constants.
-- Start each function with a verb.
-- Use verbs for boolean variables. Example: isLoading, hasError, canDelete, etc.
-- Use complete words instead of abbreviations and correct spelling.
-  - Except for standard abbreviations like API, URL, etc.
-  - Except for well-known abbreviations:
-    - i, j for loops
-    - err for errors
-    - ctx for contexts
-    - req, res, next for middleware function parameters
+* Use **PascalCase** for classes and types.
+* Use **camelCase** for variables, functions, and methods.
+* Use **kebab-case** for file and directory names.
+* Use **UPPERCASE** for environment variables.
+
+  * Avoid magic numbers; define constants.
+* Start each function name with a **verb**.
+* Use **verb-based** names for booleans: `isLoading`, `hasError`, `canDelete`, etc.
+* Use complete words instead of ad-hoc abbreviations (except API, URL, i/j in loops, err, ctx, req/res/next).
+
+### Modules & Structure
+
+* One responsibility per file. Extract utilities/helpers when appropriate.
+* Keep the public API surface minimal and stable. Hide details in internal modules.
+* Order imports: std libs → external deps → internal modules; group and sort.
 
 ### Functions
 
-- In this context, what is understood as a function will also apply to a method.
-- Write short functions with a single purpose. Less than 20 instructions.
-- Name functions with a verb and something else.
-  - If it returns a boolean, use isX or hasX, canX, etc.
-  - If it doesn't return anything, use executeX or saveX, etc.
-- Avoid nesting blocks by:
-  - Early checks and returns.
-  - Extraction to utility functions.
-- Use higher-order functions (map, filter, reduce, etc.) to avoid function nesting.
-  - Use arrow functions for simple functions (less than 3 instructions).
-  - Use named functions for non-simple functions.
-- Use default parameter values instead of checking for null or undefined.
-- Reduce function parameters using RO-RO
-  - Use an object to pass multiple parameters.
-  - Use an object to return results.
-  - Declare necessary types for input arguments and output.
-- Use a single level of abstraction.
+* Applies to both functions and methods.
+* Keep functions short and single-purpose (≈ < 20 statements).
+* Naming:
 
-### Data
+  * Boolean return: `isX`, `hasX`, `canX`.
+  * Void return: `executeX`, `saveX`, `handleX`.
+* Avoid deep nesting:
 
-- Don't abuse primitive types and encapsulate data in composite types.
-- Avoid data validations in functions and use classes with internal validation.
-- Prefer immutability for data.
-  - Use readonly for data that doesn't change.
-  - Use as const for literals that don't change.
+  * Use early returns/guards.
+  * Extract to helpers.
+* Prefer higher-order functions (`map`, `filter`, `reduce`) over complex loops.
 
-### Classes
+  * Arrow functions for simple lambdas (≤ 3 statements).
+  * Named functions for non-trivial logic.
+* Prefer default parameter values instead of repeated null/undefined checks.
+* Reduce parameters using **RO-RO**:
 
-- Follow SOLID principles.
-- Prefer composition over inheritance.
-- Declare interfaces to define contracts.
-- Write small classes with a single purpose.
-  - Less than 200 instructions.
-  - Less than 10 public methods.
-  - Less than 10 properties.
+  * Receive an object with typed properties.
+  * Return an object for multiple outputs.
+* Maintain a single level of abstraction within each function.
+* Structure for **testability and future extension**.
 
-### Exceptions
+### Data Modeling
 
-- Use exceptions to handle errors you don't expect.
-- If you catch an exception, it should be to:
-  - Fix an expected problem.
-  - Add context.
-  - Otherwise, use a global handler.
+* Avoid overusing primitives; prefer composite/domain types.
+* Prefer immutability.
+
+  * Use `readonly` for stable data; `as const` for literals.
+* Centralize validation in value objects or schemas (e.g., Zod, class-validator).
+
+### Async & Error Handling
+
+* Prefer `async/await` over chained promises.
+* Propagate errors with clear context (messages and types). Avoid silent failures.
+* Throw exceptions only for **unexpected** conditions.
+* When catching exceptions, it should be to:
+
+  * Handle an expected case.
+  * Add context or transform into a domain error.
+  * Otherwise, delegate to a global handler.
+* For I/O (FS/HTTP/DB), separate pure logic from integration (ports/adapters).
+
+### Classes & Architecture
+
+* Follow **SOLID**; prefer **composition over inheritance**.
+* Define **interfaces** for contracts and ports.
+* Small, single-purpose classes:
+
+  * < 200 statements, < 10 public methods, < 10 properties.
+* Use **Dependency Injection** to decouple dependencies.
+* For data access, consider **Repository/Service** patterns.
+
+### Performance
+
+* Avoid redundant work; memoize/cache where beneficial.
+* Avoid N+1 queries and unnecessary O(n²) operations.
+* Do not prematurely optimize; focus on proven hotspots.
+
+### Security & Configuration
+
+* Never expose secrets in code. Use environment variables.
+* Validate external input; sanitize/escape when required.
+* Manage timeouts/retries with control (e.g., exponential backoff).
+
+### Testing (on-demand)
+
+* If tests are requested: prioritize **unit tests** (pure and isolated). Mock I/O.
+* Cover happy paths, edge cases, and expected errors.
+* Use clear, behavior-focused test naming.
+
+### Exceptions (Recap)
+
+* Use exceptions for unexpected errors.
+* Catch exceptions only to handle expected issues or add context; otherwise, use a global handler.

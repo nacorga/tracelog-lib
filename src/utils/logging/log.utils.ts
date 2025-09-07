@@ -23,3 +23,21 @@ export const log = (type: LogType, message: string): void => {
     console.error(buildMessage(message));
   }
 };
+
+/**
+ * Logs an unknown message
+ * @param type - The type of log (info, warning, error)
+ * @param message - The message to log
+ * @param error - The error to log
+ */
+export const logUnknown = (type: LogType, message: string, error: unknown): void => {
+  let errorMsg: string;
+
+  try {
+    errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+  } catch {
+    errorMsg = 'Unknown error';
+  }
+
+  log(type, `${message}: ${errorMsg}`);
+};

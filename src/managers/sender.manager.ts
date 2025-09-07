@@ -4,9 +4,11 @@ import {
   RETRY_BACKOFF_MAX,
   RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
+  SYNC_XHR_TIMEOUT_MS,
+  API_BASE_URL,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto } from '../types';
-import { log } from '../utils';
+import { log, logUnknown } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -26,39 +28,16 @@ export class SenderManager extends StateManager {
     this.recoverPersistedEvents();
   }
 
+  async sendEventsQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
+    return this.executeSend(body, () => this.sendQueueAsync(body));
+  }
+
+  sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
+    return this.executeSendSync(body, () => this.sendQueueSync(body));
+  }
+
   sendEventsQueue(body: BaseEventsQueueDto): boolean {
-    const isQAMode = this.get('config')?.qaMode;
-
-    if (isQAMode) {
-      this.logQueue(body);
-    }
-
-    if (isQAMode || ['demo', 'test'].includes(this.get('config').id)) {
-      return true;
-    }
-
-    if (!this.canSendNow()) {
-      return false;
-    }
-
-    this.lastSendAttempt = Date.now();
-
-    try {
-      const success = this.sendQueue(body);
-
-      if (success) {
-        this.resetRetryState();
-        this.clearPersistedEvents();
-      } else {
-        this.handleSendFailure(body);
-      }
-
-      return success;
-    } catch {
-      this.handleSendFailure(body);
-
-      return false;
-    }
+    return this.executeSendSync(body, () => this.sendQueue(body));
   }
 
   recoverPersistedEvents(): void {
@@ -80,7 +59,7 @@ export class SenderManager extends StateManager {
         this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
-      this.logError('Failed to recover persisted events', error);
+      logUnknown('error', 'Failed to recover persisted events', error);
     }
   }
 
@@ -88,20 +67,70 @@ export class SenderManager extends StateManager {
     return Date.now() - this.lastSendAttempt >= RATE_LIMIT_INTERVAL;
   }
 
-  private sendQueue(body: BaseEventsQueueDto): boolean {
-    const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
+  private async sendQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
+    const { url, payload } = this.prepareRequest(body);
 
-    if (typeof navigator.sendBeacon !== 'function') {
-      log('warning', 'navigator.sendBeacon is not available in this environment');
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: payload,
+      });
+
+      return response.ok;
+    } catch (error) {
+      logUnknown('error', 'Failed to send events async', error);
 
       return false;
     }
+  }
 
-    if (navigator.sendBeacon(this.get('apiUrl'), blob)) {
+  private sendQueueSync(body: BaseEventsQueueDto): boolean {
+    const { url, payload } = this.prepareRequest(body);
+
+    if (this.isSendBeaconAvailable() && navigator.sendBeacon(url, payload)) {
       return true;
     }
 
-    return false;
+    return this.sendSyncXHR(url, payload);
+  }
+
+  private sendQueue(body: BaseEventsQueueDto): boolean {
+    if (!this.isSendBeaconAvailable()) {
+      return false;
+    }
+
+    const { url, payload } = this.prepareRequest(body);
+
+    return navigator.sendBeacon(url, payload);
+  }
+
+  private sendSyncXHR(url: string, payload: string): boolean {
+    try {
+      const xhr = new XMLHttpRequest();
+
+      xhr.open('POST', url, false);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.timeout = SYNC_XHR_TIMEOUT_MS;
+      xhr.send(payload);
+
+      return xhr.status >= 200 && xhr.status < 300;
+    } catch (error) {
+      logUnknown('error', 'Sync XHR failed', error);
+
+      return false;
+    }
+  }
+
+  private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
+    const baseUrl = this.get('apiUrl') ?? API_BASE_URL;
+
+    return {
+      url: `${baseUrl}/events`,
+      payload: JSON.stringify(body),
+    };
   }
 
   private getPersistedData(): PersistedQueueData | null {
@@ -159,7 +188,7 @@ export class SenderManager extends StateManager {
 
       this.storeManager.setItem(this.queueStorageKey, JSON.stringify(persistedData));
     } catch (error) {
-      this.logError('Failed to persist events', error);
+      logUnknown('error', 'Failed to persist events', error);
     }
   }
 
@@ -185,15 +214,88 @@ export class SenderManager extends StateManager {
     this.retryDelay = Math.min(this.retryDelay * 2, RETRY_BACKOFF_MAX);
   }
 
+  private async executeSend(body: BaseEventsQueueDto, sendFn: () => Promise<boolean>): Promise<boolean> {
+    if (this.shouldSkipSend()) {
+      this.logQueue(body);
+
+      return true;
+    }
+
+    if (!this.canSendNow()) {
+      return false;
+    }
+
+    this.lastSendAttempt = Date.now();
+
+    try {
+      const success = await sendFn();
+
+      if (success) {
+        this.resetRetryState();
+        this.clearPersistedEvents();
+      } else {
+        this.handleSendFailure(body);
+      }
+
+      return success;
+    } catch {
+      this.handleSendFailure(body);
+
+      return false;
+    }
+  }
+
+  private executeSendSync(body: BaseEventsQueueDto, sendFn: () => boolean): boolean {
+    if (this.shouldSkipSend()) {
+      this.logQueue(body);
+
+      return true;
+    }
+
+    if (!this.canSendNow()) {
+      return false;
+    }
+
+    this.lastSendAttempt = Date.now();
+
+    try {
+      const success = sendFn();
+
+      if (success) {
+        this.resetRetryState();
+        this.clearPersistedEvents();
+      } else {
+        this.handleSendFailure(body);
+      }
+
+      return success;
+    } catch {
+      this.handleSendFailure(body);
+
+      return false;
+    }
+  }
+
+  private shouldSkipSend(): boolean {
+    const config = this.get('config');
+    const isQAMode = config?.qaMode ?? false;
+    const isTestMode = ['demo', 'test'].includes(config?.id ?? '');
+
+    return isQAMode || isTestMode;
+  }
+
+  private isSendBeaconAvailable(): boolean {
+    if (typeof navigator.sendBeacon !== 'function') {
+      return false;
+    }
+
+    return true;
+  }
+
   private clearRetryTimeout(): void {
     if (this.retryTimeoutId !== null) {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
-  }
-
-  private logError(message: string, error: unknown): void {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log('error', `${message}: ${errorMessage}`);
   }
 }

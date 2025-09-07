@@ -8,4 +8,4 @@
 /test-results
 /playwright-report
 /tests/fixtures/tracelog.js
-/_llm
+/.llm

@@ -40,6 +40,8 @@ export class EventManager extends StateManager {
     click_data,
     custom_event,
     web_vitals,
+    session_end_reason,
+    session_start_recovered,
   }: Partial<EventData>): void {
     if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
       return;
@@ -52,6 +54,8 @@ export class EventManager extends StateManager {
       click_data,
       custom_event,
       web_vitals,
+      session_end_reason,
+      session_start_recovered,
     });
 
     if (isDuplicatedEvent) {
@@ -103,6 +107,8 @@ export class EventManager extends StateManager {
       ...(custom_event && { custom_event }),
       ...(utmParams && { utm: utmParams }),
       ...(web_vitals && { web_vitals }),
+      ...(session_end_reason && { session_end_reason }),
+      ...(session_start_recovered && { session_start_recovered }),
     };
 
     if (this.get('config')?.tags?.length) {
@@ -150,10 +156,6 @@ export class EventManager extends StateManager {
       this.initEventsQueueInterval();
     }
 
-    if (payload.type === EventType.SESSION_END && this.eventsQueue.length > 0) {
-      this.sendEventsQueue();
-    }
-
     if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
       const customEvent = payload.custom_event as CustomEventData;
 
@@ -183,11 +185,62 @@ export class EventManager extends StateManager {
     }, interval);
   }
 
+  async flushImmediately(): Promise<boolean> {
+    if (this.eventsQueue.length === 0) {
+      return true;
+    }
+
+    const body = this.buildEventsPayload();
+    const success = await this.dataSender.sendEventsQueueAsync(body);
+
+    if (success) {
+      this.eventsQueue = [];
+      this.clearQueueInterval();
+    }
+
+    return success;
+  }
+
+  flushImmediatelySync(): boolean {
+    if (this.eventsQueue.length === 0) {
+      return true;
+    }
+
+    const body = this.buildEventsPayload();
+    const success = this.dataSender.sendEventsQueueSync(body);
+
+    if (success) {
+      this.eventsQueue = [];
+      this.clearQueueInterval();
+    }
+
+    return success;
+  }
+
+  getQueueLength(): number {
+    return this.eventsQueue.length;
+  }
+
   private sendEventsQueue(): void {
     if (this.eventsQueue.length === 0) {
       return;
     }
 
+    if (!this.get('sessionId')) {
+      if (this.get('config')?.qaMode) {
+        log('info', `Queue pending: ${this.eventsQueue.length} events waiting for active session`);
+      }
+
+      return;
+    }
+
+    const body = this.buildEventsPayload();
+    const success = this.dataSender.sendEventsQueue(body);
+
+    this.eventsQueue = success ? [] : body.events;
+  }
+
+  private buildEventsPayload(): BaseEventsQueueDto {
     const uniqueEvents = new Map<string, EventData>();
 
     for (const event of this.eventsQueue) {
@@ -215,20 +268,22 @@ export class EventManager extends StateManager {
     }
 
     const deduplicatedEvents = [...uniqueEvents.values()];
-
     deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
 
-    const body: BaseEventsQueueDto = {
+    return {
       user_id: this.get('userId'),
       session_id: this.get('sessionId') as string,
       device: this.get('device'),
       events: deduplicatedEvents,
       ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
     };
+  }
 
-    const success = this.dataSender.sendEventsQueue(body);
-
-    this.eventsQueue = success ? [] : deduplicatedEvents;
+  private clearQueueInterval(): void {
+    if (this.eventsQueueIntervalId) {
+      clearInterval(this.eventsQueueIntervalId);
+      this.eventsQueueIntervalId = null;
+    }
   }
 
   private isDuplicatedEvent({
@@ -238,6 +293,8 @@ export class EventManager extends StateManager {
     click_data,
     custom_event,
     web_vitals,
+    session_end_reason,
+    session_start_recovered,
   }: Partial<EventData>): boolean {
     if (!this.lastEvent) {
       return false;
@@ -285,6 +342,14 @@ export class EventManager extends StateManager {
 
       case EventType.WEB_VITALS: {
         return this.lastEvent.web_vitals?.type === web_vitals?.type;
+      }
+
+      case EventType.SESSION_START: {
+        return this.lastEvent.session_start_recovered === session_start_recovered;
+      }
+
+      case EventType.SESSION_END: {
+        return this.lastEvent.session_end_reason === session_end_reason;
       }
 
       default: {

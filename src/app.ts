@@ -207,6 +207,7 @@ export class App extends StateManager {
 
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
+      this.suppressNextScrollTimer = null;
     }
 
     this.suppressNextScrollTimer = setTimeout(() => {
