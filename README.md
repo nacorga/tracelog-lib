@@ -1,69 +1,110 @@
-# TraceLog Client
+# TraceLog Client SDK
 
-**TraceLog** is a web analytics platform that combines user behavior tracking with AI to provide deeper insights than traditional tools.
+A lightweight TypeScript SDK for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
 
-This guide will help you integrate TraceLog into your project in just a few minutes.
+## Features
 
-## 📦 Installation
+- **Zero-config tracking** - Automatically captures clicks, scrolls, page navigation, and web vitals out of the box.
+- **Cross-tab session management** - Maintains consistent user sessions across multiple browser tabs with automatic recovery.
+- **Privacy-first** - Built-in PII sanitization, IP exclusion options, and configurable data sampling.
+- **Framework agnostic** - Works with vanilla JS, React, Vue, Angular, or any web application.
+- **Lightweight** - Only one dependency (`web-vitals`) with dual ESM/CJS support.
 
-```bash
-npm install @tracelog/client
-```
+## Installation
 
-## 🚀 Quick Start
+**Prerequisites**: Modern browser with ES6+ support. No server-side requirements.
 
-### 1. Sign Up and Get Your Project ID
-- Sign up at [tracelog.io](https://tracelog.io)
-- Get your Project ID from the dashboard
+- npm:
+  ```bash
+  npm install @tracelog/client
+  ```
+- yarn:
+  ```bash
+  yarn add @tracelog/client
+  ```
+- CDN (browser):
+  ```html
+  <script src="https://unpkg.com/@tracelog/client/dist/browser/tracelog.js"></script>
+  ```
 
-### 2. Set Up Your Custom Subdomain
-Create a CNAME record in your DNS settings:
+## Quick Start
 
-| Host               | Type  | Value             |
-| ------------------ | ----- | ----------------- |
-| `YOUR_TRACELOG_ID` | CNAME | `mdw.tracelog.io` |
+Initialize tracking with your project ID and start capturing events immediately:
 
-Replace `YOUR_TRACELOG_ID` with your actual Project ID.
+```typescript
+import * as TraceLog from '@tracelog/client';
 
-### 3. Initialize TraceLog
-
-**Basic setup:**
-```javascript
-import { TraceLog } from '@tracelog/client';
-
+// Initialize tracking
 await TraceLog.init({
   id: 'your-project-id'
 });
 
 // Send custom events
-TraceLog.event('button_click', { buttonId: 'subscribe-btn' });
+TraceLog.event('user_signup', {
+  method: 'email',
+  plan: 'premium'
+});
 ```
 
-## ⚙️ Configuration Options
+**Expected behavior**: Automatic tracking begins immediately. Check browser dev tools console for event logs (when `qaMode: true`).
 
-```javascript
+## Usage
+
+**Basic tracking with configuration:**
+```typescript
 await TraceLog.init({
   id: 'your-project-id',
+  sessionTimeout: 30 * 60 * 1000, // 30 minutes
+  qaMode: true // Enable debug logs
+});
+```
 
-  // Session timeout in ms (default: 15 minutes)
-  sessionTimeout: 900000,
-  
-  // Data added to every event
-  globalMetadata: {
-    version: '1.2.0',
-    environment: 'production'
-  },
-  
-  // Track scrolling in specific containers
-  scrollContainerSelectors: ['.main-content', '#sidebar'],
-  
-  // Remove sensitive data from URLs
-  sensitiveQueryParams: ['token', 'password'],
+**Custom events with metadata:**
+```typescript
+TraceLog.event('product_viewed', {
+  productId: 'abc-123',
+  category: 'electronics',
+  price: 299.99,
+  tags: ['featured', 'sale']
+});
+```
 
-  // Sampling rate for how many error events are captured (0-1)
-  errorSampling: 0.6,
-  
-  // Third-party integration
+**Privacy-focused configuration:**
+```typescript
+await TraceLog.init({
+  id: 'your-project-id',
+  sensitiveQueryParams: ['token', 'session_id'],
+  excludedUrlPaths: ['/admin/*', '/internal'],
+  errorSampling: 0.1 // Only sample 10% of errors
+});
+```
+
+## API
+
+**Core methods:**
+- `init(config: AppConfig): Promise<void>` - Initialize tracking with project configuration.
+- `event(name: string, metadata?: Record<string, MetadataType>): void` - Send custom event with optional metadata.
+- `destroy(): void` - Clean up all tracking and remove event listeners.
+
+**Key configuration options:**
+- `config.id`: Your unique project identifier (required).
+- `config.sessionTimeout`: Session timeout in milliseconds (default: 15 minutes).
+- `config.qaMode`: Enable debug logging and bypass data sending for testing.
+- `config.globalMetadata`: Metadata automatically attached to all events.
+
+**Metadata types:** `string | number | boolean | string[]`
+
+## Configuration
+
+**Environment-based settings:**
+- Set `qaMode: true` for development/testing environments
+- Use `samplingRate: 0.1` to reduce data volume in high-traffic applications
+- Configure `sessionTimeout` to match your application's user session length
+
+**Google Analytics integration:**
+```typescript
+await TraceLog.init({
+  id: 'your-project-id',
   integrations: {
     googleAnalytics: {
       measurementId: 'G-XXXXXXXXXX'
@@ -72,39 +113,43 @@ await TraceLog.init({
 });
 ```
 
-## 📊 Automatic Tracking
+## Compatibility
 
- TraceLog automatically captures:
- - **Page visits** - Navigation between pages
- - **Clicks** - Button and link interactions
- - **Scrolling** - Scroll depth and engagement
- - **Sessions** - User session start/end
- - **Session Recovery** - Resume previous session context when recovery data is available (`hasRecoverableSession()` returns false when no data exists)
- - **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB and Long Tasks
+- **Runtime**: Modern browsers (Chrome 60+, Firefox 55+, Safari 12+)
+- **Module formats**: ESM, CommonJS, UMD
+- **TypeScript**: Full type definitions included
+- **Frameworks**: React, Vue, Angular, Svelte, vanilla JS
 
-## 🎯 Custom Events
+## Troubleshooting
 
-```javascript
-// Simple event
-TraceLog.event('user_signup');
+**Events not appearing** → Check `qaMode: true` for console logs → Verify project ID is correct → Ensure network connectivity.
 
-// Event with data
-TraceLog.event('purchase', {
-  product: 'premium_plan',
-  price: 29.99,
-  currency: 'USD'
-});
+**Session tracking issues** → Verify localStorage is available → Check for cross-tab conflicts → Review session timeout settings.
+
+**High memory usage** → Reduce `sessionTimeout` → Lower `samplingRate` → Check for event listener leaks (call `destroy()` on cleanup).
+
+**Local development:**
+```bash
+npm install
+npm run build:all      # Build ESM + CJS
+npm run check          # Lint + format check
+npm run test:e2e       # Run E2E tests
 ```
 
-## 🧹 Cleanup
+**Quality checks:**
+- Code must pass ESLint + Prettier
+- Maintain TypeScript strict mode
+- Add tests for new features
+- Update types for API changes
 
-```javascript
-// Clean up when done (e.g., user logout)
-TraceLog.destroy();
-```
+## Versioning
 
-## 📖 Documentation
+Follows [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH). Breaking changes are documented in release notes with migration guides.
 
-* [API Reference](https://www.tracelog.io/docs/api)
-* [Advanced Configuration](https://www.tracelog.io/docs/advanced-configuration)  
-* [Best Practices](https://www.tracelog.io/docs/best-practices)
+## License
+
+MIT © TraceLog. See [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+Built with [web-vitals](https://github.com/GoogleChrome/web-vitals) for performance metrics. Inspired by privacy-first analytics tools and modern web standards for user behavior tracking.

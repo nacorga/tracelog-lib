@@ -1,8 +1,4 @@
-# TraceLog SDK
-
-**JavaScript library for web analytics and real-time event tracking**
-
-## 🎯 Purpose
+# Project Overview
 
 Event tracking SDK that automatically captures user interactions (clicks, scroll, navigation, web performance) and allows custom events. Includes cross-tab session management, session recovery, Google Analytics integration, and sampling capabilities.
 
@@ -13,15 +9,7 @@ src/
 ├── api.ts                 # Public API (init, event, destroy)
 ├── app.ts                 # Main class orchestrating all managers
 ├── handlers/              # Specific event capture
-│   ├── click.handler.ts   # Click tracking
-│   ├── scroll.handler.ts  # Scroll tracking
-│   ├── session.handler.ts # Session management
-│   └── performance.handler.ts # Web vitals
 ├── managers/              # Core business logic
-│   ├── event.manager.ts   # Event queue and sending
-│   ├── session.manager.ts # Session lifecycle
-│   ├── storage.manager.ts # localStorage abstraction
-│   └── state.manager.ts   # Shared global state
 ├── integrations/          # External integrations
 ├── utils/                 # Utilities and validations
 └── types/                 # TypeScript definitions
@@ -151,3 +139,92 @@ await TraceLog.init({
 // 4. Validations in utils/validations/
 // 5. E2E tests in tests/
 ```
+
+---
+
+# Coding Guidelines (TypeScript)
+
+## Persona & Output Discipline
+
+- Act as a senior TypeScript engineer for Node.js. Prefer clean code and design patterns.
+- Output only the code or minimal diffs needed to fulfill the request. Avoid explanations unless explicitly asked.
+- Do not generate docs or comments unless explicitly requested.
+- Do not run Git or shell commands unless explicitly instructed.
+- Preserve the public API. If a breaking change is required, briefly indicate it.
+
+## Principles
+
+- Use English in code and identifiers.
+- Always type parameters and return values; avoid any. Create and reuse domain types.
+- Keep modules pure on import; avoid side effects at module load time.
+- Strive for clean, readable, maintainable, efficient code (KISS, DRY, SOLID).
+- Prefer simplicity and clarity over cleverness. Follow project ESLint/Prettier defaults.
+
+## Naming & Structure
+
+- PascalCase for classes and types.
+- camelCase for variables, functions, methods.
+- kebab-case for files and directories.
+- UPPERCASE for environment variables; avoid magic numbers via constants.
+- Start function names with verbs; boolean functions as isX/hasX/canX.
+- One responsibility per file. Minimize public API; hide internals.
+- Import order: std → external → internal; group and sort.
+
+## Functions
+
+- Keep functions short and single-purpose (≈ under 20 statements).
+- Avoid deep nesting; use guards and extract helpers.
+- Prefer map/filter/reduce for collection ops.
+- Arrow functions for small lambdas (≤ 3 statements); named functions for non-trivial logic.
+- Prefer default parameters over repeated null/undefined checks.
+- Reduce params with RO-RO: receive typed objects; return objects for multiple outputs.
+- Maintain one abstraction level per function; design for testability and extension.
+
+## Data Modeling
+
+- Prefer domain types over raw primitives.
+- Prefer immutability; use readonly and as const where helpful.
+- Centralize validation via value objects or schemas (e.g., class-validator, Zod).
+
+## Async & Errors
+
+- Prefer async/await; propagate errors with clear messages and types.
+- Throw only for unexpected conditions.
+- Catch to handle expected cases, add context, or map to domain errors; otherwise rely on global handlers.
+- Separate pure logic from I/O (ports/adapters).
+
+## Classes & Architecture
+
+- Apply SOLID; prefer composition over inheritance.
+- Define interfaces for contracts and ports.
+- Keep classes small (< 200 statements, < 10 public methods/properties).
+- Use Dependency Injection to decouple; consider Repository/Service patterns for data access.
+
+## Performance
+
+- Avoid redundant work; memoize/cache where it pays off.
+- Avoid N+1 and accidental O(n²) hotspots.
+- Do not prematurely optimize; focus on measured bottlenecks.
+
+## Security & Configuration
+
+- Never expose secrets; read from environment variables.
+- Validate external input; sanitize/escape as needed.
+- Manage timeouts and retries with control (e.g., exponential backoff).
+
+## Testing (On-Demand)
+
+- When tests are requested: prefer unit tests (pure, isolated); mock I/O.
+- Cover happy paths, edge cases, and expected failures.
+- Use clear, behavior-oriented test naming.
+
+---
+
+# Project Conventions
+
+- Lint/format on commit: ESLint + Prettier.
+- Naming: kebab-case files, PascalCase classes, camelCase variables.
+- Commits: Conventional Commits (feat:, fix:, chore:).
+- No business logic in controllers.
+- Do not persist raw candles daily; compute features in-memory.
+- The LLM must not invent data; only use computed features and available evidence.
