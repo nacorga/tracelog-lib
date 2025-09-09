@@ -1,5 +1,3 @@
-# E2E Testing: Initialization Tests
-
 ## Overview
 
 This issue covers the implementation of **4 E2E tests** for TraceLog SDK initialization functionality. These tests validate library initialization, configuration handling, error scenarios, and QA mode setup.
@@ -255,17 +253,9 @@ test.describe('Lorem Ipsum', () => {
 - Console output validation for QA mode
 - Error message accuracy verification
 
-## Priority
-
-**High** - Initialization is fundamental to all SDK functionality
-
-## Labels
-
-- `e2e-testing`
-- `initialization`
-- `high-priority`
-- `playwright`
-- `core-functionality`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 
