@@ -4,134 +4,237 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TraceLog E2E Test Page</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            margin: 5px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-    </style>
+    <link rel="stylesheet" href="index.css">
 </head>
 <body>
-    <div class="container" style="height: 1200px;">
-        <h1 data-testid="title">TraceLog E2E Test Page</h1>
-        <button
-            id="test-button"
-            data-testid="test-button"
-            data-tl-name="test_button"
-            data-tl-value="test_value">
-            Test Button
-        </button>
+    <div class="container">
+        <h1 data-testid="title">TraceLog E2E Test Suite</h1>
+        <p>This page provides comprehensive testing scenarios for all TraceLog functionality.</p>
+        
+        <!-- Library Initialization Tests -->
+        <div class="section">
+            <h2>Library Initialization</h2>
+            <button data-testid="init-valid" id="init-valid">Initialize with Valid ID</button>
+            <button data-testid="init-invalid" id="init-invalid" class="danger">Initialize with Invalid ID</button>
+            <button data-testid="init-duplicate" id="init-duplicate" class="warning">Duplicate Initialization</button>
+            <button data-testid="destroy-lib" id="destroy-lib" class="danger">Destroy Library</button>
+            <div class="test-data" data-testid="init-status">Status: Ready for testing</div>
+            
+            <!-- Additional test elements for initialization contract tests -->
+            <div class="test-data" data-testid="environment-check">Environment: Browser APIs available</div>
+            <div class="test-data" data-testid="duplicate-init-status">Duplicate Init: Not tested</div>
+            <div class="test-data" data-testid="validation-status">Validation: Ready</div>
+        </div>
 
-        <button
-            id="custom-event-btn"
-            data-testid="custom-event-btn">
-            Send Custom Event
-        </button>
+        <!-- Session Management Tests -->
+        <div class="section">
+            <h2>Session Management</h2>
+            <button data-testid="start-session" id="start-session" class="success">Start New Session</button>
+            <button data-testid="end-session" id="end-session" class="danger">End Session</button>
+            <button data-testid="simulate-timeout" id="simulate-timeout" class="warning">Simulate Session Timeout</button>
+            <button data-testid="check-session" id="check-session">Check Session Status</button>
+            <div class="test-data" data-testid="session-info">Session Info: None</div>
+        </div>
 
-        <button
-            id="empty-name-btn"
-            data-testid="empty-name-btn"
-            data-tl-name="">
-            Empty Name
-        </button>
+        <!-- Custom Event Tracking Tests -->
+        <div class="section">
+            <h2>Custom Event Tracking</h2>
+            <div class="form-group">
+                <label for="event-name">Event Name:</label>
+                <input type="text" id="event-name" data-testid="event-name" value="test_event" placeholder="Enter event name">
+            </div>
+            <div class="form-group">
+                <label for="event-metadata">Event Metadata (JSON):</label>
+                <textarea id="event-metadata" data-testid="event-metadata" rows="3" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <button data-testid="send-custom-event" id="send-custom-event" class="success">Send Custom Event</button>
+            <button data-testid="send-invalid-event" id="send-invalid-event" class="danger">Send Invalid Event</button>
+            <button data-testid="send-large-event" id="send-large-event" class="warning">Send Large Event</button>
+            <button data-testid="send-xss-event" id="send-xss-event" class="danger">Send XSS Event</button>
+        </div>
 
-        <button
-            id="trigger-js-error-btn"
-            data-testid="trigger-js-error-btn">
-            Trigger JS Error
-        </button>
+        <!-- Click Tracking Tests -->
+        <div class="section">
+            <h2>Click Tracking</h2>
+            <button data-testid="basic-click" id="basic-click">Basic Click Test</button>
+            <button data-testid="custom-click" id="custom-click" data-tl-name="custom_button" data-tl-value="test_value">Click with Custom Data</button>
+            <button data-testid="empty-data-click" id="empty-data-click" data-tl-name="" data-tl-value="">Empty Custom Data</button>
+            <a href="#section1" data-testid="link-click" id="link-click">Link Click Test</a>
+            <div data-testid="large-text-click" id="large-text-click" style="cursor: pointer; padding: 10px; background: #e9ecef;">
+                This is a large text container with lots of content that should be truncated when clicked. 
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+            </div>
+        </div>
 
-        <button
-            id="trigger-promise-rejection-btn"
-            data-testid="trigger-promise-rejection-btn">
-            Trigger Promise Rejection
-        </button>
+        <!-- Scroll Tracking Tests -->
+        <div class="section">
+            <h2>Scroll Tracking</h2>
+            <button data-testid="scroll-to-25" id="scroll-to-25">Scroll to 25%</button>
+            <button data-testid="scroll-to-50" id="scroll-to-50">Scroll to 50%</button>
+            <button data-testid="scroll-to-100" id="scroll-to-100">Scroll to Bottom</button>
+            
+            <div class="scrollable-container" data-testid="custom-scroll-container" id="custom-scroll-container">
+                <div style="height: 1000px; background: linear-gradient(to bottom, #fff, #ddd);">
+                    <p>Custom scrollable container for testing container scroll tracking.</p>
+                    <p>Scroll within this container to test custom scroll tracking.</p>
+                    <p style="margin-top: 400px;">Middle content</p>
+                    <p style="margin-top: 400px;">Bottom content</p>
+                </div>
+            </div>
+        </div>
 
-        <button
-            id="trigger-network-error-btn"
-            data-testid="trigger-network-error-btn">
-            Trigger Network Error
-        </button>
+        <!-- Page Navigation Tests -->
+        <div class="section">
+            <h2>Page Navigation</h2>
+            <button data-testid="history-push" id="history-push">History Push State</button>
+            <button data-testid="history-replace" id="history-replace">History Replace State</button>
+            <button data-testid="hash-change" id="hash-change">Change Hash</button>
+            <button data-testid="navigate-away" id="navigate-away" class="danger">Navigate Away (about:blank)</button>
+            <div class="test-data" data-testid="current-url">Current URL: <span id="current-url-display"></span></div>
+        </div>
 
-        <button
-            id="trigger-xhr-error-btn"
-            data-testid="trigger-xhr-error-btn">
-            Trigger XHR Error
-        </button>
+        <!-- Performance Tests -->
+        <div class="section">
+            <h2>Performance Testing</h2>
+            <button data-testid="trigger-lcp" id="trigger-lcp">Trigger LCP Event</button>
+            <button data-testid="trigger-cls" id="trigger-cls">Trigger CLS Event</button>
+            <button data-testid="create-long-task" id="create-long-task" class="warning">Create Long Task</button>
+            <button data-testid="heavy-animation" id="heavy-animation">Start Heavy Animation</button>
+            <div class="performance-heavy hidden" data-testid="animation-element" id="animation-element">
+                🔄 Animated Element
+            </div>
+        </div>
+
+        <!-- Error Tracking Tests -->
+        <div class="section">
+            <h2>Error Tracking</h2>
+            <button data-testid="js-error" id="js-error" class="danger">Trigger JS Error</button>
+            <button data-testid="promise-rejection" id="promise-rejection" class="danger">Promise Rejection</button>
+            <button data-testid="network-error" id="network-error" class="danger">Network Error (Fetch)</button>
+            <button data-testid="xhr-error" id="xhr-error" class="danger">XHR Error</button>
+            <button data-testid="pii-error" id="pii-error" class="danger">Error with PII Data</button>
+        </div>
+
+        <!-- Form Interactions -->
+        <div class="section">
+            <h2>Form Interactions</h2>
+            <form data-testid="test-form" id="test-form">
+                <div class="form-group">
+                    <label for="email-input">Email:</label>
+                    <input type="email" id="email-input" data-testid="email-input" value="test@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="phone-input">Phone:</label>
+                    <input type="tel" id="phone-input" data-testid="phone-input" value="555-123-4567">
+                </div>
+                <div class="form-group">
+                    <label for="select-input">Country:</label>
+                    <select id="select-input" data-testid="select-input">
+                        <option value="us">United States</option>
+                        <option value="ca">Canada</option>
+                        <option value="uk">United Kingdom</option>
+                    </select>
+                </div>
+                <button type="submit" data-testid="form-submit">Submit Form</button>
+                <button type="reset" data-testid="form-reset">Reset Form</button>
+            </form>
+        </div>
+
+        <!-- Storage Tests -->
+        <div class="section">
+            <h2>Storage Management</h2>
+            <button data-testid="clear-storage" id="clear-storage" class="warning">Clear All Storage</button>
+            <button data-testid="simulate-quota-exceeded" id="simulate-quota-exceeded" class="danger">Simulate Storage Quota Exceeded</button>
+            <button data-testid="check-storage" id="check-storage">Check Storage Contents</button>
+            <div class="test-data" data-testid="storage-info">Storage Info: Click to check</div>
+        </div>
+
+        <!-- Multi-tab Simulation -->
+        <div class="section">
+            <h2>Multi-Tab Behavior</h2>
+            <button data-testid="open-new-tab" id="open-new-tab">Open New Tab</button>
+            <button data-testid="simulate-tab-leader" id="simulate-tab-leader" class="success">Simulate Tab Leader</button>
+            <button data-testid="simulate-tab-follower" id="simulate-tab-follower">Simulate Tab Follower</button>
+            <button data-testid="broadcast-test-message" id="broadcast-test-message">Broadcast Test Message</button>
+        </div>
+
+        <!-- Security Tests -->
+        <div class="section">
+            <h2>Security & Sanitization</h2>
+            <div class="form-group">
+                <label for="xss-input">Potentially Malicious Input:</label>
+                <input type="text" id="xss-input" data-testid="xss-input" value="<script>alert('xss')</script>" placeholder="Enter XSS payload">
+            </div>
+            <button data-testid="test-xss-sanitization" id="test-xss-sanitization" class="danger">Test XSS Sanitization</button>
+            <button data-testid="test-pii-detection" id="test-pii-detection">Test PII Detection</button>
+            <button data-testid="test-large-payload" id="test-large-payload" class="warning">Test Large Payload</button>
+        </div>
+
+        <!-- Activity Detection -->
+        <div class="section">
+            <h2>Activity Detection</h2>
+            <button data-testid="simulate-activity" id="simulate-activity" class="success">Simulate User Activity</button>
+            <button data-testid="simulate-inactivity" id="simulate-inactivity" class="warning">Simulate Inactivity</button>
+            <button data-testid="check-activity-status" id="check-activity-status">Check Activity Status</button>
+            <div class="test-data" data-testid="activity-info">Activity Status: Active</div>
+        </div>
+
+        <!-- Configuration Tests -->
+        <div class="section">
+            <h2>Configuration Testing</h2>
+            <button data-testid="test-remote-config" id="test-remote-config">Test Remote Config</button>
+            <button data-testid="test-invalid-config" id="test-invalid-config" class="danger">Test Invalid Config</button>
+            <button data-testid="test-config-merge" id="test-config-merge">Test Config Merge</button>
+            <button data-testid="toggle-qa-mode" id="toggle-qa-mode" class="warning">Toggle QA Mode</button>
+        </div>
+
+        <!-- Sampling Tests -->
+        <div class="section">
+            <h2>Sampling Configuration</h2>
+            <button data-testid="test-event-sampling" id="test-event-sampling">Test Event Sampling</button>
+            <button data-testid="test-webvitals-sampling" id="test-webvitals-sampling">Test Web Vitals Sampling</button>
+            <button data-testid="force-sampling" id="force-sampling" class="success">Force Sampling (QA Override)</button>
+        </div>
+
+        <!-- Integration Tests -->
+        <div class="section">
+            <h2>External Integrations</h2>
+            <button data-testid="test-ga-integration" id="test-ga-integration">Test Google Analytics Integration</button>
+            <button data-testid="test-api-communication" id="test-api-communication">Test API Communication</button>
+            <button data-testid="test-rate-limiting" id="test-rate-limiting" class="warning">Test Rate Limiting</button>
+        </div>
+
+        <!-- Large Content for Scroll Testing -->
+        <div class="large-content" data-testid="large-content" id="large-content">
+            <h3>Large Content Area for Scroll Testing</h3>
+            <p>This is a large content area to test scroll tracking functionality. Keep scrolling to test different scroll depths.</p>
+            <div style="height: 450px; background: #f0f8ff; margin: 15px 0; padding: 20px;">
+                <h4>25% Mark</h4>
+                <p>You are at approximately 25% of the page scroll depth.</p>
+            </div>
+            <div style="height: 450px; background: #f5f5dc; margin: 15px 0; padding: 20px;">
+                <h4>50% Mark</h4>
+                <p>You are at approximately 50% of the page scroll depth.</p>
+            </div>
+            <div style="height: 450px; background: #ffe4e1; margin: 15px 0; padding: 20px;">
+                <h4>75% Mark</h4>
+                <p>You are at approximately 75% of the page scroll depth.</p>
+            </div>
+            <div style="height: 450px; background: #e6e6fa; margin: 15px 0; padding: 20px;">
+                <h4>Bottom Section</h4>
+                <p>You have reached the bottom section of the test page.</p>
+                <button data-testid="bottom-button" id="bottom-button">Bottom Button</button>
+            </div>
+        </div>
+
+        <!-- Hidden Elements for Dynamic Testing -->
+        <div class="hidden" data-testid="hidden-section" id="hidden-section">
+            <h3>Hidden Section</h3>
+            <p>This section is initially hidden and can be shown dynamically for testing.</p>
+            <button data-testid="hidden-button" id="hidden-button">Hidden Button</button>
+        </div>
     </div>
 
-    <script type="module">
-        import { TraceLog } from './tracelog.js';
-        
-        // Make TraceLog available globally for e2e tests
-        window.TraceLog = TraceLog;
-        
-        async function initializeTraceLog() {
-            try {
-                await TraceLog.init({ id: 'test' });
-
-                console.log('TraceLog initialized successfully');
-                
-                document.getElementById('custom-event-btn')?.addEventListener('click', () => {
-                    try {
-                        TraceLog.event('playwright_event', { foo: 'bar' });
-                        console.log('Custom event sent successfully');
-                    } catch (error) {
-                        console.error('Error sending custom event:', error);
-                    }
-                });
-
-                document.getElementById('trigger-js-error-btn')?.addEventListener('click', () => {
-                    // @ts-ignore - Intentionally accessing undefined property
-                    window.nonExistentObject.someProperty;
-                });
-
-                document.getElementById('trigger-promise-rejection-btn')?.addEventListener('click', () => {
-                    Promise.reject(new Error('Test promise rejection from button'));
-                });
-
-                document.getElementById('trigger-network-error-btn')?.addEventListener('click', () => {
-                    fetch('/button-triggered-error-endpoint').catch(() => {
-                        console.log('Network error triggered');
-                    });
-                });
-
-                document.getElementById('trigger-xhr-error-btn')?.addEventListener('click', () => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('GET', '/button-triggered-xhr-error');
-                    xhr.send();
-                });
-            } catch (error) {
-                console.error('Error initializing TraceLog:', error);
-            }
-        }
-        
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeTraceLog);
-        } else {
-            initializeTraceLog();
-        }
-    </script>
+    <script type="module" src="index.js"></script>
 </body>
-</html> 
+</html>
