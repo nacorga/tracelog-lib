@@ -1,21 +1,35 @@
-# Project Overview
+# TraceLog Client - GitHub Copilot Instructions
+
+**ALWAYS FOLLOW THESE INSTRUCTIONS FIRST.** Only search for additional context or run discovery commands if the information provided here is incomplete or found to be incorrect.
+
+## Project Overview
 
 Event tracking SDK that automatically captures user interactions (clicks, scroll, navigation, web performance) and allows custom events. Includes cross-tab session management, session recovery, Google Analytics integration, and sampling capabilities.
 
-## 🏗️ Architecture
+## 📂 Key File Locations & Architecture
 
+### Critical Entry Points
+- **`src/public-api.ts`** - Main export, START HERE for API understanding
+- **`src/api.ts`** - Core init/event/destroy methods
+- **`src/app.ts`** - Main orchestration class  
+- **`tests/fixtures/index.html`** - Manual testing page (localhost:3000)
+- **`tests/e2e/`** - Playwright E2E tests for all functionality
+
+### Project Structure
 ```
 src/
 ├── api.ts                 # Public API (init, event, destroy)
 ├── app.ts                 # Main class orchestrating all managers
-├── handlers/              # Specific event capture
-├── managers/              # Core business logic
-├── integrations/          # External integrations
+├── handlers/              # Event capture (click.handler.ts, etc.)
+├── managers/              # Core business logic  
+├── integrations/          # External integrations (Google Analytics)
 ├── utils/                 # Utilities and validations
 └── types/                 # TypeScript definitions
-```
 
-**Main flow**: `init()` → Configuration → Active handlers → EventManager → Queue → Send
+tests/
+├── fixtures/              # Test HTML pages and resources
+└── e2e/                   # Playwright browser tests
+```
 
 ## 🛠️ Tech Stack
 
@@ -46,98 +60,182 @@ npm run fix        # Auto-fix lint + format
 - **Types**: Interfaces in separate `.types.ts` files
 - **Utils**: Pure functions, organized by domain
 
-## 🚀 Common Commands
+## 🚀 Essential Setup & Build Commands
 
+### Initial Setup
 ```bash
-# Build
-npm run build           # TypeScript build (dual: ESM + CJS)
-npm run build:browser   # Browser build (Vite)
-npm run build:all       # Complete build (ESM + CJS)
-npm run build-ugly      # Minified build with UglifyJS
-
-# Development
-npm run serve:test      # Local test server (port 3000)
-npm run test:e2e        # End-to-end tests with Playwright
-
-# Quality
-npm run lint            # ESLint
-npm run format          # Prettier
-npm run check           # Lint + format (verification)
-npm run fix             # Auto-fix lint + format
+# ALWAYS start here - install dependencies
+npm install             # Takes ~30 seconds, installs all dependencies
 ```
 
-## 🔍 Critical Paths
-
-### 1. Initialization
-`api.init()` → `App.init()` → `setState()` → `initHandlers()` → Active listeners
-
-### 2. Event Tracking
-DOM Event → Handler → `EventManager.track()` → Queue → `SenderManager` → API
-
-### 3. Session Management
-Activity → `SessionManager` → Cross-tab sync → Recovery if fails
-
-### 4. Data Sending
-Batch queue → Validation → `sendEventsQueue()` → Auto-retry if fails
-
-## ⚠️ WHAT NOT TO DO
-
-### 🚫 Dependencies & Build
-- **DON'T** add new dependencies without justification - only `web-vitals` allowed
-- **DON'T** break dual ESM/CJS compatibility - maintain `exports` in package.json
-- **DON'T** change `dist/` structure - affects user imports
-- **DON'T** commit without passing `npm run check`
-
-### 🚫 Security
-- **DON'T** store sensitive data in localStorage
-- **DON'T** send PII without sanitization (use `sanitize.utils.ts`)
-- **DON'T** allow execution of unvalidated code
-- **DON'T** expose internal APIs in browser build
-
-### 🚫 Performance
-- **DON'T** create memory leaks - always `cleanup()` in handlers
-- **DON'T** block main thread - use `passive: true` in listeners
-- **DON'T** send high-frequency events without throttling
-- **DON'T** store infinite queue (limit: `MAX_EVENTS_QUEUE_LENGTH`)
-
-### 🚫 State & Sessions
-- **DON'T** mutate `globalState` directly - use `StateManager.set()`
-- **DON'T** create multiple `App` instances simultaneously
-- **DON'T** call `init()` before checking `typeof window !== 'undefined'`
-- **DON'T** ignore session recovery errors - can cause data loss
-
-## 🎯 Common Tasks
-
-### Development
+### Build Commands (VALIDATED TIMINGS)
 ```bash
-# Local setup for testing
-npm run serve:test      # Terminal 1: server
-npm run test:e2e        # Terminal 2: E2E tests
+# Standard builds
+npm run build:all       # ~6 seconds - ESM + CJS build (RECOMMENDED)
+npm run build:browser   # ~1.3 seconds - Vite browser bundle  
+npm run build           # ~3 seconds - ESM build only
+npm run build:cjs       # ~3 seconds - CommonJS build only
 
-# Pre-commit verification
-npm run check           # Lint + format
-npm run build:all       # Verify builds
+# Production builds
+npm run build-ugly      # ~2 minutes - NEVER CANCEL - Minified with UglifyJS
 ```
 
-### Debug
+### Quality & Testing Commands (VALIDATED TIMINGS)
+```bash
+# Code quality - ALWAYS run before committing
+npm run check           # ~7 seconds - Lint + format verification
+npm run fix             # ~7 seconds - Auto-fix lint + format issues
+
+# Testing - NEVER CANCEL THESE
+npm run test:e2e        # ~1 minute - NEVER CANCEL - Full E2E tests with Playwright
+npm run serve:test      # Instant start - Test server on http://localhost:3000
+```
+
+### **CRITICAL TIMING WARNINGS**
+- **NEVER CANCEL** `npm run test:e2e` - Takes ~1 minute, set timeout to 90+ seconds
+- **NEVER CANCEL** `npm run build-ugly` - Takes ~2 minutes, set timeout to 180+ seconds  
+- All other commands complete within 10 seconds
+
+## 🔧 Development Patterns & Debugging
+
+### Quick Debug Setup
 ```typescript
-// Enable debug mode
+// Enable detailed logging for development
 await TraceLog.init({ 
   id: 'your-project', 
-  qaMode: true  // Detailed console logs
+  qaMode: true  // Shows all events in console
 });
 
-// Check state in localStorage (prefix 'tl:')
-// Review BroadcastChannel for cross-tab sessions
+// Check browser storage (prefix 'tl:')
+// Monitor BroadcastChannel for cross-tab sessions
 ```
 
-### Add functionality
+### Adding New Functionality
 ```typescript
-// 1. Create handler in handlers/
+// Standard pattern:
+// 1. Create handler in handlers/ (e.g., new-feature.handler.ts)
 // 2. Register in App.initHandlers()
-// 3. Add types in types/
-// 4. Validations in utils/validations/
-// 5. E2E tests in tests/
+// 3. Add types in types/ (e.g., new-feature.types.ts) 
+// 4. Add validations in utils/validations/
+// 5. Create E2E tests in tests/e2e/
+```
+
+### Main SDK Flow
+`TraceLog.init()` → `App.init()` → `setState()` → `initHandlers()` → Active DOM listeners
+
+`DOM Event` → `Handler` → `EventManager.track()` → `Queue` → `SenderManager` → `API Send`
+
+## ⚠️ CRITICAL: What NOT To Do
+
+### 🚫 Build & Dependencies  
+- **NEVER** add new dependencies - only `web-vitals` allowed
+- **NEVER** break dual ESM/CJS compatibility in package.json exports
+- **NEVER** change `dist/` structure - affects user imports
+- **NEVER** commit without passing `npm run check`
+- **NEVER** cancel long-running builds (`build-ugly` takes ~2 minutes)
+
+### 🚫 Performance & Memory
+- **NEVER** create memory leaks - always call `cleanup()` in handlers
+- **NEVER** block main thread - use `passive: true` in event listeners  
+- **NEVER** send high-frequency events without throttling
+- **NEVER** store unlimited events (respect `MAX_EVENTS_QUEUE_LENGTH`)
+
+### 🚫 State & Security
+- **NEVER** mutate `globalState` directly - use `StateManager.set()`
+- **NEVER** create multiple `App` instances simultaneously
+- **NEVER** call `init()` before checking `typeof window !== 'undefined'`
+- **NEVER** store sensitive data in localStorage without sanitization
+
+## 🎯 Essential Validation Workflows
+
+### **ALWAYS** Validate Changes With These Scenarios
+After making any code changes, ALWAYS run these validation steps:
+
+#### 1. Build & Quality Validation (Required)
+```bash
+npm run check           # Lint + format - MUST PASS before commit
+npm run build:all       # Verify both ESM/CJS builds work
+```
+
+#### 2. Manual SDK Functionality Test (Required)
+```bash
+# Terminal 1: Start test server
+npm run serve:test      # Runs on http://localhost:3000
+
+# Terminal 2: Browser test (or use Playwright)
+# Navigate to http://localhost:3000
+# Verify console shows: "TraceLog initialized successfully"
+# Click "Test Button" - verify click events logged
+# Click "Send Custom Event" - verify custom events logged
+```
+
+#### 3. E2E Test Validation (For Major Changes)
+```bash
+npm run test:e2e        # NEVER CANCEL - ~1 minute runtime
+# Tests: click tracking, custom events, session management, web vitals
+```
+
+#### 4. Production Build Test (For Release Changes)
+```bash
+npm run build-ugly      # NEVER CANCEL - ~2 minutes
+# Verifies minified production build works
+```
+
+### Expected Console Output (Successful Init)
+```
+[TraceLog] Starting leader election
+[TraceLog] Recovery manager initialized  
+[TraceLog] New session started: [session-id]
+[TraceLog] session_start event: {...}
+[TraceLog] page_view event: {...}
+TraceLog initialized successfully
+```
+
+## 📋 Common Command Reference
+
+Use these command outputs to save time instead of running discovery commands:
+
+### Repository Structure (`ls -la`)
+```
+.commitlintrc.json    .lintstagedrc.json    .versionrc.json       package.json          
+.cursor               .prettierignore       CHANGELOG.md          playwright.config.ts  
+.eslintrc.cjs         .prettierrc           CLAUDE.md             scripts/              
+.git/                 .github/              CONTRIBUTING.md       src/                  
+.gitignore            .husky/               LICENSE               tests/                
+.gitmessage           .nvmrc                README.md             tsconfig.*.json       
+```
+
+### Package.json Scripts (Key Commands)
+```json
+{
+  "build:all": "npm run build:esm && npm run build:cjs",
+  "build:browser": "vite build", 
+  "build-ugly": "npm run build:all && find dist -name '*.js' -exec npx uglify-js {} -o {} --compress --mangle --toplevel \\;",
+  "check": "npm run lint && npm run format:check",
+  "test:e2e": "npm run build:browser && cp dist/browser/tracelog.js tests/fixtures/tracelog.js && playwright test",
+  "serve:test": "http-server tests/fixtures -p 3000 --cors"
+}
+```
+
+### Test Fixture Files (`tests/fixtures/`)
+```
+index.html          # Main test page with SDK integration
+web-vitals.html     # Web vitals testing page  
+tracelog.js         # Built SDK bundle (generated)
+json/               # Test data files
+```
+
+### Build Output Structure (`dist/`)
+```
+browser/            # Vite browser bundle
+├── tracelog.js     # Main browser build
+└── web-vitals-*.mjs
+
+cjs/                # CommonJS build  
+└── *.js           # All source files compiled
+
+esm/                # ES Module build
+└── *.js           # All source files compiled
 ```
 
 ---
