@@ -236,18 +236,9 @@ test.describe('Lorem Ipsum', () => {
 - Test error deduplication behavior
 - Verify sampling rate compliance
 
-## Priority
-
-**High** - Error tracking is essential for debugging and monitoring
-
-## Labels
-
-- `e2e-testing`
-- `error-tracking`
-- `high-priority`
-- `playwright`
-- `pii-sanitization`
-- `security`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

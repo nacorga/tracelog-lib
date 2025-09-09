@@ -246,18 +246,9 @@ test.describe('Lorem Ipsum', () => {
 - Validate memory usage in fallback mode
 - Benchmark key enumeration performance
 
-## Priority
-
-**Medium** - Important for data persistence but not critical for basic functionality
-
-## Labels
-
-- `e2e-testing`
-- `storage-management`
-- `medium-priority`
-- `playwright`
-- `localStorage`
-- `data-persistence`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

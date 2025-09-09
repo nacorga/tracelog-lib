@@ -188,18 +188,9 @@ test.describe('Lorem Ipsum', () => {
 - Test event deduplication for performance metrics
 - Verify timestamp accuracy and consistency
 
-## Priority
-
-**High** - Performance monitoring is critical for user experience validation
-
-## Labels
-
-- `e2e-testing`
-- `performance-tracking`
-- `high-priority`
-- `playwright`
-- `web-vitals`
-- `performance-monitoring`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

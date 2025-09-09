@@ -270,18 +270,9 @@ test.describe('Lorem Ipsum', () => {
 - Validate queue size calculations
 - Confirm persistence state consistency
 
-## Priority
-
-**Medium** - Important for reliable event delivery but not critical for basic tracking
-
-## Labels
-
-- `e2e-testing`
-- `queue-management`
-- `medium-priority`
-- `playwright`
-- `event-batching`
-- `data-persistence`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

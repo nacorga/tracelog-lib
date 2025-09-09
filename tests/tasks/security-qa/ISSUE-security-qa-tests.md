@@ -294,20 +294,9 @@ test.describe('Lorem Ipsum', () => {
 - Validate sanitization effectiveness
 - Test performance impact of security measures
 
-## Priority
-
-**Medium** - Important for security and debugging but not critical for basic functionality
-
-## Labels
-
-- `e2e-testing`
-- `security-qa`
-- `medium-priority`
-- `playwright`
-- `xss-prevention`
-- `data-sanitization`
-- `qa-mode`
-- `security`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

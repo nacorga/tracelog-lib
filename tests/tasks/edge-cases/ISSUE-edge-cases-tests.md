@@ -312,20 +312,9 @@ test.describe('Lorem Ipsum', () => {
 - Memory usage monitoring during edge case scenarios
 - Data integrity verification at multiple checkpoints
 
-## Priority
-
-**Medium** - Important for validating complete SDK integration and edge case handling
-
-## Labels
-
-- `e2e-testing`
-- `edge-cases`
-- `medium-priority`
-- `playwright`
-- `integration-testing`
-- `user-journey`
-- `stress-testing`
-- `performance-testing`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

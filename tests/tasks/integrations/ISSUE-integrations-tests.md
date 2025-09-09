@@ -328,19 +328,9 @@ test.describe('Lorem Ipsum', () => {
 - Validate retry logic with network simulation
 - Test rate limiting with controlled API responses
 
-## Priority
-
-**Medium** - Important for external service integration but not critical for core tracking
-
-## Labels
-
-- `e2e-testing`
-- `integrations`
-- `medium-priority`
-- `playwright`
-- `google-analytics`
-- `api-communication`
-- `rate-limiting`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

@@ -351,18 +351,9 @@ test.describe('Lorem Ipsum', () => {
 - Validate cross-tab synchronization consistency
 - Monitor session cleanup completeness
 
-## Priority
-
-**High** - Session management is core to analytics tracking
-
-## Labels
-
-- `e2e-testing`
-- `session-management`
-- `high-priority`
-- `playwright`
-- `core-functionality`
-- `cross-tab-coordination`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

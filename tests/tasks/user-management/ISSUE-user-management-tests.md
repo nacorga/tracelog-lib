@@ -245,18 +245,9 @@ test.describe('Lorem Ipsum', () => {
 - Handle dynamic viewport changes
 - Test orientation change scenarios
 
-## Priority
-
-**Medium** - Important for user analytics but not critical for core functionality
-
-## Labels
-
-- `e2e-testing`
-- `user-management`
-- `medium-priority`
-- `playwright`
-- `device-detection`
-- `user-identification`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

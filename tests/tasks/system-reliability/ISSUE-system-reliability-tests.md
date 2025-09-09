@@ -386,20 +386,9 @@ test.describe('Lorem Ipsum', () => {
 - Validate cross-tab scenarios with controlled tab lifecycle
 - Test deduplication with comprehensive event patterns
 
-## Priority
-
-**Medium** - Important for long-term stability and data accuracy
-
-## Labels
-
-- `e2e-testing`
-- `system-reliability`
-- `medium-priority`
-- `playwright`
-- `memory-management`
-- `multi-tab`
-- `data-accuracy`
-- `lifecycle-management`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

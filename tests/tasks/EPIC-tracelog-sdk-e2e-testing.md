@@ -221,6 +221,10 @@ npm run serve:test
 - **Milestone 6.1**: Automated testing pipeline
 - **Milestone 6.2**: Test documentation and maintenance guides
 
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
+
 ## Definition of Done
 
 - [ ] All 70 test cases implemented and passing

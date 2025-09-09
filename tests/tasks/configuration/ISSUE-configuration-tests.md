@@ -336,20 +336,9 @@ test.describe('Lorem Ipsum', () => {
 - Test configuration inheritance chains
 - Validate performance impact measurements
 
-## Priority
-
-**Medium** - Important for SDK flexibility and customization
-
-## Labels
-
-- `e2e-testing`
-- `configuration`
-- `medium-priority`
-- `playwright`
-- `sampling`
-- `url-exclusions`
-- `tagging-system`
-- `remote-config`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

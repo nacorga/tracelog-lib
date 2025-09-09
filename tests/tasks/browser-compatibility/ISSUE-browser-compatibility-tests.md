@@ -274,19 +274,9 @@ test.describe('Lorem Ipsum', () => {
 - Validate error handling in fallback scenarios
 - Test recovery when primary APIs become available
 
-## Priority
-
-**Medium** - Important for broad user support but not critical for core functionality
-
-## Labels
-
-- `e2e-testing`
-- `browser-compatibility`
-- `medium-priority`
-- `playwright`
-- `cross-browser`
-- `graceful-degradation`
-- `api-fallbacks`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 

@@ -163,17 +163,9 @@ This issue covers the implementation of **14 E2E tests** for event tracking func
 - [ ] URL normalization removes sensitive data
 - [ ] Metadata sanitization prevents XSS
 
-## Priority
-
-**High** - Event tracking is core SDK functionality
-
-## Labels
-
-- `e2e-testing`
-- `event-tracking`
-- `high-priority`
-- `playwright`
-- `core-functionality`
+## Branching Requirements
+- Start branch from: `refactor/playwright-e2e-tests`
+- Merge changes into: `develop`
 
 ## Definition of Done
 
