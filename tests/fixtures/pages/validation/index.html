@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TraceLog Validation Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background-color: #f5f5f5; 
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }
+        .test-data { 
+            background-color: #f0f8ff; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-left: 4px solid #007acc; 
+            font-family: monospace; 
+        }
+        .error { 
+            background-color: #ffe6e6; 
+            border-left-color: #d32f2f; 
+        }
+        .success { 
+            background-color: #e8f5e8; 
+            border-left-color: #4caf50; 
+        }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a9e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 data-testid="title">TraceLog Validation Test Page</h1>
+        <p>This page allows manual testing of TraceLog validation without auto-initialization.</p>
+        
+        <div class="test-data" data-testid="validation-status">Status: Ready for validation testing</div>
+        
+        <div>
+            <button data-testid="test-no-project-id" onclick="testNoProjectId()">Test: No Project ID</button>
+            <button data-testid="test-empty-project-id" onclick="testEmptyProjectId()">Test: Empty Project ID</button>
+            <button data-testid="test-valid-project-id" onclick="testValidProjectId()">Test: Valid Project ID</button>
+        </div>
+        
+        <div id="console-output" style="margin-top: 20px;">
+            <h3>Console Output:</h3>
+            <div data-testid="console-log" style="background: #f9f9f9; padding: 10px; min-height: 100px; font-family: monospace; border: 1px solid #ddd;"></div>
+        </div>
+    </div>
+
+    <script type="module" src="./index.js"></script>
+</body>
+</html>

@@ -43,6 +43,8 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     app = null;
 
     logUnknown('error', 'Initialization failed', error);
+
+    throw error;
   } finally {
     isInitializing = false;
   }
@@ -78,9 +80,15 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
 };
 
 /**
+ * Checks if the app has been initialized.
+ * @returns true if the app is initialized, false otherwise
+ */
+export const isInitialized = (): boolean => {
+  return app !== null;
+};
+
+/**
  * Destroys the current app instance and cleans up resources.
- * @example
- * destroy(); // Safely cleanup the app
  */
 export const destroy = (): void => {
   try {
