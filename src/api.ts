@@ -12,8 +12,9 @@ let isInitializing = false;
 
 /**
  * Initializes the tracelog app with the provided configuration.
+ * If already initialized, this function returns early without error.
  * @param appConfig - The configuration object for the app
- * @throws {Error} If the app is already initialized or initialization is in progress
+ * @throws {Error} If initialization is currently in progress
  * @example
  * await init({ id: 'my-project-id' });
  */
@@ -85,6 +86,22 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
  */
 export const isInitialized = (): boolean => {
   return app !== null;
+};
+
+/**
+ * Gets the current initialization status for debugging purposes.
+ * @returns Object with detailed initialization state
+ */
+export const getInitializationStatus = (): {
+  isInitialized: boolean;
+  isInitializing: boolean;
+  hasInstance: boolean;
+} => {
+  return {
+    isInitialized: app !== null,
+    isInitializing: isInitializing,
+    hasInstance: app !== null,
+  };
 };
 
 /**
