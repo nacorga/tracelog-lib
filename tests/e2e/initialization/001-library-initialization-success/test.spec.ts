@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test-helpers';
+import { TestHelpers, TestAssertions } from '../../../utils/test-helpers';
 
 test.describe('Library Initialization - Success', () => {
   // Constants
-  const INITIALIZATION_PAGE_URL = '/pages/001-library-initialization-success/index.html';
+  const INITIALIZATION_PAGE_URL = '/';
   const VALIDATION_PAGE_URL = '/pages/validation/index.html';
   const DEFAULT_TEST_CONFIG = { id: 'test' };
   const READY_STATUS_TEXT = 'Status: Ready for testing';
