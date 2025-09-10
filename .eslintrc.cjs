@@ -38,7 +38,6 @@ module.exports = {
     '.eslintrc.cjs',
     'playwright.config.ts',
     'vite.config.ts',
-    'tests/**/*',
     'scripts/**/*',
   ],
 };

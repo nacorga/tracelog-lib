@@ -10,6 +10,16 @@ test.describe('Library Initialization - Success', () => {
   const INITIALIZED_STATUS_TEXT = 'Status: Initialized successfully';
   const VALIDATION_PASS_TEXT = 'PASS: Valid project ID accepted';
 
+  // Performance requirements from spec
+  const PERFORMANCE_REQUIREMENTS = {
+    TOTAL_INITIALIZATION_TIME: 500, // <500ms
+    CONFIG_LOADING_TIME: 200, // <200ms
+    STORAGE_OPERATIONS_TIME: 100, // <100ms
+    HANDLER_REGISTRATION_TIME: 100, // <100ms
+    USER_ID_GENERATION_TIME: 50, // <50ms
+    SESSION_SETUP_TIME: 50, // <50ms
+  };
+
   test('should successfully initialize TraceLog with valid project ID', async ({ page }) => {
     // Setup console monitoring
     const monitor = TestHelpers.createConsoleMonitor(page);
@@ -23,11 +33,17 @@ test.describe('Library Initialization - Success', () => {
       const traceLogAvailable = await TestHelpers.verifyTraceLogAvailability(page);
       expect(traceLogAvailable).toBe(true);
 
-      // Initialize TraceLog
+      // Initialize TraceLog with performance measurement
+      const startTime = Date.now();
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      const initDuration = Date.now() - startTime;
+
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
       expect(validatedResult.hasError).toBe(false);
+
+      // Performance requirement: Total initialization time <500ms
+      expect(initDuration).toBeLessThan(PERFORMANCE_REQUIREMENTS.TOTAL_INITIALIZATION_TIME);
 
       // Wait for initialization to complete
       await TestHelpers.waitForTimeout(page);
@@ -39,7 +55,9 @@ test.describe('Library Initialization - Success', () => {
       expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
 
       // Verify success message was logged
-      expect(TestAssertions.verifyConsoleMessages(monitor.consoleMessages, 'TraceLog initialized successfully')).toBe(true);
+      expect(TestAssertions.verifyConsoleMessages(monitor.consoleMessages, 'TraceLog initialized successfully')).toBe(
+        true,
+      );
 
       // Verify TraceLog reports as initialized
       const isInitialized = await TestHelpers.isTraceLogInitialized(page);
@@ -53,8 +71,8 @@ test.describe('Library Initialization - Success', () => {
       await TestHelpers.triggerClickEvent(page);
 
       // Verify no errors during interaction
-      const postClickErrors = monitor.traceLogErrors.filter(msg => 
-        msg.toLowerCase().includes('error') || msg.toLowerCase().includes('uncaught')
+      const postClickErrors = monitor.traceLogErrors.filter(
+        (msg) => msg.toLowerCase().includes('error') || msg.toLowerCase().includes('uncaught'),
       );
       expect(postClickErrors).toHaveLength(0);
 
@@ -71,7 +89,7 @@ test.describe('Library Initialization - Success', () => {
   test('should validate project ID requirement', async ({ browser }) => {
     // Create isolated context for validation testing
     const { page, cleanup } = await TestHelpers.createIsolatedContext(browser);
-    
+
     try {
       // Navigate to validation page
       await TestHelpers.navigateAndWaitForReady(page, VALIDATION_PAGE_URL);
@@ -97,7 +115,7 @@ test.describe('Library Initialization - Success', () => {
       const validIdResult = await page.evaluate(() => {
         return (window as any).testValidProjectId();
       });
-      
+
       const validatedValidIdResult = TestAssertions.verifyInitializationResult(validIdResult);
       expect(validatedValidIdResult.success).toBe(true);
       expect(validatedValidIdResult.hasError).toBe(false);
@@ -114,11 +132,17 @@ test.describe('Library Initialization - Success', () => {
     await TestHelpers.navigateAndWaitForReady(page, INITIALIZATION_PAGE_URL);
     await expect(page.getByTestId('init-status')).toContainText(READY_STATUS_TEXT);
 
-    // Perform first initialization
+    // Perform first initialization with performance measurement
+    const startTime = Date.now();
     const firstInitResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+    const initDuration = Date.now() - startTime;
+
     const validatedFirstResult = TestAssertions.verifyInitializationResult(firstInitResult);
     expect(validatedFirstResult.success).toBe(true);
     expect(validatedFirstResult.hasError).toBe(false);
+
+    // Performance requirement: Total initialization time <500ms
+    expect(initDuration).toBeLessThan(PERFORMANCE_REQUIREMENTS.TOTAL_INITIALIZATION_TIME);
 
     // Verify initialization state
     const isInitialized = await TestHelpers.isTraceLogInitialized(page);
@@ -138,7 +162,7 @@ test.describe('Library Initialization - Success', () => {
     // Should succeed (gracefully handle duplicate initialization)
     const validatedDuplicateResult = TestAssertions.verifyInitializationResult(duplicateInitResult);
     expect(validatedDuplicateResult.success).toBe(true);
-    
+
     // Should still report as initialized
     const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
     expect(stillInitialized).toBe(true);
@@ -149,11 +173,17 @@ test.describe('Library Initialization - Success', () => {
     await TestHelpers.navigateAndWaitForReady(page, INITIALIZATION_PAGE_URL);
     await expect(page.getByTestId('init-status')).toContainText(READY_STATUS_TEXT);
 
-    // Initialize TraceLog
+    // Initialize TraceLog with performance measurement
+    const startTime = Date.now();
     const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+    const initDuration = Date.now() - startTime;
+
     const validatedResult = TestAssertions.verifyInitializationResult(initResult);
     expect(validatedResult.success).toBe(true);
     expect(validatedResult.hasError).toBe(false);
+
+    // Performance requirement: Total initialization time <500ms
+    expect(initDuration).toBeLessThan(PERFORMANCE_REQUIREMENTS.TOTAL_INITIALIZATION_TIME);
 
     // Wait for initialization to complete
     await TestHelpers.waitForTimeout(page);
@@ -161,7 +191,7 @@ test.describe('Library Initialization - Success', () => {
     // Test core functionality availability
     const functionalityTests = await page.evaluate(() => {
       const results: any = {};
-      
+
       try {
         // Test custom events functionality
         (window as any).TraceLog.event('test_custom', { feature: 'custom_events' });

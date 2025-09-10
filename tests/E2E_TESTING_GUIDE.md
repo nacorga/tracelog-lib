@@ -217,10 +217,10 @@ npx playwright test --trace=on
 - **Clean test execution** - No console errors, memory leaks, or resource cleanup issues
 
 ### Implementation Standards
-- **Apply necessary changes only** - Make required modifications to ensure test success without over-engineering
-- **Maintain test isolation** - Each test should be independent and not affect others
-- **Preserve existing patterns** - Follow established test structure and helper usage
-- **Validate thoroughly** - Ensure all assertions and error checks are comprehensive
+- **Apply necessary changes only** - Modify code strictly as needed for test success, avoiding over-engineering. Address any logic anomalies, errors, or clear opportunities for improvement in the source code, but ensure changes do not compromise existing functionality.  
+- **Maintain test isolation** - Each test must be independent and not interfere with others.  
+- **Preserve existing patterns** - Follow the established test structure, conventions, and helper utilities.  
+- **Validate thoroughly** - Include comprehensive assertions and error checks to ensure reliability.
 
 ### Continuous Improvement
 - **Identify improvement opportunities** during test implementation or maintenance

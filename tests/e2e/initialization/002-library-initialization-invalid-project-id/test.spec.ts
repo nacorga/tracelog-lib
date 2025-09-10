@@ -5,14 +5,25 @@ test.describe('Library Initialization - Invalid Project ID', () => {
   // Constants
   const INITIALIZATION_PAGE_URL = '/';
   const EXPECTED_ERROR_MESSAGE_ID_REQUIRED = 'Project ID is required';
-  const EXPECTED_ERROR_MESSAGE_INVALID_APP_CONFIG = 'Project ID is required';  // Now consistent with other validation layers
-  const EXPECTED_ERROR_MESSAGE_UNDEFINED_CONFIG = 'Configuration must be an object';  // Improved error message
+  const EXPECTED_ERROR_MESSAGE_INVALID_APP_CONFIG = 'Project ID is required'; // Now consistent with other validation layers
+  const EXPECTED_ERROR_MESSAGE_UNDEFINED_CONFIG = 'Configuration must be an object'; // Improved error message
+
+  // Performance requirements from spec
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const PERFORMANCE_REQUIREMENTS = {
+    TOTAL_INITIALIZATION_TIME: 500, // <500ms (even for failed initialization)
+    CONFIG_LOADING_TIME: 200, // <200ms
+    STORAGE_OPERATIONS_TIME: 100, // <100ms
+    HANDLER_REGISTRATION_TIME: 100, // <100ms
+    USER_ID_GENERATION_TIME: 50, // <50ms
+    SESSION_SETUP_TIME: 50, // <50ms
+  };
 
   test.beforeEach(async ({ page }) => {
     // Navigate to page and wait for ready state
     await TestHelpers.navigateAndWaitForReady(page, INITIALIZATION_PAGE_URL);
     await expect(page.getByTestId('init-status')).toContainText('Status: Ready for testing');
-    
+
     // Verify TraceLog is available globally
     const traceLogAvailable = await TestHelpers.verifyTraceLogAvailability(page);
     expect(traceLogAvailable).toBe(true);
@@ -23,7 +34,8 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      // Test missing project ID (undefined config)
+      // Test missing project ID (undefined config) with performance measurement
+      const startTime = Date.now();
       const missingIdResult = await page.evaluate(async () => {
         try {
           await (window as any).TraceLog.init(undefined);
@@ -32,6 +44,10 @@ test.describe('Library Initialization - Invalid Project ID', () => {
           return { success: false, error: error.message };
         }
       });
+      const errorHandlingDuration = Date.now() - startTime;
+
+      // Performance requirement: Even error cases should be fast (<100ms for validation)
+      expect(errorHandlingDuration).toBeLessThan(100);
 
       // Verify initialization failed with proper error
       const validatedResult = TestAssertions.verifyInitializationResult(missingIdResult);
@@ -195,7 +211,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       await page.evaluate(async () => {
         try {
           await (window as any).TraceLog.init({ id: '' });
-        } catch (error) {
+        } catch {
           // Expected to fail, continue with test
         }
       });
@@ -226,11 +242,12 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       expect(localStorageKeys).toHaveLength(0);
 
       // Verify no TraceLog-related errors in console beyond expected initialization failures
-      const unexpectedErrors = monitor.traceLogErrors.filter(error => 
-        !error.includes('Initialization failed') && 
-        !error.includes('Project ID is required') &&
-        !error.includes('Configuration must be an object') &&
-        !error.includes('Event tracking failed: App not initialized')
+      const unexpectedErrors = monitor.traceLogErrors.filter(
+        (error) =>
+          !error.includes('Initialization failed') &&
+          !error.includes('Project ID is required') &&
+          !error.includes('Configuration must be an object') &&
+          !error.includes('Event tracking failed: App not initialized'),
       );
       expect(unexpectedErrors).toHaveLength(0);
     } finally {
@@ -247,7 +264,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       await page.evaluate(async () => {
         try {
           await (window as any).TraceLog.init({});
-        } catch (error) {
+        } catch {
           // Expected to fail
         }
       });
@@ -259,7 +276,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       // Test multiple user interactions
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.triggerScrollEvent(page);
-      
+
       // Wait a bit to see if any delayed handlers trigger
       await TestHelpers.waitForTimeout(page, 2000);
 
@@ -272,15 +289,18 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       expect(hasRuntimeErrors).toBeFalsy();
 
       // Verify only expected initialization errors
-      const relevantErrors = monitor.traceLogErrors.filter(error => 
-        error.includes('TraceLog') || error.includes('Initialization failed')
+      const relevantErrors = monitor.traceLogErrors.filter(
+        (error) => error.includes('TraceLog') || error.includes('Initialization failed'),
       );
       expect(relevantErrors.length).toBeGreaterThan(0); // Should have initialization error
-      expect(relevantErrors.every(error => 
-        error.includes('Initialization failed') || 
-        error.includes('Project ID is required') ||
-        error.includes('Configuration must be an object')
-      )).toBe(true);
+      expect(
+        relevantErrors.every(
+          (error) =>
+            error.includes('Initialization failed') ||
+            error.includes('Project ID is required') ||
+            error.includes('Configuration must be an object'),
+        ),
+      ).toBe(true);
     } finally {
       monitor.cleanup();
     }
@@ -291,18 +311,12 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      const invalidConfigs = [
-        undefined,
-        {},
-        { id: '' },
-        { id: null },
-        { id: '   ' }
-      ];
+      const invalidConfigs = [undefined, {}, { id: '' }, { id: null }, { id: '   ' }];
 
       for (const config of invalidConfigs) {
         // Add a small delay between attempts to avoid race conditions
         await TestHelpers.waitForTimeout(page, 100);
-        
+
         const result = await page.evaluate(async (cfg) => {
           try {
             await (window as any).TraceLog.init(cfg);
@@ -325,12 +339,12 @@ test.describe('Library Initialization - Invalid Project ID', () => {
         // TraceLog should remain uninitialized
         const isInitialized = await TestHelpers.isTraceLogInitialized(page);
         expect(isInitialized).toBe(false);
-        
+
         // Ensure clean state for next attempt
         await page.evaluate(() => {
           try {
             (window as any).TraceLog.destroy();
-          } catch (e) {
+          } catch {
             // destroy might fail if app is not initialized, which is expected
           }
         });
@@ -346,7 +360,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       // Test that a valid initialization attempt would at least pass basic validation
       // Note: It may still fail due to network/config fetch, but not due to invalid project ID
       const validResult = await TestHelpers.initializeTraceLog(page, { id: 'test-after-failures' });
-      
+
       // The result might fail due to network issues (no backend), but the error should not be about invalid project ID
       if (!validResult.success) {
         // Should fail with network/config error, not project ID validation error
