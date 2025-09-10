@@ -17,6 +17,7 @@ import { SCROLL_DEBOUNCE_TIME_MS } from './constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 import { NetworkHandler } from './handlers/network.handler';
+import { ProjectIdValidationError } from './types/validation-error.types';
 
 export class App extends StateManager {
   private isInitialized = false;
@@ -37,9 +38,9 @@ export class App extends StateManager {
       return;
     }
 
-    if (!appConfig?.id) {
-      throw new Error('Invalid app config: id is required');
-    }
+    // The app layer expects a fully validated and normalized config
+    // This is a final safety check - config should already be validated by api.ts
+    this.validateAppReadiness(appConfig);
 
     try {
       this.initStorage();
@@ -51,6 +52,25 @@ export class App extends StateManager {
     } catch (error) {
       this.isInitialized = false;
       throw error;
+    }
+  }
+
+  /**
+   * Validates that the app is ready to initialize with the provided config
+   * This is a runtime validation layer that ensures the app receives proper config
+   * @param appConfig - The validated and normalized configuration
+   * @throws {ProjectIdValidationError} If project ID is invalid at runtime
+   */
+  private validateAppReadiness(appConfig: AppConfig): void {
+    // At this point, config should be validated and normalized by api.ts
+    // This is a safety check for runtime integrity
+    if (!appConfig || typeof appConfig !== 'object') {
+      throw new ProjectIdValidationError('Configuration object is required', 'app');
+    }
+
+    // Since config comes pre-normalized, an empty ID here indicates a system error
+    if (!appConfig.id || typeof appConfig.id !== 'string' || !appConfig.id.trim()) {
+      throw new ProjectIdValidationError('Project ID is required', 'app');
     }
   }
 

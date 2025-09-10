@@ -6,4 +6,5 @@ export * from './log.types';
 export * from './queue.types';
 export * from './state.types';
 export * from './tag.types';
+export * from './validation-error.types';
 export * from './web-vitals.types';

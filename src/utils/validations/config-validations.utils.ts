@@ -1,14 +1,34 @@
 import { MAX_SESSION_TIMEOUT_MS, MIN_SESSION_TIMEOUT_MS, VALIDATION_MESSAGES } from '../../constants';
 import { AppConfig, Config, ApiConfig } from '../../types';
+import {
+  ProjectIdValidationError,
+  AppConfigValidationError,
+  SessionTimeoutValidationError,
+  SamplingRateValidationError,
+  IntegrationValidationError,
+} from '../../types/validation-error.types';
 
 /**
- * Validates the app configuration object
+ * Validates the app configuration object (before normalization)
+ * This validates the structure and basic types but allows for normalization afterward
  * @param config - The app configuration to validate
- * @throws {Error} If validation fails
+ * @throws {ProjectIdValidationError} If project ID validation fails
+ * @throws {AppConfigValidationError} If other configuration validation fails
  */
 export const validateAppConfig = (config: AppConfig): void => {
-  if (!config.id) {
-    throw new Error(VALIDATION_MESSAGES.MISSING_PROJECT_ID);
+  // Validate config exists and has id property
+  if (!config || typeof config !== 'object') {
+    throw new AppConfigValidationError('Configuration must be an object', 'config');
+  }
+
+  // Check if id property exists (allow falsy values to be handled by normalization)
+  if (!('id' in config)) {
+    throw new ProjectIdValidationError(VALIDATION_MESSAGES.MISSING_PROJECT_ID, 'config');
+  }
+
+  // Check basic type - null, undefined, or non-string values should fail here
+  if (config.id === null || config.id === undefined || typeof config.id !== 'string') {
+    throw new ProjectIdValidationError(VALIDATION_MESSAGES.MISSING_PROJECT_ID, 'config');
   }
 
   if (config.sessionTimeout !== undefined) {
@@ -17,13 +37,13 @@ export const validateAppConfig = (config: AppConfig): void => {
       config.sessionTimeout < MIN_SESSION_TIMEOUT_MS ||
       config.sessionTimeout > MAX_SESSION_TIMEOUT_MS
     ) {
-      throw new Error(VALIDATION_MESSAGES.INVALID_SESSION_TIMEOUT);
+      throw new SessionTimeoutValidationError(VALIDATION_MESSAGES.INVALID_SESSION_TIMEOUT, 'config');
     }
   }
 
   if (config.globalMetadata !== undefined) {
     if (typeof config.globalMetadata !== 'object' || config.globalMetadata === null) {
-      throw new Error('Global metadata must be an object');
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_GLOBAL_METADATA, 'config');
     }
   }
 
@@ -37,19 +57,19 @@ export const validateAppConfig = (config: AppConfig): void => {
 
   if (config.sensitiveQueryParams !== undefined) {
     if (!Array.isArray(config.sensitiveQueryParams)) {
-      throw new Error('Sensitive query params must be an array of strings');
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SENSITIVE_QUERY_PARAMS, 'config');
     }
 
     for (const param of config.sensitiveQueryParams) {
       if (typeof param !== 'string') {
-        throw new Error('All sensitive query params must be strings');
+        throw new AppConfigValidationError('All sensitive query params must be strings', 'config');
       }
     }
   }
 
   if (config.errorSampling !== undefined) {
     if (typeof config.errorSampling !== 'number' || config.errorSampling < 0 || config.errorSampling > 1) {
-      throw new Error(VALIDATION_MESSAGES.INVALID_ERROR_SAMPLING_RATE);
+      throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_ERROR_SAMPLING_RATE, 'config');
     }
   }
 };
@@ -63,14 +83,14 @@ const validateScrollContainerSelectors = (selectors: string | string[]): void =>
 
   for (const selector of selectorsArray) {
     if (typeof selector !== 'string' || selector.trim() === '') {
-      throw new Error(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS);
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, 'config');
     }
 
     if (typeof document !== 'undefined') {
       try {
         document.querySelector(selector);
       } catch {
-        throw new Error(`Invalid CSS selector: "${selector}"`);
+        throw new AppConfigValidationError(`Invalid CSS selector: "${selector}"`, 'config');
       }
     }
   }
@@ -89,31 +109,43 @@ const validateIntegrations = (integrations: AppConfig['integrations']): void => 
       typeof integrations.googleAnalytics.measurementId !== 'string' ||
       integrations.googleAnalytics.measurementId.trim() === ''
     ) {
-      throw new Error(VALIDATION_MESSAGES.INVALID_GOOGLE_ANALYTICS_ID);
+      throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_GOOGLE_ANALYTICS_ID, 'config');
     }
 
     const measurementId = integrations.googleAnalytics.measurementId.trim();
 
     if (!measurementId.match(/^(G-|UA-)/)) {
-      throw new Error('Google Analytics measurement ID must start with "G-" or "UA-"');
+      throw new IntegrationValidationError('Google Analytics measurement ID must start with "G-" or "UA-"', 'config');
     }
   }
 };
 
 /**
  * Validates and normalizes the app configuration
+ * This is the primary validation entry point that ensures consistent behavior
  * @param config - The app configuration to validate and normalize
  * @returns The normalized configuration
+ * @throws {ProjectIdValidationError} If project ID validation fails after normalization
+ * @throws {AppConfigValidationError} If other configuration validation fails
  */
 export const validateAndNormalizeConfig = (config: AppConfig): AppConfig => {
+  // First validate the structure and basic types
   validateAppConfig(config);
 
-  return {
+  // Normalize string values
+  const normalizedConfig = {
     ...config,
     id: config.id.trim(),
     globalMetadata: config.globalMetadata ?? {},
     sensitiveQueryParams: config.sensitiveQueryParams ?? [],
   };
+
+  // Validate normalized values - this catches whitespace-only IDs
+  if (!normalizedConfig.id) {
+    throw new ProjectIdValidationError(VALIDATION_MESSAGES.PROJECT_ID_EMPTY_AFTER_TRIM, 'config');
+  }
+
+  return normalizedConfig;
 };
 
 /**
