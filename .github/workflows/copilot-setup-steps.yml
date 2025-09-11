@@ -13,7 +13,6 @@ jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
 
-    # Permisos mínimos necesarios para checkout durante el setup
     permissions:
       contents: read
 
