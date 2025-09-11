@@ -79,6 +79,9 @@ npm run serve:test
 # Build SDK for testing
 npm run build:browser
 
+# Fix code format using prettier and eslint
+npm run fix
+
 # Full test pipeline (build + test)
 npm run test:e2e  # Includes build step
 
@@ -234,6 +237,7 @@ npx playwright test --trace=on
 npm run test:e2e                    # All tests pass
 npm run check                       # Code style compliance
 npm run build:all                   # Build succeeds
+npm run fix                         # Format code style and detect eslint errors
 
 # Verify cross-browser compatibility
 npx playwright test --project=chromium
