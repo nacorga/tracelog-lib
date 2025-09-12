@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test-helpers';
+import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
 import {
   InitializationTestBase,
   InitializationScenarios,
@@ -7,7 +7,7 @@ import {
   TEST_CONSTANTS,
   PerformanceValidator,
   SessionValidator,
-} from '../../../utils/initialization-test-helpers';
+} from '../../../utils/initialization/test.helpers';
 
 test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
   let testBase: InitializationTestBase;

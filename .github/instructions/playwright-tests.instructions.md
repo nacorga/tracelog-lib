@@ -32,7 +32,7 @@ Follow these repo-specific requirements for reliable, maintainable E2E tests and
 ### Recommended test skeleton
 ```ts
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test-helpers';
+import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
 
 test.describe('Feature Name', () => {
   const TEST_CONFIG = { id: 'test-project' };

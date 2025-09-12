@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test-helpers';
+import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
 
 test.describe('Session Management - Session Start', () => {
   // Constants

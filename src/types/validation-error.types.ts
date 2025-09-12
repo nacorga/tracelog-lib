@@ -66,17 +66,3 @@ export class IntegrationValidationError extends TraceLogValidationError {
     super(message, 'INTEGRATION_INVALID', layer);
   }
 }
-
-/**
- * Type guard to check if an error is a TraceLog validation error
- */
-export function isTraceLogValidationError(error: unknown): error is TraceLogValidationError {
-  return error instanceof TraceLogValidationError;
-}
-
-/**
- * Type guard to check if an error is a specific validation error type
- */
-export function isProjectIdValidationError(error: unknown): error is ProjectIdValidationError {
-  return error instanceof ProjectIdValidationError;
-}

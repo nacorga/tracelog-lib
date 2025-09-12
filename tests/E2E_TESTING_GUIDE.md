@@ -13,17 +13,18 @@
 
 ```
 tests/
-├── e2e/                          # Playwright test files
-│   ├── initialization/           # SDK initialization tests
-│   ├── session-management/       # Session lifecycle tests
+├── e2e/                         # Playwright test files
+│   ├── initialization/          # SDK initialization tests
+│   ├── session-management/      # Session lifecycle tests
 │   ├── event-tracking/          # Event capture tests
 │   └── [other-categories]/      # Organized by functionality
 ├── fixtures/                    # Test HTML pages and assets
-│   ├── index.html              # Main test page
-│   ├── tracelog.js             # Built SDK for testing
-│   └── pages/                  # Additional test pages
-└── utils/                      # Test utilities and helpers
-    └── test-helpers.ts         # Common testing functions
+│   ├── index.html               # Main test page
+│   ├── tracelog.js              # Built SDK for testing
+│   └── pages/                   # Additional test pages
+└── utils/                       # Test utilities and helpers
+    └── test.helpers.ts          # Common testing functions
+    └── [other-categories]/      # Common testing functions organized by functionality
 ```
 
 **Test Flow**: Page Load → SDK Init → User Interactions → Event Capture → Validation
@@ -44,7 +45,7 @@ tests/
 
 ### Code Style
 ```typescript
-// Follow existing patterns from test-helpers.ts
+// Follow existing patterns from test.helpers.ts
 test.describe('Feature Name', () => {
   test('should validate specific behavior', async ({ page }) => {
     // Setup console monitoring
@@ -102,7 +103,7 @@ npx playwright show-report
 ### Basic Test Structure
 ```typescript
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test-helpers';
+import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
 
 test.describe('Feature Category', () => {
   const TEST_CONFIG = { id: 'test-project' };

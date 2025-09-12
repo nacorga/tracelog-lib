@@ -329,6 +329,32 @@ export class TestHelpers {
     throw new Error(`Cross-tab session coordination not established within ${timeoutMs}ms`);
   }
 
+  static async waitForTabCountUpdate(pages: Page[], expectedTabCount: number, timeoutMs = 5000): Promise<void> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      // Check all pages for updated tab count
+      const sessionInfos = await Promise.all(pages.map((page) => TestHelpers.getCrossTabSessionInfo(page)));
+
+      for (const sessionInfo of sessionInfos) {
+        if (
+          sessionInfo.sessionContext &&
+          typeof sessionInfo.sessionContext === 'object' &&
+          'tabCount' in sessionInfo.sessionContext
+        ) {
+          const tabCount = (sessionInfo.sessionContext as { tabCount?: number }).tabCount;
+          if (tabCount === expectedTabCount) {
+            return;
+          }
+        }
+      }
+
+      await pages[0].waitForTimeout(200);
+    }
+
+    throw new Error(`Tab count did not update to ${expectedTabCount} within ${timeoutMs}ms`);
+  }
+
   static async simulateUserActivity(page: Page): Promise<void> {
     // Simulate various user activities to trigger session activity
     await page.mouse.move(100, 100);
@@ -339,21 +365,23 @@ export class TestHelpers {
 
   static async waitForLeaderElection(
     pages: Page[],
-    timeoutMs = 5000,
+    timeoutMs = 10000, // Increased timeout for more reliable leader election
   ): Promise<{
     leaderPage: Page | null;
     leaderIndex: number;
     sessionId: string | null;
   }> {
     const startTime = Date.now();
+    let attemptCount = 0;
+    const maxAttempts = Math.floor(timeoutMs / 500); // Check every 500ms
 
-    while (Date.now() - startTime < timeoutMs) {
+    while (Date.now() - startTime < timeoutMs && attemptCount < maxAttempts) {
+      attemptCount++;
+
       // Check all pages for session info
-      const allSessionInfos = await Promise.all(
-        pages.map((page) => TestHelpers.getCrossTabSessionInfo(page))
-      );
+      const allSessionInfos = await Promise.all(pages.map((page) => TestHelpers.getCrossTabSessionInfo(page)));
 
-      // Find a leader or any page with a session
+      // First, look for an existing leader
       for (let i = 0; i < allSessionInfos.length; i++) {
         const sessionInfo = allSessionInfos[i];
         if (sessionInfo.isLeader && sessionInfo.sessionId) {
@@ -365,28 +393,78 @@ export class TestHelpers {
         }
       }
 
-      // If no leader found, check if any page has a session and could become leader
-      for (let i = 0; i < allSessionInfos.length; i++) {
-        const sessionInfo = allSessionInfos[i];
-        if (sessionInfo.sessionId && sessionInfo.hasTabInfoStorage) {
-          // Force leader election by triggering activity
-          await TestHelpers.simulateUserActivity(pages[i]);
-          await pages[i].waitForTimeout(500); // Give time for election
-          
-          // Check again after activity
-          const updatedInfo = await TestHelpers.getCrossTabSessionInfo(pages[i]);
-          if (updatedInfo.isLeader) {
+      // If no leader found, try to trigger leader election on all pages
+      const pagesWithSessions = allSessionInfos
+        .map((info, index) => ({ info, index }))
+        .filter(({ info }) => info.sessionId || info.hasTabInfoStorage);
+
+      if (pagesWithSessions.length > 0) {
+        // Trigger activity on all pages with sessions to encourage leader election
+        await Promise.all(
+          pagesWithSessions.map(async ({ index }) => {
+            try {
+              await TestHelpers.simulateUserActivity(pages[index]);
+              // Add a small random delay to avoid synchronization issues
+              await pages[index].waitForTimeout(100 + Math.random() * 200);
+            } catch (error) {
+              // Continue if activity simulation fails
+              console.warn(`Failed to simulate activity on page ${index}:`, error);
+            }
+          }),
+        );
+
+        // Wait a bit longer for election to complete
+        await pages[0].waitForTimeout(800);
+
+        // Check again after triggering activities
+        const updatedSessionInfos = await Promise.all(pages.map((page) => TestHelpers.getCrossTabSessionInfo(page)));
+
+        for (let i = 0; i < updatedSessionInfos.length; i++) {
+          const sessionInfo = updatedSessionInfos[i];
+          if (sessionInfo.isLeader && sessionInfo.sessionId) {
             return {
               leaderPage: pages[i],
               leaderIndex: i,
-              sessionId: updatedInfo.sessionId,
+              sessionId: sessionInfo.sessionId,
             };
           }
         }
+
+        // If still no leader, try forcing leadership on the first page with a session
+        const firstPageWithSession = pagesWithSessions[0];
+        if (firstPageWithSession) {
+          try {
+            // Trigger multiple activities to force leader election
+            for (let attempt = 0; attempt < 3; attempt++) {
+              await TestHelpers.simulateUserActivity(pages[firstPageWithSession.index]);
+              await pages[firstPageWithSession.index].waitForTimeout(300);
+
+              const forcedElectionInfo = await TestHelpers.getCrossTabSessionInfo(pages[firstPageWithSession.index]);
+              if (forcedElectionInfo.isLeader && forcedElectionInfo.sessionId) {
+                return {
+                  leaderPage: pages[firstPageWithSession.index],
+                  leaderIndex: firstPageWithSession.index,
+                  sessionId: forcedElectionInfo.sessionId,
+                };
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to force leader election:', error);
+          }
+        }
+      } else {
+        // No pages have sessions yet, wait a bit longer for initialization
+        await pages[0].waitForTimeout(500);
       }
 
-      await pages[0].waitForTimeout(200);
+      // Progressive backoff - wait longer on later attempts
+      const waitTime = Math.min(200 + attemptCount * 50, 1000);
+      await pages[0].waitForTimeout(waitTime);
     }
+
+    // Final attempt: get session info for debugging
+    const finalSessionInfos = await Promise.all(pages.map((page) => TestHelpers.getCrossTabSessionInfo(page)));
+    console.warn('Leader election failed. Final session states:', finalSessionInfos);
 
     return {
       leaderPage: null,

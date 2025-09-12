@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test-helpers';
+import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
 import {
   InitializationTestBase,
   InitializationScenarios,
@@ -8,7 +8,7 @@ import {
   PerformanceValidator,
   SessionValidator,
   MemoryTestUtils,
-} from '../../../utils/initialization-test-helpers';
+} from '../../../utils/initialization/test.helpers';
 
 test.describe('Library Initialization - Multiple Attempts and Safety Checks', () => {
   let testBase: InitializationTestBase;

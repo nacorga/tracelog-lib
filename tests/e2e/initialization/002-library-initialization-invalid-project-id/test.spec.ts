@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers } from '../../../utils/test-helpers';
+import { TestHelpers } from '../../../utils/test.helpers';
 import {
   InitializationTestBase,
   InitializationScenarios,
   TEST_CONSTANTS,
   ErrorValidator,
   PerformanceValidator,
-} from '../../../utils/initialization-test-helpers';
+} from '../../../utils/initialization/test.helpers';
 
 test.describe('Library Initialization - Invalid Project ID', () => {
   let testBase: InitializationTestBase;
