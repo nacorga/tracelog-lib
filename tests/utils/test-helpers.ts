@@ -348,8 +348,14 @@ export class TestHelpers {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs) {
-      for (let i = 0; i < pages.length; i++) {
-        const sessionInfo = await TestHelpers.getCrossTabSessionInfo(pages[i]);
+      // Check all pages for session info
+      const allSessionInfos = await Promise.all(
+        pages.map((page) => TestHelpers.getCrossTabSessionInfo(page))
+      );
+
+      // Find a leader or any page with a session
+      for (let i = 0; i < allSessionInfos.length; i++) {
+        const sessionInfo = allSessionInfos[i];
         if (sessionInfo.isLeader && sessionInfo.sessionId) {
           return {
             leaderPage: pages[i],
@@ -359,7 +365,27 @@ export class TestHelpers {
         }
       }
 
-      await pages[0].waitForTimeout(100);
+      // If no leader found, check if any page has a session and could become leader
+      for (let i = 0; i < allSessionInfos.length; i++) {
+        const sessionInfo = allSessionInfos[i];
+        if (sessionInfo.sessionId && sessionInfo.hasTabInfoStorage) {
+          // Force leader election by triggering activity
+          await TestHelpers.simulateUserActivity(pages[i]);
+          await pages[i].waitForTimeout(500); // Give time for election
+          
+          // Check again after activity
+          const updatedInfo = await TestHelpers.getCrossTabSessionInfo(pages[i]);
+          if (updatedInfo.isLeader) {
+            return {
+              leaderPage: pages[i],
+              leaderIndex: i,
+              sessionId: updatedInfo.sessionId,
+            };
+          }
+        }
+      }
+
+      await pages[0].waitForTimeout(200);
     }
 
     return {
