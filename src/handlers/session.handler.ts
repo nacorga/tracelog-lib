@@ -47,7 +47,7 @@ export class SessionHandler extends StateManager {
 
     this.checkOrphanedSessions();
 
-    const onActivity = (): void => {
+    const onActivity = async (): Promise<void> => {
       if (this.crossTabSessionManager) {
         this.crossTabSessionManager.updateSessionActivity();
       }
@@ -56,26 +56,16 @@ export class SessionHandler extends StateManager {
         return;
       }
 
-      // If we have a cross-tab session manager, let it handle session creation
-      // The onSessionStart callback will be called when the cross-tab session is ready
-      if (this.crossTabSessionManager) {
-        const crossTabSessionId = this.crossTabSessionManager.getSessionId();
-        if (crossTabSessionId) {
-          this.set('sessionId', crossTabSessionId);
-          this.persistSession(crossTabSessionId);
-          this.startHeartbeat();
-        }
-        // Don't start regular session when cross-tab manager is handling sessions
-        return;
+      try {
+        const sessionResult = await this.createOrJoinSession();
+        this.set('sessionId', sessionResult.sessionId);
+        this.trackSession(EventType.SESSION_START, sessionResult.recovered);
+        this.persistSession(sessionResult.sessionId);
+        this.startHeartbeat();
+      } catch (error) {
+        log('error', `Session creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        this.forceCleanupSession();
       }
-
-      // Start a new session through regular session manager (fallback when no cross-tab)
-      const sessionResult = this.sessionManager!.startSession();
-
-      this.set('sessionId', sessionResult.sessionId);
-      this.trackSession(EventType.SESSION_START, sessionResult.recovered);
-      this.persistSession(sessionResult.sessionId);
-      this.startHeartbeat();
     };
 
     const onInactivity = (): void => {
@@ -91,18 +81,23 @@ export class SessionHandler extends StateManager {
         return;
       }
 
-      this.sessionManager!.endSessionManaged('inactivity').then((result) => {
-        if (this.get('config')?.qaMode) {
-          log('info', `Inactivity session end result: ${JSON.stringify(result)}`);
-        }
+      this.sessionManager!.endSessionManaged('inactivity')
+        .then((result) => {
+          if (this.get('config')?.qaMode) {
+            log('info', `Inactivity session end result: ${JSON.stringify(result)}`);
+          }
 
-        if (this.crossTabSessionManager) {
-          this.crossTabSessionManager.endSession('inactivity');
-        }
+          if (this.crossTabSessionManager) {
+            this.crossTabSessionManager.endSession('inactivity');
+          }
 
-        this.clearPersistedSession();
-        this.stopHeartbeat();
-      });
+          this.clearPersistedSession();
+          this.stopHeartbeat();
+        })
+        .catch((error) => {
+          log('error', `Session end failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          this.forceCleanupSession();
+        });
     };
 
     const sessionEndConfig: Partial<SessionEndConfig> = {
@@ -126,9 +121,14 @@ export class SessionHandler extends StateManager {
   stopTracking(): void {
     if (this.sessionManager) {
       if (this.get('sessionId')) {
-        this.sessionManager.endSessionSafely('manual_stop', { forceSync: true });
-        this.clearPersistedSession();
-        this.stopHeartbeat();
+        try {
+          this.sessionManager.endSessionSafely('manual_stop', { forceSync: true });
+          this.clearPersistedSession();
+          this.stopHeartbeat();
+        } catch (error) {
+          log('error', `Manual session stop failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          this.forceCleanupSession();
+        }
       }
 
       this.sessionManager.destroy();
@@ -186,6 +186,67 @@ export class SessionHandler extends StateManager {
     };
 
     this.crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
+  }
+
+  private async createOrJoinSession(): Promise<{ sessionId: string; recovered: boolean }> {
+    if (this.crossTabSessionManager) {
+      const existingSessionId = this.crossTabSessionManager.getSessionId();
+      if (existingSessionId) {
+        return { sessionId: existingSessionId, recovered: false };
+      }
+
+      // If cross-tab manager exists but no session, create one through regular session manager
+      // The cross-tab manager will coordinate with other tabs automatically
+      const sessionResult = this.sessionManager!.startSession();
+      return { sessionId: sessionResult.sessionId, recovered: sessionResult.recovered ?? false };
+    }
+
+    // Fallback: create regular session when no cross-tab manager
+    const sessionResult = this.sessionManager!.startSession();
+    return { sessionId: sessionResult.sessionId, recovered: sessionResult.recovered ?? false };
+  }
+
+  private forceCleanupSession(): void {
+    // Clear session state
+    this.set('sessionId', null);
+
+    // Clear persisted session data
+    this.clearPersistedSession();
+
+    // Stop heartbeat timer
+    this.stopHeartbeat();
+
+    // Clean up cross-tab session if exists
+    if (this.crossTabSessionManager) {
+      try {
+        this.crossTabSessionManager.endSession('orphaned_cleanup');
+      } catch (error) {
+        // Silent cleanup - we're already in error recovery
+        if (this.get('config')?.qaMode) {
+          log(
+            'warning',
+            `Cross-tab cleanup failed during force cleanup: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      }
+    }
+
+    // Track session end for analytics
+    try {
+      this.trackSession(EventType.SESSION_END, false, 'orphaned_cleanup');
+    } catch (error) {
+      // Silent tracking failure - we're already in error recovery
+      if (this.get('config')?.qaMode) {
+        log(
+          'warning',
+          `Session tracking failed during force cleanup: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+    }
+
+    if (this.get('config')?.qaMode) {
+      log('info', 'Forced session cleanup completed');
+    }
   }
 
   private trackSession(

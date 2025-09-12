@@ -62,6 +62,13 @@ export class SessionManager extends StateManager {
   // Session End Management
   private pendingSessionEnd = false;
   private sessionEndPromise: Promise<SessionEndResult> | null = null;
+  private sessionEndLock: Promise<SessionEndResult> = Promise.resolve({
+    success: true,
+    reason: 'manual_stop',
+    timestamp: Date.now(),
+    eventsFlushed: 0,
+    method: 'async',
+  });
   private cleanupHandlers: (() => void)[] = [];
   private readonly sessionEndConfig: SessionEndConfig;
   private sessionEndReason: SessionEndReason | null = null;
@@ -249,6 +256,13 @@ export class SessionManager extends StateManager {
     this.cleanupHandlers = [];
     this.pendingSessionEnd = false;
     this.sessionEndPromise = null;
+    this.sessionEndLock = Promise.resolve({
+      success: true,
+      reason: 'manual_stop',
+      timestamp: Date.now(),
+      eventsFlushed: 0,
+      method: 'async',
+    });
 
     if (this.recoveryManager) {
       this.recoveryManager.cleanupOldRecoveryAttempts();
@@ -382,60 +396,65 @@ export class SessionManager extends StateManager {
     return !this.sessionEndReason || this.sessionEndPriority[reason] > this.sessionEndPriority[this.sessionEndReason];
   }
 
+  private async waitForCompletion(): Promise<SessionEndResult> {
+    if (this.sessionEndPromise) {
+      return await this.sessionEndPromise;
+    }
+
+    return {
+      success: false,
+      reason: 'inactivity',
+      timestamp: Date.now(),
+      eventsFlushed: 0,
+      method: 'async',
+    };
+  }
+
   async endSessionManaged(reason: SessionEndReason): Promise<SessionEndResult> {
-    this.sessionEndStats.totalSessionEnds++;
-    this.sessionEndStats.reasonCounts[reason]++;
+    return (this.sessionEndLock = this.sessionEndLock.then(async () => {
+      this.sessionEndStats.totalSessionEnds++;
+      this.sessionEndStats.reasonCounts[reason]++;
 
-    if (this.pendingSessionEnd) {
-      this.sessionEndStats.duplicatePrevented++;
+      if (this.pendingSessionEnd) {
+        this.sessionEndStats.duplicatePrevented++;
 
-      if (this.sessionEndConfig.debugMode) {
-        log('info', `Session end already pending, waiting for completion. Reason: ${reason}`);
+        if (this.sessionEndConfig.debugMode) {
+          log('info', `Session end already pending, waiting for completion. Reason: ${reason}`);
+        }
+
+        return this.waitForCompletion();
       }
 
-      if (this.sessionEndPromise) {
-        return await this.sessionEndPromise;
+      if (!this.shouldProceedWithSessionEnd(reason)) {
+        if (this.sessionEndConfig.debugMode) {
+          log(
+            'info',
+            `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
+          );
+        }
+
+        return {
+          success: false,
+          reason,
+          timestamp: Date.now(),
+          eventsFlushed: 0,
+          method: 'async',
+        };
       }
 
-      return {
-        success: false,
-        reason,
-        timestamp: Date.now(),
-        eventsFlushed: 0,
-        method: 'async',
-      };
-    }
+      this.sessionEndReason = reason;
+      this.pendingSessionEnd = true;
+      this.sessionEndPromise = this.performSessionEnd(reason, 'async');
 
-    if (!this.shouldProceedWithSessionEnd(reason)) {
-      if (this.sessionEndConfig.debugMode) {
-        log(
-          'info',
-          `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
-        );
+      try {
+        const result = await this.sessionEndPromise;
+        return result;
+      } finally {
+        this.pendingSessionEnd = false;
+        this.sessionEndPromise = null;
+        this.sessionEndReason = null;
       }
-
-      return {
-        success: false,
-        reason,
-        timestamp: Date.now(),
-        eventsFlushed: 0,
-        method: 'async',
-      };
-    }
-
-    this.sessionEndReason = reason;
-    this.pendingSessionEnd = true;
-    this.sessionEndPromise = this.performSessionEnd(reason, 'async');
-
-    try {
-      const result = await this.sessionEndPromise;
-
-      return result;
-    } finally {
-      this.pendingSessionEnd = false;
-      this.sessionEndPromise = null;
-      this.sessionEndReason = null;
-    }
+    }));
   }
 
   endSessionSafely(
