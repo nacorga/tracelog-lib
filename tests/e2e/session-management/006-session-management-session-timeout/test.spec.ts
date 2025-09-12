@@ -27,7 +27,7 @@ test.describe('Session Management - Session Timeout', () => {
       expect(validatedResult.success).toBe(true);
       expect(validatedResult.hasError).toBe(false);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500); // Wait for cross-tab leader election
       await expect(page.getByTestId('init-status')).toContainText(INITIALIZED_STATUS_TEXT);
 
       // Start session with activity
@@ -85,7 +85,7 @@ test.describe('Session Management - Session Timeout', () => {
       };
 
       await TestHelpers.initializeTraceLog(page, testConfig);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Start initial session
       await TestHelpers.triggerClickEvent(page);
@@ -155,7 +155,7 @@ test.describe('Session Management - Session Timeout', () => {
       const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Start session and verify configuration
       await TestHelpers.triggerClickEvent(page);
@@ -228,7 +228,7 @@ test.describe('Session Management - Session Timeout', () => {
       const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page, 300);
+      await TestHelpers.waitForTimeout(page, 2500); // Wait for cross-tab leader election
 
       // Start session
       await TestHelpers.triggerClickEvent(page);
@@ -292,7 +292,7 @@ test.describe('Session Management - Session Timeout', () => {
       const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Start session
       await TestHelpers.triggerClickEvent(page);
@@ -347,7 +347,7 @@ test.describe('Session Management - Session Timeout', () => {
     try {
       await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
       await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Start session
       await TestHelpers.triggerClickEvent(page);

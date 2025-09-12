@@ -32,7 +32,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       expect(validatedResult.success).toBe(true);
       expect(validatedResult.hasError).toBe(false);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
       await expect(page.getByTestId('init-status')).toContainText(INITIALIZED_STATUS_TEXT);
 
       // Start session to verify configuration was applied
@@ -175,7 +175,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       expect(minValidated.success).toBe(true);
       expect(minValidated.hasError).toBe(false);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 500);
 
@@ -221,7 +221,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       expect(maxValidated.success).toBe(true);
       expect(maxValidated.hasError).toBe(false);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 500);
 
@@ -269,7 +269,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Start session and validate configuration
       await TestHelpers.triggerClickEvent(page);
@@ -351,7 +351,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 500);
 
@@ -383,7 +383,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       const reloadInitResult = await TestHelpers.initializeTraceLog(page, testConfig);
       expect(TestAssertions.verifyInitializationResult(reloadInitResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 500);
 
@@ -471,7 +471,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
         expect(validated.success).toBe(true);
         expect(validated.hasError).toBe(false);
 
-        await TestHelpers.waitForTimeout(page);
+        await TestHelpers.waitForTimeout(page, 2500);
         await TestHelpers.triggerClickEvent(page);
         await TestHelpers.waitForTimeout(page, 500);
 
@@ -532,7 +532,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       };
 
       await TestHelpers.initializeTraceLog(page, testConfig);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 500);
 

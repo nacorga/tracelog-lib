@@ -45,7 +45,7 @@ test.describe('Session Management - Session Start', () => {
       expect(initDuration).toBeLessThan(SESSION_REQUIREMENTS.MAX_SESSION_START_TIME);
 
       // Wait for initialization to complete
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
       await expect(page.getByTestId('init-status')).toContainText(INITIALIZED_STATUS_TEXT);
 
       // Trigger user activity to ensure session starts
@@ -101,7 +101,7 @@ test.describe('Session Management - Session Start', () => {
       // Navigate and initialize
       await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
       await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Trigger activity to ensure session creation
       await TestHelpers.triggerClickEvent(page);
@@ -145,17 +145,31 @@ test.describe('Session Management - Session Start', () => {
 
       // Generate second session to test uniqueness by clearing and reinitializing
       await page.evaluate(async () => {
-        // Clear current session and reinitialize
+        // Properly destroy first, then clear storage, then reinitialize
+        if ((window as any).TraceLog?.destroy) {
+          await (window as any).TraceLog.destroy();
+        }
         localStorage.clear();
-        await (window as any).TraceLog.destroy?.();
-        await (window as any).initializeTraceLog({ id: 'test' });
+        await (window as any).initializeTraceLog({ id: 'test', qaMode: true });
       });
 
+      // Wait for cross-tab leader election to complete (TAB_ELECTION_TIMEOUT_MS = 2000ms)
+      await TestHelpers.waitForTimeout(page, 2500);
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 500);
 
       const secondSessionValidation = await page.evaluate(() => {
         let sessionId = null;
+
+        // First, let's see what keys actually exist
+        const allKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.startsWith('tl:')) {
+            const value = localStorage.getItem(key);
+            allKeys.push({ key, value });
+          }
+        }
 
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -172,7 +186,7 @@ test.describe('Session Management - Session Start', () => {
           }
         }
 
-        return { sessionId };
+        return { sessionId, allKeys };
       });
 
       // Verify uniqueness
@@ -194,7 +208,7 @@ test.describe('Session Management - Session Start', () => {
       // Navigate and initialize
       await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
       await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Mock fetch to capture events being sent (simplified approach)
       await page.evaluate(() => {
@@ -299,7 +313,7 @@ test.describe('Session Management - Session Start', () => {
       // Navigate and initialize
       await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
       await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Trigger activity to ensure session creation
       await TestHelpers.triggerClickEvent(page);
@@ -385,7 +399,7 @@ test.describe('Session Management - Session Start', () => {
       // Record timing for accuracy testing
       const initStartTime = Date.now();
       await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500);
 
       // Trigger session creation
       await TestHelpers.triggerClickEvent(page);
@@ -471,7 +485,7 @@ test.describe('Session Management - Session Start', () => {
       // Navigate and initialize
       await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
       await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
-      await TestHelpers.waitForTimeout(page);
+      await TestHelpers.waitForTimeout(page, 2500); // Wait for cross-tab leader election
 
       // Test multiple interactions to ensure session consistency
       const interactions: (() => Promise<void>)[] = [

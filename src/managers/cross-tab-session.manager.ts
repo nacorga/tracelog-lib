@@ -1,5 +1,5 @@
 import { TAB_HEARTBEAT_INTERVAL_MS, TAB_ELECTION_TIMEOUT_MS, DEFAULT_SESSION_TIMEOUT_MS } from '../constants';
-import { BROADCAST_CHANNEL_NAME, CROSS_TAB_SESSION_KEY, TAB_INFO_KEY } from '../constants/storage.constants';
+import { BROADCAST_CHANNEL_NAME, CROSS_TAB_SESSION_KEY, TAB_SPECIFIC_INFO_KEY } from '../constants/storage.constants';
 import {
   CrossTabSessionConfig,
   TabInfo,
@@ -92,8 +92,7 @@ export class CrossTabSessionManager extends StateManager {
   private initialize(): void {
     if (!this.broadcastChannel) {
       // Fallback to single-tab behavior when BroadcastChannel is not available
-      this.isTabLeader = true;
-      this.tabInfo.isLeader = true;
+      this.becomeLeader(); // This will create a session and set up the tab as leader
       return;
     }
 
@@ -477,26 +476,8 @@ export class CrossTabSessionManager extends StateManager {
     // Announce tab closing
     this.announceTabClosing();
 
-    // Update session context
-    const sessionContext = this.getStoredSessionContext();
-    if (sessionContext) {
-      sessionContext.tabCount = Math.max(0, sessionContext.tabCount - 1);
-
-      // Only end session if this is the last tab or we're the leader
-      if (sessionContext.tabCount === 0 || this.isTabLeader) {
-        this.clearStoredSessionContext();
-
-        // Notify session end
-        if (this.callbacks?.onSessionEnd) {
-          this.callbacks.onSessionEnd(reason);
-        }
-
-        // Announce session end to other tabs
-        this.announceSessionEnd(reason);
-      } else {
-        this.storeSessionContext(sessionContext);
-      }
-    }
+    // Other tabs will handle the tab count decrement when they receive the tab_closing message
+    // Don't modify session context here - let remaining tabs manage it
 
     // Clear tab info
     this.clearTabInfo();
@@ -598,7 +579,7 @@ export class CrossTabSessionManager extends StateManager {
    */
   private storeTabInfo(): void {
     try {
-      this.storageManager.setItem(TAB_INFO_KEY(this.projectId), JSON.stringify(this.tabInfo));
+      this.storageManager.setItem(TAB_SPECIFIC_INFO_KEY(this.projectId, this.tabId), JSON.stringify(this.tabInfo));
     } catch (error) {
       if (this.config.debugMode) {
         logUnknown('warning', 'Failed to store tab info', error);
@@ -610,7 +591,7 @@ export class CrossTabSessionManager extends StateManager {
    * Clear tab info from localStorage
    */
   private clearTabInfo(): void {
-    this.storageManager.removeItem(TAB_INFO_KEY(this.projectId));
+    this.storageManager.removeItem(TAB_SPECIFIC_INFO_KEY(this.projectId, this.tabId));
   }
 
   /**

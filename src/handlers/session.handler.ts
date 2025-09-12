@@ -56,6 +56,20 @@ export class SessionHandler extends StateManager {
         return;
       }
 
+      // If we have a cross-tab session manager, let it handle session creation
+      // The onSessionStart callback will be called when the cross-tab session is ready
+      if (this.crossTabSessionManager) {
+        const crossTabSessionId = this.crossTabSessionManager.getSessionId();
+        if (crossTabSessionId) {
+          this.set('sessionId', crossTabSessionId);
+          this.persistSession(crossTabSessionId);
+          this.startHeartbeat();
+        }
+        // Don't start regular session when cross-tab manager is handling sessions
+        return;
+      }
+
+      // Start a new session through regular session manager (fallback when no cross-tab)
       const sessionResult = this.sessionManager!.startSession();
 
       this.set('sessionId', sessionResult.sessionId);
@@ -145,7 +159,9 @@ export class SessionHandler extends StateManager {
       }
 
       this.set('sessionId', sessionId);
+      this.trackSession(EventType.SESSION_START, false);
       this.persistSession(sessionId);
+      this.startHeartbeat();
     };
 
     const onSessionEnd = (reason: SessionEndReason): void => {
@@ -190,6 +206,24 @@ export class SessionHandler extends StateManager {
       return;
     }
 
+    // Check if there's already a cross-tab session active
+    if (this.crossTabSessionManager) {
+      const existingSessionId = this.crossTabSessionManager.getSessionId();
+
+      if (existingSessionId) {
+        // Join existing cross-tab session
+        this.set('sessionId', existingSessionId);
+        this.persistSession(existingSessionId);
+        this.startHeartbeat();
+        return;
+      }
+
+      // No existing cross-tab session, so trigger activity to potentially create one
+      // The cross-tab session manager will handle session creation when activity occurs
+      return;
+    }
+
+    // Fallback: no cross-tab session manager, start regular session
     const sessionResult = this.sessionManager!.startSession();
 
     this.set('sessionId', sessionResult.sessionId);

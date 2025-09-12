@@ -9,6 +9,9 @@ export const CROSS_TAB_SESSION_KEY = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:cross_tab_session` : `${STORAGE_BASE_KEY}:cross_tab_session`;
 export const TAB_INFO_KEY = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:tab_info` : `${STORAGE_BASE_KEY}:tab_info`;
+
+export const TAB_SPECIFIC_INFO_KEY = (projectId: string, tabId: string): string =>
+  `${STORAGE_BASE_KEY}:${projectId}:tab:${tabId}:info`;
 export const SESSION_RECOVERY_KEY = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:recovery` : `${STORAGE_BASE_KEY}:recovery`;
 

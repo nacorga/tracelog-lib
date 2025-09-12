@@ -323,6 +323,8 @@ export class SessionManager extends StateManager {
     this.lastActivityTime = now;
 
     if (this.isSessionActive) {
+      // Always call onActivity to update cross-tab session activity
+      this.onActivity();
       this.resetInactivityTimer();
     } else {
       if (this.throttleTimeout) {

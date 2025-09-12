@@ -247,7 +247,8 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       });
 
       // Should not have exponential growth of stored data (safety check)
-      expect(finalEvents).toBeLessThan(initialEvents * 3); // Reasonable upper bound
+      // Account for cross-tab session manager keys (session context + tab-specific keys)
+      expect(finalEvents).toBeLessThan(initialEvents + 10); // Reasonable upper bound allowing for cross-tab keys
 
       // Verify no handler-related errors (safety check)
       const handlerErrors = monitor.traceLogErrors.filter(

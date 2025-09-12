@@ -154,6 +154,222 @@ export class TestHelpers {
   }
 
   /**
+   * Cross-tab session testing utilities
+   */
+  static async createMultipleTabsWithSameContext(
+    browser: Browser,
+    tabCount: number,
+  ): Promise<{ pages: Page[]; cleanup: () => Promise<void> }> {
+    const context = await browser.newContext();
+    const pages: Page[] = [];
+
+    for (let i = 0; i < tabCount; i++) {
+      const page = await context.newPage();
+      pages.push(page);
+    }
+
+    return {
+      pages,
+      cleanup: async (): Promise<void> => await context.close(),
+    };
+  }
+
+  static async getAllTabsInfo(
+    page: Page,
+    projectId = 'test',
+  ): Promise<{
+    sessionContext: Record<string, unknown> | null;
+    allTabInfos: Array<Record<string, unknown>>;
+    regularSessionId: string | null;
+    hasBroadcastChannel: boolean;
+  }> {
+    return await page.evaluate((projectId) => {
+      const crossTabSessionKey = `tl:${projectId}:cross_tab_session`;
+      const regularSessionKey = `tl:${projectId}:session`;
+
+      let sessionContext = null;
+      let regularSession = null;
+      const allTabInfos: Array<Record<string, unknown>> = [];
+
+      try {
+        const sessionData = localStorage.getItem(crossTabSessionKey);
+        sessionContext = sessionData ? JSON.parse(sessionData) : null;
+      } catch {
+        // Continue if parsing fails
+      }
+
+      // Find all tab info entries
+      try {
+        const tabKeyPrefix = `tl:${projectId}:tab:`;
+        const tabKeySuffix = ':info';
+
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(tabKeyPrefix) && key.endsWith(tabKeySuffix)) {
+            const tabData = localStorage.getItem(key);
+            if (tabData) {
+              const parsedTabInfo = JSON.parse(tabData);
+              allTabInfos.push(parsedTabInfo);
+            }
+          }
+        }
+      } catch {
+        // Continue if parsing fails
+      }
+
+      try {
+        const regSessionData = localStorage.getItem(regularSessionKey);
+        regularSession = regSessionData ? JSON.parse(regSessionData) : null;
+      } catch {
+        // Continue if parsing fails
+      }
+
+      return {
+        sessionContext,
+        allTabInfos,
+        regularSessionId: regularSession?.sessionId ?? null,
+        hasBroadcastChannel: typeof BroadcastChannel !== 'undefined',
+      };
+    }, projectId);
+  }
+
+  static async getCrossTabSessionInfo(
+    page: Page,
+    projectId = 'test',
+  ): Promise<{
+    sessionId: string | null;
+    isLeader: boolean;
+    tabId: string | null;
+    sessionContext: Record<string, unknown> | null;
+    tabInfo: Record<string, unknown> | null;
+    hasSessionStorage: boolean;
+    hasCrossTabStorage: boolean;
+    hasTabInfoStorage: boolean;
+    regularSessionId: string | null;
+    hasBroadcastChannel: boolean;
+  }> {
+    return await page.evaluate((projectId) => {
+      const crossTabSessionKey = `tl:${projectId}:cross_tab_session`;
+      const regularSessionKey = `tl:${projectId}:session`;
+
+      let sessionContext = null;
+      let tabInfo = null;
+      let regularSession = null;
+
+      try {
+        const sessionData = localStorage.getItem(crossTabSessionKey);
+        sessionContext = sessionData ? JSON.parse(sessionData) : null;
+      } catch {
+        // Continue if parsing fails
+      }
+
+      // Find this page's tab info by looking for tab-specific keys
+      // The new format is tl:${projectId}:tab:${tabId}:info
+      try {
+        const tabKeyPrefix = `tl:${projectId}:tab:`;
+        const tabKeySuffix = ':info';
+
+        // Search through localStorage for tab-specific keys
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(tabKeyPrefix) && key.endsWith(tabKeySuffix)) {
+            const tabData = localStorage.getItem(key);
+            if (tabData) {
+              const parsedTabInfo = JSON.parse(tabData);
+              // For now, take the first one we find - in practice each page will have different tabs
+              tabInfo ??= parsedTabInfo;
+            }
+          }
+        }
+      } catch {
+        // Continue if parsing fails
+      }
+
+      try {
+        const regSessionData = localStorage.getItem(regularSessionKey);
+        regularSession = regSessionData ? JSON.parse(regSessionData) : null;
+      } catch {
+        // Continue if parsing fails
+      }
+
+      return {
+        sessionId: sessionContext?.sessionId ?? null,
+        isLeader: tabInfo?.isLeader ?? false,
+        tabId: tabInfo?.id ?? null,
+        sessionContext,
+        tabInfo,
+        hasSessionStorage: !!sessionContext,
+        hasCrossTabStorage: !!localStorage.getItem(crossTabSessionKey),
+        hasTabInfoStorage: !!tabInfo,
+        regularSessionId: regularSession?.sessionId ?? null,
+        hasBroadcastChannel: typeof BroadcastChannel !== 'undefined',
+      };
+    }, projectId);
+  }
+
+  static async waitForCrossTabSessionCoordination(
+    page: Page,
+    expectedSessionId?: string,
+    timeoutMs = 5000,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const sessionInfo = await TestHelpers.getCrossTabSessionInfo(page);
+
+      if (sessionInfo.hasSessionStorage && sessionInfo.sessionId) {
+        if (!expectedSessionId || sessionInfo.sessionId === expectedSessionId) {
+          return;
+        }
+      }
+
+      await page.waitForTimeout(100);
+    }
+
+    throw new Error(`Cross-tab session coordination not established within ${timeoutMs}ms`);
+  }
+
+  static async simulateUserActivity(page: Page): Promise<void> {
+    // Simulate various user activities to trigger session activity
+    await page.mouse.move(100, 100);
+    await page.waitForTimeout(100);
+    await TestHelpers.triggerClickEvent(page);
+    await page.waitForTimeout(200);
+  }
+
+  static async waitForLeaderElection(
+    pages: Page[],
+    timeoutMs = 5000,
+  ): Promise<{
+    leaderPage: Page | null;
+    leaderIndex: number;
+    sessionId: string | null;
+  }> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      for (let i = 0; i < pages.length; i++) {
+        const sessionInfo = await TestHelpers.getCrossTabSessionInfo(pages[i]);
+        if (sessionInfo.isLeader && sessionInfo.sessionId) {
+          return {
+            leaderPage: pages[i],
+            leaderIndex: i,
+            sessionId: sessionInfo.sessionId,
+          };
+        }
+      }
+
+      await pages[0].waitForTimeout(100);
+    }
+
+    return {
+      leaderPage: null,
+      leaderIndex: -1,
+      sessionId: null,
+    };
+  }
+
+  /**
    * Error detection utilities
    */
   static async detectRuntimeErrors(page: Page): Promise<boolean> {
@@ -175,15 +391,17 @@ export class TestHelpers {
  * Common assertions for TraceLog tests
  */
 export class TestAssertions {
-  static verifyInitializationResult(result: any): { success: boolean; error: any; hasError: boolean } {
+  static verifyInitializationResult(result: unknown): { success: boolean; error: unknown; hasError: boolean } {
     if (!result || typeof result !== 'object') {
       throw new Error('Invalid initialization result structure');
     }
 
+    const typedResult = result as { success?: unknown; error?: unknown };
+
     return {
-      success: result.success === true,
-      error: result.error,
-      hasError: result.error !== null && result.error !== undefined,
+      success: typedResult.success === true,
+      error: typedResult.error,
+      hasError: typedResult.error !== null && typedResult.error !== undefined,
     };
   }
 
