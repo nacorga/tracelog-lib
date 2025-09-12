@@ -11,27 +11,27 @@ window.TraceLog = TraceLog;
 
 // Utility functions with improved error handling
 function updateStatus(elementId, status) {
-    const element = document.querySelector(`[data-testid="${elementId}"]`);
-    if (element) {
-        element.textContent = status;
-    }
+  const element = document.querySelector(`[data-testid="${elementId}"]`);
+  if (element) {
+    element.textContent = status;
+  }
 }
 
 function logToConsole(message, type = 'log') {
-    console[type](`[E2E Test] ${message}`);
+  console[type](`[E2E Test] ${message}`);
 }
 
 function getErrorMessage(error) {
-    if (error instanceof Error) {
-        return error.message;
-    }
-    if (typeof error === 'string') {
-        return error;
-    }
-    if (error && typeof error === 'object' && error.message) {
-        return error.message;
-    }
-    return 'Unknown error';
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && error.message) {
+    return error.message;
+  }
+  return 'Unknown error';
 }
 
 // State management
@@ -41,21 +41,21 @@ let isInitialized = false;
 /**
  * Initialize TraceLog with enhanced error handling and status management
  */
-window.initializeTraceLog = async function(config = currentConfig) {
-    try {
-        await TraceLog.init(config);
-        isInitialized = true;
-        updateStatus(STATUS_ELEMENT_ID, SUCCESS_STATUS);
-        logToConsole('TraceLog initialized successfully');
-        return { success: true, error: null };
-    } catch (error) {
-        isInitialized = false;
-        const errorMessage = getErrorMessage(error);
-        const failureStatus = `Status: Initialization failed - ${errorMessage}`;
-        updateStatus(STATUS_ELEMENT_ID, failureStatus);
-        logToConsole(`Error initializing TraceLog: ${errorMessage}`, 'error');
-        return { success: false, error: errorMessage };
-    }
+window.initializeTraceLog = async function (config = currentConfig) {
+  try {
+    await TraceLog.init(config);
+    isInitialized = true;
+    updateStatus(STATUS_ELEMENT_ID, SUCCESS_STATUS);
+    logToConsole('TraceLog initialized successfully');
+    return { success: true, error: null };
+  } catch (error) {
+    isInitialized = false;
+    const errorMessage = getErrorMessage(error);
+    const failureStatus = `Status: Initialization failed - ${errorMessage}`;
+    updateStatus(STATUS_ELEMENT_ID, failureStatus);
+    logToConsole(`Error initializing TraceLog: ${errorMessage}`, 'error');
+    return { success: false, error: errorMessage };
+  }
 };
 
 /**
@@ -71,6 +71,6 @@ window.isCurrentlyInitialized = () => isInitialized;
  * Initialize page when DOM is ready (improved with constants)
  */
 document.addEventListener('DOMContentLoaded', () => {
-    updateStatus(STATUS_ELEMENT_ID, READY_STATUS);
-    logToConsole('Test page loaded and ready');
+  updateStatus(STATUS_ELEMENT_ID, READY_STATUS);
+  logToConsole('Test page loaded and ready');
 });

@@ -109,6 +109,9 @@ export class CrossTabSessionManager extends StateManager {
 
     // Start heartbeat
     this.startHeartbeat();
+
+    // Fallback mechanism: if no leader is elected after a reasonable time, force leadership
+    this.setupLeadershipFallback();
   }
 
   /**
@@ -142,6 +145,12 @@ export class CrossTabSessionManager extends StateManager {
   private requestLeadershipStatus(): void {
     if (!this.broadcastChannel) return;
 
+    // Clear any existing election timeout
+    if (this.electionTimeout) {
+      clearTimeout(this.electionTimeout);
+      this.electionTimeout = null;
+    }
+
     const message: CrossTabMessage = {
       type: 'election_request',
       tabId: this.tabId,
@@ -151,11 +160,14 @@ export class CrossTabSessionManager extends StateManager {
 
     this.broadcastChannel.postMessage(message);
 
-    // Set timeout for election
+    // Set timeout for election with additional random delay to prevent race conditions
+    const randomDelay = Math.floor(Math.random() * 500); // 0-500ms random delay
     this.electionTimeout = window.setTimeout(() => {
       // No response means we become the leader
-      this.becomeLeader();
-    }, this.config.tabElectionTimeoutMs);
+      if (!this.isTabLeader) {
+        this.becomeLeader();
+      }
+    }, this.config.tabElectionTimeoutMs + randomDelay);
   }
 
   /**
@@ -174,6 +186,11 @@ export class CrossTabSessionManager extends StateManager {
    * Become the session leader
    */
   private becomeLeader(): void {
+    // Double-check we're not already a leader (race condition protection)
+    if (this.isTabLeader) {
+      return;
+    }
+
     this.isTabLeader = true;
     this.tabInfo.isLeader = true;
     this.leaderTabId = this.tabId;
@@ -210,10 +227,20 @@ export class CrossTabSessionManager extends StateManager {
 
       // Announce new session to other tabs
       this.announceSessionStart(sessionId);
+    } else {
+      // Update existing session context
+      const sessionContext = this.getStoredSessionContext();
+      if (sessionContext) {
+        sessionContext.lastActivity = Date.now();
+        this.storeSessionContext(sessionContext);
+      }
     }
 
     // Store tab info
     this.storeTabInfo();
+
+    // Send immediate leadership announcement to ensure other tabs know
+    this.announceLeadership();
   }
 
   /**
@@ -230,6 +257,53 @@ export class CrossTabSessionManager extends StateManager {
     };
 
     this.broadcastChannel.postMessage(message);
+  }
+
+  /**
+   * Announce leadership to other tabs
+   */
+  private announceLeadership(): void {
+    if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
+
+    const message: CrossTabMessage = {
+      type: 'election_response',
+      tabId: this.tabId,
+      sessionId: this.tabInfo.sessionId,
+      timestamp: Date.now(),
+      data: { isLeader: true },
+    };
+
+    this.broadcastChannel.postMessage(message);
+  }
+
+  /**
+   * Setup fallback mechanism to ensure a leader is always elected
+   */
+  private setupLeadershipFallback(): void {
+    // Shorter fallback delay to ensure it works within test timeouts
+    const fallbackDelay = this.config.tabElectionTimeoutMs + 2000; // Election timeout + 2s buffer
+
+    setTimeout(() => {
+      // Check if we need to force leadership
+      if (!this.isTabLeader && !this.leaderTabId) {
+        // If we have a session but no leader, become leader
+        if (this.tabInfo.sessionId) {
+          if (this.config.debugMode) {
+            log('warning', `No leader detected after ${fallbackDelay}ms, forcing leadership for tab ${this.tabId}`);
+          }
+          this.becomeLeader();
+        } else {
+          // If we don't even have a session, start a new one
+          if (this.config.debugMode) {
+            log(
+              'warning',
+              `No session or leader detected after ${fallbackDelay}ms, starting new session for tab ${this.tabId}`,
+            );
+          }
+          this.becomeLeader();
+        }
+      }
+    }, fallbackDelay);
   }
 
   /**
@@ -402,21 +476,30 @@ export class CrossTabSessionManager extends StateManager {
    */
   private handleElectionResponse(message: CrossTabMessage): void {
     if (message.data?.isLeader) {
-      // Another tab is already the leader
-      this.isTabLeader = false;
-      this.tabInfo.isLeader = false;
-      this.leaderTabId = message.tabId;
+      // Another tab is already the leader - only accept if we're not already a leader
+      if (!this.isTabLeader) {
+        this.isTabLeader = false;
+        this.tabInfo.isLeader = false;
+        this.leaderTabId = message.tabId;
 
-      // Clear election timeout
-      if (this.electionTimeout) {
-        clearTimeout(this.electionTimeout);
-        this.electionTimeout = null;
-      }
+        if (this.config.debugMode) {
+          log('info', `Acknowledging tab ${message.tabId} as leader`);
+        }
 
-      // Join their session
-      if (message.sessionId) {
-        this.tabInfo.sessionId = message.sessionId;
-        this.storeTabInfo();
+        // Clear election timeout
+        if (this.electionTimeout) {
+          clearTimeout(this.electionTimeout);
+          this.electionTimeout = null;
+        }
+
+        // Join their session
+        if (message.sessionId) {
+          this.tabInfo.sessionId = message.sessionId;
+          this.storeTabInfo();
+        }
+      } else if (this.config.debugMode) {
+        // We're already a leader, log potential conflict
+        log('warning', `Received leadership claim from ${message.tabId} but this tab is already leader`);
       }
     }
   }

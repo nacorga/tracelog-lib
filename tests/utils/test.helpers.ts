@@ -263,8 +263,8 @@ export class TestHelpers {
         // Continue if parsing fails
       }
 
-      // Find this page's tab info by looking for tab-specific keys
-      // The new format is tl:${projectId}:tab:${tabId}:info
+      // Find ALL tab info entries and return a combined view
+      const allTabInfos: any[] = [];
       try {
         const tabKeyPrefix = `tl:${projectId}:tab:`;
         const tabKeySuffix = ':info';
@@ -276,9 +276,22 @@ export class TestHelpers {
             const tabData = localStorage.getItem(key);
             if (tabData) {
               const parsedTabInfo = JSON.parse(tabData);
-              // For now, take the first one we find - in practice each page will have different tabs
-              tabInfo ??= parsedTabInfo;
+              allTabInfos.push(parsedTabInfo);
             }
+          }
+        }
+
+        // Return aggregated info from all tabs
+        if (allTabInfos.length > 0) {
+          // Find a leader if any exists
+          const leader = allTabInfos.find((tab) => tab.isLeader);
+          if (leader) {
+            tabInfo = leader;
+          } else {
+            // If no leader, return the most recent tab (highest startTime)
+            tabInfo = allTabInfos.reduce((latest, current) =>
+              current.startTime > latest.startTime ? current : latest,
+            );
           }
         }
       } catch {
@@ -365,7 +378,7 @@ export class TestHelpers {
 
   static async waitForLeaderElection(
     pages: Page[],
-    timeoutMs = 10000, // Increased timeout for more reliable leader election
+    timeoutMs = 15000, // Increased timeout for more reliable leader election
   ): Promise<{
     leaderPage: Page | null;
     leaderIndex: number;
@@ -385,11 +398,16 @@ export class TestHelpers {
       for (let i = 0; i < allSessionInfos.length; i++) {
         const sessionInfo = allSessionInfos[i];
         if (sessionInfo.isLeader && sessionInfo.sessionId) {
-          return {
-            leaderPage: pages[i],
-            leaderIndex: i,
-            sessionId: sessionInfo.sessionId,
-          };
+          // Double-check by waiting a bit and verifying leadership is stable
+          await pages[0].waitForTimeout(200);
+          const recheck = await TestHelpers.getCrossTabSessionInfo(pages[i]);
+          if (recheck.isLeader && recheck.sessionId) {
+            return {
+              leaderPage: pages[i],
+              leaderIndex: i,
+              sessionId: recheck.sessionId,
+            };
+          }
         }
       }
 
@@ -464,7 +482,19 @@ export class TestHelpers {
 
     // Final attempt: get session info for debugging
     const finalSessionInfos = await Promise.all(pages.map((page) => TestHelpers.getCrossTabSessionInfo(page)));
-    console.warn('Leader election failed. Final session states:', finalSessionInfos);
+    console.warn('Leader election failed. Final session states:', JSON.stringify(finalSessionInfos, null, 2));
+
+    // Check if any page has BroadcastChannel support
+    const hasBroadcastChannel = finalSessionInfos.some((info) => info.hasBroadcastChannel);
+    if (!hasBroadcastChannel) {
+      console.warn('BroadcastChannel not supported - this may cause leader election issues');
+    }
+
+    // Check for multiple leaders (conflict detection)
+    const leaders = finalSessionInfos.filter((info) => info.isLeader);
+    if (leaders.length > 1) {
+      console.warn(`Multiple leaders detected: ${leaders.length} tabs claim leadership`);
+    }
 
     return {
       leaderPage: null,

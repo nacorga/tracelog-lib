@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TraceLog Second Page</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background-color: #f0f0f0; 
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a9e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 data-testid="second-page-title">Second Page</h1>
+        <p>This is a second page for testing navigation-based page unload scenarios.</p>
+        
+        <div data-testid="page-info">
+            <p>Page loaded at: <span id="load-time"></span></p>
+            <p>Previous page was: <span id="referrer"></span></p>
+        </div>
+        
+        <div>
+            <button data-testid="go-back" onclick="goBack()">Go Back</button>
+            <button data-testid="navigate-home" onclick="navigateHome()">Navigate to Home</button>
+        </div>
+    </div>
+
+    <script>
+        // Set page load info
+        document.getElementById('load-time').textContent = new Date().toISOString();
+        document.getElementById('referrer').textContent = document.referrer || 'Direct access';
+        
+        function goBack() {
+            window.history.back();
+        }
+        
+        function navigateHome() {
+            window.location.href = './index.html';
+        }
+        
+        // Make functions globally available
+        window.goBack = goBack;
+        window.navigateHome = navigateHome;
+    </script>
+</body>
+</html>

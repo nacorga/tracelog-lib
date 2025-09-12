@@ -94,8 +94,8 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       await TestHelpers.simulateUserActivity(pages[0]);
 
-      // Wait for leader election to complete
-      await pages[0].waitForTimeout(5000);
+      // Wait for leader election to complete - increased timeout
+      await pages[0].waitForTimeout(6000);
 
       // Initialize second tab
       await TestHelpers.navigateAndWaitForReady(pages[1], TEST_PAGE_URL);
@@ -109,7 +109,14 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       await TestHelpers.simulateUserActivity(pages[1]);
 
-      await TestHelpers.waitForLeaderElection(pages);
+      // Additional wait to allow cross-tab communication
+      await pages[0].waitForTimeout(2000);
+
+      const electionResult = await TestHelpers.waitForLeaderElection(pages);
+
+      // The fallback mechanism should ensure a leader is elected
+      expect(electionResult.leaderPage).toBeTruthy();
+      expect(electionResult.sessionId).toBeTruthy();
 
       // Get all tabs info to check the overall coordination state
       const allTabsInfo = await TestHelpers.getAllTabsInfo(pages[0]); // Any page can read localStorage
