@@ -28,7 +28,7 @@ export const SESSION_END_PRIORITY_DELAY_MS = 100;
 
 // Cross-tab session management
 export const TAB_HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
-export const TAB_ELECTION_TIMEOUT_MS = 3000; // 3 seconds - Increased for better reliability
+export const TAB_ELECTION_TIMEOUT_MS = 2000; // 2 seconds
 export const TAB_CLEANUP_DELAY_MS = 1000; // 1 second
 
 // Session recovery

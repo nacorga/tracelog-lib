@@ -110,8 +110,10 @@ export class CrossTabSessionManager extends StateManager {
     // Start heartbeat
     this.startHeartbeat();
 
-    // Fallback mechanism: if no leader is elected after a reasonable time, force leadership
-    this.setupLeadershipFallback();
+    // Fallback mechanism: only in multi-tab scenarios (when BroadcastChannel is available)
+    if (this.broadcastChannel) {
+      this.setupLeadershipFallback();
+    }
   }
 
   /**
@@ -281,7 +283,7 @@ export class CrossTabSessionManager extends StateManager {
    */
   private setupLeadershipFallback(): void {
     // Shorter fallback delay to ensure it works within test timeouts
-    const fallbackDelay = this.config.tabElectionTimeoutMs + 2000; // Election timeout + 2s buffer
+    const fallbackDelay = this.config.tabElectionTimeoutMs + 1500; // Election timeout + 1.5s buffer
 
     setTimeout(() => {
       // Check if we need to force leadership
@@ -304,6 +306,33 @@ export class CrossTabSessionManager extends StateManager {
         }
       }
     }, fallbackDelay);
+
+    // Additional periodic check for leader health
+    const leaderHealthCheck = setInterval(() => {
+      if (!this.sessionEnded && this.leaderTabId && !this.isTabLeader) {
+        // Check if leader is still responsive by checking last activity
+        const sessionContext = this.getStoredSessionContext();
+        if (sessionContext) {
+          const timeSinceLastActivity = Date.now() - sessionContext.lastActivity;
+          const maxInactiveTime = this.config.tabHeartbeatIntervalMs * 3; // 3 heartbeat intervals
+
+          if (timeSinceLastActivity > maxInactiveTime) {
+            if (this.config.debugMode) {
+              log('warning', `Leader tab appears inactive (${timeSinceLastActivity}ms), attempting to become leader`);
+            }
+            this.leaderTabId = null;
+            this.startLeaderElection();
+          }
+        }
+      }
+    }, this.config.tabHeartbeatIntervalMs * 2); // Check every 2 heartbeat intervals
+
+    // Clean up the health check interval when session ends
+    const originalEndSession = this.endSession.bind(this);
+    this.endSession = (reason: SessionEndReason): void => {
+      clearInterval(leaderHealthCheck);
+      originalEndSession(reason);
+    };
   }
 
   /**
@@ -440,13 +469,31 @@ export class CrossTabSessionManager extends StateManager {
   private handleTabClosingMessage(message: CrossTabMessage): void {
     const sessionContext = this.getStoredSessionContext();
     if (sessionContext && message.sessionId === sessionContext.sessionId) {
-      // Decrease tab count
-      sessionContext.tabCount = Math.max(0, sessionContext.tabCount - 1);
+      // Decrease tab count with minimum of 1 (current tab)
+      const oldCount = sessionContext.tabCount;
+      sessionContext.tabCount = Math.max(1, sessionContext.tabCount - 1);
+      sessionContext.lastActivity = Date.now();
       this.storeSessionContext(sessionContext);
 
-      // If this was the last tab and we're not the leader, become leader
-      if (sessionContext.tabCount === 0 && !this.isTabLeader) {
-        this.becomeLeader();
+      if (this.config.debugMode) {
+        log(
+          'info',
+          `Tab count updated from ${oldCount} to ${sessionContext.tabCount} after tab ${message.tabId} closed`,
+        );
+      }
+
+      // If the closing tab was the leader, handle leadership transition
+      const wasLeader = message.data?.isLeader || message.tabId === this.leaderTabId;
+      if (wasLeader && !this.isTabLeader) {
+        if (this.config.debugMode) {
+          log('info', `Leader tab ${message.tabId} closed, starting leader election`);
+        }
+        this.leaderTabId = null;
+
+        // Add a small delay to ensure other tabs have processed the closing message
+        setTimeout(() => {
+          this.startLeaderElection();
+        }, 200);
       }
     }
   }
@@ -553,33 +600,45 @@ export class CrossTabSessionManager extends StateManager {
     this.sessionEnded = true;
 
     if (this.config.debugMode) {
-      log('info', `Ending cross-tab session: ${reason}`);
+      log('info', `Ending cross-tab session: ${reason} (tab: ${this.tabId}, isLeader: ${this.isTabLeader})`);
     }
 
-    // Announce tab closing
+    // Announce tab closing with current state
     this.announceTabClosing();
 
-    // Other tabs will handle the tab count decrement when they receive the tab_closing message
-    // Don't modify session context here - let remaining tabs manage it
+    // If this is the leader, announce session end to remaining tabs
+    if (this.isTabLeader && reason !== 'manual_stop') {
+      this.announceSessionEnd(reason);
+    }
 
-    // Clear tab info
-    this.clearTabInfo();
+    // Give time for messages to be sent before cleanup
+    setTimeout(() => {
+      this.clearTabInfo();
+    }, 150);
   }
 
   /**
    * Announce tab is closing to other tabs
    */
   private announceTabClosing(): void {
-    if (!this.broadcastChannel) return;
+    if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
 
     const message: CrossTabMessage = {
       type: 'tab_closing',
       tabId: this.tabId,
       sessionId: this.tabInfo.sessionId,
       timestamp: Date.now(),
+      data: { isLeader: this.isTabLeader },
     };
 
     this.broadcastChannel.postMessage(message);
+
+    // Give other tabs time to process the message before we close
+    setTimeout(() => {
+      if (this.config.debugMode) {
+        log('info', `Tab ${this.tabId} closing announcement sent`);
+      }
+    }, 100);
   }
 
   /**

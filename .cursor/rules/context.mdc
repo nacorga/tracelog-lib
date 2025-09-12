@@ -2,98 +2,156 @@
 alwaysApply: true
 ---
 
-# TraceLog Client Project Context
+# TraceLog SDK
 
-## Overview
-TraceLog is a web analytics platform that combines user behavior tracking with AI to provide deeper insights than traditional tools. This is the TypeScript client library that enables developers to integrate TraceLog tracking into their web applications.
+**JavaScript library for web analytics and real-time event tracking**
 
-## Project Structure
+## 🎯 Purpose
 
-### Core Architecture
-- **Main Entry**: `src/public-api.ts` → exports everything from `src/api.ts`
-- **Application Core**: `src/app.ts` - Main App class that orchestrates all functionality
-- **Type System**: Comprehensive TypeScript types in `src/types/`
+Event tracking SDK that automatically captures user interactions (clicks, scroll, navigation, web performance) and allows custom events. Includes cross-tab session management, session recovery, Google Analytics integration, and sampling capabilities.
 
-### Key Directories
-- `src/handlers/` - Event handlers with multi-fallback page unload support (clicks, scrolls, page views, performance, errors, sessions, network)
-- `src/managers/` - Core business logic managers with centralized session management and progressive sending (API, config, events, sampling, storage, state, etc.)
-- `src/listeners/` - Browser event listeners for activity, input, touch, unload, visibility
-- `src/integrations/` - Third-party integrations (currently Google Analytics)
-- `src/utils/` - Utility functions organized by domain (browser, data, logging, network, security, validations)
-- `src/constants/` - Application constants organized by domain
+## 🏗️ Architecture
 
-### Event Tracking System
-The library tracks multiple event types automatically:
-- **Page Views** - Navigation between pages
-- **Clicks** - Button and link interactions with detailed metadata
-- **Scrolling** - Scroll depth and engagement tracking
-- **Sessions** - User session lifecycle management
-- **Performance (Web Vitals)** - LCP, INP, CLS, FCP, TTFB, Long Tasks
-- **Errors** - JavaScript errors, promise rejections, network errors
-- **Custom Events** - Developer-defined events with metadata
+```
+src/
+├── api.ts                 # Public API (init, event, destroy)
+├── app.ts                 # Main class orchestrating all managers
+├── handlers/              # Specific event capture
+│   ├── click.handler.ts   # Click tracking
+│   ├── scroll.handler.ts  # Scroll tracking
+│   ├── session.handler.ts # Session management
+│   └── performance.handler.ts # Web vitals
+├── managers/              # Core business logic
+│   ├── event.manager.ts   # Event queue and sending
+│   ├── session.manager.ts # Session lifecycle
+│   ├── storage.manager.ts # localStorage abstraction
+│   └── state.manager.ts   # Shared global state
+├── integrations/          # External integrations
+├── utils/                 # Utilities and validations
+└── types/                 # TypeScript definitions
+```
 
-## Configuration & Features
+**Main flow**: `init()` → Configuration → Active handlers → EventManager → Queue → Send
 
-### Key Configuration Options
-- `sessionTimeout` - Session timeout (default: 15 minutes)
-- `globalMetadata` - Data added to every event
-- `scrollContainerSelectors` - Track scrolling in specific containers
-- `sensitiveQueryParams` - Remove sensitive data from URLs
-- `samplingRate` - Control event sampling (0-1)
-- `errorSampling` - Control error event sampling (0.1 default, 1.0 in QA)
-- `integrations.googleAnalytics` - Google Analytics integration
+## 🛠️ Tech Stack
 
-### Build System
-- **TypeScript**: Multiple build targets (ESM, CJS, Browser)
-- **Vite**: Browser build configuration
-- **Testing**: Playwright for E2E tests
-- **Quality**: ESLint, Prettier, Husky hooks
-- **Publishing**: Standard-version for releases
+- **TypeScript 5.7** - Static typing
+- **Vite** - Build tool and bundler
+- **web-vitals 4.2** - Only dependency (performance metrics)
+- **Playwright** - E2E testing
+- **ESLint + Prettier** - Linting and formatting
 
-## Code Patterns & Conventions
+## 📝 Code Conventions
 
-### Manager Pattern
-Core functionality is organized into managers that handle specific concerns:
-- `ApiManager` - API endpoint management
-- `ConfigManager` - Configuration fetching and merging
-- `EventManager` - Event queuing, sending, and immediate flush capabilities
-- `StateManager` - Application state management
-- `StorageManager` - Browser storage abstraction
-- `UserManager` - User identification
-- `SessionManager` - Session lifecycle
-- `SamplingManager` - Event sampling logic
-- `SenderManager` - Progressive data transmission (sendBeacon → syncXHR → fetch)
+### Lint & Format
+```bash
+npm run check      # Verify lint + format
+npm run fix        # Auto-fix lint + format
+```
 
-### Handler Pattern
-Event handlers follow a consistent pattern:
-- Implement `startTracking()` and `stopTracking()` methods
-- Use listeners to capture browser events with multi-fallback support for critical events
-- Transform raw events into structured `EventData`
-- Send events via `EventManager` with automatic deduplication
+### Naming
+- **Classes**: `PascalCase` (e.g.: `EventManager`)
+- **Files**: `kebab-case.type.ts` (e.g.: `session.manager.ts`)
+- **Public methods**: `camelCase`
+- **Private methods**: `camelCase` with `private` prefix
+- **Constants**: `UPPER_SNAKE_CASE`
 
-### Type Safety
-- Comprehensive TypeScript types for all data structures
-- Event types defined in enums (`EventType`, `ErrorType`, `ScrollDirection`)
-- Validation utilities for runtime type checking
-- Sanitization for security
+### Patterns
+- **Managers**: Extend `StateManager` for global state access
+- **Handlers**: Classes that capture specific DOM events
+- **Types**: Interfaces in separate `.types.ts` files
+- **Utils**: Pure functions, organized by domain
 
-### Error Handling
-- Robust error handling throughout the application
-- Error sampling to prevent spam
-- Network error tracking
-- Graceful degradation when tracking fails
+## 🚀 Common Commands
 
-## Testing Strategy
-- **E2E Tests**: Comprehensive Playwright tests covering all event types
-- **Test Fixtures**: HTML pages for testing different scenarios
-- **Coverage**: Code coverage tracking with detailed reports
+```bash
+# Build
+npm run build           # TypeScript build (dual: ESM + CJS)
+npm run build:browser   # Browser build (Vite)
+npm run build:all       # Complete build (ESM + CJS)
+npm run build-ugly      # Minified build with UglifyJS
 
-## Security & Privacy
-- URL sanitization to remove sensitive query parameters
-- IP exclusion capabilities
-- Data validation and sanitization
-- HTTPS enforcement (with allowHttp option for development)
+# Development
+npm run serve:test      # Local test server (port 3000)
+npm run test:e2e        # End-to-end tests with Playwright
 
-## Dependencies
-- **Runtime**: Only `web-vitals` for performance tracking
-- **Development**: TypeScript, ESLint, Prettier, Playwright, Vite, and build tools
+# Quality
+npm run lint            # ESLint
+npm run format          # Prettier
+npm run check           # Lint + format (verification)
+npm run fix             # Auto-fix lint + format
+```
+
+## 🔍 Critical Paths
+
+### 1. Initialization
+`api.init()` → `App.init()` → `setState()` → `initHandlers()` → Active listeners
+
+### 2. Event Tracking
+DOM Event → Handler → `EventManager.track()` → Queue → `SenderManager` → API
+
+### 3. Session Management
+Activity → `SessionManager` → Cross-tab sync → Recovery if fails
+
+### 4. Data Sending
+Batch queue → Validation → `sendEventsQueue()` → Auto-retry if fails
+
+## ⚠️ WHAT NOT TO DO
+
+### 🚫 Dependencies & Build
+- **DON'T** add new dependencies without justification - only `web-vitals` allowed
+- **DON'T** break dual ESM/CJS compatibility - maintain `exports` in package.json
+- **DON'T** change `dist/` structure - affects user imports
+- **DON'T** commit without passing `npm run check`
+
+### 🚫 Security
+- **DON'T** store sensitive data in localStorage
+- **DON'T** send PII without sanitization (use `sanitize.utils.ts`)
+- **DON'T** allow execution of unvalidated code
+- **DON'T** expose internal APIs in browser build
+
+### 🚫 Performance
+- **DON'T** create memory leaks - always `cleanup()` in handlers
+- **DON'T** block main thread - use `passive: true` in listeners
+- **DON'T** send high-frequency events without throttling
+- **DON'T** store infinite queue (limit: `MAX_EVENTS_QUEUE_LENGTH`)
+
+### 🚫 State & Sessions
+- **DON'T** mutate `globalState` directly - use `StateManager.set()`
+- **DON'T** create multiple `App` instances simultaneously
+- **DON'T** call `init()` before checking `typeof window !== 'undefined'`
+- **DON'T** ignore session recovery errors - can cause data loss
+
+## 🎯 Common Tasks
+
+### Development
+```bash
+# Local setup for testing
+npm run serve:test      # Terminal 1: server
+npm run test:e2e        # Terminal 2: E2E tests
+
+# Pre-commit verification
+npm run check           # Lint + format
+npm run build:all       # Verify builds
+```
+
+### Debug
+```typescript
+// Enable debug mode
+await TraceLog.init({ 
+  id: 'your-project', 
+  qaMode: true  // Detailed console logs
+});
+
+// Check state in localStorage (prefix 'tl:')
+// Review BroadcastChannel for cross-tab sessions
+```
+
+### Add functionality
+```typescript
+// 1. Create handler in handlers/
+// 2. Register in App.initHandlers()
+// 3. Add types in types/
+// 4. Validations in utils/validations/
+// 5. E2E tests in tests/
+```
