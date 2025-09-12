@@ -230,7 +230,7 @@ export class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
 
-    this.suppressNextScrollTimer = setTimeout(() => {
+    this.suppressNextScrollTimer = window.setTimeout(() => {
       this.set('suppressNextScroll', false);
     }, SCROLL_DEBOUNCE_TIME_MS * 2);
   }

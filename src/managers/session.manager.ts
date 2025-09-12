@@ -59,6 +59,9 @@ export class SessionManager extends StateManager {
   private sessionStartTime = 0;
   private throttleTimeout: number | null = null;
 
+  // Track visibility change timeout for proper cleanup
+  private visibilityChangeTimeout: number | null = null;
+
   // Session End Management
   private pendingSessionEnd = false;
   private sessionEndPromise: Promise<SessionEndResult> | null = null;
@@ -691,10 +694,11 @@ export class SessionManager extends StateManager {
     // Delayed handler for visibility changes (gives time for page transitions)
     const visibilityChangeHandler = (): void => {
       if (document.visibilityState === 'hidden' && this.get('sessionId') && !unloadHandled) {
-        setTimeout(() => {
+        this.visibilityChangeTimeout = window.setTimeout(() => {
           if (document.visibilityState === 'hidden' && this.get('sessionId') && !unloadHandled) {
             handlePageUnload();
           }
+          this.visibilityChangeTimeout = null;
         }, 1000);
       }
     };
@@ -707,6 +711,12 @@ export class SessionManager extends StateManager {
       () => window.removeEventListener('beforeunload', beforeUnloadHandler),
       () => window.removeEventListener('pagehide', pageHideHandler as EventListener),
       () => document.removeEventListener('visibilitychange', visibilityChangeHandler),
+      () => {
+        if (this.visibilityChangeTimeout) {
+          clearTimeout(this.visibilityChangeTimeout);
+          this.visibilityChangeTimeout = null;
+        }
+      },
     );
   }
 }

@@ -29,7 +29,22 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     }
 
     if (isInitializing) {
-      throw new Error('App initialization is already in progress');
+      // Instead of throwing, wait for the ongoing initialization to complete
+      let retries = 0;
+      const maxRetries = 20; // 2 seconds maximum wait (reduced for better performance)
+
+      while (isInitializing && retries < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 50)); // Shorter intervals for faster response
+        retries++;
+      }
+
+      if (app) {
+        return; // Initialization completed successfully
+      }
+
+      if (isInitializing) {
+        throw new Error('App initialization timeout - concurrent initialization took too long');
+      }
     }
 
     isInitializing = true;

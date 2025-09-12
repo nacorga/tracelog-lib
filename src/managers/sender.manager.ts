@@ -298,4 +298,12 @@ export class SenderManager extends StateManager {
       this.retryTimeoutId = null;
     }
   }
+
+  /**
+   * Stop all pending operations and clean up resources
+   */
+  stop(): void {
+    this.clearRetryTimeout();
+    this.resetRetryState();
+  }
 }

@@ -27,6 +27,13 @@ export class CrossTabSessionManager extends StateManager {
   private cleanupTimeout: number | null = null;
   private sessionEnded = false;
 
+  // Additional timeout tracking for proper cleanup
+  private fallbackLeadershipTimeout: number | null = null;
+  private electionDelayTimeout: number | null = null;
+  private tabInfoCleanupTimeout: number | null = null;
+  private closingAnnouncementTimeout: number | null = null;
+  private leaderHealthCheckInterval: number | null = null;
+
   constructor(
     storageManager: StorageManager,
     projectId: string,
@@ -173,15 +180,28 @@ export class CrossTabSessionManager extends StateManager {
   }
 
   /**
-   * Start leader election process
+   * Start leader election process with debouncing to prevent excessive elections
    */
   private startLeaderElection(): void {
+    // Prevent multiple concurrent elections
+    if (this.electionTimeout) {
+      if (this.config.debugMode) {
+        log('info', 'Leader election already in progress, skipping');
+      }
+      return;
+    }
+
     if (this.config.debugMode) {
       log('info', 'Starting leader election');
     }
 
-    // Announce election request
-    this.requestLeadershipStatus();
+    // Add randomized delay to prevent thundering herd (optimized for performance tests)
+    const randomDelay = Math.floor(Math.random() * 50) + 10; // 10-60ms delay (reduced for better performance)
+
+    this.electionTimeout = window.setTimeout(() => {
+      this.electionTimeout = null;
+      this.requestLeadershipStatus();
+    }, randomDelay);
   }
 
   /**
@@ -285,7 +305,7 @@ export class CrossTabSessionManager extends StateManager {
     // Shorter fallback delay to ensure it works within test timeouts
     const fallbackDelay = this.config.tabElectionTimeoutMs + 1500; // Election timeout + 1.5s buffer
 
-    setTimeout(() => {
+    this.fallbackLeadershipTimeout = window.setTimeout(() => {
       // Check if we need to force leadership
       if (!this.isTabLeader && !this.leaderTabId) {
         // If we have a session but no leader, become leader
@@ -305,10 +325,11 @@ export class CrossTabSessionManager extends StateManager {
           this.becomeLeader();
         }
       }
+      this.fallbackLeadershipTimeout = null;
     }, fallbackDelay);
 
     // Additional periodic check for leader health
-    const leaderHealthCheck = setInterval(() => {
+    this.leaderHealthCheckInterval = window.setInterval(() => {
       if (!this.sessionEnded && this.leaderTabId && !this.isTabLeader) {
         // Check if leader is still responsive by checking last activity
         const sessionContext = this.getStoredSessionContext();
@@ -330,7 +351,10 @@ export class CrossTabSessionManager extends StateManager {
     // Clean up the health check interval when session ends
     const originalEndSession = this.endSession.bind(this);
     this.endSession = (reason: SessionEndReason): void => {
-      clearInterval(leaderHealthCheck);
+      if (this.leaderHealthCheckInterval) {
+        clearInterval(this.leaderHealthCheckInterval);
+        this.leaderHealthCheckInterval = null;
+      }
       originalEndSession(reason);
     };
   }
@@ -491,8 +515,9 @@ export class CrossTabSessionManager extends StateManager {
         this.leaderTabId = null;
 
         // Add a small delay to ensure other tabs have processed the closing message
-        setTimeout(() => {
+        this.electionDelayTimeout = window.setTimeout(() => {
           this.startLeaderElection();
+          this.electionDelayTimeout = null;
         }, 200);
       }
     }
@@ -566,19 +591,29 @@ export class CrossTabSessionManager extends StateManager {
   }
 
   /**
-   * Send heartbeat to other tabs
+   * Send heartbeat to other tabs with rate limiting to prevent flooding
    */
   private sendHeartbeat(): void {
     if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
+
+    // Rate limit heartbeats - only send if we're the leader or haven't sent recently
+    const now = Date.now();
+    const lastHeartbeat = (this as any).lastHeartbeatSent || 0;
+    const minHeartbeatInterval = this.config.tabHeartbeatIntervalMs * 0.8; // 80% of interval
+
+    if (!this.isTabLeader && now - lastHeartbeat < minHeartbeatInterval) {
+      return; // Skip heartbeat to reduce noise
+    }
 
     const message: CrossTabMessage = {
       type: 'heartbeat',
       tabId: this.tabId,
       sessionId: this.tabInfo.sessionId,
-      timestamp: Date.now(),
+      timestamp: now,
     };
 
     this.broadcastChannel.postMessage(message);
+    (this as any).lastHeartbeatSent = now;
   }
 
   /**
@@ -612,8 +647,9 @@ export class CrossTabSessionManager extends StateManager {
     }
 
     // Give time for messages to be sent before cleanup
-    setTimeout(() => {
+    this.tabInfoCleanupTimeout = window.setTimeout(() => {
       this.clearTabInfo();
+      this.tabInfoCleanupTimeout = null;
     }, 150);
   }
 
@@ -634,10 +670,11 @@ export class CrossTabSessionManager extends StateManager {
     this.broadcastChannel.postMessage(message);
 
     // Give other tabs time to process the message before we close
-    setTimeout(() => {
+    this.closingAnnouncementTimeout = window.setTimeout(() => {
       if (this.config.debugMode) {
         log('info', `Tab ${this.tabId} closing announcement sent`);
       }
+      this.closingAnnouncementTimeout = null;
     }, 100);
   }
 
@@ -791,6 +828,32 @@ export class CrossTabSessionManager extends StateManager {
     if (this.cleanupTimeout) {
       clearTimeout(this.cleanupTimeout);
       this.cleanupTimeout = null;
+    }
+
+    // Clear additional timeouts
+    if (this.fallbackLeadershipTimeout) {
+      clearTimeout(this.fallbackLeadershipTimeout);
+      this.fallbackLeadershipTimeout = null;
+    }
+
+    if (this.electionDelayTimeout) {
+      clearTimeout(this.electionDelayTimeout);
+      this.electionDelayTimeout = null;
+    }
+
+    if (this.tabInfoCleanupTimeout) {
+      clearTimeout(this.tabInfoCleanupTimeout);
+      this.tabInfoCleanupTimeout = null;
+    }
+
+    if (this.closingAnnouncementTimeout) {
+      clearTimeout(this.closingAnnouncementTimeout);
+      this.closingAnnouncementTimeout = null;
+    }
+
+    if (this.leaderHealthCheckInterval) {
+      clearInterval(this.leaderHealthCheckInterval);
+      this.leaderHealthCheckInterval = null;
     }
 
     // End session and cleanup

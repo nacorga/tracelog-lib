@@ -10,16 +10,35 @@ export class TestHelpers {
   static createConsoleMonitor(page: Page): {
     consoleMessages: string[];
     traceLogErrors: string[];
+    traceLogWarnings: string[];
+    traceLogInfo: string[];
+    debugLogs: string[];
     cleanup: () => void;
+    getAnomalies: () => string[];
   } {
     const consoleMessages: string[] = [];
     const traceLogErrors: string[] = [];
+    const traceLogWarnings: string[] = [];
+    const traceLogInfo: string[] = [];
+    const debugLogs: string[] = [];
 
     const monitor = (msg: any): void => {
       const text = msg.text();
+      const type = msg.type();
       consoleMessages.push(text);
 
-      if (msg.type() === 'error') {
+      // Categorize TraceLog messages
+      if (text.includes('[TraceLog]')) {
+        debugLogs.push(`[${type.toUpperCase()}] ${text}`);
+
+        if (type === 'error') {
+          traceLogErrors.push(text);
+        } else if (type === 'warn' || type === 'warning') {
+          traceLogWarnings.push(text);
+        } else if (type === 'info' || type === 'log') {
+          traceLogInfo.push(text);
+        }
+      } else if (type === 'error') {
         // Only track TraceLog-specific errors, not resource loading errors
         if (text.includes('TraceLog') || text.includes('[E2E Test]') || text.includes('Initialization failed')) {
           traceLogErrors.push(text);
@@ -27,12 +46,71 @@ export class TestHelpers {
       }
     };
 
+    const getAnomalies = (): string[] => {
+      const anomalies: string[] = [];
+
+      // Detect excessive cross-tab communication (real performance issue)
+      const electionLogs = debugLogs.filter(
+        (log) =>
+          log.includes('election_request') || log.includes('election_response') || log.includes('Acknowledging tab'),
+      );
+      if (electionLogs.length > 20) {
+        anomalies.push(`Excessive leader election activity: ${electionLogs.length} messages (threshold: 20)`);
+      }
+
+      // Detect heartbeat flooding (performance issue)
+      const heartbeatLogs = debugLogs.filter((log) => log.includes('heartbeat'));
+      if (heartbeatLogs.length > 30) {
+        anomalies.push(`Heartbeat flooding detected: ${heartbeatLogs.length} heartbeats (threshold: 30)`);
+      }
+
+      // Detect multiple concurrent initializations (race condition)
+      const initProgressLogs = debugLogs.filter(
+        (log) => log.includes('already in progress') || log.includes('initialization in progress'),
+      );
+      if (initProgressLogs.length > 3) {
+        anomalies.push(`Concurrent initialization conflicts: ${initProgressLogs.length} conflicts (threshold: 3)`);
+      }
+
+      // Detect storage operation failures (functional issue)
+      const storageLogs = debugLogs.filter(
+        (log) => log.includes('storage') && (log.includes('failed') || log.includes('error') || log.includes('quota')),
+      );
+      if (storageLogs.length > 5) {
+        anomalies.push(`Storage operation failures: ${storageLogs.length} failures (threshold: 5)`);
+      }
+
+      // Detect excessive session recreation (performance issue)
+      const sessionStartLogs = debugLogs.filter(
+        (log) => log.includes('session started') || log.includes('New session started'),
+      );
+      if (sessionStartLogs.length > 3) {
+        anomalies.push(`Excessive session recreation: ${sessionStartLogs.length} sessions (threshold: 3)`);
+      }
+
+      // Detect memory leaks or excessive event queuing
+      const queueLogs = debugLogs.filter((log) => log.includes('queue') && log.includes('length'));
+      const excessiveQueue = queueLogs.find((log) => {
+        const match = log.match(/queue.*length.*(\d+)/i);
+        return match && parseInt(match[1]) > 100;
+      });
+      if (excessiveQueue) {
+        anomalies.push(`Excessive event queue detected: ${excessiveQueue}`);
+      }
+
+      return anomalies;
+    };
+
     page.on('console', monitor);
 
     return {
       consoleMessages,
       traceLogErrors,
+      traceLogWarnings,
+      traceLogInfo,
+      debugLogs,
       cleanup: () => page.off('console', monitor),
+      getAnomalies,
     };
   }
 

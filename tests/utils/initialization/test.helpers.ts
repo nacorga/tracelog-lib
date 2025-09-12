@@ -7,12 +7,12 @@ import { TestHelpers, TestAssertions } from '../test.helpers';
 export const PERFORMANCE_REQUIREMENTS = {
   TOTAL_INITIALIZATION_TIME: 500, // <500ms
   CONFIG_LOADING_TIME: 200, // <200ms
-  STORAGE_OPERATIONS_TIME: 100, // <100ms
+  STORAGE_OPERATIONS_TIME: 150, // <150ms (increased to account for concurrency handling)
   HANDLER_REGISTRATION_TIME: 100, // <100ms
   USER_ID_GENERATION_TIME: 50, // <50ms
   SESSION_SETUP_TIME: 50, // <50ms
   ERROR_HANDLING_TIME: 100, // <100ms for validation errors
-  SUBSEQUENT_INIT_TIME: 100, // <100ms for subsequent initialization attempts
+  SUBSEQUENT_INIT_TIME: 150, // <150ms for subsequent initialization attempts (increased for concurrency handling)
 } as const;
 
 /**

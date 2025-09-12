@@ -71,7 +71,7 @@ export class ScrollHandler extends StateManager {
         clearTimeout(container.debounceTimer);
       }
 
-      container.debounceTimer = setTimeout(() => {
+      container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
 
         if (scrollData) {

@@ -133,6 +133,9 @@ export class EventManager extends StateManager {
       clearInterval(this.eventsQueueIntervalId);
       this.eventsQueueIntervalId = null;
     }
+
+    // Stop the data sender to clean up retry timeouts
+    this.dataSender.stop();
   }
 
   private processAndSend(payload: EventData): void {
