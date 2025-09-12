@@ -1,10 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
+import {
+  TestHelpers,
+  TestAssertions,
+  TEST_PAGE_URL,
+  DEFAULT_TEST_CONFIG,
+} from '../../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Cross-Tab Session Coordination', () => {
   // Test Configuration
-  const TEST_PAGE_URL = '/';
-  const DEFAULT_TEST_CONFIG = { id: 'test', qaMode: true };
   const LEADER_ELECTION_TIMEOUT = 5000;
 
   test('should share same session ID across multiple tabs when opened within session timeout', async ({ browser }) => {
@@ -14,7 +17,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
     try {
       // Initialize first tab
       await TestHelpers.navigateAndWaitForReady(pages[0], TEST_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(pages[0], DEFAULT_TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(pages[0], { ...DEFAULT_TEST_CONFIG, qaMode: true });
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
@@ -32,7 +35,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Initialize second tab
       await TestHelpers.navigateAndWaitForReady(pages[1], TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(pages[1], DEFAULT_TEST_CONFIG);
+      await TestHelpers.initializeTraceLog(pages[1], { ...DEFAULT_TEST_CONFIG, qaMode: true });
       await TestHelpers.simulateUserActivity(pages[1]);
 
       // Wait for session coordination
@@ -40,7 +43,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Initialize third tab
       await TestHelpers.navigateAndWaitForReady(pages[2], TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(pages[2], DEFAULT_TEST_CONFIG);
+      await TestHelpers.initializeTraceLog(pages[2], { ...DEFAULT_TEST_CONFIG, qaMode: true });
       await TestHelpers.simulateUserActivity(pages[2]);
 
       // Wait for session coordination

@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
+import {
+  TestHelpers,
+  TestAssertions,
+  TEST_PAGE_URL,
+  DEFAULT_TEST_CONFIG,
+} from '../../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Session Recovery', () => {
-  // Constants
-  const TEST_PAGE_URL = '/';
-  const DEFAULT_TEST_CONFIG = { id: 'test' };
-
   test('should maintain session functionality after page reload', async ({ page }) => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
@@ -19,29 +20,8 @@ test.describe('Session Management - Session Recovery', () => {
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 1000);
 
-      // Get original session data
-      const originalSessionData = await page.evaluate(() => {
-        let sessionId = null;
-
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key?.includes('session') && key.startsWith('tl:')) {
-            try {
-              const data = localStorage.getItem(key);
-              if (data) {
-                const parsed = JSON.parse(data);
-                if (parsed.sessionId) {
-                  sessionId = parsed.sessionId;
-                }
-              }
-            } catch {
-              // Continue if parsing fails
-            }
-          }
-        }
-
-        return { sessionId };
-      });
+      // Get original session data using the helper function
+      const originalSessionData = await TestHelpers.getSessionDataFromStorage(page);
 
       expect(originalSessionData.sessionId).toBeTruthy();
 

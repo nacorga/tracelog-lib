@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
+import { TestHelpers, TestAssertions, DEFAULT_TEST_CONFIG } from '../../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Page Unload Session End', () => {
   // Test Configuration
-  const TEST_PAGE_URL = '/pages/page-unload/';
+  const PAGE_UNLOAD_URL = '/pages/page-unload/';
   const SECOND_PAGE_URL = '/pages/page-unload/second-page.html';
-  const DEFAULT_TEST_CONFIG = { id: 'test', qaMode: true };
   const UNLOAD_DETECTION_TIMEOUT = 2000;
 
   test('should trigger SESSION_END event on beforeunload with page_unload reason', async ({ page }) => {
@@ -13,7 +12,7 @@ test.describe('Session Management - Page Unload Session End', () => {
 
     try {
       // Navigate and initialize
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -30,23 +29,8 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(sessionInfo.sessionId).toBeTruthy();
       expect(typeof sessionInfo.sessionId).toBe('string');
 
-      // Set up event monitoring
-      await page.evaluate(() => {
-        const app = (window as any).TraceLog._app;
-        if (app?.eventManager) {
-          const originalTrack = app.eventManager.track.bind(app.eventManager);
-          app.eventManager.track = function (eventData: any): any {
-            if (eventData.type === 'SESSION_END') {
-              (window as any).sessionEndData = {
-                reason: eventData.session_end_reason,
-                timestamp: Date.now(),
-                detected: true,
-              };
-            }
-            return originalTrack(eventData);
-          };
-        }
-      });
+      // Set up event monitoring using consolidated helper
+      await TestHelpers.setupSessionEndMonitoring(page);
 
       // Trigger page unload by navigation
       await page.click('[data-testid="navigate-to-second-page"]');
@@ -85,7 +69,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -148,7 +132,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -174,7 +158,7 @@ test.describe('Session Management - Page Unload Session End', () => {
       await TestHelpers.waitForTimeout(page, 1000);
 
       // Navigate back to original page
-      await page.goto(TEST_PAGE_URL);
+      await page.goto(PAGE_UNLOAD_URL);
       await TestHelpers.waitForTimeout(page, 1000);
 
       // Verify session was properly cleaned up and persisted
@@ -194,7 +178,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -245,7 +229,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -293,7 +277,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -344,7 +328,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -355,23 +339,8 @@ test.describe('Session Management - Page Unload Session End', () => {
       await TestHelpers.waitForCrossTabSessionCoordination(page);
       await TestHelpers.waitForTimeout(page, 1000);
 
-      // Set up event monitoring for session end events
-      await page.evaluate(() => {
-        (window as any).sessionEndEvents = [];
-        const app = (window as any).TraceLog._app;
-        if (app?.eventManager) {
-          const originalTrack = app.eventManager.track.bind(app.eventManager);
-          app.eventManager.track = function (eventData: any): any {
-            if (eventData.type === 'SESSION_END') {
-              (window as any).sessionEndEvents.push({
-                reason: eventData.session_end_reason,
-                timestamp: Date.now(),
-              });
-            }
-            return originalTrack(eventData);
-          };
-        }
-      });
+      // Set up event monitoring for session end events using consolidated helper
+      await TestHelpers.setupSessionEndMonitoring(page, true);
 
       // Trigger multiple unload events rapidly
       await page.evaluate(() => {
@@ -415,7 +384,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -438,7 +407,7 @@ test.describe('Session Management - Page Unload Session End', () => {
       await TestHelpers.waitForTimeout(page, 1000);
 
       // Return to original page
-      await page.goto(TEST_PAGE_URL);
+      await page.goto(PAGE_UNLOAD_URL);
       await TestHelpers.waitForTimeout(page, 1000);
 
       // Check if session data persisted in storage

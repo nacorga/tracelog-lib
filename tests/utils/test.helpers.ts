@@ -70,7 +70,7 @@ export class TestHelpers {
     });
   }
 
-  static async initializeTraceLog(page: Page, config = { id: 'test' }): Promise<any> {
+  static async initializeTraceLog(page: Page, config: { id: string; qaMode?: boolean } = { id: 'test' }): Promise<any> {
     return await page.evaluate(async (config) => {
       return await (window as any).initializeTraceLog(config);
     }, config);
@@ -519,6 +519,171 @@ export class TestHelpers {
   static async waitForTimeout(page: Page, timeout = 1000): Promise<void> {
     await page.waitForTimeout(timeout);
   }
+
+  /**
+   * Session Management Test Utilities
+   */
+  static async getSessionDataFromStorage(page: Page): Promise<{
+    sessionId: string | null;
+    sessionData: any;
+    hasSession: boolean;
+  }> {
+    return await page.evaluate(() => {
+      let sessionId = null;
+      let sessionData = null;
+      let hasSession = false;
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.includes('session') && key.startsWith('tl:')) {
+          hasSession = true;
+          try {
+            const data = localStorage.getItem(key);
+            if (data) {
+              sessionData = JSON.parse(data);
+              if (sessionData.sessionId) {
+                sessionId = sessionData.sessionId;
+              }
+            }
+          } catch {
+            // Continue if parsing fails
+          }
+        }
+      }
+
+      return { sessionId, sessionData, hasSession };
+    });
+  }
+
+  static async validateSessionStructure(
+    sessionData: any,
+    requirements: {
+      hasSessionId?: boolean;
+      hasStartTime?: boolean;
+      hasTimingField?: boolean;
+      minSessionIdLength?: number;
+    } = {},
+  ): Promise<boolean> {
+    if (!sessionData) return false;
+
+    const { hasSessionId = true, hasStartTime = true, hasTimingField = true, minSessionIdLength = 36 } = requirements;
+
+    if (hasSessionId && (!sessionData.sessionId || typeof sessionData.sessionId !== 'string')) {
+      return false;
+    }
+
+    if (hasSessionId && sessionData.sessionId.length < minSessionIdLength) {
+      return false;
+    }
+
+    if (hasStartTime && (typeof sessionData.startTime !== 'number' || sessionData.startTime <= 0)) {
+      return false;
+    }
+
+    if (hasTimingField) {
+      const timingFields = ['lastHeartbeat', 'lastActivity', 'timestamp'];
+      const hasValidTiming = timingFields.some(
+        (field) => typeof sessionData[field] === 'number' && sessionData[field] > 0,
+      );
+      if (!hasValidTiming) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  static async setupSessionTest(
+    page: Page,
+    config = { id: 'test', qaMode: true },
+  ): Promise<{
+    monitor: ReturnType<typeof TestHelpers.createConsoleMonitor>;
+    sessionInfo: Awaited<ReturnType<typeof TestHelpers.getSessionDataFromStorage>>;
+  }> {
+    const monitor = TestHelpers.createConsoleMonitor(page);
+
+    await TestHelpers.navigateAndWaitForReady(page, '/');
+    await TestHelpers.initializeTraceLog(page, config);
+    await TestHelpers.waitForTimeout(page, 2500); // Wait for cross-tab leader election
+    await TestHelpers.triggerClickEvent(page);
+    await TestHelpers.waitForTimeout(page, 500);
+
+    const sessionInfo = await TestHelpers.getSessionDataFromStorage(page);
+
+    return { monitor, sessionInfo };
+  }
+
+  static async cleanupSessionTest(monitor: ReturnType<typeof TestHelpers.createConsoleMonitor>): Promise<void> {
+    monitor.cleanup();
+  }
+
+  static async validateSessionTimeout(
+    page: Page,
+    expectedTimeout?: number,
+  ): Promise<{
+    hasSession: boolean;
+    sessionId: string | null;
+    configTimeout?: number;
+    isValid: boolean;
+  }> {
+    return await page.evaluate((_expectedTimeout) => {
+      let sessionData = null;
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.includes('session') && key.startsWith('tl:')) {
+          try {
+            const data = localStorage.getItem(key);
+            if (data) {
+              sessionData = JSON.parse(data);
+              break;
+            }
+          } catch {
+            // Continue if parsing fails
+          }
+        }
+      }
+
+      const traceLogConfig = (window as any).TraceLog?.getConfig?.();
+
+      return {
+        hasSession: !!sessionData,
+        sessionId: sessionData?.sessionId ?? null,
+        configTimeout: traceLogConfig?.sessionTimeout,
+        isValid: !!sessionData?.sessionId && typeof sessionData.sessionId === 'string',
+      };
+    }, expectedTimeout);
+  }
+}
+
+/**
+ * Test constants and configuration
+ */
+export class TestConstants {
+  static readonly TEST_PAGE_URL = '/';
+  static readonly DEFAULT_TEST_CONFIG = { id: 'test' };
+  static readonly DEFAULT_QA_CONFIG = { id: 'test', qaMode: true };
+  static readonly READY_STATUS_TEXT = 'Status: Ready for testing';
+  static readonly INITIALIZED_STATUS_TEXT = 'Status: Initialized successfully';
+
+  // Session requirements
+  static readonly SESSION_REQUIREMENTS = {
+    MIN_SESSION_ID_LENGTH: 36, // UUID length
+    MAX_SESSION_START_TIME: 1000, // <1000ms for session initialization
+    STORAGE_KEY_PREFIX: 'tl:', // TraceLog localStorage prefix
+    EXPECTED_SESSION_METADATA_FIELDS: [
+      'sessionId',
+      'startTime',
+      'lastActivity',
+      'tabCount',
+      'recoveryAttempts',
+      'metadata',
+    ],
+  };
+
+  // Session timeout bounds (from src/constants/limits.constants.ts)
+  static readonly MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds
+  static readonly MAX_SESSION_TIMEOUT_MS = 86400000; // 24 hours
 }
 
 /**
@@ -545,5 +710,40 @@ export class TestAssertions {
 
   static verifyNoTraceLogErrors(traceLogErrors: string[]): boolean {
     return traceLogErrors.length === 0;
+  }
+
+  static verifySessionId(sessionId: string | null): void {
+    if (!sessionId) {
+      throw new Error('Session ID is null or undefined');
+    }
+    if (typeof sessionId !== 'string') {
+      throw new Error(`Session ID must be string, got ${typeof sessionId}`);
+    }
+    if (sessionId.length < TestConstants.SESSION_REQUIREMENTS.MIN_SESSION_ID_LENGTH) {
+      throw new Error(
+        `Session ID length ${sessionId.length} is less than minimum ${TestConstants.SESSION_REQUIREMENTS.MIN_SESSION_ID_LENGTH}`,
+      );
+    }
+  }
+
+  static verifySessionStructure(sessionData: any): void {
+    if (!sessionData) {
+      throw new Error('Session data is null or undefined');
+    }
+    if (!sessionData.sessionId) {
+      throw new Error('Session data missing sessionId field');
+    }
+    if (typeof sessionData.sessionId !== 'string') {
+      throw new Error(`sessionId must be string, got ${typeof sessionData.sessionId}`);
+    }
+  }
+
+  static verifyTimingAccuracy(timestamp: number, startTime: number, endTime: number, buffer = 1000): void {
+    if (timestamp < startTime - buffer) {
+      throw new Error(`Timestamp ${timestamp} is before start time ${startTime} (buffer: ${buffer}ms)`);
+    }
+    if (timestamp > endTime + buffer) {
+      throw new Error(`Timestamp ${timestamp} is after end time ${endTime} (buffer: ${buffer}ms)`);
+    }
   }
 }
