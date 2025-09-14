@@ -42,6 +42,7 @@ export class CrossTabSessionManager extends StateManager {
       onSessionStart?: (sessionId: string) => void;
       onSessionEnd?: (reason: SessionEndReason) => void;
       onTabActivity?: () => void;
+      onCrossTabConflict?: () => void;
     },
   ) {
     super();
@@ -572,6 +573,11 @@ export class CrossTabSessionManager extends StateManager {
       } else if (this.config.debugMode) {
         // We're already a leader, log potential conflict
         log('warning', `Received leadership claim from ${message.tabId} but this tab is already leader`);
+
+        // Notify conflict callback
+        if (this.callbacks?.onCrossTabConflict) {
+          this.callbacks.onCrossTabConflict();
+        }
       }
     }
   }

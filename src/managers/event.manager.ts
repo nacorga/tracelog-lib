@@ -23,6 +23,14 @@ export class EventManager extends StateManager {
   private lastEvent: EventData | null = null;
   private eventsQueueIntervalId: number | null = null;
 
+  // Circuit breaker properties
+  private failureCount = 0;
+  private readonly MAX_FAILURES = 5;
+  private circuitOpen = false;
+
+  // Event deduplication properties
+  private readonly eventFingerprints = new Map<string, number>();
+
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 
@@ -229,6 +237,20 @@ export class EventManager extends StateManager {
       return;
     }
 
+    // Circuit breaker: skip sending if circuit is open
+    if (this.circuitOpen) {
+      if (this.failureCount > 0) {
+        this.failureCount--;
+      }
+      if (this.failureCount === 0) {
+        this.circuitOpen = false;
+        if (this.get('config')?.qaMode) {
+          log('info', 'Circuit breaker reset - resuming event sending');
+        }
+      }
+      return;
+    }
+
     if (!this.get('sessionId')) {
       if (this.get('config')?.qaMode) {
         log('info', `Queue pending: ${this.eventsQueue.length} events waiting for active session`);
@@ -240,7 +262,25 @@ export class EventManager extends StateManager {
     const body = this.buildEventsPayload();
     const success = this.dataSender.sendEventsQueue(body);
 
-    this.eventsQueue = success ? [] : body.events;
+    if (success) {
+      this.eventsQueue = [];
+      this.failureCount = 0;
+    } else {
+      this.eventsQueue = body.events;
+      this.failureCount++;
+
+      if (this.failureCount >= this.MAX_FAILURES) {
+        this.circuitOpen = true;
+        this.eventsQueue = []; // Clear queue to prevent memory leak
+
+        if (this.get('config')?.qaMode) {
+          log(
+            'warning',
+            `Circuit breaker opened after ${this.MAX_FAILURES} failures - clearing event queue to prevent memory leak`,
+          );
+        }
+      }
+    }
   }
 
   private buildEventsPayload(): BaseEventsQueueDto {
@@ -289,75 +329,49 @@ export class EventManager extends StateManager {
     }
   }
 
-  private isDuplicatedEvent({
-    type,
-    page_url,
-    scroll_data,
-    click_data,
-    custom_event,
-    web_vitals,
-    session_end_reason,
-    session_start_recovered,
-  }: Partial<EventData>): boolean {
-    if (!this.lastEvent) {
-      return false;
+  private getEventFingerprint(event: Partial<EventData>): string {
+    const key = `${event.type}_${event.page_url}`;
+
+    if (event.click_data) {
+      // Round coordinates to reduce false positives
+      const x = Math.round((event.click_data.x || 0) / 10) * 10;
+      const y = Math.round((event.click_data.y || 0) / 10) * 10;
+      return `${key}_${x}_${y}_${event.click_data.tag}_${event.click_data.id}`;
     }
 
-    if (this.lastEvent.type !== type) {
-      return false;
+    if (event.scroll_data) {
+      return `${key}_${event.scroll_data.depth}_${event.scroll_data.direction}`;
     }
 
-    const currentTime = Date.now();
-    const timeDiff = currentTime - this.lastEvent.timestamp;
-
-    if (timeDiff >= DUPLICATE_EVENT_THRESHOLD_MS) {
-      return false;
+    if (event.custom_event) {
+      return `${key}_${event.custom_event.name}`;
     }
 
-    switch (type) {
-      case EventType.PAGE_VIEW: {
-        return this.lastEvent.page_url === page_url;
-      }
-
-      case EventType.CLICK: {
-        const coordinatesMatch =
-          Math.abs((this.lastEvent.click_data?.x ?? 0) - (click_data?.x ?? 0)) <= 5 &&
-          Math.abs((this.lastEvent.click_data?.y ?? 0) - (click_data?.y ?? 0)) <= 5;
-
-        const elementMatch =
-          this.lastEvent.click_data?.tag === click_data?.tag &&
-          this.lastEvent.click_data?.id === click_data?.id &&
-          this.lastEvent.click_data?.text === click_data?.text;
-
-        return coordinatesMatch && elementMatch;
-      }
-
-      case EventType.SCROLL: {
-        return (
-          this.lastEvent.scroll_data?.depth === scroll_data?.depth &&
-          this.lastEvent.scroll_data?.direction === scroll_data?.direction
-        );
-      }
-
-      case EventType.CUSTOM: {
-        return this.lastEvent.custom_event?.name === custom_event?.name;
-      }
-
-      case EventType.WEB_VITALS: {
-        return this.lastEvent.web_vitals?.type === web_vitals?.type;
-      }
-
-      case EventType.SESSION_START: {
-        return this.lastEvent.session_start_recovered === session_start_recovered;
-      }
-
-      case EventType.SESSION_END: {
-        return this.lastEvent.session_end_reason === session_end_reason;
-      }
-
-      default: {
-        return false;
-      }
+    if (event.web_vitals) {
+      return `${key}_${event.web_vitals.type}`;
     }
+
+    if (event.session_end_reason) {
+      return `${key}_${event.session_end_reason}`;
+    }
+
+    if (event.session_start_recovered !== undefined) {
+      return `${key}_${event.session_start_recovered}`;
+    }
+
+    return key;
+  }
+
+  private isDuplicatedEvent(event: Partial<EventData>): boolean {
+    const fingerprint = this.getEventFingerprint(event);
+    const lastTime = this.eventFingerprints.get(fingerprint) || 0;
+    const now = Date.now();
+
+    if (now - lastTime < DUPLICATE_EVENT_THRESHOLD_MS) {
+      return true;
+    }
+
+    this.eventFingerprints.set(fingerprint, now);
+    return false;
   }
 }

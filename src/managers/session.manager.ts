@@ -12,6 +12,7 @@ import {
   SessionEndResult,
   SessionEndStats,
   SessionContext,
+  SessionHealth,
 } from '../types/session.types';
 import {
   ActivityListenerManager,
@@ -94,6 +95,14 @@ export class SessionManager extends StateManager {
       orphaned_cleanup: 0,
       tab_closed: 0,
     },
+  };
+
+  // Session health monitoring
+  private readonly sessionHealth: SessionHealth = {
+    recoveryAttempts: 0,
+    sessionTimeouts: 0,
+    crossTabConflicts: 0,
+    lastHealthCheck: Date.now(),
   };
 
   constructor(
@@ -195,6 +204,9 @@ export class SessionManager extends StateManager {
       if (recoveryResult.recovered && recoveryResult.recoveredSessionId) {
         sessionId = recoveryResult.recoveredSessionId;
         wasRecovered = true;
+
+        // Track session recovery for health monitoring
+        this.trackSessionHealth('recovery');
 
         // Update session timing from recovery context
         if (recoveryResult.context) {
@@ -357,6 +369,8 @@ export class SessionManager extends StateManager {
   };
 
   private readonly handleInactivity = (): void => {
+    // Track session timeout for health monitoring
+    this.trackSessionHealth('timeout');
     this.onInactivity();
   };
 
@@ -478,6 +492,50 @@ export class SessionManager extends StateManager {
 
   isPendingSessionEnd(): boolean {
     return this.pendingSessionEnd;
+  }
+
+  /**
+   * Track session health events for monitoring and diagnostics
+   */
+  trackSessionHealth(event: 'recovery' | 'timeout' | 'conflict'): void {
+    const now = Date.now();
+
+    // Update health counters
+    switch (event) {
+      case 'recovery':
+        this.sessionHealth.recoveryAttempts++;
+        break;
+      case 'timeout':
+        this.sessionHealth.sessionTimeouts++;
+        break;
+      case 'conflict':
+        this.sessionHealth.crossTabConflicts++;
+        break;
+    }
+
+    this.sessionHealth.lastHealthCheck = now;
+
+    // Send health degradation event if recovery attempts are high
+    if (this.sessionHealth.recoveryAttempts > 3 && this.eventManager) {
+      this.eventManager.track({
+        type: EventType.CUSTOM,
+        custom_event: {
+          name: 'session_health_degraded',
+          metadata: {
+            ...this.sessionHealth,
+            event_trigger: event,
+          },
+        },
+      });
+
+      if (this.sessionEndConfig.debugMode) {
+        log('warning', `Session health degraded: ${this.sessionHealth.recoveryAttempts} recovery attempts`);
+      }
+    }
+
+    if (this.sessionEndConfig.debugMode) {
+      log('info', `Session health event tracked: ${event}`, this.sessionHealth);
+    }
   }
 
   private async performSessionEnd(reason: SessionEndReason, method: 'async' | 'sync'): Promise<SessionEndResult> {

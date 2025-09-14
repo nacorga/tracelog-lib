@@ -68,3 +68,11 @@ export interface RecoveryAttempt {
   attempt: number;
   context: SessionContext;
 }
+
+// Session health monitoring types
+export interface SessionHealth {
+  recoveryAttempts: number;
+  sessionTimeouts: number;
+  crossTabConflicts: number;
+  lastHealthCheck: number;
+}

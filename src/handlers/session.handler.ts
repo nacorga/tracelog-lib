@@ -179,10 +179,22 @@ export class SessionHandler extends StateManager {
       }
     };
 
+    const onCrossTabConflict = (): void => {
+      if (this.get('config')?.qaMode) {
+        log('warning', 'Cross-tab conflict detected');
+      }
+
+      // Track cross-tab conflict in session health
+      if (this.sessionManager) {
+        this.sessionManager.trackSessionHealth('conflict');
+      }
+    };
+
     const callbacks = {
       onSessionStart,
       onSessionEnd,
       onTabActivity,
+      onCrossTabConflict,
     };
 
     this.crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
