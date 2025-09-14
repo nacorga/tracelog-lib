@@ -66,6 +66,9 @@ test.describe('Feature Name', () => {
 });
 ```
 
+### Configuration
+- IMPORTANT: Always initialize the SDK in E2E tests with `{ id: 'test' }`. This special test project id is required for the E2E environment to avoid external calls and ensure deterministic behavior.
+
 ### Logging
 - Add logs at strategic points to detect errors or anomalies.
 - Keep logs clear and concise; avoid describing correct/expected behavior.
