@@ -22,8 +22,24 @@ export class SessionHandler extends StateManager {
 
   private sessionManager: SessionManager | null = null;
   private recoveryManager: SessionRecoveryManager | null = null;
-  private crossTabSessionManager: CrossTabSessionManager | null = null;
+  private _crossTabSessionManager: CrossTabSessionManager | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+  private get crossTabSessionManager(): CrossTabSessionManager | null {
+    if (!this._crossTabSessionManager && this.shouldUseCrossTabs()) {
+      const projectId = this.get('config')?.id;
+      if (projectId) {
+        this.initializeCrossTabSessionManager(projectId);
+      }
+    }
+    return this._crossTabSessionManager;
+  }
+
+  private shouldUseCrossTabs(): boolean {
+    // Only initialize if BroadcastChannel is supported (indicates potential for multiple tabs)
+    // and ServiceWorker is available (better cross-tab coordination)
+    return typeof BroadcastChannel !== 'undefined' && typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+  }
 
   constructor(storageManager: StorageManager, eventManager: EventManager) {
     super();
@@ -36,7 +52,7 @@ export class SessionHandler extends StateManager {
 
     if (projectId) {
       this.initializeSessionRecoveryManager(projectId);
-      this.initializeCrossTabSessionManager(projectId);
+      // CrossTabSessionManager will be initialized lazily when needed via the getter
     }
   }
 
@@ -135,9 +151,9 @@ export class SessionHandler extends StateManager {
       this.sessionManager = null;
     }
 
-    if (this.crossTabSessionManager) {
-      this.crossTabSessionManager.destroy();
-      this.crossTabSessionManager = null;
+    if (this._crossTabSessionManager) {
+      this._crossTabSessionManager.destroy();
+      this._crossTabSessionManager = null;
     }
 
     if (this.recoveryManager) {
@@ -197,7 +213,7 @@ export class SessionHandler extends StateManager {
       onCrossTabConflict,
     };
 
-    this.crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
+    this._crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
   }
 
   private async createOrJoinSession(): Promise<{ sessionId: string; recovered: boolean }> {
