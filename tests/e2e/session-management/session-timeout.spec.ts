@@ -4,7 +4,7 @@ import {
   TestAssertions,
   TEST_PAGE_URL,
   DEFAULT_TEST_CONFIG,
-} from '../../../utils/session-management/test.helpers';
+} from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Session Timeout', () => {
   test('should accept custom session timeout configuration and validate initialization', async ({ page }) => {
@@ -15,14 +15,30 @@ test.describe('Session Management - Session Timeout', () => {
       await expect(page.getByTestId('init-status')).toContainText('Status: Initialized successfully');
 
       // Verify session exists and configuration was applied
+      if (!sessionInfo.hasSession) {
+        monitor.traceLogErrors.push('[E2E Test] Session was not created during timeout configuration test');
+      }
+
       expect(sessionInfo.hasSession).toBe(true);
-      TestAssertions.verifySessionId(sessionInfo.sessionId);
+
+      try {
+        TestAssertions.verifySessionId(sessionInfo.sessionId);
+      } catch (error) {
+        monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed in timeout config test: ${error}`);
+        throw error;
+      }
 
       const isInitialized = await TestHelpers.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Verify no TraceLog errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      if (!hasNoErrors) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] TraceLog errors detected during session timeout config test: ${monitor.traceLogErrors.join(', ')}`,
+        );
+      }
+      expect(hasNoErrors).toBe(true);
     } finally {
       await TestHelpers.cleanupSessionTest(monitor);
     }
@@ -33,7 +49,14 @@ test.describe('Session Management - Session Timeout', () => {
 
     try {
       // Verify initial session
-      TestAssertions.verifySessionId(sessionInfo.sessionId);
+      try {
+        TestAssertions.verifySessionId(sessionInfo.sessionId);
+      } catch (error) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Initial session ID verification failed in continuous activity test: ${error}`,
+        );
+        throw error;
+      }
 
       // Test multiple activities to ensure session persists
       for (let i = 0; i < 3; i++) {
@@ -42,10 +65,22 @@ test.describe('Session Management - Session Timeout', () => {
 
         // Verify session still exists after each activity
         const activeSessionInfo = await TestHelpers.getSessionDataFromStorage(page);
-        TestAssertions.verifySessionId(activeSessionInfo.sessionId);
+
+        try {
+          TestAssertions.verifySessionId(activeSessionInfo.sessionId);
+        } catch (error) {
+          monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed during activity ${i}: ${error}`);
+          throw error;
+        }
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      if (!hasNoErrors) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] TraceLog errors detected during continuous activity test: ${monitor.traceLogErrors.join(', ')}`,
+        );
+      }
+      expect(hasNoErrors).toBe(true);
     } finally {
       await TestHelpers.cleanupSessionTest(monitor);
     }

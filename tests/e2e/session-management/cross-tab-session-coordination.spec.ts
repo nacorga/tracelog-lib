@@ -4,7 +4,7 @@ import {
   TestAssertions,
   TEST_PAGE_URL,
   DEFAULT_TEST_CONFIG,
-} from '../../../utils/session-management/test.helpers';
+} from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Cross-Tab Session Coordination', () => {
   // Test Configuration
@@ -19,6 +19,13 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       await TestHelpers.navigateAndWaitForReady(pages[0], TEST_PAGE_URL);
       const initResult = await TestHelpers.initializeTraceLog(pages[0], { ...DEFAULT_TEST_CONFIG, qaMode: true });
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+
+      if (!validatedResult.success) {
+        monitors[0].traceLogErrors.push(
+          `[E2E Test] First tab initialization failed in cross-tab test: ${JSON.stringify(initResult)}`,
+        );
+      }
+
       expect(validatedResult.success).toBe(true);
 
       // Trigger activity to start session
@@ -30,6 +37,19 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Get initial session ID
       const firstTabSessionInfo = await TestHelpers.getCrossTabSessionInfo(pages[0]);
+
+      if (!firstTabSessionInfo.sessionId) {
+        monitors[0].traceLogErrors.push(
+          '[E2E Test] First tab session ID was not created in cross-tab coordination test',
+        );
+      }
+
+      if (typeof firstTabSessionInfo.sessionId !== 'string') {
+        monitors[0].traceLogErrors.push(
+          `[E2E Test] First tab session ID is not a string: ${typeof firstTabSessionInfo.sessionId}`,
+        );
+      }
+
       expect(firstTabSessionInfo.sessionId).toBeTruthy();
       expect(typeof firstTabSessionInfo.sessionId).toBe('string');
 

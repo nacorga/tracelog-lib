@@ -6,7 +6,7 @@ import {
   DEFAULT_TEST_CONFIG,
   MIN_SESSION_TIMEOUT_MS,
   MAX_SESSION_TIMEOUT_MS,
-} from '../../../utils/session-management/test.helpers';
+} from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Custom Session Timeout', () => {
   test('should accept custom session timeout within valid bounds', async ({ page }) => {
@@ -26,16 +26,45 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       // Verify session exists and custom timeout was accepted
       const configValidation = await TestHelpers.validateSessionTimeoutConfig(page, customTimeout);
+
+      if (!configValidation.hasSession) {
+        monitor.traceLogErrors.push('[E2E Test] Session was not created with custom timeout configuration');
+      }
+
+      if (!configValidation.isValid) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Custom timeout configuration validation failed: ${JSON.stringify(configValidation)}`,
+        );
+      }
+
       expect(configValidation.hasSession).toBe(true);
-      TestAssertions.verifySessionId(configValidation.sessionId);
+
+      try {
+        TestAssertions.verifySessionId(configValidation.sessionId);
+      } catch (error) {
+        monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed with custom timeout: ${error}`);
+        throw error;
+      }
+
       expect(configValidation.isValid).toBe(true);
 
       // If the configuration is accessible, verify the custom timeout was set
       if (configValidation.configTimeout !== undefined) {
+        if (configValidation.configTimeout !== customTimeout) {
+          monitor.traceLogErrors.push(
+            `[E2E Test] Custom timeout not applied correctly: expected ${customTimeout}, got ${configValidation.configTimeout}`,
+          );
+        }
         expect(configValidation.configTimeout).toBe(customTimeout);
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      if (!hasNoErrors) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] TraceLog errors detected during custom timeout test: ${monitor.traceLogErrors.join(', ')}`,
+        );
+      }
+      expect(hasNoErrors).toBe(true);
     } finally {
       await TestHelpers.cleanupSessionTest(monitor);
     }
@@ -56,6 +85,19 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       const lowTimeoutResult = await TestHelpers.initializeTraceLog(page, lowTimeoutConfig);
       const lowTimeoutValidated = TestAssertions.verifyInitializationResult(lowTimeoutResult);
+
+      if (lowTimeoutValidated.success) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Low timeout should have been rejected but was accepted: ${tooLowTimeout}ms`,
+        );
+      }
+
+      if (!lowTimeoutValidated.hasError) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Low timeout validation should have produced error but did not: ${JSON.stringify(lowTimeoutResult)}`,
+        );
+      }
+
       expect(lowTimeoutValidated.success).toBe(false);
       expect(lowTimeoutValidated.hasError).toBe(true);
       expect(lowTimeoutValidated.error).toBeTruthy();
@@ -78,6 +120,19 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       const highTimeoutResult = await TestHelpers.initializeTraceLog(page, highTimeoutConfig);
       const highTimeoutValidated = TestAssertions.verifyInitializationResult(highTimeoutResult);
+
+      if (highTimeoutValidated.success) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] High timeout should have been rejected but was accepted: ${tooHighTimeout}ms`,
+        );
+      }
+
+      if (!highTimeoutValidated.hasError) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] High timeout validation should have produced error but did not: ${JSON.stringify(highTimeoutResult)}`,
+        );
+      }
+
       expect(highTimeoutValidated.success).toBe(false);
       expect(highTimeoutValidated.hasError).toBe(true);
       expect(highTimeoutValidated.error).toBeTruthy();

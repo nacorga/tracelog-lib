@@ -4,7 +4,7 @@ import {
   TestAssertions,
   TEST_PAGE_URL,
   DEFAULT_TEST_CONFIG,
-} from '../../../utils/session-management/test.helpers';
+} from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Session Recovery', () => {
   test('should maintain session functionality after page reload', async ({ page }) => {
@@ -23,6 +23,10 @@ test.describe('Session Management - Session Recovery', () => {
       // Get original session data using the helper function
       const originalSessionData = await TestHelpers.getSessionDataFromStorage(page);
 
+      if (!originalSessionData.sessionId) {
+        monitor.traceLogErrors.push('[E2E Test] Original session ID was not created before reload test');
+      }
+
       expect(originalSessionData.sessionId).toBeTruthy();
 
       // Wait for session to stabilize
@@ -36,6 +40,11 @@ test.describe('Session Management - Session Recovery', () => {
       await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+
+      if (!validatedResult.success) {
+        monitor.traceLogErrors.push(`[E2E Test] Initialization failed after reload: ${JSON.stringify(initResult)}`);
+      }
+
       expect(validatedResult.success).toBe(true);
 
       await TestHelpers.waitForTimeout(page);
@@ -71,15 +80,34 @@ test.describe('Session Management - Session Recovery', () => {
       });
 
       // Session should exist after reload (either recovered or new)
+      if (!postReloadSessionData.hasSession) {
+        monitor.traceLogErrors.push('[E2E Test] Session was not found after page reload and recovery');
+      }
+
+      if (!postReloadSessionData.sessionId) {
+        monitor.traceLogErrors.push('[E2E Test] Session ID is missing after page reload and recovery');
+      }
+
       expect(postReloadSessionData.hasSession).toBe(true);
       expect(postReloadSessionData.sessionId).toBeTruthy();
 
       // Test session functionality with custom event
       const eventResult = await TestHelpers.testCustomEvent(page, 'post_recovery_test', { recovered: true });
+
+      if (!eventResult.success) {
+        monitor.traceLogErrors.push(`[E2E Test] Custom event failed after recovery: ${JSON.stringify(eventResult)}`);
+      }
+
       expect(eventResult.success).toBe(true);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      if (!hasNoErrors) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] TraceLog errors detected during page reload recovery test: ${monitor.traceLogErrors.join(', ')}`,
+        );
+      }
+      expect(hasNoErrors).toBe(true);
     } finally {
       monitor.cleanup();
     }
@@ -267,11 +295,27 @@ test.describe('Session Management - Session Recovery', () => {
       });
 
       // Should create new session, not recover expired one
+      if (!newSessionValidation.currentSessionId) {
+        monitor.traceLogErrors.push('[E2E Test] No session ID found after expired session recovery');
+      }
+
+      if (!newSessionValidation.isNewSession) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Expired session was recovered instead of creating new session: ${newSessionValidation.currentSessionId}`,
+        );
+      }
+
       expect(newSessionValidation.currentSessionId).toBeTruthy();
       expect(newSessionValidation.isNewSession).toBe(true);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      if (!hasNoErrors) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] TraceLog errors detected during expired session recovery test: ${monitor.traceLogErrors.join(', ')}`,
+        );
+      }
+      expect(hasNoErrors).toBe(true);
     } finally {
       monitor.cleanup();
     }

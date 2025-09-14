@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
+import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
 import {
   InitializationTestBase,
   TEST_CONFIGS,
   TEST_CONSTANTS,
   SessionValidator,
-} from '../../../utils/initialization/test.helpers';
+} from '../../utils/initialization/test.helpers';
 
 test.describe('Library Initialization - Success', () => {
   test('should successfully initialize TraceLog with valid project ID', async ({ page }) => {

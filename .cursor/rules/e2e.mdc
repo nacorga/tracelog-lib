@@ -43,7 +43,7 @@ tests/
 ## 📝 Conventions
 
 ### File Naming
-- **Test files**: `test.spec.ts` in category directories
+- **Test files**: `kebab-case` (e.g., `invalid-project-id.spec.ts`)
 - **Categories**: `kebab-case` (e.g., `session-management/`)
 - **Constants**: `UPPER_SNAKE_CASE` for test values
 
@@ -116,7 +116,7 @@ import { test, expect } from '@playwright/test';
 import { TestHelpers, TestAssertions } from '../../../utils/test.helpers';
 
 test.describe('Feature Category', () => {
-  const TEST_CONFIG = { id: 'test-project' };
+  const TEST_CONFIG = { id: 'test' };
 
   test('should validate expected behavior', async ({ page }) => {
     const monitor = TestHelpers.createConsoleMonitor(page);

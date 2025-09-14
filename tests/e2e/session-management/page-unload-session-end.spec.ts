@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions, DEFAULT_TEST_CONFIG } from '../../../utils/session-management/test.helpers';
+import { TestHelpers, TestAssertions, DEFAULT_TEST_CONFIG } from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Page Unload Session End', () => {
   // Test Configuration
@@ -15,6 +15,13 @@ test.describe('Session Management - Page Unload Session End', () => {
       await TestHelpers.navigateAndWaitForReady(page, PAGE_UNLOAD_URL);
       const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
       const validated = TestAssertions.verifyInitializationResult(initResult);
+
+      if (!validated.success) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Initialization failed in page unload test: ${JSON.stringify(initResult)}`,
+        );
+      }
+
       expect(validated.success).toBe(true);
 
       // Start session by triggering activity
@@ -26,6 +33,17 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       // Get session info
       const sessionInfo = await TestHelpers.getCrossTabSessionInfo(page);
+
+      if (!sessionInfo.sessionId) {
+        monitor.traceLogErrors.push('[E2E Test] Session ID was not created before page unload test');
+      }
+
+      if (typeof sessionInfo.sessionId !== 'string') {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Session ID is not a string in page unload test: ${typeof sessionInfo.sessionId}`,
+        );
+      }
+
       expect(sessionInfo.sessionId).toBeTruthy();
       expect(typeof sessionInfo.sessionId).toBe('string');
 
