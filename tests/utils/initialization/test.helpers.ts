@@ -27,7 +27,7 @@ export const TEST_CONFIGS = {
     globalMetadata: { source: 'e2e-test' },
     errorSampling: 0.5,
   },
-  QA_MODE: { id: 'test', qaMode: true },
+  QA_MODE: { id: 'test' },
   QA_MODE_COMPLEX: {
     id: 'test',
     qaMode: true,

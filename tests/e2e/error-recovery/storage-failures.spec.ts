@@ -9,7 +9,7 @@ import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
  */
 test.describe('Storage Failures - Error Recovery', () => {
   // Enhanced debug logging configuration
-  const DEBUG_CONFIG = { id: 'test', qaMode: true, debugMode: true };
+  const DEBUG_CONFIG = { id: 'test', debugMode: true };
 
   test.beforeEach(async ({ page }) => {
     // Navigate to test page and ensure clean state

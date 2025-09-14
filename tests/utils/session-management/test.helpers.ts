@@ -10,8 +10,8 @@ export class SessionManagementConstants {
   static readonly SECOND_PAGE_URL = '/pages/page-unload/second-page.html';
 
   // Test configurations
-  static readonly DEFAULT_TEST_CONFIG = { id: 'test', qaMode: true };
-  static readonly QA_CONFIG = { id: 'test', qaMode: true };
+  static readonly DEFAULT_TEST_CONFIG = { id: 'test' };
+  static readonly QA_CONFIG = { id: 'test' };
 
   // Session timeout bounds (from src/constants/limits.constants.ts)
   static readonly MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds

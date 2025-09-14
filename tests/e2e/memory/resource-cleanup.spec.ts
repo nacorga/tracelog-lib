@@ -38,7 +38,7 @@ interface ResourceSnapshot {
 }
 
 test.describe('Memory - Resource Cleanup', () => {
-  const TEST_CONFIG = { id: 'test', qaMode: true };
+  const TEST_CONFIG = { id: 'test' };
 
   /**
    * Inject resource tracking instrumentation into the page

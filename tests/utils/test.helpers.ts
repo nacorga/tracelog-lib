@@ -673,7 +673,7 @@ export class TestHelpers {
 
   static async setupSessionTest(
     page: Page,
-    config = { id: 'test', qaMode: true },
+    config = { id: 'test' },
   ): Promise<{
     monitor: ReturnType<typeof TestHelpers.createConsoleMonitor>;
     sessionInfo: Awaited<ReturnType<typeof TestHelpers.getSessionDataFromStorage>>;
@@ -740,7 +740,7 @@ export class TestHelpers {
 export class TestConstants {
   static readonly TEST_PAGE_URL = '/';
   static readonly DEFAULT_TEST_CONFIG = { id: 'test' };
-  static readonly DEFAULT_QA_CONFIG = { id: 'test', qaMode: true };
+  static readonly DEFAULT_QA_CONFIG = { id: 'test' };
   static readonly READY_STATUS_TEXT = 'Status: Ready for testing';
   static readonly INITIALIZED_STATUS_TEXT = 'Status: Initialized successfully';
 

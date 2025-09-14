@@ -47,7 +47,7 @@ test.describe('Session Management - Session Start', () => {
           await (window as any).TraceLog.destroy();
         }
         localStorage.clear();
-        await (window as any).initializeTraceLog({ id: 'test', qaMode: true });
+        await (window as any).initializeTraceLog({ id: 'test' });
       });
 
       // Wait for cross-tab leader election and trigger activity
