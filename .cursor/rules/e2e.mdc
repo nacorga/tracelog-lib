@@ -66,6 +66,12 @@ test.describe('Feature Name', () => {
 });
 ```
 
+### Logging
+- Add logs at strategic points to detect errors or anomalies.
+- Keep logs clear and concise; avoid describing correct/expected behavior.
+- Logs must never interfere with test outcomes or control flow.
+- Prefer centralized console monitoring via `TestHelpers.createConsoleMonitor()`.
+
 ### Test Structure
 - **Setup**: Console monitoring, page navigation
 - **Action**: User interactions, SDK operations  

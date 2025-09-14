@@ -16,7 +16,14 @@ test.describe('Library Initialization - Success', () => {
       await testBase.setup();
       await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
       await TestHelpers.waitForTimeout(page);
-      await testBase.validateSuccessfulInit();
+
+      // Log if initialization validation fails
+      try {
+        await testBase.validateSuccessfulInit();
+      } catch (error) {
+        testBase.consoleMonitor.traceLogErrors.push(`[E2E Test] Initialization validation failed: ${error}`);
+        throw error;
+      }
 
       // Test functionality
       await testBase.testBasicFunctionality();
@@ -25,6 +32,11 @@ test.describe('Library Initialization - Success', () => {
       const postClickErrors = testBase.consoleMonitor.traceLogErrors.filter(
         (msg) => msg.toLowerCase().includes('error') || msg.toLowerCase().includes('uncaught'),
       );
+      if (postClickErrors.length > 0) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Unexpected TraceLog errors detected: ${postClickErrors.join(', ')}`,
+        );
+      }
       expect(postClickErrors).toHaveLength(0);
     } finally {
       testBase.cleanup();
@@ -33,6 +45,7 @@ test.describe('Library Initialization - Success', () => {
 
   test('should validate project ID requirement', async ({ browser }) => {
     const { page, cleanup } = await TestHelpers.createIsolatedContext(browser);
+    const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
       // Navigate to validation page
@@ -51,6 +64,18 @@ test.describe('Library Initialization - Success', () => {
         }, method);
 
         const validatedResult = TestAssertions.verifyInitializationResult(result);
+
+        if (validatedResult.success) {
+          monitor.traceLogErrors.push(
+            `[E2E Test] ${method} should have failed but succeeded: ${JSON.stringify(result)}`,
+          );
+        }
+        if (!result.error?.includes(expectedError)) {
+          monitor.traceLogErrors.push(
+            `[E2E Test] ${method} error mismatch - expected: "${expectedError}", got: "${result.error}"`,
+          );
+        }
+
         expect(validatedResult.success).toBe(false);
         expect(result.error).toContain(expectedError);
       }
@@ -61,12 +86,25 @@ test.describe('Library Initialization - Success', () => {
       });
 
       const validatedValidIdResult = TestAssertions.verifyInitializationResult(validIdResult);
+
+      if (!validatedValidIdResult.success) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Valid project ID test failed unexpectedly: ${JSON.stringify(validIdResult)}`,
+        );
+      }
+      if (validatedValidIdResult.hasError) {
+        monitor.traceLogErrors.push(
+          `[E2E Test] Valid project ID test has unexpected error: ${JSON.stringify(validIdResult)}`,
+        );
+      }
+
       expect(validatedValidIdResult.success).toBe(true);
       expect(validatedValidIdResult.hasError).toBe(false);
 
       // Verify validation status in UI
       await expect(page.getByTestId('validation-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.VALIDATION_PASS);
     } finally {
+      monitor.cleanup();
       await cleanup();
     }
   });
@@ -92,10 +130,24 @@ test.describe('Library Initialization - Success', () => {
 
       // Should succeed (gracefully handle duplicate initialization)
       const validatedDuplicateResult = TestAssertions.verifyInitializationResult(duplicateInitResult);
+
+      if (!validatedDuplicateResult.success) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Duplicate initialization should have succeeded: ${JSON.stringify(duplicateInitResult)}`,
+        );
+      }
+
       expect(validatedDuplicateResult.success).toBe(true);
 
       // Should still report as initialized
       const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+
+      if (!stillInitialized) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          '[E2E Test] TraceLog should still be initialized after duplicate init',
+        );
+      }
+
       expect(stillInitialized).toBe(true);
     } finally {
       testBase.cleanup();
@@ -117,6 +169,13 @@ test.describe('Library Initialization - Success', () => {
 
       // Verify no runtime errors occurred during interactions
       const hasRuntimeErrors = await TestHelpers.detectRuntimeErrors(page);
+
+      if (hasRuntimeErrors) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          '[E2E Test] Runtime errors detected during core functionality test',
+        );
+      }
+
       expect(hasRuntimeErrors).toBeFalsy();
     } finally {
       testBase.cleanup();

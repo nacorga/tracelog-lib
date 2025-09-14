@@ -44,6 +44,18 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const duration = Date.now() - startTime;
 
       const validatedResult = TestAssertions.verifyInitializationResult(duplicateInitResult);
+
+      if (!validatedResult.success) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Multiple init attempt ${i} failed: ${JSON.stringify(duplicateInitResult)}`,
+        );
+      }
+      if (validatedResult.hasError) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Multiple init attempt ${i} has unexpected error: ${JSON.stringify(duplicateInitResult)}`,
+        );
+      }
+
       expect(validatedResult.success).toBe(true);
       expect(validatedResult.hasError).toBe(false);
 
@@ -65,6 +77,13 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     const criticalErrors = testBase.consoleMonitor.traceLogErrors.filter((error: string) =>
       criticalErrorPatterns.some((pattern) => error.toLowerCase().includes(pattern)),
     );
+
+    if (criticalErrors.length > 0) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Critical errors detected during multiple init attempts: ${criticalErrors.join(', ')}`,
+      );
+    }
+
     expect(criticalErrors).toHaveLength(0);
   });
 
@@ -106,8 +125,24 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const reinitResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
       const duration = Date.now() - startTime;
 
-      expect(TestAssertions.verifyInitializationResult(reinitResult).success).toBe(true);
-      PerformanceValidator.validateInitializationTime(duration, true);
+      const validatedReinitResult = TestAssertions.verifyInitializationResult(reinitResult);
+
+      if (!validatedReinitResult.success) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
+        );
+      }
+
+      expect(validatedReinitResult.success).toBe(true);
+
+      try {
+        PerformanceValidator.validateInitializationTime(duration, true);
+      } catch (error) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Performance validation failed for re-initialization ${i}: ${error}`,
+        );
+        throw error;
+      }
 
       // Test interaction after each re-initialization
       await TestHelpers.triggerClickEvent(page, `h1[data-testid="title"]`);
@@ -126,10 +161,24 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     const handlerErrors = testBase.consoleMonitor.traceLogErrors.filter((error: string) =>
       handlerErrorPatterns.some((pattern) => error.toLowerCase().includes(pattern)),
     );
+
+    if (handlerErrors.length > 0) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Handler errors detected during event handler safety checks: ${handlerErrors.join(', ')}`,
+      );
+    }
+
     expect(handlerErrors).toHaveLength(0);
 
     // Verify no runtime errors occurred
     const hasRuntimeErrors = await TestHelpers.detectRuntimeErrors(page);
+
+    if (hasRuntimeErrors) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        '[E2E Test] Runtime errors detected during event handler safety checks',
+      );
+    }
+
     expect(hasRuntimeErrors).toBeFalsy();
   });
 
@@ -152,8 +201,24 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const reinitResult = await TestHelpers.initializeTraceLog(page, configs[i]);
       const duration = Date.now() - startTime;
 
-      expect(TestAssertions.verifyInitializationResult(reinitResult).success).toBe(true);
-      PerformanceValidator.validateInitializationTime(duration, true);
+      const validatedReinitResult = TestAssertions.verifyInitializationResult(reinitResult);
+
+      if (!validatedReinitResult.success) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
+        );
+      }
+
+      expect(validatedReinitResult.success).toBe(true);
+
+      try {
+        PerformanceValidator.validateInitializationTime(duration, true);
+      } catch (error) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Performance validation failed for re-initialization ${i}: ${error}`,
+        );
+        throw error;
+      }
 
       // Test functionality preservation
       const customEventResult = await TestHelpers.testCustomEvent(page, `reinit_test_${i}`, {
@@ -178,6 +243,13 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     const trackingErrors = testBase.consoleMonitor.traceLogErrors.filter(
       (error: string) => error.toLowerCase().includes('track') && error.toLowerCase().includes('fail'),
     );
+
+    if (trackingErrors.length > 0) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Tracking errors detected during functionality preservation test: ${trackingErrors.join(', ')}`,
+      );
+    }
+
     expect(trackingErrors).toHaveLength(0);
   });
 
@@ -200,8 +272,24 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const reinitResult = await TestHelpers.initializeTraceLog(page, config);
       const duration = Date.now() - startTime;
 
-      expect(TestAssertions.verifyInitializationResult(reinitResult).success).toBe(true);
-      PerformanceValidator.validateInitializationTime(duration, true);
+      const validatedReinitResult = TestAssertions.verifyInitializationResult(reinitResult);
+
+      if (!validatedReinitResult.success) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
+        );
+      }
+
+      expect(validatedReinitResult.success).toBe(true);
+
+      try {
+        PerformanceValidator.validateInitializationTime(duration, true);
+      } catch (error) {
+        testBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Performance validation failed for re-initialization ${i}: ${error}`,
+        );
+        throw error;
+      }
 
       // Periodic interaction to trigger handlers
       if (i % 3 === 0) {
@@ -221,6 +309,13 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     const memoryErrors = testBase.consoleMonitor.traceLogErrors.filter((error: string) =>
       memoryErrorPatterns.some((pattern) => error.toLowerCase().includes(pattern)),
     );
+
+    if (memoryErrors.length > 0) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Memory errors detected during memory management test: ${memoryErrors.join(', ')}`,
+      );
+    }
+
     expect(memoryErrors).toHaveLength(0);
 
     // Verify system responsiveness
@@ -252,6 +347,13 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const isAllowedError = allowedRacePatterns.some((pattern) => error.toLowerCase().includes(pattern));
       return hasRaceKeywords && !isAllowedError;
     });
+
+    if (raceErrors.length > 0) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Unexpected race condition errors detected during rapid init test: ${raceErrors.join(', ')}`,
+      );
+    }
+
     expect(raceErrors).toHaveLength(0);
   });
 });

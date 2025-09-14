@@ -64,12 +64,32 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       const regularResult = await regularTestBase.performMeasuredInit(TEST_CONFIGS.NON_QA_MODE);
 
       // Both should succeed and meet performance requirements
-      expect(qaResult.result.success || TestAssertions.verifyInitializationResult(qaResult.result).success).toBe(true);
-      expect(
-        regularResult.result.success || TestAssertions.verifyInitializationResult(regularResult.result).success,
-      ).toBe(true);
-      PerformanceValidator.validateInitializationTime(qaResult.duration);
-      PerformanceValidator.validateInitializationTime(regularResult.duration);
+      const qaValidated = TestAssertions.verifyInitializationResult(qaResult.result);
+      const regularValidated = TestAssertions.verifyInitializationResult(regularResult.result);
+
+      if (!qaValidated.success) {
+        qaTestBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] QA mode initialization failed: ${JSON.stringify(qaResult.result)}`,
+        );
+      }
+      if (!regularValidated.success) {
+        regularTestBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Regular mode initialization failed: ${JSON.stringify(regularResult.result)}`,
+        );
+      }
+
+      expect(qaValidated.success).toBe(true);
+      expect(regularValidated.success).toBe(true);
+
+      try {
+        PerformanceValidator.validateInitializationTime(qaResult.duration);
+        PerformanceValidator.validateInitializationTime(regularResult.duration);
+      } catch (error) {
+        qaTestBase.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Performance validation failed for QA vs regular mode comparison: ${error}`,
+        );
+        throw error;
+      }
 
       // Wait and trigger events in both contexts
       await TestHelpers.waitForTimeout(qaPage, 1000);
@@ -153,6 +173,13 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     const criticalErrors = testBase.consoleMonitor.traceLogErrors.filter((error) =>
       criticalErrorPatterns.some((pattern) => error.toLowerCase().includes(pattern)),
     );
+
+    if (criticalErrors.length > 0) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Critical errors detected during complex QA mode test: ${criticalErrors.join(', ')}`,
+      );
+    }
+
     expect(criticalErrors).toHaveLength(0);
   });
 
@@ -265,14 +292,28 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     }
 
     // Validate performance consistency
-    PerformanceValidator.validatePerformanceConsistency(performanceResults);
+    try {
+      PerformanceValidator.validatePerformanceConsistency(performanceResults);
+    } catch (error) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Performance consistency validation failed for QA mode: ${error}, Results: ${JSON.stringify(performanceResults)}`,
+      );
+      throw error;
+    }
 
     const averageDuration =
       performanceResults.reduce((sum, result) => sum + result.duration, 0) / performanceResults.length;
     const maxDuration = Math.max(...performanceResults.map((r) => r.duration));
 
-    PerformanceValidator.validateInitializationTime(averageDuration);
-    PerformanceValidator.validateInitializationTime(maxDuration);
+    try {
+      PerformanceValidator.validateInitializationTime(averageDuration);
+      PerformanceValidator.validateInitializationTime(maxDuration);
+    } catch (error) {
+      testBase.consoleMonitor.traceLogErrors.push(
+        `[E2E Test] Initialization time validation failed for QA mode performance test: Average: ${averageDuration}ms, Max: ${maxDuration}ms, Error: ${error}`,
+      );
+      throw error;
+    }
 
     // Verify QA mode overhead is acceptable (max 50% for E2E test stability)
     expect(maxDuration).toBeLessThan(500 * 1.5); // 50% overhead allowance for E2E tests
@@ -309,14 +350,32 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       const initResult2 = await testBase2.performMeasuredInit(TEST_CONFIGS.QA_MODE);
 
       // Both should succeed and meet performance requirements
-      expect(initResult1.result.success || TestAssertions.verifyInitializationResult(initResult1.result).success).toBe(
-        true,
-      );
-      expect(initResult2.result.success || TestAssertions.verifyInitializationResult(initResult2.result).success).toBe(
-        true,
-      );
-      PerformanceValidator.validateInitializationTime(initResult1.duration);
-      PerformanceValidator.validateInitializationTime(initResult2.duration);
+      const validated1 = TestAssertions.verifyInitializationResult(initResult1.result);
+      const validated2 = TestAssertions.verifyInitializationResult(initResult2.result);
+
+      if (!validated1.success) {
+        testBase1.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] QA mode cross-tab initialization failed for page 1: ${JSON.stringify(initResult1.result)}`,
+        );
+      }
+      if (!validated2.success) {
+        testBase2.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] QA mode cross-tab initialization failed for page 2: ${JSON.stringify(initResult2.result)}`,
+        );
+      }
+
+      expect(validated1.success).toBe(true);
+      expect(validated2.success).toBe(true);
+
+      try {
+        PerformanceValidator.validateInitializationTime(initResult1.duration);
+        PerformanceValidator.validateInitializationTime(initResult2.duration);
+      } catch (error) {
+        testBase1.consoleMonitor.traceLogErrors.push(
+          `[E2E Test] Performance validation failed for cross-tab QA mode test: ${error}`,
+        );
+        throw error;
+      }
 
       // Wait for cross-tab synchronization
       await TestHelpers.waitForTimeout(page1, 2000);
