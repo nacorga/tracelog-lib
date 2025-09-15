@@ -7,7 +7,8 @@
   "types": "./dist/esm/public-api.d.ts",
   "files": [
     "dist/esm",
-    "dist/cjs"
+    "dist/cjs",
+    "dist/browser"
   ],
   "exports": {
     "import": "./dist/esm/public-api.js",
@@ -21,7 +22,7 @@
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:browser": "vite build",
-    "build:all": "npm run build:esm && npm run build:cjs",
+    "build:all": "npm run build:esm && npm run build:cjs && npm run build:browser",
     "build-ugly": "npm run build:all && find dist -name '*.js' -exec npx uglify-js {} -o {} --compress --mangle --toplevel \\;",
     "build-ugly:win": "npm run build:all && Get-ChildItem -Path dist -Recurse -Filter *.js | ForEach-Object { npx uglify-js $_.FullName -o $_.FullName --compress --mangle --toplevel }",
     "release": "standard-version",

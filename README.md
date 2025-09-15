@@ -24,7 +24,7 @@ A lightweight TypeScript SDK for web analytics and user behavior tracking. Autom
   ```
 - CDN (browser):
   ```html
-  <script src="https://unpkg.com/@tracelog/client/dist/browser/tracelog.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tracelog/client@latest/dist/browser/tracelog.js"></script>
   ```
 
 ## Quick Start
