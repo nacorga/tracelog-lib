@@ -56,13 +56,13 @@ test.describe('Performance Benchmarks', () => {
       const validated = TestUtils.verifyInitializationResult(initPerformance);
 
       if (!validated.success) {
-        monitor.traceLogErrors.push(`[E2E Test] Initialization failed: ${initPerformance.error}`);
+        monitor.traceLogErrors.push(`Initialization failed: ${initPerformance.error}`);
       }
 
       // Performance budget validation
       if (initPerformance.duration > PERFORMANCE_BUDGETS.INITIALIZATION) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Initialization exceeded performance budget: ${initPerformance.duration}ms > ${PERFORMANCE_BUDGETS.INITIALIZATION}ms`,
+          `Initialization exceeded performance budget: ${initPerformance.duration}ms > ${PERFORMANCE_BUDGETS.INITIALIZATION}ms`,
         );
       }
 
@@ -92,7 +92,7 @@ test.describe('Performance Benchmarks', () => {
 
       const validated = TestUtils.verifyInitializationResult(initResult);
       if (!validated.success) {
-        monitor.traceLogErrors.push(`[E2E Test] SDK initialization failed: ${initResult.error}`);
+        monitor.traceLogErrors.push(`SDK initialization failed: ${initResult.error}`);
       }
       expect(validated.success).toBe(true);
 
@@ -143,7 +143,7 @@ test.describe('Performance Benchmarks', () => {
 
         // Validate event tracking result
         if (!eventPerformance.success) {
-          monitor.traceLogErrors.push(`[E2E Test] ${eventType.name} event tracking failed: ${eventPerformance.error}`);
+          monitor.traceLogErrors.push(`${eventType.name} event tracking failed: ${eventPerformance.error}`);
         }
 
         // Performance budget validation
@@ -151,7 +151,7 @@ test.describe('Performance Benchmarks', () => {
           eventType.name === 'custom' ? PERFORMANCE_BUDGETS.CUSTOM_EVENT : PERFORMANCE_BUDGETS.EVENT_TRACKING;
         if (eventPerformance.duration > budget) {
           monitor.traceLogErrors.push(
-            `[E2E Test] ${eventType.name} event exceeded performance budget: ${eventPerformance.duration}ms > ${budget}ms`,
+            `${eventType.name} event exceeded performance budget: ${eventPerformance.duration}ms > ${budget}ms`,
           );
         }
 
@@ -218,16 +218,16 @@ test.describe('Performance Benchmarks', () => {
 
       // Validate session performance
       if (!sessionPerformance.success) {
-        monitor.traceLogErrors.push(`[E2E Test] Session initialization failed: ${sessionPerformance.error}`);
+        monitor.traceLogErrors.push(`Session initialization failed: ${sessionPerformance.error}`);
       }
 
       if (!sessionPerformance.hasSession) {
-        monitor.traceLogErrors.push('[E2E Test] TraceLog was not properly initialized');
+        monitor.traceLogErrors.push('TraceLog was not properly initialized');
       }
 
       if (sessionPerformance.duration > PERFORMANCE_BUDGETS.SESSION_START) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Session initialization exceeded performance budget: ${sessionPerformance.duration}ms > ${PERFORMANCE_BUDGETS.SESSION_START}ms`,
+          `Session initialization exceeded performance budget: ${sessionPerformance.duration}ms > ${PERFORMANCE_BUDGETS.SESSION_START}ms`,
         );
       }
 
@@ -302,12 +302,12 @@ test.describe('Performance Benchmarks', () => {
 
       // Validate batch processing performance
       if (!batchPerformance.success) {
-        monitor.traceLogErrors.push(`[E2E Test] Batch event processing failed: ${batchPerformance.error}`);
+        monitor.traceLogErrors.push(`Batch event processing failed: ${batchPerformance.error}`);
       }
 
       if (batchPerformance.averageEventTime > PERFORMANCE_BUDGETS.EVENT_TRACKING) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Average batch event time exceeded budget: ${batchPerformance.averageEventTime}ms > ${PERFORMANCE_BUDGETS.EVENT_TRACKING}ms`,
+          `Average batch event time exceeded budget: ${batchPerformance.averageEventTime}ms > ${PERFORMANCE_BUDGETS.EVENT_TRACKING}ms`,
         );
       }
 
@@ -395,7 +395,7 @@ test.describe('Performance Benchmarks', () => {
 
       // Validate memory performance (if memory API is available)
       if (!memoryPerformance.success) {
-        monitor.traceLogErrors.push(`[E2E Test] Memory performance test failed: ${memoryPerformance.error}`);
+        monitor.traceLogErrors.push(`Memory performance test failed: ${memoryPerformance.error}`);
       }
 
       if (memoryPerformance.hasMemoryAPI) {
@@ -415,7 +415,7 @@ test.describe('Performance Benchmarks', () => {
 
         if (memoryDeltaMB > memoryLimitMB) {
           monitor.traceLogErrors.push(
-            `[E2E Test] Memory usage exceeded limit: ${memoryDeltaMB.toFixed(2)}MB > ${memoryLimitMB}MB`,
+            `Memory usage exceeded limit: ${memoryDeltaMB.toFixed(2)}MB > ${memoryLimitMB}MB`,
           );
         }
 

@@ -343,7 +343,7 @@ test.describe('Custom Event Tracking - Valid Events', () => {
         // Check for any anomalies in processing
         const anomalies = monitor.getAnomalies();
         if (anomalies.length > 0) {
-          console.log('[E2E Test] Detected processing anomalies during rapid burst:', anomalies);
+          // Processing anomalies detected during rapid burst testing
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);

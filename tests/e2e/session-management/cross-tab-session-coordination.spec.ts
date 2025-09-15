@@ -17,7 +17,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       if (!validatedResult.success) {
         monitors[0].traceLogErrors.push(
-          `[E2E Test] First tab initialization failed in cross-tab test: ${JSON.stringify(initResult)}`,
+          `First tab initialization failed in cross-tab test: ${JSON.stringify(initResult)}`,
         );
       }
 
@@ -35,13 +35,13 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       if (!firstTabSessionInfo.sessionId) {
         monitors[0].traceLogErrors.push(
-          '[E2E Test] First tab session ID was not created in cross-tab coordination test',
+          'First tab session ID was not created in cross-tab coordination test',
         );
       }
 
       if (typeof firstTabSessionInfo.sessionId !== 'string') {
         monitors[0].traceLogErrors.push(
-          `[E2E Test] First tab session ID is not a string: ${typeof firstTabSessionInfo.sessionId}`,
+          `First tab session ID is not a string: ${typeof firstTabSessionInfo.sessionId}`,
         );
       }
 
@@ -286,7 +286,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
             };
           }),
         );
-        console.warn('Tab count update failed. Current states:', debugInfo);
+        monitor.traceLogWarnings.push(`Tab count update failed. Current states: ${JSON.stringify(debugInfo)}`);
 
         // Be more lenient - accept if at least one page has correct count or if count is reasonable
         const sessionContext = newLeaderInfo.sessionContext as { tabCount?: number };
@@ -300,7 +300,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
         }
 
         // Log warning but don't fail the test if count is within reasonable bounds
-        console.warn(`Tab count is ${actualCount} instead of expected 2, but within acceptable range`);
+        monitor.traceLogWarnings.push(`Tab count is ${actualCount} instead of expected 2, but within acceptable range`);
       }
 
       // Verify no errors in remaining tabs

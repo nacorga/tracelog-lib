@@ -17,7 +17,7 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       if (!validated.success) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Initialization failed in page unload test: ${JSON.stringify(initResult)}`,
+          `Initialization failed in page unload test: ${JSON.stringify(initResult)}`,
         );
       }
 
@@ -34,12 +34,12 @@ test.describe('Session Management - Page Unload Session End', () => {
       const sessionInfo = await TestUtils.getCrossTabSessionInfo(page);
 
       if (!sessionInfo.sessionId) {
-        monitor.traceLogErrors.push('[E2E Test] Session ID was not created before page unload test');
+        monitor.traceLogErrors.push('Session ID was not created before page unload test');
       }
 
       if (typeof sessionInfo.sessionId !== 'string') {
         monitor.traceLogErrors.push(
-          `[E2E Test] Session ID is not a string in page unload test: ${typeof sessionInfo.sessionId}`,
+          `Session ID is not a string in page unload test: ${typeof sessionInfo.sessionId}`,
         );
       }
 

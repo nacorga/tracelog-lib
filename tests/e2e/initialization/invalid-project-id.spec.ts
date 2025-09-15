@@ -38,7 +38,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       PerformanceValidator.validateErrorHandlingTime(errorHandlingDuration);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Performance validation failed for missing ID error: ${error}`,
+        `Performance validation failed for missing ID error: ${error}`,
       );
       throw error;
     }
@@ -47,7 +47,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       ErrorValidator.validateInitializationError(missingIdResult, TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Error validation failed for undefined config: ${JSON.stringify(missingIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG}`,
+        `Error validation failed for undefined config: ${JSON.stringify(missingIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG}`,
       );
       throw error;
     }
@@ -75,7 +75,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       ErrorValidator.validateInitializationError(emptyConfigResult, TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Error validation failed for empty config: ${JSON.stringify(emptyConfigResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
+        `Error validation failed for empty config: ${JSON.stringify(emptyConfigResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
       );
       throw error;
     }
@@ -84,7 +84,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] No tracking validation failed for empty config case: ${error}`,
+        `No tracking validation failed for empty config case: ${error}`,
       );
       throw error;
     }
@@ -106,7 +106,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       ErrorValidator.validateInitializationError(emptyIdResult, TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Error validation failed for empty ID: ${JSON.stringify(emptyIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
+        `Error validation failed for empty ID: ${JSON.stringify(emptyIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
       );
       throw error;
     }
@@ -115,7 +115,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] No tracking validation failed for empty ID case: ${error}`,
+        `No tracking validation failed for empty ID case: ${error}`,
       );
       throw error;
     }
@@ -137,7 +137,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       ErrorValidator.validateInitializationError(whitespaceIdResult, TEST_CONSTANTS.ERROR_MESSAGES.INVALID_APP_CONFIG);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Error validation failed for whitespace ID: ${JSON.stringify(whitespaceIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.INVALID_APP_CONFIG}`,
+        `Error validation failed for whitespace ID: ${JSON.stringify(whitespaceIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.INVALID_APP_CONFIG}`,
       );
       throw error;
     }
@@ -146,7 +146,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] No tracking validation failed for whitespace ID case: ${error}`,
+        `No tracking validation failed for whitespace ID case: ${error}`,
       );
       throw error;
     }
@@ -168,7 +168,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       ErrorValidator.validateInitializationError(nullIdResult, TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Error validation failed for null ID: ${JSON.stringify(nullIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
+        `Error validation failed for null ID: ${JSON.stringify(nullIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
       );
       throw error;
     }
@@ -177,7 +177,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] No tracking validation failed for null ID case: ${error}`,
+        `No tracking validation failed for null ID case: ${error}`,
       );
       throw error;
     }
@@ -240,7 +240,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     const hasRuntimeErrors = await TestUtils.detectRuntimeErrors(page);
 
     if (hasRuntimeErrors) {
-      testBase.consoleMonitor.traceLogErrors.push('[E2E Test] Runtime errors detected in event handlers test');
+      testBase.consoleMonitor.traceLogErrors.push('Runtime errors detected in event handlers test');
     }
 
     expect(hasRuntimeErrors).toBeFalsy();
@@ -290,7 +290,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
         validResult.error?.includes(TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG)
       ) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Valid initialization failed with project ID validation error after multiple failures: ${JSON.stringify(validResult)}`,
+          `Valid initialization failed with project ID validation error after multiple failures: ${JSON.stringify(validResult)}`,
         );
       }
 

@@ -34,7 +34,7 @@ test.describe('Custom Event Tracking - Invalid Metadata', () => {
           expect(hasExpectedError).toBe(true);
         } else {
           // If sanitization handled it gracefully, that's also acceptable behavior
-          console.log('ANOMALY: Circular reference was sanitized instead of rejected');
+          monitor.traceLogWarnings.push('ANOMALY: Circular reference was sanitized instead of rejected');
         }
       } finally {
         monitor.cleanup();
@@ -71,7 +71,7 @@ test.describe('Custom Event Tracking - Invalid Metadata', () => {
           expect(hasExpectedError).toBe(true);
         } else {
           // If sanitization handled it gracefully by depth limiting, that's acceptable
-          console.log('ANOMALY: Deep circular reference was sanitized instead of rejected');
+          monitor.traceLogWarnings.push('ANOMALY: Deep circular reference was sanitized instead of rejected');
         }
       } finally {
         monitor.cleanup();
@@ -543,7 +543,7 @@ test.describe('Custom Event Tracking - Invalid Metadata', () => {
             results[1].error.includes('circular references') || results[1].error.includes('invalid types');
           expect(hasExpectedError).toBe(true);
         } else {
-          console.log('ANOMALY: Multiple attempts - circular reference was sanitized instead of rejected');
+          monitor.traceLogWarnings.push('ANOMALY: Multiple attempts - circular reference was sanitized instead of rejected');
         }
 
         // Verify SDK still works

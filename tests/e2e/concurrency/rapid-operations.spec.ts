@@ -41,8 +41,8 @@ test.describe('Concurrency - Rapid Operations', () => {
         // Check for anomalies in debug logs
         const anomalies = monitor.getAnomalies();
         if (anomalies.length > 0) {
-          console.warn('Detected anomalies in concurrent session creation:', anomalies);
-          console.warn('Debug logs:', monitor.debugLogs);
+          monitor.traceLogWarnings.push(`Detected anomalies in concurrent session creation: ${anomalies.join(', ')}`);
+          monitor.traceLogWarnings.push(`Debug logs: ${monitor.debugLogs.slice(-5).join(', ')}`);
         }
 
         // Verify no critical TraceLog errors occurred (allow initialization conflicts and common concurrency issues)
@@ -85,7 +85,7 @@ test.describe('Concurrency - Rapid Operations', () => {
 
         // Handle cases where session creation is delayed due to concurrency handling
         if (!firstSessionInfo.hasSession || !firstSessionInfo.sessionId) {
-          console.warn('Initial session not created yet, waiting longer...');
+          monitor.traceLogWarnings.push('Initial session not created yet, waiting longer...');
           await TestUtils.waitForTimeout(page, 2000);
           await TestUtils.triggerClickEvent(page);
           await TestUtils.waitForTimeout(page, 1000);
@@ -94,7 +94,7 @@ test.describe('Concurrency - Rapid Operations', () => {
           expect(retrySessionInfo.hasSession).toBe(true);
 
           if (!retrySessionInfo.sessionId) {
-            console.warn('Session creation failed on Mobile Chrome - this may be a platform limitation');
+            monitor.traceLogWarnings.push('Session creation failed on Mobile Chrome - this may be a platform limitation');
             return; // Skip this test on platforms where session creation is unreliable
           }
 
@@ -120,12 +120,12 @@ test.describe('Concurrency - Rapid Operations', () => {
           const originalSessionId =
             firstSessionInfo.sessionId ?? (await TestUtils.getSessionDataFromStorage(page)).sessionId;
           if (originalSessionId && finalSessionInfo.sessionId !== originalSessionId) {
-            console.warn(
+            monitor.traceLogWarnings.push(
               `Session ID changed during concurrent re-initialization: ${originalSessionId} -> ${finalSessionInfo.sessionId}`,
             );
           }
         } else {
-          console.warn('Final session ID is null - this may indicate a concurrency issue on this platform');
+          monitor.traceLogWarnings.push('Final session ID is null - this may indicate a concurrency issue on this platform');
         }
 
         // Verify no critical TraceLog errors (allow initialization conflicts)
@@ -192,8 +192,8 @@ test.describe('Concurrency - Rapid Operations', () => {
         // Check for anomalies in rapid interactions
         const anomalies = monitor.getAnomalies();
         if (anomalies.length > 0) {
-          console.warn('Detected anomalies in rapid click events:', anomalies);
-          console.warn('Debug logs sample:', monitor.debugLogs.slice(-10));
+          monitor.traceLogWarnings.push(`Detected anomalies in rapid click events: ${anomalies.join(', ')}`);
+          monitor.traceLogWarnings.push(`Debug logs sample: ${monitor.debugLogs.slice(-10).join(', ')}`);
         }
 
         // Verify no errors during rapid interactions
@@ -452,7 +452,7 @@ test.describe('Concurrency - Rapid Operations', () => {
           if (retrySession.sessionId) {
             TestUtils.verifySessionId(retrySession.sessionId);
           } else {
-            console.warn('Session creation failed during high-frequency test setup - skipping baseline verification');
+            monitor.traceLogWarnings.push('Session creation failed during high-frequency test setup - skipping baseline verification');
           }
         } else {
           TestUtils.verifySessionId(baselineSession.sessionId);

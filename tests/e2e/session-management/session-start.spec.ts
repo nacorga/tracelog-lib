@@ -11,7 +11,7 @@ test.describe('Session Management - Session Start', () => {
 
       // Verify session was created
       if (!sessionInfo.hasSession) {
-        monitor.traceLogErrors.push('[E2E Test] Session was not created during setup');
+        monitor.traceLogErrors.push('Session was not created during setup');
       }
 
       expect(sessionInfo.hasSession).toBe(true);
@@ -19,14 +19,14 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed: ${error}`);
+        monitor.traceLogErrors.push(`Session ID verification failed: ${error}`);
         throw error;
       }
 
       try {
         TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Session structure verification failed: ${error}`);
+        monitor.traceLogErrors.push(`Session structure verification failed: ${error}`);
         throw error;
       }
 
@@ -34,7 +34,7 @@ test.describe('Session Management - Session Start', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during session creation: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during session creation: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -51,7 +51,7 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] First session ID verification failed: ${error}`);
+        monitor.traceLogErrors.push(`First session ID verification failed: ${error}`);
         throw error;
       }
 
@@ -61,7 +61,7 @@ test.describe('Session Management - Session Start', () => {
       );
 
       if (!hasValidFormat) {
-        monitor.traceLogErrors.push(`[E2E Test] Session ID does not match UUID format: ${sessionInfo.sessionId}`);
+        monitor.traceLogErrors.push(`Session ID does not match UUID format: ${sessionInfo.sessionId}`);
       }
 
       expect(hasValidFormat).toBe(true);
@@ -89,12 +89,12 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionId(secondSessionInfo.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Second session ID verification failed: ${error}`);
+        monitor.traceLogErrors.push(`Second session ID verification failed: ${error}`);
         throw error;
       }
 
       if (secondSessionInfo.sessionId === firstSessionId) {
-        monitor.traceLogErrors.push(`[E2E Test] Session IDs are not unique: ${firstSessionId}`);
+        monitor.traceLogErrors.push(`Session IDs are not unique: ${firstSessionId}`);
       }
 
       expect(secondSessionInfo.sessionId).not.toBe(firstSessionId);
@@ -103,7 +103,7 @@ test.describe('Session Management - Session Start', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during session uniqueness test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during session uniqueness test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -144,7 +144,7 @@ test.describe('Session Management - Session Start', () => {
         const sessionStartEvent = eventValidation.sessionStartEvent;
 
         if (sessionStartEvent.type !== 'session_start') {
-          monitor.traceLogErrors.push(`[E2E Test] Session start event has wrong type: ${sessionStartEvent.type}`);
+          monitor.traceLogErrors.push(`Session start event has wrong type: ${sessionStartEvent.type}`);
         }
 
         expect(sessionStartEvent.type).toBe('session_start');
@@ -152,13 +152,13 @@ test.describe('Session Management - Session Start', () => {
         try {
           TestUtils.verifyTimingAccuracy(sessionStartEvent.timestamp, sessionStartTime - 1000, Date.now() + 1000);
         } catch (error) {
-          monitor.traceLogErrors.push(`[E2E Test] Session start event timing verification failed: ${error}`);
+          monitor.traceLogErrors.push(`Session start event timing verification failed: ${error}`);
           throw error;
         }
 
         if (!sessionStartEvent.page_url || typeof sessionStartEvent.page_url !== 'string') {
           monitor.traceLogErrors.push(
-            `[E2E Test] Session start event missing or invalid page_url: ${sessionStartEvent.page_url}`,
+            `Session start event missing or invalid page_url: ${sessionStartEvent.page_url}`,
           );
         }
 
@@ -170,7 +170,7 @@ test.describe('Session Management - Session Start', () => {
       const sessionInfo = await TestUtils.getSessionDataFromStorage(page);
 
       if (!sessionInfo.hasSession) {
-        monitor.traceLogErrors.push('[E2E Test] Session was not created in localStorage fallback check');
+        monitor.traceLogErrors.push('Session was not created in localStorage fallback check');
       }
 
       expect(sessionInfo.hasSession).toBe(true);
@@ -178,7 +178,7 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Session structure verification failed in fallback check: ${error}`);
+        monitor.traceLogErrors.push(`Session structure verification failed in fallback check: ${error}`);
         throw error;
       }
 
@@ -186,7 +186,7 @@ test.describe('Session Management - Session Start', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during session start event test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during session start event test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -203,7 +203,7 @@ test.describe('Session Management - Session Start', () => {
     try {
       // Validate session exists and has correct structure
       if (!sessionInfo.hasSession) {
-        monitor.traceLogErrors.push('[E2E Test] Session does not exist in localStorage persistence test');
+        monitor.traceLogErrors.push('Session does not exist in localStorage persistence test');
       }
 
       expect(sessionInfo.hasSession).toBe(true);
@@ -211,7 +211,7 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Session structure verification failed in persistence test: ${error}`);
+        monitor.traceLogErrors.push(`Session structure verification failed in persistence test: ${error}`);
         throw error;
       }
 
@@ -225,7 +225,7 @@ test.describe('Session Management - Session Start', () => {
 
       if (!isValidStructure) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Session data structure validation failed: ${JSON.stringify(sessionInfo.sessionData)}`,
+          `Session data structure validation failed: ${JSON.stringify(sessionInfo.sessionData)}`,
         );
       }
 
@@ -235,7 +235,7 @@ test.describe('Session Management - Session Start', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during localStorage persistence test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during localStorage persistence test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -278,7 +278,7 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed in timestamp/metadata test: ${error}`);
+        monitor.traceLogErrors.push(`Session ID verification failed in timestamp/metadata test: ${error}`);
         throw error;
       }
 
@@ -286,7 +286,7 @@ test.describe('Session Management - Session Start', () => {
         TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Session structure verification failed in timestamp/metadata test: ${error}`,
+          `Session structure verification failed in timestamp/metadata test: ${error}`,
         );
         throw error;
       }
@@ -295,7 +295,7 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifyTimingAccuracy(metadata.timestamp, initStartTime, postActivityTime + 1000);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Timing accuracy verification failed: ${error}`);
+        monitor.traceLogErrors.push(`Timing accuracy verification failed: ${error}`);
         throw error;
       }
 
@@ -307,7 +307,7 @@ test.describe('Session Management - Session Start', () => {
 
       if (!isValidStructure) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Session structure validation failed for timing information: ${JSON.stringify(sessionInfo.sessionData)}`,
+          `Session structure validation failed for timing information: ${JSON.stringify(sessionInfo.sessionData)}`,
         );
       }
 
@@ -321,7 +321,7 @@ test.describe('Session Management - Session Start', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during timestamp/metadata test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during timestamp/metadata test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -338,7 +338,7 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Initial session ID verification failed in consistency test: ${error}`);
+        monitor.traceLogErrors.push(`Initial session ID verification failed in consistency test: ${error}`);
         throw error;
       }
 
@@ -360,7 +360,7 @@ test.describe('Session Management - Session Start', () => {
           TestUtils.verifySessionId(currentSessionInfo.sessionId);
         } catch (error) {
           monitor.traceLogErrors.push(
-            `[E2E Test] Session ID verification failed during interaction ${interactions.indexOf(interaction)}: ${error}`,
+            `Session ID verification failed during interaction ${interactions.indexOf(interaction)}: ${error}`,
           );
           throw error;
         }
@@ -373,7 +373,7 @@ test.describe('Session Management - Session Start', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during session consistency test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during session consistency test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);

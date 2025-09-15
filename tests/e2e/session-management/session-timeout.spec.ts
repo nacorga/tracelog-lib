@@ -11,7 +11,7 @@ test.describe('Session Management - Session Timeout', () => {
 
       // Verify session exists and configuration was applied
       if (!sessionInfo.hasSession) {
-        monitor.traceLogErrors.push('[E2E Test] Session was not created during timeout configuration test');
+        monitor.traceLogErrors.push('Session was not created during timeout configuration test');
       }
 
       expect(sessionInfo.hasSession).toBe(true);
@@ -19,7 +19,7 @@ test.describe('Session Management - Session Timeout', () => {
       try {
         TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed in timeout config test: ${error}`);
+        monitor.traceLogErrors.push(`Session ID verification failed in timeout config test: ${error}`);
         throw error;
       }
 
@@ -30,7 +30,7 @@ test.describe('Session Management - Session Timeout', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during session timeout config test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during session timeout config test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -48,7 +48,7 @@ test.describe('Session Management - Session Timeout', () => {
         TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Initial session ID verification failed in continuous activity test: ${error}`,
+          `Initial session ID verification failed in continuous activity test: ${error}`,
         );
         throw error;
       }
@@ -64,7 +64,7 @@ test.describe('Session Management - Session Timeout', () => {
         try {
           TestUtils.verifySessionId(activeSessionInfo.sessionId);
         } catch (error) {
-          monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed during activity ${i}: ${error}`);
+          monitor.traceLogErrors.push(`Session ID verification failed during activity ${i}: ${error}`);
           throw error;
         }
       }
@@ -72,7 +72,7 @@ test.describe('Session Management - Session Timeout', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during continuous activity test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during continuous activity test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);

@@ -22,12 +22,12 @@ test.describe('Session Management - Custom Session Timeout', () => {
       const configValidation = await TestUtils.validateSessionTimeoutConfig(page, customTimeout);
 
       if (!configValidation.hasSession) {
-        monitor.traceLogErrors.push('[E2E Test] Session was not created with custom timeout configuration');
+        monitor.traceLogErrors.push('Session was not created with custom timeout configuration');
       }
 
       if (!configValidation.isValid) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Custom timeout configuration validation failed: ${JSON.stringify(configValidation)}`,
+          `Custom timeout configuration validation failed: ${JSON.stringify(configValidation)}`,
         );
       }
 
@@ -36,7 +36,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       try {
         TestUtils.verifySessionId(configValidation.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed with custom timeout: ${error}`);
+        monitor.traceLogErrors.push(`Session ID verification failed with custom timeout: ${error}`);
         throw error;
       }
 
@@ -46,7 +46,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       if (configValidation.configTimeout !== undefined) {
         if (configValidation.configTimeout !== customTimeout) {
           monitor.traceLogErrors.push(
-            `[E2E Test] Custom timeout not applied correctly: expected ${customTimeout}, got ${configValidation.configTimeout}`,
+            `Custom timeout not applied correctly: expected ${customTimeout}, got ${configValidation.configTimeout}`,
           );
         }
         expect(configValidation.configTimeout).toBe(customTimeout);
@@ -55,7 +55,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during custom timeout test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during custom timeout test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -82,13 +82,13 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       if (lowTimeoutValidated.success) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Low timeout should have been rejected but was accepted: ${tooLowTimeout}ms`,
+          `Low timeout should have been rejected but was accepted: ${tooLowTimeout}ms`,
         );
       }
 
       if (!lowTimeoutValidated.hasError) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Low timeout validation should have produced error but did not: ${JSON.stringify(lowTimeoutResult)}`,
+          `Low timeout validation should have produced error but did not: ${JSON.stringify(lowTimeoutResult)}`,
         );
       }
 
@@ -117,13 +117,13 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       if (highTimeoutValidated.success) {
         monitor.traceLogErrors.push(
-          `[E2E Test] High timeout should have been rejected but was accepted: ${tooHighTimeout}ms`,
+          `High timeout should have been rejected but was accepted: ${tooHighTimeout}ms`,
         );
       }
 
       if (!highTimeoutValidated.hasError) {
         monitor.traceLogErrors.push(
-          `[E2E Test] High timeout validation should have produced error but did not: ${JSON.stringify(highTimeoutResult)}`,
+          `High timeout validation should have produced error but did not: ${JSON.stringify(highTimeoutResult)}`,
         );
       }
 

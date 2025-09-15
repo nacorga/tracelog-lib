@@ -72,8 +72,8 @@ test.describe('Storage Failures - Error Recovery', () => {
       // Check for anomalies in storage quota handling
       const anomalies = monitor.getAnomalies();
       if (anomalies.length > 0) {
-        console.warn('Detected anomalies in localStorage quota test:', anomalies);
-        console.warn('Debug logs:', monitor.debugLogs);
+        monitor.traceLogWarnings.push(`Detected anomalies in localStorage quota test: ${anomalies.join(', ')}`);
+        monitor.traceLogWarnings.push(`Debug logs: ${monitor.debugLogs.slice(-5).join(', ')}`);
       }
 
       // Verify no critical errors occurred

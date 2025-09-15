@@ -16,7 +16,7 @@ test.describe('Library Initialization - Success', () => {
       try {
         await testBase.validateSuccessfulInit();
       } catch (error) {
-        testBase.consoleMonitor.traceLogErrors.push(`[E2E Test] Initialization validation failed: ${error}`);
+        testBase.consoleMonitor.traceLogErrors.push(`Initialization validation failed: ${error}`);
         throw error;
       }
 
@@ -29,7 +29,7 @@ test.describe('Library Initialization - Success', () => {
       );
       if (postClickErrors.length > 0) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Unexpected TraceLog errors detected: ${postClickErrors.join(', ')}`,
+          `Unexpected TraceLog errors detected: ${postClickErrors.join(', ')}`,
         );
       }
       expect(postClickErrors).toHaveLength(0);
@@ -62,12 +62,12 @@ test.describe('Library Initialization - Success', () => {
 
         if (validatedResult.success) {
           monitor.traceLogErrors.push(
-            `[E2E Test] ${method} should have failed but succeeded: ${JSON.stringify(result)}`,
+            `${method} should have failed but succeeded: ${JSON.stringify(result)}`,
           );
         }
         if (!result.error?.includes(expectedError)) {
           monitor.traceLogErrors.push(
-            `[E2E Test] ${method} error mismatch - expected: "${expectedError}", got: "${result.error}"`,
+            `${method} error mismatch - expected: "${expectedError}", got: "${result.error}"`,
           );
         }
 
@@ -84,12 +84,12 @@ test.describe('Library Initialization - Success', () => {
 
       if (!validatedValidIdResult.success) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Valid project ID test failed unexpectedly: ${JSON.stringify(validIdResult)}`,
+          `Valid project ID test failed unexpectedly: ${JSON.stringify(validIdResult)}`,
         );
       }
       if (validatedValidIdResult.hasError) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Valid project ID test has unexpected error: ${JSON.stringify(validIdResult)}`,
+          `Valid project ID test has unexpected error: ${JSON.stringify(validIdResult)}`,
         );
       }
 
@@ -128,7 +128,7 @@ test.describe('Library Initialization - Success', () => {
 
       if (!validatedDuplicateResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Duplicate initialization should have succeeded: ${JSON.stringify(duplicateInitResult)}`,
+          `Duplicate initialization should have succeeded: ${JSON.stringify(duplicateInitResult)}`,
         );
       }
 
@@ -139,7 +139,7 @@ test.describe('Library Initialization - Success', () => {
 
       if (!stillInitialized) {
         testBase.consoleMonitor.traceLogErrors.push(
-          '[E2E Test] TraceLog should still be initialized after duplicate init',
+          'TraceLog should still be initialized after duplicate init',
         );
       }
 
@@ -167,7 +167,7 @@ test.describe('Library Initialization - Success', () => {
 
       if (hasRuntimeErrors) {
         testBase.consoleMonitor.traceLogErrors.push(
-          '[E2E Test] Runtime errors detected during core functionality test',
+          'Runtime errors detected during core functionality test',
         );
       }
 

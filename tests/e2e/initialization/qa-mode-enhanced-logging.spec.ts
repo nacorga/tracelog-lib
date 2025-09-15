@@ -90,7 +90,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
 
     if (criticalErrors.length > 0) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Critical errors detected during QA mode test: ${criticalErrors.join(', ')}`,
+        `Critical errors detected during QA mode test: ${criticalErrors.join(', ')}`,
       );
     }
 
@@ -141,7 +141,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
 
     if (criticalErrors.length > 0) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Critical errors detected during complex QA mode test: ${criticalErrors.join(', ')}`,
+        `Critical errors detected during complex QA mode test: ${criticalErrors.join(', ')}`,
       );
     }
 
@@ -261,7 +261,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       PerformanceValidator.validatePerformanceConsistency(performanceResults);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Performance consistency validation failed for QA mode: ${error}, Results: ${JSON.stringify(performanceResults)}`,
+        `Performance consistency validation failed for QA mode: ${error}, Results: ${JSON.stringify(performanceResults)}`,
       );
       throw error;
     }
@@ -275,7 +275,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       PerformanceValidator.validateInitializationTime(maxDuration);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Initialization time validation failed for QA mode performance test: Average: ${averageDuration}ms, Max: ${maxDuration}ms, Error: ${error}`,
+        `Initialization time validation failed for QA mode performance test: Average: ${averageDuration}ms, Max: ${maxDuration}ms, Error: ${error}`,
       );
       throw error;
     }
@@ -320,12 +320,12 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
 
       if (!validated1.success) {
         testBase1.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] QA mode cross-tab initialization failed for page 1: ${JSON.stringify(initResult1.result)}`,
+          `QA mode cross-tab initialization failed for page 1: ${JSON.stringify(initResult1.result)}`,
         );
       }
       if (!validated2.success) {
         testBase2.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] QA mode cross-tab initialization failed for page 2: ${JSON.stringify(initResult2.result)}`,
+          `QA mode cross-tab initialization failed for page 2: ${JSON.stringify(initResult2.result)}`,
         );
       }
 
@@ -337,7 +337,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
         PerformanceValidator.validateInitializationTime(initResult2.duration);
       } catch (error) {
         testBase1.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Performance validation failed for cross-tab QA mode test: ${error}`,
+          `Performance validation failed for cross-tab QA mode test: ${error}`,
         );
         throw error;
       }

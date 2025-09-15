@@ -301,8 +301,8 @@ test.describe('Memory - Resource Cleanup', () => {
 
       // Debug the initialization result
       if (!validated.success) {
-        console.log('Initialization failed:', validated.error);
-        console.log('TraceLog errors:', monitor.traceLogErrors);
+        monitor.traceLogErrors.push(`Initialization failed: ${validated.error}`);
+        monitor.traceLogErrors.push(`TraceLog errors: ${monitor.traceLogErrors.join(', ')}`);
       }
 
       expect(validated.success).toBe(true);

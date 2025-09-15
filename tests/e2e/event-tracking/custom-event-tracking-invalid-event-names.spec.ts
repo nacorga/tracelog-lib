@@ -549,9 +549,9 @@ test.describe('Custom Event Tracking - Invalid Event Names', () => {
         // Wait for potential valid event processing
         await page.waitForTimeout(1000);
 
-        // Log network activity for debugging (should be minimal in test environment)
+        // Verify no unexpected network activity during invalid event test
         if (networkRequests.length > 0) {
-          console.log('[E2E Test] Network requests detected during invalid event test:', networkRequests);
+          // Network requests detected - this might indicate unexpected behavior
         }
 
         // In QA mode, validation errors are expected and logged - filter out validation errors

@@ -9,8 +9,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const pageLoadStartTime = Date.now();
 
       try {
-        console.log('[E2E Test] Testing PAGE_VIEW event firing on initialization');
-
         await TestUtils.navigateAndWaitForReady(page);
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
@@ -33,7 +31,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
                   // Since we can't directly access internal event queue, we verify via console logs
                   resolve(true);
                 } catch {
-                  console.warn('[E2E Test] Could not verify PAGE_VIEW event directly');
                   resolve(false);
                 }
               } else {
@@ -50,7 +47,7 @@ test.describe('Page View Tracking - Initial Page Load', () => {
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
 
         const pageLoadEndTime = Date.now();
-        console.log(`[E2E Test] PAGE_VIEW event verification completed in ${pageLoadEndTime - pageLoadStartTime}ms`);
+        // PAGE_VIEW event verification completed
       } finally {
         monitor.cleanup();
       }
@@ -60,8 +57,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing PAGE_VIEW event fires only once');
-
         await TestUtils.navigateAndWaitForReady(page);
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
@@ -91,8 +86,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing URL component capture');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
@@ -131,8 +124,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing query parameter capture');
-
         // Navigate to a URL with query parameters
         const testUrl = '/?test=value&param2=data&number=123';
         await TestUtils.navigateAndWaitForReady(page, testUrl);
@@ -170,8 +161,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing hash fragment capture');
-
         // Navigate to a URL with hash fragment
         const testUrl = '/#section-1';
         await TestUtils.navigateAndWaitForReady(page, testUrl);
@@ -204,8 +193,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing referrer information capture');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
@@ -225,9 +212,9 @@ test.describe('Page View Tracking - Initial Page Load', () => {
         // This is expected behavior - we're testing the capture mechanism works
         if (referrerData.hasReferrer) {
           expect(referrerData.referrer).toMatch(/^https?:\/\//);
-          console.log(`[E2E Test] Referrer captured: ${referrerData.referrer}`);
+          // Referrer captured successfully
         } else {
-          console.log('[E2E Test] No referrer available (expected in direct navigation)');
+          // No referrer available (expected in direct navigation)
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
@@ -240,8 +227,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing empty referrer handling');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
@@ -273,13 +258,10 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing page title capture');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         // Get the actual page title
         const expectedTitle = await page.title();
-        console.log(`[E2E Test] Expected page title: ${expectedTitle}`);
 
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
@@ -309,8 +291,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing empty title handling');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         // Temporarily change page title to empty
@@ -344,8 +324,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing special characters in title');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         const specialTitle = 'Test Title with "quotes" & special chars: <script>alert(\'test\')</script> 你好';
@@ -383,8 +361,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing UTM parameter extraction');
-
         // Navigate to URL with UTM parameters
         const utmUrl = '/?utm_source=test&utm_medium=email&utm_campaign=summer&utm_term=analytics&utm_content=banner';
         await TestUtils.navigateAndWaitForReady(page, utmUrl);
@@ -424,8 +400,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing partial UTM parameters');
-
         // Navigate to URL with only some UTM parameters
         const partialUtmUrl = '/?utm_source=google&utm_campaign=brand&other_param=value';
         await TestUtils.navigateAndWaitForReady(page, partialUtmUrl);
@@ -467,8 +441,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
-        console.log('[E2E Test] Testing URLs without UTM parameters');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
@@ -512,8 +484,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const testStartTime = Date.now();
 
       try {
-        console.log('[E2E Test] Testing event timing accuracy');
-
         await TestUtils.navigateAndWaitForReady(page);
 
         const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
@@ -564,8 +534,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const pageLoadStart = Date.now();
 
       try {
-        console.log('[E2E Test] Testing PAGE_VIEW timestamp accuracy');
-
         await TestUtils.navigateAndWaitForReady(page);
         const pageReadyTime = Date.now();
 
@@ -609,7 +577,7 @@ test.describe('Page View Tracking - Initial Page Load', () => {
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
 
-        console.log(`[E2E Test] Timing validation completed - Total duration: ${testEndTime - pageLoadStart}ms`);
+        // Timing validation completed
       } finally {
         monitor.cleanup();
       }
@@ -620,8 +588,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
       const timingMeasurements: number[] = [];
 
       try {
-        console.log('[E2E Test] Testing timing consistency across multiple loads');
-
         // Perform multiple page loads and measure timing consistency
         for (let i = 0; i < 3; i++) {
           const loadStart = Date.now();
@@ -635,7 +601,7 @@ test.describe('Page View Tracking - Initial Page Load', () => {
           const duration = loadEnd - loadStart;
           timingMeasurements.push(duration);
 
-          console.log(`[E2E Test] Load ${i + 1} completed in ${duration}ms`);
+          // Load completed
 
           // Small delay between loads
           await page.waitForTimeout(500);
@@ -653,9 +619,7 @@ test.describe('Page View Tracking - Initial Page Load', () => {
         const variance = ((maxDuration - averageDuration) / averageDuration) * 100;
         expect(variance).toBeLessThan(500); // Lenient for E2E environment
 
-        console.log(
-          `[E2E Test] Timing consistency: min=${minDuration}ms, max=${maxDuration}ms, avg=${averageDuration.toFixed(1)}ms, variance=${variance.toFixed(1)}%`,
-        );
+        // Timing consistency analysis completed
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
       } finally {

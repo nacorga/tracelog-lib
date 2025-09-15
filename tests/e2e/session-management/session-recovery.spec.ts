@@ -19,7 +19,7 @@ test.describe('Session Management - Session Recovery', () => {
       const originalSessionData = await TestUtils.getSessionDataFromStorage(page);
 
       if (!originalSessionData.sessionId) {
-        monitor.traceLogErrors.push('[E2E Test] Original session ID was not created before reload test');
+        monitor.traceLogErrors.push('Original session ID was not created before reload test');
       }
 
       expect(originalSessionData.sessionId).toBeTruthy();
@@ -37,7 +37,7 @@ test.describe('Session Management - Session Recovery', () => {
       const validatedResult = TestUtils.verifyInitializationResult(initResult);
 
       if (!validatedResult.success) {
-        monitor.traceLogErrors.push(`[E2E Test] Initialization failed after reload: ${JSON.stringify(initResult)}`);
+        monitor.traceLogErrors.push(`Initialization failed after reload: ${JSON.stringify(initResult)}`);
       }
 
       expect(validatedResult.success).toBe(true);
@@ -76,11 +76,11 @@ test.describe('Session Management - Session Recovery', () => {
 
       // Session should exist after reload (either recovered or new)
       if (!postReloadSessionData.hasSession) {
-        monitor.traceLogErrors.push('[E2E Test] Session was not found after page reload and recovery');
+        monitor.traceLogErrors.push('Session was not found after page reload and recovery');
       }
 
       if (!postReloadSessionData.sessionId) {
-        monitor.traceLogErrors.push('[E2E Test] Session ID is missing after page reload and recovery');
+        monitor.traceLogErrors.push('Session ID is missing after page reload and recovery');
       }
 
       expect(postReloadSessionData.hasSession).toBe(true);
@@ -90,7 +90,7 @@ test.describe('Session Management - Session Recovery', () => {
       const eventResult = await TestUtils.testCustomEvent(page, 'post_recovery_test', { recovered: true });
 
       if (!eventResult.success) {
-        monitor.traceLogErrors.push(`[E2E Test] Custom event failed after recovery: ${JSON.stringify(eventResult)}`);
+        monitor.traceLogErrors.push(`Custom event failed after recovery: ${JSON.stringify(eventResult)}`);
       }
 
       expect(eventResult.success).toBe(true);
@@ -99,7 +99,7 @@ test.describe('Session Management - Session Recovery', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during page reload recovery test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during page reload recovery test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);
@@ -291,12 +291,12 @@ test.describe('Session Management - Session Recovery', () => {
 
       // Should create new session, not recover expired one
       if (!newSessionValidation.currentSessionId) {
-        monitor.traceLogErrors.push('[E2E Test] No session ID found after expired session recovery');
+        monitor.traceLogErrors.push('No session ID found after expired session recovery');
       }
 
       if (!newSessionValidation.isNewSession) {
         monitor.traceLogErrors.push(
-          `[E2E Test] Expired session was recovered instead of creating new session: ${newSessionValidation.currentSessionId}`,
+          `Expired session was recovered instead of creating new session: ${newSessionValidation.currentSessionId}`,
         );
       }
 
@@ -307,7 +307,7 @@ test.describe('Session Management - Session Recovery', () => {
       const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
-          `[E2E Test] TraceLog errors detected during expired session recovery test: ${monitor.traceLogErrors.join(', ')}`,
+          `TraceLog errors detected during expired session recovery test: ${monitor.traceLogErrors.join(', ')}`,
         );
       }
       expect(hasNoErrors).toBe(true);

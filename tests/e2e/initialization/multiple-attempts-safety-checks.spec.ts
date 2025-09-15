@@ -47,12 +47,12 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
       if (!validatedResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Multiple init attempt ${i} failed: ${JSON.stringify(duplicateInitResult)}`,
+          `Multiple init attempt ${i} failed: ${JSON.stringify(duplicateInitResult)}`,
         );
       }
       if (validatedResult.hasError) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Multiple init attempt ${i} has unexpected error: ${JSON.stringify(duplicateInitResult)}`,
+          `Multiple init attempt ${i} has unexpected error: ${JSON.stringify(duplicateInitResult)}`,
         );
       }
 
@@ -80,7 +80,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     if (criticalErrors.length > 0) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Critical errors detected during multiple init attempts: ${criticalErrors.join(', ')}`,
+        `Critical errors detected during multiple init attempts: ${criticalErrors.join(', ')}`,
       );
     }
 
@@ -129,7 +129,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
       if (!validatedReinitResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
+          `Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
         );
       }
 
@@ -139,7 +139,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
         PerformanceValidator.validateInitializationTime(duration, true);
       } catch (error) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Performance validation failed for re-initialization ${i}: ${error}`,
+          `Performance validation failed for re-initialization ${i}: ${error}`,
         );
         throw error;
       }
@@ -164,7 +164,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     if (handlerErrors.length > 0) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Handler errors detected during event handler safety checks: ${handlerErrors.join(', ')}`,
+        `Handler errors detected during event handler safety checks: ${handlerErrors.join(', ')}`,
       );
     }
 
@@ -175,7 +175,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     if (hasRuntimeErrors) {
       testBase.consoleMonitor.traceLogErrors.push(
-        '[E2E Test] Runtime errors detected during event handler safety checks',
+        'Runtime errors detected during event handler safety checks',
       );
     }
 
@@ -205,7 +205,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
       if (!validatedReinitResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
+          `Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
         );
       }
 
@@ -215,7 +215,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
         PerformanceValidator.validateInitializationTime(duration, true);
       } catch (error) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Performance validation failed for re-initialization ${i}: ${error}`,
+          `Performance validation failed for re-initialization ${i}: ${error}`,
         );
         throw error;
       }
@@ -246,7 +246,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     if (trackingErrors.length > 0) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Tracking errors detected during functionality preservation test: ${trackingErrors.join(', ')}`,
+        `Tracking errors detected during functionality preservation test: ${trackingErrors.join(', ')}`,
       );
     }
 
@@ -276,7 +276,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
       if (!validatedReinitResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
+          `Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
         );
       }
 
@@ -286,7 +286,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
         PerformanceValidator.validateInitializationTime(duration, true);
       } catch (error) {
         testBase.consoleMonitor.traceLogErrors.push(
-          `[E2E Test] Performance validation failed for re-initialization ${i}: ${error}`,
+          `Performance validation failed for re-initialization ${i}: ${error}`,
         );
         throw error;
       }
@@ -312,7 +312,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     if (memoryErrors.length > 0) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Memory errors detected during memory management test: ${memoryErrors.join(', ')}`,
+        `Memory errors detected during memory management test: ${memoryErrors.join(', ')}`,
       );
     }
 
@@ -350,7 +350,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     if (raceErrors.length > 0) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `[E2E Test] Unexpected race condition errors detected during rapid init test: ${raceErrors.join(', ')}`,
+        `Unexpected race condition errors detected during rapid init test: ${raceErrors.join(', ')}`,
       );
     }
 
