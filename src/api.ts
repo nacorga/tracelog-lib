@@ -89,7 +89,10 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
   } catch (error) {
     logUnknown('error', 'Event tracking failed', error);
 
-    if (error instanceof Error && error.message === 'App not initialized') {
+    if (
+      error instanceof Error &&
+      (error.message === 'App not initialized' || error.message.includes('validation failed'))
+    ) {
       throw error;
     }
   }
