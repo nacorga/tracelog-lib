@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
+import { TestUtils } from '../../utils';
 import {
   InitializationTestBase,
   InitializationScenarios,
@@ -8,7 +8,7 @@ import {
   PerformanceValidator,
   SessionValidator,
   MemoryTestUtils,
-} from '../../utils/initialization/test.helpers';
+} from '../../utils/initialization.helpers';
 
 test.describe('Library Initialization - Multiple Attempts and Safety Checks', () => {
   let testBase: InitializationTestBase;
@@ -31,19 +31,19 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     await SessionValidator.validateSessionState(page);
 
     // Get initial storage state
-    const initialStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const initialStorageKeys = await TestUtils.getTraceLogStorageKeys(page);
     expect(initialStorageKeys.length).toBeGreaterThan(0);
 
     // Multiple consecutive attempts with same config
     const subsequentResults: Array<{ duration: number; success: boolean }> = [];
     for (let i = 0; i < 3; i++) {
-      await TestHelpers.waitForTimeout(page, 200);
+      await TestUtils.waitForTimeout(page, 200);
 
       const startTime = Date.now();
-      const duplicateInitResult = await TestHelpers.initializeTraceLog(page);
+      const duplicateInitResult = await TestUtils.initializeTraceLog(page);
       const duration = Date.now() - startTime;
 
-      const validatedResult = TestAssertions.verifyInitializationResult(duplicateInitResult);
+      const validatedResult = TestUtils.verifyInitializationResult(duplicateInitResult);
 
       if (!validatedResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
@@ -64,7 +64,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       subsequentResults.push({ duration, success: true });
 
       // Verify state consistency
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
       await expect(page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.INITIALIZED);
     }
@@ -95,11 +95,11 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     await InitializationScenarios.testMultipleInitAttempts(testBase, configs);
 
     // Final state verification
-    const finallyInitialized = await TestHelpers.isTraceLogInitialized(page);
+    const finallyInitialized = await TestUtils.isTraceLogInitialized(page);
     expect(finallyInitialized).toBe(true);
 
     // Validate memory management
-    const initialStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const initialStorageKeys = await TestUtils.getTraceLogStorageKeys(page);
     expect(initialStorageKeys.length).toBeGreaterThan(0);
   });
 
@@ -110,22 +110,22 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     await testBase.performMeasuredInit();
 
     // Test initial interaction works
-    await TestHelpers.triggerClickEvent(page);
-    await TestHelpers.waitForTimeout(page, 1000);
+    await TestUtils.triggerClickEvent(page);
+    await TestUtils.waitForTimeout(page, 1000);
 
     // Get initial event count
-    const initialEvents = await TestHelpers.getTraceLogStorageKeys(page);
+    const initialEvents = await TestUtils.getTraceLogStorageKeys(page);
     const initialEventCount = initialEvents.length;
 
     // Multiple re-initializations (should not create duplicate handlers)
     for (let i = 0; i < 3; i++) {
-      await TestHelpers.waitForTimeout(page, 300);
+      await TestUtils.waitForTimeout(page, 300);
 
       const startTime = Date.now();
-      const reinitResult = await TestHelpers.initializeTraceLog(page);
+      const reinitResult = await TestUtils.initializeTraceLog(page);
       const duration = Date.now() - startTime;
 
-      const validatedReinitResult = TestAssertions.verifyInitializationResult(reinitResult);
+      const validatedReinitResult = TestUtils.verifyInitializationResult(reinitResult);
 
       if (!validatedReinitResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
@@ -145,13 +145,13 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       }
 
       // Test interaction after each re-initialization
-      await TestHelpers.triggerClickEvent(page, `h1[data-testid="title"]`);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page, `h1[data-testid="title"]`);
+      await TestUtils.waitForTimeout(page, 500);
     }
 
     // Final interaction tests
     await testBase.testBasicFunctionality();
-    await TestHelpers.waitForTimeout(page, 1000);
+    await TestUtils.waitForTimeout(page, 1000);
 
     // Verify no excessive storage growth
     await SessionValidator.validateMemoryManagement(page, initialEventCount, 10);
@@ -171,7 +171,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     expect(handlerErrors).toHaveLength(0);
 
     // Verify no runtime errors occurred
-    const hasRuntimeErrors = await TestHelpers.detectRuntimeErrors(page);
+    const hasRuntimeErrors = await TestUtils.detectRuntimeErrors(page);
 
     if (hasRuntimeErrors) {
       testBase.consoleMonitor.traceLogErrors.push(
@@ -187,21 +187,21 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
   }) => {
     // Initial initialization and functionality test
     await testBase.performMeasuredInit();
-    const initialCustomEventResult = await TestHelpers.testCustomEvent(page, 'initial_test', { phase: 'initial' });
-    expect(TestAssertions.verifyInitializationResult(initialCustomEventResult).success).toBe(true);
+    const initialCustomEventResult = await TestUtils.testCustomEvent(page, 'initial_test', { phase: 'initial' });
+    expect(TestUtils.verifyInitializationResult(initialCustomEventResult).success).toBe(true);
 
     // Test multiple re-initializations with different configs
     const configs = [TEST_CONFIGS.DEFAULT, TEST_CONFIGS.ALTERNATE_1, TEST_CONFIGS.DEFAULT];
 
     for (let i = 0; i < configs.length; i++) {
-      await TestHelpers.waitForTimeout(page, 400);
+      await TestUtils.waitForTimeout(page, 400);
 
       // Re-initialize with performance tracking
       const startTime = Date.now();
-      const reinitResult = await TestHelpers.initializeTraceLog(page, configs[i]);
+      const reinitResult = await TestUtils.initializeTraceLog(page, configs[i]);
       const duration = Date.now() - startTime;
 
-      const validatedReinitResult = TestAssertions.verifyInitializationResult(reinitResult);
+      const validatedReinitResult = TestUtils.verifyInitializationResult(reinitResult);
 
       if (!validatedReinitResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
@@ -221,21 +221,21 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       }
 
       // Test functionality preservation
-      const customEventResult = await TestHelpers.testCustomEvent(page, `reinit_test_${i}`, {
+      const customEventResult = await TestUtils.testCustomEvent(page, `reinit_test_${i}`, {
         phase: `reinit_${i}`,
         config: configs[i].id,
       });
-      expect(TestAssertions.verifyInitializationResult(customEventResult).success).toBe(true);
+      expect(TestUtils.verifyInitializationResult(customEventResult).success).toBe(true);
 
       // Verify state consistency
       await SessionValidator.validateSessionState(page);
       await testBase.testBasicFunctionality();
-      await TestHelpers.waitForTimeout(page, 300);
+      await TestUtils.waitForTimeout(page, 300);
     }
 
     // Final comprehensive functionality test
-    const finalCustomEventResult = await TestHelpers.testCustomEvent(page, 'final_test', { phase: 'final' });
-    expect(TestAssertions.verifyInitializationResult(finalCustomEventResult).success).toBe(true);
+    const finalCustomEventResult = await TestUtils.testCustomEvent(page, 'final_test', { phase: 'final' });
+    expect(TestUtils.verifyInitializationResult(finalCustomEventResult).success).toBe(true);
 
     await SessionValidator.validateFunctionalityPreservation(page);
 
@@ -264,15 +264,15 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     // Perform multiple re-initialization attempts (stress test)
     for (let i = 0; i < 10; i++) {
-      await TestHelpers.waitForTimeout(page, 100);
+      await TestUtils.waitForTimeout(page, 100);
 
       // Alternate configurations
       const config = i % 2 === 0 ? TEST_CONFIGS.DEFAULT : TEST_CONFIGS.ALTERNATE_1;
       const startTime = Date.now();
-      const reinitResult = await TestHelpers.initializeTraceLog(page, config);
+      const reinitResult = await TestUtils.initializeTraceLog(page, config);
       const duration = Date.now() - startTime;
 
-      const validatedReinitResult = TestAssertions.verifyInitializationResult(reinitResult);
+      const validatedReinitResult = TestUtils.verifyInitializationResult(reinitResult);
 
       if (!validatedReinitResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
@@ -293,7 +293,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
       // Periodic interaction to trigger handlers
       if (i % 3 === 0) {
-        await TestHelpers.triggerClickEvent(page);
+        await TestUtils.triggerClickEvent(page);
       }
     }
 
@@ -320,8 +320,8 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
 
     // Verify system responsiveness
     await SessionValidator.validateSessionState(page);
-    const finalTest = await TestHelpers.testCustomEvent(page, 'memory_test_final', { test: 'memory_management' });
-    expect(TestAssertions.verifyInitializationResult(finalTest).success).toBe(true);
+    const finalTest = await TestUtils.testCustomEvent(page, 'memory_test_final', { test: 'memory_management' });
+    expect(TestUtils.verifyInitializationResult(finalTest).success).toBe(true);
   });
 
   test('should properly handle rapid consecutive initialization attempts with safety checks', async ({ page }) => {
@@ -332,11 +332,11 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     await SessionValidator.validateSessionState(page);
 
     // Should be able to track events after rapid initialization
-    await TestHelpers.waitForTimeout(page, 500);
-    const postRapidEventResult = await TestHelpers.testCustomEvent(page, 'post_rapid_test', {
+    await TestUtils.waitForTimeout(page, 500);
+    const postRapidEventResult = await TestUtils.testCustomEvent(page, 'post_rapid_test', {
       testType: 'rapid_concurrent_init',
     });
-    expect(TestAssertions.verifyInitializationResult(postRapidEventResult).success).toBe(true);
+    expect(TestUtils.verifyInitializationResult(postRapidEventResult).success).toBe(true);
 
     // Verify no unexpected race condition errors
     const allowedRacePatterns = ['initialization is already in progress', 'app initialization is already in progress'];

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
+import { TestUtils } from '../../utils';
 
 test.describe('Session Management - Session Start', () => {
   test('should automatically create session on first user activity', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
+    const { monitor, sessionInfo } = await TestUtils.setupSessionTest(page);
 
     try {
       // Verify the session is already initialized by setupSessionTest
@@ -17,21 +17,21 @@ test.describe('Session Management - Session Start', () => {
       expect(sessionInfo.hasSession).toBe(true);
 
       try {
-        TestAssertions.verifySessionId(sessionInfo.sessionId);
+        TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed: ${error}`);
         throw error;
       }
 
       try {
-        TestAssertions.verifySessionStructure(sessionInfo.sessionData);
+        TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Session structure verification failed: ${error}`);
         throw error;
       }
 
       // Verify no errors occurred during session creation
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during session creation: ${monitor.traceLogErrors.join(', ')}`,
@@ -39,17 +39,17 @@ test.describe('Session Management - Session Start', () => {
       }
       expect(hasNoErrors).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should generate unique session ID with proper format', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
+    const { monitor, sessionInfo } = await TestUtils.setupSessionTest(page);
 
     try {
       // Validate first session ID properties
       try {
-        TestAssertions.verifySessionId(sessionInfo.sessionId);
+        TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] First session ID verification failed: ${error}`);
         throw error;
@@ -75,19 +75,19 @@ test.describe('Session Management - Session Start', () => {
         }
         localStorage.clear();
       });
-      await TestHelpers.initializeTraceLog(page);
+      await TestUtils.initializeTraceLog(page);
 
       // Wait for cross-tab leader election and trigger activity
-      await TestHelpers.waitForTimeout(page, 2500);
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 2500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Get second session data
-      const secondSessionInfo = await TestHelpers.getSessionDataFromStorage(page);
+      const secondSessionInfo = await TestUtils.getSessionDataFromStorage(page);
 
       // Verify uniqueness
       try {
-        TestAssertions.verifySessionId(secondSessionInfo.sessionId);
+        TestUtils.verifySessionId(secondSessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Second session ID verification failed: ${error}`);
         throw error;
@@ -100,7 +100,7 @@ test.describe('Session Management - Session Start', () => {
       expect(secondSessionInfo.sessionId).not.toBe(firstSessionId);
 
       // Verify no errors occurred
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during session uniqueness test: ${monitor.traceLogErrors.join(', ')}`,
@@ -108,25 +108,25 @@ test.describe('Session Management - Session Start', () => {
       }
       expect(hasNoErrors).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should track SESSION_START event with required metadata', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page, 2500);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page, 2500);
 
       // Setup event capture using consolidated helper
-      await TestHelpers.setupEventCapture(page);
+      await TestUtils.setupEventCapture(page);
 
       // Trigger activity to start session and capture events
       const sessionStartTime = Date.now();
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Get captured events and validate
       const eventValidation = await page.evaluate(() => {
@@ -150,7 +150,7 @@ test.describe('Session Management - Session Start', () => {
         expect(sessionStartEvent.type).toBe('session_start');
 
         try {
-          TestAssertions.verifyTimingAccuracy(sessionStartEvent.timestamp, sessionStartTime - 1000, Date.now() + 1000);
+          TestUtils.verifyTimingAccuracy(sessionStartEvent.timestamp, sessionStartTime - 1000, Date.now() + 1000);
         } catch (error) {
           monitor.traceLogErrors.push(`[E2E Test] Session start event timing verification failed: ${error}`);
           throw error;
@@ -167,7 +167,7 @@ test.describe('Session Management - Session Start', () => {
       }
 
       // Verify session creation through localStorage as fallback
-      const sessionInfo = await TestHelpers.getSessionDataFromStorage(page);
+      const sessionInfo = await TestUtils.getSessionDataFromStorage(page);
 
       if (!sessionInfo.hasSession) {
         monitor.traceLogErrors.push('[E2E Test] Session was not created in localStorage fallback check');
@@ -176,14 +176,14 @@ test.describe('Session Management - Session Start', () => {
       expect(sessionInfo.hasSession).toBe(true);
 
       try {
-        TestAssertions.verifySessionStructure(sessionInfo.sessionData);
+        TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Session structure verification failed in fallback check: ${error}`);
         throw error;
       }
 
       // Verify no errors occurred
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during session start event test: ${monitor.traceLogErrors.join(', ')}`,
@@ -192,13 +192,13 @@ test.describe('Session Management - Session Start', () => {
       expect(hasNoErrors).toBe(true);
     } finally {
       // Cleanup using consolidated helper
-      await TestHelpers.restoreOriginalFetch(page);
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.restoreOriginalFetch(page);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should persist session data in localStorage with correct structure', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
+    const { monitor, sessionInfo } = await TestUtils.setupSessionTest(page);
 
     try {
       // Validate session exists and has correct structure
@@ -209,19 +209,19 @@ test.describe('Session Management - Session Start', () => {
       expect(sessionInfo.hasSession).toBe(true);
 
       try {
-        TestAssertions.verifySessionStructure(sessionInfo.sessionData);
+        TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Session structure verification failed in persistence test: ${error}`);
         throw error;
       }
 
       // Verify localStorage keys are properly prefixed
-      const storageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+      const storageKeys = await TestUtils.getTraceLogStorageKeys(page);
       expect(storageKeys.length).toBeGreaterThan(0);
       expect(storageKeys.some((key: string) => key.startsWith('tl:'))).toBe(true);
 
       // Validate session data structure
-      const isValidStructure = await TestHelpers.validateSessionStructure(sessionInfo.sessionData);
+      const isValidStructure = await TestUtils.validateSessionStructure(sessionInfo.sessionData);
 
       if (!isValidStructure) {
         monitor.traceLogErrors.push(
@@ -232,7 +232,7 @@ test.describe('Session Management - Session Start', () => {
       expect(isValidStructure).toBe(true);
 
       // Verify no errors occurred
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during localStorage persistence test: ${monitor.traceLogErrors.join(', ')}`,
@@ -240,26 +240,26 @@ test.describe('Session Management - Session Start', () => {
       }
       expect(hasNoErrors).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should create session with accurate timestamp and metadata', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Record timing for accuracy testing
       const initStartTime = Date.now();
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page, 2500);
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page, 2500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
       const postActivityTime = Date.now();
 
       // Get session data and metadata
-      const sessionInfo = await TestHelpers.getSessionDataFromStorage(page);
+      const sessionInfo = await TestUtils.getSessionDataFromStorage(page);
       const metadata = await page.evaluate(() => ({
         browserInfo: {
           userAgent: navigator.userAgent,
@@ -276,14 +276,14 @@ test.describe('Session Management - Session Start', () => {
 
       // Validate session exists and structure
       try {
-        TestAssertions.verifySessionId(sessionInfo.sessionId);
+        TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed in timestamp/metadata test: ${error}`);
         throw error;
       }
 
       try {
-        TestAssertions.verifySessionStructure(sessionInfo.sessionData);
+        TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
         monitor.traceLogErrors.push(
           `[E2E Test] Session structure verification failed in timestamp/metadata test: ${error}`,
@@ -293,14 +293,14 @@ test.describe('Session Management - Session Start', () => {
 
       // Validate timing accuracy
       try {
-        TestAssertions.verifyTimingAccuracy(metadata.timestamp, initStartTime, postActivityTime + 1000);
+        TestUtils.verifyTimingAccuracy(metadata.timestamp, initStartTime, postActivityTime + 1000);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Timing accuracy verification failed: ${error}`);
         throw error;
       }
 
       // Validate session data contains timing information
-      const isValidStructure = await TestHelpers.validateSessionStructure(sessionInfo.sessionData, {
+      const isValidStructure = await TestUtils.validateSessionStructure(sessionInfo.sessionData, {
         hasStartTime: true,
         hasTimingField: true,
       });
@@ -318,7 +318,7 @@ test.describe('Session Management - Session Start', () => {
       expect(metadata.pageInfo.url).toBeTruthy();
 
       // Verify no errors occurred
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during timestamp/metadata test: ${monitor.traceLogErrors.join(', ')}`,
@@ -326,17 +326,17 @@ test.describe('Session Management - Session Start', () => {
       }
       expect(hasNoErrors).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should handle session creation consistently across page interactions', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
+    const { monitor, sessionInfo } = await TestUtils.setupSessionTest(page);
 
     try {
       // Verify initial session
       try {
-        TestAssertions.verifySessionId(sessionInfo.sessionId);
+        TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Initial session ID verification failed in consistency test: ${error}`);
         throw error;
@@ -344,20 +344,20 @@ test.describe('Session Management - Session Start', () => {
 
       // Test multiple interactions to ensure session consistency
       const interactions = [
-        (): Promise<void> => TestHelpers.triggerClickEvent(page),
-        (): Promise<void> => TestHelpers.triggerScrollEvent(page),
-        (): Promise<any> => TestHelpers.testCustomEvent(page, 'test_interaction', { test: 'session_consistency' }),
+        (): Promise<void> => TestUtils.triggerClickEvent(page),
+        (): Promise<void> => TestUtils.triggerScrollEvent(page),
+        (): Promise<any> => TestUtils.testCustomEvent(page, 'test_interaction', { test: 'session_consistency' }),
       ];
 
       for (const interaction of interactions) {
         await interaction();
-        await TestHelpers.waitForTimeout(page, 300);
+        await TestUtils.waitForTimeout(page, 300);
 
         // Get current session data
-        const currentSessionInfo = await TestHelpers.getSessionDataFromStorage(page);
+        const currentSessionInfo = await TestUtils.getSessionDataFromStorage(page);
 
         try {
-          TestAssertions.verifySessionId(currentSessionInfo.sessionId);
+          TestUtils.verifySessionId(currentSessionInfo.sessionId);
         } catch (error) {
           monitor.traceLogErrors.push(
             `[E2E Test] Session ID verification failed during interaction ${interactions.indexOf(interaction)}: ${error}`,
@@ -370,7 +370,7 @@ test.describe('Session Management - Session Start', () => {
       }
 
       // Verify no errors occurred during multiple interactions
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during session consistency test: ${monitor.traceLogErrors.join(', ')}`,
@@ -379,10 +379,10 @@ test.describe('Session Management - Session Start', () => {
       expect(hasNoErrors).toBe(true);
 
       // Verify session persistence after all interactions
-      const finalStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+      const finalStorageKeys = await TestUtils.getTraceLogStorageKeys(page);
       expect(finalStorageKeys.length).toBeGreaterThan(0);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 });

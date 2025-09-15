@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers } from '../../utils/test.helpers';
+import { TestUtils } from '../../utils';
 import {
   InitializationTestBase,
   InitializationScenarios,
   TEST_CONSTANTS,
   ErrorValidator,
   PerformanceValidator,
-} from '../../utils/initialization/test.helpers';
+} from '../../utils/initialization.helpers';
 
 test.describe('Library Initialization - Invalid Project ID', () => {
   let testBase: InitializationTestBase;
@@ -197,11 +197,11 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     await ErrorValidator.validateNoTrackingOnFailure(page);
 
     // Trigger user interactions to ensure no automatic tracking occurs
-    await TestHelpers.triggerClickEvent(page);
-    await TestHelpers.triggerScrollEvent(page);
+    await TestUtils.triggerClickEvent(page);
+    await TestUtils.triggerScrollEvent(page);
 
     // Re-verify no localStorage data was created after interactions
-    const localStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const localStorageKeys = await TestUtils.getTraceLogStorageKeys(page);
     expect(localStorageKeys).toHaveLength(0);
 
     // Verify only expected errors in console
@@ -228,16 +228,16 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     await ErrorValidator.validateNoTrackingOnFailure(page);
 
     // Test multiple user interactions
-    await TestHelpers.triggerClickEvent(page);
-    await TestHelpers.triggerScrollEvent(page);
-    await TestHelpers.waitForTimeout(page, 2000);
+    await TestUtils.triggerClickEvent(page);
+    await TestUtils.triggerScrollEvent(page);
+    await TestUtils.waitForTimeout(page, 2000);
 
     // Verify no localStorage entries after interactions
-    const localStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const localStorageKeys = await TestUtils.getTraceLogStorageKeys(page);
     expect(localStorageKeys).toHaveLength(0);
 
     // Verify no runtime errors occurred
-    const hasRuntimeErrors = await TestHelpers.detectRuntimeErrors(page);
+    const hasRuntimeErrors = await TestUtils.detectRuntimeErrors(page);
 
     if (hasRuntimeErrors) {
       testBase.consoleMonitor.traceLogErrors.push('[E2E Test] Runtime errors detected in event handlers test');
@@ -273,14 +273,14 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     await InitializationScenarios.testInvalidProjectIdScenarios(testBase);
 
     // Verify no localStorage data after all failed attempts
-    const localStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const localStorageKeys = await TestUtils.getTraceLogStorageKeys(page);
     expect(localStorageKeys).toHaveLength(0);
 
     // Wait before attempting valid initialization
-    await TestHelpers.waitForTimeout(page, 1000);
+    await TestUtils.waitForTimeout(page, 1000);
 
     // Test valid initialization would pass basic validation
-    const validResult = await TestHelpers.initializeTraceLog(page, { id: 'test-after-failures' });
+    const validResult = await TestUtils.initializeTraceLog(page, { id: 'test-after-failures' });
 
     // Validate result based on expected behavior
     if (!validResult.success) {

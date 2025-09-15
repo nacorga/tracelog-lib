@@ -1,20 +1,20 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
+import { TestUtils } from '../../utils';
 
 test.describe('Storage Quota Edge Cases', () => {
   test('should handle localStorage quota exceeded after initialization', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Verify SDK is initialized
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Now simulate localStorage quota exceeded for future operations
@@ -31,15 +31,15 @@ test.describe('Storage Quota Edge Cases', () => {
       });
 
       // Test that events can still be tracked (should use fallback storage)
-      const eventResult = await TestHelpers.testCustomEvent(page, 'quota_test_event', {
+      const eventResult = await TestUtils.testCustomEvent(page, 'quota_test_event', {
         test: 'storage_quota_exceeded',
         fallback: true,
       });
       expect(eventResult.success).toBe(true);
 
       // Trigger additional events to test fallback mechanisms
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
 
       // Allow for storage-related warnings but no critical failures
       const criticalErrors = monitor.traceLogErrors.filter(
@@ -57,14 +57,14 @@ test.describe('Storage Quota Edge Cases', () => {
   });
 
   test('should handle sessionStorage quota exceeded after initialization', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Now simulate sessionStorage quota exceeded
@@ -100,7 +100,7 @@ test.describe('Storage Quota Edge Cases', () => {
       expect(sessionInfo.hasTraceLog).toBe(true);
 
       // Test that SDK continues functioning
-      const eventResult = await TestHelpers.testCustomEvent(page, 'session_quota_test', {
+      const eventResult = await TestUtils.testCustomEvent(page, 'session_quota_test', {
         test: 'sessionStorage_quota_exceeded',
       });
       expect(eventResult.success).toBe(true);
@@ -121,14 +121,14 @@ test.describe('Storage Quota Edge Cases', () => {
   });
 
   test('should handle complete storage unavailability after initialization', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Now simulate complete storage unavailability
@@ -166,13 +166,13 @@ test.describe('Storage Quota Edge Cases', () => {
       });
 
       // Verify basic functionality works without storage (memory-only mode)
-      const eventResult = await TestHelpers.testCustomEvent(page, 'no_storage_event', {
+      const eventResult = await TestUtils.testCustomEvent(page, 'no_storage_event', {
         test: 'complete_storage_unavailable',
       });
       expect(eventResult.success).toBe(true);
 
       // Should function in memory-only mode
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
 
       // Allow storage-related warnings but no critical failures
@@ -192,14 +192,14 @@ test.describe('Storage Quota Edge Cases', () => {
   });
 
   test('should handle storage errors during critical operations', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Simulate intermittent storage failures
@@ -221,7 +221,7 @@ test.describe('Storage Quota Edge Cases', () => {
 
       // Test multiple events to trigger intermittent failures
       for (let i = 0; i < 10; i++) {
-        const eventResult = await TestHelpers.testCustomEvent(page, `intermittent_test_${i}`, {
+        const eventResult = await TestUtils.testCustomEvent(page, `intermittent_test_${i}`, {
           index: i,
           test: 'intermittent_storage_failures',
         });
@@ -229,11 +229,11 @@ test.describe('Storage Quota Edge Cases', () => {
       }
 
       // Trigger DOM events
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
 
       // SDK should continue functioning despite intermittent failures
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
 
       // Allow for storage warnings but no critical system errors

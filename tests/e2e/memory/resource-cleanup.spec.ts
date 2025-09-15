@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
-import { TEST_CONFIGS } from '../../utils/initialization/test.helpers';
+import { TestUtils } from '../../utils';
+import { TEST_CONFIGS } from '../../utils/initialization.helpers';
 
 /**
  * Resource tracking instrumentation for memory leak detection
@@ -283,21 +283,21 @@ test.describe('Memory - Resource Cleanup', () => {
   }
 
   test('should clean up DOM event listeners on destroy', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Inject resource tracking BEFORE navigation to catch all listeners
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
 
       // Debug the initialization result
       if (!validated.success) {
@@ -308,8 +308,8 @@ test.describe('Memory - Resource Cleanup', () => {
       expect(validated.success).toBe(true);
 
       // Trigger various events to ensure listeners are added
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
       await page.evaluate(() => {
         // Trigger visibility change
         document.dispatchEvent(new Event('visibilitychange'));
@@ -318,7 +318,7 @@ test.describe('Memory - Resource Cleanup', () => {
         window.dispatchEvent(new Event('blur'));
       });
 
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Capture snapshot after initialization and events
       const afterInitSnapshot = await captureResourceSnapshot(page);
@@ -339,36 +339,36 @@ test.describe('Memory - Resource Cleanup', () => {
       );
 
       // Verify no TraceLog-specific errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should clean up timers and intervals on destroy', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Inject resource tracking BEFORE navigation to catch all resources
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Wait for session management timers to be established
-      await TestHelpers.waitForTimeout(page, 2000);
+      await TestUtils.waitForTimeout(page, 2000);
 
       // Trigger events to activate various handlers
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.simulateUserActivity(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.simulateUserActivity(page);
 
       // Capture snapshot after initialization
       const afterInitSnapshot = await captureResourceSnapshot(page);
@@ -381,7 +381,7 @@ test.describe('Memory - Resource Cleanup', () => {
       await forceGarbageCollection(page);
 
       // Wait for timer cleanup to complete
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Capture final snapshot
       const afterDestroySnapshot = await captureResourceSnapshot(page);
@@ -392,33 +392,33 @@ test.describe('Memory - Resource Cleanup', () => {
       );
 
       // Verify no TraceLog-specific errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should clean up localStorage entries on destroy', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Inject resource tracking BEFORE navigation to catch all resources
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Trigger events to create session data
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1500);
 
       // Capture snapshot after initialization and session creation
       const afterInitSnapshot = await captureResourceSnapshot(page);
@@ -445,7 +445,7 @@ test.describe('Memory - Resource Cleanup', () => {
 
       // Destroy TraceLog
       await destroyTraceLog(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Capture final snapshot
       const afterDestroySnapshot = await captureResourceSnapshot(page);
@@ -456,14 +456,14 @@ test.describe('Memory - Resource Cleanup', () => {
       );
 
       // Verify no TraceLog-specific errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should clean up BroadcastChannels on destroy', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Skip test if BroadcastChannel is not supported
@@ -477,22 +477,22 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Wait for cross-tab session management to establish channels
-      await TestHelpers.waitForTimeout(page, 2000);
+      await TestUtils.waitForTimeout(page, 2000);
 
       // Trigger events to activate cross-tab communication
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.simulateUserActivity(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.simulateUserActivity(page);
 
       // Capture snapshot after initialization
       const afterInitSnapshot = await captureResourceSnapshot(page);
@@ -509,7 +509,7 @@ test.describe('Memory - Resource Cleanup', () => {
       await forceGarbageCollection(page);
 
       // Wait for channel cleanup
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Capture final snapshot
       const afterDestroySnapshot = await captureResourceSnapshot(page);
@@ -520,21 +520,21 @@ test.describe('Memory - Resource Cleanup', () => {
       );
 
       // Verify no TraceLog-specific errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should prevent memory leaks during multiple init/destroy cycles', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Inject resource tracking BEFORE navigation to catch all resources
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
@@ -545,15 +545,15 @@ test.describe('Memory - Resource Cleanup', () => {
       // Perform multiple init/destroy cycles
       for (let cycle = 0; cycle < cycleCount; cycle++) {
         // Initialize TraceLog
-        const initResult = await TestHelpers.initializeTraceLog(page);
-        const validated = TestAssertions.verifyInitializationResult(initResult);
+        const initResult = await TestUtils.initializeTraceLog(page);
+        const validated = TestUtils.verifyInitializationResult(initResult);
         expect(validated.success).toBe(true);
 
         // Trigger various activities
-        await TestHelpers.triggerClickEvent(page);
-        await TestHelpers.triggerScrollEvent(page);
-        await TestHelpers.simulateUserActivity(page);
-        await TestHelpers.waitForTimeout(page, 1000);
+        await TestUtils.triggerClickEvent(page);
+        await TestUtils.triggerScrollEvent(page);
+        await TestUtils.simulateUserActivity(page);
+        await TestUtils.waitForTimeout(page, 1000);
 
         // Capture snapshot after init
         const afterInitSnapshot = await captureResourceSnapshot(page);
@@ -562,7 +562,7 @@ test.describe('Memory - Resource Cleanup', () => {
         // Destroy TraceLog
         await destroyTraceLog(page);
         await forceGarbageCollection(page);
-        await TestHelpers.waitForTimeout(page, 500);
+        await TestUtils.waitForTimeout(page, 500);
 
         // Capture snapshot after destroy
         const afterDestroySnapshot = await captureResourceSnapshot(page);
@@ -594,29 +594,29 @@ test.describe('Memory - Resource Cleanup', () => {
       }
 
       // Verify no TraceLog-specific errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should clean up long-running timeouts on destroy', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Inject resource tracking BEFORE navigation
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Wait for all timers to be established (including long-running ones)
-      await TestHelpers.waitForTimeout(page, 3000);
+      await TestUtils.waitForTimeout(page, 3000);
 
       // Capture snapshot after initialization
       const afterInitSnapshot = await captureResourceSnapshot(page);
@@ -625,7 +625,7 @@ test.describe('Memory - Resource Cleanup', () => {
       await destroyTraceLog(page);
 
       // Wait a short time for immediate cleanup
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       const immediateSnapshot = await captureResourceSnapshot(page);
 
@@ -634,27 +634,27 @@ test.describe('Memory - Resource Cleanup', () => {
       expect(immediateSnapshot.timers.total).toBeLessThan(afterInitSnapshot.timers.total);
 
       // Verify no TraceLog-specific errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should verify baseline timeouts (control test)', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Inject resource tracking BEFORE navigation
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Capture baseline WITHOUT initializing TraceLog
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Wait the same amount of time as other tests
-      await TestHelpers.waitForTimeout(page, 3000);
+      await TestUtils.waitForTimeout(page, 3000);
 
       const afterWaitSnapshot = await captureResourceSnapshot(page);
 
@@ -662,25 +662,25 @@ test.describe('Memory - Resource Cleanup', () => {
       expect(afterWaitSnapshot.timers.total).toBeLessThanOrEqual(baselineSnapshot.timers.total + 1);
 
       // Verify no TraceLog-specific errors
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle resource cleanup failures gracefully', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Inject resource tracking and error simulation BEFORE navigation
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Initialize
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Simulate cleanup failures by overriding cleanup methods
@@ -709,13 +709,13 @@ test.describe('Memory - Resource Cleanup', () => {
       });
 
       // Trigger events to create resources
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Destroy TraceLog (this should handle cleanup failures gracefully)
       await destroyTraceLog(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Verify the SDK handles cleanup failures gracefully (may still be partially initialized)
       const sdkState = await page.evaluate(() => {

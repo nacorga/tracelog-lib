@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
-import { TEST_CONFIGS } from '../../utils/initialization/test.helpers';
+import { TestUtils } from '../../utils';
+import { TEST_CONFIGS } from '../../utils/initialization.helpers';
 
 /**
  * Performance benchmarks for TraceLog SDK
@@ -19,10 +19,10 @@ test.describe('Performance Benchmarks', () => {
    * Measures initialization performance in browser context
    */
   test('should initialize within performance budget (100ms)', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Measure initialization time in browser context
       const initPerformance = await page.evaluate(async (config) => {
@@ -53,7 +53,7 @@ test.describe('Performance Benchmarks', () => {
       }, TEST_CONFIGS.DEFAULT);
 
       // Validate initialization result
-      const validated = TestAssertions.verifyInitializationResult(initPerformance);
+      const validated = TestUtils.verifyInitializationResult(initPerformance);
 
       if (!validated.success) {
         monitor.traceLogErrors.push(`[E2E Test] Initialization failed: ${initPerformance.error}`);
@@ -73,7 +73,7 @@ test.describe('Performance Benchmarks', () => {
 
       expect(validated.success).toBe(true);
       expect(initPerformance.duration).toBeLessThanOrEqual(PERFORMANCE_BUDGETS.INITIALIZATION);
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
@@ -83,14 +83,14 @@ test.describe('Performance Benchmarks', () => {
    * Measures event tracking performance for various event types
    */
   test('should track events within performance budget (10ms)', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize SDK first
-      await TestHelpers.navigateAndWaitForReady(page);
-      const initResult = await TestHelpers.initializeTraceLog(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      const initResult = await TestUtils.initializeTraceLog(page);
 
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       if (!validated.success) {
         monitor.traceLogErrors.push(`[E2E Test] SDK initialization failed: ${initResult.error}`);
       }
@@ -98,9 +98,9 @@ test.describe('Performance Benchmarks', () => {
 
       // Test different event types with performance measurement
       const eventTypes = [
-        { name: 'click', action: () => TestHelpers.triggerClickEvent(page) },
-        { name: 'scroll', action: () => TestHelpers.triggerScrollEvent(page) },
-        { name: 'custom', action: () => TestHelpers.testCustomEvent(page, 'perf_test', { value: 'benchmark' }) },
+        { name: 'click', action: () => TestUtils.triggerClickEvent(page) },
+        { name: 'scroll', action: () => TestUtils.triggerScrollEvent(page) },
+        { name: 'custom', action: () => TestUtils.testCustomEvent(page, 'perf_test', { value: 'benchmark' }) },
       ];
 
       for (const eventType of eventTypes) {
@@ -166,7 +166,7 @@ test.describe('Performance Benchmarks', () => {
         expect(eventPerformance.duration).toBeLessThanOrEqual(budget);
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
@@ -176,10 +176,10 @@ test.describe('Performance Benchmarks', () => {
    * Measures session management performance
    */
   test('should handle session operations within performance budget (100ms)', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Measure session initialization performance
       const sessionPerformance = await page.evaluate(async (config) => {
@@ -239,7 +239,7 @@ test.describe('Performance Benchmarks', () => {
       expect(sessionPerformance.success).toBe(true);
       expect(sessionPerformance.hasSession).toBe(true);
       expect(sessionPerformance.duration).toBeLessThanOrEqual(PERFORMANCE_BUDGETS.SESSION_START);
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
@@ -249,13 +249,13 @@ test.describe('Performance Benchmarks', () => {
    * Measures batch event processing performance
    */
   test('should process batch events efficiently', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
-      const initResult = await TestHelpers.initializeTraceLog(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      const initResult = await TestUtils.initializeTraceLog(page);
 
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Measure batch event processing
@@ -322,7 +322,7 @@ test.describe('Performance Benchmarks', () => {
 
       expect(batchPerformance.success).toBe(true);
       expect(batchPerformance.averageEventTime).toBeLessThanOrEqual(PERFORMANCE_BUDGETS.EVENT_TRACKING);
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
@@ -332,10 +332,10 @@ test.describe('Performance Benchmarks', () => {
    * Measures memory usage and cleanup performance
    */
   test('should maintain memory efficiency during operations', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Measure memory usage during SDK lifecycle
       const memoryPerformance = await page.evaluate(async (config) => {
@@ -423,7 +423,7 @@ test.describe('Performance Benchmarks', () => {
       }
 
       expect(memoryPerformance.success).toBe(true);
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }

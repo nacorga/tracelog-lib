@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
-import { InitializationTestBase, TEST_CONSTANTS, SessionValidator } from '../../utils/initialization/test.helpers';
+import { TestUtils } from '../../utils';
+import { InitializationTestBase, TEST_CONSTANTS, SessionValidator } from '../../utils/initialization.helpers';
 
 test.describe('Library Initialization - Success', () => {
   test('should successfully initialize TraceLog with valid project ID', async ({ page }) => {
@@ -10,7 +10,7 @@ test.describe('Library Initialization - Success', () => {
       // Setup and perform initialization
       await testBase.setup();
       await testBase.performMeasuredInit();
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.waitForTimeout(page);
 
       // Log if initialization validation fails
       try {
@@ -39,13 +39,13 @@ test.describe('Library Initialization - Success', () => {
   });
 
   test('should validate project ID requirement', async ({ browser }) => {
-    const { page, cleanup } = await TestHelpers.createIsolatedContext(browser);
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const { page, cleanup } = await TestUtils.createIsolatedContext(browser);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Navigate to validation page
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.VALIDATION_PAGE);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.VALIDATION_PAGE);
+      await TestUtils.waitForTimeout(page);
 
       // Test validation scenarios using page-specific methods
       const validationScenarios = [
@@ -58,7 +58,7 @@ test.describe('Library Initialization - Success', () => {
           return (window as any)[methodName]();
         }, method);
 
-        const validatedResult = TestAssertions.verifyInitializationResult(result);
+        const validatedResult = TestUtils.verifyInitializationResult(result);
 
         if (validatedResult.success) {
           monitor.traceLogErrors.push(
@@ -80,7 +80,7 @@ test.describe('Library Initialization - Success', () => {
         return (window as any).testValidProjectId();
       });
 
-      const validatedValidIdResult = TestAssertions.verifyInitializationResult(validIdResult);
+      const validatedValidIdResult = TestUtils.verifyInitializationResult(validIdResult);
 
       if (!validatedValidIdResult.success) {
         monitor.traceLogErrors.push(
@@ -124,7 +124,7 @@ test.describe('Library Initialization - Success', () => {
       });
 
       // Should succeed (gracefully handle duplicate initialization)
-      const validatedDuplicateResult = TestAssertions.verifyInitializationResult(duplicateInitResult);
+      const validatedDuplicateResult = TestUtils.verifyInitializationResult(duplicateInitResult);
 
       if (!validatedDuplicateResult.success) {
         testBase.consoleMonitor.traceLogErrors.push(
@@ -135,7 +135,7 @@ test.describe('Library Initialization - Success', () => {
       expect(validatedDuplicateResult.success).toBe(true);
 
       // Should still report as initialized
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
 
       if (!stillInitialized) {
         testBase.consoleMonitor.traceLogErrors.push(
@@ -156,14 +156,14 @@ test.describe('Library Initialization - Success', () => {
       // Setup and initialization
       await testBase.setup();
       await testBase.performMeasuredInit();
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.waitForTimeout(page);
 
       // Test core functionality using centralized method
       await SessionValidator.validateFunctionalityPreservation(page);
       await testBase.testBasicFunctionality();
 
       // Verify no runtime errors occurred during interactions
-      const hasRuntimeErrors = await TestHelpers.detectRuntimeErrors(page);
+      const hasRuntimeErrors = await TestUtils.detectRuntimeErrors(page);
 
       if (hasRuntimeErrors) {
         testBase.consoleMonitor.traceLogErrors.push(

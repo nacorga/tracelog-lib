@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
+import { TestUtils } from '../../utils';
 
 test.describe('Session Management - Session Timeout', () => {
   test('should accept custom session timeout configuration and validate initialization', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
+    const { monitor, sessionInfo } = await TestUtils.setupSessionTest(page);
 
     try {
       // Wait for initialization to complete and verify final status
@@ -17,17 +17,17 @@ test.describe('Session Management - Session Timeout', () => {
       expect(sessionInfo.hasSession).toBe(true);
 
       try {
-        TestAssertions.verifySessionId(sessionInfo.sessionId);
+        TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed in timeout config test: ${error}`);
         throw error;
       }
 
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Verify no TraceLog errors
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during session timeout config test: ${monitor.traceLogErrors.join(', ')}`,
@@ -35,17 +35,17 @@ test.describe('Session Management - Session Timeout', () => {
       }
       expect(hasNoErrors).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should maintain session state with continuous user activity', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
+    const { monitor, sessionInfo } = await TestUtils.setupSessionTest(page);
 
     try {
       // Verify initial session
       try {
-        TestAssertions.verifySessionId(sessionInfo.sessionId);
+        TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(
           `[E2E Test] Initial session ID verification failed in continuous activity test: ${error}`,
@@ -55,21 +55,21 @@ test.describe('Session Management - Session Timeout', () => {
 
       // Test multiple activities to ensure session persists
       for (let i = 0; i < 3; i++) {
-        await TestHelpers.waitForTimeout(page, 1000);
-        await TestHelpers.triggerClickEvent(page);
+        await TestUtils.waitForTimeout(page, 1000);
+        await TestUtils.triggerClickEvent(page);
 
         // Verify session still exists after each activity
-        const activeSessionInfo = await TestHelpers.getSessionDataFromStorage(page);
+        const activeSessionInfo = await TestUtils.getSessionDataFromStorage(page);
 
         try {
-          TestAssertions.verifySessionId(activeSessionInfo.sessionId);
+          TestUtils.verifySessionId(activeSessionInfo.sessionId);
         } catch (error) {
           monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed during activity ${i}: ${error}`);
           throw error;
         }
       }
 
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during continuous activity test: ${monitor.traceLogErrors.join(', ')}`,
@@ -77,27 +77,27 @@ test.describe('Session Management - Session Timeout', () => {
       }
       expect(hasNoErrors).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should validate session timeout configuration behavior without waiting for full timeout', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page, 2500);
+      await TestUtils.waitForTimeout(page, 2500);
 
       // Start session and verify configuration
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Validate that session timeout mechanism is in place using consolidated helper
-      const configValidation = await TestHelpers.evaluateSessionData(page);
+      const configValidation = await TestUtils.evaluateSessionData(page);
 
       // Validate session configuration was applied correctly
       expect(configValidation.sessionExists).toBe(true);
@@ -106,31 +106,31 @@ test.describe('Session Management - Session Timeout', () => {
       expect(configValidation.storageKeyCount).toBeGreaterThan(0);
 
       if (configValidation.sessionData) {
-        const isValidStructure = await TestHelpers.validateSessionDataStructure(configValidation.sessionData);
+        const isValidStructure = await TestUtils.validateSessionDataStructure(configValidation.sessionData);
         expect(isValidStructure).toBe(true);
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle proper session cleanup and resource management', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Test initialization and cleanup cycle
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page, 2500); // Wait for cross-tab leader election
+      await TestUtils.waitForTimeout(page, 2500); // Wait for cross-tab leader election
 
       // Start session
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 300);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 300);
 
       // Verify session exists
       const sessionExists = await page.evaluate(() => {
@@ -152,7 +152,7 @@ test.describe('Session Management - Session Timeout', () => {
         }
       });
 
-      await TestHelpers.waitForTimeout(page, 200);
+      await TestUtils.waitForTimeout(page, 200);
 
       // Verify cleanup occurred
       const cleanupValidation = await page.evaluate(() => {
@@ -169,62 +169,62 @@ test.describe('Session Management - Session Timeout', () => {
       // Session data should be cleaned up after destroy
       expect(cleanupValidation.sessionKeys).toBeLessThanOrEqual(1);
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should verify session timeout configuration with different timeout values', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page, 2500);
+      await TestUtils.waitForTimeout(page, 2500);
 
       // Start session
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify session is created with default timeout configuration
-      const customConfigValidation = await TestHelpers.evaluateSessionData(page);
+      const customConfigValidation = await TestUtils.evaluateSessionData(page);
 
       expect(customConfigValidation.sessionExists).toBe(true);
       expect(customConfigValidation.sessionId).toBeTruthy();
       expect(customConfigValidation.isInitialized).toBe(true);
 
       if (customConfigValidation.sessionData) {
-        const isValidStructure = await TestHelpers.validateSessionDataStructure(customConfigValidation.sessionData);
+        const isValidStructure = await TestUtils.validateSessionDataStructure(customConfigValidation.sessionData);
         expect(isValidStructure).toBe(true);
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should ensure session data structure contains required timeout-related fields', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page, 2500);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page, 2500);
 
       // Start session
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Check session data structure for timeout-related fields using consolidated helper
-      const sessionStructureValidation = await TestHelpers.evaluateSessionData(page);
+      const sessionStructureValidation = await TestUtils.evaluateSessionData(page);
 
       if (sessionStructureValidation.sessionData) {
-        const isValidStructure = await TestHelpers.validateSessionDataStructure(sessionStructureValidation.sessionData);
+        const isValidStructure = await TestUtils.validateSessionDataStructure(sessionStructureValidation.sessionData);
         expect(isValidStructure).toBe(true);
         expect(sessionStructureValidation.sessionId).toBeTruthy();
         expect(typeof sessionStructureValidation.sessionId).toBe('string');
@@ -232,7 +232,7 @@ test.describe('Session Management - Session Timeout', () => {
         throw new Error('Session structure validation failed - no session data found');
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }

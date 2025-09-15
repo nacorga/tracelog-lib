@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
+import { TestUtils } from '../../utils';
 import {
   InitializationTestBase,
   InitializationScenarios,
@@ -7,7 +7,7 @@ import {
   TEST_CONSTANTS,
   PerformanceValidator,
   SessionValidator,
-} from '../../utils/initialization/test.helpers';
+} from '../../utils/initialization.helpers';
 
 test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
   let testBase: InitializationTestBase;
@@ -39,8 +39,8 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     expect(qaConfigCheck.configPassed).toBe(true);
 
     // Test functionality and storage
-    await TestHelpers.triggerClickEvent(page);
-    await TestHelpers.waitForTimeout(page, 1000);
+    await TestUtils.triggerClickEvent(page);
+    await TestUtils.waitForTimeout(page, 1000);
     await SessionValidator.validateSessionState(page);
   });
 
@@ -57,10 +57,10 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     expect(qaConfigCheck.qaMode).toBe(true);
 
     // Wait and trigger events to generate logs
-    await TestHelpers.waitForTimeout(page, 1000);
-    await TestHelpers.triggerClickEvent(page);
-    await TestHelpers.testCustomEvent(page, 'qa_test_event', { mode: 'qa' });
-    await TestHelpers.waitForTimeout(page, 2000);
+    await TestUtils.waitForTimeout(page, 1000);
+    await TestUtils.triggerClickEvent(page);
+    await TestUtils.testCustomEvent(page, 'qa_test_event', { mode: 'qa' });
+    await TestUtils.waitForTimeout(page, 2000);
 
     // Validate enhanced logging in QA mode
     const hasEnhancedLogging = testBase.consoleMonitor.consoleMessages.some(
@@ -117,11 +117,11 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     expect(errorSamplingTest.functionalityWorks).toBe(true);
 
     // Test custom events with metadata
-    const customEventResult = await TestHelpers.testCustomEvent(page, 'qa_complex_test', {
+    const customEventResult = await TestUtils.testCustomEvent(page, 'qa_complex_test', {
       feature: 'complex_qa_config',
       timestamp: Date.now(),
     });
-    expect(TestAssertions.verifyInitializationResult(customEventResult).success).toBe(true);
+    expect(TestUtils.verifyInitializationResult(customEventResult).success).toBe(true);
 
     // Verify logging presence
     const configLogging = testBase.consoleMonitor.consoleMessages.some(
@@ -131,7 +131,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
 
     // Test DOM interactions
     await testBase.testBasicFunctionality();
-    await TestHelpers.waitForTimeout(page, 1000);
+    await TestUtils.waitForTimeout(page, 1000);
 
     // Verify no critical errors
     const criticalErrorPatterns = ['critical', 'fatal', 'uncaught'];
@@ -151,7 +151,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
   test('should validate QA mode session management with enhanced logging', async ({ page }) => {
     // Initialize with QA mode
     await testBase.performMeasuredInit();
-    await TestHelpers.waitForTimeout(page, 2000);
+    await TestUtils.waitForTimeout(page, 2000);
 
     // Test session management functionality
     const sessionTest = await page.evaluate(() => ({
@@ -169,16 +169,16 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     expect(sessionLogging.length).toBeGreaterThan(0);
 
     // Test functionality and session state
-    const eventResult = await TestHelpers.testCustomEvent(page, 'qa_session_test', {
+    const eventResult = await TestUtils.testCustomEvent(page, 'qa_session_test', {
       sessionPhase: 'active',
       qaMode: true,
     });
-    expect(TestAssertions.verifyInitializationResult(eventResult).success).toBe(true);
+    expect(TestUtils.verifyInitializationResult(eventResult).success).toBe(true);
 
     // Validate session storage
     await SessionValidator.validateSessionState(page);
 
-    const sessionStorageCheck = await TestHelpers.getTraceLogStorageKeys(page);
+    const sessionStorageCheck = await TestUtils.getTraceLogStorageKeys(page);
     expect(sessionStorageCheck.length).toBeGreaterThanOrEqual(0);
   });
 
@@ -214,14 +214,14 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     expect(errorHandlingTest.errorCreated).toBe(true);
     expect(errorHandlingTest.qaMode).toBe(true);
 
-    await TestHelpers.waitForTimeout(page, 1000);
+    await TestUtils.waitForTimeout(page, 1000);
 
     // Test functionality preservation
-    const functionalityTest = await TestHelpers.testCustomEvent(page, 'qa_error_handling_test', {
+    const functionalityTest = await TestUtils.testCustomEvent(page, 'qa_error_handling_test', {
       errorHandling: 'active',
       samplingRate: 1.0,
     });
-    expect(TestAssertions.verifyInitializationResult(functionalityTest).success).toBe(true);
+    expect(TestUtils.verifyInitializationResult(functionalityTest).success).toBe(true);
 
     // Test system stability
     await testBase.testBasicFunctionality();
@@ -241,7 +241,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
           // Ignore cleanup errors
         }
       });
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Measure performance
       const initResult = await testBase.performMeasuredInit();
@@ -252,8 +252,8 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       });
 
       // Test functionality works
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 200);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 200);
     }
 
     // Validate performance consistency
@@ -285,7 +285,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
 
     // Test post-initialization performance
     const postInitStartTime = Date.now();
-    await TestHelpers.testCustomEvent(page, 'qa_performance_test', {
+    await TestUtils.testCustomEvent(page, 'qa_performance_test', {
       performanceTest: true,
       attempts: performanceResults.length,
     });
@@ -315,8 +315,8 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       const initResult2 = await testBase2.performMeasuredInit();
 
       // Both should succeed and meet performance requirements
-      const validated1 = TestAssertions.verifyInitializationResult(initResult1.result);
-      const validated2 = TestAssertions.verifyInitializationResult(initResult2.result);
+      const validated1 = TestUtils.verifyInitializationResult(initResult1.result);
+      const validated2 = TestUtils.verifyInitializationResult(initResult2.result);
 
       if (!validated1.success) {
         testBase1.consoleMonitor.traceLogErrors.push(
@@ -343,8 +343,8 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       }
 
       // Wait for cross-tab synchronization
-      await TestHelpers.waitForTimeout(page1, 2000);
-      await TestHelpers.waitForTimeout(page2, 2000);
+      await TestUtils.waitForTimeout(page1, 2000);
+      await TestUtils.waitForTimeout(page2, 2000);
 
       // Test cross-tab functionality
       const crossTabTest1 = await page1.evaluate(() => ({
@@ -362,8 +362,8 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       expect(crossTabTest2.isInitialized).toBe(true);
 
       // Test events in both tabs
-      await TestHelpers.testCustomEvent(page1, 'qa_crosstab_test_1', { tab: 1 });
-      await TestHelpers.testCustomEvent(page2, 'qa_crosstab_test_2', { tab: 2 });
+      await TestUtils.testCustomEvent(page1, 'qa_crosstab_test_1', { tab: 1 });
+      await TestUtils.testCustomEvent(page2, 'qa_crosstab_test_2', { tab: 2 });
 
       // Verify enhanced logging in both contexts
       const loggingKeywords = ['[TraceLog]', 'qa mode'];

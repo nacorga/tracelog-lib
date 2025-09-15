@@ -1,11 +1,7 @@
 import { test, expect } from '@playwright/test';
-import {
-  TestHelpers,
-  TestAssertions,
-  MIN_SESSION_TIMEOUT_MS,
-  MAX_SESSION_TIMEOUT_MS,
-} from '../../utils/session-management/test.helpers';
-import { TEST_CONFIGS } from '../../utils/initialization/test.helpers';
+import { TestUtils } from '../../utils';
+import { TEST_CONFIGS } from '../../utils/initialization.helpers';
+import { TEST_CONSTANTS } from '../../utils/common.helpers';
 
 test.describe('Session Management - Custom Session Timeout', () => {
   test('should accept custom session timeout within valid bounds', async ({ page }) => {
@@ -16,14 +12,14 @@ test.describe('Session Management - Custom Session Timeout', () => {
       sessionTimeout: customTimeout,
     };
 
-    const { monitor } = await TestHelpers.setupSessionTest(page, testConfig);
+    const { monitor } = await TestUtils.setupSessionTest(page, testConfig);
 
     try {
       // Wait for initialization to complete and verify final status
       await expect(page.getByTestId('init-status')).toContainText('Status: Initialized successfully');
 
       // Verify session exists and custom timeout was accepted
-      const configValidation = await TestHelpers.validateSessionTimeoutConfig(page, customTimeout);
+      const configValidation = await TestUtils.validateSessionTimeoutConfig(page, customTimeout);
 
       if (!configValidation.hasSession) {
         monitor.traceLogErrors.push('[E2E Test] Session was not created with custom timeout configuration');
@@ -38,7 +34,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       expect(configValidation.hasSession).toBe(true);
 
       try {
-        TestAssertions.verifySessionId(configValidation.sessionId);
+        TestUtils.verifySessionId(configValidation.sessionId);
       } catch (error) {
         monitor.traceLogErrors.push(`[E2E Test] Session ID verification failed with custom timeout: ${error}`);
         throw error;
@@ -56,7 +52,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
         expect(configValidation.configTimeout).toBe(customTimeout);
       }
 
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during custom timeout test: ${monitor.traceLogErrors.join(', ')}`,
@@ -64,15 +60,15 @@ test.describe('Session Management - Custom Session Timeout', () => {
       }
       expect(hasNoErrors).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should reject invalid session timeout values with proper error handling', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Test with timeout too low (below 30 seconds minimum)
       const tooLowTimeout = 15000; // 15 seconds
@@ -81,8 +77,8 @@ test.describe('Session Management - Custom Session Timeout', () => {
         sessionTimeout: tooLowTimeout,
       };
 
-      const lowTimeoutResult = await TestHelpers.initializeTraceLog(page, lowTimeoutConfig);
-      const lowTimeoutValidated = TestAssertions.verifyInitializationResult(lowTimeoutResult);
+      const lowTimeoutResult = await TestUtils.initializeTraceLog(page, lowTimeoutConfig);
+      const lowTimeoutValidated = TestUtils.verifyInitializationResult(lowTimeoutResult);
 
       if (lowTimeoutValidated.success) {
         monitor.traceLogErrors.push(
@@ -107,17 +103,17 @@ test.describe('Session Management - Custom Session Timeout', () => {
           (window as any).TraceLog.destroy();
         }
       });
-      await TestHelpers.waitForTimeout(page, 300);
+      await TestUtils.waitForTimeout(page, 300);
 
       // Test with timeout too high (above 24 hours maximum)
-      const tooHighTimeout = MAX_SESSION_TIMEOUT_MS + 1000; // Beyond max
+      const tooHighTimeout = TEST_CONSTANTS.MAX_SESSION_TIMEOUT_MS + 1000; // Beyond max
       const highTimeoutConfig = {
         ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: tooHighTimeout,
       };
 
-      const highTimeoutResult = await TestHelpers.initializeTraceLog(page, highTimeoutConfig);
-      const highTimeoutValidated = TestAssertions.verifyInitializationResult(highTimeoutResult);
+      const highTimeoutResult = await TestUtils.initializeTraceLog(page, highTimeoutConfig);
+      const highTimeoutValidated = TestUtils.verifyInitializationResult(highTimeoutResult);
 
       if (highTimeoutValidated.success) {
         monitor.traceLogErrors.push(
@@ -142,7 +138,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
           (window as any).TraceLog.destroy();
         }
       });
-      await TestHelpers.waitForTimeout(page, 300);
+      await TestUtils.waitForTimeout(page, 300);
 
       // Test with invalid type (string instead of number)
       const invalidTypeConfig = {
@@ -150,8 +146,8 @@ test.describe('Session Management - Custom Session Timeout', () => {
         sessionTimeout: '300000' as any, // Invalid: string instead of number
       };
 
-      const invalidTypeResult = await TestHelpers.initializeTraceLog(page, invalidTypeConfig);
-      const invalidTypeValidated = TestAssertions.verifyInitializationResult(invalidTypeResult);
+      const invalidTypeResult = await TestUtils.initializeTraceLog(page, invalidTypeConfig);
+      const invalidTypeValidated = TestUtils.verifyInitializationResult(invalidTypeResult);
       expect(invalidTypeValidated.success).toBe(false);
       expect(invalidTypeValidated.hasError).toBe(true);
       expect(invalidTypeValidated.error).toBeTruthy();
@@ -162,33 +158,33 @@ test.describe('Session Management - Custom Session Timeout', () => {
       );
       expect(hasTimeoutError).toBe(true);
     } finally {
-      await TestHelpers.cleanupSessionTest(monitor);
+      await TestUtils.cleanupSessionTest(monitor);
     }
   });
 
   test('should test extreme timeout values at boundaries', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Test minimum valid timeout (30 seconds)
       const minTimeoutConfig = {
         ...TEST_CONFIGS.DEFAULT,
-        sessionTimeout: MIN_SESSION_TIMEOUT_MS,
+        sessionTimeout: TEST_CONSTANTS.MIN_SESSION_TIMEOUT_MS,
       };
 
-      const minResult = await TestHelpers.initializeTraceLog(page, minTimeoutConfig);
-      const minValidated = TestAssertions.verifyInitializationResult(minResult);
+      const minResult = await TestUtils.initializeTraceLog(page, minTimeoutConfig);
+      const minValidated = TestUtils.verifyInitializationResult(minResult);
       expect(minValidated.success).toBe(true);
       expect(minValidated.hasError).toBe(false);
 
-      await TestHelpers.waitForTimeout(page, 2500);
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 2500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify session was created with minimum timeout using consolidated helper
-      const minSessionData = await TestHelpers.evaluateSessionData(page);
+      const minSessionData = await TestUtils.evaluateSessionData(page);
       expect(minSessionData.sessionExists).toBe(true);
 
       // Clear state for maximum timeout test
@@ -198,38 +194,38 @@ test.describe('Session Management - Custom Session Timeout', () => {
           await (window as any).TraceLog.destroy();
         }
       });
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Test maximum valid timeout (24 hours)
       const maxTimeoutConfig = {
         ...TEST_CONFIGS.DEFAULT,
-        sessionTimeout: MAX_SESSION_TIMEOUT_MS,
+        sessionTimeout: TEST_CONSTANTS.MAX_SESSION_TIMEOUT_MS,
       };
 
-      const maxResult = await TestHelpers.initializeTraceLog(page, maxTimeoutConfig);
-      const maxValidated = TestAssertions.verifyInitializationResult(maxResult);
+      const maxResult = await TestUtils.initializeTraceLog(page, maxTimeoutConfig);
+      const maxValidated = TestUtils.verifyInitializationResult(maxResult);
       expect(maxValidated.success).toBe(true);
       expect(maxValidated.hasError).toBe(false);
 
-      await TestHelpers.waitForTimeout(page, 2500);
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 2500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify session was created with maximum timeout using consolidated helper
-      const maxSessionData = await TestHelpers.evaluateSessionData(page);
+      const maxSessionData = await TestUtils.evaluateSessionData(page);
       expect(maxSessionData.sessionExists).toBe(true);
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should validate custom timeout behavior without waiting for actual timeout', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Use a short but valid custom timeout for testing (1 minute)
       const shortTimeout = 60000; // 1 minute
@@ -238,14 +234,14 @@ test.describe('Session Management - Custom Session Timeout', () => {
         sessionTimeout: shortTimeout,
       };
 
-      const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
-      expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
+      const initResult = await TestUtils.initializeTraceLog(page, testConfig);
+      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page, 2500);
+      await TestUtils.waitForTimeout(page, 2500);
 
       // Start session and validate configuration
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify session configuration and timing mechanisms are in place
       const timeoutValidation = await page.evaluate((expectedTimeout) => {
@@ -300,17 +296,17 @@ test.describe('Session Management - Custom Session Timeout', () => {
         expect(hasRecentTiming).toBe(true);
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should persist custom timeout configuration across page reloads', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Initialize with custom timeout
       const customTimeout = 10 * 60 * 1000; // 10 minutes
@@ -319,12 +315,12 @@ test.describe('Session Management - Custom Session Timeout', () => {
         sessionTimeout: customTimeout,
       };
 
-      const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
-      expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
+      const initResult = await TestUtils.initializeTraceLog(page, testConfig);
+      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page, 2500);
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 2500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Get initial session data
       const initialSessionData = await page.evaluate(() => {
@@ -347,16 +343,16 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       // Reload page to test persistence
       await page.reload();
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Reinitialize with same configuration
-      await TestHelpers.navigateAndWaitForReady(page);
-      const reloadInitResult = await TestHelpers.initializeTraceLog(page, testConfig);
-      expect(TestAssertions.verifyInitializationResult(reloadInitResult).success).toBe(true);
+      await TestUtils.navigateAndWaitForReady(page);
+      const reloadInitResult = await TestUtils.initializeTraceLog(page, testConfig);
+      expect(TestUtils.verifyInitializationResult(reloadInitResult).success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page, 2500);
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 2500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify session configuration persisted after reload
       const postReloadValidation = await page.evaluate((originalSessionId) => {
@@ -401,17 +397,17 @@ test.describe('Session Management - Custom Session Timeout', () => {
       expect(typeof postReloadValidation.sessionId).toBe('string');
       expect(postReloadValidation.sessionId.length).toBeGreaterThanOrEqual(36);
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle multiple custom timeout configurations consistently', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Test sequence of different timeout configurations
       const timeoutConfigs = [
@@ -428,7 +424,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
             await (window as any).TraceLog.destroy();
           }
         });
-        await TestHelpers.waitForTimeout(page, 1000); // Longer wait for cleanup
+        await TestUtils.waitForTimeout(page, 1000); // Longer wait for cleanup
 
         // Initialize with current timeout configuration
         const testConfig = {
@@ -436,14 +432,14 @@ test.describe('Session Management - Custom Session Timeout', () => {
           sessionTimeout: timeout,
         };
 
-        const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
-        const validated = TestAssertions.verifyInitializationResult(initResult);
+        const initResult = await TestUtils.initializeTraceLog(page, testConfig);
+        const validated = TestUtils.verifyInitializationResult(initResult);
         expect(validated.success).toBe(true);
         expect(validated.hasError).toBe(false);
 
-        await TestHelpers.waitForTimeout(page, 2500);
-        await TestHelpers.triggerClickEvent(page);
-        await TestHelpers.waitForTimeout(page, 500);
+        await TestUtils.waitForTimeout(page, 2500);
+        await TestUtils.triggerClickEvent(page);
+        await TestUtils.waitForTimeout(page, 500);
 
         // Verify session creation with current configuration
         const configCheck = await page.evaluate((expectedTimeout: number) => {
@@ -488,10 +484,10 @@ test.describe('Session Management - Custom Session Timeout', () => {
   });
 
   test('should validate session timeout configuration persistence in storage', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page);
+      await TestUtils.navigateAndWaitForReady(page);
 
       // Use custom timeout configuration
       const customTimeout = 20 * 60 * 1000; // 20 minutes
@@ -500,10 +496,10 @@ test.describe('Session Management - Custom Session Timeout', () => {
         sessionTimeout: customTimeout,
       };
 
-      await TestHelpers.initializeTraceLog(page, testConfig);
-      await TestHelpers.waitForTimeout(page, 2500);
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.initializeTraceLog(page, testConfig);
+      await TestUtils.waitForTimeout(page, 2500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify session storage structure and timeout-related data
       const storageValidation = await page.evaluate((expectedTimeout) => {
@@ -563,7 +559,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
         expect(storageValidation.sessionData.sessionId.length).toBeGreaterThanOrEqual(36);
       }
 
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }

@@ -1,19 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
+import { TestUtils } from '../../utils';
 
 test.describe('Session Management - Cross-Tab Session Coordination', () => {
   // Test Configuration
   const LEADER_ELECTION_TIMEOUT = 5000;
 
   test('should share same session ID across multiple tabs when opened within session timeout', async ({ browser }) => {
-    const { pages, cleanup } = await TestHelpers.createMultipleTabsWithSameContext(browser, 3);
-    const monitors = pages.map((page) => TestHelpers.createConsoleMonitor(page));
+    const { pages, cleanup } = await TestUtils.createMultipleTabsWithSameContext(browser, 3);
+    const monitors = pages.map((page) => TestUtils.createConsoleMonitor(page));
 
     try {
       // Initialize first tab
-      await TestHelpers.navigateAndWaitForReady(pages[0]);
-      const initResult = await TestHelpers.initializeTraceLog(pages[0]);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(pages[0]);
+      const initResult = await TestUtils.initializeTraceLog(pages[0]);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
 
       if (!validatedResult.success) {
         monitors[0].traceLogErrors.push(
@@ -24,14 +24,14 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       expect(validatedResult.success).toBe(true);
 
       // Trigger activity to start session
-      await TestHelpers.simulateUserActivity(pages[0]);
-      await TestHelpers.waitForTimeout(pages[0], 3000); // Wait longer for leader election
+      await TestUtils.simulateUserActivity(pages[0]);
+      await TestUtils.waitForTimeout(pages[0], 3000); // Wait longer for leader election
 
       // Wait for cross-tab session coordination to complete
-      await TestHelpers.waitForCrossTabSessionCoordination(pages[0]);
+      await TestUtils.waitForCrossTabSessionCoordination(pages[0]);
 
       // Get initial session ID
-      const firstTabSessionInfo = await TestHelpers.getCrossTabSessionInfo(pages[0]);
+      const firstTabSessionInfo = await TestUtils.getCrossTabSessionInfo(pages[0]);
 
       if (!firstTabSessionInfo.sessionId) {
         monitors[0].traceLogErrors.push(
@@ -49,23 +49,23 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       expect(typeof firstTabSessionInfo.sessionId).toBe('string');
 
       // Initialize second tab
-      await TestHelpers.navigateAndWaitForReady(pages[1]);
-      await TestHelpers.initializeTraceLog(pages[1]);
-      await TestHelpers.simulateUserActivity(pages[1]);
+      await TestUtils.navigateAndWaitForReady(pages[1]);
+      await TestUtils.initializeTraceLog(pages[1]);
+      await TestUtils.simulateUserActivity(pages[1]);
 
       // Wait for session coordination
-      await TestHelpers.waitForCrossTabSessionCoordination(pages[1], firstTabSessionInfo.sessionId ?? undefined);
+      await TestUtils.waitForCrossTabSessionCoordination(pages[1], firstTabSessionInfo.sessionId ?? undefined);
 
       // Initialize third tab
-      await TestHelpers.navigateAndWaitForReady(pages[2]);
-      await TestHelpers.initializeTraceLog(pages[2]);
-      await TestHelpers.simulateUserActivity(pages[2]);
+      await TestUtils.navigateAndWaitForReady(pages[2]);
+      await TestUtils.initializeTraceLog(pages[2]);
+      await TestUtils.simulateUserActivity(pages[2]);
 
       // Wait for session coordination
-      await TestHelpers.waitForCrossTabSessionCoordination(pages[2], firstTabSessionInfo.sessionId ?? undefined);
+      await TestUtils.waitForCrossTabSessionCoordination(pages[2], firstTabSessionInfo.sessionId ?? undefined);
 
       // Verify all tabs share the same session ID
-      const allSessionInfos = await Promise.all(pages.map((page) => TestHelpers.getCrossTabSessionInfo(page)));
+      const allSessionInfos = await Promise.all(pages.map((page) => TestUtils.getCrossTabSessionInfo(page)));
 
       // All tabs should have the same session ID
       expect(allSessionInfos[0].sessionId).toBeTruthy();
@@ -86,7 +86,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Verify no errors across all tabs
       monitors.forEach((monitor) => {
-        expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+        expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
       });
     } finally {
       monitors.forEach((monitor) => monitor.cleanup());
@@ -95,12 +95,12 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
   });
 
   test('should elect one tab as session leader and maintain leadership', async ({ browser }) => {
-    const { pages, cleanup } = await TestHelpers.createMultipleTabsWithSameContext(browser, 2);
-    const monitors = pages.map((page) => TestHelpers.createConsoleMonitor(page));
+    const { pages, cleanup } = await TestUtils.createMultipleTabsWithSameContext(browser, 2);
+    const monitors = pages.map((page) => TestUtils.createConsoleMonitor(page));
 
     try {
       // Initialize first tab and wait for it to become leader
-      await TestHelpers.navigateAndWaitForReady(pages[0]);
+      await TestUtils.navigateAndWaitForReady(pages[0]);
 
       // Initialize TraceLog explicitly
       const initResult = await pages[0].evaluate(() =>
@@ -110,13 +110,13 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       );
       expect(initResult.success).toBe(true);
 
-      await TestHelpers.simulateUserActivity(pages[0]);
+      await TestUtils.simulateUserActivity(pages[0]);
 
       // Wait for leader election to complete - increased timeout
       await pages[0].waitForTimeout(6000);
 
       // Initialize second tab
-      await TestHelpers.navigateAndWaitForReady(pages[1]);
+      await TestUtils.navigateAndWaitForReady(pages[1]);
 
       // Initialize TraceLog on second tab
       await pages[1].evaluate(() =>
@@ -125,19 +125,19 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
         ).initializeTraceLog(),
       );
 
-      await TestHelpers.simulateUserActivity(pages[1]);
+      await TestUtils.simulateUserActivity(pages[1]);
 
       // Additional wait to allow cross-tab communication
       await pages[0].waitForTimeout(2000);
 
-      const electionResult = await TestHelpers.waitForLeaderElection(pages);
+      const electionResult = await TestUtils.waitForLeaderElection(pages);
 
       // The fallback mechanism should ensure a leader is elected
       expect(electionResult.leaderPage).toBeTruthy();
       expect(electionResult.sessionId).toBeTruthy();
 
       // Get all tabs info to check the overall coordination state
-      const allTabsInfo = await TestHelpers.getAllTabsInfo(pages[0]); // Any page can read localStorage
+      const allTabsInfo = await TestUtils.getAllTabsInfo(pages[0]); // Any page can read localStorage
 
       // Verify session coordination
       expect(allTabsInfo.sessionContext).toBeTruthy();
@@ -167,43 +167,43 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
   });
 
   test('should keep session active while any tab has user activity', async ({ browser }) => {
-    const { pages, cleanup } = await TestHelpers.createMultipleTabsWithSameContext(browser, 2);
-    const monitors = pages.map((page) => TestHelpers.createConsoleMonitor(page));
+    const { pages, cleanup } = await TestUtils.createMultipleTabsWithSameContext(browser, 2);
+    const monitors = pages.map((page) => TestUtils.createConsoleMonitor(page));
 
     try {
       // Initialize tabs
-      await TestHelpers.navigateAndWaitForReady(pages[0]);
-      await TestHelpers.initializeTraceLog(pages[0]);
-      await TestHelpers.simulateUserActivity(pages[0]);
+      await TestUtils.navigateAndWaitForReady(pages[0]);
+      await TestUtils.initializeTraceLog(pages[0]);
+      await TestUtils.simulateUserActivity(pages[0]);
 
-      await TestHelpers.navigateAndWaitForReady(pages[1]);
-      await TestHelpers.initializeTraceLog(pages[1]);
-      await TestHelpers.simulateUserActivity(pages[1]);
+      await TestUtils.navigateAndWaitForReady(pages[1]);
+      await TestUtils.initializeTraceLog(pages[1]);
+      await TestUtils.simulateUserActivity(pages[1]);
 
       // Wait for coordination
-      const { sessionId } = await TestHelpers.waitForLeaderElection(pages);
+      const { sessionId } = await TestUtils.waitForLeaderElection(pages);
       expect(sessionId).toBeTruthy();
 
       // Get initial session activity timestamp
-      let sessionInfo = await TestHelpers.getCrossTabSessionInfo(pages[0]);
+      let sessionInfo = await TestUtils.getCrossTabSessionInfo(pages[0]);
       const initialTimestamp = (sessionInfo.sessionContext as { lastActivity?: number })?.lastActivity;
       expect(typeof initialTimestamp).toBe('number');
 
       // Wait a bit, then trigger activity only on second tab
-      await TestHelpers.waitForTimeout(pages[0], 1000);
-      await TestHelpers.simulateUserActivity(pages[1]);
-      await TestHelpers.waitForTimeout(pages[0], 1500); // Increased wait time to account for throttling
+      await TestUtils.waitForTimeout(pages[0], 1000);
+      await TestUtils.simulateUserActivity(pages[1]);
+      await TestUtils.waitForTimeout(pages[0], 1500); // Increased wait time to account for throttling
 
       // Check that session activity was updated
-      sessionInfo = await TestHelpers.getCrossTabSessionInfo(pages[0]);
+      sessionInfo = await TestUtils.getCrossTabSessionInfo(pages[0]);
       const updatedTimestamp = (sessionInfo.sessionContext as { lastActivity?: number })?.lastActivity;
       expect(typeof updatedTimestamp).toBe('number');
       expect(updatedTimestamp).toBeGreaterThan(initialTimestamp!);
 
       // Both tabs should still have the same session
       const [firstTabInfo, secondTabInfo] = await Promise.all([
-        TestHelpers.getCrossTabSessionInfo(pages[0]),
-        TestHelpers.getCrossTabSessionInfo(pages[1]),
+        TestUtils.getCrossTabSessionInfo(pages[0]),
+        TestUtils.getCrossTabSessionInfo(pages[1]),
       ]);
 
       expect(firstTabInfo.sessionId).toBe(sessionId);
@@ -213,7 +213,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Verify no errors occurred
       monitors.forEach((monitor) => {
-        expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+        expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
       });
     } finally {
       monitors.forEach((monitor) => monitor.cleanup());
@@ -222,24 +222,24 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
   });
 
   test('should properly handle leader tab closure and elect new leader', async ({ browser }) => {
-    const { pages, cleanup } = await TestHelpers.createMultipleTabsWithSameContext(browser, 3);
-    const monitors = pages.map((page) => TestHelpers.createConsoleMonitor(page));
+    const { pages, cleanup } = await TestUtils.createMultipleTabsWithSameContext(browser, 3);
+    const monitors = pages.map((page) => TestUtils.createConsoleMonitor(page));
 
     try {
       // Initialize all tabs
       for (const page of pages) {
-        await TestHelpers.navigateAndWaitForReady(page);
-        await TestHelpers.initializeTraceLog(page);
-        await TestHelpers.simulateUserActivity(page);
+        await TestUtils.navigateAndWaitForReady(page);
+        await TestUtils.initializeTraceLog(page);
+        await TestUtils.simulateUserActivity(page);
       }
 
       // Wait for initial leader election
-      const { leaderIndex: initialLeaderIndex, sessionId } = await TestHelpers.waitForLeaderElection(pages);
+      const { leaderIndex: initialLeaderIndex, sessionId } = await TestUtils.waitForLeaderElection(pages);
       expect(initialLeaderIndex).toBeGreaterThanOrEqual(0);
       expect(sessionId).toBeTruthy();
 
       // Verify initial state
-      const initialLeaderInfo = await TestHelpers.getCrossTabSessionInfo(pages[initialLeaderIndex]);
+      const initialLeaderInfo = await TestUtils.getCrossTabSessionInfo(pages[initialLeaderIndex]);
       expect(initialLeaderInfo.isLeader).toBe(true);
 
       // Close the leader tab
@@ -247,10 +247,10 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       const remainingPages = pages.filter((_, index) => index !== initialLeaderIndex);
 
       // Wait longer for the remaining tabs to detect the leader is gone and process messages
-      await TestHelpers.waitForTimeout(remainingPages[0], 4000); // Increased from 3000 to 4000ms
+      await TestUtils.waitForTimeout(remainingPages[0], 4000); // Increased from 3000 to 4000ms
 
       // Verify a new leader was elected from remaining tabs
-      const { leaderPage: newLeaderPage, sessionId: newSessionId } = await TestHelpers.waitForLeaderElection(
+      const { leaderPage: newLeaderPage, sessionId: newSessionId } = await TestUtils.waitForLeaderElection(
         remainingPages,
         LEADER_ELECTION_TIMEOUT,
       );
@@ -259,14 +259,12 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       expect(newSessionId).toBeTruthy();
 
       // Session ID should remain the same or a new session should be started
-      const newLeaderInfo = await TestHelpers.getCrossTabSessionInfo(newLeaderPage!);
+      const newLeaderInfo = await TestUtils.getCrossTabSessionInfo(newLeaderPage!);
       expect(newLeaderInfo.isLeader).toBe(true);
       expect(newLeaderInfo.sessionId).toBeTruthy();
 
       // Remaining tabs should still be coordinated
-      const allRemainingInfos = await Promise.all(
-        remainingPages.map((page) => TestHelpers.getCrossTabSessionInfo(page)),
-      );
+      const allRemainingInfos = await Promise.all(remainingPages.map((page) => TestUtils.getCrossTabSessionInfo(page)));
 
       // All remaining tabs should have the same session ID
       const sessionIds = allRemainingInfos.map((info) => info.sessionId).filter(Boolean);
@@ -275,12 +273,12 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Wait for tab count to be updated after tab closure
       try {
-        await TestHelpers.waitForTabCountUpdate(remainingPages, 2, 5000); // Increased timeout to 5000ms
+        await TestUtils.waitForTabCountUpdate(remainingPages, 2, 5000); // Increased timeout to 5000ms
       } catch {
         // If tab count doesn't update, log current state for debugging
         const debugInfo = await Promise.all(
           remainingPages.map(async (page, index) => {
-            const info = await TestHelpers.getCrossTabSessionInfo(page);
+            const info = await TestUtils.getCrossTabSessionInfo(page);
             return {
               index,
               tabCount: (info.sessionContext as { tabCount?: number })?.tabCount,
@@ -309,7 +307,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       monitors
         .filter((_, index) => index !== initialLeaderIndex)
         .forEach((monitor) => {
-          expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+          expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
         });
     } finally {
       monitors.forEach((monitor) => monitor.cleanup());
@@ -318,27 +316,27 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
   });
 
   test('should end session only when all tabs are closed or inactive', async ({ browser }) => {
-    const { pages, cleanup } = await TestHelpers.createMultipleTabsWithSameContext(browser, 2);
-    const monitors = pages.map((page) => TestHelpers.createConsoleMonitor(page));
+    const { pages, cleanup } = await TestUtils.createMultipleTabsWithSameContext(browser, 2);
+    const monitors = pages.map((page) => TestUtils.createConsoleMonitor(page));
 
     try {
       // Initialize both tabs
-      await TestHelpers.navigateAndWaitForReady(pages[0]);
-      await TestHelpers.initializeTraceLog(pages[0]);
-      await TestHelpers.simulateUserActivity(pages[0]);
+      await TestUtils.navigateAndWaitForReady(pages[0]);
+      await TestUtils.initializeTraceLog(pages[0]);
+      await TestUtils.simulateUserActivity(pages[0]);
 
-      await TestHelpers.navigateAndWaitForReady(pages[1]);
-      await TestHelpers.initializeTraceLog(pages[1]);
-      await TestHelpers.simulateUserActivity(pages[1]);
+      await TestUtils.navigateAndWaitForReady(pages[1]);
+      await TestUtils.initializeTraceLog(pages[1]);
+      await TestUtils.simulateUserActivity(pages[1]);
 
       // Wait for coordination
-      const { sessionId } = await TestHelpers.waitForLeaderElection(pages);
+      const { sessionId } = await TestUtils.waitForLeaderElection(pages);
       expect(sessionId).toBeTruthy();
 
       // Verify both tabs have the session
       const [firstTabInfo, secondTabInfo] = await Promise.all([
-        TestHelpers.getCrossTabSessionInfo(pages[0]),
-        TestHelpers.getCrossTabSessionInfo(pages[1]),
+        TestUtils.getCrossTabSessionInfo(pages[0]),
+        TestUtils.getCrossTabSessionInfo(pages[1]),
       ]);
 
       expect(firstTabInfo.sessionId).toBe(sessionId);
@@ -354,10 +352,10 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Close first tab
       await pages[0].close();
-      await TestHelpers.waitForTimeout(pages[1], 1000);
+      await TestUtils.waitForTimeout(pages[1], 1000);
 
       // Second tab should still have the session active
-      const remainingTabInfo = await TestHelpers.getCrossTabSessionInfo(pages[1]);
+      const remainingTabInfo = await TestUtils.getCrossTabSessionInfo(pages[1]);
       expect(remainingTabInfo.sessionId).toBeTruthy();
       expect(remainingTabInfo.hasSessionStorage).toBe(true);
 
@@ -372,7 +370,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       // but we've verified the session persisted while at least one tab remained active.
 
       // Verify no errors in the remaining monitor
-      expect(TestAssertions.verifyNoTraceLogErrors(monitors[1].traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitors[1].traceLogErrors)).toBe(true);
     } finally {
       monitors.forEach((monitor) => monitor.cleanup());
       await cleanup();
@@ -380,12 +378,12 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
   });
 
   test('should use BroadcastChannel for cross-tab communication', async ({ browser }) => {
-    const { pages, cleanup } = await TestHelpers.createMultipleTabsWithSameContext(browser, 2);
-    const monitors = pages.map((page) => TestHelpers.createConsoleMonitor(page));
+    const { pages, cleanup } = await TestUtils.createMultipleTabsWithSameContext(browser, 2);
+    const monitors = pages.map((page) => TestUtils.createConsoleMonitor(page));
 
     try {
       // Initialize first tab and capture BroadcastChannel usage
-      await TestHelpers.navigateAndWaitForReady(pages[0]);
+      await TestUtils.navigateAndWaitForReady(pages[0]);
 
       // Set up BroadcastChannel monitoring
       await pages[0].evaluate(() => {
@@ -420,17 +418,17 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
         };
       });
 
-      await TestHelpers.initializeTraceLog(pages[0]);
-      await TestHelpers.simulateUserActivity(pages[0]);
+      await TestUtils.initializeTraceLog(pages[0]);
+      await TestUtils.simulateUserActivity(pages[0]);
 
       // Initialize second tab
-      await TestHelpers.navigateAndWaitForReady(pages[1]);
-      await TestHelpers.initializeTraceLog(pages[1]);
-      await TestHelpers.simulateUserActivity(pages[1]);
+      await TestUtils.navigateAndWaitForReady(pages[1]);
+      await TestUtils.initializeTraceLog(pages[1]);
+      await TestUtils.simulateUserActivity(pages[1]);
 
       // Wait for coordination
-      await TestHelpers.waitForLeaderElection(pages);
-      await TestHelpers.waitForTimeout(pages[0], 2000); // Allow time for messages
+      await TestUtils.waitForLeaderElection(pages);
+      await TestUtils.waitForTimeout(pages[0], 2000); // Allow time for messages
 
       // Verify BroadcastChannel was used
       const broadcastInfo = await pages[0].evaluate(() => {
@@ -461,7 +459,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Verify no errors occurred
       monitors.forEach((monitor) => {
-        expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+        expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
       });
     } finally {
       monitors.forEach((monitor) => monitor.cleanup());
@@ -470,29 +468,29 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
   });
 
   test('should maintain consistent session timing across tabs', async ({ browser }) => {
-    const { pages, cleanup } = await TestHelpers.createMultipleTabsWithSameContext(browser, 2);
-    const monitors = pages.map((page) => TestHelpers.createConsoleMonitor(page));
+    const { pages, cleanup } = await TestUtils.createMultipleTabsWithSameContext(browser, 2);
+    const monitors = pages.map((page) => TestUtils.createConsoleMonitor(page));
 
     try {
       // Initialize first tab
-      await TestHelpers.navigateAndWaitForReady(pages[0]);
+      await TestUtils.navigateAndWaitForReady(pages[0]);
       const initTime = Date.now();
-      await TestHelpers.initializeTraceLog(pages[0]);
-      await TestHelpers.simulateUserActivity(pages[0]);
+      await TestUtils.initializeTraceLog(pages[0]);
+      await TestUtils.simulateUserActivity(pages[0]);
 
       // Initialize second tab shortly after
-      await TestHelpers.waitForTimeout(pages[0], 500);
-      await TestHelpers.navigateAndWaitForReady(pages[1]);
-      await TestHelpers.initializeTraceLog(pages[1]);
-      await TestHelpers.simulateUserActivity(pages[1]);
+      await TestUtils.waitForTimeout(pages[0], 500);
+      await TestUtils.navigateAndWaitForReady(pages[1]);
+      await TestUtils.initializeTraceLog(pages[1]);
+      await TestUtils.simulateUserActivity(pages[1]);
 
       // Wait for coordination
-      await TestHelpers.waitForLeaderElection(pages);
+      await TestUtils.waitForLeaderElection(pages);
 
       // Get session information from both tabs
       const [firstTabInfo, secondTabInfo] = await Promise.all([
-        TestHelpers.getCrossTabSessionInfo(pages[0]),
-        TestHelpers.getCrossTabSessionInfo(pages[1]),
+        TestUtils.getCrossTabSessionInfo(pages[0]),
+        TestUtils.getCrossTabSessionInfo(pages[1]),
       ]);
 
       // Both should have the same session
@@ -524,7 +522,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Verify no errors occurred
       monitors.forEach((monitor) => {
-        expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+        expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
       });
     } finally {
       monitors.forEach((monitor) => monitor.cleanup());

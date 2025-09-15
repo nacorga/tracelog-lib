@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
+import { TestUtils } from '../../utils';
 
 /**
  * E2E tests for storage failure scenarios and fallback mechanisms
@@ -10,7 +10,7 @@ import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
 test.describe('Storage Failures - Error Recovery', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to test page and ensure clean state
-    await TestHelpers.navigateAndWaitForReady(page);
+    await TestUtils.navigateAndWaitForReady(page);
 
     // Clear any existing storage to ensure clean test state
     await page.evaluate(() => {
@@ -20,16 +20,16 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should handle localStorage quota exceeded gracefully', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
       // Verify SDK is initialized
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Now simulate localStorage quota exceeded for future operations
@@ -53,16 +53,16 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Test that events can still be tracked (should use fallback storage)
-      const eventResult = await TestHelpers.testCustomEvent(page, 'quota_test_event', { test: 'quota_exceeded' });
+      const eventResult = await TestUtils.testCustomEvent(page, 'quota_test_event', { test: 'quota_exceeded' });
       expect(eventResult.success).toBe(true);
 
       // Trigger multiple events to ensure fallback storage is working
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
 
       // Test multiple custom events to trigger quota failures
       for (let i = 0; i < 5; i++) {
-        const multiEventResult = await TestHelpers.testCustomEvent(page, `quota_event_${i}`, {
+        const multiEventResult = await TestUtils.testCustomEvent(page, `quota_event_${i}`, {
           index: i,
           quota_test: true,
         });
@@ -80,7 +80,7 @@ test.describe('Storage Failures - Error Recovery', () => {
       expect(monitor.traceLogErrors.length).toBe(0);
 
       // Verify SDK continues to function
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
     } finally {
       monitor.cleanup();
@@ -95,16 +95,16 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should handle localStorage.getItem failures gracefully', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
       // Verify SDK is initialized
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Now simulate localStorage.getItem failures for future operations
@@ -126,16 +126,16 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Test event tracking works with fallback
-      const eventResult = await TestHelpers.testCustomEvent(page, 'getitem_failure_test', { fallback: true });
+      const eventResult = await TestUtils.testCustomEvent(page, 'getitem_failure_test', { fallback: true });
       expect(eventResult.success).toBe(true);
 
       // Trigger user interactions
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Test multiple events to ensure continued functionality
       for (let i = 0; i < 3; i++) {
-        const multiEventResult = await TestHelpers.testCustomEvent(page, `getitem_event_${i}`, {
+        const multiEventResult = await TestUtils.testCustomEvent(page, `getitem_event_${i}`, {
           index: i,
           getitem_test: true,
         });
@@ -143,7 +143,7 @@ test.describe('Storage Failures - Error Recovery', () => {
       }
 
       // Verify SDK continues functioning despite getItem failures
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
 
       // Verify no critical errors
@@ -161,16 +161,16 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should handle localStorage.setItem failures gracefully', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
       // Verify SDK is initialized
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Now simulate localStorage.setItem failures for future operations
@@ -190,17 +190,17 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Test that events can still be tracked after setItem starts failing
-      const eventResult = await TestHelpers.testCustomEvent(page, 'setitem_failure_test', { fallback: true });
+      const eventResult = await TestUtils.testCustomEvent(page, 'setitem_failure_test', { fallback: true });
       expect(eventResult.success).toBe(true);
 
       // Trigger multiple interactions to test persistence fallback
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
-      await TestHelpers.testCustomEvent(page, 'another_event', { after_failure: true });
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
+      await TestUtils.testCustomEvent(page, 'another_event', { after_failure: true });
 
       // Test multiple events to ensure fallback works consistently
       for (let i = 0; i < 3; i++) {
-        const multiEventResult = await TestHelpers.testCustomEvent(page, `setitem_event_${i}`, {
+        const multiEventResult = await TestUtils.testCustomEvent(page, `setitem_event_${i}`, {
           index: i,
           setitem_test: true,
         });
@@ -208,7 +208,7 @@ test.describe('Storage Failures - Error Recovery', () => {
       }
 
       // Verify SDK continues functioning
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
 
       // Verify no critical errors
@@ -225,17 +225,17 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should handle localStorage.removeItem failures gracefully', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
       // Test normal operations first
-      await TestHelpers.triggerClickEvent(page);
-      const eventResult = await TestHelpers.testCustomEvent(page, 'removeitem_test', { cleanup: true });
+      await TestUtils.triggerClickEvent(page);
+      const eventResult = await TestUtils.testCustomEvent(page, 'removeitem_test', { cleanup: true });
       expect(eventResult.success).toBe(true);
 
       // Now simulate localStorage.removeItem failures
@@ -255,7 +255,7 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Test that events continue to work despite removeItem failures
-      const afterFailureEvent = await TestHelpers.testCustomEvent(page, 'after_removeitem_failure', { test: true });
+      const afterFailureEvent = await TestUtils.testCustomEvent(page, 'after_removeitem_failure', { test: true });
       expect(afterFailureEvent.success).toBe(true);
 
       // Test cleanup operations that might call removeItem
@@ -285,7 +285,7 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should handle complete localStorage unavailability', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Mock localStorage to be completely unavailable BEFORE initialization
@@ -320,28 +320,28 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Initialize TraceLog - should fall back to in-memory storage
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
       // Verify SDK is functional with fallback storage
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Test all core functionality works with fallback storage
-      const eventResult = await TestHelpers.testCustomEvent(page, 'no_storage_test', {
+      const eventResult = await TestUtils.testCustomEvent(page, 'no_storage_test', {
         fallback_only: true,
         timestamp: Date.now(),
       });
       expect(eventResult.success).toBe(true);
 
       // Test user interactions
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
 
       // Multiple events to test fallback storage capacity
       for (let i = 0; i < 5; i++) {
-        const multiEventResult = await TestHelpers.testCustomEvent(page, `fallback_event_${i}`, {
+        const multiEventResult = await TestUtils.testCustomEvent(page, `fallback_event_${i}`, {
           index: i,
           batch: 'fallback_test',
         });
@@ -385,12 +385,12 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should handle mixed storage operation failures', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
       // Now simulate intermittent localStorage failures
@@ -436,7 +436,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
       // Test multiple operations to trigger various failure scenarios
       for (let i = 0; i < 10; i++) {
-        const eventResult = await TestHelpers.testCustomEvent(page, `mixed_test_${i}`, {
+        const eventResult = await TestUtils.testCustomEvent(page, `mixed_test_${i}`, {
           iteration: i,
           mixed_failures: true,
         });
@@ -444,16 +444,16 @@ test.describe('Storage Failures - Error Recovery', () => {
 
         // Trigger user interactions
         if (i % 2 === 0) {
-          await TestHelpers.triggerClickEvent(page);
+          await TestUtils.triggerClickEvent(page);
         } else {
-          await TestHelpers.triggerScrollEvent(page);
+          await TestUtils.triggerScrollEvent(page);
         }
 
-        await TestHelpers.waitForTimeout(page, 100);
+        await TestUtils.waitForTimeout(page, 100);
       }
 
       // Verify SDK remains stable despite intermittent failures
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
 
       // Verify no critical errors accumulated
@@ -473,15 +473,15 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should recover gracefully from storage corruption', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // First, initialize normally to create valid storage entries
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Corrupt storage data
       await page.evaluate(() => {
@@ -501,17 +501,17 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Test that SDK handles corrupted data gracefully
-      const eventAfterCorruption = await TestHelpers.testCustomEvent(page, 'corruption_recovery_test', {
+      const eventAfterCorruption = await TestUtils.testCustomEvent(page, 'corruption_recovery_test', {
         after_corruption: true,
       });
       expect(eventAfterCorruption.success).toBe(true);
 
       // Trigger more interactions to test continued functionality
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
 
       // Verify SDK continues functioning (should use fallback storage)
-      const finalEventResult = await TestHelpers.testCustomEvent(page, 'final_corruption_test', {
+      const finalEventResult = await TestUtils.testCustomEvent(page, 'final_corruption_test', {
         recovery_verified: true,
       });
       expect(finalEventResult.success).toBe(true);
@@ -530,12 +530,12 @@ test.describe('Storage Failures - Error Recovery', () => {
   });
 
   test('should maintain functionality during concurrent storage operations', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
       // Simulate concurrent operations that might cause storage conflicts
       const concurrentOperations = [];
@@ -543,7 +543,7 @@ test.describe('Storage Failures - Error Recovery', () => {
       // Create multiple concurrent events
       for (let i = 0; i < 10; i++) {
         concurrentOperations.push(
-          TestHelpers.testCustomEvent(page, `concurrent_event_${i}`, {
+          TestUtils.testCustomEvent(page, `concurrent_event_${i}`, {
             concurrent: true,
             index: i,
             timestamp: Date.now(),
@@ -552,8 +552,8 @@ test.describe('Storage Failures - Error Recovery', () => {
       }
 
       // Add concurrent user interactions
-      concurrentOperations.push(TestHelpers.triggerClickEvent(page));
-      concurrentOperations.push(TestHelpers.triggerScrollEvent(page));
+      concurrentOperations.push(TestUtils.triggerClickEvent(page));
+      concurrentOperations.push(TestUtils.triggerScrollEvent(page));
 
       // Execute all operations concurrently
       const results = await Promise.all(concurrentOperations);
@@ -566,11 +566,11 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Verify SDK remains stable after concurrent operations
-      const stillInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
 
       // Test one more operation to ensure stability
-      const finalTest = await TestHelpers.testCustomEvent(page, 'post_concurrent_test', {
+      const finalTest = await TestUtils.testCustomEvent(page, 'post_concurrent_test', {
         after_concurrent: true,
       });
       expect(finalTest.success).toBe(true);

@@ -31,7 +31,7 @@ export class App extends StateManager {
   private performanceHandler!: PerformanceHandler;
   private errorHandler!: ErrorHandler;
   private networkHandler!: NetworkHandler;
-  private suppressNextScrollTimer: ReturnType<typeof setTimeout> | null = null;
+  private suppressNextScrollTimer: number | null = null;
 
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {

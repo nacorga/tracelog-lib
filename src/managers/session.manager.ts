@@ -534,7 +534,7 @@ export class SessionManager extends StateManager {
     }
 
     if (this.sessionEndConfig.debugMode) {
-      log('info', `Session health event tracked: ${event}`, this.sessionHealth);
+      log('info', `Session health event tracked: ${event}`);
     }
   }
 

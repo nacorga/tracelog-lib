@@ -1,22 +1,22 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
+import { TestUtils } from '../../utils';
 
 test.describe('Session Management - Session Recovery', () => {
   test('should maintain session functionality after page reload', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize and create initial session
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Trigger activity to create session
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Get original session data using the helper function
-      const originalSessionData = await TestHelpers.getSessionDataFromStorage(page);
+      const originalSessionData = await TestUtils.getSessionDataFromStorage(page);
 
       if (!originalSessionData.sessionId) {
         monitor.traceLogErrors.push('[E2E Test] Original session ID was not created before reload test');
@@ -25,16 +25,16 @@ test.describe('Session Management - Session Recovery', () => {
       expect(originalSessionData.sessionId).toBeTruthy();
 
       // Wait for session to stabilize
-      await TestHelpers.waitForTimeout(page, 1500);
+      await TestUtils.waitForTimeout(page, 1500);
 
       // Simulate page reload
       await page.reload();
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Re-initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validatedResult = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validatedResult = TestUtils.verifyInitializationResult(initResult);
 
       if (!validatedResult.success) {
         monitor.traceLogErrors.push(`[E2E Test] Initialization failed after reload: ${JSON.stringify(initResult)}`);
@@ -42,11 +42,11 @@ test.describe('Session Management - Session Recovery', () => {
 
       expect(validatedResult.success).toBe(true);
 
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.waitForTimeout(page);
 
       // Trigger activity to establish session after reload
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1500);
 
       // Verify session functionality after reload
       const postReloadSessionData = await page.evaluate(() => {
@@ -87,7 +87,7 @@ test.describe('Session Management - Session Recovery', () => {
       expect(postReloadSessionData.sessionId).toBeTruthy();
 
       // Test session functionality with custom event
-      const eventResult = await TestHelpers.testCustomEvent(page, 'post_recovery_test', { recovered: true });
+      const eventResult = await TestUtils.testCustomEvent(page, 'post_recovery_test', { recovered: true });
 
       if (!eventResult.success) {
         monitor.traceLogErrors.push(`[E2E Test] Custom event failed after recovery: ${JSON.stringify(eventResult)}`);
@@ -96,7 +96,7 @@ test.describe('Session Management - Session Recovery', () => {
       expect(eventResult.success).toBe(true);
 
       // Verify no errors occurred
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during page reload recovery test: ${monitor.traceLogErrors.join(', ')}`,
@@ -109,21 +109,21 @@ test.describe('Session Management - Session Recovery', () => {
   });
 
   test('should handle session storage and recovery data management', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Create session with activities
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.testCustomEvent(page, 'recovery_test_event', {
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.testCustomEvent(page, 'recovery_test_event', {
         testData: 'recovery_validation',
         timestamp: Date.now(),
       });
-      await TestHelpers.waitForTimeout(page, 1500);
+      await TestUtils.waitForTimeout(page, 1500);
 
       // Verify session data is stored
       const sessionStorageCheck = await page.evaluate(() => {
@@ -160,16 +160,16 @@ test.describe('Session Management - Session Recovery', () => {
 
       // Simulate reload
       await page.reload();
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Re-initialize
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Trigger recovery
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Validate session management after recovery attempt
       const postRecoveryCheck = await page.evaluate(() => {
@@ -205,24 +205,24 @@ test.describe('Session Management - Session Recovery', () => {
       expect(postRecoveryCheck.isSessionWorking).toBe(true);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle expired session recovery gracefully', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Create initial session
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Simulate expired recovery data
       await page.evaluate(() => {
@@ -253,16 +253,16 @@ test.describe('Session Management - Session Recovery', () => {
 
       // Simulate reload
       await page.reload();
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Re-initialize
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Trigger activity
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Verify new session was created (expired session not recovered)
       const newSessionValidation = await page.evaluate(() => {
@@ -304,7 +304,7 @@ test.describe('Session Management - Session Recovery', () => {
       expect(newSessionValidation.isNewSession).toBe(true);
 
       // Verify no errors occurred
-      const hasNoErrors = TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors);
+      const hasNoErrors = TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors);
       if (!hasNoErrors) {
         monitor.traceLogErrors.push(
           `[E2E Test] TraceLog errors detected during expired session recovery test: ${monitor.traceLogErrors.join(', ')}`,
@@ -317,33 +317,33 @@ test.describe('Session Management - Session Recovery', () => {
   });
 
   test('should maintain session timing accuracy during recovery process', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Create session with timing data
       const sessionStartTime = Date.now();
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Simulate reload
       const reloadTime = Date.now();
       await page.reload();
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Re-initialize
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Trigger recovery
       const recoveryTime = Date.now();
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Validate timing accuracy
       const timingValidation = await page.evaluate(
@@ -406,26 +406,26 @@ test.describe('Session Management - Session Recovery', () => {
       expect(timingValidation.hasSessionData).toBe(true);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle cross-reload session continuity', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Create session with multiple interactions
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.triggerScrollEvent(page);
-      await TestHelpers.testCustomEvent(page, 'continuity_test', { phase: 'before_reload' });
-      await TestHelpers.waitForTimeout(page, 1500);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.triggerScrollEvent(page);
+      await TestUtils.testCustomEvent(page, 'continuity_test', { phase: 'before_reload' });
+      await TestUtils.waitForTimeout(page, 1500);
 
       // Get session info before reload
       const preReloadSession = await page.evaluate(() => {
@@ -455,14 +455,14 @@ test.describe('Session Management - Session Recovery', () => {
       // Perform multiple reload cycles
       for (let i = 0; i < 2; i++) {
         await page.reload();
-        await TestHelpers.waitForTimeout(page, 500);
+        await TestUtils.waitForTimeout(page, 500);
 
-        await TestHelpers.navigateAndWaitForReady(page);
-        await TestHelpers.initializeTraceLog(page);
-        await TestHelpers.waitForTimeout(page);
+        await TestUtils.navigateAndWaitForReady(page);
+        await TestUtils.initializeTraceLog(page);
+        await TestUtils.waitForTimeout(page);
 
-        await TestHelpers.triggerClickEvent(page);
-        await TestHelpers.waitForTimeout(page, 1000);
+        await TestUtils.triggerClickEvent(page);
+        await TestUtils.waitForTimeout(page, 1000);
 
         // Verify session exists after each reload
         const sessionExists = await page.evaluate(() => {
@@ -479,30 +479,30 @@ test.describe('Session Management - Session Recovery', () => {
       }
 
       // Test final functionality
-      const finalEventResult = await TestHelpers.testCustomEvent(page, 'final_continuity_test', {
+      const finalEventResult = await TestUtils.testCustomEvent(page, 'final_continuity_test', {
         phase: 'after_reloads',
       });
       expect(finalEventResult.success).toBe(true);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle session recovery under different browser conditions', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page);
-      await TestHelpers.initializeTraceLog(page);
-      await TestHelpers.waitForTimeout(page);
+      await TestUtils.navigateAndWaitForReady(page);
+      await TestUtils.initializeTraceLog(page);
+      await TestUtils.waitForTimeout(page);
 
       // Create session
-      await TestHelpers.triggerClickEvent(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.triggerClickEvent(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Test storage persistence across different scenarios
       const storageTests = [
@@ -510,7 +510,7 @@ test.describe('Session Management - Session Recovery', () => {
           name: 'normal_reload',
           action: async () => {
             await page.reload();
-            await TestHelpers.waitForTimeout(page, 500);
+            await TestUtils.waitForTimeout(page, 500);
           },
         },
         {
@@ -529,13 +529,13 @@ test.describe('Session Management - Session Recovery', () => {
         await testCase.action();
 
         // Re-initialize
-        await TestHelpers.navigateAndWaitForReady(page);
-        await TestHelpers.initializeTraceLog(page);
-        await TestHelpers.waitForTimeout(page);
+        await TestUtils.navigateAndWaitForReady(page);
+        await TestUtils.initializeTraceLog(page);
+        await TestUtils.waitForTimeout(page);
 
         // Trigger session activity
-        await TestHelpers.triggerClickEvent(page);
-        await TestHelpers.waitForTimeout(page, 1000);
+        await TestUtils.triggerClickEvent(page);
+        await TestUtils.waitForTimeout(page, 1000);
 
         // Verify session functionality
         const sessionCheck = await page.evaluate(() => {
@@ -565,14 +565,14 @@ test.describe('Session Management - Session Recovery', () => {
         expect(sessionCheck.sessionId).toBeTruthy();
 
         // Test event functionality
-        const eventResult = await TestHelpers.testCustomEvent(page, `test_${testCase.name}`, {
+        const eventResult = await TestUtils.testCustomEvent(page, `test_${testCase.name}`, {
           testCase: testCase.name,
         });
         expect(eventResult.success).toBe(true);
       }
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }

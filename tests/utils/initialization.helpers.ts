@@ -1,11 +1,25 @@
 import { Page, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../test.helpers';
-import { Config } from '../../../src/types';
-
-// Special test ID that automatically enables qaMode=true and uses local config
-// Use for: QA mode tests, local testing without API calls
-// Don't use for: Testing regular mode (qaMode=false) or API config loading
-const TEST_ID = 'test';
+import {
+  createConsoleMonitor,
+  ConsoleMonitor,
+  navigateAndWaitForReady,
+  initializeTraceLog,
+  isTraceLogInitialized,
+  verifyTraceLogAvailability,
+  triggerClickEvent,
+  triggerScrollEvent,
+  testCustomEvent,
+  waitForTimeout,
+  getTraceLogStorageKeys,
+  DEFAULT_CONFIG,
+  TEST_URLS,
+  STATUS_TEXTS,
+  ERROR_MESSAGES,
+  verifyInitializationResult,
+  verifyConsoleMessages,
+  verifyNoTraceLogErrors,
+} from './common.helpers';
+import { Config } from '../../src/types';
 
 /**
  * Performance requirements from spec
@@ -25,44 +39,31 @@ export const PERFORMANCE_REQUIREMENTS = {
  * Common test configurations
  */
 export const TEST_CONFIGS: Record<string, Config> = {
-  DEFAULT: { id: TEST_ID },
-  ALTERNATE_1: { id: TEST_ID, sessionTimeout: 30000 },
+  DEFAULT: DEFAULT_CONFIG,
+  ALTERNATE_1: { id: 'test', sessionTimeout: 30000 },
   ALTERNATE_2: {
-    id: TEST_ID,
+    id: 'test',
     sessionTimeout: 45000,
     globalMetadata: { source: 'e2e-test' },
     errorSampling: 0.5,
   },
   ALTERNATE_3: {
-    id: TEST_ID,
+    id: 'test',
     sessionTimeout: 30000,
     globalMetadata: { source: 'qa-test', environment: 'test' },
     errorSampling: 1.0,
     scrollContainerSelectors: ['body', '.content'],
   },
+  QA_MODE: { id: 'test' }, // Add QA_MODE config referenced in the code
 } as const;
 
 /**
- * Common page URLs and status texts
+ * Re-export constants from common helpers for backward compatibility
  */
 export const TEST_CONSTANTS = {
-  URLS: {
-    INITIALIZATION_PAGE: '/',
-    VALIDATION_PAGE: '/pages/validation/index.html',
-    PAGE_UNLOAD_PAGE_URL: '/pages/page-unload/index.html',
-    PAGE_UNLOAD_SECOND_PAGE_URL: '/pages/page-unload/second-page.html',
-  },
-  STATUS_TEXTS: {
-    READY: 'Status: Ready for testing',
-    INITIALIZED: 'Status: Initialized successfully',
-    VALIDATION_PASS: 'PASS: Valid project ID accepted',
-  },
-  ERROR_MESSAGES: {
-    ID_REQUIRED: 'Project ID is required',
-    INVALID_APP_CONFIG: 'Project ID is required',
-    UNDEFINED_CONFIG: 'Configuration must be an object',
-    APP_NOT_INITIALIZED: 'App not initialized',
-  },
+  URLS: TEST_URLS,
+  STATUS_TEXTS,
+  ERROR_MESSAGES,
 } as const;
 
 /**
@@ -138,7 +139,7 @@ export class ErrorValidator {
    * Validates initialization error structure and message
    */
   static validateInitializationError(result: any, expectedErrorMessage: string): void {
-    const validatedResult = TestAssertions.verifyInitializationResult(result);
+    const validatedResult = verifyInitializationResult(result);
     expect(validatedResult.success).toBe(false);
     expect(validatedResult.hasError).toBe(true);
     expect(result.error).toContain(expectedErrorMessage);
@@ -168,17 +169,17 @@ export class ErrorValidator {
    */
   static async validateNoTrackingOnFailure(page: Page): Promise<void> {
     // Verify TraceLog is not initialized
-    const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+    const isInitialized = await isTraceLogInitialized(page);
     expect(isInitialized).toBe(false);
 
     // Verify no localStorage entries
-    const localStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const localStorageKeys = await getTraceLogStorageKeys(page);
     expect(localStorageKeys).toHaveLength(0);
 
     // Test custom events fail
-    const customEventResult = await TestHelpers.testCustomEvent(page, 'test_event', { data: 'test' });
+    const customEventResult = await testCustomEvent(page, 'test_event', { data: 'test' });
     expect(customEventResult.success).toBe(false);
-    expect(customEventResult.error).toContain(TEST_CONSTANTS.ERROR_MESSAGES.APP_NOT_INITIALIZED);
+    expect(customEventResult.error).toContain(ERROR_MESSAGES.APP_NOT_INITIALIZED);
   }
 }
 
@@ -190,10 +191,10 @@ export class SessionValidator {
    * Validates basic session state after initialization
    */
   static async validateSessionState(page: Page): Promise<void> {
-    const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+    const isInitialized = await isTraceLogInitialized(page);
     expect(isInitialized).toBe(true);
 
-    const localStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const localStorageKeys = await getTraceLogStorageKeys(page);
     expect(localStorageKeys.length).toBeGreaterThan(0);
   }
 
@@ -201,7 +202,7 @@ export class SessionValidator {
    * Validates memory management and storage growth
    */
   static async validateMemoryManagement(page: Page, initialStorageCount: number, maxGrowth = 10): Promise<void> {
-    const finalStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+    const finalStorageKeys = await getTraceLogStorageKeys(page);
     expect(finalStorageKeys.length).toBeLessThan(initialStorageCount + maxGrowth);
   }
 
@@ -241,14 +242,14 @@ export class SessionValidator {
  */
 export class InitializationTestBase {
   protected page: Page;
-  protected monitor: ReturnType<typeof TestHelpers.createConsoleMonitor>;
+  protected monitor: ConsoleMonitor;
 
   constructor(page: Page) {
     this.page = page;
-    this.monitor = TestHelpers.createConsoleMonitor(page);
+    this.monitor = createConsoleMonitor(page);
   }
 
-  get consoleMonitor(): ReturnType<typeof TestHelpers.createConsoleMonitor> {
+  get consoleMonitor(): ConsoleMonitor {
     return this.monitor;
   }
 
@@ -259,11 +260,11 @@ export class InitializationTestBase {
   /**
    * Standard setup for initialization tests
    */
-  async setup(url: string = TEST_CONSTANTS.URLS.INITIALIZATION_PAGE): Promise<void> {
-    await TestHelpers.navigateAndWaitForReady(this.page, url);
-    await expect(this.page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.READY);
+  async setup(url: string = TEST_URLS.INITIALIZATION_PAGE): Promise<void> {
+    await navigateAndWaitForReady(this.page, url);
+    await expect(this.page.getByTestId('init-status')).toContainText(STATUS_TEXTS.READY);
 
-    const traceLogAvailable = await TestHelpers.verifyTraceLogAvailability(this.page);
+    const traceLogAvailable = await verifyTraceLogAvailability(this.page);
     expect(traceLogAvailable).toBe(true);
   }
 
@@ -275,11 +276,11 @@ export class InitializationTestBase {
     expectSuccess = true,
   ): Promise<{ result: any; duration: number }> {
     const startTime = Date.now();
-    const result = await TestHelpers.initializeTraceLog(this.page, config);
+    const result = await initializeTraceLog(this.page, config);
     const duration = Date.now() - startTime;
 
     if (expectSuccess) {
-      const validated = TestAssertions.verifyInitializationResult(result);
+      const validated = verifyInitializationResult(result);
       expect(validated.success).toBe(true);
       expect(validated.hasError).toBe(false);
       PerformanceValidator.validateInitializationTime(duration);
@@ -292,15 +293,13 @@ export class InitializationTestBase {
    * Validate initialization success with common checks
    */
   async validateSuccessfulInit(): Promise<void> {
-    await expect(this.page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.INITIALIZED);
+    await expect(this.page.getByTestId('init-status')).toContainText(STATUS_TEXTS.INITIALIZED);
 
     // Verify no errors
-    expect(TestAssertions.verifyNoTraceLogErrors(this.monitor.traceLogErrors)).toBe(true);
+    expect(verifyNoTraceLogErrors(this.monitor.traceLogErrors)).toBe(true);
 
     // Verify success message
-    expect(
-      TestAssertions.verifyConsoleMessages(this.monitor.consoleMessages, 'TraceLog initialized successfully'),
-    ).toBe(true);
+    expect(verifyConsoleMessages(this.monitor.consoleMessages, 'TraceLog initialized successfully')).toBe(true);
 
     await SessionValidator.validateSessionState(this.page);
   }
@@ -310,12 +309,12 @@ export class InitializationTestBase {
    */
   async testBasicFunctionality(): Promise<void> {
     // Test DOM interactions
-    await TestHelpers.triggerClickEvent(this.page);
-    await TestHelpers.triggerScrollEvent(this.page);
+    await triggerClickEvent(this.page);
+    await triggerScrollEvent(this.page);
 
     // Test custom events
-    const customEventResult = await TestHelpers.testCustomEvent(this.page, 'test_event', { test: true });
-    const validated = TestAssertions.verifyInitializationResult(customEventResult);
+    const customEventResult = await testCustomEvent(this.page, 'test_event', { test: true });
+    const validated = verifyInitializationResult(customEventResult);
     expect(validated.success).toBe(true);
     expect(validated.hasError).toBe(false);
   }
@@ -337,11 +336,11 @@ export class InitializationScenarios {
    */
   static async testInvalidProjectIdScenarios(testBase: InitializationTestBase): Promise<void> {
     const invalidConfigs = [
-      { config: undefined, expectedError: TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG },
-      { config: {}, expectedError: TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED },
-      { config: { id: '' }, expectedError: TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED },
-      { config: { id: null }, expectedError: TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED },
-      { config: { id: '   \t\n  ' }, expectedError: TEST_CONSTANTS.ERROR_MESSAGES.INVALID_APP_CONFIG },
+      { config: undefined, expectedError: ERROR_MESSAGES.UNDEFINED_CONFIG },
+      { config: {}, expectedError: ERROR_MESSAGES.ID_REQUIRED },
+      { config: { id: '' }, expectedError: ERROR_MESSAGES.ID_REQUIRED },
+      { config: { id: null }, expectedError: ERROR_MESSAGES.ID_REQUIRED },
+      { config: { id: '   \t\n  ' }, expectedError: ERROR_MESSAGES.INVALID_APP_CONFIG },
     ];
 
     for (const { config, expectedError } of invalidConfigs) {
@@ -378,13 +377,13 @@ export class InitializationScenarios {
 
     // Subsequent attempts
     for (let i = 1; i < configs.length; i++) {
-      await TestHelpers.waitForTimeout(testBase.testPage, 300);
+      await waitForTimeout(testBase.testPage, 300);
 
       const startTime = Date.now();
-      const result = await TestHelpers.initializeTraceLog(testBase.testPage, configs[i]);
+      const result = await initializeTraceLog(testBase.testPage, configs[i]);
       const duration = Date.now() - startTime;
 
-      const validated = TestAssertions.verifyInitializationResult(result);
+      const validated = verifyInitializationResult(result);
       expect(validated.success).toBe(true);
       expect(validated.hasError).toBe(false);
 

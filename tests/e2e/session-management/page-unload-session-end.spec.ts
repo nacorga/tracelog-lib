@@ -1,19 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
-import { TEST_CONSTANTS } from '../../utils/initialization/test.helpers';
+import { TestUtils } from '../../utils';
+import { TEST_CONSTANTS } from '../../utils/initialization.helpers';
 
 test.describe('Session Management - Page Unload Session End', () => {
   // Test Configuration
   const UNLOAD_DETECTION_TIMEOUT = 2000;
 
   test('should trigger SESSION_END event on beforeunload with page_unload reason', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
       // Navigate and initialize
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
 
       if (!validated.success) {
         monitor.traceLogErrors.push(
@@ -24,14 +24,14 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(validated.success).toBe(true);
 
       // Start session by triggering activity
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000); // Wait longer for session to start
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000); // Wait longer for session to start
 
       // Wait for session coordination
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
 
       // Get session info
-      const sessionInfo = await TestHelpers.getCrossTabSessionInfo(page);
+      const sessionInfo = await TestUtils.getCrossTabSessionInfo(page);
 
       if (!sessionInfo.sessionId) {
         monitor.traceLogErrors.push('[E2E Test] Session ID was not created before page unload test');
@@ -47,7 +47,7 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(typeof sessionInfo.sessionId).toBe('string');
 
       // Set up event monitoring using consolidated helper
-      await TestHelpers.setupSessionEndMonitoring(page);
+      await TestUtils.setupSessionEndMonitoring(page);
 
       // Trigger page unload by navigation
       await page.click('[data-testid="navigate-to-second-page"]');
@@ -57,7 +57,7 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       // Go back to check if SESSION_END was triggered
       await page.goBack();
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Check if SESSION_END event was detected
       const sessionEndData = await page.evaluate(() => {
@@ -76,25 +76,25 @@ test.describe('Session Management - Page Unload Session End', () => {
       }
 
       // Verify no TraceLog errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should use synchronous event delivery methods during page unload', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Start session and add some events to queue
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000);
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
 
       // Add events to queue by disabling auto-flush temporarily
       await page.evaluate(() => {
@@ -109,15 +109,15 @@ test.describe('Session Management - Page Unload Session End', () => {
           (window as any).TraceLog.event('test_event_3', { data: 'test3' });
         }
       });
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify TraceLog is properly initialized and can handle events
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Test that we can track events (which implies event manager is working)
-      const eventResult = await TestHelpers.testCustomEvent(page, 'sync_test_event', { test: true });
-      const eventValidated = TestAssertions.verifyInitializationResult(eventResult);
+      const eventResult = await TestUtils.testCustomEvent(page, 'sync_test_event', { test: true });
+      const eventValidated = TestUtils.verifyInitializationResult(eventResult);
       expect(eventValidated.success).toBe(true);
 
       // Monitor synchronous flush calls
@@ -135,33 +135,33 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       // Trigger page unload
       await page.click('[data-testid="navigate-away"]');
-      await TestHelpers.waitForTimeout(page, UNLOAD_DETECTION_TIMEOUT);
+      await TestUtils.waitForTimeout(page, UNLOAD_DETECTION_TIMEOUT);
 
       // Note: We can't directly verify the sync call after navigation
       // but we can verify the setup was correct and no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should properly clean up session state during page unload', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Start session
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000);
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Get initial session state
-      const sessionInfo = await TestHelpers.getCrossTabSessionInfo(page);
+      const sessionInfo = await TestUtils.getCrossTabSessionInfo(page);
       const initialSessionId = sessionInfo.sessionId;
       expect(initialSessionId).toBeTruthy();
 
@@ -172,11 +172,11 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       // Navigate away (triggers unload)
       await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_SECOND_PAGE_URL);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Navigate back to original page
       await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Verify session was properly cleaned up and persisted
       const storedSessionId = await page.evaluate(() => {
@@ -185,29 +185,26 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(storedSessionId).toBe(sessionInfo.sessionId ?? null);
 
       // Verify no TraceLog errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle rapid navigation without losing session end events', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(
-        page,
-        TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL.replace('index.html', ''),
-      );
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL.replace('index.html', ''));
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Start session
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000);
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Track multiple events to ensure queue has content
       await page.evaluate(() => {
@@ -224,41 +221,41 @@ test.describe('Session Management - Page Unload Session End', () => {
       });
 
       // Verify TraceLog is properly initialized and can handle events
-      const isInitialized = await TestHelpers.isTraceLogInitialized(page);
+      const isInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(isInitialized).toBe(true);
 
       // Perform rapid navigation sequence
       await page.click('[data-testid="navigate-to-second-page"]');
       await page.waitForURL('**/second-page.html', { timeout: 3000 });
 
-      await TestHelpers.waitForTimeout(page, 200);
+      await TestUtils.waitForTimeout(page, 200);
 
       await page.click('[data-testid="go-back"]');
       await page.waitForURL('**/page-unload/', { timeout: 5000 });
 
-      await TestHelpers.waitForTimeout(page, 500);
+      await TestUtils.waitForTimeout(page, 500);
 
       // Verify no errors occurred during rapid navigation
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should trigger session end on pagehide event for mobile compatibility', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Start session
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000);
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Set up pagehide event monitoring
       await page.evaluate(() => {
@@ -278,7 +275,7 @@ test.describe('Session Management - Page Unload Session End', () => {
         window.dispatchEvent(event);
       });
 
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Verify pagehide was detected
       const pagehideDetected = await page.evaluate(() => {
@@ -287,26 +284,26 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(pagehideDetected).toBe(true);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should handle visibility change events as fallback for session end', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Start session
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000);
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Monitor visibility change handling
       await page.evaluate(() => {
@@ -329,7 +326,7 @@ test.describe('Session Management - Page Unload Session End', () => {
         document.dispatchEvent(event);
       });
 
-      await TestHelpers.waitForTimeout(page, 1500); // Wait for delayed handler
+      await TestUtils.waitForTimeout(page, 1500); // Wait for delayed handler
 
       // Verify visibility change was detected
       const visibilityEvents = await page.evaluate(() => {
@@ -338,29 +335,29 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(visibilityEvents.length).toBeGreaterThan(0);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should prevent duplicate session end events during multiple unload triggers', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Start session
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000);
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Set up event monitoring for session end events using consolidated helper
-      await TestHelpers.setupSessionEndMonitoring(page, true);
+      await TestUtils.setupSessionEndMonitoring(page, true);
 
       // Trigger multiple unload events rapidly
       await page.evaluate(() => {
@@ -380,7 +377,7 @@ test.describe('Session Management - Page Unload Session End', () => {
         document.dispatchEvent(visibilityEvent);
       });
 
-      await TestHelpers.waitForTimeout(page, 2000);
+      await TestUtils.waitForTimeout(page, 2000);
 
       // Verify session end events were tracked but not duplicated excessively
       await page.evaluate(() => {
@@ -394,50 +391,50 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(hasEventMonitoring).toBe(true);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }
   });
 
   test('should maintain session state for potential recovery after unload', async ({ page }) => {
-    const monitor = TestHelpers.createConsoleMonitor(page);
+    const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page);
-      const validated = TestAssertions.verifyInitializationResult(initResult);
+      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      const initResult = await TestUtils.initializeTraceLog(page);
+      const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
       // Start session
-      await TestHelpers.simulateUserActivity(page);
-      await TestHelpers.waitForTimeout(page, 3000);
-      await TestHelpers.waitForCrossTabSessionCoordination(page);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.simulateUserActivity(page);
+      await TestUtils.waitForTimeout(page, 3000);
+      await TestUtils.waitForCrossTabSessionCoordination(page);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Get initial session data
-      const sessionInfo = await TestHelpers.getCrossTabSessionInfo(page);
-      const storageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+      const sessionInfo = await TestUtils.getCrossTabSessionInfo(page);
+      const storageKeys = await TestUtils.getTraceLogStorageKeys(page);
 
       expect(sessionInfo.sessionId).toBeTruthy();
       expect(storageKeys.length).toBeGreaterThan(0);
 
       // Navigate away to trigger unload
       await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_SECOND_PAGE_URL);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Return to original page
       await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
-      await TestHelpers.waitForTimeout(page, 1000);
+      await TestUtils.waitForTimeout(page, 1000);
 
       // Check if session data persisted in storage
-      const persistedStorageKeys = await TestHelpers.getTraceLogStorageKeys(page);
+      const persistedStorageKeys = await TestUtils.getTraceLogStorageKeys(page);
 
       // Verify session data was preserved for potential recovery
       expect(persistedStorageKeys.length).toBeGreaterThan(0);
 
       // Verify no errors occurred
-      expect(TestAssertions.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
     } finally {
       monitor.cleanup();
     }

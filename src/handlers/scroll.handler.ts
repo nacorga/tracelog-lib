@@ -6,7 +6,7 @@ import { StateManager } from '../managers/state.manager';
 interface ScrollContainer {
   element: Window | HTMLElement;
   lastScrollPos: number;
-  debounceTimer: ReturnType<typeof setTimeout> | null;
+  debounceTimer: number | null;
   listener: EventListener;
 }
 
