@@ -1,14 +1,9 @@
 import { test, expect } from '@playwright/test';
-import {
-  TestHelpers,
-  TestAssertions,
-  TEST_PAGE_URL,
-  DEFAULT_TEST_CONFIG,
-} from '../../utils/session-management/test.helpers';
+import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Session Start', () => {
   test('should automatically create session on first user activity', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page, DEFAULT_TEST_CONFIG);
+    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
 
     try {
       // Verify the session is already initialized by setupSessionTest
@@ -49,7 +44,7 @@ test.describe('Session Management - Session Start', () => {
   });
 
   test('should generate unique session ID with proper format', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page, DEFAULT_TEST_CONFIG);
+    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
 
     try {
       // Validate first session ID properties
@@ -79,8 +74,8 @@ test.describe('Session Management - Session Start', () => {
           await (window as any).TraceLog.destroy();
         }
         localStorage.clear();
-        await (window as any).initializeTraceLog({ id: 'test' });
       });
+      await TestHelpers.initializeTraceLog(page);
 
       // Wait for cross-tab leader election and trigger activity
       await TestHelpers.waitForTimeout(page, 2500);
@@ -121,8 +116,8 @@ test.describe('Session Management - Session Start', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page, 2500);
 
       // Setup event capture using consolidated helper
@@ -203,7 +198,7 @@ test.describe('Session Management - Session Start', () => {
   });
 
   test('should persist session data in localStorage with correct structure', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page, DEFAULT_TEST_CONFIG);
+    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
 
     try {
       // Validate session exists and has correct structure
@@ -253,11 +248,11 @@ test.describe('Session Management - Session Start', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Record timing for accuracy testing
       const initStartTime = Date.now();
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page, 2500);
       await TestHelpers.triggerClickEvent(page);
       await TestHelpers.waitForTimeout(page, 500);
@@ -336,7 +331,7 @@ test.describe('Session Management - Session Start', () => {
   });
 
   test('should handle session creation consistently across page interactions', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page, DEFAULT_TEST_CONFIG);
+    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
 
     try {
       // Verify initial session

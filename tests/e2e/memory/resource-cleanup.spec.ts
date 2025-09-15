@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
+import { TEST_CONFIGS } from '../../utils/initialization/test.helpers';
 
 /**
  * Resource tracking instrumentation for memory leak detection
@@ -38,8 +39,6 @@ interface ResourceSnapshot {
 }
 
 test.describe('Memory - Resource Cleanup', () => {
-  const TEST_CONFIG = { id: 'test' };
-
   /**
    * Inject resource tracking instrumentation into the page
    */
@@ -82,14 +81,14 @@ test.describe('Memory - Resource Cleanup', () => {
       };
 
       // Override setTimeout to track timers
-      window.setTimeout = function (callback: any, delay?: number, ...args: any[]) {
+      (window as any).setTimeout = function (callback: any, delay?: number, ...args: any[]) {
         const id = tracker.originalSetTimeout.call(window, callback, delay, ...args);
         tracker.timers.add(id);
         return id;
       };
 
       // Override clearTimeout to track cleanup
-      window.clearTimeout = function (id: number) {
+      (window as any).clearTimeout = function (id: number) {
         tracker.timers.delete(id);
         return tracker.originalClearTimeout.call(window, id);
       };
@@ -102,7 +101,7 @@ test.describe('Memory - Resource Cleanup', () => {
       };
 
       // Override clearInterval to track cleanup
-      window.clearInterval = function (id: number) {
+      (window as any).clearInterval = function (id: number) {
         tracker.intervals.delete(id);
         return tracker.originalClearInterval.call(window, id);
       };
@@ -291,13 +290,13 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
 
       // Debug the initialization result
@@ -354,13 +353,13 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -407,13 +406,13 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -430,10 +429,10 @@ test.describe('Memory - Resource Cleanup', () => {
 
       // Verify expected storage keys exist (mobile browsers may have different storage patterns)
       const expectedKeyPatterns = [
-        `tl:${TEST_CONFIG.id}:session`,
-        `tl:${TEST_CONFIG.id}:cross_tab_session`,
-        `tl:${TEST_CONFIG.id}:tab:`,
-        `tl:${TEST_CONFIG.id}:uid`, // UID key is commonly created
+        `tl:${TEST_CONFIGS.DEFAULT.id}:session`,
+        `tl:${TEST_CONFIGS.DEFAULT.id}:cross_tab_session`,
+        `tl:${TEST_CONFIGS.DEFAULT.id}:tab:`,
+        `tl:${TEST_CONFIGS.DEFAULT.id}:uid`, // UID key is commonly created
       ];
 
       const hasExpectedKeys = expectedKeyPatterns.some((pattern) =>
@@ -478,13 +477,13 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -535,7 +534,7 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Capture baseline AFTER page load but before TraceLog init
       const baselineSnapshot = await captureResourceSnapshot(page);
@@ -546,10 +545,7 @@ test.describe('Memory - Resource Cleanup', () => {
       // Perform multiple init/destroy cycles
       for (let cycle = 0; cycle < cycleCount; cycle++) {
         // Initialize TraceLog
-        const initResult = await TestHelpers.initializeTraceLog(page, {
-          ...TEST_CONFIG,
-          id: 'test', // Keep using 'test' to avoid HTTP requests
-        });
+        const initResult = await TestHelpers.initializeTraceLog(page);
         const validated = TestAssertions.verifyInitializationResult(initResult);
         expect(validated.success).toBe(true);
 
@@ -612,10 +608,10 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -652,7 +648,7 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Capture baseline WITHOUT initializing TraceLog
       const baselineSnapshot = await captureResourceSnapshot(page);
@@ -680,10 +676,10 @@ test.describe('Memory - Resource Cleanup', () => {
       await injectResourceTracker(page);
 
       // Navigate and wait for ready
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Initialize
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -703,7 +699,7 @@ test.describe('Memory - Resource Cleanup', () => {
 
         // Override clearTimeout to sometimes fail
         const originalClearTimeout = window.clearTimeout;
-        window.clearTimeout = function (id: number) {
+        (window as any).clearTimeout = function (id: number) {
           // Randomly fail some cleanup attempts
           if (Math.random() < 0.3) {
             throw new Error('Simulated timer cleanup failure');

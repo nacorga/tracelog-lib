@@ -1,23 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { TestHelpers, TestAssertions, TestConstants } from '../../utils/test.helpers';
+import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
 
 test.describe('Concurrency - Rapid Operations', () => {
-  // Enhanced debug logging configuration
-  const DEBUG_CONFIG = {
-    ...TestConstants.DEFAULT_QA_CONFIG,
-    qaMode: true,
-    debugMode: true,
-  };
-
   test.describe('Concurrent Session Creation', () => {
     test('should handle multiple simultaneous session creation attempts gracefully', async ({ page }) => {
       const monitor = TestHelpers.createConsoleMonitor(page);
 
       try {
-        await TestHelpers.navigateAndWaitForReady(page, '/');
+        await TestHelpers.navigateAndWaitForReady(page);
 
         // Create multiple simultaneous initialization attempts with debug logging
-        const initPromises = Array.from({ length: 5 }, () => TestHelpers.initializeTraceLog(page, DEBUG_CONFIG));
+        const initPromises = Array.from({ length: 5 }, () => TestHelpers.initializeTraceLog(page));
 
         // Execute all initialization attempts concurrently
         const results = await Promise.all(initPromises);
@@ -80,10 +73,10 @@ test.describe('Concurrency - Rapid Operations', () => {
       const monitor = TestHelpers.createConsoleMonitor(page);
 
       try {
-        await TestHelpers.navigateAndWaitForReady(page, '/');
+        await TestHelpers.navigateAndWaitForReady(page);
 
         // Initialize first session
-        await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+        await TestHelpers.initializeTraceLog(page);
         await TestHelpers.waitForTimeout(page, 1500);
         await TestHelpers.triggerClickEvent(page);
         await TestHelpers.waitForTimeout(page, 500);
@@ -111,16 +104,7 @@ test.describe('Concurrency - Rapid Operations', () => {
         }
 
         // Attempt concurrent re-initialization while session exists
-        const concurrentInitPromises = Array.from({ length: 3 }, () =>
-          page.evaluate(async (config) => {
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              return await (window as any).initializeTraceLog(config);
-            } catch (error: unknown) {
-              return { success: false, error: (error as Error).message };
-            }
-          }, DEBUG_CONFIG),
-        );
+        const concurrentInitPromises = Array.from({ length: 3 }, () => TestHelpers.initializeTraceLog(page));
 
         await Promise.all(concurrentInitPromises);
         await TestHelpers.waitForTimeout(page, 1000);
@@ -165,8 +149,8 @@ test.describe('Concurrency - Rapid Operations', () => {
 
       try {
         // Setup session
-        await TestHelpers.navigateAndWaitForReady(page, '/');
-        await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+        await TestHelpers.navigateAndWaitForReady(page);
+        await TestHelpers.initializeTraceLog(page);
         await TestHelpers.waitForTimeout(page, 2500);
 
         // Get initial session state
@@ -224,8 +208,8 @@ test.describe('Concurrency - Rapid Operations', () => {
 
       try {
         // Setup session
-        await TestHelpers.navigateAndWaitForReady(page, '/');
-        await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+        await TestHelpers.navigateAndWaitForReady(page);
+        await TestHelpers.initializeTraceLog(page);
         await TestHelpers.waitForTimeout(page, 2500);
 
         // Create mixed interaction types
@@ -282,7 +266,7 @@ test.describe('Concurrency - Rapid Operations', () => {
       try {
         // Initialize all tabs concurrently
         const initPromises = pages.map((page) =>
-          TestHelpers.navigateAndWaitForReady(page, '/').then(() => TestHelpers.initializeTraceLog(page, DEBUG_CONFIG)),
+          TestHelpers.navigateAndWaitForReady(page).then(() => TestHelpers.initializeTraceLog(page)),
         );
 
         await Promise.all(initPromises);
@@ -336,8 +320,8 @@ test.describe('Concurrency - Rapid Operations', () => {
 
       try {
         // Setup both tabs
-        await Promise.all(pages.map((page) => TestHelpers.navigateAndWaitForReady(page, '/')));
-        await Promise.all(pages.map((page) => TestHelpers.initializeTraceLog(page, DEBUG_CONFIG)));
+        await Promise.all(pages.map((page) => TestHelpers.navigateAndWaitForReady(page)));
+        await Promise.all(pages.map((page) => TestHelpers.initializeTraceLog(page)));
 
         // Wait for cross-tab coordination
         await TestHelpers.waitForTimeout(pages[0], 4000);
@@ -395,8 +379,8 @@ test.describe('Concurrency - Rapid Operations', () => {
           monitors.push(monitor);
 
           try {
-            await TestHelpers.navigateAndWaitForReady(page, '/');
-            await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+            await TestHelpers.navigateAndWaitForReady(page);
+            await TestHelpers.initializeTraceLog(page);
 
             // Quick activity
             await TestHelpers.triggerClickEvent(page);
@@ -448,8 +432,8 @@ test.describe('Concurrency - Rapid Operations', () => {
 
       try {
         // Setup session
-        await TestHelpers.navigateAndWaitForReady(page, '/');
-        await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+        await TestHelpers.navigateAndWaitForReady(page);
+        await TestHelpers.initializeTraceLog(page);
         await TestHelpers.waitForTimeout(page, 2500);
 
         // Get baseline session state - trigger activity first to ensure session creation
@@ -509,12 +493,12 @@ test.describe('Concurrency - Rapid Operations', () => {
       const monitor = TestHelpers.createConsoleMonitor(page);
 
       try {
-        await TestHelpers.navigateAndWaitForReady(page, '/');
+        await TestHelpers.navigateAndWaitForReady(page);
 
         // Create potential conflict scenario with rapid init/destroy cycles
         const conflictOperations = Array.from({ length: 3 }, async () => {
           try {
-            await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+            await TestHelpers.initializeTraceLog(page);
             await TestHelpers.waitForTimeout(page, 300);
 
             // Simulate potential conflict
@@ -527,7 +511,7 @@ test.describe('Concurrency - Rapid Operations', () => {
             });
 
             await TestHelpers.waitForTimeout(page, 200);
-            return await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+            return await TestHelpers.initializeTraceLog(page);
           } catch (error) {
             // Return error result for failed operations
             return { success: false, error: (error as Error).message };
@@ -538,7 +522,7 @@ test.describe('Concurrency - Rapid Operations', () => {
         await TestHelpers.waitForTimeout(page, 2000);
 
         // Final initialization to ensure stable state
-        const finalInitResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+        const finalInitResult = await TestHelpers.initializeTraceLog(page);
         await TestHelpers.waitForTimeout(page, 1500);
         await TestHelpers.triggerClickEvent(page);
         await TestHelpers.waitForTimeout(page, 1000);

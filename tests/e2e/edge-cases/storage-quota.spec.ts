@@ -2,16 +2,14 @@ import { test, expect } from '@playwright/test';
 import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
 
 test.describe('Storage Quota Edge Cases', () => {
-  const TEST_CONFIG = { id: 'test' };
-
   test('should handle localStorage quota exceeded after initialization', async ({ page }) => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -62,10 +60,10 @@ test.describe('Storage Quota Edge Cases', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -126,10 +124,10 @@ test.describe('Storage Quota Edge Cases', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 
@@ -197,10 +195,10 @@ test.describe('Storage Quota Edge Cases', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Initialize TraceLog first
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 

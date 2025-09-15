@@ -2,20 +2,18 @@ import { test, expect } from '@playwright/test';
 import {
   TestHelpers,
   TestAssertions,
-  TEST_PAGE_URL,
-  DEFAULT_TEST_CONFIG,
   MIN_SESSION_TIMEOUT_MS,
   MAX_SESSION_TIMEOUT_MS,
 } from '../../utils/session-management/test.helpers';
+import { TEST_CONFIGS } from '../../utils/initialization/test.helpers';
 
 test.describe('Session Management - Custom Session Timeout', () => {
   test('should accept custom session timeout within valid bounds', async ({ page }) => {
     // Test with valid custom timeout (5 minutes)
     const customTimeout = 5 * 60 * 1000; // 5 minutes
     const testConfig = {
-      ...DEFAULT_TEST_CONFIG,
+      ...TEST_CONFIGS.DEFAULT,
       sessionTimeout: customTimeout,
-      qaMode: true,
     };
 
     const { monitor } = await TestHelpers.setupSessionTest(page, testConfig);
@@ -74,12 +72,12 @@ test.describe('Session Management - Custom Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Test with timeout too low (below 30 seconds minimum)
       const tooLowTimeout = 15000; // 15 seconds
       const lowTimeoutConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: tooLowTimeout,
       };
 
@@ -114,7 +112,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       // Test with timeout too high (above 24 hours maximum)
       const tooHighTimeout = MAX_SESSION_TIMEOUT_MS + 1000; // Beyond max
       const highTimeoutConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: tooHighTimeout,
       };
 
@@ -148,7 +146,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       // Test with invalid type (string instead of number)
       const invalidTypeConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: '300000' as any, // Invalid: string instead of number
       };
 
@@ -172,13 +170,12 @@ test.describe('Session Management - Custom Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Test minimum valid timeout (30 seconds)
       const minTimeoutConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: MIN_SESSION_TIMEOUT_MS,
-        qaMode: true,
       };
 
       const minResult = await TestHelpers.initializeTraceLog(page, minTimeoutConfig);
@@ -205,9 +202,8 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       // Test maximum valid timeout (24 hours)
       const maxTimeoutConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: MAX_SESSION_TIMEOUT_MS,
-        qaMode: true,
       };
 
       const maxResult = await TestHelpers.initializeTraceLog(page, maxTimeoutConfig);
@@ -233,14 +229,13 @@ test.describe('Session Management - Custom Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Use a short but valid custom timeout for testing (1 minute)
       const shortTimeout = 60000; // 1 minute
       const testConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: shortTimeout,
-        qaMode: true,
       };
 
       const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
@@ -315,14 +310,13 @@ test.describe('Session Management - Custom Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Initialize with custom timeout
       const customTimeout = 10 * 60 * 1000; // 10 minutes
       const testConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: customTimeout,
-        qaMode: true,
       };
 
       const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
@@ -356,7 +350,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       await TestHelpers.waitForTimeout(page, 1000);
 
       // Reinitialize with same configuration
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
       const reloadInitResult = await TestHelpers.initializeTraceLog(page, testConfig);
       expect(TestAssertions.verifyInitializationResult(reloadInitResult).success).toBe(true);
 
@@ -417,7 +411,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Test sequence of different timeout configurations
       const timeoutConfigs = [
@@ -438,9 +432,8 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
         // Initialize with current timeout configuration
         const testConfig = {
-          ...DEFAULT_TEST_CONFIG,
+          ...TEST_CONFIGS.DEFAULT,
           sessionTimeout: timeout,
-          qaMode: true,
         };
 
         const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
@@ -498,14 +491,13 @@ test.describe('Session Management - Custom Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Use custom timeout configuration
       const customTimeout = 20 * 60 * 1000; // 20 minutes
       const testConfig = {
-        ...DEFAULT_TEST_CONFIG,
+        ...TEST_CONFIGS.DEFAULT,
         sessionTimeout: customTimeout,
-        qaMode: true,
       };
 
       await TestHelpers.initializeTraceLog(page, testConfig);

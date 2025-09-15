@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
+import { TEST_CONFIGS } from '../../utils/initialization/test.helpers';
 
 /**
  * Performance benchmarks for TraceLog SDK
@@ -14,11 +15,6 @@ test.describe('Performance Benchmarks', () => {
     CUSTOM_EVENT: 15,
   } as const;
 
-  const TEST_CONFIG = {
-    id: 'test', // Use 'test' ID for special handling that avoids network requests
-    qaMode: true, // Enable QA mode for testing
-  };
-
   /**
    * Measures initialization performance in browser context
    */
@@ -26,7 +22,7 @@ test.describe('Performance Benchmarks', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Measure initialization time in browser context
       const initPerformance = await page.evaluate(async (config) => {
@@ -54,7 +50,7 @@ test.describe('Performance Benchmarks', () => {
             error: error.message,
           };
         }
-      }, TEST_CONFIG);
+      }, TEST_CONFIGS.DEFAULT);
 
       // Validate initialization result
       const validated = TestAssertions.verifyInitializationResult(initPerformance);
@@ -91,8 +87,8 @@ test.describe('Performance Benchmarks', () => {
 
     try {
       // Initialize SDK first
-      await TestHelpers.navigateAndWaitForReady(page, '/');
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      const initResult = await TestHelpers.initializeTraceLog(page);
 
       const validated = TestAssertions.verifyInitializationResult(initResult);
       if (!validated.success) {
@@ -183,7 +179,7 @@ test.describe('Performance Benchmarks', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Measure session initialization performance
       const sessionPerformance = await page.evaluate(async (config) => {
@@ -218,7 +214,7 @@ test.describe('Performance Benchmarks', () => {
             error: error.message,
           };
         }
-      }, TEST_CONFIG);
+      }, TEST_CONFIGS.DEFAULT);
 
       // Validate session performance
       if (!sessionPerformance.success) {
@@ -256,8 +252,8 @@ test.describe('Performance Benchmarks', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      const initResult = await TestHelpers.initializeTraceLog(page);
 
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -339,7 +335,7 @@ test.describe('Performance Benchmarks', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Measure memory usage during SDK lifecycle
       const memoryPerformance = await page.evaluate(async (config) => {
@@ -395,7 +391,7 @@ test.describe('Performance Benchmarks', () => {
             error: error.message,
           };
         }
-      }, TEST_CONFIG);
+      }, TEST_CONFIGS.DEFAULT);
 
       // Validate memory performance (if memory API is available)
       if (!memoryPerformance.success) {

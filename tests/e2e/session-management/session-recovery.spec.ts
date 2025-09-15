@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  TestHelpers,
-  TestAssertions,
-  TEST_PAGE_URL,
-  DEFAULT_TEST_CONFIG,
-} from '../../utils/session-management/test.helpers';
+import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Session Recovery', () => {
   test('should maintain session functionality after page reload', async ({ page }) => {
@@ -12,8 +7,8 @@ test.describe('Session Management - Session Recovery', () => {
 
     try {
       // Initialize and create initial session
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Trigger activity to create session
@@ -37,8 +32,8 @@ test.describe('Session Management - Session Recovery', () => {
       await TestHelpers.waitForTimeout(page, 500);
 
       // Re-initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      const initResult = await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
 
       if (!validatedResult.success) {
@@ -118,8 +113,8 @@ test.describe('Session Management - Session Recovery', () => {
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Create session with activities
@@ -168,8 +163,8 @@ test.describe('Session Management - Session Recovery', () => {
       await TestHelpers.waitForTimeout(page, 500);
 
       // Re-initialize
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Trigger recovery
@@ -221,8 +216,8 @@ test.describe('Session Management - Session Recovery', () => {
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Create initial session
@@ -261,8 +256,8 @@ test.describe('Session Management - Session Recovery', () => {
       await TestHelpers.waitForTimeout(page, 500);
 
       // Re-initialize
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Trigger activity
@@ -326,8 +321,8 @@ test.describe('Session Management - Session Recovery', () => {
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Create session with timing data
@@ -341,8 +336,8 @@ test.describe('Session Management - Session Recovery', () => {
       await TestHelpers.waitForTimeout(page, 500);
 
       // Re-initialize
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Trigger recovery
@@ -422,8 +417,8 @@ test.describe('Session Management - Session Recovery', () => {
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Create session with multiple interactions
@@ -462,8 +457,8 @@ test.describe('Session Management - Session Recovery', () => {
         await page.reload();
         await TestHelpers.waitForTimeout(page, 500);
 
-        await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-        await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+        await TestHelpers.navigateAndWaitForReady(page);
+        await TestHelpers.initializeTraceLog(page);
         await TestHelpers.waitForTimeout(page);
 
         await TestHelpers.triggerClickEvent(page);
@@ -501,8 +496,8 @@ test.describe('Session Management - Session Recovery', () => {
 
     try {
       // Initialize TraceLog
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page);
 
       // Create session
@@ -534,8 +529,8 @@ test.describe('Session Management - Session Recovery', () => {
         await testCase.action();
 
         // Re-initialize
-        await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-        await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+        await TestHelpers.navigateAndWaitForReady(page);
+        await TestHelpers.initializeTraceLog(page);
         await TestHelpers.waitForTimeout(page);
 
         // Trigger session activity

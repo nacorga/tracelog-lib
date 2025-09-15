@@ -1,18 +1,12 @@
 import { Page } from '@playwright/test';
 import { TestHelpers as BaseTestHelpers } from '../test.helpers';
+import { TEST_CONFIGS, TEST_CONSTANTS } from '../initialization/test.helpers';
+import { Config } from '../../../src/types';
 
 /**
  * Session Management specific test constants
  */
 export class SessionManagementConstants {
-  // Test URLs
-  static readonly TEST_PAGE_URL = '/';
-  static readonly SECOND_PAGE_URL = '/pages/page-unload/second-page.html';
-
-  // Test configurations
-  static readonly DEFAULT_TEST_CONFIG = { id: 'test' };
-  static readonly QA_CONFIG = { id: 'test' };
-
   // Session timeout bounds (from src/constants/limits.constants.ts)
   static readonly MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds
   static readonly MAX_SESSION_TIMEOUT_MS = 86400000; // 24 hours
@@ -42,8 +36,8 @@ export class SessionManagementHelpers extends BaseTestHelpers {
    */
   static async setupSessionTest(
     page: Page,
-    config = SessionManagementConstants.DEFAULT_TEST_CONFIG,
-    testUrl = SessionManagementConstants.TEST_PAGE_URL,
+    config: Config = TEST_CONFIGS.DEFAULT,
+    testUrl: string = TEST_CONSTANTS.URLS.INITIALIZATION_PAGE,
   ): Promise<{
     monitor: ReturnType<typeof BaseTestHelpers.createConsoleMonitor>;
     sessionInfo: Awaited<ReturnType<typeof BaseTestHelpers.getSessionDataFromStorage>>;
@@ -195,8 +189,8 @@ export class SessionManagementHelpers extends BaseTestHelpers {
    */
   static async setupCrossTabSessionTest(
     page: Page,
-    config = SessionManagementConstants.DEFAULT_TEST_CONFIG,
-    testUrl = SessionManagementConstants.TEST_PAGE_URL,
+    config: Config = TEST_CONFIGS.DEFAULT,
+    testUrl: string = TEST_CONSTANTS.URLS.INITIALIZATION_PAGE,
   ): Promise<{
     monitor: ReturnType<typeof BaseTestHelpers.createConsoleMonitor>;
     sessionInfo: Awaited<ReturnType<typeof BaseTestHelpers.getCrossTabSessionInfo>>;
@@ -304,7 +298,5 @@ export { TestHelpers as BaseTestHelpers, TestConstants, TestAssertions } from '.
 export { SessionManagementHelpers as TestHelpers };
 
 // Export session management specific constants and helpers as defaults
-export const TEST_PAGE_URL = SessionManagementConstants.TEST_PAGE_URL;
-export const DEFAULT_TEST_CONFIG = SessionManagementConstants.DEFAULT_TEST_CONFIG as { id: string; qaMode: boolean };
 export const MIN_SESSION_TIMEOUT_MS = SessionManagementConstants.MIN_SESSION_TIMEOUT_MS;
 export const MAX_SESSION_TIMEOUT_MS = SessionManagementConstants.MAX_SESSION_TIMEOUT_MS;

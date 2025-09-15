@@ -8,12 +8,9 @@ import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
  * operations fail and properly falls back to in-memory storage.
  */
 test.describe('Storage Failures - Error Recovery', () => {
-  // Enhanced debug logging configuration
-  const DEBUG_CONFIG = { id: 'test', debugMode: true };
-
   test.beforeEach(async ({ page }) => {
     // Navigate to test page and ensure clean state
-    await TestHelpers.navigateAndWaitForReady(page, '/');
+    await TestHelpers.navigateAndWaitForReady(page);
 
     // Clear any existing storage to ensure clean test state
     await page.evaluate(() => {
@@ -27,7 +24,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
@@ -102,7 +99,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
@@ -168,7 +165,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
@@ -232,7 +229,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
@@ -323,7 +320,7 @@ test.describe('Storage Failures - Error Recovery', () => {
       });
 
       // Initialize TraceLog - should fall back to in-memory storage
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
@@ -392,7 +389,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
     try {
       // Initialize TraceLog first (normal initialization)
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validatedResult = TestAssertions.verifyInitializationResult(initResult);
       expect(validatedResult.success).toBe(true);
 
@@ -480,7 +477,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
     try {
       // First, initialize normally to create valid storage entries
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
       await TestHelpers.triggerClickEvent(page);
@@ -537,7 +534,7 @@ test.describe('Storage Failures - Error Recovery', () => {
 
     try {
       // Initialize TraceLog
-      const initResult = await TestHelpers.initializeTraceLog(page, DEBUG_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
       // Simulate concurrent operations that might cause storage conflicts

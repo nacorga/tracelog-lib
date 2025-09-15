@@ -1,4 +1,6 @@
 import { Page, Browser } from '@playwright/test';
+import { Config } from '../../src/types';
+import { TEST_CONFIGS, TEST_CONSTANTS } from './initialization/test.helpers';
 
 /**
  * Common test utilities for TraceLog E2E tests
@@ -117,7 +119,11 @@ export class TestHelpers {
   /**
    * Page initialization utilities
    */
-  static async navigateAndWaitForReady(page: Page, url: string, statusSelector?: string): Promise<void> {
+  static async navigateAndWaitForReady(
+    page: Page,
+    url: string = TEST_CONSTANTS.URLS.INITIALIZATION_PAGE,
+    statusSelector?: string,
+  ): Promise<void> {
     await page.goto(url);
     await page.waitForLoadState('domcontentloaded');
 
@@ -148,7 +154,7 @@ export class TestHelpers {
     });
   }
 
-  static async initializeTraceLog(page: Page, config: { id: string; qaMode?: boolean } = { id: 'test' }): Promise<any> {
+  static async initializeTraceLog(page: Page, config: Config = TEST_CONFIGS.DEFAULT): Promise<any> {
     return await page.evaluate(async (config) => {
       return await (window as any).initializeTraceLog(config);
     }, config);
@@ -422,10 +428,12 @@ export class TestHelpers {
 
   static async waitForTabCountUpdate(pages: Page[], expectedTabCount: number, timeoutMs = 5000): Promise<void> {
     const startTime = Date.now();
+    let lastKnownCounts: number[] = [];
 
     while (Date.now() - startTime < timeoutMs) {
       // Check all pages for updated tab count
       const sessionInfos = await Promise.all(pages.map((page) => TestHelpers.getCrossTabSessionInfo(page)));
+      const currentCounts: number[] = [];
 
       for (const sessionInfo of sessionInfos) {
         if (
@@ -434,16 +442,26 @@ export class TestHelpers {
           'tabCount' in sessionInfo.sessionContext
         ) {
           const tabCount = (sessionInfo.sessionContext as { tabCount?: number }).tabCount;
-          if (tabCount === expectedTabCount) {
-            return;
+          if (typeof tabCount === 'number') {
+            currentCounts.push(tabCount);
+            if (tabCount === expectedTabCount) {
+              return;
+            }
           }
         }
       }
 
-      await pages[0].waitForTimeout(200);
+      lastKnownCounts = currentCounts;
+
+      // Use progressive backoff for polling interval
+      const elapsed = Date.now() - startTime;
+      const interval = elapsed < 1000 ? 100 : elapsed < 3000 ? 200 : 500;
+      await pages[0].waitForTimeout(interval);
     }
 
-    throw new Error(`Tab count did not update to ${expectedTabCount} within ${timeoutMs}ms`);
+    throw new Error(
+      `Tab count did not update to ${expectedTabCount} within ${timeoutMs}ms. Last known counts: ${lastKnownCounts.join(', ')}`,
+    );
   }
 
   static async simulateUserActivity(page: Page): Promise<void> {
@@ -673,14 +691,14 @@ export class TestHelpers {
 
   static async setupSessionTest(
     page: Page,
-    config = { id: 'test' },
+    config = TEST_CONFIGS.DEFAULT,
   ): Promise<{
     monitor: ReturnType<typeof TestHelpers.createConsoleMonitor>;
     sessionInfo: Awaited<ReturnType<typeof TestHelpers.getSessionDataFromStorage>>;
   }> {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
-    await TestHelpers.navigateAndWaitForReady(page, '/');
+    await TestHelpers.navigateAndWaitForReady(page);
     await TestHelpers.initializeTraceLog(page, config);
     await TestHelpers.waitForTimeout(page, 2500); // Wait for cross-tab leader election
     await TestHelpers.triggerClickEvent(page);
@@ -739,8 +757,6 @@ export class TestHelpers {
  */
 export class TestConstants {
   static readonly TEST_PAGE_URL = '/';
-  static readonly DEFAULT_TEST_CONFIG = { id: 'test' };
-  static readonly DEFAULT_QA_CONFIG = { id: 'test' };
   static readonly READY_STATUS_TEXT = 'Status: Ready for testing';
   static readonly INITIALIZED_STATUS_TEXT = 'Status: Initialized successfully';
 

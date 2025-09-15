@@ -1,14 +1,9 @@
 import { test, expect } from '@playwright/test';
-import {
-  TestHelpers,
-  TestAssertions,
-  TEST_PAGE_URL,
-  DEFAULT_TEST_CONFIG,
-} from '../../utils/session-management/test.helpers';
+import { TestHelpers, TestAssertions } from '../../utils/session-management/test.helpers';
 
 test.describe('Session Management - Session Timeout', () => {
   test('should accept custom session timeout configuration and validate initialization', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page, DEFAULT_TEST_CONFIG);
+    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
 
     try {
       // Wait for initialization to complete and verify final status
@@ -45,7 +40,7 @@ test.describe('Session Management - Session Timeout', () => {
   });
 
   test('should maintain session state with continuous user activity', async ({ page }) => {
-    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page, DEFAULT_TEST_CONFIG);
+    const { monitor, sessionInfo } = await TestHelpers.setupSessionTest(page);
 
     try {
       // Verify initial session
@@ -90,14 +85,9 @@ test.describe('Session Management - Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
-      const testConfig = {
-        ...DEFAULT_TEST_CONFIG,
-        qaMode: true,
-      };
-
-      const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
       await TestHelpers.waitForTimeout(page, 2500);
@@ -130,15 +120,10 @@ test.describe('Session Management - Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-
-      const testConfig = {
-        ...DEFAULT_TEST_CONFIG,
-        qaMode: true,
-      };
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Test initialization and cleanup cycle
-      const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
       await TestHelpers.waitForTimeout(page, 2500); // Wait for cross-tab leader election
@@ -194,15 +179,9 @@ test.describe('Session Management - Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
+      await TestHelpers.navigateAndWaitForReady(page);
 
-      // Test with default timeout configuration
-      const testConfig = {
-        ...DEFAULT_TEST_CONFIG,
-        qaMode: true,
-      };
-
-      const initResult = await TestHelpers.initializeTraceLog(page, testConfig);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       expect(TestAssertions.verifyInitializationResult(initResult).success).toBe(true);
 
       await TestHelpers.waitForTimeout(page, 2500);
@@ -233,8 +212,8 @@ test.describe('Session Management - Session Timeout', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, TEST_PAGE_URL);
-      await TestHelpers.initializeTraceLog(page, DEFAULT_TEST_CONFIG);
+      await TestHelpers.navigateAndWaitForReady(page);
+      await TestHelpers.initializeTraceLog(page);
       await TestHelpers.waitForTimeout(page, 2500);
 
       // Start session

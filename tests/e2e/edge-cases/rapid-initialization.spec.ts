@@ -1,14 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
+import { TEST_CONFIGS } from '../../utils/initialization/test.helpers';
 
 test.describe('Rapid Initialization Edge Cases', () => {
-  const TEST_CONFIG = { id: 'test' };
-
   test('should handle rapid initialization attempts safely', async ({ page }) => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Test multiple rapid initialization attempts with same config
       // The SDK should handle this by allowing the first to succeed, others return early
@@ -17,7 +16,7 @@ test.describe('Rapid Initialization Edge Cases', () => {
           (window as any).TraceLog.init(config).catch((error: Error) => ({ error: error.message })),
         );
         return Promise.allSettled(promises);
-      }, TEST_CONFIG);
+      }, TEST_CONFIGS.DEFAULT);
 
       // Verify all promises settled (no hanging promises)
       expect(results).toHaveLength(5);
@@ -50,7 +49,7 @@ test.describe('Rapid Initialization Edge Cases', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Test multiple concurrent initialization with identical config
       // The SDK should handle concurrent calls by waiting for the first to complete
@@ -71,7 +70,7 @@ test.describe('Rapid Initialization Edge Cases', () => {
           duration: endTime - startTime,
           totalAttempts: promises.length,
         };
-      }, TEST_CONFIG);
+      }, TEST_CONFIGS.DEFAULT);
 
       // Verify all attempts completed
       expect(results.results).toHaveLength(10);
@@ -105,7 +104,7 @@ test.describe('Rapid Initialization Edge Cases', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // Simulate initialization attempt during page unload
       const result = await page.evaluate(async (config) => {
@@ -122,7 +121,7 @@ test.describe('Rapid Initialization Edge Cases', () => {
         } catch (error) {
           return { success: false, error: (error as Error).message };
         }
-      }, TEST_CONFIG);
+      }, TEST_CONFIGS.DEFAULT);
 
       // Should handle unload gracefully (either succeed or fail cleanly)
       expect(result).toBeDefined();
@@ -148,10 +147,10 @@ test.describe('Rapid Initialization Edge Cases', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // First initialize with a valid config
-      const firstInitResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const firstInitResult = await TestHelpers.initializeTraceLog(page);
       const firstValidated = TestAssertions.verifyInitializationResult(firstInitResult);
       expect(firstValidated.success).toBe(true);
 
@@ -218,10 +217,10 @@ test.describe('Rapid Initialization Edge Cases', () => {
     const monitor = TestHelpers.createConsoleMonitor(page);
 
     try {
-      await TestHelpers.navigateAndWaitForReady(page, '/');
+      await TestHelpers.navigateAndWaitForReady(page);
 
       // First initialize the SDK properly
-      const initResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIG);
+      const initResult = await TestHelpers.initializeTraceLog(page);
       const validated = TestAssertions.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
 

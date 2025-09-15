@@ -40,7 +40,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       await TestHelpers.waitForTimeout(page, 200);
 
       const startTime = Date.now();
-      const duplicateInitResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
+      const duplicateInitResult = await TestHelpers.initializeTraceLog(page);
       const duration = Date.now() - startTime;
 
       const validatedResult = TestAssertions.verifyInitializationResult(duplicateInitResult);
@@ -122,7 +122,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       await TestHelpers.waitForTimeout(page, 300);
 
       const startTime = Date.now();
-      const reinitResult = await TestHelpers.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
+      const reinitResult = await TestHelpers.initializeTraceLog(page);
       const duration = Date.now() - startTime;
 
       const validatedReinitResult = TestAssertions.verifyInitializationResult(reinitResult);

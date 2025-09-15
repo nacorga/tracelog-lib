@@ -46,6 +46,8 @@ export const TEST_CONSTANTS = {
   URLS: {
     INITIALIZATION_PAGE: '/',
     VALIDATION_PAGE: '/pages/validation/index.html',
+    PAGE_UNLOAD_PAGE_URL: '/pages/page-unload/index.html',
+    PAGE_UNLOAD_SECOND_PAGE_URL: '/pages/page-unload/second-page.html',
   },
   STATUS_TEXTS: {
     READY: 'Status: Ready for testing',
