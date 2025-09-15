@@ -26,7 +26,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     page,
   }) => {
     // First initialization
-    await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
+    await testBase.performMeasuredInit();
     await expect(page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.INITIALIZED);
     await SessionValidator.validateSessionState(page);
 
@@ -91,7 +91,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     page,
   }) => {
     // Test multiple configurations using centralized scenario
-    const configs = [TEST_CONFIGS.DEFAULT, TEST_CONFIGS.ALTERNATE, TEST_CONFIGS.COMPLEX];
+    const configs = [TEST_CONFIGS.DEFAULT, TEST_CONFIGS.ALTERNATE_1, TEST_CONFIGS.ALTERNATE_2];
     await InitializationScenarios.testMultipleInitAttempts(testBase, configs);
 
     // Final state verification
@@ -107,7 +107,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     page,
   }) => {
     // Initial setup and first initialization
-    await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
+    await testBase.performMeasuredInit();
 
     // Test initial interaction works
     await TestHelpers.triggerClickEvent(page);
@@ -186,12 +186,12 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     page,
   }) => {
     // Initial initialization and functionality test
-    await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
+    await testBase.performMeasuredInit();
     const initialCustomEventResult = await TestHelpers.testCustomEvent(page, 'initial_test', { phase: 'initial' });
     expect(TestAssertions.verifyInitializationResult(initialCustomEventResult).success).toBe(true);
 
     // Test multiple re-initializations with different configs
-    const configs = [TEST_CONFIGS.DEFAULT, TEST_CONFIGS.ALTERNATE, TEST_CONFIGS.DEFAULT];
+    const configs = [TEST_CONFIGS.DEFAULT, TEST_CONFIGS.ALTERNATE_1, TEST_CONFIGS.DEFAULT];
 
     for (let i = 0; i < configs.length; i++) {
       await TestHelpers.waitForTimeout(page, 400);
@@ -260,14 +260,14 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     const initialMemoryState = await MemoryTestUtils.getMemoryBaseline(page);
 
     // Initial initialization
-    await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
+    await testBase.performMeasuredInit();
 
     // Perform multiple re-initialization attempts (stress test)
     for (let i = 0; i < 10; i++) {
       await TestHelpers.waitForTimeout(page, 100);
 
       // Alternate configurations
-      const config = i % 2 === 0 ? TEST_CONFIGS.DEFAULT : TEST_CONFIGS.ALTERNATE;
+      const config = i % 2 === 0 ? TEST_CONFIGS.DEFAULT : TEST_CONFIGS.ALTERNATE_1;
       const startTime = Date.now();
       const reinitResult = await TestHelpers.initializeTraceLog(page, config);
       const duration = Date.now() - startTime;

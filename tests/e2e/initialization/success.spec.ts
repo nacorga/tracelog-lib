@@ -1,11 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestHelpers, TestAssertions } from '../../utils/test.helpers';
-import {
-  InitializationTestBase,
-  TEST_CONFIGS,
-  TEST_CONSTANTS,
-  SessionValidator,
-} from '../../utils/initialization/test.helpers';
+import { InitializationTestBase, TEST_CONSTANTS, SessionValidator } from '../../utils/initialization/test.helpers';
 
 test.describe('Library Initialization - Success', () => {
   test('should successfully initialize TraceLog with valid project ID', async ({ page }) => {
@@ -14,7 +9,7 @@ test.describe('Library Initialization - Success', () => {
     try {
       // Setup and perform initialization
       await testBase.setup();
-      await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
+      await testBase.performMeasuredInit();
       await TestHelpers.waitForTimeout(page);
 
       // Log if initialization validation fails
@@ -115,7 +110,7 @@ test.describe('Library Initialization - Success', () => {
     try {
       // Setup and first initialization
       await testBase.setup();
-      await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
+      await testBase.performMeasuredInit();
       await SessionValidator.validateSessionState(page);
 
       // Test duplicate initialization handling
@@ -160,7 +155,7 @@ test.describe('Library Initialization - Success', () => {
     try {
       // Setup and initialization
       await testBase.setup();
-      await testBase.performMeasuredInit(TEST_CONFIGS.DEFAULT);
+      await testBase.performMeasuredInit();
       await TestHelpers.waitForTimeout(page);
 
       // Test core functionality using centralized method

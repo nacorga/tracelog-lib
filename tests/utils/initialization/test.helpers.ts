@@ -1,5 +1,11 @@
 import { Page, expect } from '@playwright/test';
 import { TestHelpers, TestAssertions } from '../test.helpers';
+import { Config } from '../../../src/types';
+
+// Special test ID that automatically enables qaMode=true and uses local config
+// Use for: QA mode tests, local testing without API calls
+// Don't use for: Testing regular mode (qaMode=false) or API config loading
+const TEST_ID = 'test';
 
 /**
  * Performance requirements from spec
@@ -18,25 +24,22 @@ export const PERFORMANCE_REQUIREMENTS = {
 /**
  * Common test configurations
  */
-export const TEST_CONFIGS = {
-  DEFAULT: { id: 'test' },
-  ALTERNATE: { id: 'test', sessionTimeout: 30000 },
-  COMPLEX: {
-    id: 'test',
+export const TEST_CONFIGS: Record<string, Config> = {
+  DEFAULT: { id: TEST_ID },
+  ALTERNATE_1: { id: TEST_ID, sessionTimeout: 30000 },
+  ALTERNATE_2: {
+    id: TEST_ID,
     sessionTimeout: 45000,
     globalMetadata: { source: 'e2e-test' },
     errorSampling: 0.5,
   },
-  QA_MODE: { id: 'test' },
-  QA_MODE_COMPLEX: {
-    id: 'test',
-    qaMode: true,
+  ALTERNATE_3: {
+    id: TEST_ID,
     sessionTimeout: 30000,
     globalMetadata: { source: 'qa-test', environment: 'test' },
     errorSampling: 1.0,
     scrollContainerSelectors: ['body', '.content'],
   },
-  NON_QA_MODE: { id: 'test', qaMode: false },
 } as const;
 
 /**
@@ -268,7 +271,7 @@ export class InitializationTestBase {
    * Perform measured initialization with performance validation
    */
   async performMeasuredInit(
-    config: any = TEST_CONFIGS.DEFAULT,
+    config: Config = TEST_CONFIGS.DEFAULT,
     expectSuccess = true,
   ): Promise<{ result: any; duration: number }> {
     const startTime = Date.now();
@@ -365,7 +368,7 @@ export class InitializationScenarios {
    */
   static async testMultipleInitAttempts(
     testBase: InitializationTestBase,
-    configs: any[] = [TEST_CONFIGS.DEFAULT, TEST_CONFIGS.ALTERNATE, TEST_CONFIGS.COMPLEX],
+    configs: any[] = [TEST_CONFIGS.DEFAULT, TEST_CONFIGS.ALTERNATE_1, TEST_CONFIGS.ALTERNATE_2],
   ): Promise<void> {
     const results: Array<{ duration: number; success: boolean }> = [];
 
@@ -399,7 +402,7 @@ export class InitializationScenarios {
     const rapidInitPromises: Promise<any>[] = [];
 
     for (let i = 0; i < attemptCount; i++) {
-      const config = { id: 'test', sessionTimeout: 30000 + i * 1000 };
+      const config = { ...TEST_CONFIGS.DEFAULT, sessionTimeout: 30000 + i * 1000 };
       rapidInitPromises.push(
         testBase.testPage.evaluate(async (cfg) => {
           try {
