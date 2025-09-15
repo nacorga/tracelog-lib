@@ -61,9 +61,7 @@ test.describe('Library Initialization - Success', () => {
         const validatedResult = TestUtils.verifyInitializationResult(result);
 
         if (validatedResult.success) {
-          monitor.traceLogErrors.push(
-            `${method} should have failed but succeeded: ${JSON.stringify(result)}`,
-          );
+          monitor.traceLogErrors.push(`${method} should have failed but succeeded: ${JSON.stringify(result)}`);
         }
         if (!result.error?.includes(expectedError)) {
           monitor.traceLogErrors.push(
@@ -83,14 +81,10 @@ test.describe('Library Initialization - Success', () => {
       const validatedValidIdResult = TestUtils.verifyInitializationResult(validIdResult);
 
       if (!validatedValidIdResult.success) {
-        monitor.traceLogErrors.push(
-          `Valid project ID test failed unexpectedly: ${JSON.stringify(validIdResult)}`,
-        );
+        monitor.traceLogErrors.push(`Valid project ID test failed unexpectedly: ${JSON.stringify(validIdResult)}`);
       }
       if (validatedValidIdResult.hasError) {
-        monitor.traceLogErrors.push(
-          `Valid project ID test has unexpected error: ${JSON.stringify(validIdResult)}`,
-        );
+        monitor.traceLogErrors.push(`Valid project ID test has unexpected error: ${JSON.stringify(validIdResult)}`);
       }
 
       expect(validatedValidIdResult.success).toBe(true);
@@ -138,9 +132,7 @@ test.describe('Library Initialization - Success', () => {
       const stillInitialized = await TestUtils.isTraceLogInitialized(page);
 
       if (!stillInitialized) {
-        testBase.consoleMonitor.traceLogErrors.push(
-          'TraceLog should still be initialized after duplicate init',
-        );
+        testBase.consoleMonitor.traceLogErrors.push('TraceLog should still be initialized after duplicate init');
       }
 
       expect(stillInitialized).toBe(true);
@@ -166,9 +158,7 @@ test.describe('Library Initialization - Success', () => {
       const hasRuntimeErrors = await TestUtils.detectRuntimeErrors(page);
 
       if (hasRuntimeErrors) {
-        testBase.consoleMonitor.traceLogErrors.push(
-          'Runtime errors detected during core functionality test',
-        );
+        testBase.consoleMonitor.traceLogErrors.push('Runtime errors detected during core functionality test');
       }
 
       expect(hasRuntimeErrors).toBeFalsy();

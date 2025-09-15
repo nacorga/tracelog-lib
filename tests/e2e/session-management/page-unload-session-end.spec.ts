@@ -16,9 +16,7 @@ test.describe('Session Management - Page Unload Session End', () => {
       const validated = TestUtils.verifyInitializationResult(initResult);
 
       if (!validated.success) {
-        monitor.traceLogErrors.push(
-          `Initialization failed in page unload test: ${JSON.stringify(initResult)}`,
-        );
+        monitor.traceLogErrors.push(`Initialization failed in page unload test: ${JSON.stringify(initResult)}`);
       }
 
       expect(validated.success).toBe(true);
@@ -38,9 +36,7 @@ test.describe('Session Management - Page Unload Session End', () => {
       }
 
       if (typeof sessionInfo.sessionId !== 'string') {
-        monitor.traceLogErrors.push(
-          `Session ID is not a string in page unload test: ${typeof sessionInfo.sessionId}`,
-        );
+        monitor.traceLogErrors.push(`Session ID is not a string in page unload test: ${typeof sessionInfo.sessionId}`);
       }
 
       expect(sessionInfo.sessionId).toBeTruthy();

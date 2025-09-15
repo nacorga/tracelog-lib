@@ -47,9 +47,7 @@ test.describe('Session Management - Session Timeout', () => {
       try {
         TestUtils.verifySessionId(sessionInfo.sessionId);
       } catch (error) {
-        monitor.traceLogErrors.push(
-          `Initial session ID verification failed in continuous activity test: ${error}`,
-        );
+        monitor.traceLogErrors.push(`Initial session ID verification failed in continuous activity test: ${error}`);
         throw error;
       }
 

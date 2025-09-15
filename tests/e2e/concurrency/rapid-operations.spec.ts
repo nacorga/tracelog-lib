@@ -94,7 +94,9 @@ test.describe('Concurrency - Rapid Operations', () => {
           expect(retrySessionInfo.hasSession).toBe(true);
 
           if (!retrySessionInfo.sessionId) {
-            monitor.traceLogWarnings.push('Session creation failed on Mobile Chrome - this may be a platform limitation');
+            monitor.traceLogWarnings.push(
+              'Session creation failed on Mobile Chrome - this may be a platform limitation',
+            );
             return; // Skip this test on platforms where session creation is unreliable
           }
 
@@ -125,7 +127,9 @@ test.describe('Concurrency - Rapid Operations', () => {
             );
           }
         } else {
-          monitor.traceLogWarnings.push('Final session ID is null - this may indicate a concurrency issue on this platform');
+          monitor.traceLogWarnings.push(
+            'Final session ID is null - this may indicate a concurrency issue on this platform',
+          );
         }
 
         // Verify no critical TraceLog errors (allow initialization conflicts)
@@ -452,7 +456,9 @@ test.describe('Concurrency - Rapid Operations', () => {
           if (retrySession.sessionId) {
             TestUtils.verifySessionId(retrySession.sessionId);
           } else {
-            monitor.traceLogWarnings.push('Session creation failed during high-frequency test setup - skipping baseline verification');
+            monitor.traceLogWarnings.push(
+              'Session creation failed during high-frequency test setup - skipping baseline verification',
+            );
           }
         } else {
           TestUtils.verifySessionId(baselineSession.sessionId);

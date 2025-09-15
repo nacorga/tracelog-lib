@@ -543,7 +543,9 @@ test.describe('Custom Event Tracking - Invalid Metadata', () => {
             results[1].error.includes('circular references') || results[1].error.includes('invalid types');
           expect(hasExpectedError).toBe(true);
         } else {
-          monitor.traceLogWarnings.push('ANOMALY: Multiple attempts - circular reference was sanitized instead of rejected');
+          monitor.traceLogWarnings.push(
+            'ANOMALY: Multiple attempts - circular reference was sanitized instead of rejected',
+          );
         }
 
         // Verify SDK still works

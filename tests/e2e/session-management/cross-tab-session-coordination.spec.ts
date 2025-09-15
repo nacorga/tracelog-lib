@@ -34,9 +34,7 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
       const firstTabSessionInfo = await TestUtils.getCrossTabSessionInfo(pages[0]);
 
       if (!firstTabSessionInfo.sessionId) {
-        monitors[0].traceLogErrors.push(
-          'First tab session ID was not created in cross-tab coordination test',
-        );
+        monitors[0].traceLogErrors.push('First tab session ID was not created in cross-tab coordination test');
       }
 
       if (typeof firstTabSessionInfo.sessionId !== 'string') {

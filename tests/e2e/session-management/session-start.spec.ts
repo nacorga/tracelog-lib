@@ -157,9 +157,7 @@ test.describe('Session Management - Session Start', () => {
         }
 
         if (!sessionStartEvent.page_url || typeof sessionStartEvent.page_url !== 'string') {
-          monitor.traceLogErrors.push(
-            `Session start event missing or invalid page_url: ${sessionStartEvent.page_url}`,
-          );
+          monitor.traceLogErrors.push(`Session start event missing or invalid page_url: ${sessionStartEvent.page_url}`);
         }
 
         expect(sessionStartEvent.page_url).toBeTruthy();
@@ -285,9 +283,7 @@ test.describe('Session Management - Session Start', () => {
       try {
         TestUtils.verifySessionStructure(sessionInfo.sessionData);
       } catch (error) {
-        monitor.traceLogErrors.push(
-          `Session structure verification failed in timestamp/metadata test: ${error}`,
-        );
+        monitor.traceLogErrors.push(`Session structure verification failed in timestamp/metadata test: ${error}`);
         throw error;
       }
 

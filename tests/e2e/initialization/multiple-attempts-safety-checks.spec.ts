@@ -128,9 +128,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const validatedReinitResult = TestUtils.verifyInitializationResult(reinitResult);
 
       if (!validatedReinitResult.success) {
-        testBase.consoleMonitor.traceLogErrors.push(
-          `Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
-        );
+        testBase.consoleMonitor.traceLogErrors.push(`Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`);
       }
 
       expect(validatedReinitResult.success).toBe(true);
@@ -174,9 +172,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
     const hasRuntimeErrors = await TestUtils.detectRuntimeErrors(page);
 
     if (hasRuntimeErrors) {
-      testBase.consoleMonitor.traceLogErrors.push(
-        'Runtime errors detected during event handler safety checks',
-      );
+      testBase.consoleMonitor.traceLogErrors.push('Runtime errors detected during event handler safety checks');
     }
 
     expect(hasRuntimeErrors).toBeFalsy();
@@ -204,9 +200,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const validatedReinitResult = TestUtils.verifyInitializationResult(reinitResult);
 
       if (!validatedReinitResult.success) {
-        testBase.consoleMonitor.traceLogErrors.push(
-          `Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
-        );
+        testBase.consoleMonitor.traceLogErrors.push(`Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`);
       }
 
       expect(validatedReinitResult.success).toBe(true);
@@ -275,9 +269,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       const validatedReinitResult = TestUtils.verifyInitializationResult(reinitResult);
 
       if (!validatedReinitResult.success) {
-        testBase.consoleMonitor.traceLogErrors.push(
-          `Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`,
-        );
+        testBase.consoleMonitor.traceLogErrors.push(`Re-initialization ${i} failed: ${JSON.stringify(reinitResult)}`);
       }
 
       expect(validatedReinitResult.success).toBe(true);

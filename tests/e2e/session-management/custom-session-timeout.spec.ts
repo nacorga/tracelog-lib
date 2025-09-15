@@ -81,9 +81,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       const lowTimeoutValidated = TestUtils.verifyInitializationResult(lowTimeoutResult);
 
       if (lowTimeoutValidated.success) {
-        monitor.traceLogErrors.push(
-          `Low timeout should have been rejected but was accepted: ${tooLowTimeout}ms`,
-        );
+        monitor.traceLogErrors.push(`Low timeout should have been rejected but was accepted: ${tooLowTimeout}ms`);
       }
 
       if (!lowTimeoutValidated.hasError) {
@@ -116,9 +114,7 @@ test.describe('Session Management - Custom Session Timeout', () => {
       const highTimeoutValidated = TestUtils.verifyInitializationResult(highTimeoutResult);
 
       if (highTimeoutValidated.success) {
-        monitor.traceLogErrors.push(
-          `High timeout should have been rejected but was accepted: ${tooHighTimeout}ms`,
-        );
+        monitor.traceLogErrors.push(`High timeout should have been rejected but was accepted: ${tooHighTimeout}ms`);
       }
 
       if (!highTimeoutValidated.hasError) {

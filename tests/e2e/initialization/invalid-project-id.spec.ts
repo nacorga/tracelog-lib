@@ -37,9 +37,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     try {
       PerformanceValidator.validateErrorHandlingTime(errorHandlingDuration);
     } catch (error) {
-      testBase.consoleMonitor.traceLogErrors.push(
-        `Performance validation failed for missing ID error: ${error}`,
-      );
+      testBase.consoleMonitor.traceLogErrors.push(`Performance validation failed for missing ID error: ${error}`);
       throw error;
     }
 
@@ -83,9 +81,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     try {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
-      testBase.consoleMonitor.traceLogErrors.push(
-        `No tracking validation failed for empty config case: ${error}`,
-      );
+      testBase.consoleMonitor.traceLogErrors.push(`No tracking validation failed for empty config case: ${error}`);
       throw error;
     }
   });
@@ -114,9 +110,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     try {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
-      testBase.consoleMonitor.traceLogErrors.push(
-        `No tracking validation failed for empty ID case: ${error}`,
-      );
+      testBase.consoleMonitor.traceLogErrors.push(`No tracking validation failed for empty ID case: ${error}`);
       throw error;
     }
   });
@@ -145,9 +139,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     try {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
-      testBase.consoleMonitor.traceLogErrors.push(
-        `No tracking validation failed for whitespace ID case: ${error}`,
-      );
+      testBase.consoleMonitor.traceLogErrors.push(`No tracking validation failed for whitespace ID case: ${error}`);
       throw error;
     }
   });
@@ -176,9 +168,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     try {
       await ErrorValidator.validateNoTrackingOnFailure(page);
     } catch (error) {
-      testBase.consoleMonitor.traceLogErrors.push(
-        `No tracking validation failed for null ID case: ${error}`,
-      );
+      testBase.consoleMonitor.traceLogErrors.push(`No tracking validation failed for null ID case: ${error}`);
       throw error;
     }
   });

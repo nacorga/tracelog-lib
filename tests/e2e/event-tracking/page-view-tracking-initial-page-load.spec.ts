@@ -6,7 +6,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
   test.describe('PAGE_VIEW event triggering', () => {
     test('should trigger PAGE_VIEW event immediately after successful initialization', async ({ page }) => {
       const monitor = TestUtils.createConsoleMonitor(page);
-      const pageLoadStartTime = Date.now();
 
       try {
         await TestUtils.navigateAndWaitForReady(page);
@@ -45,9 +44,6 @@ test.describe('Page View Tracking - Initial Page Load', () => {
 
         // Verify no TraceLog errors occurred
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
-
-        const pageLoadEndTime = Date.now();
-        // PAGE_VIEW event verification completed
       } finally {
         monitor.cleanup();
       }
