@@ -25,7 +25,7 @@ export class ScrollHandler extends StateManager {
     const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
 
     const elements: Array<Window | HTMLElement> = selectors
-      .map((sel) => document.querySelector(sel))
+      .map((sel) => this.safeQuerySelector(sel))
       .filter((element): element is HTMLElement => element instanceof HTMLElement);
 
     if (elements.length === 0) {
@@ -54,6 +54,11 @@ export class ScrollHandler extends StateManager {
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
+    // Skip setup for non-scrollable elements (except window)
+    if (element !== window && !this.isElementScrollable(element as HTMLElement)) {
+      return;
+    }
+
     const container: ScrollContainer = {
       element,
       lastScrollPos: this.getScrollTop(element),
@@ -128,5 +133,34 @@ export class ScrollHandler extends StateManager {
 
   private getScrollHeight(element: Window | HTMLElement): number {
     return element instanceof Window ? document.documentElement.scrollHeight : element.scrollHeight;
+  }
+
+  private isElementScrollable(element: HTMLElement): boolean {
+    const style = getComputedStyle(element);
+    const hasScrollableOverflow =
+      style.overflowY === 'auto' ||
+      style.overflowY === 'scroll' ||
+      style.overflowX === 'auto' ||
+      style.overflowX === 'scroll' ||
+      style.overflow === 'auto' ||
+      style.overflow === 'scroll';
+
+    // Element must have scrollable overflow AND content that exceeds the container
+    const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+
+    return hasScrollableOverflow && hasOverflowContent;
+  }
+
+  private safeQuerySelector(selector: string): HTMLElement | null {
+    try {
+      return document.querySelector(selector);
+    } catch (error) {
+      // Invalid CSS selector - log warning and continue
+      if (this.get('config').qaMode) {
+        console.warn(`[TraceLog] Invalid CSS selector: "${selector}"`, error);
+      }
+
+      return null;
+    }
   }
 }

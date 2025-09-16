@@ -7,6 +7,7 @@ import {
   SamplingRateValidationError,
   IntegrationValidationError,
 } from '../../types/validation-error.types';
+import { log } from '../logging';
 
 /**
  * Validates the app configuration object (before normalization)
@@ -86,11 +87,14 @@ const validateScrollContainerSelectors = (selectors: string | string[]): void =>
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, 'config');
     }
 
+    // Validate CSS selector syntax but handle invalid selectors gracefully
     if (typeof document !== 'undefined') {
       try {
         document.querySelector(selector);
       } catch {
-        throw new AppConfigValidationError(`Invalid CSS selector: "${selector}"`, 'config');
+        // Invalid CSS selectors are handled gracefully
+        // they will be ignored by the ScrollHandler and it will fall back to window scrolling
+        log('warning', `Invalid CSS selector will be ignored: "${selector}"`);
       }
     }
   }
