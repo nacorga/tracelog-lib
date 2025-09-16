@@ -113,21 +113,20 @@ test.describe('Scroll Tracking - Custom Container Scroll', () => {
       const { monitor } = await TestUtils.setupCustomContainerTest(page, invalidSelectors, false);
 
       try {
-        // Test that TraceLog initialization fails gracefully with invalid selectors
+        // Test that TraceLog initialization succeeds with invalid selectors (they are ignored)
         const initResult = await TestUtils.initializeTraceLog(page, {
           id: TestUtils.DEFAULT_CONFIG.id,
           scrollContainerSelectors: invalidSelectors,
         });
 
-        // The initialization should fail gracefully (no crash, proper error message)
-        expect(initResult.success).toBe(false);
-        expect(initResult.error).toContain('Invalid CSS selector');
+        // The initialization should succeed (invalid selectors are ignored gracefully)
+        expect(initResult.success).toBe(true);
+        expect(initResult.error).toBeNull();
 
-        // The fact that initialization failed gracefully (with a proper error message)
-        // instead of crashing or throwing an unhandled exception demonstrates that
-        // invalid CSS selectors are handled gracefully
-        // Note: We don't check for TraceLog errors here because we expect the initialization
-        // error to be logged, which is the correct behavior for invalid selectors
+        // The fact that initialization succeeded with warnings logged demonstrates that
+        // invalid CSS selectors are handled gracefully - they are ignored and the system
+        // falls back to window scrolling behavior
+        expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
       } finally {
         monitor.cleanup();
       }
