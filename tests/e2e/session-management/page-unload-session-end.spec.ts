@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
 import { TEST_CONSTANTS } from '../../utils/initialization.helpers';
+import '../../../src/types/window.types';
 
 test.describe('Session Management - Page Unload Session End', () => {
   // Test Configuration
@@ -94,10 +95,11 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       // Add events to queue by disabling auto-flush temporarily
       await page.evaluate(() => {
-        const app = (window as any).TraceLog._app;
-        if (app?.eventManager) {
+        const bridge = window.__traceLogTestBridge;
+        const eventManager = bridge?.getEventManager();
+        if (eventManager) {
           // Temporarily disable interval to prevent auto-flush
-          app.eventManager.clearQueueInterval();
+          eventManager.clearQueueIntervalInstance();
 
           // Add multiple events
           (window as any).TraceLog.event('test_event_1', { data: 'test1' });
@@ -118,10 +120,11 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       // Monitor synchronous flush calls
       await page.evaluate(() => {
-        const app = (window as any).TraceLog._app;
-        if (app?.eventManager) {
-          const originalFlushSync = app.eventManager.flushImmediatelySync.bind(app.eventManager);
-          app.eventManager.flushImmediatelySync = function (): boolean {
+        const bridge = window.__traceLogTestBridge;
+        const eventManager = bridge?.getEventManager();
+        if (eventManager) {
+          const originalFlushSync = eventManager.flushImmediatelySync.bind(eventManager);
+          eventManager.flushImmediatelySync = function (): boolean {
             (window as any).syncFlushCalled = true;
             (window as any).syncFlushTimestamp = Date.now();
             return originalFlushSync();
@@ -204,10 +207,11 @@ test.describe('Session Management - Page Unload Session End', () => {
 
       // Track multiple events to ensure queue has content
       await page.evaluate(() => {
-        const app = (window as any).TraceLog._app;
-        if (app?.eventManager) {
+        const bridge = window.__traceLogTestBridge;
+        const eventManager = bridge?.getEventManager();
+        if (eventManager) {
           // Temporarily disable interval to prevent auto-flush
-          app.eventManager.clearQueueInterval();
+          eventManager.clearQueueIntervalInstance();
 
           // Add multiple events
           for (let i = 0; i < 3; i++) {

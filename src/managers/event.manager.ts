@@ -31,6 +31,10 @@ export class EventManager extends StateManager {
   // Event deduplication properties
   private readonly eventFingerprints = new Map<string, number>();
 
+  get clearQueueIntervalInstance(): () => void {
+    return process.env.NODE_ENV === 'e2e' ? this.clearQueueInterval : (): void => {};
+  }
+
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 

@@ -2,6 +2,7 @@
 import { TraceLog } from '../../tracelog.js';
 
 // Make TraceLog available globally
+// Testing utilities will be auto-injected as __traceLogTestBridge
 window.TraceLog = TraceLog;
 
 let traceLogInstance = null;

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Content Extraction Test Page</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6; 
+            margin: 20px; 
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .large-container {
+            background-color: #f9f9f9;
+            padding: 20px;
+            min-height: 200px;
+        }
+        .nested-content {
+            border: 2px solid #e0e0e0;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .hidden { display: none; }
+        .invisible { visibility: hidden; }
+        .empty-element { width: 50px; height: 50px; background: #ccc; }
+    </style>
+</head>
+<body>
+    <h1>Text Content Extraction Test Suite</h1>
+
+    <!-- Basic Text Extraction Tests -->
+    <div class="test-section">
+        <h3>Basic Text Extraction</h3>
+        <button id="simple-button" data-testid="simple-button">Click Me</button>
+        <a href="#" id="simple-link" data-testid="simple-link">Simple Link Text</a>
+        <span id="simple-span" data-testid="simple-span">Simple Span Content</span>
+        <p id="simple-paragraph" data-testid="simple-paragraph">This is a simple paragraph with some text content.</p>
+    </div>
+
+    <!-- Nested Content Tests -->
+    <div class="test-section">
+        <h3>Nested Content Handling</h3>
+        <div id="nested-container" data-testid="nested-container">
+            <span>Outer text </span>
+            <strong>bold text</strong>
+            <em> italic text</em>
+            <span> more outer text</span>
+        </div>
+        
+        <button id="nested-button" data-testid="nested-button">
+            <i class="icon">📍</i>
+            <span>Button with nested content</span>
+            <small>(additional info)</small>
+        </button>
+
+        <div class="nested-content">
+            <div id="deep-nested" data-testid="deep-nested">
+                <div>
+                    <span>Level 1</span>
+                    <div>
+                        <span>Level 2</span>
+                        <div>
+                            <span id="deep-target" data-testid="deep-target">Level 3 Target</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Long Text Truncation Tests -->
+    <div class="test-section">
+        <h3>Long Text Truncation</h3>
+        <p id="medium-text" data-testid="medium-text">This is a medium-length text that should be within the normal limits of text extraction. It contains multiple sentences to test the boundary conditions of text length handling in the click tracking system.</p>
+        
+        <p id="long-text" data-testid="long-text">This is an extremely long text content that exceeds the maximum text length limit defined in the TraceLog SDK constants. This text is intentionally verbose and contains multiple sentences with detailed descriptions to test the truncation behavior when text content is too long for efficient tracking. The system should automatically truncate this content and add ellipsis to indicate that the text has been shortened. This ensures that the tracking data remains manageable and doesn't consume excessive storage or bandwidth while still providing meaningful context about user interactions. The truncation should preserve the most important part of the text, which is typically at the beginning of the content.</p>
+
+        <div class="large-container">
+            <h4 id="container-title" data-testid="container-title">Large Container Title</h4>
+            <p>This is a large container with substantial text content that represents a typical article or blog post section. It contains multiple paragraphs and various elements that might be clicked by users.</p>
+            <p>The container has enough text to trigger the large container detection logic in the click handler, which should prefer the actual clicked element's text over the container's full text content.</p>
+            <button id="button-in-large-container" data-testid="button-in-large-container">Action Button</button>
+            <p>Additional content continues here with more text that makes this container qualify as a large text container according to the SDK's logic for handling excessive text content in click tracking.</p>
+        </div>
+    </div>
+
+    <!-- Special Characters and Sanitization Tests -->
+    <div class="test-section">
+        <h3>Special Characters and Sanitization</h3>
+        <button id="special-chars" data-testid="special-chars">Text with "quotes" and 'apostrophes' & symbols!</button>
+        <span id="unicode-content" data-testid="unicode-content">Unicode: 你好世界 🌍 café naïve résumé</span>
+        <div id="html-content" data-testid="html-content">Text with &lt;script&gt; tags and &amp; entities</div>
+        <p id="whitespace-text" data-testid="whitespace-text">   Text   with   excessive   whitespace   </p>
+        <span id="newlines-text" data-testid="newlines-text">Text
+        with
+        multiple
+        newlines</span>
+    </div>
+
+    <!-- No Text Content Fallback Tests -->
+    <div class="test-section">
+        <h3>No Text Content Fallback</h3>
+        <div id="empty-div" data-testid="empty-div" class="empty-element"></div>
+        <img id="image-element" data-testid="image-element" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Test Image">
+        <input type="button" id="input-button" data-testid="input-button" value="Input Button">
+        <button id="empty-button" data-testid="empty-button"></button>
+        <span id="hidden-text" data-testid="hidden-text" class="hidden">Hidden Text</span>
+        <span id="invisible-text" data-testid="invisible-text" class="invisible">Invisible Text</span>
+    </div>
+
+    <!-- Mixed Content Tests -->
+    <div class="test-section">
+        <h3>Mixed Content Elements</h3>
+        <div id="mixed-content" data-testid="mixed-content">
+            Text content
+            <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Inline image">
+            more text
+            <button>Nested button</button>
+            final text
+        </div>
+        
+        <label id="form-label" data-testid="form-label">
+            Label text
+            <input type="text" placeholder="Input field">
+            additional label text
+        </label>
+    </div>
+
+    <!-- Status indicator for test helpers -->
+    <div id="init-status" data-testid="init-status">Ready</div>
+
+    <script>
+        // Prevent any potential XSS execution during tests
+        window.alertTriggered = false;
+        const originalAlert = window.alert;
+        window.alert = function() {
+            window.alertTriggered = true;
+            return originalAlert.apply(window, arguments);
+        };
+
+        // Page ready indicator
+        window.pageReady = true;
+    </script>
+    
+    <!-- Load TraceLog SDK and test utilities -->
+    <script type="module" src="index.js"></script>
+</body>
+</html>

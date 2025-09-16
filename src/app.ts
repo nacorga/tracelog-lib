@@ -33,6 +33,14 @@ export class App extends StateManager {
   private networkHandler!: NetworkHandler;
   private suppressNextScrollTimer: number | null = null;
 
+  /**
+   * Get the event manager instance for testing purposes
+   * @internal
+   */
+  get eventManagerInstance(): EventManager | null {
+    return process.env.NODE_ENV === 'e2e' ? this.eventManager : null;
+  }
+
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {
       return;

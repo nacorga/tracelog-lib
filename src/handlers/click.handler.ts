@@ -194,11 +194,11 @@ export class ClickHandler extends StateManager {
 
     // Strategy 4: If clicked text is much shorter than relevant text, prefer clicked text
     if (clickedText && clickedText.length < relevantText.length * 0.1) {
-      return clickedText.length <= MAX_TEXT_LENGTH ? clickedText : clickedText.slice(0, MAX_TEXT_LENGTH) + '...';
+      return clickedText.length <= MAX_TEXT_LENGTH ? clickedText : clickedText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
     }
 
-    // Fallback: truncate relevant text
-    return relevantText.slice(0, MAX_TEXT_LENGTH) + '...';
+    // Fallback: truncate relevant text to exactly MAX_TEXT_LENGTH including ellipsis
+    return relevantText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
   }
 
   private extractElementAttributes(element: HTMLElement): Record<string, string> {

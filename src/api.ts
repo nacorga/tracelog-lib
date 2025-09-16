@@ -1,8 +1,10 @@
 import { App } from './app';
+import { EventManager } from './managers/event.manager';
 import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
 import { logUnknown } from './utils';
 import { validateAndNormalizeConfig } from './utils/validations';
+import './types/window.types';
 
 export * as Types from './app.types';
 export * as Constants from './app.constants';
@@ -138,3 +140,56 @@ export const destroy = (): void => {
     logUnknown('error', 'Cleanup failed', error);
   }
 };
+
+// Auto-inject testing bridge only in development/testing environments
+if (process.env.NODE_ENV === 'e2e') {
+  if (typeof window !== 'undefined') {
+    // Wait for DOM to be ready before injecting
+    const injectTestingBridge = (): void => {
+      window.__traceLogTestBridge = {
+        /**
+         * Get the event manager instance for testing
+         * @returns EventManager instance or null if not initialized
+         */
+        getEventManager: (): EventManager | null => app?.eventManagerInstance ?? null,
+
+        /**
+         * Check if TraceLog is properly initialized
+         * @returns true if initialized, false otherwise
+         */
+        isInitialized: (): boolean => !!app && !isInitializing,
+
+        /**
+         * Get the current app instance for advanced testing
+         * @returns App instance or null if not initialized
+         */
+        getAppInstance: (): App | null => app ?? null,
+
+        /**
+         * Check if initialization is in progress
+         * @returns true if initializing, false otherwise
+         */
+        isInitializing: (): boolean => isInitializing,
+
+        /**
+         * Environment detection for debugging
+         * @returns object with environment flags
+         */
+        getEnvironmentInfo: () => ({
+          hostname: window.location.hostname,
+          hasTestIds: !!document.querySelector('[data-testid]'),
+          hasPlaywright: !!(window as any).__playwright,
+          userAgent: navigator.userAgent,
+          nodeEnv: process.env.NODE_ENV,
+        }),
+      };
+    };
+
+    // Inject immediately if DOM is ready, otherwise wait
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', injectTestingBridge);
+    } else {
+      injectTestingBridge();
+    }
+  }
+}

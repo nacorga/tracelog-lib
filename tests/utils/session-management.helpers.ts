@@ -13,6 +13,7 @@ import {
   validateSessionStructure,
   validateSessionTimeout,
 } from './common.helpers';
+import '../../src/types/window.types';
 import { TEST_CONFIGS, TEST_CONSTANTS } from './initialization.helpers';
 import { Config } from '../../src/types';
 
@@ -172,10 +173,11 @@ export async function setupSessionEndMonitoring(page: Page, useEventsArray = fal
       (window as any).sessionEndEvents = [];
     }
 
-    const app = (window as any).TraceLog._app;
-    if (app?.eventManager) {
-      const originalTrack = app.eventManager.track.bind(app.eventManager);
-      app.eventManager.track = function (eventData: any): any {
+    const bridge = window.__traceLogTestBridge;
+    const eventManager = bridge?.getEventManager();
+    if (eventManager) {
+      const originalTrack = eventManager.track.bind(eventManager);
+      eventManager.track = function (eventData: any): any {
         if (eventData.type === 'SESSION_END') {
           if (useArray) {
             (window as any).sessionEndEvents.push({

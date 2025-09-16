@@ -6,6 +6,7 @@ const READY_STATUS = 'Ready for validation testing';
 const VALID_TEST_CONFIG = { id: 'test' };
 
 // Make TraceLog available globally for testing
+// Testing utilities will be auto-injected as __traceLogTestBridge
 window.TraceLog = TraceLog;
 
 // Enhanced console logging utility with timestamps

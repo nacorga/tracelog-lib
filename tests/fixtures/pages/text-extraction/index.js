@@ -3,8 +3,8 @@ import { TraceLog } from '../../tracelog.js';
 // Configuration constants
 const DEFAULT_CONFIG = { id: 'test' }; // IMPORTANT: ID for testing. Don't change this value.
 const STATUS_ELEMENT_ID = 'init-status';
-const READY_STATUS = 'Status: Ready for testing';
-const SUCCESS_STATUS = 'Status: Initialized successfully';
+const READY_STATUS = 'Ready';
+const SUCCESS_STATUS = 'Initialized successfully';
 
 // Make TraceLog available globally
 // Testing utilities will be auto-injected as __traceLogTestBridge
@@ -19,7 +19,7 @@ function updateStatus(elementId, status) {
 }
 
 function logToConsole(message, type = 'log') {
-  console[type](`[E2E Test] ${message}`);
+  console[type](`[Text Extraction Test] ${message}`);
 }
 
 function getErrorMessage(error) {
@@ -52,7 +52,7 @@ window.initializeTraceLog = async function (config = currentConfig) {
   } catch (error) {
     isInitialized = false;
     const errorMessage = getErrorMessage(error);
-    const failureStatus = `Status: Initialization failed - ${errorMessage}`;
+    const failureStatus = `Initialization failed - ${errorMessage}`;
     updateStatus(STATUS_ELEMENT_ID, failureStatus);
     logToConsole(`Error initializing TraceLog: ${errorMessage}`, 'error');
     return { success: false, error: errorMessage };
@@ -69,9 +69,9 @@ window.getCurrentConfig = () => currentConfig;
 window.isCurrentlyInitialized = () => isInitialized;
 
 /**
- * Initialize page when DOM is ready (improved with constants)
+ * Initialize page when DOM is ready
  */
 document.addEventListener('DOMContentLoaded', () => {
   updateStatus(STATUS_ELEMENT_ID, READY_STATUS);
-  logToConsole('Test page loaded and ready');
+  logToConsole('Text extraction test page loaded and ready');
 });
