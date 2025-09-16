@@ -248,6 +248,7 @@ expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
 - DON'T persist test data between tests in localStorage
 - DON'T use production APIs in tests
 - DON'T commit sensitive testing data
+- DON'T store test data in `window` object
 
 ### 🚫 Testing Bridge Usage
 
