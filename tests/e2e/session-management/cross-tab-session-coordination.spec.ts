@@ -284,7 +284,11 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
             };
           }),
         );
-        monitor.traceLogWarnings.push(`Tab count update failed. Current states: ${JSON.stringify(debugInfo)}`);
+        // Use the first remaining monitor (since the leader tab was closed)
+        const remainingMonitorIndex = initialLeaderIndex === 0 ? 1 : 0;
+        monitors[remainingMonitorIndex].traceLogWarnings.push(
+          `Tab count update failed. Current states: ${JSON.stringify(debugInfo)}`,
+        );
 
         // Be more lenient - accept if at least one page has correct count or if count is reasonable
         const sessionContext = newLeaderInfo.sessionContext as { tabCount?: number };
@@ -298,7 +302,9 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
         }
 
         // Log warning but don't fail the test if count is within reasonable bounds
-        monitor.traceLogWarnings.push(`Tab count is ${actualCount} instead of expected 2, but within acceptable range`);
+        monitors[remainingMonitorIndex].traceLogWarnings.push(
+          `Tab count is ${actualCount} instead of expected 2, but within acceptable range`,
+        );
       }
 
       // Verify no errors in remaining tabs
