@@ -15,8 +15,16 @@ test.describe('Session Management - Session Recovery', () => {
       await TestUtils.triggerClickEvent(page);
       await TestUtils.waitForTimeout(page, 1000);
 
-      // Get original session data using the helper function
-      const originalSessionData = await TestUtils.getSessionDataFromStorage(page);
+      // Wait for session to be created and persisted
+      let originalSessionData = await TestUtils.getSessionDataFromStorage(page);
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (!originalSessionData.sessionId && attempts < maxAttempts) {
+        await TestUtils.waitForTimeout(page, 200);
+        originalSessionData = await TestUtils.getSessionDataFromStorage(page);
+        attempts++;
+      }
 
       if (!originalSessionData.sessionId) {
         monitor.traceLogErrors.push('Original session ID was not created before reload test');
