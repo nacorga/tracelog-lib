@@ -1,0 +1,289 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+        - auto
+        - patch
+        - minor
+        - major
+      force_version:
+        description: 'Force specific version (e.g., 1.2.3)'
+        required: false
+        type: string
+      skip_tests:
+        description: 'Skip test suite'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Dry run (no actual release)'
+        required: false
+        default: false
+        type: boolean
+
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  pre-release-validation:
+    name: Pre-Release Validation
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check-release.outputs.should-release }}
+      version-info: ${{ steps.check-release.outputs.version-info }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: 'https://registry.npmjs.org/'
+          scope: '@tracelog'
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.js
+
+      - name: Run pre-release validation
+        run: |
+          if [[ "${{ github.event.inputs.skip_tests }}" == "true" ]]; then
+            echo "Skipping tests as requested"
+            node scripts/pre-release-check.js --skip-performance
+          else
+            node scripts/pre-release-check.js
+          fi
+
+      - name: Check if release is needed
+        id: check-release
+        run: |
+          # Check if this is a manual trigger or if there are releasable commits
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should-release=true" >> $GITHUB_OUTPUT
+            echo "Manual release triggered"
+          else
+            # Check for conventional commits that warrant a release
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [[ -z "$LAST_TAG" ]]; then
+              echo "should-release=true" >> $GITHUB_OUTPUT
+              echo "No previous tags, first release"
+            else
+              COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null || echo "")
+              if echo "$COMMITS" | grep -qE "^(feat|fix|perf|docs|style|refactor|test|chore|ci|build)(\(.+\))?:" || echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
+                echo "should-release=true" >> $GITHUB_OUTPUT
+                echo "Found conventional commits requiring release"
+              else
+                echo "should-release=false" >> $GITHUB_OUTPUT
+                echo "No releasable commits found"
+              fi
+            fi
+          fi
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: pre-release-validation
+    if: needs.pre-release-validation.outputs.should-release == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: 'https://registry.npmjs.org/'
+          scope: '@tracelog'
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-browsers-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.js
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Execute release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Build release command based on inputs
+          RELEASE_CMD="node scripts/release.js"
+
+          # Add dry run flag if requested
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            RELEASE_CMD="$RELEASE_CMD --dry-run"
+          fi
+
+          # Add skip tests flag if requested
+          if [[ "${{ github.event.inputs.skip_tests }}" == "true" ]]; then
+            RELEASE_CMD="$RELEASE_CMD --skip-tests"
+          fi
+
+          # Add version type or force version
+          if [[ -n "${{ github.event.inputs.force_version }}" ]]; then
+            RELEASE_CMD="$RELEASE_CMD --force-version ${{ github.event.inputs.force_version }}"
+          elif [[ "${{ github.event.inputs.version_type }}" != "auto" ]]; then
+            # For manual version types, we'll modify the release script to accept this
+            case "${{ github.event.inputs.version_type }}" in
+              "major"|"minor"|"patch")
+                # We could implement a --force-bump-type flag in the release script
+                echo "Manual version type: ${{ github.event.inputs.version_type }}"
+                ;;
+            esac
+          fi
+
+          # Add verbose flag for GitHub Actions
+          RELEASE_CMD="$RELEASE_CMD --verbose"
+
+          echo "Executing: $RELEASE_CMD"
+          eval $RELEASE_CMD
+
+      - name: Get release version
+        id: get-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Released version: $VERSION"
+
+      - name: Create GitHub Release
+        if: github.event.inputs.dry_run != 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get-version.outputs.version }}
+          release_name: Release v${{ steps.get-version.outputs.version }}
+          body: |
+            Release v${{ steps.get-version.outputs.version }}
+
+            For detailed changes, see [CHANGELOG.md](./CHANGELOG.md).
+
+            ## Installation
+
+            ```bash
+            npm install @tracelog/sdk@${{ steps.get-version.outputs.version }}
+            ```
+
+            ## Documentation
+
+            See [README.md](./README.md) for usage instructions.
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Assets
+        if: github.event.inputs.dry_run != 'true'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/browser/tracelog.js
+          asset_name: tracelog-${{ steps.get-version.outputs.version }}.js
+          asset_content_type: application/javascript
+
+      - name: Generate performance report
+        run: |
+          if [[ "${{ github.event.inputs.skip_tests }}" != "true" ]]; then
+            npm run performance:benchmark || true
+            if [[ -f "performance/performance-results.json" ]]; then
+              echo "Performance results available"
+              cat performance/performance-results.json
+            fi
+          fi
+
+      - name: Post-release validation
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          # Verify the package was published
+          PACKAGE_VERSION=$(npm view @tracelog/sdk version)
+          if [[ "$PACKAGE_VERSION" == "${{ steps.get-version.outputs.version }}" ]]; then
+            echo "✅ Package successfully published to NPM"
+          else
+            echo "❌ Package version mismatch on NPM"
+            exit 1
+          fi
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [pre-release-validation, release]
+    if: always() && needs.release.result == 'success'
+
+    steps:
+      - name: Release Success Notification
+        run: |
+          echo "🎉 Release completed successfully!"
+          echo "Version: ${{ needs.release.outputs.version }}"
+          echo "Check the release at: ${{ github.server_url }}/${{ github.repository }}/releases"
+
+  notify-failure:
+    name: Notify Failure
+    runs-on: ubuntu-latest
+    needs: [pre-release-validation, release]
+    if: always() && (needs.pre-release-validation.result == 'failure' || needs.release.result == 'failure')
+
+    steps:
+      - name: Release Failure Notification
+        run: |
+          echo "❌ Release failed!"
+          echo "Check the workflow logs for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          exit 1
