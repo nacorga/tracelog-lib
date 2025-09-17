@@ -309,5 +309,134 @@ test.describe('Scroll Tracking - Window Scroll', () => {
         result.monitor.cleanup();
       }
     });
+
+    test('should maintain stable memory usage during extended scroll operations', async ({ page }) => {
+      const { monitor } = await TestUtils.setupScrollTrackingTest(page);
+
+      try {
+        // Measure memory usage before and during extended scroll test
+        const memoryMeasurements = await page.evaluate(async () => {
+          const measurements: Array<{ timestamp: number; heapUsed: number; heapTotal: number; eventCount: number }> =
+            [];
+
+          // Initial memory measurement
+          if ('memory' in performance) {
+            const memInfo = (performance as any).memory;
+            measurements.push({
+              timestamp: performance.now(),
+              heapUsed: memInfo.usedJSHeapSize,
+              heapTotal: memInfo.totalJSHeapSize,
+              eventCount: 0,
+            });
+          }
+
+          // Simulate extended scroll session (5 seconds)
+          const startTime = performance.now();
+          const duration = 5000;
+          let scrollEventCount = 0;
+
+          // Track scroll events
+          const scrollEventListener = () => {
+            scrollEventCount++;
+          };
+          window.addEventListener('scroll', scrollEventListener, { passive: true });
+
+          // Perform continuous scrolling with memory monitoring
+          const scrollPromise = new Promise<void>((resolve) => {
+            let currentPosition = 0;
+            const maxPosition = 3000;
+            const step = 50;
+
+            const performScroll = () => {
+              if (performance.now() - startTime >= duration) {
+                resolve();
+                return;
+              }
+
+              // Scroll and measure memory every few operations
+              window.scrollTo(0, currentPosition);
+              currentPosition = (currentPosition + step) % maxPosition;
+
+              // Memory measurement every 500ms
+              if ((performance.now() - startTime) % 500 < 50) {
+                if ('memory' in performance) {
+                  const memInfo = (performance as any).memory;
+                  measurements.push({
+                    timestamp: performance.now(),
+                    heapUsed: memInfo.usedJSHeapSize,
+                    heapTotal: memInfo.totalJSHeapSize,
+                    eventCount: scrollEventCount,
+                  });
+                }
+              }
+
+              setTimeout(performScroll, 25); // Scroll every 25ms
+            };
+
+            performScroll();
+          });
+
+          await scrollPromise;
+
+          // Final memory measurement
+          if ('memory' in performance) {
+            const memInfo = (performance as any).memory;
+            measurements.push({
+              timestamp: performance.now(),
+              heapUsed: memInfo.usedJSHeapSize,
+              heapTotal: memInfo.totalJSHeapSize,
+              eventCount: scrollEventCount,
+            });
+          }
+
+          window.removeEventListener('scroll', scrollEventListener);
+
+          return {
+            measurements,
+            totalEventCount: scrollEventCount,
+            hasPerfMemory: 'memory' in performance,
+          };
+        });
+
+        // Verify memory measurements were captured (or gracefully handle when not available)
+        if (memoryMeasurements.hasPerfMemory) {
+          expect(memoryMeasurements.measurements.length).toBeGreaterThan(2);
+        } else {
+          // performance.memory not available (Firefox, Safari, Mobile Safari due to privacy)
+          expect(memoryMeasurements.measurements.length).toBe(0);
+          // Note: performance.memory API not available in this browser - test gracefully degrades
+        }
+
+        if (memoryMeasurements.measurements.length > 0) {
+          const initialMemory = memoryMeasurements.measurements[0].heapUsed;
+          const finalMemory = memoryMeasurements.measurements[memoryMeasurements.measurements.length - 1].heapUsed;
+
+          // Memory growth should be reasonable (< 5MB increase during test)
+          const memoryGrowth = finalMemory - initialMemory;
+          expect(memoryGrowth).toBeLessThan(5 * 1024 * 1024); // 5MB limit
+
+          // Verify no excessive memory spikes (each measurement should not exceed 2x initial)
+          for (const measurement of memoryMeasurements.measurements) {
+            expect(measurement.heapUsed).toBeLessThan(initialMemory * 2);
+          }
+
+          // Calculate memory growth rate
+          const duration =
+            memoryMeasurements.measurements[memoryMeasurements.measurements.length - 1].timestamp -
+            memoryMeasurements.measurements[0].timestamp;
+          const growthRate = memoryGrowth / (duration / 1000); // bytes per second
+
+          // Memory growth rate should be reasonable (< 1MB/second)
+          expect(growthRate).toBeLessThan(1024 * 1024);
+
+          // Verify scroll events occurred during extended duration (this counts browser scroll events, not TraceLog events)
+          expect(memoryMeasurements.totalEventCount).toBeGreaterThan(10); // Should have many scroll events
+        }
+
+        expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      } finally {
+        monitor.cleanup();
+      }
+    });
   });
 });

@@ -624,6 +624,104 @@ test.describe('Click Tracking - Interactive Elements', () => {
       }
     });
 
+    test('should maintain responsive UI during click interactions (< 50ms response time)', async ({ page }) => {
+      const { monitor, initResult } = await TestUtils.setupEventTrackingTest(page);
+
+      try {
+        expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
+
+        // Create test button with visual feedback
+        await page.evaluate(() => {
+          const button = document.createElement('button');
+          button.id = 'responsiveness-test-button';
+          button.textContent = 'Click Response Test';
+          button.style.padding = '10px';
+          button.style.backgroundColor = '#007bff';
+          button.style.color = 'white';
+          button.style.border = 'none';
+          button.style.cursor = 'pointer';
+
+          // Add click feedback handler
+          button.addEventListener('click', () => {
+            button.style.backgroundColor = '#28a745';
+            setTimeout(() => {
+              button.style.backgroundColor = '#007bff';
+            }, 100);
+          });
+
+          document.body.appendChild(button);
+        });
+
+        // Measure click-to-response time using performance.now()
+        const clickResponseTimes: number[] = [];
+        const testIterations = 5;
+
+        for (let i = 0; i < testIterations; i++) {
+          const responseTime = await page.evaluate(() => {
+            return new Promise<number>((resolve) => {
+              const button = document.getElementById('responsiveness-test-button');
+              if (!button) {
+                resolve(-1);
+                return;
+              }
+
+              const startTime = performance.now();
+
+              // Simulate click and measure response
+              const clickEvent = new MouseEvent('click', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+              });
+
+              // Measure time to DOM update (style change)
+              const observer = new MutationObserver(() => {
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                observer.disconnect();
+                resolve(responseTime);
+              });
+
+              observer.observe(button, {
+                attributes: true,
+                attributeFilter: ['style'],
+              });
+
+              button.dispatchEvent(clickEvent);
+
+              // Fallback timeout
+              setTimeout(() => {
+                observer.disconnect();
+                resolve(performance.now() - startTime);
+              }, 100);
+            });
+          });
+
+          if (responseTime > 0) {
+            clickResponseTimes.push(responseTime);
+          }
+
+          await TestUtils.waitForTimeout(page, 200);
+        }
+
+        // Verify all response times are under 50ms
+        for (const responseTime of clickResponseTimes) {
+          expect(responseTime).toBeLessThan(50);
+        }
+
+        // Verify we captured meaningful measurements
+        expect(clickResponseTimes.length).toBeGreaterThan(0);
+
+        // Calculate average response time for validation
+        const averageResponseTime = clickResponseTimes.reduce((sum, time) => sum + time, 0) / clickResponseTimes.length;
+        expect(averageResponseTime).toBeLessThan(25); // Even stricter average requirement
+
+        expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+      } finally {
+        monitor.cleanup();
+      }
+    });
+
     test('should handle multiple unique elements', async ({ page }) => {
       const { monitor, initResult } = await TestUtils.setupEventTrackingTest(page);
 
