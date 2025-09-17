@@ -244,10 +244,12 @@ export async function getAllWebVitalsEvents(page: Page): Promise<{
         hasValue: typeof webVitals?.value === 'number',
         valueIsFinite: Number.isFinite(webVitals?.value),
         valueIsValid: webVitals
-          ? // CLS can be 0 or positive, other metrics should be positive
+          ? // CLS can be 0+, TTFB can be -2+, other metrics should be positive
             webVitals.type === 'CLS'
             ? webVitals.value >= 0
-            : webVitals.value > 0
+            : webVitals.type === 'TTFB'
+              ? webVitals.value >= -2
+              : webVitals.value > 0
           : false,
         hasTimestamp: typeof event.timestamp === 'number',
         hasPageUrl: typeof event.page_url === 'string',
@@ -316,9 +318,9 @@ export async function validateMetricRanges(page: Page): Promise<{
           expectedRange = '0-5000ms';
           break;
         case 'TTFB':
-          // TTFB should be positive and typically less than 2 seconds
-          isWithinExpectedRange = value > 0 && value < 2000;
-          expectedRange = '0-2000ms';
+          // TTFB can be -1, -2, 0 (in some browsers) and typically less than 2 seconds
+          isWithinExpectedRange = value >= -2 && value < 2000;
+          expectedRange = '-2-2000ms';
           break;
         case 'INP':
           // INP should be positive and typically less than 1 second
@@ -762,7 +764,15 @@ export async function analyzeFallbackBehavior(page: Page): Promise<{
       fallbackMetrics: webVitalsEvents.map((e: WebVitalsEvent) => ({
         type: e.web_vitals?.type || '',
         value: e.web_vitals?.value || 0,
-        isValidValue: typeof e.web_vitals?.value === 'number' && e.web_vitals ? e.web_vitals.value >= 0 : false,
+        isValidValue:
+          typeof e.web_vitals?.value === 'number' && e.web_vitals
+            ? // Allow 0+ for CLS, -2+ for TTFB, require positive for others
+              e.web_vitals.type === 'CLS'
+              ? e.web_vitals.value >= 0
+              : e.web_vitals.type === 'TTFB'
+                ? e.web_vitals.value >= -2
+                : e.web_vitals.value > 0
+            : false,
       })),
     };
   });
