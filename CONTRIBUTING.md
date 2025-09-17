@@ -1,6 +1,6 @@
-# Contributing to TraceLog Client
+# Contributing to TraceLog SDK
 
-Thank you for your interest in contributing to the TraceLog client! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to the TraceLog SDK! This document provides guidelines and information for contributors.
 
 ## Table of Contents
 
@@ -36,8 +36,8 @@ Thank you for your interest in contributing to the TraceLog client! This documen
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/tracelog-client.git
-cd tracelog-client
+git clone https://github.com/YOUR_USERNAME/tracelog-sdk.git
+cd tracelog-sdk
 
 # Install dependencies
 npm install
@@ -312,4 +312,4 @@ export function event(name: string, metadata?: Record<string, MetadataType>): vo
 
 ---
 
-Thank you for contributing to TraceLog Client! 🚀 
+Thank you for contributing to TraceLog SDK! 🚀 

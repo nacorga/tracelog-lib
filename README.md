@@ -1,4 +1,4 @@
-# TraceLog Client SDK
+# TraceLog SDK
 
 A lightweight TypeScript SDK for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
 
@@ -16,15 +16,15 @@ A lightweight TypeScript SDK for web analytics and user behavior tracking. Autom
 
 - npm:
   ```bash
-  npm install @tracelog/client
+  npm install @tracelog/sdk
   ```
 - yarn:
   ```bash
-  yarn add @tracelog/client
+  yarn add @tracelog/sdk
   ```
 - CDN (browser):
   ```html
-  <script src="https://cdn.jsdelivr.net/npm/@tracelog/client@latest/dist/browser/tracelog.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tracelog/sdk@latest/dist/browser/tracelog.js"></script>
   ```
 
 ## Quick Start
@@ -32,7 +32,7 @@ A lightweight TypeScript SDK for web analytics and user behavior tracking. Autom
 Initialize tracking with your project ID and start capturing events immediately:
 
 ```typescript
-import * as TraceLog from '@tracelog/client';
+import * as TraceLog from '@tracelog/sdk';
 
 // Initialize tracking
 await TraceLog.init({

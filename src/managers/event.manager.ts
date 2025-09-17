@@ -35,6 +35,11 @@ export class EventManager extends StateManager {
     return process.env.NODE_ENV === 'e2e' ? this.clearQueueInterval : (): void => {};
   }
 
+  // E2E testing method to access events queue
+  getEventQueue(): EventData[] | null {
+    return process.env.NODE_ENV === 'e2e' ? this.eventsQueue : null;
+  }
+
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 

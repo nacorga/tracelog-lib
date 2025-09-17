@@ -1,4 +1,4 @@
-# TraceLog Client - GitHub Copilot Instructions
+# TraceLog SDK - GitHub Copilot Instructions
 
 **ALWAYS FOLLOW THESE INSTRUCTIONS FIRST.** Only search for additional context or run discovery commands if the information provided here is incomplete or found to be incorrect.
 

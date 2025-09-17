@@ -24,7 +24,7 @@ export default defineConfig({
       },
     },
     target: 'es2022',
-    minify: false,
-    sourcemap: false,
+    minify: process.env.NODE_ENV !== 'e2e',
+    sourcemap: process.env.NODE_ENV === 'e2e',
   },
 });
