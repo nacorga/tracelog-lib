@@ -1,42 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-
-// Interface definitions for better type safety
-interface LongTaskEvent {
-  type: string;
-  timestamp?: number;
-  page_url?: string;
-  web_vitals?: {
-    type: string;
-    value: number;
-  };
-}
-
-interface LongTaskDetectionInfo {
-  hasLongTasks: boolean;
-  longTaskCount: number;
-  longTaskValues: number[];
-  validDurations: boolean;
-  validThreshold: boolean;
-  averageDuration: number;
-  maxDuration: number;
-  minDuration: number;
-}
-
-interface ThrottlingTestInfo {
-  totalLongTasks: number;
-  eventsWithinThrottleWindow: number;
-  throttleEffective: boolean;
-  timeBetweenEvents: number[];
-  respectsThrottleLimit: boolean;
-}
-
-interface SamplingTestInfo {
-  attemptsGenerated: number;
-  eventsRecorded: number;
-  samplingRatio: number;
-  withinExpectedRange: boolean;
-}
+import {
+  LongTaskDetectionInfo,
+  LongTaskEvent,
+  SamplingTestInfo,
+  ThrottlingTestInfo,
+} from '../../utils/performance-tracking.helpers';
 
 test.describe('Performance Tracking - Long Task Detection', () => {
   test.describe('Long Task Detection and Thresholds', () => {
@@ -795,17 +764,10 @@ test.describe('Performance Tracking - Long Task Detection', () => {
           content.style.backgroundColor = '#f0f0f0';
           content.textContent = 'Content for LCP comparison';
           document.body.appendChild(content);
-
-          // Generate long task
-          setTimeout(() => {
-            const start = performance.now();
-            while (performance.now() - start < 110) {
-              for (let i = 0; i < 55000; i++) {
-                void (Math.random() * Math.random() * Math.sin(i));
-              }
-            }
-          }, 300);
         });
+
+        // Generate long task
+        await TestUtils.generateLongTask(page, 110, 300);
 
         await page.waitForTimeout(2000);
 
@@ -1119,55 +1081,37 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
         await page.waitForTimeout(15000);
 
-        const memoryStability = await page.evaluate((initialMem) => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return { testable: false };
+        const memoryStability = await TestUtils.measureMemoryUsage(page, initialMemory);
 
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return { testable: false };
+        // Get long task events count for validation
+        const longTaskDetectionForMemory = await TestUtils.getLongTaskDetection(page);
+        const extendedMemoryStability = {
+          ...memoryStability,
+          longTaskEventsRecorded: longTaskDetectionForMemory.longTaskCount,
+        };
 
-          const events = eventManager.getEventQueue() ?? [];
-          const longTaskEvents = events.filter(
-            (event: LongTaskEvent) => event.type === 'web_vitals' && event.web_vitals?.type === 'LONG_TASK',
-          );
-
-          const currentMemory =
-            (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0;
-
-          return {
-            testable: true,
-            initialMemory: initialMem,
-            currentMemory,
-            memoryDifference: currentMemory - initialMem,
-            longTaskEventsRecorded: longTaskEvents.length,
-            hasReasonableMemoryUsage:
-              currentMemory === 0 || initialMem === 0 || Math.abs(currentMemory - initialMem) < 2 * 1024 * 1024, // Less than 2MB change
-            memoryStable:
-              currentMemory === 0 || initialMem === 0 || Math.abs(currentMemory - initialMem) < 5 * 1024 * 1024, // Less than 5MB change
-          };
-        }, initialMemory);
-
-        if (memoryStability.testable) {
+        if (extendedMemoryStability.testable) {
           // Long task detection may not work in all browsers, so make this conditional
-          if (memoryStability.longTaskEventsRecorded && memoryStability.longTaskEventsRecorded > 0) {
-            expect(memoryStability.hasReasonableMemoryUsage).toBe(true);
-            expect(memoryStability.memoryStable).toBe(true);
+          if (extendedMemoryStability.longTaskEventsRecorded && extendedMemoryStability.longTaskEventsRecorded > 0) {
+            expect(extendedMemoryStability.hasReasonableMemoryUsage).toBe(true);
+            expect(extendedMemoryStability.memoryStable).toBe(true);
 
             // Memory usage should not grow excessively
             if (
-              memoryStability.currentMemory &&
-              memoryStability.initialMemory &&
-              memoryStability.memoryDifference &&
-              memoryStability.currentMemory > 0 &&
-              memoryStability.initialMemory > 0
+              extendedMemoryStability.currentMemory &&
+              extendedMemoryStability.initialMemory &&
+              extendedMemoryStability.memoryDifference &&
+              extendedMemoryStability.currentMemory > 0 &&
+              extendedMemoryStability.initialMemory > 0
             ) {
-              const memoryIncreasePercent = (memoryStability.memoryDifference / memoryStability.initialMemory) * 100;
+              const memoryIncreasePercent =
+                (extendedMemoryStability.memoryDifference / extendedMemoryStability.initialMemory) * 100;
               expect(Math.abs(memoryIncreasePercent)).toBeLessThan(20); // Less than 20% memory change
             }
           } else {
             // Still validate memory stability even without long task events
-            expect(memoryStability.hasReasonableMemoryUsage).toBe(true);
-            expect(memoryStability.memoryStable).toBe(true);
+            expect(extendedMemoryStability.hasReasonableMemoryUsage).toBe(true);
+            expect(extendedMemoryStability.memoryStable).toBe(true);
           }
         }
 

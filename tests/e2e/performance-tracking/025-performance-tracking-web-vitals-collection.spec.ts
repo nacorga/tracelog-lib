@@ -1,28 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { EventType } from '../../../src/types/event.types';
-
-// Interface definitions for better type safety
-interface WebVitalsEvent {
-  type: string;
-  web_vitals?: {
-    type: string;
-    value: number;
-  };
-  timestamp?: number;
-  page_url?: string;
-}
-
-// These interfaces are used in the page.evaluate functions below
-interface EventsByType {
-  [key: string]: WebVitalsEvent[];
-}
-
-interface DuplicateDetectionInfo {
-  type: string;
-  count: number;
-  hasDuplicates: boolean;
-}
+import { WebVitalsEvent } from '../../utils/performance-tracking.helpers';
 
 test.describe('Performance Tracking - Web Vitals Collection', () => {
   test.beforeEach(async ({ page }) => {
@@ -57,44 +35,23 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
         // Create content that triggers LCP
-        await page.evaluate(() => {
-          const largeContent = document.createElement('div');
-          largeContent.style.width = '100%';
-          largeContent.style.height = '200px';
-          largeContent.style.backgroundColor = '#f0f0f0';
-          largeContent.style.fontSize = '24px';
-          largeContent.style.padding = '20px';
-          largeContent.textContent = 'Large content for LCP testing';
-          document.body.appendChild(largeContent);
-        });
+        await TestUtils.createLCPTriggerContent(page);
 
         // Wait for LCP to be captured
         await page.waitForTimeout(1000);
 
         // Check if LCP was captured through testing bridge
-        const webVitalsData = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return null;
+        const webVitalsData = await TestUtils.getWebVitalsEvents(page, 'LCP');
 
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return null;
+        const lcpData = {
+          hasLCP: webVitalsData.hasEvents,
+          lcpValue: webVitalsData.values[0],
+          lcpEvents: webVitalsData.eventCount,
+        };
 
-          // Access event queue to check for web vitals events
-          const events = eventManager.getEventQueue() ?? [];
-          const webVitalsEvents = events.filter(
-            (event: WebVitalsEvent) => event.type === 'web_vitals' && event.web_vitals?.type === 'LCP',
-          );
-
-          return {
-            hasLCP: webVitalsEvents.length > 0,
-            lcpValue: webVitalsEvents[0]?.web_vitals?.value,
-            lcpEvents: webVitalsEvents.length,
-          };
-        });
-
-        if (webVitalsData?.hasLCP) {
-          expect(webVitalsData.lcpValue).toBeGreaterThan(0);
-          expect(typeof webVitalsData.lcpValue).toBe('number');
+        if (lcpData.hasLCP) {
+          expect(lcpData.lcpValue).toBeGreaterThan(0);
+          expect(typeof lcpData.lcpValue).toBe('number');
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
@@ -113,54 +70,22 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
         // Create layout shift by adding content dynamically
-        await page.evaluate(() => {
-          const content = document.createElement('div');
-          content.style.height = '100px';
-          content.style.backgroundColor = '#ddd';
-          content.textContent = 'Content causing layout shift';
-
-          // Insert at the beginning to cause shift
-          document.body.insertBefore(content, document.body.firstChild);
-
-          // Force layout recalculation
-          void content.offsetHeight;
-
-          // Add more content to increase shift
-          setTimeout(() => {
-            const moreContent = document.createElement('div');
-            moreContent.style.height = '50px';
-            moreContent.style.backgroundColor = '#bbb';
-            moreContent.textContent = 'More shifting content';
-            document.body.insertBefore(moreContent, document.body.firstChild);
-            void moreContent.offsetHeight;
-          }, 100);
-        });
+        await TestUtils.createLayoutShift(page);
 
         // Wait for CLS to be captured
         await page.waitForTimeout(1500);
 
-        const webVitalsData = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return null;
+        const webVitalsData = await TestUtils.getWebVitalsEvents(page, 'CLS');
 
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return null;
+        const clsData = {
+          hasCLS: webVitalsData.hasEvents,
+          clsValue: webVitalsData.values[0],
+          clsEvents: webVitalsData.eventCount,
+        };
 
-          const events = eventManager.getEventQueue() ?? [];
-          const clsEvents = events.filter(
-            (event: WebVitalsEvent) => event.type === 'web_vitals' && event.web_vitals?.type === 'CLS',
-          );
-
-          return {
-            hasCLS: clsEvents.length > 0,
-            clsValue: clsEvents[0]?.web_vitals?.value,
-            clsEvents: clsEvents.length,
-          };
-        });
-
-        if (webVitalsData?.hasCLS) {
-          expect(webVitalsData.clsValue).toBeGreaterThanOrEqual(0);
-          expect(typeof webVitalsData.clsValue).toBe('number');
+        if (clsData.hasCLS) {
+          expect(clsData.clsValue).toBeGreaterThanOrEqual(0);
+          expect(typeof clsData.clsValue).toBe('number');
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
@@ -181,28 +106,17 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         // Wait for FCP to be captured (should happen automatically)
         await page.waitForTimeout(1000);
 
-        const webVitalsData = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return null;
+        const webVitalsData = await TestUtils.getWebVitalsEvents(page, 'FCP');
 
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return null;
+        const fcpData = {
+          hasFCP: webVitalsData.hasEvents,
+          fcpValue: webVitalsData.values[0],
+          fcpEvents: webVitalsData.eventCount,
+        };
 
-          const events = eventManager.getEventQueue() ?? [];
-          const fcpEvents = events.filter(
-            (event: WebVitalsEvent) => event.type === 'web_vitals' && event.web_vitals?.type === 'FCP',
-          );
-
-          return {
-            hasFCP: fcpEvents.length > 0,
-            fcpValue: fcpEvents[0]?.web_vitals?.value,
-            fcpEvents: fcpEvents.length,
-          };
-        });
-
-        if (webVitalsData?.hasFCP) {
-          expect(webVitalsData.fcpValue).toBeGreaterThan(0);
-          expect(typeof webVitalsData.fcpValue).toBe('number');
+        if (fcpData.hasFCP) {
+          expect(fcpData.fcpValue).toBeGreaterThan(0);
+          expect(typeof fcpData.fcpValue).toBe('number');
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
@@ -223,28 +137,17 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         // Wait for TTFB to be captured (should happen automatically)
         await page.waitForTimeout(1000);
 
-        const webVitalsData = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return null;
+        const webVitalsData = await TestUtils.getWebVitalsEvents(page, 'TTFB');
 
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return null;
+        const ttfbData = {
+          hasTTFB: webVitalsData.hasEvents,
+          ttfbValue: webVitalsData.values[0],
+          ttfbEvents: webVitalsData.eventCount,
+        };
 
-          const events = eventManager.getEventQueue() ?? [];
-          const ttfbEvents = events.filter(
-            (event: WebVitalsEvent) => event.type === 'web_vitals' && event.web_vitals?.type === 'TTFB',
-          );
-
-          return {
-            hasTTFB: ttfbEvents.length > 0,
-            ttfbValue: ttfbEvents[0]?.web_vitals?.value,
-            ttfbEvents: ttfbEvents.length,
-          };
-        });
-
-        if (webVitalsData?.hasTTFB) {
-          expect(webVitalsData.ttfbValue).toBeGreaterThan(0);
-          expect(typeof webVitalsData.ttfbValue).toBe('number');
+        if (ttfbData.hasTTFB) {
+          expect(ttfbData.ttfbValue).toBeGreaterThan(0);
+          expect(typeof ttfbData.ttfbValue).toBe('number');
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
@@ -263,27 +166,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
         // Create interactive element that might trigger INP
-        await page.evaluate(() => {
-          const button = document.createElement('button');
-          button.textContent = 'Click for INP Test';
-          button.style.padding = '20px';
-          button.style.fontSize = '16px';
-
-          // Add intensive task on click to potentially trigger INP
-          button.addEventListener('click', () => {
-            const start = performance.now();
-            // Simulate some processing time
-            while (performance.now() - start < 50) {
-              // Busy loop
-            }
-
-            // Update DOM to trigger paint
-            button.textContent = 'Clicked!';
-            button.style.backgroundColor = '#4CAF50';
-          });
-
-          document.body.appendChild(button);
-        });
+        await TestUtils.createINPTriggerElements(page);
 
         // Click the button to trigger potential INP
         await page.click('button');
@@ -295,28 +178,17 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         await page.click('button');
         await page.waitForTimeout(1000);
 
-        const webVitalsData = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return null;
+        const webVitalsData = await TestUtils.getWebVitalsEvents(page, 'INP');
 
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return null;
+        const inpData = {
+          hasINP: webVitalsData.hasEvents,
+          inpValue: webVitalsData.values[0],
+          inpEvents: webVitalsData.eventCount,
+        };
 
-          const events = eventManager.getEventQueue() ?? [];
-          const inpEvents = events.filter(
-            (event: WebVitalsEvent) => event.type === 'web_vitals' && event.web_vitals?.type === 'INP',
-          );
-
-          return {
-            hasINP: inpEvents.length > 0,
-            inpValue: inpEvents[0]?.web_vitals?.value,
-            inpEvents: inpEvents.length,
-          };
-        });
-
-        if (webVitalsData?.hasINP) {
-          expect(webVitalsData.inpValue).toBeGreaterThan(0);
-          expect(typeof webVitalsData.inpValue).toBe('number');
+        if (inpData.hasINP) {
+          expect(inpData.inpValue).toBeGreaterThan(0);
+          expect(typeof inpData.inpValue).toBe('number');
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
@@ -358,49 +230,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
         await page.waitForTimeout(1500);
 
-        const webVitalsValidation = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return { hasEvents: false, validationResults: [] };
-
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return { hasEvents: false, validationResults: [] };
-
-          const events = eventManager.getEventQueue() ?? [];
-          const webVitalsEvents = events.filter((event: WebVitalsEvent) => event.type === 'web_vitals');
-
-          const validationResults = webVitalsEvents.map((event: WebVitalsEvent) => {
-            const webVitals = event.web_vitals;
-
-            return {
-              type: webVitals?.type,
-              value: webVitals?.value,
-              hasType: typeof webVitals?.type === 'string',
-              hasValue: typeof webVitals?.value === 'number',
-              valueIsFinite: Number.isFinite(webVitals?.value),
-              valueIsValid: webVitals
-                ? // CLS can be 0 or positive, other metrics should be positive
-                  webVitals.type === 'CLS'
-                  ? webVitals.value >= 0
-                  : webVitals.value > 0
-                : false,
-              hasTimestamp: typeof event.timestamp === 'number',
-              hasPageUrl: typeof event.page_url === 'string',
-              eventStructure: {
-                hasType: Object.prototype.hasOwnProperty.call(event, 'type'),
-                hasWebVitals: Object.prototype.hasOwnProperty.call(event, 'web_vitals'),
-                hasTimestamp: Object.prototype.hasOwnProperty.call(event, 'timestamp'),
-                hasPageUrl: Object.prototype.hasOwnProperty.call(event, 'page_url'),
-              },
-            };
-          });
-
-          return {
-            hasEvents: webVitalsEvents.length > 0,
-            eventsCount: webVitalsEvents.length,
-            validationResults,
-            eventTypes: webVitalsEvents.map((e: WebVitalsEvent) => e.web_vitals?.type).filter(Boolean),
-          };
-        });
+        const webVitalsValidation = await TestUtils.getAllWebVitalsEvents(page);
 
         if (webVitalsValidation.hasEvents) {
           expect(webVitalsValidation.eventsCount).toBeGreaterThan(0);
@@ -461,76 +291,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         // Wait for various metrics to be captured
         await page.waitForTimeout(2000);
 
-        const metricsValidation = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return { validations: [] };
-
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return { validations: [] };
-
-          const events = eventManager.getEventQueue() ?? [];
-          const webVitalsEvents = events.filter((event: WebVitalsEvent) => event.type === 'web_vitals');
-
-          const validations = webVitalsEvents.map((event: WebVitalsEvent) => {
-            if (!event.web_vitals) {
-              return {
-                type: 'unknown',
-                value: 0,
-                isWithinExpectedRange: false,
-                expectedRange: 'invalid',
-              };
-            }
-
-            const { type, value } = event.web_vitals;
-            let isWithinExpectedRange = false;
-            let expectedRange = '';
-
-            switch (type) {
-              case 'LCP':
-                // LCP should be positive and typically less than 10 seconds for good performance
-                isWithinExpectedRange = value > 0 && value < 10000;
-                expectedRange = '0-10000ms';
-                break;
-              case 'CLS':
-                // CLS should be between 0 and reasonable upper bound (typically < 1 for good performance)
-                isWithinExpectedRange = value >= 0 && value < 5;
-                expectedRange = '0-5';
-                break;
-              case 'FCP':
-                // FCP should be positive and typically less than 5 seconds
-                isWithinExpectedRange = value > 0 && value < 5000;
-                expectedRange = '0-5000ms';
-                break;
-              case 'TTFB':
-                // TTFB should be positive and typically less than 2 seconds
-                isWithinExpectedRange = value > 0 && value < 2000;
-                expectedRange = '0-2000ms';
-                break;
-              case 'INP':
-                // INP should be positive and typically less than 1 second
-                isWithinExpectedRange = value > 0 && value < 1000;
-                expectedRange = '0-1000ms';
-                break;
-              case 'LONG_TASK':
-                // Long tasks should be at least 50ms (definition) and less than 5 seconds
-                isWithinExpectedRange = value >= 50 && value < 5000;
-                expectedRange = '50-5000ms';
-                break;
-              default:
-                isWithinExpectedRange = value >= 0;
-                expectedRange = '>=0';
-            }
-
-            return {
-              type,
-              value,
-              isWithinExpectedRange,
-              expectedRange,
-            };
-          });
-
-          return { validations };
-        });
+        const metricsValidation = await TestUtils.validateMetricRanges(page);
 
         // Only validate if we have web vitals events captured
         if (metricsValidation.validations.length > 0) {
@@ -618,48 +379,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
         await page.waitForTimeout(1500);
 
-        const samplingConsistency = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return { testable: false };
-
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return { testable: false };
-
-          const events = eventManager.getEventQueue() ?? [];
-          const webVitalsEvents = events.filter((event: WebVitalsEvent) => event.type === 'web_vitals');
-
-          // Group events by type
-          const eventsByType = webVitalsEvents.reduce((acc: EventsByType, event: WebVitalsEvent) => {
-            const type = event.web_vitals?.type;
-            if (!type) return acc;
-            if (!acc[type]) acc[type] = [];
-            acc[type].push(event);
-            return acc;
-          }, {} as EventsByType);
-
-          return {
-            testable: true,
-            totalEvents: webVitalsEvents.length,
-            eventsByType,
-            typesCaptured: Object.keys(eventsByType),
-            duplicateDetection: Object.entries(eventsByType).map(
-              ([type, events]: [string, WebVitalsEvent[]]): DuplicateDetectionInfo => ({
-                type,
-                count: events.length,
-                // Check for potential duplicates (same type and similar values)
-                hasDuplicates:
-                  events.length > 1 &&
-                  events.some((e1: WebVitalsEvent, i: number) =>
-                    events.slice(i + 1).some((e2: WebVitalsEvent) => {
-                      const val1 = e1.web_vitals?.value ?? 0;
-                      const val2 = e2.web_vitals?.value ?? 0;
-                      return Math.abs(val1 - val2) < 1;
-                    }),
-                  ),
-              }),
-            ),
-          };
-        });
+        const samplingConsistency = await TestUtils.analyzeDuplicateDetection(page);
 
         if (samplingConsistency.testable) {
           // Verify no unexpected duplicates (sampling should prevent this)
@@ -685,16 +405,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         // Mock web-vitals import failure
-        await page.addInitScript(() => {
-          // Override dynamic import to simulate web-vitals not being available
-          const originalImport = window.eval('import');
-          window.eval = (code: string): unknown => {
-            if (code.includes('import(') && code.includes('web-vitals')) {
-              return Promise.reject(new Error('web-vitals module not available'));
-            }
-            return originalImport(code);
-          };
-        });
+        await TestUtils.mockWebVitalsUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
         const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
@@ -726,28 +437,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
         await page.waitForTimeout(2000);
 
-        const fallbackBehavior = await page.evaluate(() => {
-          const bridge = window.__traceLogTestBridge;
-          if (!bridge) return { testable: false };
-
-          const eventManager = bridge.getEventManager();
-          if (!eventManager) return { testable: false };
-
-          const events = eventManager.getEventQueue() ?? [];
-          const webVitalsEvents = events.filter((event: WebVitalsEvent) => event.type === 'web_vitals');
-
-          return {
-            testable: true,
-            hasWebVitalsEvents: webVitalsEvents.length > 0,
-            eventCount: webVitalsEvents.length,
-            eventTypes: webVitalsEvents.map((e: WebVitalsEvent) => e.web_vitals?.type).filter(Boolean),
-            fallbackMetrics: webVitalsEvents.map((e: WebVitalsEvent) => ({
-              type: e.web_vitals?.type,
-              value: e.web_vitals?.value,
-              isValidValue: typeof e.web_vitals?.value === 'number' && e.web_vitals ? e.web_vitals.value >= 0 : false,
-            })),
-          };
-        });
+        const fallbackBehavior = await TestUtils.analyzeFallbackBehavior(page);
 
         if (fallbackBehavior.testable) {
           // Even with web-vitals library unavailable, fallback should work
@@ -774,10 +464,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         // Mock PerformanceObserver unavailability
-        await page.addInitScript(() => {
-          // Remove PerformanceObserver to simulate unsupported environment
-          delete (window as Window & { PerformanceObserver?: unknown }).PerformanceObserver;
-        });
+        await TestUtils.mockPerformanceObserverUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
         const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
@@ -798,44 +485,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
         await page.waitForTimeout(1000);
 
-        const performanceObserverFallback = await page.evaluate(
-          (): {
-            testable: boolean;
-            hasPerformanceObserver?: boolean;
-            isInitialized?: boolean;
-            canTrackCustomEvents?: boolean;
-            hasBasicEventManager?: boolean;
-            eventQueueAccessible?: boolean;
-          } => {
-            const bridge = window.__traceLogTestBridge;
-            if (!bridge) return { testable: false };
-
-            const app = bridge.getAppInstance();
-            if (!app) return { testable: false };
-
-            const eventManager = bridge.getEventManager();
-
-            return {
-              testable: true,
-              hasPerformanceObserver: typeof PerformanceObserver !== 'undefined',
-              isInitialized: bridge.isInitialized(),
-              hasBasicEventManager: Boolean(eventManager),
-              eventQueueAccessible: Boolean(eventManager?.getEventQueue),
-              // Check if app continues to function without PerformanceObserver
-              canTrackCustomEvents: ((): boolean => {
-                try {
-                  app.eventManagerInstance?.track?.({
-                    type: EventType.CUSTOM,
-                    custom_event: { name: 'test_without_observer', metadata: { test: true } },
-                  });
-                  return true;
-                } catch {
-                  return false;
-                }
-              })(),
-            };
-          },
-        );
+        const performanceObserverFallback = await TestUtils.analyzePerformanceObserverFallback(page);
 
         if (performanceObserverFallback.testable) {
           expect(performanceObserverFallback.hasPerformanceObserver).toBe(false);
