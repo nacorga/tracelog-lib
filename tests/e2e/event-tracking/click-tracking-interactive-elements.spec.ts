@@ -2,6 +2,27 @@ import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
 
 test.describe('Click Tracking - Interactive Elements', () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to test page first to ensure proper context
+    await TestUtils.navigateAndWaitForReady(page, '/');
+
+    // Clear any existing storage to ensure clean test state
+    try {
+      await page.evaluate(() => {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.clear();
+        }
+
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.clear();
+        }
+      });
+    } catch {
+      // WebKit may block storage access in some contexts, continue with test
+      console.log('Storage cleanup skipped due to security restrictions');
+    }
+  });
+
   test.describe('Interactive element tracking', () => {
     test('should track clicks on buttons', async ({ page }) => {
       const { monitor, initResult } = await TestUtils.setupEventTrackingTest(page);
@@ -667,13 +688,6 @@ test.describe('Click Tracking - Interactive Elements', () => {
 
               const startTime = performance.now();
 
-              // Simulate click and measure response
-              const clickEvent = new MouseEvent('click', {
-                view: window,
-                bubbles: true,
-                cancelable: true,
-              });
-
               // Measure time to DOM update (style change)
               const observer = new MutationObserver(() => {
                 const endTime = performance.now();
@@ -687,7 +701,8 @@ test.describe('Click Tracking - Interactive Elements', () => {
                 attributeFilter: ['style'],
               });
 
-              button.dispatchEvent(clickEvent);
+              // Use actual click instead of dispatchEvent for better WebKit compatibility
+              (button as HTMLElement).click();
 
               // Fallback timeout
               setTimeout(() => {

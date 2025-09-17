@@ -25,6 +25,27 @@ interface DuplicateDetectionInfo {
 }
 
 test.describe('Performance Tracking - Web Vitals Collection', () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to test page first to ensure proper context
+    await TestUtils.navigateAndWaitForReady(page, '/');
+
+    // Clear any existing storage to ensure clean test state
+    try {
+      await page.evaluate(() => {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.clear();
+        }
+
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.clear();
+        }
+      });
+    } catch {
+      // WebKit may block storage access in some contexts, continue with test
+      console.log('Storage cleanup skipped due to security restrictions');
+    }
+  });
+
   test.describe('Core Web Vitals Collection', () => {
     test('should collect LCP (Largest Contentful Paint) metrics when available', async ({ page }) => {
       const monitor = TestUtils.createConsoleMonitor(page);
@@ -417,6 +438,26 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
+        // Trigger content to generate web vitals events
+        await page.evaluate(() => {
+          // Add content for LCP
+          const content = document.createElement('div');
+          content.style.width = '100%';
+          content.style.height = '150px';
+          content.style.backgroundColor = '#e0e0e0';
+          content.textContent = 'Large content for testing';
+          document.body.appendChild(content);
+
+          // Trigger layout shift for CLS
+          setTimeout(() => {
+            const shifter = document.createElement('div');
+            shifter.style.height = '80px';
+            shifter.style.backgroundColor = '#ccc';
+            document.body.insertBefore(shifter, document.body.firstChild);
+            void shifter.offsetHeight;
+          }, 100);
+        });
+
         // Wait for various metrics to be captured
         await page.waitForTimeout(2000);
 
@@ -477,7 +518,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
                 break;
               default:
                 isWithinExpectedRange = value >= 0;
-                expectedRange = 'e0';
+                expectedRange = '>=0';
             }
 
             return {
@@ -491,8 +532,11 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
           return { validations };
         });
 
-        for (const validation of metricsValidation.validations) {
-          expect(validation.isWithinExpectedRange).toBe(true);
+        // Only validate if we have web vitals events captured
+        if (metricsValidation.validations.length > 0) {
+          for (const validation of metricsValidation.validations) {
+            expect(validation.isWithinExpectedRange).toBe(true);
+          }
         }
 
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);

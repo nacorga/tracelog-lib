@@ -119,7 +119,7 @@ The system analyzes conventional commits since the last tag:
 
 ### Environment Variables
 ```bash
-NODE_AUTH_TOKEN=npm_token_here    # For NPM publishing
+NPM_TOKEN=npm_token_here    # For NPM publishing
 GITHUB_TOKEN=github_token_here    # For GitHub releases
 ```
 
