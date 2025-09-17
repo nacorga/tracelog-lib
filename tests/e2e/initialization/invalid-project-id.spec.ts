@@ -3,10 +3,10 @@ import { TestUtils } from '../../utils';
 import {
   InitializationTestBase,
   InitializationScenarios,
-  TEST_CONSTANTS,
   ErrorValidator,
   PerformanceValidator,
-} from '../../utils/initialization.helpers';
+} from '../../utils/initialization.utils';
+import { ERROR_MESSAGES, STATUS_TEXTS } from '../../constants';
 
 test.describe('Library Initialization - Invalid Project ID', () => {
   let testBase: InitializationTestBase;
@@ -42,10 +42,10 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     }
 
     try {
-      ErrorValidator.validateInitializationError(missingIdResult, TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG);
+      ErrorValidator.validateInitializationError(missingIdResult, ERROR_MESSAGES.UNDEFINED_CONFIG);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `Error validation failed for undefined config: ${JSON.stringify(missingIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG}`,
+        `Error validation failed for undefined config: ${JSON.stringify(missingIdResult)}, Expected: ${ERROR_MESSAGES.UNDEFINED_CONFIG}`,
       );
       throw error;
     }
@@ -54,7 +54,7 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     await ErrorValidator.validateNoTrackingOnFailure(page);
 
     // Verify status remains ready
-    await expect(page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.READY);
+    await expect(page.getByTestId('init-status')).toContainText(STATUS_TEXTS.READY);
   });
 
   test('should throw error when initialized with empty object (no id property)', async ({ page }) => {
@@ -70,10 +70,10 @@ test.describe('Library Initialization - Invalid Project ID', () => {
 
     // Validate error and ensure no tracking occurs
     try {
-      ErrorValidator.validateInitializationError(emptyConfigResult, TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED);
+      ErrorValidator.validateInitializationError(emptyConfigResult, ERROR_MESSAGES.ID_REQUIRED);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `Error validation failed for empty config: ${JSON.stringify(emptyConfigResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
+        `Error validation failed for empty config: ${JSON.stringify(emptyConfigResult)}, Expected: ${ERROR_MESSAGES.ID_REQUIRED}`,
       );
       throw error;
     }
@@ -99,10 +99,10 @@ test.describe('Library Initialization - Invalid Project ID', () => {
 
     // Validate error and ensure no tracking occurs
     try {
-      ErrorValidator.validateInitializationError(emptyIdResult, TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED);
+      ErrorValidator.validateInitializationError(emptyIdResult, ERROR_MESSAGES.ID_REQUIRED);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `Error validation failed for empty ID: ${JSON.stringify(emptyIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
+        `Error validation failed for empty ID: ${JSON.stringify(emptyIdResult)}, Expected: ${ERROR_MESSAGES.ID_REQUIRED}`,
       );
       throw error;
     }
@@ -128,10 +128,10 @@ test.describe('Library Initialization - Invalid Project ID', () => {
 
     // Validate error and ensure no tracking occurs
     try {
-      ErrorValidator.validateInitializationError(whitespaceIdResult, TEST_CONSTANTS.ERROR_MESSAGES.INVALID_APP_CONFIG);
+      ErrorValidator.validateInitializationError(whitespaceIdResult, ERROR_MESSAGES.INVALID_APP_CONFIG);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `Error validation failed for whitespace ID: ${JSON.stringify(whitespaceIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.INVALID_APP_CONFIG}`,
+        `Error validation failed for whitespace ID: ${JSON.stringify(whitespaceIdResult)}, Expected: ${ERROR_MESSAGES.INVALID_APP_CONFIG}`,
       );
       throw error;
     }
@@ -157,10 +157,10 @@ test.describe('Library Initialization - Invalid Project ID', () => {
 
     // Validate error and ensure no tracking occurs
     try {
-      ErrorValidator.validateInitializationError(nullIdResult, TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED);
+      ErrorValidator.validateInitializationError(nullIdResult, ERROR_MESSAGES.ID_REQUIRED);
     } catch (error) {
       testBase.consoleMonitor.traceLogErrors.push(
-        `Error validation failed for null ID: ${JSON.stringify(nullIdResult)}, Expected: ${TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED}`,
+        `Error validation failed for null ID: ${JSON.stringify(nullIdResult)}, Expected: ${ERROR_MESSAGES.ID_REQUIRED}`,
       );
       throw error;
     }
@@ -276,16 +276,16 @@ test.describe('Library Initialization - Invalid Project ID', () => {
     if (!validResult.success) {
       // Should fail with network/config error, not project ID validation error
       if (
-        validResult.error?.includes(TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED) ||
-        validResult.error?.includes(TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG)
+        validResult.error?.includes(ERROR_MESSAGES.ID_REQUIRED) ||
+        validResult.error?.includes(ERROR_MESSAGES.UNDEFINED_CONFIG)
       ) {
         testBase.consoleMonitor.traceLogErrors.push(
           `Valid initialization failed with project ID validation error after multiple failures: ${JSON.stringify(validResult)}`,
         );
       }
 
-      expect(validResult.error).not.toContain(TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED);
-      expect(validResult.error).not.toContain(TEST_CONSTANTS.ERROR_MESSAGES.UNDEFINED_CONFIG);
+      expect(validResult.error).not.toContain(ERROR_MESSAGES.ID_REQUIRED);
+      expect(validResult.error).not.toContain(ERROR_MESSAGES.UNDEFINED_CONFIG);
       expect(validResult.error).toMatch(/Failed to load config|Failed to fetch|NetworkError/);
     } else {
       expect(validResult.success).toBe(true);

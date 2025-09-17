@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { TEST_CONFIGS } from '../../utils/initialization.helpers';
-import { TEST_CONSTANTS } from '../../utils/common.helpers';
+import { TEST_CONFIGS } from '../../constants';
+import { TEST_CONSTANTS } from '../../utils/common.utils';
 
 test.describe('Session Management - Custom Session Timeout', () => {
   test('should accept custom session timeout within valid bounds', async ({ page }) => {

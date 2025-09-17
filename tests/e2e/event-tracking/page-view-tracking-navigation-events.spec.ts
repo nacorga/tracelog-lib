@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { TEST_CONFIGS } from '../../utils/initialization.helpers';
+import { TEST_CONFIGS } from '../../constants';
 
 test.describe('Page View Tracking - Navigation Events', () => {
   test.describe('History API navigation tracking', () => {

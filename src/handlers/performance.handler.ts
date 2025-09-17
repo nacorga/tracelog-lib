@@ -39,6 +39,9 @@ export class PerformanceHandler extends StateManager {
   }
 
   private observeWebVitalsFallback(): void {
+    // TTFB - should be captured immediately as it's available from navigation timing
+    this.reportTTFB();
+
     // LCP
     this.safeObserve(
       'largest-contentful-paint',

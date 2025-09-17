@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { TEST_CONSTANTS } from '../../utils/initialization.helpers';
 import '../../../src/types/window.types';
+import { TEST_URLS } from '../../constants';
 
 test.describe('Session Management - Page Unload Session End', () => {
   // Test Configuration
@@ -12,7 +12,7 @@ test.describe('Session Management - Page Unload Session End', () => {
 
     try {
       // Navigate and initialize
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
 
@@ -83,7 +83,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -148,7 +148,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -170,11 +170,11 @@ test.describe('Session Management - Page Unload Session End', () => {
       }, sessionInfo.sessionId);
 
       // Navigate away (triggers unload)
-      await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_SECOND_PAGE_URL);
+      await page.goto(TEST_URLS.PAGE_UNLOAD_SECOND_PAGE_URL);
       await TestUtils.waitForTimeout(page, 1000);
 
       // Navigate back to original page
-      await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await page.goto(TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       await TestUtils.waitForTimeout(page, 1000);
 
       // Verify session was properly cleaned up and persisted
@@ -194,7 +194,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL.replace('index.html', ''));
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL.replace('index.html', ''));
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -246,7 +246,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -294,7 +294,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -345,7 +345,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -401,7 +401,7 @@ test.describe('Session Management - Page Unload Session End', () => {
     const monitor = TestUtils.createConsoleMonitor(page);
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       const initResult = await TestUtils.initializeTraceLog(page);
       const validated = TestUtils.verifyInitializationResult(initResult);
       expect(validated.success).toBe(true);
@@ -420,11 +420,11 @@ test.describe('Session Management - Page Unload Session End', () => {
       expect(storageKeys.length).toBeGreaterThan(0);
 
       // Navigate away to trigger unload
-      await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_SECOND_PAGE_URL);
+      await page.goto(TEST_URLS.PAGE_UNLOAD_SECOND_PAGE_URL);
       await TestUtils.waitForTimeout(page, 1000);
 
       // Return to original page
-      await page.goto(TEST_CONSTANTS.URLS.PAGE_UNLOAD_PAGE_URL);
+      await page.goto(TEST_URLS.PAGE_UNLOAD_PAGE_URL);
       await TestUtils.waitForTimeout(page, 1000);
 
       // Check if session data persisted in storage

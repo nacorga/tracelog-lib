@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
 import { EventType } from '../../../src/types';
+import { TEST_CONFIGS } from '../../constants';
 
 test.describe('Performance Tracking - Web Vitals Fallback', () => {
   test.beforeEach(async ({ page }) => {
@@ -33,7 +34,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
         await TestUtils.mockWebVitalsUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -170,7 +171,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
         await TestUtils.mockWebVitalsUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -258,7 +259,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
         await TestUtils.mockWebVitalsUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -337,7 +338,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
         await TestUtils.mockPerformanceObserverUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -383,7 +384,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
         await TestUtils.mockPerformanceObserverUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -436,7 +437,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
         await TestUtils.mockPerformanceObserverUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -528,7 +529,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
       try {
         // First test with normal web-vitals library
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const normalInitResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const normalInitResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(normalInitResult).success).toBe(true);
 
@@ -549,7 +550,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
         // Now test with fallback (new page to reset state)
         await TestUtils.mockWebVitalsUnavailable(page);
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const fallbackInitResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const fallbackInitResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(fallbackInitResult).success).toBe(true);
 
@@ -605,7 +606,7 @@ test.describe('Performance Tracking - Web Vitals Fallback', () => {
 
         await TestUtils.mockWebVitalsUnavailable(page);
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 

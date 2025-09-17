@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
+import { TEST_CONFIGS } from '../../constants';
 
 test.describe('Scroll Tracking - Custom Container Scroll', () => {
   test.describe('Custom container tracking', () => {
@@ -115,7 +116,7 @@ test.describe('Scroll Tracking - Custom Container Scroll', () => {
       try {
         // Test that TraceLog initialization succeeds with invalid selectors (they are ignored)
         const initResult = await TestUtils.initializeTraceLog(page, {
-          id: TestUtils.DEFAULT_CONFIG.id,
+          id: TEST_CONFIGS.DEFAULT.id,
           scrollContainerSelectors: invalidSelectors,
         });
 

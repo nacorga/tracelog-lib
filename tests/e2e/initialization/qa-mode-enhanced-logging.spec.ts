@@ -3,11 +3,10 @@ import { TestUtils } from '../../utils';
 import {
   InitializationTestBase,
   InitializationScenarios,
-  TEST_CONFIGS,
-  TEST_CONSTANTS,
   PerformanceValidator,
   SessionValidator,
-} from '../../utils/initialization.helpers';
+} from '../../utils/initialization.utils';
+import { STATUS_TEXTS, TEST_CONFIGS } from '../../constants';
 
 test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
   let testBase: InitializationTestBase;
@@ -28,7 +27,7 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     await InitializationScenarios.testQAModeFeatures(testBase);
 
     // Additional QA mode specific validations
-    await expect(page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.INITIALIZED);
+    await expect(page.getByTestId('init-status')).toContainText(STATUS_TEXTS.INITIALIZED);
 
     // Verify QA mode configuration acceptance
     const qaConfigCheck = await page.evaluate(() => ({

@@ -1,11 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import {
-  LongTaskDetectionInfo,
-  LongTaskEvent,
-  SamplingTestInfo,
-  ThrottlingTestInfo,
-} from '../../utils/performance-tracking.helpers';
+import { TEST_CONFIGS } from '../../constants';
+import { LongTaskDetectionInfo, LongTaskEvent, SamplingTestInfo, ThrottlingTestInfo } from '../../types';
 
 test.describe('Performance Tracking - Long Task Detection', () => {
   test.describe('Long Task Detection and Thresholds', () => {
@@ -14,7 +10,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -142,7 +138,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -237,7 +233,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -307,7 +303,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -412,7 +408,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -504,7 +500,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -593,7 +589,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -668,7 +664,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -751,7 +747,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -872,7 +868,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
           };
         });
 
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
         // Measure performance after initialization and during tracking
@@ -976,7 +972,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
         });
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -1042,7 +1038,7 @@ test.describe('Performance Tracking - Long Task Detection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 

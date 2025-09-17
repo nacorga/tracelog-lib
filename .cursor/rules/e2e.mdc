@@ -28,9 +28,17 @@ tests/
 │   ├── index.html               # Main test page
 │   ├── tracelog.js              # Built SDK for testing
 │   └── pages/                   # Additional test pages
-└── utils/                       # Test utilities and helpers
+└── constants/                   # Test constants
+    ├── index.ts                 # Unified export
+    ├── common.constants.ts      # Core shared utilities
+    └── [other-constants]        # Organized by domain
+└── types/                       # Test types
+    ├── index.ts                 # Unified export
+    ├── common.types.ts          # Core shared utilities
+    └── [other-types]            # Organized by domain
+└── utils/                       # Test utilities
     ├── index.ts                 # Unified TestUtils export
-    ├── common.helpers.ts        # Core shared utilities
+    ├── common.utils.ts          # Core shared utilities
     └── [other-utils]            # Organized by domain
 ```
 
@@ -56,7 +64,7 @@ tests/
 ### Code Style
 
 ```typescript
-// Follow functional programming paradigms with TestUtils helpers
+// Follow functional programming paradigms with TestUtils helper utilities
 test.describe('Feature Name', () => {
   test('should validate specific behavior', async ({ page }) => {
     const monitor = TestUtils.createConsoleMonitor(page);
@@ -75,8 +83,8 @@ test.describe('Feature Name', () => {
 ### Functional Architecture
 
 - `TestUtils` namespace aggregates all helper utilities
-- All helpers are pure functions—no classes
-- Helpers grouped by domain (event-tracking, session-management, etc.)
+- All utils are pure functions—no classes
+- Utils grouped by domain (event-tracking, session-management, etc.)
 - Single import: `import { TestUtils } from '../utils'`
 
 
@@ -183,7 +191,7 @@ test.describe('Feature Category', () => {
 ```
 
 
-### Helper Usage
+### Util Usage
 
 ```typescript
 // Navigation & Setup
@@ -309,7 +317,7 @@ The testing bridge is injected based on build-time environment:
 ### Bridge Usage Patterns
 
 ```typescript
-// ✅ GOOD: Use helpers that abstract bridge access
+// ✅ GOOD: Use util that abstract bridge access
 const monitor = await TestUtils.setupTextExtractionTest(page);
 const result = await TestUtils.clickElementAndCaptureData(page, selector);
 
@@ -352,7 +360,7 @@ All test fixtures automatically:
 
 - Modify only as necessary for test success without over-engineering
 - Maintain test independence and isolation
-- Follow established patterns and helpers
+- Follow established patterns and utils
 - Include thorough assertions and error detection
 
 
@@ -360,7 +368,7 @@ All test fixtures automatically:
 
 - Identify and address improvement opportunities
 - Enhance reliability and maintainability cautiously
-- Document significant changes to tests or helpers
+- Document significant changes to tests or utils
 
 
 ### Quality Gates

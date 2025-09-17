@@ -1,22 +1,22 @@
-import * as CommonHelpers from './common.helpers';
-import * as EventTrackingHelpers from './event-tracking.helpers';
-import * as SessionManagementHelpers from './session-management.helpers';
-import * as InitializationHelpers from './initialization.helpers';
-import * as PerformanceTrackingHelpers from './performance-tracking.helpers';
+import * as CommonUtils from './common.utils';
+import * as EventTrackingUtils from './event-tracking.utils';
+import * as SessionManagementUtils from './session-management.utils';
+import * as InitializationUtils from './initialization.utils';
+import * as PerformanceTrackingUtils from './performance-tracking.utils';
 
 export const TestUtils = {
   // Core shared utilities
-  ...CommonHelpers,
+  ...CommonUtils,
 
-  // Event tracking helpers
-  ...EventTrackingHelpers,
+  // Event tracking utils
+  ...EventTrackingUtils,
 
-  // Session management helpers
-  ...SessionManagementHelpers,
+  // Session management utils
+  ...SessionManagementUtils,
 
-  // Initialization helpers
-  ...InitializationHelpers,
+  // Initialization utils
+  ...InitializationUtils,
 
-  // Performance tracking helpers
-  ...PerformanceTrackingHelpers,
+  // Performance tracking utils
+  ...PerformanceTrackingUtils,
 };

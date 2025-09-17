@@ -1,49 +1,16 @@
 import { Page, Browser } from '@playwright/test';
 import { Config } from '../../src/types';
+import { ConsoleMonitor } from '../types';
+import { DEFAULT_CONFIG, TEST_URLS } from '../constants';
 
 /**
  * Core shared utilities for TraceLog E2E tests
  * This file contains all common functionality that can be reused across different test domains.
  */
 
-// Test configuration constants
-export const TEST_ID = 'test';
-
-export const DEFAULT_CONFIG: Config = { id: TEST_ID };
-
-export const TEST_URLS = {
-  INITIALIZATION_PAGE: '/',
-  VALIDATION_PAGE: '/pages/validation/index.html',
-  PAGE_UNLOAD_PAGE_URL: '/pages/page-unload/index.html',
-  PAGE_UNLOAD_SECOND_PAGE_URL: '/pages/page-unload/second-page.html',
-} as const;
-
-export const STATUS_TEXTS = {
-  READY: 'Status: Ready for testing',
-  INITIALIZED: 'Status: Initialized successfully',
-  VALIDATION_PASS: 'PASS: Valid project ID accepted',
-} as const;
-
-export const ERROR_MESSAGES = {
-  ID_REQUIRED: 'Project ID is required',
-  INVALID_APP_CONFIG: 'Project ID is required',
-  UNDEFINED_CONFIG: 'Configuration must be an object',
-  APP_NOT_INITIALIZED: 'App not initialized',
-} as const;
-
 /**
  * Console message monitoring utilities
  */
-export interface ConsoleMonitor {
-  consoleMessages: string[];
-  traceLogErrors: string[];
-  traceLogWarnings: string[];
-  traceLogInfo: string[];
-  debugLogs: string[];
-  cleanup: () => void;
-  getAnomalies: () => string[];
-}
-
 export function createConsoleMonitor(page: Page): ConsoleMonitor {
   const consoleMessages: string[] = [];
   const traceLogErrors: string[] = [];

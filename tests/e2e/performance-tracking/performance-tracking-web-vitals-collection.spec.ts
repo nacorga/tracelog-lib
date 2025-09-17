@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { WebVitalsEvent } from '../../utils/performance-tracking.helpers';
+import { WebVitalsEvent } from '../../types';
+import { TEST_CONFIGS } from '../../constants';
 
 test.describe('Performance Tracking - Web Vitals Collection', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to test page first to ensure proper context
-    await TestUtils.navigateAndWaitForReady(page, '/');
-
     // Clear any existing storage to ensure clean test state
+    // Note: Don't navigate here for web vitals tests as navigation metrics
+    // are only captured on the first page load
     try {
       await page.evaluate(() => {
         if (typeof localStorage !== 'undefined') {
@@ -30,7 +30,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -65,7 +65,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -99,7 +99,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -130,7 +130,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -161,7 +161,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -204,7 +204,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -264,7 +264,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -313,7 +313,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -358,7 +358,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -408,7 +408,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         await TestUtils.mockWebVitalsUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -467,7 +467,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         await TestUtils.mockPerformanceObserverUnavailable(page);
 
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -514,7 +514,7 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, TestUtils.TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page, TEST_CONFIGS.DEFAULT);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 

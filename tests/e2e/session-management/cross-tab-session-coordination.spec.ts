@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
+import { WindowWithBroadcast } from '../../types';
 
 test.describe('Session Management - Cross-Tab Session Coordination', () => {
   // Test Configuration
@@ -391,16 +392,6 @@ test.describe('Session Management - Cross-Tab Session Coordination', () => {
 
       // Set up BroadcastChannel monitoring
       await pages[0].evaluate(() => {
-        interface WindowWithBroadcast extends Window {
-          broadcastChannelMessages: Array<{
-            type: string;
-            tabId: string;
-            timestamp: number;
-            sessionId: string;
-          }>;
-          broadcastChannelName: string;
-        }
-
         const windowWithBroadcast = window as unknown as WindowWithBroadcast;
         windowWithBroadcast.broadcastChannelMessages = [];
         const originalBroadcastChannel = window.BroadcastChannel;

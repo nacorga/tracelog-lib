@@ -391,7 +391,7 @@ test.describe('Scroll Tracking - Scroll Suppression', () => {
         expect(result.customEventCaptured).toBe(true);
         expect(result.scrollEventsSuppressed).toBe(true);
         expect(result.customEventData).toBeDefined();
-        expect(result.customEventData.metadata.key).toBe('value');
+        expect(result.customEventData?.metadata?.key).toBe('value');
         expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
       } finally {
         monitor.cleanup();
