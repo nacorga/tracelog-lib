@@ -1,5 +1,6 @@
 import type { EventManager } from '../managers/event.manager';
 import type { App } from '../app';
+import { ScrollHandler } from '../handlers/scroll.handler';
 
 /**
  * Testing bridge interface for E2E tests
@@ -23,6 +24,12 @@ export interface TraceLogTestBridge {
    * @returns App instance or null if not initialized
    */
   getAppInstance(): App | null;
+
+  /**
+   * Get the scroll handler instance for testing
+   * @returns ScrollHandler instance or null if not initialized
+   */
+  getScrollHandler(): ScrollHandler | null;
 
   /**
    * Check if initialization is in progress

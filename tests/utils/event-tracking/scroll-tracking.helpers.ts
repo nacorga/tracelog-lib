@@ -194,12 +194,15 @@ export async function setupScrollTrackingTest(
   // Wait for suppressNextScroll to be cleared
   await page.waitForTimeout(600);
 
-  // Create tall page and get dimensions
+  // Create tall page with exact height and get dimensions
   const pageInfo = await page.evaluate((height) => {
+    // Clear existing content first
+    document.body.innerHTML = '';
+
     const tallDiv = document.createElement('div');
     tallDiv.style.height = `${height}px`;
-    tallDiv.style.background = 'linear-gradient(to bottom, #red, #blue)';
-    tallDiv.innerHTML = `<h2 style="padding-top: ${height / 2}px;">Middle of page</h2>`;
+    tallDiv.style.background = 'linear-gradient(to bottom, red, blue)';
+    tallDiv.innerHTML = `<div style="height: 50px; margin-top: ${height / 2}px;">Middle marker</div>`;
     document.body.appendChild(tallDiv);
 
     return {
@@ -255,6 +258,27 @@ export async function setupNonScrollablePageTest(
   const monitor = createConsoleMonitor(page);
 
   await navigateAndWaitForReady(page, '/');
+
+  // First, clear existing content and make page non-scrollable
+  await page.evaluate((height) => {
+    // Clear existing content
+    document.body.innerHTML = '';
+
+    // Set body and html to exact height to prevent scrolling
+    document.body.style.height = `${height}px`;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.height = `${height}px`;
+    document.documentElement.style.overflow = 'hidden';
+
+    // Add minimal content
+    const shortDiv = document.createElement('div');
+    shortDiv.style.height = `${height}px`;
+    shortDiv.style.overflow = 'hidden';
+    shortDiv.innerHTML = `<div style="height: 100%; background: red;">Short content</div>`;
+    document.body.appendChild(shortDiv);
+  }, pageHeight);
+
+  // Now initialize TraceLog on a truly non-scrollable page
   const initResult = await initializeTraceLog(page);
 
   if (!initResult.success) {
@@ -263,14 +287,6 @@ export async function setupNonScrollablePageTest(
 
   // Wait for suppressNextScroll to be cleared
   await page.waitForTimeout(600);
-
-  // Create short page (no scrolling possible)
-  await page.evaluate((height) => {
-    const shortDiv = document.createElement('div');
-    shortDiv.style.height = `${height}px`;
-    shortDiv.innerHTML = `<div style="height: 100%; background: red;">Short content</div>`;
-    document.body.appendChild(shortDiv);
-  }, pageHeight);
 
   return { monitor };
 }
@@ -297,6 +313,13 @@ export async function testScrollPercentageCalculations(
   const results = [];
 
   for (const testCase of testCases) {
+    // Clean up any existing content before each test case
+    await page.evaluate(() => {
+      // Remove any existing test content
+      const existingDivs = document.querySelectorAll('div[style*="height"]');
+      existingDivs.forEach((div) => div.remove());
+    });
+
     const { monitor } = await setupScrollTrackingTest(page, testCase.height);
 
     try {

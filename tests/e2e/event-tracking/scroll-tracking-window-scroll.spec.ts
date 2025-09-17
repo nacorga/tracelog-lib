@@ -158,9 +158,9 @@ test.describe('Scroll Tracking - Window Scroll', () => {
     test('should calculate percentage correctly for various page heights', async ({ page }) => {
       const testCases = [
         { height: 2000, scrollTo: 0, expectedDepth: 0 },
-        { height: 2000, scrollTo: 500, expectedRange: [20, 40] as [number, number] }, // Around 25-35%
-        { height: 4000, scrollTo: 1000, expectedRange: [20, 40] as [number, number] }, // Around 25-35%
-        { height: 1000, scrollTo: 300, expectedRange: [60, 90] as [number, number] }, // Around 70-85% (Mobile Safari can be lower ~62%)
+        { height: 2000, scrollTo: 500, expectedRange: [15, 35] as [number, number] }, // Around 18-30% (accounting for page overhead)
+        { height: 4000, scrollTo: 1000, expectedRange: [15, 35] as [number, number] }, // Around 20-30%
+        { height: 1000, scrollTo: 300, expectedRange: [35, 65] as [number, number] }, // Around 38-60% (Mobile Safari can be lower)
       ];
 
       const results = await TestUtils.testScrollPercentageCalculations(page, testCases);

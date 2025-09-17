@@ -166,6 +166,12 @@ if (process.env.NODE_ENV === 'e2e') {
         getAppInstance: (): App | null => app ?? null,
 
         /**
+         * Get the scroll handler instance for testing
+         * @returns ScrollHandler instance or null if not initialized
+         */
+        getScrollHandler: () => app?.scrollHandlerInstance ?? null,
+
+        /**
          * Check if initialization is in progress
          * @returns true if initializing, false otherwise
          */

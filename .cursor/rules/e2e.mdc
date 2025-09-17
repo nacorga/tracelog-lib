@@ -378,7 +378,7 @@ npx playwright test --project=firefox
 npx playwright test --project=webkit
 ```
 
-**Success Criteria**: 100% pass rate on all browsers with zero regressions and measurable test quality improvements
+**Success Criteria**: 100% pass rate on all browsers without typescript or eslint errors and with zero regressions and measurable test quality improvements
 
 ## 🎯 Architecture Benefits
 

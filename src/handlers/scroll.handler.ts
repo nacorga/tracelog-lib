@@ -54,7 +54,7 @@ export class ScrollHandler extends StateManager {
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
-    // Skip setup for non-scrollable elements (except window)
+    // Skip setup for non-scrollable elements
     if (element !== window && !this.isElementScrollable(element as HTMLElement)) {
       return;
     }
@@ -105,6 +105,11 @@ export class ScrollHandler extends StateManager {
     const scrollTop = this.getScrollTop(element);
     const viewportHeight = this.getViewportHeight(element);
     const scrollHeight = this.getScrollHeight(element);
+
+    // Check if the page is actually scrollable at runtime
+    if (element === window && scrollHeight <= viewportHeight) {
+      return null;
+    }
 
     const direction = scrollTop > lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
     const depth =

@@ -41,6 +41,14 @@ export class App extends StateManager {
     return process.env.NODE_ENV === 'e2e' ? this.eventManager : null;
   }
 
+  /**
+   * Get the scroll handler instance for testing purposes
+   * @internal
+   */
+  get scrollHandlerInstance(): ScrollHandler | null {
+    return process.env.NODE_ENV === 'e2e' ? this.scrollHandler : null;
+  }
+
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {
       return;

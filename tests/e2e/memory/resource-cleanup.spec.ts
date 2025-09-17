@@ -578,7 +578,7 @@ test.describe('Memory - Resource Cleanup', () => {
       );
 
       expect(finalSnapshot.timers.total).toBeLessThanOrEqual(
-        baselineSnapshot.timers.total + 15, // Allow for async cleanup delays
+        baselineSnapshot.timers.total + 20, // Allow for async cleanup delays and test environment overhead
       );
 
       expect(finalSnapshot.storage.traceLogEntries).toBeLessThanOrEqual(

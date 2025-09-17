@@ -164,7 +164,7 @@ test.describe('Page View Tracking - Navigation Events', () => {
         expect(beforeBack.state).toEqual({ page: 2 });
 
         // Trigger popstate by going back
-        const popstateResult = await page.evaluate(() => {
+        const popstateResult = (await page.evaluate(() => {
           return new Promise((resolve) => {
             const handler = (): void => {
               window.removeEventListener('popstate', handler);
@@ -179,7 +179,12 @@ test.describe('Page View Tracking - Navigation Events', () => {
             window.addEventListener('popstate', handler);
             window.history.back();
           });
-        });
+        })) as {
+          currentUrl: string;
+          pathname: string;
+          state: unknown;
+          popstateTriggered: boolean;
+        };
 
         expect(popstateResult.popstateTriggered).toBe(true);
         expect(popstateResult.pathname).toBe('/page-1');
@@ -212,7 +217,7 @@ test.describe('Page View Tracking - Navigation Events', () => {
         await page.waitForTimeout(500);
 
         // Perform hash change navigation
-        const hashChangeResult = await page.evaluate(() => {
+        const hashChangeResult = (await page.evaluate(() => {
           return new Promise((resolve) => {
             const beforeHash = window.location.hash;
 
@@ -229,7 +234,12 @@ test.describe('Page View Tracking - Navigation Events', () => {
             window.addEventListener('hashchange', handler);
             window.location.hash = '#section-1';
           });
-        });
+        })) as {
+          beforeHash: string;
+          afterHash: string;
+          currentUrl: string;
+          hashChangeTriggered: boolean;
+        };
 
         expect(hashChangeResult.hashChangeTriggered).toBe(true);
         expect(hashChangeResult.afterHash).toBe('#section-1');
@@ -239,10 +249,10 @@ test.describe('Page View Tracking - Navigation Events', () => {
         await page.waitForTimeout(1000);
 
         // Test multiple hash changes
-        const multiHashResult = await page.evaluate(() => {
+        const multiHashResult = (await page.evaluate(() => {
           return new Promise((resolve) => {
             let changeCount = 0;
-            const results = [];
+            const results: Array<{ hash: string; url: string; changeNumber: number }> = [];
 
             const handler = (): void => {
               changeCount++;
@@ -268,7 +278,11 @@ test.describe('Page View Tracking - Navigation Events', () => {
             setTimeout(() => (window.location.hash = '#section-2'), 100);
             setTimeout(() => (window.location.hash = '#section-3'), 300);
           });
-        });
+        })) as {
+          totalChanges: number;
+          changes: Array<{ hash: string; url: string; changeNumber: number }>;
+          finalHash: string;
+        };
 
         expect(multiHashResult.totalChanges).toBe(2);
         expect(multiHashResult.finalHash).toBe('#section-3');
@@ -366,7 +380,7 @@ test.describe('Page View Tracking - Navigation Events', () => {
         await page.waitForTimeout(1500);
 
         // Test hash change with from_page_url
-        const hashNavigationChain = await page.evaluate(() => {
+        const hashNavigationChain = (await page.evaluate(() => {
           return new Promise((resolve) => {
             const beforeHashUrl = window.location.href;
 
@@ -383,7 +397,12 @@ test.describe('Page View Tracking - Navigation Events', () => {
             window.addEventListener('hashchange', handler);
             window.location.hash = '#navigation-test';
           });
-        });
+        })) as {
+          fromUrl: string;
+          currentUrl: string;
+          hash: string;
+          hashChangeDetected: boolean;
+        };
 
         expect(hashNavigationChain.hashChangeDetected).toBe(true);
         expect(hashNavigationChain.hash).toBe('#navigation-test');
@@ -418,7 +437,7 @@ test.describe('Page View Tracking - Navigation Events', () => {
         // Perform rapid navigation changes to test debouncing
         const rapidNavigationResult = await page.evaluate(() => {
           const startTime = Date.now();
-          const navigationEvents = [];
+          const navigationEvents: Array<{ type: string; url: string; timestamp: number }> = [];
 
           // Track all navigation attempts
           const trackNavigation = (type: string, url: string, timestamp: number): void => {
@@ -465,10 +484,10 @@ test.describe('Page View Tracking - Navigation Events', () => {
         await page.waitForTimeout(1500);
 
         // Test rapid hash changes for debouncing
-        const rapidHashResult = await page.evaluate(() => {
+        const rapidHashResult = (await page.evaluate(() => {
           const startTime = Date.now();
           let hashChangeCount = 0;
-          const hashEvents = [];
+          const hashEvents: Array<{ hash: string; timestamp: number; changeNumber: number }> = [];
 
           return new Promise((resolve) => {
             const handler = (_event: Event): void => {
@@ -499,7 +518,12 @@ test.describe('Page View Tracking - Navigation Events', () => {
               });
             }, 1000);
           });
-        });
+        })) as {
+          hashChangeCount: number;
+          hashEvents: Array<{ hash: string; timestamp: number; changeNumber: number }>;
+          finalHash: string;
+          totalDuration: number;
+        };
 
         // Verify hash changes were processed
         expect(rapidHashResult.hashChangeCount).toBeGreaterThan(0);
@@ -540,8 +564,14 @@ test.describe('Page View Tracking - Navigation Events', () => {
         await page.waitForTimeout(500);
 
         // Test navigation timing with measured intervals
-        const timingResults = await page.evaluate((startTime) => {
-          const results = [];
+        const timingResults = (await page.evaluate((startTime) => {
+          const results: Array<{
+            navigation: string;
+            startTime: number;
+            endTime: number;
+            duration: number;
+            url: string;
+          }> = [];
 
           return new Promise((resolve) => {
             // Navigation 1 - immediate
@@ -579,7 +609,17 @@ test.describe('Page View Tracking - Navigation Events', () => {
               }, 100);
             }, 150); // Increased delay to ensure timing difference
           });
-        }, testStartTime);
+        }, testStartTime)) as {
+          results: Array<{
+            navigation: string;
+            startTime: number;
+            endTime: number;
+            duration: number;
+            url: string;
+          }>;
+          totalTestTime: number;
+          currentUrl: string;
+        };
 
         // Verify timing results
         expect(timingResults.results).toHaveLength(2);
