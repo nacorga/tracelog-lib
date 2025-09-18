@@ -392,7 +392,6 @@ test.describe('Custom Event Tracking - Invalid Metadata', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        // Initialize with QA mode enabled (TEST_CONFIGS.DEFAULT has qaMode: true)
         await TestUtils.initializeTraceLog(page);
 
         // Test with a scenario that should definitely fail - too many keys

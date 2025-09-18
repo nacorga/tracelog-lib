@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { TEST_CONFIGS } from '../../utils/initialization.helpers';
+import { TEST_CONFIGS } from '../../constants';
 
 test.describe('Click Tracking - Custom Data Attributes', () => {
   test.describe('Data attribute tracking', () => {

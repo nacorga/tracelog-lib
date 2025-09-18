@@ -1,5 +1,6 @@
 import { MetadataType } from '../../types';
 import { isValidEventName, isValidMetadata } from './metadata-validations.utils';
+import { debugLog } from '../logging';
 
 /**
  * Validates a complete event with name and optional metadata
@@ -14,6 +15,7 @@ export const isEventValid = (
   const nameValidation = isValidEventName(eventName);
 
   if (!nameValidation.valid) {
+    debugLog.clientError('EventValidation', 'Event name validation failed', { eventName, error: nameValidation.error });
     return nameValidation;
   }
 
@@ -21,5 +23,14 @@ export const isEventValid = (
     return { valid: true };
   }
 
-  return isValidMetadata(eventName, metadata, 'customEvent');
+  const metadataValidation = isValidMetadata(eventName, metadata, 'customEvent');
+
+  if (!metadataValidation.valid) {
+    debugLog.clientError('EventValidation', 'Event metadata validation failed', {
+      eventName,
+      error: metadataValidation.error,
+    });
+  }
+
+  return metadataValidation;
 };

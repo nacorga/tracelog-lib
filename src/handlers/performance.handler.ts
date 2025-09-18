@@ -3,6 +3,7 @@ import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType, NavigationId, VitalSample } from '../types';
 import { LONG_TASK_THROTTLE_MS } from '../constants';
 import { PRECISION_FOUR_DECIMALS, PRECISION_TWO_DECIMALS } from '../constants';
+import { debugLog } from '../utils/logging';
 
 type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
 
@@ -19,26 +20,34 @@ export class PerformanceHandler extends StateManager {
   }
 
   async startTracking(): Promise<void> {
+    debugLog.info('PerformanceHandler', 'Starting performance tracking');
+
     await this.initWebVitals();
     this.observeLongTasks();
     this.reportTTFB();
   }
 
   stopTracking(): void {
+    debugLog.debug('PerformanceHandler', 'Stopping performance tracking', { observersCount: this.observers.length });
+
     for (const obs of this.observers) {
       try {
         obs.disconnect();
-      } catch {
-        // Intentionally ignore disconnect errors
+      } catch (error) {
+        debugLog.warn('PerformanceHandler', 'Failed to disconnect performance observer', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
       }
     }
 
     this.observers = [];
-
     this.reportedByNav.clear();
   }
 
   private observeWebVitalsFallback(): void {
+    // TTFB - should be captured immediately as it's available from navigation timing
+    this.reportTTFB();
+
     // LCP
     this.safeObserve(
       'largest-contentful-paint',
@@ -128,7 +137,10 @@ export class PerformanceHandler extends StateManager {
       onFCP(report('FCP'));
       onTTFB(report('TTFB'));
       onINP(report('INP'));
-    } catch {
+    } catch (error) {
+      debugLog.warn('PerformanceHandler', 'Failed to load web-vitals library, using fallback', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       this.observeWebVitalsFallback();
     }
   }
@@ -138,14 +150,26 @@ export class PerformanceHandler extends StateManager {
       const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
 
       if (!nav) {
+        debugLog.debug('PerformanceHandler', 'Navigation timing not available for TTFB');
         return;
       }
 
       const ttfb = nav.responseStart;
 
-      this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
-    } catch {
-      // Intentionally ignored
+      // TTFB can be 0 in some browsers (especially Mobile Safari) when:
+      // - Response is served from cache
+      // - Connection is reused
+      // - Browser cannot determine exact timing
+      // We still report it as it's a valid measurement
+      if (typeof ttfb === 'number' && Number.isFinite(ttfb)) {
+        this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
+      } else {
+        debugLog.debug('PerformanceHandler', 'TTFB value is not a valid number', { ttfb });
+      }
+    } catch (error) {
+      debugLog.warn('PerformanceHandler', 'Failed to report TTFB', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -192,6 +216,7 @@ export class PerformanceHandler extends StateManager {
 
   private trackWebVital(type: WebVitalType, value?: number): void {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
+      debugLog.warn('PerformanceHandler', 'Invalid web vital value', { type, value });
       return;
     }
 
@@ -213,7 +238,10 @@ export class PerformanceHandler extends StateManager {
       }
 
       return `${Math.round(nav.startTime)}_${window.location.pathname}`;
-    } catch {
+    } catch (error) {
+      debugLog.warn('PerformanceHandler', 'Failed to get navigation ID', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       return null;
     }
   }
@@ -247,8 +275,11 @@ export class PerformanceHandler extends StateManager {
       if (!once) {
         this.observers.push(obs);
       }
-    } catch {
-      // Intentionally ignored
+    } catch (error) {
+      debugLog.warn('PerformanceHandler', 'Failed to create performance observer', {
+        type,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 }

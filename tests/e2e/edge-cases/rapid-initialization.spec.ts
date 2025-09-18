@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { TEST_CONFIGS } from '../../utils/initialization.helpers';
+import { TEST_CONFIGS } from '../../constants';
 
 test.describe('Rapid Initialization Edge Cases', () => {
   test('should handle rapid initialization attempts safely', async ({ page }) => {

@@ -1,7 +1,6 @@
 import { Page } from '@playwright/test';
 import {
   createConsoleMonitor,
-  ConsoleMonitor,
   navigateAndWaitForReady,
   initializeTraceLog,
   triggerClickEvent,
@@ -12,33 +11,18 @@ import {
   getSessionDataFromStorage,
   validateSessionStructure,
   validateSessionTimeout,
-} from './common.helpers';
+} from './common.utils';
 import '../../src/types/window.types';
-import { TEST_CONFIGS, TEST_CONSTANTS } from './initialization.helpers';
 import { Config } from '../../src/types';
-
-/**
- * Session Management specific test constants
- */
-
-// Session timeout bounds (from src/constants/limits.constants.ts)
-export const MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds
-export const MAX_SESSION_TIMEOUT_MS = 86400000; // 24 hours
-export const DEFAULT_SESSION_TIMEOUT_MS = 900000; // 15 minutes
-
-// Test timing constants
-export const SESSION_START_WAIT_MS = 2500; // Wait for session to start
-export const CROSS_TAB_COORDINATION_WAIT_MS = 3000; // Wait for cross-tab coordination
-export const UNLOAD_DETECTION_TIMEOUT_MS = 2000; // Page unload detection
-export const SESSION_RECOVERY_WAIT_MS = 5000; // Session recovery wait
-
-// Session validation requirements
-export const SESSION_VALIDATION_REQUIREMENTS = {
-  hasSessionId: true,
-  hasStartTime: true,
-  hasTimingField: true,
-  minSessionIdLength: 36, // UUID length
-};
+import { ConsoleMonitor } from '../types';
+import {
+  CROSS_TAB_COORDINATION_WAIT_MS,
+  DEFAULT_SESSION_TIMEOUT_MS,
+  SESSION_START_WAIT_MS,
+  SESSION_VALIDATION_REQUIREMENTS,
+  TEST_CONFIGS,
+  TEST_URLS,
+} from '../constants';
 
 /**
  * Session Management specific test helpers
@@ -50,7 +34,7 @@ export const SESSION_VALIDATION_REQUIREMENTS = {
 export async function setupSessionTest(
   page: Page,
   config: Config = TEST_CONFIGS.DEFAULT,
-  testUrl: string = TEST_CONSTANTS.URLS.INITIALIZATION_PAGE,
+  testUrl: string = TEST_URLS.INITIALIZATION_PAGE,
 ): Promise<{
   monitor: ConsoleMonitor;
   sessionInfo: Awaited<ReturnType<typeof getSessionDataFromStorage>>;
@@ -204,7 +188,7 @@ export async function setupSessionEndMonitoring(page: Page, useEventsArray = fal
 export async function setupCrossTabSessionTest(
   page: Page,
   config: Config = TEST_CONFIGS.DEFAULT,
-  testUrl: string = TEST_CONSTANTS.URLS.INITIALIZATION_PAGE,
+  testUrl: string = TEST_URLS.INITIALIZATION_PAGE,
 ): Promise<{
   monitor: ConsoleMonitor;
   sessionInfo: Awaited<ReturnType<typeof getCrossTabSessionInfo>>;

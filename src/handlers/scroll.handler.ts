@@ -2,6 +2,7 @@ import { SCROLL_DEBOUNCE_TIME_MS, SIGNIFICANT_SCROLL_DELTA } from '../constants'
 import { EventType, ScrollData, ScrollDirection } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
+import { debugLog } from '../utils/logging';
 
 interface ScrollContainer {
   element: Window | HTMLElement;
@@ -24,6 +25,8 @@ export class ScrollHandler extends StateManager {
     const raw = this.get('config').scrollContainerSelectors;
     const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
 
+    debugLog.info('ScrollHandler', 'Starting scroll tracking', { selectorsCount: selectors.length });
+
     const elements: Array<Window | HTMLElement> = selectors
       .map((sel) => this.safeQuerySelector(sel))
       .filter((element): element is HTMLElement => element instanceof HTMLElement);
@@ -38,6 +41,8 @@ export class ScrollHandler extends StateManager {
   }
 
   stopTracking(): void {
+    debugLog.debug('ScrollHandler', 'Stopping scroll tracking', { containersCount: this.containers.length });
+
     for (const container of this.containers) {
       if (container.debounceTimer) {
         clearTimeout(container.debounceTimer);
@@ -161,10 +166,10 @@ export class ScrollHandler extends StateManager {
       return document.querySelector(selector);
     } catch (error) {
       // Invalid CSS selector - log warning and continue
-      if (this.get('config').qaMode) {
-        console.warn(`[TraceLog] Invalid CSS selector: "${selector}"`, error);
-      }
-
+      debugLog.clientWarn('ScrollHandler', 'Invalid CSS selector', {
+        selector,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       return null;
     }
   }

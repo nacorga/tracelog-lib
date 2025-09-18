@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { InitializationTestBase, TEST_CONSTANTS, SessionValidator } from '../../utils/initialization.helpers';
+import { InitializationTestBase, SessionValidator } from '../../utils/initialization.utils';
+import { ERROR_MESSAGES, STATUS_TEXTS, TEST_URLS } from '../../constants';
 
 test.describe('Library Initialization - Success', () => {
   test('should successfully initialize TraceLog with valid project ID', async ({ page }) => {
@@ -44,13 +45,13 @@ test.describe('Library Initialization - Success', () => {
 
     try {
       // Navigate to validation page
-      await TestUtils.navigateAndWaitForReady(page, TEST_CONSTANTS.URLS.VALIDATION_PAGE);
+      await TestUtils.navigateAndWaitForReady(page, TEST_URLS.VALIDATION_PAGE);
       await TestUtils.waitForTimeout(page);
 
       // Test validation scenarios using page-specific methods
       const validationScenarios = [
-        { method: 'testNoProjectId', expectedError: TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED },
-        { method: 'testEmptyProjectId', expectedError: TEST_CONSTANTS.ERROR_MESSAGES.ID_REQUIRED },
+        { method: 'testNoProjectId', expectedError: ERROR_MESSAGES.ID_REQUIRED },
+        { method: 'testEmptyProjectId', expectedError: ERROR_MESSAGES.ID_REQUIRED },
       ];
 
       for (const { method, expectedError } of validationScenarios) {
@@ -91,7 +92,7 @@ test.describe('Library Initialization - Success', () => {
       expect(validatedValidIdResult.hasError).toBe(false);
 
       // Verify validation status in UI
-      await expect(page.getByTestId('validation-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.VALIDATION_PASS);
+      await expect(page.getByTestId('validation-status')).toContainText(STATUS_TEXTS.VALIDATION_PASS);
     } finally {
       monitor.cleanup();
       await cleanup();

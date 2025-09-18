@@ -1,0 +1,10 @@
+export interface ConsoleMonitor {
+  consoleMessages: string[];
+  traceLogErrors: string[];
+  traceLogWarnings: string[];
+  traceLogInfo: string[];
+  debugLogs: string[];
+  contextErrors: string[];
+  cleanup: () => void;
+  getAnomalies: () => string[];
+}

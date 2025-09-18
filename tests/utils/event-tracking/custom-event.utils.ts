@@ -1,84 +1,20 @@
 import { Page } from '@playwright/test';
-import { testCustomEvent, triggerClickEvent, triggerScrollEvent, waitForTimeout } from '../common.helpers';
-
-// Types for better type safety
-interface WindowWithTraceLog extends Window {
-  TraceLog?: {
-    event: (name: string, metadata?: Record<string, unknown>) => void;
-  };
-  alertTriggered?: boolean;
-}
-
-interface EventResult {
-  success: boolean;
-  error: string | null;
-}
+import { testCustomEvent, triggerClickEvent, triggerScrollEvent, waitForTimeout } from '../common.utils';
+import { EventResult } from '../../types';
+import { EventType } from '../../../src/types';
+import {
+  BATCH_PROCESSING_WAIT_MS,
+  BURST_PROCESSING_WAIT_MS,
+  EDGE_CASE_METADATA,
+  EVENT_PROCESSING_WAIT_MS,
+  SANITIZATION_TEST_CASES,
+  VALID_EVENT_NAMES,
+} from '../../constants/event-tracking.constants';
 
 /**
  * Custom Event Testing Helpers
  * Functions for testing custom event tracking functionality
  */
-
-// Test data sets for custom events
-export const VALID_EVENT_NAMES = [
-  'user_signup',
-  'button_click',
-  'page_view_custom',
-  'form_submit',
-  'video_play',
-  'download_started',
-  'search_performed',
-  'cart_item_added',
-  'checkout_completed',
-  'user_login',
-];
-
-export const EDGE_CASE_METADATA = {
-  emptyString: '',
-  zeroNumber: 0,
-  negativeNumber: -123,
-  floatNumber: 3.14159,
-  booleanTrue: true,
-  booleanFalse: false,
-  specialChars: '!@#$%^&*()_+-=[]{}|;:,.<>?',
-  unicode: '你好世界 🌍 café naïve',
-};
-
-export const SANITIZATION_TEST_CASES = [
-  {
-    name: 'html_content',
-    metadata: {
-      content: 'Normal text <script>alert("xss")</script> more text',
-      description: 'This should be sanitized',
-    },
-  },
-  {
-    name: 'special_chars',
-    metadata: {
-      message: 'User input with "quotes" and \'apostrophes\' and symbols @#$%',
-      data: 'Normal content should remain',
-    },
-  },
-  {
-    name: 'unicode_content',
-    metadata: {
-      text: 'Unicode content: 你好 🎉 café naïve résumé',
-      emoji: '😀🎯🚀',
-    },
-  },
-];
-
-// Event validation limits (from src/constants/limits.constants.ts)
-export const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
-export const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024; // 8KB
-export const MAX_CUSTOM_EVENT_KEYS = 10;
-export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
-export const MAX_STRING_LENGTH = 1000;
-
-// Test timing constants
-export const EVENT_PROCESSING_WAIT_MS = 1000;
-export const BATCH_PROCESSING_WAIT_MS = 2000;
-export const BURST_PROCESSING_WAIT_MS = 4000;
 
 /**
  * Test multiple valid event names
@@ -129,7 +65,23 @@ export async function testEventsWithoutMetadata(page: Page): Promise<Array<{ nam
   for (const eventName of eventNamesOnly) {
     const result = await page.evaluate((name): EventResult => {
       try {
-        (window as WindowWithTraceLog).TraceLog?.event(name);
+        const bridge = window.__traceLogTestBridge;
+        if (!bridge) {
+          throw new Error('Test bridge not available');
+        }
+
+        const eventManager = bridge.getEventManager();
+        if (!eventManager) {
+          throw new Error('Event manager not available');
+        }
+
+        eventManager.track({
+          type: 'custom' as EventType,
+          custom_event: {
+            name: name,
+          },
+        });
+
         return { success: true, error: null };
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -162,14 +114,31 @@ export async function testDataSanitization(page: Page): Promise<Array<{ name: st
 export async function testNullUndefinedHandling(page: Page): Promise<unknown> {
   return await page.evaluate((): EventResult => {
     try {
-      (window as WindowWithTraceLog).TraceLog?.event('null_test', {
-        validField: 'valid_value',
-        nullField: null,
-        undefinedField: undefined,
-        emptyString: '',
-        zeroValue: 0,
-        falseValue: false,
+      const bridge = window.__traceLogTestBridge;
+      if (!bridge) {
+        throw new Error('Test bridge not available');
+      }
+
+      const eventManager = bridge.getEventManager();
+      if (!eventManager) {
+        throw new Error('Event manager not available');
+      }
+
+      eventManager.track({
+        type: 'custom' as EventType,
+        custom_event: {
+          name: 'null_test',
+          metadata: {
+            validField: 'valid_value',
+            nullField: 'null',
+            undefinedField: 'undefined',
+            emptyString: '',
+            zeroValue: 0,
+            falseValue: false,
+          },
+        },
       });
+
       return { success: true, error: null };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -286,7 +255,7 @@ export async function testEventBursts(page: Page, burstSize = 15): Promise<Array
 export async function verifyNoXSSExecution(page: Page): Promise<boolean> {
   return await page.evaluate(() => {
     // Check if any alert was triggered (would indicate XSS)
-    return !(window as WindowWithTraceLog).alertTriggered;
+    return !(window as any).alertTriggered;
   });
 }
 

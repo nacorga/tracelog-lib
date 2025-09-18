@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
-import { createConsoleMonitor, ConsoleMonitor, navigateAndWaitForReady, initializeTraceLog } from '../common.helpers';
+import { createConsoleMonitor, navigateAndWaitForReady, initializeTraceLog } from '../common.utils';
+import { ConsoleMonitor } from '../../types';
 
 /**
  * Scroll Tracking Testing Helpers

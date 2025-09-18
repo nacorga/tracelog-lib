@@ -1,13 +1,8 @@
 import { Page } from '@playwright/test';
-import {
-  createConsoleMonitor,
-  ConsoleMonitor,
-  navigateAndWaitForReady,
-  initializeTraceLog,
-  DEFAULT_CONFIG,
-  TEST_URLS,
-} from '../common.helpers';
+import { createConsoleMonitor, navigateAndWaitForReady, initializeTraceLog } from '../common.utils';
 import { Config } from '../../../src/types';
+import { ConsoleMonitor } from '../../types';
+import { DEFAULT_CONFIG, TEST_URLS } from '../../constants';
 
 /**
  * Common Test Helpers and Utilities
@@ -32,13 +27,3 @@ export async function setupEventTrackingTest(
 
   return { monitor, initResult };
 }
-
-// Re-export common dependencies for convenience
-export {
-  createConsoleMonitor,
-  ConsoleMonitor,
-  navigateAndWaitForReady,
-  initializeTraceLog,
-  DEFAULT_CONFIG,
-  TEST_URLS,
-} from '../common.helpers';

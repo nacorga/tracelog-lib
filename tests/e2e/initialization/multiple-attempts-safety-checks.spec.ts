@@ -3,12 +3,11 @@ import { TestUtils } from '../../utils';
 import {
   InitializationTestBase,
   InitializationScenarios,
-  TEST_CONFIGS,
-  TEST_CONSTANTS,
   PerformanceValidator,
   SessionValidator,
   MemoryTestUtils,
-} from '../../utils/initialization.helpers';
+} from '../../utils/initialization.utils';
+import { STATUS_TEXTS, TEST_CONFIGS } from '../../constants';
 
 test.describe('Library Initialization - Multiple Attempts and Safety Checks', () => {
   let testBase: InitializationTestBase;
@@ -27,7 +26,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
   }) => {
     // First initialization
     await testBase.performMeasuredInit();
-    await expect(page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.INITIALIZED);
+    await expect(page.getByTestId('init-status')).toContainText(STATUS_TEXTS.INITIALIZED);
     await SessionValidator.validateSessionState(page);
 
     // Get initial storage state
@@ -66,7 +65,7 @@ test.describe('Library Initialization - Multiple Attempts and Safety Checks', ()
       // Verify state consistency
       const stillInitialized = await TestUtils.isTraceLogInitialized(page);
       expect(stillInitialized).toBe(true);
-      await expect(page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.INITIALIZED);
+      await expect(page.getByTestId('init-status')).toContainText(STATUS_TEXTS.INITIALIZED);
     }
 
     // Validate memory management

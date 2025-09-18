@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import { TEST_CONFIGS } from '../../utils/initialization.helpers';
-import { TEST_CONSTANTS } from '../../utils/common.helpers';
+import { TEST_CONFIGS } from '../../constants';
+import { TEST_CONSTANTS } from '../../utils/common.utils';
 
 test.describe('Session Management - Custom Session Timeout', () => {
   test('should accept custom session timeout within valid bounds', async ({ page }) => {
@@ -144,14 +144,22 @@ test.describe('Session Management - Custom Session Timeout', () => {
 
       const invalidTypeResult = await TestUtils.initializeTraceLog(page, invalidTypeConfig);
       const invalidTypeValidated = TestUtils.verifyInitializationResult(invalidTypeResult);
+
       expect(invalidTypeValidated.success).toBe(false);
       expect(invalidTypeValidated.hasError).toBe(true);
       expect(invalidTypeValidated.error).toBeTruthy();
 
       // Verify error messages contain relevant information about timeout validation
-      const hasTimeoutError = monitor.traceLogErrors.some(
-        (error) => error.toLowerCase().includes('timeout') || error.toLowerCase().includes('session'),
+      // Check that all three invalid configurations produced proper error messages
+      const allErrors = [lowTimeoutValidated.error, highTimeoutValidated.error, invalidTypeValidated.error];
+
+      const hasTimeoutError = allErrors.some(
+        (error) =>
+          error &&
+          typeof error === 'string' &&
+          (error.toLowerCase().includes('timeout') || error.toLowerCase().includes('session')),
       );
+
       expect(hasTimeoutError).toBe(true);
     } finally {
       await TestUtils.cleanupSessionTest(monitor);

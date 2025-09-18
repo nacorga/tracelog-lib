@@ -1,5 +1,5 @@
 import { Page } from '@playwright/test';
-import { createConsoleMonitor, navigateAndWaitForReady, initializeTraceLog } from '../common.helpers';
+import { createConsoleMonitor, navigateAndWaitForReady, initializeTraceLog } from '../common.utils';
 import type { EventData, ScrollData, ClickData, CustomEventData, EventType } from '../../../src/types/event.types';
 import type { MetadataType } from '../../../src/types/common.types';
 

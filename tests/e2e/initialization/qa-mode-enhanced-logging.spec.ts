@@ -3,11 +3,10 @@ import { TestUtils } from '../../utils';
 import {
   InitializationTestBase,
   InitializationScenarios,
-  TEST_CONFIGS,
-  TEST_CONSTANTS,
   PerformanceValidator,
   SessionValidator,
-} from '../../utils/initialization.helpers';
+} from '../../utils/initialization.utils';
+import { STATUS_TEXTS, TEST_CONFIGS } from '../../constants';
 
 test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
   let testBase: InitializationTestBase;
@@ -28,13 +27,13 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     await InitializationScenarios.testQAModeFeatures(testBase);
 
     // Additional QA mode specific validations
-    await expect(page.getByTestId('init-status')).toContainText(TEST_CONSTANTS.STATUS_TEXTS.INITIALIZED);
+    await expect(page.getByTestId('init-status')).toContainText(STATUS_TEXTS.INITIALIZED);
 
-    // Verify QA mode configuration acceptance
     const qaConfigCheck = await page.evaluate(() => ({
       initSuccess: true,
-      configPassed: true, // We passed qaMode: true to init
+      configPassed: true,
     }));
+
     expect(qaConfigCheck.initSuccess).toBe(true);
     expect(qaConfigCheck.configPassed).toBe(true);
 
@@ -48,11 +47,11 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     // Initialize with QA mode
     await testBase.performMeasuredInit();
 
-    // Verify QA mode initialization success
     const qaConfigCheck = await page.evaluate(() => ({
       initSuccess: true,
       qaMode: true,
     }));
+
     expect(qaConfigCheck.initSuccess).toBe(true);
     expect(qaConfigCheck.qaMode).toBe(true);
 
@@ -62,17 +61,12 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     await TestUtils.testCustomEvent(page, 'qa_test_event', { mode: 'qa' });
     await TestUtils.waitForTimeout(page, 2000);
 
-    // Validate enhanced logging in QA mode
-    const hasEnhancedLogging = testBase.consoleMonitor.consoleMessages.some(
-      (msg) =>
-        msg.includes('TraceLog initialized successfully') ||
-        msg.includes('[TraceLog]') ||
-        msg.includes('QA Mode') ||
-        msg.includes('Debug:') ||
-        msg.toLowerCase().includes('initialized') ||
-        msg.toLowerCase().includes('tracelog'),
+    // Validate logging is working (tests run in debug mode)
+    const hasLogging = testBase.consoleMonitor.consoleMessages.some(
+      (msg) => msg.includes('[TraceLog:') || msg.toLowerCase().includes('tracelog'),
     );
-    expect(hasEnhancedLogging).toBe(true);
+
+    expect(hasLogging).toBe(true);
 
     // Verify QA mode specific features
     const qaLogCount = testBase.consoleMonitor.consoleMessages.length;
@@ -109,11 +103,11 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     expect(complexConfigCheck.initSuccess).toBe(true);
     expect(complexConfigCheck.configApplied).toBe(true);
 
-    // Test functionality in complex QA mode
     const errorSamplingTest = await page.evaluate(() => ({
       functionalityWorks: true,
       qaMode: true,
     }));
+
     expect(errorSamplingTest.functionalityWorks).toBe(true);
 
     // Test custom events with metadata
@@ -365,17 +359,16 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
       await TestUtils.testCustomEvent(page1, 'qa_crosstab_test_1', { tab: 1 });
       await TestUtils.testCustomEvent(page2, 'qa_crosstab_test_2', { tab: 2 });
 
-      // Verify enhanced logging in both contexts
-      const loggingKeywords = ['[TraceLog]', 'qa mode'];
-      const hasEnhancedLogging1 = testBase1.consoleMonitor.consoleMessages.some((msg) =>
-        loggingKeywords.some((keyword) => msg.toLowerCase().includes(keyword.toLowerCase())),
+      // Verify logging is working in both tabs (debug mode)
+      const hasLogging1 = testBase1.consoleMonitor.consoleMessages.some(
+        (msg) => msg.includes('[TraceLog:') || msg.toLowerCase().includes('tracelog'),
       );
-      const hasEnhancedLogging2 = testBase2.consoleMonitor.consoleMessages.some((msg) =>
-        loggingKeywords.some((keyword) => msg.toLowerCase().includes(keyword.toLowerCase())),
+      const hasLogging2 = testBase2.consoleMonitor.consoleMessages.some(
+        (msg) => msg.includes('[TraceLog:') || msg.toLowerCase().includes('tracelog'),
       );
 
-      expect(hasEnhancedLogging1).toBe(true);
-      expect(hasEnhancedLogging2).toBe(true);
+      expect(hasLogging1).toBe(true);
+      expect(hasLogging2).toBe(true);
 
       testBase1.cleanup();
       testBase2.cleanup();
