@@ -155,7 +155,17 @@ export class PerformanceHandler extends StateManager {
       }
 
       const ttfb = nav.responseStart;
-      this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
+
+      // TTFB can be 0 in some browsers (especially Mobile Safari) when:
+      // - Response is served from cache
+      // - Connection is reused
+      // - Browser cannot determine exact timing
+      // We still report it as it's a valid measurement
+      if (typeof ttfb === 'number' && Number.isFinite(ttfb)) {
+        this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
+      } else {
+        debugLog.debug('PerformanceHandler', 'TTFB value is not a valid number', { ttfb });
+      }
     } catch (error) {
       debugLog.warn('PerformanceHandler', 'Failed to report TTFB', {
         error: error instanceof Error ? error.message : 'Unknown error',

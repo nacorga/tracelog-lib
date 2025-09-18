@@ -146,7 +146,11 @@ test.describe('Performance Tracking - Web Vitals Collection', () => {
         };
 
         if (ttfbData.hasTTFB) {
-          expect(ttfbData.ttfbValue).toBeGreaterThan(0);
+          // TTFB can be 0 in some browsers (especially Mobile Safari) when:
+          // - Response is served from cache
+          // - Connection is reused
+          // - Browser cannot determine exact timing
+          expect(ttfbData.ttfbValue).toBeGreaterThanOrEqual(0);
           expect(typeof ttfbData.ttfbValue).toBe('number');
         }
 

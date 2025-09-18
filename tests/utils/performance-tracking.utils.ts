@@ -165,7 +165,7 @@ export async function getAllWebVitalsEvents(page: Page): Promise<{
         hasValue: typeof webVitals?.value === 'number',
         valueIsFinite: Number.isFinite(webVitals?.value),
         valueIsValid: webVitals
-          ? // CLS can be 0+, TTFB can be -2+, other metrics should be positive
+          ? // CLS can be 0+, TTFB can be -2+ (negative values valid for cached responses), other metrics should be positive
             webVitals.type === 'CLS'
             ? webVitals.value >= 0
             : webVitals.type === 'TTFB'
@@ -239,7 +239,8 @@ export async function validateMetricRanges(page: Page): Promise<{
           expectedRange = '0-5000ms';
           break;
         case 'TTFB':
-          // TTFB can be -1, -2, 0 (in some browsers) and typically less than 2 seconds
+          // TTFB can be negative (valid for cached responses), 0+, and typically less than 2 seconds
+          // Some browsers report -1, -2 for cached responses which is valid
           isWithinExpectedRange = value >= -2 && value < 2000;
           expectedRange = '-2-2000ms';
           break;
@@ -671,7 +672,7 @@ export async function analyzeFallbackBehavior(page: Page): Promise<{
         value: e.web_vitals?.value || 0,
         isValidValue:
           typeof e.web_vitals?.value === 'number' && e.web_vitals
-            ? // Allow 0+ for CLS, -2+ for TTFB, require positive for others
+            ? // Allow 0+ for CLS, -2+ for TTFB (negative values valid for cached responses), require positive for others
               e.web_vitals.type === 'CLS'
               ? e.web_vitals.value >= 0
               : e.web_vitals.type === 'TTFB'

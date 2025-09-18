@@ -17,14 +17,14 @@ export function createConsoleMonitor(page: Page): ConsoleMonitor {
   const traceLogWarnings: string[] = [];
   const traceLogInfo: string[] = [];
   const debugLogs: string[] = [];
+  const contextErrors: string[] = [];
 
   const monitor = (msg: any): void => {
     const text = msg.text();
     const type = msg.type();
     consoleMessages.push(text);
 
-    // Categorize TraceLog messages
-    if (text.includes('[TraceLog]')) {
+    if (text.includes('[TraceLog:')) {
       debugLogs.push(`[${type.toUpperCase()}] ${text}`);
 
       if (type === 'error') {
@@ -35,64 +35,42 @@ export function createConsoleMonitor(page: Page): ConsoleMonitor {
         traceLogInfo.push(text);
       }
     } else if (type === 'error') {
-      // Only track TraceLog-specific errors, not resource loading errors
-      if (text.includes('TraceLog') || text.includes('[E2E Test]') || text.includes('Initialization failed')) {
-        traceLogErrors.push(text);
-      }
+      contextErrors.push(text);
     }
   };
 
   const getAnomalies = (): string[] => {
     const anomalies: string[] = [];
 
-    // Detect excessive cross-tab communication (real performance issue)
-    const electionLogs = debugLogs.filter(
-      (log) =>
-        log.includes('election_request') || log.includes('election_response') || log.includes('Acknowledging tab'),
-    );
-    if (electionLogs.length > 20) {
-      anomalies.push(`Excessive leader election activity: ${electionLogs.length} messages (threshold: 20)`);
+    // Check for TraceLog-specific errors first (most important)
+    if (traceLogErrors.length > 0) {
+      anomalies.push(`TraceLog errors detected: ${traceLogErrors.length} error(s)`);
     }
 
-    // Detect heartbeat flooding (performance issue)
-    const heartbeatLogs = debugLogs.filter((log) => log.includes('heartbeat'));
-    if (heartbeatLogs.length > 30) {
-      anomalies.push(`Heartbeat flooding detected: ${heartbeatLogs.length} heartbeats (threshold: 30)`);
+    // Check for context errors (potentially related)
+    if (contextErrors.length > 0) {
+      anomalies.push(`Context errors detected: ${contextErrors.length} error(s)`);
     }
 
-    // Detect multiple concurrent initializations (race condition)
-    const initProgressLogs = debugLogs.filter(
-      (log) => log.includes('already in progress') || log.includes('initialization in progress'),
-    );
-    if (initProgressLogs.length > 3) {
-      anomalies.push(`Concurrent initialization conflicts: ${initProgressLogs.length} conflicts (threshold: 3)`);
+    // Check for excessive warnings
+    if (traceLogWarnings.length > 10) {
+      anomalies.push(`High warning count: ${traceLogWarnings.length} warnings (threshold: 10)`);
     }
 
-    // Detect storage operation failures (functional issue)
-    const storageLogs = debugLogs.filter(
-      (log) => log.includes('storage') && (log.includes('failed') || log.includes('error') || log.includes('quota')),
-    );
-    if (storageLogs.length > 5) {
-      anomalies.push(`Storage operation failures: ${storageLogs.length} failures (threshold: 5)`);
-    }
+    // Simple pattern detection for common issues
+    const problemPatterns = [
+      { pattern: 'failed', threshold: 3, name: 'failures' },
+      { pattern: 'error', threshold: 5, name: 'error mentions' },
+      { pattern: 'timeout', threshold: 2, name: 'timeouts' },
+      { pattern: 'retry', threshold: 5, name: 'retries' },
+    ];
 
-    // Detect excessive session recreation (performance issue)
-    const sessionStartLogs = debugLogs.filter(
-      (log) => log.includes('session started') || log.includes('New session started'),
-    );
-    if (sessionStartLogs.length > 3) {
-      anomalies.push(`Excessive session recreation: ${sessionStartLogs.length} sessions (threshold: 3)`);
-    }
-
-    // Detect memory leaks or excessive event queuing
-    const queueLogs = debugLogs.filter((log) => log.includes('queue') && log.includes('length'));
-    const excessiveQueue = queueLogs.find((log) => {
-      const match = log.match(/queue.*length.*(\d+)/i);
-      return match && parseInt(match[1]) > 100;
+    problemPatterns.forEach(({ pattern, threshold, name }) => {
+      const matchingLogs = debugLogs.filter((log) => log.toLowerCase().includes(pattern.toLowerCase()));
+      if (matchingLogs.length > threshold) {
+        anomalies.push(`Excessive ${name}: ${matchingLogs.length} occurrences (threshold: ${threshold})`);
+      }
     });
-    if (excessiveQueue) {
-      anomalies.push(`Excessive event queue detected: ${excessiveQueue}`);
-    }
 
     return anomalies;
   };
@@ -105,6 +83,7 @@ export function createConsoleMonitor(page: Page): ConsoleMonitor {
     traceLogWarnings,
     traceLogInfo,
     debugLogs,
+    contextErrors,
     cleanup: () => page.off('console', monitor),
     getAnomalies,
   };

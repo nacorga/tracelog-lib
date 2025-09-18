@@ -103,13 +103,12 @@ export class ConfigManager {
   private getDefaultConfig(appConfig: AppConfig): Config {
     const defaultConfig: Config = DEFAULT_CONFIG({
       ...appConfig,
-      mode: 'qa',
       errorSampling: 1,
     });
 
     const configRecords: Record<string, Config> = {
-      ['demo']: defaultConfig,
-      ['test']: defaultConfig,
+      ['demo']: { ...defaultConfig, mode: 'qa' },
+      ['test']: { ...defaultConfig, mode: 'debug' },
     };
 
     return configRecords[appConfig.id] ?? DEFAULT_CONFIG(appConfig);
