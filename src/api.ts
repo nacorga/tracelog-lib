@@ -2,7 +2,7 @@ import { App } from './app';
 import { EventManager } from './managers/event.manager';
 import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
-import { logUnknown } from './utils';
+import { debugLog } from './utils/logging';
 import { validateAndNormalizeConfig } from './utils/validations';
 import './types/window.types';
 
@@ -60,7 +60,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
   } catch (error) {
     app = null;
 
-    logUnknown('error', 'Initialization failed', error);
+    debugLog.error('API', 'Initialization failed', { error });
 
     throw error;
   } finally {
@@ -89,7 +89,7 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
 
     app.sendCustomEvent(name, metadata);
   } catch (error) {
-    logUnknown('error', 'Event tracking failed', error);
+    debugLog.error('API', 'Event tracking failed', { error });
 
     if (
       error instanceof Error &&
@@ -137,7 +137,7 @@ export const destroy = (): void => {
     app = null;
     isInitializing = false;
   } catch (error) {
-    logUnknown('error', 'Cleanup failed', error);
+    debugLog.error('API', 'Cleanup failed', { error });
   }
 };
 

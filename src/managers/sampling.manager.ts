@@ -4,7 +4,7 @@ import { StateManager } from './state.manager';
 
 export class SamplingManager extends StateManager {
   shouldSampleEvent(type: EventType, webVitals?: WebVitalsData): boolean {
-    const isQaMode = this.get('config')?.qaMode === true;
+    const isQaMode = this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug';
 
     if (isQaMode) {
       return true;

@@ -37,7 +37,16 @@ export class ConfigManager {
       const safeApiConfig = sanitizeApiConfig(rawData);
       const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
       const mergedConfig: Config = { ...apiConfig, ...appConfig };
-      const errorSampling = mergedConfig.qaMode ? 1 : (mergedConfig.errorSampling ?? 0.1);
+
+      // Check if qaMode=true is in URL and automatically set mode to 'qa'
+      const urlParameters = new URLSearchParams(window.location.search);
+      const isQaMode = urlParameters.get('qaMode') === 'true';
+      if (isQaMode && !mergedConfig.mode) {
+        mergedConfig.mode = 'qa';
+      }
+
+      const errorSampling =
+        mergedConfig.mode === 'qa' || mergedConfig.mode === 'debug' ? 1 : (mergedConfig.errorSampling ?? 0.1);
       const finalConfig: Config = { ...mergedConfig, errorSampling };
 
       return finalConfig;
@@ -66,7 +75,7 @@ export class ConfigManager {
   private getDefaultConfig(appConfig: AppConfig): Config {
     const defaultConfig: Config = DEFAULT_CONFIG({
       ...appConfig,
-      qaMode: true,
+      mode: 'qa',
       errorSampling: 1,
     });
 

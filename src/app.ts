@@ -101,7 +101,7 @@ export class App extends StateManager {
           ...(sanitizedMetadata && { metadata: sanitizedMetadata }),
         },
       });
-    } else if (this.get('config')?.qaMode) {
+    } else if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
       throw new Error(
         `custom event "${name}" validation failed (${error ?? 'unknown error'}). Please, review your event data and try again.`,
       );

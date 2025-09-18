@@ -161,7 +161,7 @@ export class ScrollHandler extends StateManager {
       return document.querySelector(selector);
     } catch (error) {
       // Invalid CSS selector - log warning and continue
-      if (this.get('config').qaMode) {
+      if (this.get('config').mode === 'qa' || this.get('config').mode === 'debug') {
         console.warn(`[TraceLog] Invalid CSS selector: "${selector}"`, error);
       }
 

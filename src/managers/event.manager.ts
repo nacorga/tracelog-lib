@@ -5,7 +5,8 @@ import {
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants';
 import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
-import { getUTMParameters, isUrlPathExcluded, log } from '../utils';
+import { getUTMParameters, isUrlPathExcluded } from '../utils';
+import { debugLog } from '../utils/logging';
 import { SenderManager } from './sender.manager';
 import { SamplingManager } from './sampling.manager';
 import { StateManager } from './state.manager';
@@ -98,8 +99,8 @@ export class EventManager extends StateManager {
     const isSessionEndEvent = type == EventType.SESSION_END;
 
     if (isRouteExcluded && (!isSessionEndEvent || (isSessionEndEvent && !hasStartSession))) {
-      if (this.get('config')?.qaMode) {
-        log('info', `Event ${type} on excluded route: ${page_url}`);
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.debug('EventManager', `Event ${type} on excluded route: ${page_url}`);
       }
 
       return;
@@ -132,12 +133,13 @@ export class EventManager extends StateManager {
       const matchedTags = this.tagsManager.getEventTagsIds(payload, this.get('device'));
 
       if (matchedTags?.length) {
-        payload.tags = this.get('config')?.qaMode
-          ? matchedTags.map((id) => ({
-              id,
-              key: this.get('config')?.tags?.find((t) => t.id === id)?.key ?? '',
-            }))
-          : matchedTags;
+        payload.tags =
+          this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug'
+            ? matchedTags.map((id) => ({
+                id,
+                key: this.get('config')?.tags?.find((t) => t.id === id)?.key ?? '',
+              }))
+            : matchedTags;
       }
     }
 
@@ -156,10 +158,10 @@ export class EventManager extends StateManager {
   }
 
   private processAndSend(payload: EventData): void {
-    const isQAMode = this.get('config')?.qaMode;
+    const isQAMode = this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug';
 
     if (isQAMode) {
-      log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
+      debugLog.debug('EventManager', `${payload.type} event: ${JSON.stringify(payload)}`);
     }
 
     if (!isQAMode && this.get('config')?.ipExcluded) {
@@ -184,8 +186,8 @@ export class EventManager extends StateManager {
   }
 
   private trackGoogleAnalyticsEvent(customEvent: CustomEventData): void {
-    if (this.get('config').qaMode) {
-      log('info', `Google Analytics event: ${JSON.stringify(customEvent)}`);
+    if (this.get('config').mode === 'qa' || this.get('config').mode === 'debug') {
+      debugLog.debug('EventManager', `Google Analytics event: ${JSON.stringify(customEvent)}`);
     } else if (this.googleAnalytics) {
       this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
     }
@@ -253,16 +255,16 @@ export class EventManager extends StateManager {
       }
       if (this.failureCount === 0) {
         this.circuitOpen = false;
-        if (this.get('config')?.qaMode) {
-          log('info', 'Circuit breaker reset - resuming event sending');
+        if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+          debugLog.debug('EventManager', 'Circuit breaker reset - resuming event sending');
         }
       }
       return;
     }
 
     if (!this.get('sessionId')) {
-      if (this.get('config')?.qaMode) {
-        log('info', `Queue pending: ${this.eventsQueue.length} events waiting for active session`);
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.debug('EventManager', `Queue pending: ${this.eventsQueue.length} events waiting for active session`);
       }
 
       return;
@@ -282,9 +284,9 @@ export class EventManager extends StateManager {
         this.circuitOpen = true;
         this.eventsQueue = []; // Clear queue to prevent memory leak
 
-        if (this.get('config')?.qaMode) {
-          log(
-            'warning',
+        if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+          debugLog.warn(
+            'EventManager',
             `Circuit breaker opened after ${this.MAX_FAILURES} failures - clearing event queue to prevent memory leak`,
           );
         }

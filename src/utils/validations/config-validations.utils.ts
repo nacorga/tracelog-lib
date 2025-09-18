@@ -7,7 +7,7 @@ import {
   SamplingRateValidationError,
   IntegrationValidationError,
 } from '../../types/validation-error.types';
-import { log } from '../logging';
+import { debugLog } from '../logging';
 
 /**
  * Validates the app configuration object (before normalization)
@@ -94,7 +94,7 @@ const validateScrollContainerSelectors = (selectors: string | string[]): void =>
       } catch {
         // Invalid CSS selectors are handled gracefully
         // they will be ignored by the ScrollHandler and it will fall back to window scrolling
-        log('warning', `Invalid CSS selector will be ignored: "${selector}"`);
+        debugLog.clientWarn('ConfigValidation', `Invalid CSS selector will be ignored: "${selector}"`);
       }
     }
   }
@@ -232,10 +232,6 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
 
   validateSamplingRate(config.samplingRate, errors);
 
-  if (config.qaMode !== undefined && typeof config.qaMode !== 'boolean') {
-    errors.push('qaMode must be a boolean');
-  }
-
   if (config.tags !== undefined && !Array.isArray(config.tags)) {
     errors.push('tags must be an array');
   }
@@ -275,7 +271,6 @@ export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
     const response = json as Record<string, unknown>;
 
     const result: Record<keyof ApiConfig, boolean> = {
-      qaMode: response['qaMode'] === undefined || typeof response['qaMode'] === 'boolean',
       samplingRate:
         response['samplingRate'] === undefined ||
         (typeof response['samplingRate'] === 'number' && response['samplingRate'] > 0 && response['samplingRate'] <= 1),

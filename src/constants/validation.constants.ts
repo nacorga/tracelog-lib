@@ -10,7 +10,6 @@ import {
 export const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>([
   'tags',
   'samplingRate',
-  'qaMode',
   'excludedUrlPaths',
   'ipExcluded',
 ]);

@@ -5,7 +5,8 @@ import {
   DEFAULT_VISIBILITY_TIMEOUT_MS,
 } from '../constants';
 import { DeviceType, EventType } from '../types';
-import { generateUUID, getDeviceType, log, logUnknown } from '../utils';
+import { generateUUID, getDeviceType } from '../utils';
+import { debugLog } from '../utils/logging';
 import {
   SessionEndReason,
   SessionEndConfig,
@@ -158,11 +159,11 @@ export class SessionManager extends StateManager {
       this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager ?? undefined);
 
       if (this.sessionEndConfig.debugMode) {
-        log('info', 'Recovery manager initialized');
+        debugLog.debug('SessionManager', 'Recovery manager initialized');
       }
     } catch (error) {
       if (this.sessionEndConfig.debugMode) {
-        logUnknown('warning', 'Failed to initialize recovery manager', error);
+        debugLog.warn('SessionManager', 'Failed to initialize recovery manager', { error });
       }
     }
   }
@@ -218,7 +219,7 @@ export class SessionManager extends StateManager {
         }
 
         if (this.sessionEndConfig.debugMode) {
-          log('info', `Session recovered: ${sessionId}`);
+          debugLog.debug('SessionManager', `Session recovered: ${sessionId}`);
         }
       }
     }
@@ -231,7 +232,7 @@ export class SessionManager extends StateManager {
       this.lastActivityTime = now;
 
       if (this.sessionEndConfig.debugMode) {
-        log('info', `New session started: ${sessionId}`);
+        debugLog.debug('SessionManager', `New session started: ${sessionId}`);
       }
     }
 
@@ -436,7 +437,7 @@ export class SessionManager extends StateManager {
         this.sessionEndStats.duplicatePrevented++;
 
         if (this.sessionEndConfig.debugMode) {
-          log('info', `Session end already pending, waiting for completion. Reason: ${reason}`);
+          debugLog.debug('SessionManager', `Session end already pending, waiting for completion. Reason: ${reason}`);
         }
 
         return this.waitForCompletion();
@@ -444,8 +445,8 @@ export class SessionManager extends StateManager {
 
       if (!this.shouldProceedWithSessionEnd(reason)) {
         if (this.sessionEndConfig.debugMode) {
-          log(
-            'info',
+          debugLog.debug(
+            'SessionManager',
             `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
           );
         }
@@ -529,12 +530,15 @@ export class SessionManager extends StateManager {
       });
 
       if (this.sessionEndConfig.debugMode) {
-        log('warning', `Session health degraded: ${this.sessionHealth.recoveryAttempts} recovery attempts`);
+        debugLog.warn(
+          'SessionManager',
+          `Session health degraded: ${this.sessionHealth.recoveryAttempts} recovery attempts`,
+        );
       }
     }
 
     if (this.sessionEndConfig.debugMode) {
-      log('info', `Session health event tracked: ${event}`);
+      debugLog.debug('SessionManager', `Session health event tracked: ${event}`);
     }
   }
 
@@ -545,7 +549,7 @@ export class SessionManager extends StateManager {
 
     try {
       if (this.sessionEndConfig.debugMode) {
-        log('info', `Starting ${method} session end. Reason: ${reason}`);
+        debugLog.debug('SessionManager', `Starting ${method} session end. Reason: ${reason}`);
       }
 
       if (this.eventManager) {
@@ -594,7 +598,7 @@ export class SessionManager extends StateManager {
       this.sessionEndStats.failedEnds++;
 
       if (this.sessionEndConfig.debugMode) {
-        logUnknown('error', 'Session end failed', error);
+        debugLog.error('SessionManager', 'Session end failed', { error });
       }
 
       this.cleanupSession();
@@ -624,14 +628,17 @@ export class SessionManager extends StateManager {
       this.sessionEndStats.duplicatePrevented++;
 
       if (this.sessionEndConfig.debugMode) {
-        log('warning', `Sync session end called while async end pending. Forcing sync end. Reason: ${reason}`);
+        debugLog.warn(
+          'SessionManager',
+          `Sync session end called while async end pending. Forcing sync end. Reason: ${reason}`,
+        );
       }
     }
 
     if (!this.shouldProceedWithSessionEnd(reason)) {
       if (this.sessionEndConfig.debugMode) {
-        log(
-          'info',
+        debugLog.debug(
+          'SessionManager',
           `Sync session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
         );
       }
@@ -711,7 +718,7 @@ export class SessionManager extends StateManager {
       this.cleanupSession();
 
       if (this.sessionEndConfig.debugMode) {
-        logUnknown('error', 'Session end failed', error);
+        debugLog.error('SessionManager', 'Session end failed', { error });
       }
 
       return {

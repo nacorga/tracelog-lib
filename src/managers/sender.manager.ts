@@ -8,7 +8,7 @@ import {
   API_BASE_URL,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto } from '../types';
-import { log, logUnknown } from '../utils';
+import { debugLog } from '../utils/logging';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -59,7 +59,7 @@ export class SenderManager extends StateManager {
         this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
-      logUnknown('error', 'Failed to recover persisted events', error);
+      debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
     }
   }
 
@@ -81,7 +81,7 @@ export class SenderManager extends StateManager {
 
       return response.ok;
     } catch (error) {
-      logUnknown('error', 'Failed to send events async', error);
+      debugLog.error('SenderManager', 'Failed to send events async', { error });
 
       return false;
     }
@@ -118,7 +118,7 @@ export class SenderManager extends StateManager {
 
       return xhr.status >= 200 && xhr.status < 300;
     } catch (error) {
-      logUnknown('error', 'Sync XHR failed', error);
+      debugLog.error('SenderManager', 'Sync XHR failed', { error });
 
       return false;
     }
@@ -167,7 +167,7 @@ export class SenderManager extends StateManager {
       has_global_metadata: !!queue.global_metadata,
     };
 
-    log('info', `Queue structure: ${JSON.stringify(queueStructure)}`);
+    debugLog.debug('SenderManager', `Queue structure: ${JSON.stringify(queueStructure)}`);
   }
 
   private handleSendFailure(body: BaseEventsQueueDto): void {
@@ -188,7 +188,7 @@ export class SenderManager extends StateManager {
 
       this.storeManager.setItem(this.queueStorageKey, JSON.stringify(persistedData));
     } catch (error) {
-      logUnknown('error', 'Failed to persist events', error);
+      debugLog.error('SenderManager', 'Failed to persist events', { error });
     }
   }
 
@@ -278,7 +278,7 @@ export class SenderManager extends StateManager {
 
   private shouldSkipSend(): boolean {
     const config = this.get('config');
-    const isQAMode = config?.qaMode ?? false;
+    const isQAMode = (config?.mode === 'qa' || config?.mode === 'debug') ?? false;
     const isTestMode = ['demo', 'test'].includes(config?.id ?? '');
 
     return isQAMode || isTestMode;

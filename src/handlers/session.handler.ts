@@ -7,7 +7,7 @@ import { SessionRecoveryManager } from '../managers/session-recovery.manager';
 import { CrossTabSessionManager } from '../managers/cross-tab-session.manager';
 import { StateManager } from '../managers/state.manager';
 import { StorageManager } from '../managers/storage.manager';
-import { log } from '../utils';
+import { debugLog } from '../utils/logging';
 
 interface StoredSession {
   sessionId: string;
@@ -79,7 +79,10 @@ export class SessionHandler extends StateManager {
         this.persistSession(sessionResult.sessionId);
         this.startHeartbeat();
       } catch (error) {
-        log('error', `Session creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        debugLog.error(
+          'SessionHandler',
+          `Session creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
         this.forceCleanupSession();
       }
     };
@@ -90,8 +93,8 @@ export class SessionHandler extends StateManager {
       }
 
       if (this.crossTabSessionManager && this.crossTabSessionManager.getEffectiveSessionTimeout() > 0) {
-        if (this.get('config')?.qaMode) {
-          log('info', 'Session kept alive by cross-tab activity');
+        if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+          debugLog.debug('SessionHandler', 'Session kept alive by cross-tab activity');
         }
 
         return;
@@ -99,8 +102,8 @@ export class SessionHandler extends StateManager {
 
       this.sessionManager!.endSessionManaged('inactivity')
         .then((result) => {
-          if (this.get('config')?.qaMode) {
-            log('info', `Inactivity session end result: ${JSON.stringify(result)}`);
+          if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+            debugLog.debug('SessionHandler', `Inactivity session end result: ${JSON.stringify(result)}`);
           }
 
           if (this.crossTabSessionManager) {
@@ -111,14 +114,17 @@ export class SessionHandler extends StateManager {
           this.stopHeartbeat();
         })
         .catch((error) => {
-          log('error', `Session end failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          debugLog.error(
+            'SessionHandler',
+            `Session end failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
           this.forceCleanupSession();
         });
     };
 
     const sessionEndConfig: Partial<SessionEndConfig> = {
       enablePageUnloadHandlers: true,
-      debugMode: this.get('config')?.qaMode ?? false,
+      debugMode: (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') ?? false,
       syncTimeoutMs: 2000,
       maxRetries: 3,
     };
@@ -142,7 +148,10 @@ export class SessionHandler extends StateManager {
           this.clearPersistedSession();
           this.stopHeartbeat();
         } catch (error) {
-          log('error', `Manual session stop failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          debugLog.error(
+            'SessionHandler',
+            `Manual session stop failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
           this.forceCleanupSession();
         }
       }
@@ -167,11 +176,13 @@ export class SessionHandler extends StateManager {
   }
 
   private initializeCrossTabSessionManager(projectId: string): void {
-    const config: Partial<CrossTabSessionConfig> = { debugMode: this.get('config')?.qaMode ?? false };
+    const config: Partial<CrossTabSessionConfig> = {
+      debugMode: (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') ?? false,
+    };
 
     const onSessionStart = (sessionId: string): void => {
-      if (this.get('config')?.qaMode) {
-        log('info', `Cross-tab session started: ${sessionId}`);
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.debug('SessionHandler', `Cross-tab session started: ${sessionId}`);
       }
 
       this.set('sessionId', sessionId);
@@ -181,8 +192,8 @@ export class SessionHandler extends StateManager {
     };
 
     const onSessionEnd = (reason: SessionEndReason): void => {
-      if (this.get('config')?.qaMode) {
-        log('info', `Cross-tab session ended: ${reason}`);
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.debug('SessionHandler', `Cross-tab session ended: ${reason}`);
       }
 
       this.clearPersistedSession();
@@ -190,14 +201,14 @@ export class SessionHandler extends StateManager {
     };
 
     const onTabActivity = (): void => {
-      if (this.get('config')?.qaMode) {
-        log('info', 'Cross-tab activity detected');
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.debug('SessionHandler', 'Cross-tab activity detected');
       }
     };
 
     const onCrossTabConflict = (): void => {
-      if (this.get('config')?.qaMode) {
-        log('warning', 'Cross-tab conflict detected');
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.warn('SessionHandler', 'Cross-tab conflict detected');
       }
 
       // Track cross-tab conflict in session health
@@ -250,9 +261,9 @@ export class SessionHandler extends StateManager {
         this.crossTabSessionManager.endSession('orphaned_cleanup');
       } catch (error) {
         // Silent cleanup - we're already in error recovery
-        if (this.get('config')?.qaMode) {
-          log(
-            'warning',
+        if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+          debugLog.warn(
+            'SessionHandler',
             `Cross-tab cleanup failed during force cleanup: ${error instanceof Error ? error.message : 'Unknown error'}`,
           );
         }
@@ -264,16 +275,16 @@ export class SessionHandler extends StateManager {
       this.trackSession(EventType.SESSION_END, false, 'orphaned_cleanup');
     } catch (error) {
       // Silent tracking failure - we're already in error recovery
-      if (this.get('config')?.qaMode) {
-        log(
-          'warning',
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.warn(
+          'SessionHandler',
           `Session tracking failed during force cleanup: ${error instanceof Error ? error.message : 'Unknown error'}`,
         );
       }
     }
 
-    if (this.get('config')?.qaMode) {
-      log('info', 'Forced session cleanup completed');
+    if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+      debugLog.debug('SessionHandler', 'Forced session cleanup completed');
     }
   }
 
@@ -350,8 +361,8 @@ export class SessionHandler extends StateManager {
 
               this.recoveryManager.storeSessionContextForRecovery(sessionContext);
 
-              if (this.get('config')?.qaMode) {
-                log('info', `Orphaned session stored for recovery: ${session.sessionId}`);
+              if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+                debugLog.debug('SessionHandler', `Orphaned session stored for recovery: ${session.sessionId}`);
               }
             }
           }
@@ -359,8 +370,11 @@ export class SessionHandler extends StateManager {
           this.trackSession(EventType.SESSION_END);
           this.clearPersistedSession();
 
-          if (this.get('config')?.qaMode) {
-            log('info', `Orphaned session ended: ${session.sessionId}, recovery available: ${canRecover}`);
+          if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+            debugLog.debug(
+              'SessionHandler',
+              `Orphaned session ended: ${session.sessionId}, recovery available: ${canRecover}`,
+            );
           }
         }
       } catch {

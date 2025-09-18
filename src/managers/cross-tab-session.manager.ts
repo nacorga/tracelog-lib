@@ -7,7 +7,8 @@ import {
   SessionContext,
   SessionEndReason,
 } from '../types/session.types';
-import { generateUUID, log, logUnknown } from '../utils';
+import { generateUUID } from '../utils';
+import { debugLog } from '../utils/logging';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 
@@ -54,7 +55,7 @@ export class CrossTabSessionManager extends StateManager {
     this.config = {
       tabHeartbeatIntervalMs: TAB_HEARTBEAT_INTERVAL_MS,
       tabElectionTimeoutMs: TAB_ELECTION_TIMEOUT_MS,
-      debugMode: this.get('config')?.qaMode ?? false,
+      debugMode: (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') ?? false,
       ...config,
     };
 
@@ -87,7 +88,7 @@ export class CrossTabSessionManager extends StateManager {
       return channel;
     } catch (error) {
       if (this.config.debugMode) {
-        logUnknown('warning', 'Failed to initialize BroadcastChannel', error);
+        debugLog.warn('CrossTabSession', 'Failed to initialize BroadcastChannel', { error });
       }
 
       return null;
@@ -129,7 +130,7 @@ export class CrossTabSessionManager extends StateManager {
    */
   private tryJoinExistingSession(sessionContext: SessionContext): void {
     if (this.config.debugMode) {
-      log('info', `Attempting to join existing session: ${sessionContext.sessionId}`);
+      debugLog.debug('CrossTabSession', `Attempting to join existing session: ${sessionContext.sessionId}`);
     }
 
     // Set session info
@@ -187,13 +188,13 @@ export class CrossTabSessionManager extends StateManager {
     // Prevent multiple concurrent elections
     if (this.electionTimeout) {
       if (this.config.debugMode) {
-        log('info', 'Leader election already in progress, skipping');
+        debugLog.debug('CrossTabSession', 'Leader election already in progress, skipping');
       }
       return;
     }
 
     if (this.config.debugMode) {
-      log('info', 'Starting leader election');
+      debugLog.debug('CrossTabSession', 'Starting leader election');
     }
 
     // Add randomized delay to prevent thundering herd (optimized for performance tests)
@@ -219,7 +220,7 @@ export class CrossTabSessionManager extends StateManager {
     this.leaderTabId = this.tabId;
 
     if (this.config.debugMode) {
-      log('info', `Tab ${this.tabId} became session leader`);
+      debugLog.debug('CrossTabSession', `Tab ${this.tabId} became session leader`);
     }
 
     // Clear any existing election timeout
@@ -312,14 +313,17 @@ export class CrossTabSessionManager extends StateManager {
         // If we have a session but no leader, become leader
         if (this.tabInfo.sessionId) {
           if (this.config.debugMode) {
-            log('warning', `No leader detected after ${fallbackDelay}ms, forcing leadership for tab ${this.tabId}`);
+            debugLog.warn(
+              'CrossTabSession',
+              `No leader detected after ${fallbackDelay}ms, forcing leadership for tab ${this.tabId}`,
+            );
           }
           this.becomeLeader();
         } else {
           // If we don't even have a session, start a new one
           if (this.config.debugMode) {
-            log(
-              'warning',
+            debugLog.warn(
+              'CrossTabSession',
               `No session or leader detected after ${fallbackDelay}ms, starting new session for tab ${this.tabId}`,
             );
           }
@@ -340,7 +344,10 @@ export class CrossTabSessionManager extends StateManager {
 
           if (timeSinceLastActivity > maxInactiveTime) {
             if (this.config.debugMode) {
-              log('warning', `Leader tab appears inactive (${timeSinceLastActivity}ms), attempting to become leader`);
+              debugLog.warn(
+                'CrossTabSession',
+                `Leader tab appears inactive (${timeSinceLastActivity}ms), attempting to become leader`,
+              );
             }
             this.leaderTabId = null;
             this.startLeaderElection();
@@ -380,7 +387,7 @@ export class CrossTabSessionManager extends StateManager {
    */
   private handleCrossTabMessage(message: CrossTabMessage): void {
     if (this.config.debugMode) {
-      log('info', `Received cross-tab message: ${message.type} from ${message.tabId}`);
+      debugLog.debug('CrossTabSession', `Received cross-tab message: ${message.type} from ${message.tabId}`);
     }
 
     switch (message.type) {
@@ -456,7 +463,7 @@ export class CrossTabSessionManager extends StateManager {
     // Ignore if this tab is the leader
     if (this.isTabLeader) {
       if (this.config.debugMode) {
-        log('info', `Ignoring session end message from ${message.tabId} (this tab is leader)`);
+        debugLog.debug('CrossTabSession', `Ignoring session end message from ${message.tabId} (this tab is leader)`);
       }
 
       return;
@@ -466,7 +473,7 @@ export class CrossTabSessionManager extends StateManager {
     if (!this.leaderTabId || message.tabId !== this.leaderTabId) {
       if (this.config.debugMode) {
         const extra = this.leaderTabId ? `; leader is ${this.leaderTabId}` : '';
-        log('info', `Ignoring session end message from ${message.tabId}${extra}`);
+        debugLog.debug('CrossTabSession', `Ignoring session end message from ${message.tabId}${extra}`);
       }
 
       return;
@@ -501,8 +508,8 @@ export class CrossTabSessionManager extends StateManager {
       this.storeSessionContext(sessionContext);
 
       if (this.config.debugMode) {
-        log(
-          'info',
+        debugLog.debug(
+          'CrossTabSession',
           `Tab count updated from ${oldCount} to ${sessionContext.tabCount} after tab ${message.tabId} closed`,
         );
       }
@@ -511,7 +518,7 @@ export class CrossTabSessionManager extends StateManager {
       const wasLeader = message.data?.isLeader || message.tabId === this.leaderTabId;
       if (wasLeader && !this.isTabLeader) {
         if (this.config.debugMode) {
-          log('info', `Leader tab ${message.tabId} closed, starting leader election`);
+          debugLog.debug('CrossTabSession', `Leader tab ${message.tabId} closed, starting leader election`);
         }
         this.leaderTabId = null;
 
@@ -556,7 +563,7 @@ export class CrossTabSessionManager extends StateManager {
         this.leaderTabId = message.tabId;
 
         if (this.config.debugMode) {
-          log('info', `Acknowledging tab ${message.tabId} as leader`);
+          debugLog.debug('CrossTabSession', `Acknowledging tab ${message.tabId} as leader`);
         }
 
         // Clear election timeout
@@ -572,7 +579,10 @@ export class CrossTabSessionManager extends StateManager {
         }
       } else if (this.config.debugMode) {
         // We're already a leader, log potential conflict
-        log('warning', `Received leadership claim from ${message.tabId} but this tab is already leader`);
+        debugLog.warn(
+          'CrossTabSession',
+          `Received leadership claim from ${message.tabId} but this tab is already leader`,
+        );
 
         // Notify conflict callback
         if (this.callbacks?.onCrossTabConflict) {
@@ -641,7 +651,10 @@ export class CrossTabSessionManager extends StateManager {
     this.sessionEnded = true;
 
     if (this.config.debugMode) {
-      log('info', `Ending cross-tab session: ${reason} (tab: ${this.tabId}, isLeader: ${this.isTabLeader})`);
+      debugLog.debug(
+        'CrossTabSession',
+        `Ending cross-tab session: ${reason} (tab: ${this.tabId}, isLeader: ${this.isTabLeader})`,
+      );
     }
 
     // Announce tab closing with current state
@@ -678,7 +691,7 @@ export class CrossTabSessionManager extends StateManager {
     // Give other tabs time to process the message before we close
     this.closingAnnouncementTimeout = window.setTimeout(() => {
       if (this.config.debugMode) {
-        log('info', `Tab ${this.tabId} closing announcement sent`);
+        debugLog.debug('CrossTabSession', `Tab ${this.tabId} closing announcement sent`);
       }
       this.closingAnnouncementTimeout = null;
     }, 100);
@@ -732,7 +745,7 @@ export class CrossTabSessionManager extends StateManager {
       return stored ? JSON.parse(stored) : null;
     } catch (error) {
       if (this.config.debugMode) {
-        logUnknown('warning', 'Failed to parse stored session context', error);
+        debugLog.warn('CrossTabSession', 'Failed to parse stored session context', { error });
       }
 
       return null;
@@ -747,7 +760,7 @@ export class CrossTabSessionManager extends StateManager {
       this.storageManager.setItem(CROSS_TAB_SESSION_KEY(this.projectId), JSON.stringify(context));
     } catch (error) {
       if (this.config.debugMode) {
-        logUnknown('warning', 'Failed to store session context', error);
+        debugLog.warn('CrossTabSession', 'Failed to store session context', { error });
       }
     }
   }
@@ -767,7 +780,7 @@ export class CrossTabSessionManager extends StateManager {
       this.storageManager.setItem(TAB_SPECIFIC_INFO_KEY(this.projectId, this.tabId), JSON.stringify(this.tabInfo));
     } catch (error) {
       if (this.config.debugMode) {
-        logUnknown('warning', 'Failed to store tab info', error);
+        debugLog.warn('CrossTabSession', 'Failed to store tab info', { error });
       }
     }
   }

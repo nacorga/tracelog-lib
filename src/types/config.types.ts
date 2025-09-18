@@ -1,14 +1,10 @@
 import { MetadataType } from './common.types';
 import { TagConfig } from './tag.types';
+import { Mode } from './mode.types';
 
 export type Config = ApiConfig & AppConfig;
 
 export interface ApiConfig {
-  /**
-   * Enables QA mode for testing and debugging purposes.
-   * When enabled, events may be processed differently for development environments.
-   */
-  qaMode?: boolean;
   /**
    * Sampling rate as a percentage (0-1) to control how many events are sent.
    * A value of 1 means all events are sent, while 0.5 means only half of events are sent.
@@ -84,7 +80,7 @@ export interface AppConfig {
   /**
    * Sampling rate for error events (0-1).
    * Controls how many error and network error events are captured.
-   * @default 0.1 for production, 1.0 for QA mode
+   * @default 0.1 for production, 1.0 for qa/debug mode
    */
   errorSampling?: number;
   /**
@@ -102,4 +98,13 @@ export interface AppConfig {
       measurementId: string;
     };
   };
+  /**
+   * Logging mode for the SDK.
+   * - 'production': No debug output (default)
+   * - 'qa': Shows client-facing logs only (INFO, CLIENT_WARN, CLIENT_ERROR)
+   * - 'debug': Shows all logs including internal SDK errors
+   *
+   * @default 'production'
+   */
+  mode?: Mode;
 }

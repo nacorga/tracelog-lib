@@ -7,7 +7,7 @@ import {
 } from '../constants';
 import { SESSION_RECOVERY_KEY } from '../constants/storage.constants';
 import { SessionRecoveryConfig, SessionContext, RecoveryAttempt } from '../types/session.types';
-import { log, logUnknown } from '../utils';
+import { debugLog } from '../utils/logging';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { EventManager } from './event.manager';
@@ -30,7 +30,7 @@ export class SessionRecoveryManager extends StateManager {
     this.storageManager = storageManager;
     this.eventManager = eventManager ?? null;
     this.projectId = projectId;
-    this.debugMode = this.get('config')?.qaMode ?? false;
+    this.debugMode = (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') ?? false;
 
     this.config = {
       recoveryWindowMs: this.calculateRecoveryWindow(),
@@ -49,7 +49,7 @@ export class SessionRecoveryManager extends StateManager {
     context?: SessionContext;
   } {
     if (this.debugMode) {
-      log('info', 'Attempting session recovery');
+      debugLog.debug('SessionRecovery', 'Attempting session recovery');
     }
 
     // Get stored recovery attempts
@@ -59,7 +59,10 @@ export class SessionRecoveryManager extends StateManager {
     // Check if we can recover
     if (!this.canAttemptRecovery(lastAttempt)) {
       if (this.debugMode) {
-        log('info', 'Session recovery not possible - outside recovery window or max attempts reached');
+        debugLog.debug(
+          'SessionRecovery',
+          'Session recovery not possible - outside recovery window or max attempts reached',
+        );
       }
 
       return {
@@ -72,7 +75,7 @@ export class SessionRecoveryManager extends StateManager {
 
     if (!lastSessionContext) {
       if (this.debugMode) {
-        log('info', 'No session context available for recovery');
+        debugLog.debug('SessionRecovery', 'No session context available for recovery');
       }
 
       return {
@@ -86,7 +89,7 @@ export class SessionRecoveryManager extends StateManager {
 
     if (timeSinceLastActivity > this.config.recoveryWindowMs) {
       if (this.debugMode) {
-        log('info', 'Session recovery failed - outside recovery window');
+        debugLog.debug('SessionRecovery', 'Session recovery failed - outside recovery window');
       }
 
       return {
@@ -115,7 +118,7 @@ export class SessionRecoveryManager extends StateManager {
     this.storeRecoveryAttempts(recoveryAttempts);
 
     if (this.debugMode) {
-      log('info', `Session recovery successful: recovery of session ${recoveredSessionId}`);
+      debugLog.debug('SessionRecovery', `Session recovery successful: recovery of session ${recoveredSessionId}`);
     }
 
     return {
@@ -138,13 +141,13 @@ export class SessionRecoveryManager extends StateManager {
 
     if (this.debugMode) {
       if (calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
-        log(
-          'warning',
+        debugLog.warn(
+          'SessionRecovery',
           `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`,
         );
       } else if (calculatedRecoveryWindow < MIN_SESSION_RECOVERY_WINDOW_MS) {
-        log(
-          'warning',
+        debugLog.warn(
+          'SessionRecovery',
           `Recovery window increased to minimum ${MIN_SESSION_RECOVERY_WINDOW_MS}ms (2min). Calculated: ${calculatedRecoveryWindow}ms`,
         );
       }
@@ -204,11 +207,11 @@ export class SessionRecoveryManager extends StateManager {
       this.storeRecoveryAttempts(recoveryAttempts);
 
       if (this.debugMode) {
-        log('info', `Stored session context for recovery: ${sessionContext.sessionId}`);
+        debugLog.debug('SessionRecovery', `Stored session context for recovery: ${sessionContext.sessionId}`);
       }
     } catch (error) {
       if (this.debugMode) {
-        logUnknown('warning', 'Failed to store session context for recovery', error);
+        debugLog.warn('SessionRecovery', 'Failed to store session context for recovery', { error });
       }
     }
   }
@@ -224,10 +227,10 @@ export class SessionRecoveryManager extends StateManager {
       if (this.debugMode) {
         const stored = this.storageManager.getItem(SESSION_RECOVERY_KEY(this.projectId));
 
-        logUnknown(
-          'warning',
+        debugLog.warn(
+          'SessionRecovery',
           `Failed to parse stored recovery attempts for projectId ${this.projectId}. Data: ${stored}`,
-          error,
+          { error },
         );
       }
 
@@ -243,7 +246,7 @@ export class SessionRecoveryManager extends StateManager {
       this.storageManager.setItem(SESSION_RECOVERY_KEY(this.projectId), JSON.stringify(attempts));
     } catch (error) {
       if (this.debugMode) {
-        logUnknown('warning', 'Failed to store recovery attempts', error);
+        debugLog.warn('SessionRecovery', 'Failed to store recovery attempts', { error });
       }
     }
   }
@@ -270,7 +273,7 @@ export class SessionRecoveryManager extends StateManager {
       this.storeRecoveryAttempts(validAttempts);
 
       if (this.debugMode) {
-        log('info', `Cleaned up ${attempts.length - validAttempts.length} old recovery attempts`);
+        debugLog.debug('SessionRecovery', `Cleaned up ${attempts.length - validAttempts.length} old recovery attempts`);
       }
     }
   }
@@ -310,7 +313,7 @@ export class SessionRecoveryManager extends StateManager {
     this.storageManager.removeItem(SESSION_RECOVERY_KEY(this.projectId));
 
     if (this.debugMode) {
-      log('info', 'Cleared all recovery data');
+      debugLog.debug('SessionRecovery', 'Cleared all recovery data');
     }
   }
 }

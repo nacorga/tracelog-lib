@@ -1,5 +1,5 @@
 import { MetadataType } from '../types';
-import { log, logUnknown } from '../utils';
+import { debugLog } from '../utils/logging';
 import { StateManager } from '../managers/state.manager';
 
 declare global {
@@ -24,7 +24,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
     const measurementId = this.get('config').integrations?.googleAnalytics?.measurementId;
 
     if (!measurementId?.trim()) {
-      log('warning', 'Google Analytics initialization skipped: measurementId not configured');
+      debugLog.warn('GoogleAnalytics', 'Google Analytics initialization skipped: measurementId not configured');
 
       return;
     }
@@ -32,7 +32,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
     const userId = this.get('userId');
 
     if (!userId?.trim()) {
-      log('warning', 'Google Analytics initialization skipped: userId not available');
+      debugLog.warn('GoogleAnalytics', 'Google Analytics initialization skipped: userId not available');
 
       return;
     }
@@ -46,13 +46,13 @@ export class GoogleAnalyticsIntegration extends StateManager {
       this.configureGtag(measurementId, userId);
       this.isInitialized = true;
     } catch (error) {
-      logUnknown('error', 'Google Analytics initialization failed', error);
+      debugLog.error('GoogleAnalytics', 'Google Analytics initialization failed', { error });
     }
   }
 
   trackEvent(eventName: string, metadata: Record<string, MetadataType>): void {
     if (!eventName?.trim()) {
-      log('warning', 'Google Analytics event tracking skipped: invalid eventName');
+      debugLog.warn('GoogleAnalytics', 'Google Analytics event tracking skipped: invalid eventName');
 
       return;
     }
@@ -64,7 +64,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
     try {
       window.gtag('event', eventName, metadata);
     } catch (error) {
-      logUnknown('error', `Error tracking Google Analytics event (${eventName})`, error);
+      debugLog.error('GoogleAnalytics', `Error tracking Google Analytics event (${eventName})`, { error });
     }
   }
 
@@ -86,7 +86,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
     const existingGAScript = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
 
     if (existingGAScript) {
-      log('warning', 'Google Analytics script already loaded from external source');
+      debugLog.warn('GoogleAnalytics', 'Google Analytics script already loaded from external source');
 
       return true;
     }
