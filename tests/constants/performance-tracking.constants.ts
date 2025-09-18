@@ -1,11 +1,3 @@
-import { Config } from '../../src/types';
-import { TEST_ID } from './common.constants';
-
-export const PERFORMANCE_TEST_CONFIGS = {
-  DEFAULT: { id: TEST_ID, qaMode: true } as Config,
-  MINIMAL: { id: TEST_ID } as Config,
-} as const;
-
 export const PERFORMANCE_THRESHOLDS = {
   INITIALIZATION_TIME_MS: 100, // Library should initialize within 100ms
   MAIN_THREAD_BLOCKING_MS: 50, // Should not block main thread for more than 50ms (practical threshold)

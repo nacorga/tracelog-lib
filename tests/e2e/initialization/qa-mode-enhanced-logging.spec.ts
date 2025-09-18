@@ -29,11 +29,11 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     // Additional QA mode specific validations
     await expect(page.getByTestId('init-status')).toContainText(STATUS_TEXTS.INITIALIZED);
 
-    // Verify QA mode configuration acceptance
     const qaConfigCheck = await page.evaluate(() => ({
       initSuccess: true,
-      configPassed: true, // We passed qaMode: true to init
+      configPassed: true,
     }));
+
     expect(qaConfigCheck.initSuccess).toBe(true);
     expect(qaConfigCheck.configPassed).toBe(true);
 
@@ -47,11 +47,11 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     // Initialize with QA mode
     await testBase.performMeasuredInit();
 
-    // Verify QA mode initialization success
     const qaConfigCheck = await page.evaluate(() => ({
       initSuccess: true,
       qaMode: true,
     }));
+
     expect(qaConfigCheck.initSuccess).toBe(true);
     expect(qaConfigCheck.qaMode).toBe(true);
 
@@ -103,11 +103,11 @@ test.describe('Library Initialization - QA Mode and Enhanced Logging', () => {
     expect(complexConfigCheck.initSuccess).toBe(true);
     expect(complexConfigCheck.configApplied).toBe(true);
 
-    // Test functionality in complex QA mode
     const errorSamplingTest = await page.evaluate(() => ({
       functionalityWorks: true,
       qaMode: true,
     }));
+
     expect(errorSamplingTest.functionalityWorks).toBe(true);
 
     // Test custom events with metadata

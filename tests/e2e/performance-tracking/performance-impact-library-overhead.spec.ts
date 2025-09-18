@@ -1,11 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../../utils';
-import {
-  PERFORMANCE_TEST_CONFIGS,
-  PERFORMANCE_THRESHOLDS,
-  PERFORMANCE_TEST_CONSTANTS,
-  PERFORMANCE_TEST_SELECTORS,
-} from '../../constants';
+import { PERFORMANCE_THRESHOLDS, PERFORMANCE_TEST_CONSTANTS, PERFORMANCE_TEST_SELECTORS } from '../../constants';
 import {
   MainThreadPerformanceInfo,
   UserInteractionPerformanceInfo,
@@ -45,7 +40,7 @@ test.describe('Performance Impact - Library Overhead', () => {
         const initMeasurement = await TestUtils.measureInitializationPerformance(page);
 
         // Initialize the library and complete measurement
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
         const completedMeasurement = await TestUtils.completeInitializationMeasurement(page, initMeasurement);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
@@ -85,7 +80,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
         // Test main thread blocking during initialization
         const mainThreadTest = await TestUtils.testMainThreadBlocking(page, async () => {
-          const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+          const initResult = await TestUtils.initializeTraceLog(page);
           expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
         });
 
@@ -111,7 +106,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -169,7 +164,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -208,7 +203,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -256,7 +251,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -308,7 +303,7 @@ test.describe('Performance Impact - Library Overhead', () => {
         // Measure baseline memory
         await TestUtils.measurePerformanceImpact(page);
 
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
         // Create test elements and perform operations
@@ -367,7 +362,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -445,7 +440,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -496,7 +491,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -548,7 +543,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -611,7 +606,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
@@ -706,7 +701,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
         // Initialize library and measure impact
         const initMeasurement = await TestUtils.measureInitializationPerformance(page);
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
         const completedInitMeasurement = await TestUtils.completeInitializationMeasurement(page, initMeasurement);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
@@ -755,7 +750,7 @@ test.describe('Performance Impact - Library Overhead', () => {
 
       try {
         await TestUtils.navigateAndWaitForReady(page, '/');
-        const initResult = await TestUtils.initializeTraceLog(page, PERFORMANCE_TEST_CONFIGS.DEFAULT);
+        const initResult = await TestUtils.initializeTraceLog(page);
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
 
