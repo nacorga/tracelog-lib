@@ -58,8 +58,11 @@ export class SessionHandler extends StateManager {
 
   startTracking(): void {
     if (this.sessionManager) {
+      debugLog.debug('SessionHandler', 'Session tracking already active');
       return;
     }
+
+    debugLog.info('SessionHandler', 'Starting session tracking');
 
     this.checkOrphanedSessions();
 
@@ -137,10 +140,14 @@ export class SessionHandler extends StateManager {
       sessionEndConfig,
     );
 
+    debugLog.debug('SessionHandler', 'Session manager initialized');
+
     this.startInitialSession();
   }
 
   stopTracking(): void {
+    debugLog.info('SessionHandler', 'Stopping session tracking');
+
     if (this.sessionManager) {
       if (this.get('sessionId')) {
         try {
@@ -173,6 +180,7 @@ export class SessionHandler extends StateManager {
 
   private initializeSessionRecoveryManager(projectId: string): void {
     this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager);
+    debugLog.debug('SessionHandler', 'Session recovery manager initialized', { projectId });
   }
 
   private initializeCrossTabSessionManager(projectId: string): void {
@@ -225,6 +233,7 @@ export class SessionHandler extends StateManager {
     };
 
     this._crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
+    debugLog.debug('SessionHandler', 'Cross-tab session manager initialized', { projectId });
   }
 
   private async createOrJoinSession(): Promise<{ sessionId: string; recovered: boolean }> {
@@ -303,8 +312,11 @@ export class SessionHandler extends StateManager {
 
   private startInitialSession(): void {
     if (this.get('sessionId')) {
+      debugLog.debug('SessionHandler', 'Session already exists, skipping initial session creation');
       return;
     }
+
+    debugLog.debug('SessionHandler', 'Starting initial session');
 
     // Check if there's already a cross-tab session active
     if (this.crossTabSessionManager) {
@@ -324,6 +336,7 @@ export class SessionHandler extends StateManager {
     }
 
     // Fallback: no cross-tab session manager, start regular session
+    debugLog.debug('SessionHandler', 'Starting regular session (no cross-tab)');
     const sessionResult = this.sessionManager!.startSession();
 
     this.set('sessionId', sessionResult.sessionId);

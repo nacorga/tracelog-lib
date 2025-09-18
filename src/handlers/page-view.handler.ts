@@ -2,6 +2,7 @@ import { EventType, PageViewData } from '../types';
 import { normalizeUrl } from '../utils';
 import { StateManager } from '../managers/state.manager';
 import { EventManager } from '../managers/event.manager';
+import { debugLog } from '../utils/logging';
 
 export class PageViewHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -18,6 +19,8 @@ export class PageViewHandler extends StateManager {
   }
 
   startTracking(): void {
+    debugLog.info('PageViewHandler', 'Starting page view tracking');
+
     this.trackInitialPageView();
     this.trackCurrentPage();
 
@@ -29,6 +32,8 @@ export class PageViewHandler extends StateManager {
   }
 
   stopTracking(): void {
+    debugLog.debug('PageViewHandler', 'Stopping page view tracking');
+
     window.removeEventListener('popstate', this.trackCurrentPage);
     window.removeEventListener('hashchange', this.trackCurrentPage);
 
@@ -62,6 +67,8 @@ export class PageViewHandler extends StateManager {
 
     if (this.get('pageUrl') !== normalizedUrl) {
       const fromUrl = this.get('pageUrl');
+
+      debugLog.debug('PageViewHandler', 'Page navigation detected', { from: fromUrl, to: normalizedUrl });
 
       this.set('pageUrl', normalizedUrl);
 

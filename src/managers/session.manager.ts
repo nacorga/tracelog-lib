@@ -143,6 +143,12 @@ export class SessionManager extends StateManager {
     if (this.sessionEndConfig.enablePageUnloadHandlers) {
       this.setupPageUnloadHandlers();
     }
+
+    debugLog.info('SessionManager', 'SessionManager initialized', {
+      sessionTimeout: this.config.timeout,
+      deviceCapabilities: this.deviceCapabilities,
+      unloadHandlersEnabled: this.sessionEndConfig.enablePageUnloadHandlers,
+    });
   }
 
   /**
@@ -158,13 +164,9 @@ export class SessionManager extends StateManager {
       // Initialize session recovery manager (always enabled)
       this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager ?? undefined);
 
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.debug('SessionManager', 'Recovery manager initialized');
-      }
+      debugLog.debug('SessionManager', 'Recovery manager initialized', { projectId });
     } catch (error) {
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.warn('SessionManager', 'Failed to initialize recovery manager', { error });
-      }
+      debugLog.error('SessionManager', 'Failed to initialize recovery manager', { error, projectId });
     }
   }
 
@@ -218,9 +220,10 @@ export class SessionManager extends StateManager {
           this.lastActivityTime = now;
         }
 
-        if (this.sessionEndConfig.debugMode) {
-          debugLog.debug('SessionManager', `Session recovered: ${sessionId}`);
-        }
+        debugLog.info('SessionManager', 'Session successfully recovered', {
+          sessionId,
+          recoveryAttempts: this.sessionHealth.recoveryAttempts,
+        });
       }
     }
 
@@ -231,9 +234,7 @@ export class SessionManager extends StateManager {
       this.sessionStartTime = now;
       this.lastActivityTime = now;
 
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.debug('SessionManager', `New session started: ${sessionId}`);
-      }
+      debugLog.info('SessionManager', 'New session started', { sessionId });
     }
 
     this.isSessionActive = true;
@@ -436,9 +437,7 @@ export class SessionManager extends StateManager {
       if (this.pendingSessionEnd) {
         this.sessionEndStats.duplicatePrevented++;
 
-        if (this.sessionEndConfig.debugMode) {
-          debugLog.debug('SessionManager', `Session end already pending, waiting for completion. Reason: ${reason}`);
-        }
+        debugLog.debug('SessionManager', 'Session end already pending, waiting for completion', { reason });
 
         return this.waitForCompletion();
       }
@@ -548,9 +547,7 @@ export class SessionManager extends StateManager {
     let eventsFlushed = 0;
 
     try {
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.debug('SessionManager', `Starting ${method} session end. Reason: ${reason}`);
-      }
+      debugLog.info('SessionManager', 'Starting session end', { method, reason, timestamp });
 
       if (this.eventManager) {
         this.eventManager.track({
@@ -597,9 +594,7 @@ export class SessionManager extends StateManager {
     } catch (error) {
       this.sessionEndStats.failedEnds++;
 
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.error('SessionManager', 'Session end failed', { error });
-      }
+      debugLog.error('SessionManager', 'Session end failed', { error, reason, method });
 
       this.cleanupSession();
 
@@ -627,12 +622,7 @@ export class SessionManager extends StateManager {
     if (this.pendingSessionEnd) {
       this.sessionEndStats.duplicatePrevented++;
 
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.warn(
-          'SessionManager',
-          `Sync session end called while async end pending. Forcing sync end. Reason: ${reason}`,
-        );
-      }
+      debugLog.warn('SessionManager', 'Sync session end called while async end pending', { reason });
     }
 
     if (!this.shouldProceedWithSessionEnd(reason)) {
@@ -717,9 +707,7 @@ export class SessionManager extends StateManager {
 
       this.cleanupSession();
 
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.error('SessionManager', 'Session end failed', { error });
-      }
+      debugLog.error('SessionManager', 'Sync session end failed', { error, reason });
 
       return {
         success: false,

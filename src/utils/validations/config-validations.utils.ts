@@ -19,16 +19,22 @@ import { debugLog } from '../logging';
 export const validateAppConfig = (config: AppConfig): void => {
   // Validate config exists and has id property
   if (!config || typeof config !== 'object') {
+    debugLog.clientError('ConfigValidation', 'Configuration must be an object', { config });
     throw new AppConfigValidationError('Configuration must be an object', 'config');
   }
 
   // Check if id property exists (allow falsy values to be handled by normalization)
   if (!('id' in config)) {
+    debugLog.clientError('ConfigValidation', 'Project ID is missing from configuration');
     throw new ProjectIdValidationError(VALIDATION_MESSAGES.MISSING_PROJECT_ID, 'config');
   }
 
   // Check basic type - null, undefined, or non-string values should fail here
   if (config.id === null || config.id === undefined || typeof config.id !== 'string') {
+    debugLog.clientError('ConfigValidation', 'Project ID must be a non-empty string', {
+      providedId: config.id,
+      type: typeof config.id,
+    });
     throw new ProjectIdValidationError(VALIDATION_MESSAGES.MISSING_PROJECT_ID, 'config');
   }
 
@@ -38,12 +44,21 @@ export const validateAppConfig = (config: AppConfig): void => {
       config.sessionTimeout < MIN_SESSION_TIMEOUT_MS ||
       config.sessionTimeout > MAX_SESSION_TIMEOUT_MS
     ) {
+      debugLog.clientError('ConfigValidation', 'Invalid session timeout', {
+        provided: config.sessionTimeout,
+        min: MIN_SESSION_TIMEOUT_MS,
+        max: MAX_SESSION_TIMEOUT_MS,
+      });
       throw new SessionTimeoutValidationError(VALIDATION_MESSAGES.INVALID_SESSION_TIMEOUT, 'config');
     }
   }
 
   if (config.globalMetadata !== undefined) {
     if (typeof config.globalMetadata !== 'object' || config.globalMetadata === null) {
+      debugLog.clientError('ConfigValidation', 'Global metadata must be an object', {
+        provided: config.globalMetadata,
+        type: typeof config.globalMetadata,
+      });
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_GLOBAL_METADATA, 'config');
     }
   }
@@ -58,11 +73,19 @@ export const validateAppConfig = (config: AppConfig): void => {
 
   if (config.sensitiveQueryParams !== undefined) {
     if (!Array.isArray(config.sensitiveQueryParams)) {
+      debugLog.clientError('ConfigValidation', 'Sensitive query params must be an array', {
+        provided: config.sensitiveQueryParams,
+        type: typeof config.sensitiveQueryParams,
+      });
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SENSITIVE_QUERY_PARAMS, 'config');
     }
 
     for (const param of config.sensitiveQueryParams) {
       if (typeof param !== 'string') {
+        debugLog.clientError('ConfigValidation', 'All sensitive query params must be strings', {
+          param,
+          type: typeof param,
+        });
         throw new AppConfigValidationError('All sensitive query params must be strings', 'config');
       }
     }
@@ -70,6 +93,10 @@ export const validateAppConfig = (config: AppConfig): void => {
 
   if (config.errorSampling !== undefined) {
     if (typeof config.errorSampling !== 'number' || config.errorSampling < 0 || config.errorSampling > 1) {
+      debugLog.clientError('ConfigValidation', 'Invalid error sampling rate', {
+        provided: config.errorSampling,
+        expected: '0-1',
+      });
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_ERROR_SAMPLING_RATE, 'config');
     }
   }
@@ -84,6 +111,11 @@ const validateScrollContainerSelectors = (selectors: string | string[]): void =>
 
   for (const selector of selectorsArray) {
     if (typeof selector !== 'string' || selector.trim() === '') {
+      debugLog.clientError('ConfigValidation', 'Invalid scroll container selector', {
+        selector,
+        type: typeof selector,
+        isEmpty: selector === '' || (typeof selector === 'string' && selector.trim() === ''),
+      });
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, 'config');
     }
 
@@ -113,12 +145,19 @@ const validateIntegrations = (integrations: AppConfig['integrations']): void => 
       typeof integrations.googleAnalytics.measurementId !== 'string' ||
       integrations.googleAnalytics.measurementId.trim() === ''
     ) {
+      debugLog.clientError('ConfigValidation', 'Invalid Google Analytics measurement ID', {
+        provided: integrations.googleAnalytics.measurementId,
+        type: typeof integrations.googleAnalytics.measurementId,
+      });
       throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_GOOGLE_ANALYTICS_ID, 'config');
     }
 
     const measurementId = integrations.googleAnalytics.measurementId.trim();
 
     if (!measurementId.match(/^(G-|UA-)/)) {
+      debugLog.clientError('ConfigValidation', 'Google Analytics measurement ID must start with "G-" or "UA-"', {
+        provided: measurementId,
+      });
       throw new IntegrationValidationError('Google Analytics measurement ID must start with "G-" or "UA-"', 'config');
     }
   }
@@ -146,6 +185,10 @@ export const validateAndNormalizeConfig = (config: AppConfig): AppConfig => {
 
   // Validate normalized values - this catches whitespace-only IDs
   if (!normalizedConfig.id) {
+    debugLog.clientError('ConfigValidation', 'Project ID is empty after trimming whitespace', {
+      originalId: config.id,
+      normalizedId: normalizedConfig.id,
+    });
     throw new ProjectIdValidationError(VALIDATION_MESSAGES.PROJECT_ID_EMPTY_AFTER_TRIM, 'config');
   }
 

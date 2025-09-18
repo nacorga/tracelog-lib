@@ -54,8 +54,15 @@ export class SenderManager extends StateManager {
       const success = this.sendEventsQueue(recoveryBody);
 
       if (success) {
+        debugLog.info('SenderManager', 'Persisted events recovered successfully', {
+          eventsCount: persistedData.events.length,
+          sessionId: persistedData.sessionId,
+        });
         this.clearPersistedEvents();
       } else {
+        debugLog.warn('SenderManager', 'Failed to recover persisted events, scheduling retry', {
+          eventsCount: persistedData.events.length,
+        });
         this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
@@ -234,6 +241,10 @@ export class SenderManager extends StateManager {
         this.resetRetryState();
         this.clearPersistedEvents();
       } else {
+        debugLog.warn('SenderManager', 'Failed to send events', {
+          eventsCount: body.events.length,
+          method: 'async',
+        });
         this.handleSendFailure(body);
       }
 
@@ -265,6 +276,10 @@ export class SenderManager extends StateManager {
         this.resetRetryState();
         this.clearPersistedEvents();
       } else {
+        debugLog.warn('SenderManager', 'Failed to send events', {
+          eventsCount: body.events.length,
+          method: 'sync',
+        });
         this.handleSendFailure(body);
       }
 

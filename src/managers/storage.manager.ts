@@ -8,6 +8,10 @@ export class StorageManager {
   constructor() {
     this.storage = this.init();
     this.storageAvailable = this.storage !== null;
+
+    if (!this.storageAvailable) {
+      debugLog.warn('StorageManager', 'localStorage not available, using memory fallback');
+    }
   }
 
   getItem(key: string): string | null {
@@ -21,8 +25,8 @@ export class StorageManager {
       }
 
       return this.fallbackStorage.get(key) ?? null;
-    } catch {
-      debugLog.warn('StorageManager', 'Storage getItem failed, using memory fallback');
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Storage getItem failed, using memory fallback', { key, error });
       this.storageAvailable = false;
       return this.fallbackStorage.get(key) ?? null;
     }
@@ -41,8 +45,8 @@ export class StorageManager {
       }
 
       this.fallbackStorage.set(key, value);
-    } catch {
-      debugLog.warn('StorageManager', 'Storage setItem failed, using memory fallback');
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Storage setItem failed, using memory fallback', { key, error });
       this.storageAvailable = false;
       this.fallbackStorage.set(key, value);
     }
@@ -61,8 +65,8 @@ export class StorageManager {
       }
 
       this.fallbackStorage.delete(key);
-    } catch {
-      debugLog.warn('StorageManager', 'Storage removeItem failed, using memory fallback');
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Storage removeItem failed, using memory fallback', { key, error });
       this.storageAvailable = false;
       this.fallbackStorage.delete(key);
     }

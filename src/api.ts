@@ -22,15 +22,27 @@ let isInitializing = false;
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
   try {
+    debugLog.info('API', 'SDK initialization started', { id: appConfig.id, mode: appConfig.mode });
+
     if (typeof window === 'undefined' || typeof document === 'undefined') {
+      debugLog.clientError(
+        'API',
+        'Browser environment required - this library can only be used in a browser environment',
+        {
+          hasWindow: typeof window !== 'undefined',
+          hasDocument: typeof document !== 'undefined',
+        },
+      );
       throw new Error('This library can only be used in a browser environment');
     }
 
     if (app) {
+      debugLog.debug('API', 'SDK already initialized, skipping duplicate initialization', { projectId: appConfig.id });
       return;
     }
 
     if (isInitializing) {
+      debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
       // Instead of throwing, wait for the ongoing initialization to complete
       let retries = 0;
       const maxRetries = 20; // 2 seconds maximum wait (reduced for better performance)
@@ -41,22 +53,38 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
       }
 
       if (app) {
+        debugLog.debug('API', 'Concurrent initialization completed successfully', {
+          projectId: appConfig.id,
+          retriesUsed: retries,
+        });
         return; // Initialization completed successfully
       }
 
       if (isInitializing) {
+        debugLog.error('API', 'Initialization timeout - concurrent initialization took too long', {
+          projectId: appConfig.id,
+          retriesUsed: retries,
+          maxRetries,
+        });
         throw new Error('App initialization timeout - concurrent initialization took too long');
       }
     }
 
     isInitializing = true;
 
+    debugLog.debug('API', 'Validating and normalizing configuration', { projectId: appConfig.id });
     const validatedConfig = validateAndNormalizeConfig(appConfig);
+
+    debugLog.debug('API', 'Creating App instance', { projectId: validatedConfig.id });
     const instance = new App();
 
     await instance.init(validatedConfig);
 
     app = instance;
+    debugLog.info('API', 'SDK initialization completed successfully', {
+      projectId: validatedConfig.id,
+      mode: validatedConfig.mode,
+    });
   } catch (error) {
     app = null;
 
@@ -84,12 +112,21 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
   try {
     if (!app) {
+      debugLog.clientError('API', 'Custom event failed - SDK not initialized. Please call TraceLog.init() first', {
+        eventName: name,
+        hasMetadata: !!metadata,
+      });
       throw new Error('App not initialized');
     }
 
+    debugLog.debug('API', 'Sending custom event', {
+      eventName: name,
+      hasMetadata: !!metadata,
+      metadataKeys: metadata ? Object.keys(metadata) : [],
+    });
     app.sendCustomEvent(name, metadata);
   } catch (error) {
-    debugLog.error('API', 'Event tracking failed', { error });
+    debugLog.error('API', 'Event tracking failed', { eventName: name, error, hasMetadata: !!metadata });
 
     if (
       error instanceof Error &&
@@ -129,15 +166,19 @@ export const getInitializationStatus = (): {
  */
 export const destroy = (): void => {
   try {
+    debugLog.info('API', 'SDK cleanup initiated');
+
     if (!app) {
+      debugLog.warn('API', 'Cleanup called but SDK was not initialized');
       throw new Error('App not initialized');
     }
 
     app.destroy();
     app = null;
     isInitializing = false;
+    debugLog.info('API', 'SDK cleanup completed successfully');
   } catch (error) {
-    debugLog.error('API', 'Cleanup failed', { error });
+    debugLog.error('API', 'Cleanup failed', { error, hadApp: !!app, wasInitializing: isInitializing });
   }
 };
 

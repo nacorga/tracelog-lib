@@ -2,6 +2,7 @@ import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { ErrorType, EventType } from '../types';
 import { normalizeUrl } from '../utils';
+import { debugLog } from '../utils/logging';
 
 interface ExtendedXHR extends XMLHttpRequest {
   _tracelogStartTime?: number;
@@ -26,11 +27,15 @@ export class NetworkHandler extends StateManager {
   }
 
   startTracking(): void {
+    debugLog.info('NetworkHandler', 'Starting network error tracking');
+
     this.interceptFetch();
     this.interceptXHR();
   }
 
   stopTracking(): void {
+    debugLog.debug('NetworkHandler', 'Stopping network error tracking');
+
     window.fetch = this.originalFetch;
     XMLHttpRequest.prototype.open = this.originalXHROpen;
     XMLHttpRequest.prototype.send = this.originalXHRSend;
@@ -47,6 +52,12 @@ export class NetworkHandler extends StateManager {
         const duration = Date.now() - startTime;
 
         if (!response.ok) {
+          debugLog.debug('NetworkHandler', 'Fetch error detected', {
+            method,
+            url: this.normalizeUrlForTracking(url),
+            status: response.status,
+            statusText: response.statusText,
+          });
           this.trackNetworkError(
             method.toUpperCase(),
             this.normalizeUrlForTracking(url),
@@ -59,12 +70,19 @@ export class NetworkHandler extends StateManager {
         return response;
       } catch (error) {
         const duration = Date.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : 'Network Error';
+
+        debugLog.debug('NetworkHandler', 'Fetch exception caught', {
+          method,
+          url: this.normalizeUrlForTracking(url),
+          error: errorMessage,
+        });
 
         this.trackNetworkError(
           method.toUpperCase(),
           this.normalizeUrlForTracking(url),
           undefined,
-          error instanceof Error ? error.message : 'Network Error',
+          errorMessage,
           duration,
         );
 
@@ -109,13 +127,14 @@ export class NetworkHandler extends StateManager {
           const duration = Date.now() - startTime;
 
           if (xhr.status === 0 || xhr.status >= 400) {
-            trackNetworkError(
+            const statusText = xhr.statusText || 'Request Failed';
+            debugLog.debug('NetworkHandler', 'XHR error detected', {
               method,
-              normalizeUrlForTracking(url),
-              xhr.status,
-              xhr.statusText || 'Request Failed',
-              duration,
-            );
+              url: normalizeUrlForTracking(url),
+              status: xhr.status,
+              statusText,
+            });
+            trackNetworkError(method, normalizeUrlForTracking(url), xhr.status, statusText, duration);
           }
         }
 
@@ -138,8 +157,15 @@ export class NetworkHandler extends StateManager {
     const config = this.get('config');
 
     if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
+      debugLog.debug('NetworkHandler', 'Network error not sampled, skipping', {
+        errorSampling: config?.errorSampling,
+        method,
+        url,
+      });
       return;
     }
+
+    debugLog.warn('NetworkHandler', 'Network error tracked', { method, url, status, statusText, duration });
 
     this.eventManager.track({
       type: EventType.ERROR,

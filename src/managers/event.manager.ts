@@ -48,6 +48,10 @@ export class EventManager extends StateManager {
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
+
+    debugLog.info('EventManager', 'EventManager initialized', {
+      hasGoogleAnalytics: !!googleAnalytics,
+    });
   }
 
   track({
@@ -62,6 +66,7 @@ export class EventManager extends StateManager {
     session_start_recovered,
   }: Partial<EventData>): void {
     if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
+      debugLog.debug('EventManager', 'Event filtered by sampling', { type, samplingActive: true });
       return;
     }
 
@@ -90,6 +95,10 @@ export class EventManager extends StateManager {
         this.lastEvent.timestamp = now;
       }
 
+      debugLog.debug('EventManager', 'Duplicate event detected, timestamp updated', {
+        type,
+        queueLength: this.eventsQueue.length,
+      });
       return;
     }
 
@@ -171,7 +180,12 @@ export class EventManager extends StateManager {
     this.eventsQueue.push(payload);
 
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
-      this.eventsQueue.shift();
+      const removedEvent = this.eventsQueue.shift();
+      debugLog.warn('EventManager', 'Event queue overflow, oldest event removed', {
+        maxLength: MAX_EVENTS_QUEUE_LENGTH,
+        currentLength: this.eventsQueue.length,
+        removedEventType: removedEvent?.type,
+      });
     }
 
     if (!this.eventsQueueIntervalId) {
@@ -255,9 +269,9 @@ export class EventManager extends StateManager {
       }
       if (this.failureCount === 0) {
         this.circuitOpen = false;
-        if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
-          debugLog.debug('EventManager', 'Circuit breaker reset - resuming event sending');
-        }
+        debugLog.info('EventManager', 'Circuit breaker reset - resuming event sending', {
+          queueLength: this.eventsQueue.length,
+        });
       }
       return;
     }
@@ -282,14 +296,14 @@ export class EventManager extends StateManager {
 
       if (this.failureCount >= this.MAX_FAILURES) {
         this.circuitOpen = true;
+        const clearedEvents = this.eventsQueue.length;
         this.eventsQueue = []; // Clear queue to prevent memory leak
 
-        if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
-          debugLog.warn(
-            'EventManager',
-            `Circuit breaker opened after ${this.MAX_FAILURES} failures - clearing event queue to prevent memory leak`,
-          );
-        }
+        debugLog.warn('EventManager', 'Circuit breaker opened after consecutive failures', {
+          maxFailures: this.MAX_FAILURES,
+          clearedEvents,
+          failureCount: this.failureCount,
+        });
       }
     }
   }

@@ -18,6 +18,7 @@ import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 import { NetworkHandler } from './handlers/network.handler';
 import { ProjectIdValidationError } from './types/validation-error.types';
+import { debugLog } from './utils/logging';
 
 export class App extends StateManager {
   private isInitialized = false;
@@ -51,8 +52,11 @@ export class App extends StateManager {
 
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {
+      debugLog.debug('App', 'App already initialized, skipping re-initialization', { projectId: appConfig.id });
       return;
     }
+
+    debugLog.info('App', 'App initialization started', { projectId: appConfig.id, mode: appConfig.mode });
 
     // The app layer expects a fully validated and normalized config
     // This is a final safety check - config should already be validated by api.ts
@@ -60,13 +64,23 @@ export class App extends StateManager {
 
     try {
       this.initStorage();
+
       await this.setState(appConfig);
+
       await this.setIntegrations();
+
       this.setEventManager();
+
       await this.initHandlers();
+
       this.isInitialized = true;
+      debugLog.info('App', 'App initialization completed successfully', {
+        projectId: appConfig.id,
+        mode: appConfig.mode,
+      });
     } catch (error) {
       this.isInitialized = false;
+      debugLog.error('App', 'App initialization failed', { projectId: appConfig.id, error });
       throw error;
     }
   }
@@ -81,11 +95,19 @@ export class App extends StateManager {
     // At this point, config should be validated and normalized by api.ts
     // This is a safety check for runtime integrity
     if (!appConfig || typeof appConfig !== 'object') {
+      debugLog.clientError('App', 'Configuration object is required for initialization', {
+        receivedType: typeof appConfig,
+      });
       throw new ProjectIdValidationError('Configuration object is required', 'app');
     }
 
     // Since config comes pre-normalized, an empty ID here indicates a system error
     if (!appConfig.id || typeof appConfig.id !== 'string' || !appConfig.id.trim()) {
+      debugLog.clientError('App', 'Project ID is required and cannot be empty', {
+        hasId: !!appConfig.id,
+        idType: typeof appConfig.id,
+        idLength: appConfig.id ? appConfig.id.length : 0,
+      });
       throw new ProjectIdValidationError('Project ID is required', 'app');
     }
   }
@@ -94,6 +116,7 @@ export class App extends StateManager {
     const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
 
     if (valid) {
+      debugLog.debug('App', 'Custom event validated and queued', { eventName: name, hasMetadata: !!sanitizedMetadata });
       this.eventManager.track({
         type: EventType.CUSTOM,
         custom_event: {
@@ -101,17 +124,30 @@ export class App extends StateManager {
           ...(sanitizedMetadata && { metadata: sanitizedMetadata }),
         },
       });
-    } else if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
-      throw new Error(
-        `custom event "${name}" validation failed (${error ?? 'unknown error'}). Please, review your event data and try again.`,
-      );
+    } else {
+      const currentMode = this.get('config')?.mode;
+      debugLog.clientError('App', `Custom event validation failed: ${error ?? 'unknown error'}`, {
+        eventName: name,
+        validationError: error,
+        hasMetadata: !!metadata,
+        mode: currentMode,
+      });
+
+      if (currentMode === 'qa' || currentMode === 'debug') {
+        throw new Error(
+          `custom event "${name}" validation failed (${error ?? 'unknown error'}). Please, review your event data and try again.`,
+        );
+      }
     }
   }
 
   destroy(): void {
     if (!this.isInitialized) {
+      debugLog.warn('App', 'Destroy called but app was not initialized');
       return;
     }
+
+    debugLog.info('App', 'App cleanup started');
 
     if (this.googleAnalytics) {
       this.googleAnalytics.cleanup();
@@ -159,6 +195,7 @@ export class App extends StateManager {
     this.set('sessionId', null);
 
     this.isInitialized = false;
+    debugLog.info('App', 'App cleanup completed successfully');
   }
 
   private async setState(appConfig: AppConfig): Promise<void> {
@@ -210,11 +247,17 @@ export class App extends StateManager {
 
   private async initHandlers(): Promise<void> {
     this.initSessionHandler();
+
     this.initPageViewHandler();
+
     this.initClickHandler();
+
     this.initScrollHandler();
+
     await this.initPerformanceHandler();
+
     this.initErrorHandler();
+
     this.initNetworkHandler();
   }
 
