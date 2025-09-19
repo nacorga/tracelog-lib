@@ -1,5 +1,6 @@
 import * as CommonUtils from './common.utils';
 import * as EventTrackingUtils from './event-tracking.utils';
+import * as ErrorTrackingUtils from './error-tracking.utils';
 import * as SessionManagementUtils from './session-management.utils';
 import * as InitializationUtils from './initialization.utils';
 import * as PerformanceTrackingUtils from './performance-tracking.utils';
@@ -10,6 +11,9 @@ export const TestUtils = {
 
   // Event tracking utils
   ...EventTrackingUtils,
+
+  // Error tracking utils
+  ...ErrorTrackingUtils,
 
   // Session management utils
   ...SessionManagementUtils,

@@ -157,15 +157,23 @@ export class NetworkHandler extends StateManager {
     const config = this.get('config');
 
     if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
-      debugLog.debug('NetworkHandler', 'Network error not sampled, skipping', {
-        errorSampling: config?.errorSampling,
-        method,
-        url,
-      });
+      debugLog.debug(
+        'NetworkHandler',
+        `Network error not sampled, skipping (errorSampling: ${config?.errorSampling}, method: ${method}, url: ${url})`,
+        {
+          errorSampling: config?.errorSampling,
+          method,
+          url,
+        },
+      );
       return;
     }
 
-    debugLog.warn('NetworkHandler', 'Network error tracked', { method, url, status, statusText, duration });
+    debugLog.warn(
+      'NetworkHandler',
+      `Network error tracked: ${method} ${url} (status: ${status}, statusText: ${statusText}, duration: ${duration}ms)`,
+      { method, url, status, statusText, duration },
+    );
 
     this.eventManager.track({
       type: EventType.ERROR,

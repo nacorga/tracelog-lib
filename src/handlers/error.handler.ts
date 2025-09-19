@@ -43,15 +43,21 @@ export class ErrorHandler extends StateManager {
     const config = this.get('config');
 
     if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
-      debugLog.debug('ErrorHandler', 'Error not sampled, skipping', { errorSampling: config?.errorSampling });
+      debugLog.debug('ErrorHandler', `Error not sampled, skipping (errorSampling: ${config?.errorSampling})`, {
+        errorSampling: config?.errorSampling,
+      });
       return;
     }
 
-    debugLog.warn('ErrorHandler', 'JavaScript error captured', {
-      message: event.message,
-      filename: event.filename,
-      lineno: event.lineno,
-    });
+    debugLog.warn(
+      'ErrorHandler',
+      `JavaScript error captured: ${event.message} (filename: ${event.filename}, lineno: ${event.lineno})`,
+      {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+      },
+    );
 
     this.eventManager.track({
       type: EventType.ERROR,
@@ -72,7 +78,9 @@ export class ErrorHandler extends StateManager {
       return;
     }
 
-    debugLog.warn('ErrorHandler', 'Unhandled promise rejection captured', { reason: typeof event.reason });
+    debugLog.warn('ErrorHandler', `Unhandled promise rejection captured (reason: ${typeof event.reason})`, {
+      reason: typeof event.reason,
+    });
 
     let reason = 'Unknown rejection';
 
