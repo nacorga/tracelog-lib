@@ -62,7 +62,7 @@ export class SessionHandler extends StateManager {
       return;
     }
 
-    debugLog.info('SessionHandler', 'Starting session tracking');
+    debugLog.debug('SessionHandler', 'Starting session tracking');
 
     this.checkOrphanedSessions();
 

@@ -20,7 +20,7 @@ export class PerformanceHandler extends StateManager {
   }
 
   async startTracking(): Promise<void> {
-    debugLog.info('PerformanceHandler', 'Starting performance tracking');
+    debugLog.debug('PerformanceHandler', 'Starting performance tracking');
 
     await this.initWebVitals();
     this.observeLongTasks();

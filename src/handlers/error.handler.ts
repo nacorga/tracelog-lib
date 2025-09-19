@@ -18,7 +18,7 @@ export class ErrorHandler extends StateManager {
   }
 
   startTracking(): void {
-    debugLog.info('ErrorHandler', 'Starting error tracking');
+    debugLog.debug('ErrorHandler', 'Starting error tracking');
 
     this.setupErrorListener();
     this.setupUnhandledRejectionListener();

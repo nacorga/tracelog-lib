@@ -144,7 +144,7 @@ export class SessionManager extends StateManager {
       this.setupPageUnloadHandlers();
     }
 
-    debugLog.info('SessionManager', 'SessionManager initialized', {
+    debugLog.debug('SessionManager', 'SessionManager initialized', {
       sessionTimeout: this.config.timeout,
       deviceCapabilities: this.deviceCapabilities,
       unloadHandlersEnabled: this.sessionEndConfig.enablePageUnloadHandlers,

@@ -25,7 +25,7 @@ export class ScrollHandler extends StateManager {
     const raw = this.get('config').scrollContainerSelectors;
     const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
 
-    debugLog.info('ScrollHandler', 'Starting scroll tracking', { selectorsCount: selectors.length });
+    debugLog.debug('ScrollHandler', 'Starting scroll tracking', { selectorsCount: selectors.length });
 
     const elements: Array<Window | HTMLElement> = selectors
       .map((sel) => this.safeQuerySelector(sel))

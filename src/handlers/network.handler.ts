@@ -27,7 +27,7 @@ export class NetworkHandler extends StateManager {
   }
 
   startTracking(): void {
-    debugLog.info('NetworkHandler', 'Starting network error tracking');
+    debugLog.debug('NetworkHandler', 'Starting network error tracking');
 
     this.interceptFetch();
     this.interceptXHR();

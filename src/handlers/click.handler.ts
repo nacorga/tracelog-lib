@@ -21,7 +21,7 @@ export class ClickHandler extends StateManager {
       return;
     }
 
-    debugLog.info('ClickHandler', 'Starting click tracking');
+    debugLog.debug('ClickHandler', 'Starting click tracking');
 
     this.clickHandler = (event: Event): void => {
       const mouseEvent = event as MouseEvent;

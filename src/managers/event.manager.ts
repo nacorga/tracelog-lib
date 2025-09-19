@@ -49,7 +49,7 @@ export class EventManager extends StateManager {
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
 
-    debugLog.info('EventManager', 'EventManager initialized', {
+    debugLog.debug('EventManager', 'EventManager initialized', {
       hasGoogleAnalytics: !!googleAnalytics,
     });
   }
@@ -67,6 +67,7 @@ export class EventManager extends StateManager {
   }: Partial<EventData>): void {
     if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
       debugLog.debug('EventManager', 'Event filtered by sampling', { type, samplingActive: true });
+
       return;
     }
 
@@ -99,6 +100,7 @@ export class EventManager extends StateManager {
         type,
         queueLength: this.eventsQueue.length,
       });
+
       return;
     }
 
@@ -170,7 +172,7 @@ export class EventManager extends StateManager {
     const isQAMode = this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug';
 
     if (isQAMode) {
-      debugLog.debug('EventManager', `${payload.type} event: ${JSON.stringify(payload)}`);
+      debugLog.info('EventManager', `${payload.type} event: ${JSON.stringify(payload)}`);
     }
 
     if (!isQAMode && this.get('config')?.ipExcluded) {
@@ -181,6 +183,7 @@ export class EventManager extends StateManager {
 
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
       const removedEvent = this.eventsQueue.shift();
+
       debugLog.warn('EventManager', 'Event queue overflow, oldest event removed', {
         maxLength: MAX_EVENTS_QUEUE_LENGTH,
         currentLength: this.eventsQueue.length,

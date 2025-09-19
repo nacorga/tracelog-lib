@@ -19,7 +19,7 @@ export class PageViewHandler extends StateManager {
   }
 
   startTracking(): void {
-    debugLog.info('PageViewHandler', 'Starting page view tracking');
+    debugLog.debug('PageViewHandler', 'Starting page view tracking');
 
     this.trackInitialPageView();
     this.trackCurrentPage();
