@@ -58,16 +58,23 @@ export class SenderManager extends StateManager {
           eventsCount: persistedData.events.length,
           sessionId: persistedData.sessionId,
         });
+
         this.clearPersistedEvents();
       } else {
         debugLog.warn('SenderManager', 'Failed to recover persisted events, scheduling retry', {
           eventsCount: persistedData.events.length,
         });
+
         this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
       debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
     }
+  }
+
+  stop(): void {
+    this.clearRetryTimeout();
+    this.resetRetryState();
   }
 
   private canSendNow(): boolean {
@@ -163,18 +170,7 @@ export class SenderManager extends StateManager {
   }
 
   private logQueue(queue: BaseEventsQueueDto): void {
-    const events = queue.events;
-    const queueStructure = {
-      user_id: queue.user_id,
-      session_id: queue.session_id,
-      device: queue.device,
-      events_count: events.length,
-      first_type: events[0]?.type ?? null,
-      last_type: events.length > 0 ? events[events.length - 1]?.type : null,
-      has_global_metadata: !!queue.global_metadata,
-    };
-
-    debugLog.debug('SenderManager', `Queue structure: ${JSON.stringify(queueStructure)}`);
+    debugLog.info('SenderManager', ` ⏩ Queue snapshot`, queue);
   }
 
   private handleSendFailure(body: BaseEventsQueueDto): void {
@@ -229,8 +225,19 @@ export class SenderManager extends StateManager {
     }
 
     if (!this.canSendNow()) {
+      debugLog.info('SenderManager', `⏱️ Rate limited - skipping send`, {
+        eventsCount: body.events.length,
+        timeSinceLastSend: Date.now() - this.lastSendAttempt,
+      });
+
       return false;
     }
+
+    debugLog.info('SenderManager', `🌐 Sending events to server (async)`, {
+      eventsCount: body.events.length,
+      sessionId: body.session_id,
+      userId: body.user_id,
+    });
 
     this.lastSendAttempt = Date.now();
 
@@ -238,6 +245,11 @@ export class SenderManager extends StateManager {
       const success = await sendFn();
 
       if (success) {
+        debugLog.info('SenderManager', `✅ Successfully sent events to server`, {
+          eventsCount: body.events.length,
+          method: 'async',
+        });
+
         this.resetRetryState();
         this.clearPersistedEvents();
       } else {
@@ -245,6 +257,7 @@ export class SenderManager extends StateManager {
           eventsCount: body.events.length,
           method: 'async',
         });
+
         this.handleSendFailure(body);
       }
 
@@ -264,8 +277,20 @@ export class SenderManager extends StateManager {
     }
 
     if (!this.canSendNow()) {
+      debugLog.info('SenderManager', `⏱️ Rate limited - skipping send`, {
+        eventsCount: body.events.length,
+        timeSinceLastSend: Date.now() - this.lastSendAttempt,
+      });
+
       return false;
     }
+
+    debugLog.info('SenderManager', `🌐 Sending events to server (sync)`, {
+      eventsCount: body.events.length,
+      sessionId: body.session_id,
+      userId: body.user_id,
+      method: 'sendBeacon/XHR',
+    });
 
     this.lastSendAttempt = Date.now();
 
@@ -273,6 +298,11 @@ export class SenderManager extends StateManager {
       const success = sendFn();
 
       if (success) {
+        debugLog.info('SenderManager', `✅ Successfully sent events to server`, {
+          eventsCount: body.events.length,
+          method: 'sync',
+        });
+
         this.resetRetryState();
         this.clearPersistedEvents();
       } else {
@@ -280,11 +310,17 @@ export class SenderManager extends StateManager {
           eventsCount: body.events.length,
           method: 'sync',
         });
+
         this.handleSendFailure(body);
       }
 
       return success;
     } catch {
+      debugLog.info('SenderManager', `💥 Exception during event sending`, {
+        eventsCount: body.events.length,
+        method: 'sync',
+      });
+
       this.handleSendFailure(body);
 
       return false;
@@ -292,11 +328,7 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    const config = this.get('config');
-    const isQAMode = (config?.mode === 'qa' || config?.mode === 'debug') ?? false;
-    const isTestMode = ['demo', 'test'].includes(config?.id ?? '');
-
-    return isQAMode || isTestMode;
+    return ['demo', 'test'].includes(this.get('config').id);
   }
 
   private isSendBeaconAvailable(): boolean {
@@ -312,13 +344,5 @@ export class SenderManager extends StateManager {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
-  }
-
-  /**
-   * Stop all pending operations and clean up resources
-   */
-  stop(): void {
-    this.clearRetryTimeout();
-    this.resetRetryState();
   }
 }

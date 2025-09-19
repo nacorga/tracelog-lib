@@ -78,6 +78,13 @@ export class SessionHandler extends StateManager {
       try {
         const sessionResult = await this.createOrJoinSession();
         this.set('sessionId', sessionResult.sessionId);
+
+        debugLog.info('SessionHandler', '🏁 Session started', {
+          sessionId: sessionResult.sessionId,
+          recovered: sessionResult.recovered,
+          crossTabActive: !!this.crossTabSessionManager,
+        });
+
         this.trackSession(EventType.SESSION_START, sessionResult.recovered);
         this.persistSession(sessionResult.sessionId);
         this.startHeartbeat();
@@ -105,9 +112,12 @@ export class SessionHandler extends StateManager {
 
       this.sessionManager!.endSessionManaged('inactivity')
         .then((result) => {
-          if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
-            debugLog.debug('SessionHandler', `Inactivity session end result: ${JSON.stringify(result)}`);
-          }
+          debugLog.info('SessionHandler', '🛑 Session ended by inactivity', {
+            sessionId: this.get('sessionId'),
+            reason: result.reason,
+            success: result.success,
+            eventsFlushed: result.eventsFlushed,
+          });
 
           if (this.crossTabSessionManager) {
             this.crossTabSessionManager.endSession('inactivity');

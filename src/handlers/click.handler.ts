@@ -38,6 +38,12 @@ export class ClickHandler extends StateManager {
         return;
       }
 
+      debugLog.info('ClickHandler', '🖱️ Click detected on element', {
+        tagName: clickedElement.tagName,
+        className: clickedElement.className || 'none',
+        textContent: clickedElement.textContent?.slice(0, 50) ?? 'empty',
+      });
+
       const trackingElement = this.findTrackingElement(clickedElement);
       const relevantClickElement = this.getRelevantClickElement(clickedElement);
       const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);

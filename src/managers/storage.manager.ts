@@ -3,7 +3,7 @@ import { debugLog } from '../utils/logging';
 export class StorageManager {
   private readonly storage: globalThis.Storage | null = null;
   private readonly fallbackStorage = new Map<string, string>();
-  private storageAvailable = true;
+  private storageAvailable = false;
 
   constructor() {
     this.storage = this.init();

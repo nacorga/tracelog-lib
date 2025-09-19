@@ -26,14 +26,12 @@ class DebugLogger extends StateManager {
 
     switch (mode) {
       case 'production':
-        return false; // No logs in production
+        return false;
 
       case 'qa':
-        // Only client-facing logs in QA mode
-        return ['CLIENT_ERROR', 'CLIENT_WARN', 'INFO'].includes(level);
+        return ['INFO', 'CLIENT_ERROR', 'CLIENT_WARN'].includes(level);
 
       case 'debug':
-        // All logs in debug mode
         return true;
 
       default:
@@ -92,7 +90,7 @@ class DebugLogger extends StateManager {
    * Visible in QA and debug modes
    */
   clientError(namespace: string, message: string, data?: unknown): void {
-    this.logMessage('CLIENT_ERROR', namespace, message, data);
+    this.handleModeBasedEvent('CLIENT_ERROR', namespace, message, data);
   }
 
   /**
@@ -100,15 +98,15 @@ class DebugLogger extends StateManager {
    * Visible in QA and debug modes
    */
   clientWarn(namespace: string, message: string, data?: unknown): void {
-    this.logMessage('CLIENT_WARN', namespace, message, data);
+    this.handleModeBasedEvent('CLIENT_WARN', namespace, message, data);
   }
 
   /**
    * General operational information
-   * Visible in QA and debug modes
+   * QA mode: dispatches custom events, Debug mode: console logs
    */
   info(namespace: string, message: string, data?: unknown): void {
-    this.logMessage('INFO', namespace, message, data);
+    this.handleModeBasedEvent('INFO', namespace, message, data);
   }
 
   /**
@@ -141,6 +139,48 @@ class DebugLogger extends StateManager {
    */
   verbose(namespace: string, message: string, data?: unknown): void {
     this.logMessage('VERBOSE', namespace, message, data);
+  }
+
+  /**
+   * Handle the event based on the current mode
+   */
+  private handleModeBasedEvent(level: LogLevel, namespace: string, message: string, data?: unknown): void {
+    const mode = this.getCurrentMode();
+
+    if (mode === 'production') {
+      return;
+    }
+
+    if (mode === 'qa') {
+      this.dispatchEvent(level, namespace, message, data);
+    } else if (mode === 'debug') {
+      this.logMessage(level, namespace, message, data);
+    }
+  }
+
+  /**
+   * Dispatch custom event for QA mode
+   */
+  private dispatchEvent(level: LogLevel, namespace: string, message: string, data?: unknown): void {
+    if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') {
+      return;
+    }
+
+    try {
+      const event = new CustomEvent('tracelog:qa', {
+        detail: {
+          timestamp: new Date().toISOString(),
+          level,
+          namespace,
+          message,
+          data,
+        },
+      });
+
+      window.dispatchEvent(event);
+    } catch {
+      console.log(`[TraceLog:${namespace}] ${message}`, data);
+    }
   }
 }
 
