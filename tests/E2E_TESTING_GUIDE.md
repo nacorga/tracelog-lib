@@ -61,6 +61,10 @@ expect(result.error).toBeDefined();
 
 // Custom config for specific tests
 const customConfig = { id: 'test', sessionTimeout: 1000 };
+
+// Advanced: Wait for initialization events
+const initEvent = await TestUtils.waitForInitComplete(page);
+TestUtils.assertions.expectEventMatches(initEvent, 'App', 'initialization completed');
 ```
 
 ### Event Tests
@@ -69,6 +73,10 @@ await TestUtils.trackCustomEvent(page, { name: 'test_event', metadata: { key: 'v
 const events = await TestUtils.getTrackedEvents(page);
 const event = events.find((e: any) => e.type === 'CUSTOM');
 expect(event.custom_event.name).toBe('test_event');
+
+// Advanced: Wait for specific event capture
+const eventCaptured = await TestUtils.waitForCustomEventCapture(page, 'test_event');
+TestUtils.assertions.expectCustomEventMetadata(eventCaptured, { key: 'value' });
 ```
 
 ### Session Tests
@@ -77,24 +85,68 @@ await TestUtils.triggerUserActivity(page);
 await TestUtils.waitForSessionStart(page);
 const session = await TestUtils.getSessionData(page);
 expect((session as any).isActive).toBe(true);
+
+// Advanced: Wait for session events
+const sessionStartEvent = await TestUtils.waitForSessionEvent(page, 'start');
+TestUtils.assertions.expectEventMatches(sessionStartEvent, 'SessionManager', 'Session started');
+
+// End session and verify
+const sessionEndEvent = await TestUtils.waitForSessionEvent(page, 'end');
+TestUtils.assertions.expectSessionLifecycle([sessionStartEvent, sessionEndEvent]);
 ```
 
-### Event Listening (Advanced)
+### Event Capture (Simple & Reliable)
 ```ts
-// Listen for real-time TraceLog events
-const eventListener = await TestUtils.listenForTraceLogEvents(page);
+import { EventCapture, COMMON_FILTERS } from '../utils';
+
+const eventCapture = new EventCapture();
 
 try {
+  await eventCapture.startCapture(page);
   await TestUtils.initializeTraceLog(page);
 
   // Wait for specific events
-  await TestUtils.waitForTraceLogEvent(page, (event: unknown) =>
-    (event as any).namespace === 'App' && (event as any).message.includes('initialization completed')
-  );
+  const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, 3000);
+  expect(initEvent.namespace).toBe('App');
+  expect(initEvent.message).toContain('initialization');
+
+  // Get all captured events
+  const allEvents = eventCapture.getEvents();
+  expect(allEvents.length).toBeGreaterThan(0);
+
+  // Filter events by type
+  const sessionEvents = eventCapture.getEvents(COMMON_FILTERS.SESSION_START);
+  const errorEvents = eventCapture.getEvents(COMMON_FILTERS.ERROR);
 
 } finally {
-  await eventListener.cleanup();
+  await eventCapture.stopCapture();
 }
+```
+
+### Available Common Filters
+```ts
+COMMON_FILTERS.INITIALIZATION   // App initialization events
+COMMON_FILTERS.SESSION_START    // Session start events
+COMMON_FILTERS.SESSION_END      // Session end events
+COMMON_FILTERS.CUSTOM_EVENT     // Custom event tracking
+COMMON_FILTERS.PAGE_VIEW        // Page view events
+COMMON_FILTERS.CLICK            // Click tracking events
+COMMON_FILTERS.ERROR            // Error events
+```
+
+### Custom Event Filtering
+```ts
+// Custom filters for specific test needs
+const customEvent = await eventCapture.waitForEvent({
+  namespace: 'EventManager',
+  messageContains: 'specific_action'
+}, 2000);
+
+// Filter by namespace only
+const appEvents = eventCapture.getEvents({ namespace: 'App' });
+
+// Filter by message content
+const successEvents = eventCapture.getEvents({ messageContains: 'success' });
 ```
 
 ## 🔧 Test Environment Setup
