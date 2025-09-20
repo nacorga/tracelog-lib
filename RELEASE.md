@@ -23,7 +23,6 @@ git push origin feature/your-feature-name
   - ✅ Code quality (ESLint + Prettier)
   - ✅ Build integrity
   - ✅ E2E tests with Playwright
-  - ✅ Performance benchmarks
   - ✅ Package configuration validation
 - **Cannot merge until CI passes + code review**
 
@@ -84,7 +83,6 @@ npm run changelog:preview      # Preview changelog changes
 npm run check                  # Code quality checks
 npm run test:e2e              # E2E tests
 npm run build:all             # Build verification
-npm run performance:benchmark # Performance tests
 ```
 
 ## 🔄 CI/CD Pipeline
@@ -95,7 +93,6 @@ npm run performance:benchmark # Performance tests
 - ✅ Code quality (ESLint + Prettier)
 - ✅ Build integrity (ESM + CJS + Browser)
 - ✅ E2E test coverage (Playwright)
-- ✅ Performance benchmarks
 - ✅ Package configuration validation
 - ✅ Upload test artifacts if failures occur
 
@@ -137,7 +134,6 @@ The system analyzes conventional commits since the last tag:
 - **Code Quality**: ESLint + Prettier must pass
 - **Build Verification**: All builds (ESM/CJS/Browser) successful
 - **Test Coverage**: Complete E2E test suite with Playwright
-- **Performance**: Benchmarks within acceptable limits
 
 ### Release Security
 - **Branch Restriction**: Only releases from `main`
@@ -273,19 +269,6 @@ npm install @tracelog/sdk@latest
 # 2. Manually fix any issues (e.g., unpublish from NPM if needed)
 # 3. Re-run release workflow with --dry-run first
 ```
-
-## 📈 Metrics and Monitoring
-
-### Performance Benchmarks
-- **Initialization**: < 50ms
-- **Event Processing**: < 5ms average
-- **Bundle Size**: < 100KB (browser build)
-
-### Release Analytics
-- Complete release time
-- Tests executed and results
-- Generated build sizes
-- GitHub Actions performance
 
 ## 🎯 Best Practices
 

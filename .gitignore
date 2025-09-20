@@ -3,7 +3,6 @@
 .DS_Store
 /dist
 /node_modules
-/benchmark
 /coverage
 /test-results
 /test-reports

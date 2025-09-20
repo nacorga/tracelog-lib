@@ -159,7 +159,6 @@ This project uses a **branch protection strategy** to ensure code quality:
      - Code quality (ESLint + Prettier)
      - Build integrity
      - E2E tests
-     - Performance benchmarks
    - PR cannot be merged until CI passes
    - Code review required
 
@@ -172,7 +171,6 @@ This project uses a **branch protection strategy** to ensure code quality:
 - **Code Quality**: ESLint + Prettier enforced in CI
 - **Type Safety**: TypeScript strict mode required
 - **Testing**: E2E tests with Playwright for all features
-- **Performance**: Bundle size monitoring and benchmarks
 - **Security**: Dependency vulnerability scanning
 
 ## Versioning
