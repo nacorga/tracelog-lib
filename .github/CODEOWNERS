@@ -1,0 +1,29 @@
+# Code Owners Configuration
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners - these users will be requested for review on all changes
+* @nacorga
+
+# Core source code
+/src/ @nacorga
+
+# Build and configuration files
+/package.json @nacorga
+/package-lock.json @nacorga
+/tsconfig*.json @nacorga
+/vite.config.ts @nacorga
+/playwright.config.ts @nacorga
+
+# GitHub workflows and configuration
+/.github/ @nacorga
+
+# Scripts and automation
+/scripts/ @nacorga
+
+# Documentation
+/README.md @nacorga
+/CHANGELOG.md @nacorga
+/LICENSE @nacorga
+
+# Test files
+/tests/ @nacorga

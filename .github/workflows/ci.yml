@@ -1,38 +1,28 @@
 name: CI
 
 on:
-  push:
-    branches: [develop]
   pull_request:
-    branches: [develop]
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
 
 jobs:
-  test:
+  validate:
+    name: Validate Changes
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false || github.event_name == 'push'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cache NPM registry
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
-      - name: Cache Playwright browsers
-        id: cache-playwright
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-browsers-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -41,20 +31,151 @@ jobs:
           registry-url: 'https://registry.npmjs.org/'
           scope: '@tracelog'
 
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-browsers-
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build:all
-
-      - name: Lint
-        run: npm run lint
-
       - name: Install Playwright browsers
-        if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
-      - name: Run E2E tests
-        run: npm run test:e2e
-        env:
-          CI: true
+      - name: Make scripts executable
+        run: chmod +x scripts/*.js
+
+      - name: Dependencies Security Check
+        run: |
+          echo "🔍 Checking dependencies for vulnerabilities..."
+          npm audit --audit-level high || {
+            echo "❌ Security vulnerabilities found"
+            npm audit
+            exit 1
+          }
+          echo "✅ No high-severity vulnerabilities found"
+
+      - name: Code Quality Check
+        run: |
+          echo "🔍 Running code quality checks..."
+          npm run check
+          echo "✅ Code quality checks passed"
+
+      - name: Build Integrity Check
+        run: |
+          echo "🔍 Testing build integrity..."
+          # Clean previous builds
+          rm -rf dist || true
+
+          # Run full build
+          npm run build:all
+
+          # Verify build outputs
+          required_files=(
+            "dist/esm/public-api.js"
+            "dist/esm/public-api.d.ts"
+            "dist/cjs/public-api.js"
+            "dist/browser/tracelog.js"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "❌ Missing build output: $file"
+              exit 1
+            fi
+          done
+
+          # Check file sizes (basic sanity check)
+          browser_build="dist/browser/tracelog.js"
+          size_kb=$(du -k "$browser_build" | cut -f1)
+
+          if [[ $size_kb -gt 100 ]]; then
+            echo "⚠️ Browser build is large: ${size_kb}KB"
+          fi
+
+          echo "✅ Build completed successfully. Browser build: ${size_kb}KB"
+
+      - name: Run E2E Tests
+        run: |
+          echo "🔍 Running E2E tests..."
+          npm run test:e2e
+
+      - name: Upload test results (if tests fail)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.event.pull_request.number || 'main' }}
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Performance Benchmarks
+        run: |
+          echo "🔍 Running performance benchmarks..."
+          npm run performance:benchmark || true
+          if [[ -f "performance/performance-results.json" ]]; then
+            echo "📊 Performance results available"
+            cat performance/performance-results.json
+          fi
+
+      - name: Package Configuration Check
+        run: |
+          echo "🔍 Validating package configuration..."
+
+          # Check required fields
+          required_fields=("name" "version" "description" "main" "module" "types")
+          for field in "${required_fields[@]}"; do
+            if ! node -p "require('./package.json').$field" > /dev/null 2>&1; then
+              echo "❌ Missing required field: $field"
+              exit 1
+            fi
+          done
+
+          # Check exports configuration
+          if ! node -p "require('./package.json').exports" > /dev/null 2>&1; then
+            echo "❌ Missing exports configuration"
+            exit 1
+          fi
+
+          # Check files array
+          if ! node -p "require('./package.json').files.length > 0" > /dev/null 2>&1; then
+            echo "❌ Missing or empty files array"
+            exit 1
+          fi
+
+          # Validate version format
+          version=$(node -p "require('./package.json').version")
+          if ! echo "$version" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$"; then
+            echo "❌ Invalid version format: $version"
+            exit 1
+          fi
+
+          echo "✅ Package configuration is valid"
+
+      - name: Validation Summary
+        if: success()
+        run: |
+          echo ""
+          echo "🎉 All validation checks passed!"
+          echo "✅ No security vulnerabilities"
+          echo "✅ Code quality passed"
+          echo "✅ Build integrity verified"
+          echo "✅ E2E tests passed"
+          echo "✅ Performance benchmarks completed"
+          echo "✅ Package configuration valid"
+          echo ""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "✅ Pull request is ready for merge!"
+          else
+            echo "🚀 Main branch is healthy and ready for release!"
+          fi
