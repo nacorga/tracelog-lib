@@ -225,15 +225,6 @@ jobs:
           asset_name: tracelog-${{ steps.get-version.outputs.version }}.js
           asset_content_type: application/javascript
 
-      - name: Generate performance report
-        run: |
-          echo "🚀 Generating post-release performance report..."
-          npm run performance:benchmark || true
-          if [[ -f "performance/performance-results.json" ]]; then
-            echo "📊 Performance results available"
-            cat performance/performance-results.json
-          fi
-
       - name: Post-release validation
         if: github.event.inputs.dry_run != 'true'
         run: |

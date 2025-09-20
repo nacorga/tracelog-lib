@@ -119,15 +119,6 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      - name: Performance Benchmarks
-        run: |
-          echo "🔍 Running performance benchmarks..."
-          npm run performance:benchmark || true
-          if [[ -f "performance/performance-results.json" ]]; then
-            echo "📊 Performance results available"
-            cat performance/performance-results.json
-          fi
-
       - name: Package Configuration Check
         run: |
           echo "🔍 Validating package configuration..."
@@ -171,7 +162,6 @@ jobs:
           echo "✅ Code quality passed"
           echo "✅ Build integrity verified"
           echo "✅ E2E tests passed"
-          echo "✅ Performance benchmarks completed"
           echo "✅ Package configuration valid"
           echo ""
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
