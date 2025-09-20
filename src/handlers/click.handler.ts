@@ -2,6 +2,7 @@ import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH, INTERACTIVE_SELECTORS } from '.
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
+import { debugLog } from '../utils/logging';
 
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -16,8 +17,11 @@ export class ClickHandler extends StateManager {
 
   startTracking(): void {
     if (this.clickHandler) {
+      debugLog.debug('ClickHandler', 'Click tracking already active');
       return;
     }
+
+    debugLog.debug('ClickHandler', 'Starting click tracking');
 
     this.clickHandler = (event: Event): void => {
       const mouseEvent = event as MouseEvent;
@@ -29,7 +33,16 @@ export class ClickHandler extends StateManager {
             ? target.parentElement
             : null;
 
-      if (!clickedElement) return;
+      if (!clickedElement) {
+        debugLog.warn('ClickHandler', 'Click target not found or not an element');
+        return;
+      }
+
+      debugLog.info('ClickHandler', '🖱️ Click detected on element', {
+        tagName: clickedElement.tagName,
+        className: clickedElement.className || 'none',
+        textContent: clickedElement.textContent?.slice(0, 50) ?? 'empty',
+      });
 
       const trackingElement = this.findTrackingElement(clickedElement);
       const relevantClickElement = this.getRelevantClickElement(clickedElement);
@@ -85,7 +98,11 @@ export class ClickHandler extends StateManager {
         if (element.matches(selector)) {
           return element;
         }
-      } catch {
+      } catch (error) {
+        debugLog.warn('ClickHandler', 'Invalid selector in interactive elements check', {
+          selector,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
         continue;
       }
     }
@@ -97,7 +114,11 @@ export class ClickHandler extends StateManager {
         if (parent) {
           return parent;
         }
-      } catch {
+      } catch (error) {
+        debugLog.warn('ClickHandler', 'Invalid selector in parent element search', {
+          selector,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
         continue;
       }
     }

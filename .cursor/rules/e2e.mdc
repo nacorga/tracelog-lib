@@ -91,7 +91,7 @@ test.describe('Feature Name', () => {
 ### Configuration
 
 - Use `TEST_CONFIGS.DEFAULT` with `test` ID for E2E tests
-    - Enables `qaMode=true` and local config loading
+    - Enables `mode=debug` and local config loading
     - Avoid for regular mode or API config tests
 - Access constants from `TEST_CONSTANTS` via TestUtils
 

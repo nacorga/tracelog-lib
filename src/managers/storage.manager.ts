@@ -1,13 +1,17 @@
-import { log } from '../utils/logging/log.utils';
+import { debugLog } from '../utils/logging';
 
 export class StorageManager {
   private readonly storage: globalThis.Storage | null = null;
   private readonly fallbackStorage = new Map<string, string>();
-  private storageAvailable = true;
+  private storageAvailable = false;
 
   constructor() {
     this.storage = this.init();
     this.storageAvailable = this.storage !== null;
+
+    if (!this.storageAvailable) {
+      debugLog.warn('StorageManager', 'localStorage not available, using memory fallback');
+    }
   }
 
   getItem(key: string): string | null {
@@ -21,8 +25,8 @@ export class StorageManager {
       }
 
       return this.fallbackStorage.get(key) ?? null;
-    } catch {
-      log('warning', 'Storage getItem failed, using memory fallback');
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Storage getItem failed, using memory fallback', { key, error });
       this.storageAvailable = false;
       return this.fallbackStorage.get(key) ?? null;
     }
@@ -41,8 +45,8 @@ export class StorageManager {
       }
 
       this.fallbackStorage.set(key, value);
-    } catch {
-      log('warning', 'Storage setItem failed, using memory fallback');
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Storage setItem failed, using memory fallback', { key, error });
       this.storageAvailable = false;
       this.fallbackStorage.set(key, value);
     }
@@ -61,8 +65,8 @@ export class StorageManager {
       }
 
       this.fallbackStorage.delete(key);
-    } catch {
-      log('warning', 'Storage removeItem failed, using memory fallback');
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Storage removeItem failed, using memory fallback', { key, error });
       this.storageAvailable = false;
       this.fallbackStorage.delete(key);
     }

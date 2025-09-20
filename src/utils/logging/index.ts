@@ -1,1 +1,1 @@
-export * from './log.utils';
+export { debugLog } from './debug-logger.utils';

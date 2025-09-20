@@ -6,9 +6,6 @@ export const DEFAULT_CONFIG: Config = { id: TEST_ID };
 
 export const TEST_URLS = {
   INITIALIZATION_PAGE: '/',
-  VALIDATION_PAGE: '/pages/validation/index.html',
-  PAGE_UNLOAD_PAGE_URL: '/pages/page-unload/index.html',
-  PAGE_UNLOAD_SECOND_PAGE_URL: '/pages/page-unload/second-page.html',
 } as const;
 
 export const STATUS_TEXTS = {

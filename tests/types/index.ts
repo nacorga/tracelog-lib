@@ -1,5 +1,2 @@
 export * from './common.types';
-export * from './event.types';
-export * from './performance-tracking.types';
-export * from './resource.types';
-export * from './window.types';
+export * from './event-capture.types';

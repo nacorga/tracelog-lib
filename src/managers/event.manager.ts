@@ -5,7 +5,8 @@ import {
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants';
 import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
-import { getUTMParameters, isUrlPathExcluded, log } from '../utils';
+import { getUTMParameters, isUrlPathExcluded } from '../utils';
+import { debugLog } from '../utils/logging';
 import { SenderManager } from './sender.manager';
 import { SamplingManager } from './sampling.manager';
 import { StateManager } from './state.manager';
@@ -47,6 +48,10 @@ export class EventManager extends StateManager {
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
+
+    debugLog.debug('EventManager', 'EventManager initialized', {
+      hasGoogleAnalytics: !!googleAnalytics,
+    });
   }
 
   track({
@@ -60,7 +65,18 @@ export class EventManager extends StateManager {
     session_end_reason,
     session_start_recovered,
   }: Partial<EventData>): void {
+    debugLog.info('EventManager', `📥 Event captured: ${type}`, {
+      type,
+      page_url,
+      hasCustomEvent: !!custom_event,
+      hasClickData: !!click_data,
+      hasScrollData: !!scroll_data,
+      hasWebVitals: !!web_vitals,
+    });
+
     if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
+      debugLog.debug('EventManager', 'Event filtered by sampling', { type, samplingActive: true });
+
       return;
     }
 
@@ -89,6 +105,11 @@ export class EventManager extends StateManager {
         this.lastEvent.timestamp = now;
       }
 
+      debugLog.debug('EventManager', 'Duplicate event detected, timestamp updated', {
+        type,
+        queueLength: this.eventsQueue.length,
+      });
+
       return;
     }
 
@@ -98,8 +119,8 @@ export class EventManager extends StateManager {
     const isSessionEndEvent = type == EventType.SESSION_END;
 
     if (isRouteExcluded && (!isSessionEndEvent || (isSessionEndEvent && !hasStartSession))) {
-      if (this.get('config')?.qaMode) {
-        log('info', `Event ${type} on excluded route: ${page_url}`);
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.debug('EventManager', `Event ${type} on excluded route: ${page_url}`);
       }
 
       return;
@@ -132,12 +153,13 @@ export class EventManager extends StateManager {
       const matchedTags = this.tagsManager.getEventTagsIds(payload, this.get('device'));
 
       if (matchedTags?.length) {
-        payload.tags = this.get('config')?.qaMode
-          ? matchedTags.map((id) => ({
-              id,
-              key: this.get('config')?.tags?.find((t) => t.id === id)?.key ?? '',
-            }))
-          : matchedTags;
+        payload.tags =
+          this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug'
+            ? matchedTags.map((id) => ({
+                id,
+                key: this.get('config')?.tags?.find((t) => t.id === id)?.key ?? '',
+              }))
+            : matchedTags;
       }
     }
 
@@ -156,24 +178,36 @@ export class EventManager extends StateManager {
   }
 
   private processAndSend(payload: EventData): void {
-    const isQAMode = this.get('config')?.qaMode;
+    debugLog.info('EventManager', `🔄 Event processed and queued: ${payload.type}`, {
+      type: payload.type,
+      timestamp: payload.timestamp,
+      page_url: payload.page_url,
+      queueLengthBefore: this.eventsQueue.length,
+    });
 
-    if (isQAMode) {
-      log('info', `${payload.type} event: ${JSON.stringify(payload)}`);
-    }
+    if (this.get('config').ipExcluded) {
+      debugLog.info('EventManager', `❌ Event blocked: IP excluded`);
 
-    if (!isQAMode && this.get('config')?.ipExcluded) {
       return;
     }
 
     this.eventsQueue.push(payload);
 
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
-      this.eventsQueue.shift();
+      const removedEvent = this.eventsQueue.shift();
+
+      debugLog.warn('EventManager', 'Event queue overflow, oldest event removed', {
+        maxLength: MAX_EVENTS_QUEUE_LENGTH,
+        currentLength: this.eventsQueue.length,
+        removedEventType: removedEvent?.type,
+      });
     }
 
     if (!this.eventsQueueIntervalId) {
       this.initEventsQueueInterval();
+      debugLog.info('EventManager', `⏰ Event sender initialized - queue will be sent periodically`, {
+        queueLength: this.eventsQueue.length,
+      });
     }
 
     if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
@@ -184,8 +218,8 @@ export class EventManager extends StateManager {
   }
 
   private trackGoogleAnalyticsEvent(customEvent: CustomEventData): void {
-    if (this.get('config').qaMode) {
-      log('info', `Google Analytics event: ${JSON.stringify(customEvent)}`);
+    if (this.get('config').mode === 'qa' || this.get('config').mode === 'debug') {
+      debugLog.debug('EventManager', `Google Analytics event: ${JSON.stringify(customEvent)}`);
     } else if (this.googleAnalytics) {
       this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
     }
@@ -246,6 +280,12 @@ export class EventManager extends StateManager {
       return;
     }
 
+    debugLog.info('EventManager', `📤 Preparing to send event queue`, {
+      queueLength: this.eventsQueue.length,
+      hasSessionId: !!this.get('sessionId'),
+      circuitOpen: this.circuitOpen,
+    });
+
     // Circuit breaker: skip sending if circuit is open
     if (this.circuitOpen) {
       if (this.failureCount > 0) {
@@ -253,18 +293,15 @@ export class EventManager extends StateManager {
       }
       if (this.failureCount === 0) {
         this.circuitOpen = false;
-        if (this.get('config')?.qaMode) {
-          log('info', 'Circuit breaker reset - resuming event sending');
-        }
+        debugLog.info('EventManager', 'Circuit breaker reset - resuming event sending', {
+          queueLength: this.eventsQueue.length,
+        });
       }
       return;
     }
 
     if (!this.get('sessionId')) {
-      if (this.get('config')?.qaMode) {
-        log('info', `Queue pending: ${this.eventsQueue.length} events waiting for active session`);
-      }
-
+      debugLog.info('EventManager', `⏳ Queue waiting: ${this.eventsQueue.length} events waiting for active session`);
       return;
     }
 
@@ -272,22 +309,32 @@ export class EventManager extends StateManager {
     const success = this.dataSender.sendEventsQueue(body);
 
     if (success) {
+      debugLog.info('EventManager', `✅ Event queue sent successfully`, {
+        eventsCount: body.events.length,
+        sessionId: body.session_id,
+        uniqueEventsAfterDedup: body.events.length,
+      });
       this.eventsQueue = [];
       this.failureCount = 0;
     } else {
+      debugLog.info('EventManager', `❌ Failed to send event queue`, {
+        eventsCount: body.events.length,
+        failureCount: this.failureCount + 1,
+        willOpenCircuit: this.failureCount + 1 >= this.MAX_FAILURES,
+      });
       this.eventsQueue = body.events;
       this.failureCount++;
 
       if (this.failureCount >= this.MAX_FAILURES) {
         this.circuitOpen = true;
+        const clearedEvents = this.eventsQueue.length;
         this.eventsQueue = []; // Clear queue to prevent memory leak
 
-        if (this.get('config')?.qaMode) {
-          log(
-            'warning',
-            `Circuit breaker opened after ${this.MAX_FAILURES} failures - clearing event queue to prevent memory leak`,
-          );
-        }
+        debugLog.warn('EventManager', 'Circuit breaker opened after consecutive failures', {
+          maxFailures: this.MAX_FAILURES,
+          clearedEvents,
+          failureCount: this.failureCount,
+        });
       }
     }
   }

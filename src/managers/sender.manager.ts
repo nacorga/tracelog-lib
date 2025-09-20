@@ -8,7 +8,7 @@ import {
   API_BASE_URL,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto } from '../types';
-import { log, logUnknown } from '../utils';
+import { debugLog } from '../utils/logging';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -54,13 +54,27 @@ export class SenderManager extends StateManager {
       const success = this.sendEventsQueue(recoveryBody);
 
       if (success) {
+        debugLog.info('SenderManager', 'Persisted events recovered successfully', {
+          eventsCount: persistedData.events.length,
+          sessionId: persistedData.sessionId,
+        });
+
         this.clearPersistedEvents();
       } else {
+        debugLog.warn('SenderManager', 'Failed to recover persisted events, scheduling retry', {
+          eventsCount: persistedData.events.length,
+        });
+
         this.scheduleRetry(recoveryBody);
       }
     } catch (error) {
-      logUnknown('error', 'Failed to recover persisted events', error);
+      debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
     }
+  }
+
+  stop(): void {
+    this.clearRetryTimeout();
+    this.resetRetryState();
   }
 
   private canSendNow(): boolean {
@@ -81,7 +95,7 @@ export class SenderManager extends StateManager {
 
       return response.ok;
     } catch (error) {
-      logUnknown('error', 'Failed to send events async', error);
+      debugLog.error('SenderManager', 'Failed to send events async', { error });
 
       return false;
     }
@@ -118,7 +132,7 @@ export class SenderManager extends StateManager {
 
       return xhr.status >= 200 && xhr.status < 300;
     } catch (error) {
-      logUnknown('error', 'Sync XHR failed', error);
+      debugLog.error('SenderManager', 'Sync XHR failed', { error });
 
       return false;
     }
@@ -156,18 +170,7 @@ export class SenderManager extends StateManager {
   }
 
   private logQueue(queue: BaseEventsQueueDto): void {
-    const events = queue.events;
-    const queueStructure = {
-      user_id: queue.user_id,
-      session_id: queue.session_id,
-      device: queue.device,
-      events_count: events.length,
-      first_type: events[0]?.type ?? null,
-      last_type: events.length > 0 ? events[events.length - 1]?.type : null,
-      has_global_metadata: !!queue.global_metadata,
-    };
-
-    log('info', `Queue structure: ${JSON.stringify(queueStructure)}`);
+    debugLog.info('SenderManager', ` ⏩ Queue snapshot`, queue);
   }
 
   private handleSendFailure(body: BaseEventsQueueDto): void {
@@ -188,7 +191,7 @@ export class SenderManager extends StateManager {
 
       this.storeManager.setItem(this.queueStorageKey, JSON.stringify(persistedData));
     } catch (error) {
-      logUnknown('error', 'Failed to persist events', error);
+      debugLog.error('SenderManager', 'Failed to persist events', { error });
     }
   }
 
@@ -222,8 +225,19 @@ export class SenderManager extends StateManager {
     }
 
     if (!this.canSendNow()) {
+      debugLog.info('SenderManager', `⏱️ Rate limited - skipping send`, {
+        eventsCount: body.events.length,
+        timeSinceLastSend: Date.now() - this.lastSendAttempt,
+      });
+
       return false;
     }
+
+    debugLog.info('SenderManager', `🌐 Sending events to server (async)`, {
+      eventsCount: body.events.length,
+      sessionId: body.session_id,
+      userId: body.user_id,
+    });
 
     this.lastSendAttempt = Date.now();
 
@@ -231,9 +245,19 @@ export class SenderManager extends StateManager {
       const success = await sendFn();
 
       if (success) {
+        debugLog.info('SenderManager', `✅ Successfully sent events to server`, {
+          eventsCount: body.events.length,
+          method: 'async',
+        });
+
         this.resetRetryState();
         this.clearPersistedEvents();
       } else {
+        debugLog.warn('SenderManager', 'Failed to send events', {
+          eventsCount: body.events.length,
+          method: 'async',
+        });
+
         this.handleSendFailure(body);
       }
 
@@ -253,8 +277,20 @@ export class SenderManager extends StateManager {
     }
 
     if (!this.canSendNow()) {
+      debugLog.info('SenderManager', `⏱️ Rate limited - skipping send`, {
+        eventsCount: body.events.length,
+        timeSinceLastSend: Date.now() - this.lastSendAttempt,
+      });
+
       return false;
     }
+
+    debugLog.info('SenderManager', `🌐 Sending events to server (sync)`, {
+      eventsCount: body.events.length,
+      sessionId: body.session_id,
+      userId: body.user_id,
+      method: 'sendBeacon/XHR',
+    });
 
     this.lastSendAttempt = Date.now();
 
@@ -262,14 +298,29 @@ export class SenderManager extends StateManager {
       const success = sendFn();
 
       if (success) {
+        debugLog.info('SenderManager', `✅ Successfully sent events to server`, {
+          eventsCount: body.events.length,
+          method: 'sync',
+        });
+
         this.resetRetryState();
         this.clearPersistedEvents();
       } else {
+        debugLog.warn('SenderManager', 'Failed to send events', {
+          eventsCount: body.events.length,
+          method: 'sync',
+        });
+
         this.handleSendFailure(body);
       }
 
       return success;
     } catch {
+      debugLog.info('SenderManager', `💥 Exception during event sending`, {
+        eventsCount: body.events.length,
+        method: 'sync',
+      });
+
       this.handleSendFailure(body);
 
       return false;
@@ -277,11 +328,7 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    const config = this.get('config');
-    const isQAMode = config?.qaMode ?? false;
-    const isTestMode = ['demo', 'test'].includes(config?.id ?? '');
-
-    return isQAMode || isTestMode;
+    return ['demo', 'test'].includes(this.get('config').id);
   }
 
   private isSendBeaconAvailable(): boolean {
@@ -297,13 +344,5 @@ export class SenderManager extends StateManager {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
-  }
-
-  /**
-   * Stop all pending operations and clean up resources
-   */
-  stop(): void {
-    this.clearRetryTimeout();
-    this.resetRetryState();
   }
 }

@@ -4,6 +4,7 @@ export interface ConsoleMonitor {
   traceLogWarnings: string[];
   traceLogInfo: string[];
   debugLogs: string[];
+  contextErrors: string[];
   cleanup: () => void;
   getAnomalies: () => string[];
 }

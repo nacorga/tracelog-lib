@@ -6,7 +6,17 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: process.env.CI ? 4 : undefined,
-  reporter: process.env.CI ? [['list'], ['github'], ['html', { outputFolder: 'playwright-report', open: 'never' }]] : 'html',
+  reporter: process.env.CI ?
+  [
+    ['list'],
+    ['github'],
+    ['html', { outputFolder: 'playwright-report', open: 'never' }]
+  ] : [
+    ['list'],
+    ['html', { outputFolder: 'playwright-report' }],
+    ['json', { outputFile: 'playwright-report/test-results.json' }],
+    ['./tests/failed-reporter.ts']
+  ],
   globalTimeout: process.env.CI ? 15 * 60 * 1000 : undefined,
   timeout: process.env.CI ? 45 * 1000 : 30 * 1000,
   expect: {
