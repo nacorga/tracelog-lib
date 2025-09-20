@@ -53,6 +53,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Run E2E tests
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "Running E2E tests..."
+          npm run test:e2e
+
+      - name: Upload test results (if tests fail)
+        if: failure() && github.event.inputs.skip_tests != 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report-pre-release
+          path: playwright-report/
+          retention-days: 7
+
       - name: Check if release is needed
         id: check-release
         run: |
