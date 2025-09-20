@@ -1,5 +1,21 @@
 # Changelog
 
+
+## [0.0.2] - 2025-09-20
+
+### 🔧 Other Changes
+
+- Update documentation and references from TraceLog SDK to TraceLog Events Library ([6c0068c](../../commit/6c0068c4c247826897db0254f6a072e61128500b))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-sdk/compare/v0.0.1...v0.0.2
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
