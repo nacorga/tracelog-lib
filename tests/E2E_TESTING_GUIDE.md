@@ -2,13 +2,12 @@
 
 ## 🎯 Core Requirements
 
-* **Testing Bridge**: Use `window.__traceLogTestBridge` (auto-injected when `NODE_ENV=e2e`)
-* **TestUtils**: All utilities via `TestUtils` namespace
-* **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`
-* **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile
-* **Test ID**: Use `{ id: 'test' }` for automatic debug mode and full logging
+- **Test ID**: Use `{ id: 'test' }` (enables debug mode and full logging)
+- **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`
+- **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile
+- **Testing Bridge**: Auto-injected `window.__traceLogTestBridge` when `NODE_ENV=e2e`
 
-## 📝 Mandatory Test Structure
+## 📝 Basic Test Structure
 
 ```ts
 import { test, expect } from '@playwright/test';
@@ -36,172 +35,125 @@ test('should validate behavior', async ({ page }) => {
 
 ```
 tests/
-├── constants/[domain].constants.ts   # NO hardcoded values
-├── utils/[domain].utils.ts           # Pure helper functions
-├── types/[domain].types.ts           # TypeScript interfaces
-└── e2e/[domain]/test-name.spec.ts    # Test files by domain
+├── constants/[domain].constants.ts   # Test data constants
+├── utils/[domain].utils.ts           # Helper functions
+├── types/[domain].types.ts           # TypeScript types
+└── e2e/[domain]/test-name.spec.ts    # Test files
 ```
 
-**Domains**: initialization, session-management, event-tracking, performance-tracking, error-tracking, user-management, storage-management, queue-management, configuration, integrations, security-qa, system-reliability, browser-compatibility, edge-cases
+**Domains**: initialization, session-management, event-tracking, performance-tracking, error-tracking, user-management
 
 ## 🛠️ Essential Patterns
 
-### Initialization Tests
+### Initialization
 ```ts
-// Standard test config (auto debug mode + full logging)
-const config = { id: 'test' };
-
-// Valid: { id: 'test' }
-expect(result.success).toBe(true);
-expect(appInstance.isInitialized).toBe(true);
-
-// Invalid: { id: '' }
-expect(result.success).toBe(false);
-expect(result.error).toBeDefined();
-
-// Custom config for specific tests
-const customConfig = { id: 'test', sessionTimeout: 1000 };
-
-// Advanced: Wait for initialization events
-const initEvent = await TestUtils.waitForInitComplete(page);
-TestUtils.assertions.expectEventMatches(initEvent, 'App', 'initialization completed');
+const config = { id: 'test' }; // Auto debug mode + full logging
+const initResult = await TestUtils.initializeTraceLog(page, config);
+expect(initResult.success).toBe(true);
 ```
 
-### Event Tests
+### Event Tracking
 ```ts
 await TestUtils.trackCustomEvent(page, { name: 'test_event', metadata: { key: 'value' } });
 const events = await TestUtils.getTrackedEvents(page);
 const event = events.find((e: any) => e.type === 'CUSTOM');
 expect(event.custom_event.name).toBe('test_event');
-
-// Advanced: Wait for specific event capture
-const eventCaptured = await TestUtils.waitForCustomEventCapture(page, 'test_event');
-TestUtils.assertions.expectCustomEventMetadata(eventCaptured, { key: 'value' });
 ```
 
-### Session Tests
+### Session Management
 ```ts
 await TestUtils.triggerUserActivity(page);
 await TestUtils.waitForSessionStart(page);
 const session = await TestUtils.getSessionData(page);
 expect((session as any).isActive).toBe(true);
-
-// Advanced: Wait for session events
-const sessionStartEvent = await TestUtils.waitForSessionEvent(page, 'start');
-TestUtils.assertions.expectEventMatches(sessionStartEvent, 'SessionManager', 'Session started');
-
-// End session and verify
-const sessionEndEvent = await TestUtils.waitForSessionEvent(page, 'end');
-TestUtils.assertions.expectSessionLifecycle([sessionStartEvent, sessionEndEvent]);
 ```
 
-### Event Capture (Simple & Reliable)
+### Event Capture
 ```ts
 import { EventCapture, COMMON_FILTERS } from '../utils';
 
 const eventCapture = new EventCapture();
-
 try {
   await eventCapture.startCapture(page);
   await TestUtils.initializeTraceLog(page);
 
-  // Wait for specific events
   const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, 3000);
   expect(initEvent.namespace).toBe('App');
-  expect(initEvent.message).toContain('initialization');
-
-  // Get all captured events
-  const allEvents = eventCapture.getEvents();
-  expect(allEvents.length).toBeGreaterThan(0);
-
-  // Filter events by type
-  const sessionEvents = eventCapture.getEvents(COMMON_FILTERS.SESSION_START);
-  const errorEvents = eventCapture.getEvents(COMMON_FILTERS.ERROR);
-
 } finally {
   await eventCapture.stopCapture();
 }
 ```
 
-### Available Common Filters
+### Available Filters
 ```ts
 COMMON_FILTERS.INITIALIZATION   // App initialization events
 COMMON_FILTERS.SESSION_START    // Session start events
-COMMON_FILTERS.SESSION_END      // Session end events
 COMMON_FILTERS.CUSTOM_EVENT     // Custom event tracking
-COMMON_FILTERS.PAGE_VIEW        // Page view events
-COMMON_FILTERS.CLICK            // Click tracking events
 COMMON_FILTERS.ERROR            // Error events
 ```
 
-### Custom Event Filtering
-```ts
-// Custom filters for specific test needs
-const customEvent = await eventCapture.waitForEvent({
-  namespace: 'EventManager',
-  messageContains: 'specific_action'
-}, 2000);
+## 🔧 Environment Setup
 
-// Filter by namespace only
-const appEvents = eventCapture.getEvents({ namespace: 'App' });
-
-// Filter by message content
-const successEvents = eventCapture.getEvents({ messageContains: 'success' });
-```
-
-## 🔧 Test Environment Setup
-
-### Test Configuration Behavior
-ID `"test"` triggers special behavior in ConfigManager:
-- **Mode**: Automatically set to `"debug"` (full logging)
-- **Error Sampling**: Set to `1` (100% error capture)
-- **API Calls**: Skipped - uses local default config
-- **Logging**: Complete debug output in console
-- **Events**: Emits `tracelog:qa` events for real-time test validation (only for `id: 'test'` or `id: 'demo'`)
-
-### Fixture Modification
-Modify `tests/fixtures/index.html` when testing specific scenarios:
-```html
-<!-- Add custom elements for click/scroll tests -->
-<button id="test-btn" data-tl-name="custom_event">Click Me</button>
-<div id="scroll-container" style="height: 200px; overflow-y: scroll;">...</div>
-
-<!-- Add test data attributes -->
-<meta name="test-scenario" content="large-payload-test">
-```
-
-### Custom Test Pages
-Create specific fixture pages for complex scenarios:
-```
-tests/fixtures/pages/
-├── performance-test.html     # Large DOM for performance tests
-├── error-simulation.html     # Controlled error scenarios
-├── multi-tab-test.html       # Cross-tab coordination tests
-└── storage-test.html         # LocalStorage edge cases
-```
+### Test Config Behavior
+`{ id: 'test' }` triggers:
+- Debug mode with full console logging
+- 100% error capture (errorSampling: 1)
+- Skips API calls, uses local config
+- Emits `tracelog:qa` events for validation
 
 ### Network Simulation
 ```ts
-// Simulate network failures for API tests
+// Block network requests
 await page.route('**/api/**', route => route.abort('failed'));
 
-// Mock API responses
+// Mock responses
 await page.route('**/config', route => route.fulfill({
   status: 200,
-  body: JSON.stringify({ sampling: 0.5, excludedPaths: ['/admin'] })
+  body: JSON.stringify({ sampling: 0.5 })
 }));
+```
+
+## ⚡ Best Practices
+
+### Timing
+```ts
+// GOOD: Wait for conditions
+await page.waitForFunction(() => window.__traceLogTestBridge?.isInitialized());
+
+// BAD: Arbitrary timeouts
+await page.waitForTimeout(1000); // Flaky
+```
+
+### Error Testing
+```ts
+// Trigger JavaScript error
+await page.evaluate(() => {
+  throw new Error('Test error for error tracking');
+});
+
+// Wait for error capture
+const errorEvent = await eventCapture.waitForEvent(COMMON_FILTERS.ERROR, 3000);
+```
+
+### Data Isolation
+```ts
+test.beforeEach(async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.__traceLogTestBridge?.destroy();
+  });
+});
 ```
 
 ## 🚫 Critical Don'ts
 
-* DON'T skip console monitoring/cleanup
-* DON'T hardcode test data or timeouts
-* DON'T access `TraceLog._app` directly
-* DON'T test single browser only
-* DON'T use real PII in test data
-* DON'T create external dependencies
-* DON'T modify fixtures without cleanup
-* DON'T assume timing - use proper waits
+- DON'T skip console monitoring cleanup
+- DON'T hardcode timeouts or test data
+- DON'T access `TraceLog._app` directly
+- DON'T test single browser only
+- DON'T use real PII in tests
+- DON'T assume timing - use proper waits
 
 ## ✅ Quality Gates
 
@@ -210,5 +162,3 @@ npm run test:e2e        # 100% pass rate
 npm run check           # No lint/format errors
 npm run build:browser   # Must succeed
 ```
-
-**Success Criteria**: 100% pass rate across all browsers, zero errors, all 70+ E2E_TESTS.json scenarios covered.
