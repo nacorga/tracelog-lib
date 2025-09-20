@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Intelligent Release Management System for TraceLog SDK
+ * Intelligent Release Management System for TraceLog Events Library
  *
  * This script automates the entire release process:
  * - Validates repository state and dependencies
@@ -59,7 +59,7 @@ class ReleaseManager {
 
   async run() {
     try {
-      this.log.title('TraceLog SDK Release Manager');
+      this.log.title('TraceLog Events Library Release Manager');
 
       if (this.dryRun) {
         this.log.warning('DRY RUN MODE - No changes will be made');
@@ -410,7 +410,7 @@ function parseArgs() {
 
 function showHelp() {
   console.log(`
-${colors.bright}TraceLog SDK Release Manager${colors.reset}
+${colors.bright}TraceLog Events Library Release Manager${colors.reset}
 
 Usage: node scripts/release.js [options]
 

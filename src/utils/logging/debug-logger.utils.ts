@@ -110,7 +110,7 @@ class DebugLogger extends StateManager {
   }
 
   /**
-   * Internal SDK errors
+   * Internal library errors
    * Visible only in debug mode
    */
   error(namespace: string, message: string, data?: unknown): void {
@@ -118,7 +118,7 @@ class DebugLogger extends StateManager {
   }
 
   /**
-   * Internal SDK warnings
+   * Internal library warnings
    * Visible only in debug mode
    */
   warn(namespace: string, message: string, data?: unknown): void {

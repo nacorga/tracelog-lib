@@ -1,10 +1,10 @@
-# TraceLog SDK
+# TraceLog Events Library
 
 **JavaScript library for web analytics and real-time event tracking**
 
 ## 🎯 Purpose
 
-Event tracking SDK that automatically captures user interactions (clicks, scrolls, navigation, web performance) and supports custom events. Features cross-tab session management, session recovery, Google Analytics integration, and event sampling.
+Event tracking library that automatically captures user interactions (clicks, scrolls, navigation, web performance) and supports custom events. Features cross-tab session management, session recovery, Google Analytics integration, and event sampling.
 
 ## 🏗️ Architecture
 

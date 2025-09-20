@@ -1,6 +1,6 @@
-# TraceLog SDK
+# TraceLog Events Library
 
-A lightweight TypeScript SDK for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
+A lightweight TypeScript Library for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
 
 ## Features
 

@@ -22,7 +22,7 @@ let isInitializing = false;
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
   try {
-    debugLog.info('API', 'SDK initialization started', { id: appConfig.id, mode: appConfig.mode });
+    debugLog.info('API', 'Library initialization started', { id: appConfig.id, mode: appConfig.mode });
 
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       debugLog.clientError(
@@ -37,7 +37,9 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     }
 
     if (app) {
-      debugLog.debug('API', 'SDK already initialized, skipping duplicate initialization', { projectId: appConfig.id });
+      debugLog.debug('API', 'Library already initialized, skipping duplicate initialization', {
+        projectId: appConfig.id,
+      });
       return;
     }
 
@@ -81,7 +83,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     await instance.init(validatedConfig);
 
     app = instance;
-    debugLog.info('API', 'SDK initialization completed successfully', {
+    debugLog.info('API', 'Library initialization completed successfully', {
       projectId: validatedConfig.id,
       mode: validatedConfig.mode,
     });
@@ -112,7 +114,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
   try {
     if (!app) {
-      debugLog.clientError('API', 'Custom event failed - SDK not initialized. Please call TraceLog.init() first', {
+      debugLog.clientError('API', 'Custom event failed - Library not initialized. Please call TraceLog.init() first', {
         eventName: name,
         hasMetadata: !!metadata,
       });
@@ -166,17 +168,17 @@ export const getInitializationStatus = (): {
  */
 export const destroy = (): void => {
   try {
-    debugLog.info('API', 'SDK cleanup initiated');
+    debugLog.info('API', 'Library cleanup initiated');
 
     if (!app) {
-      debugLog.warn('API', 'Cleanup called but SDK was not initialized');
+      debugLog.warn('API', 'Cleanup called but Library was not initialized');
       throw new Error('App not initialized');
     }
 
     app.destroy();
     app = null;
     isInitializing = false;
-    debugLog.info('API', 'SDK cleanup completed successfully');
+    debugLog.info('API', 'Library cleanup completed successfully');
   } catch (error) {
     debugLog.error('API', 'Cleanup failed', { error, hadApp: !!app, wasInitializing: isInitializing });
   }

@@ -1,10 +1,10 @@
-# TraceLog SDK - GitHub Copilot Instructions
+# TraceLog Events Library - GitHub Copilot Instructions
 
 **ALWAYS FOLLOW THESE INSTRUCTIONS FIRST.** Only search for additional context or run discovery commands if the information provided here is incomplete or found to be incorrect.
 
 ## Project Overview
 
-Event tracking SDK that automatically captures user interactions (clicks, scroll, navigation, web performance) and allows custom events. Includes cross-tab session management, session recovery, Google Analytics integration, and sampling capabilities.
+Event tracking library that automatically captures user interactions (clicks, scroll, navigation, web performance) and allows custom events. Includes cross-tab session management, session recovery, Google Analytics integration, and sampling capabilities.
 
 ## 📂 Key File Locations & Architecture
 
@@ -120,7 +120,7 @@ await TraceLog.init({
 // 5. Create E2E tests in tests/e2e/
 ```
 
-### Main SDK Flow
+### Main library Flow
 `TraceLog.init()` → `App.init()` → `setState()` → `initHandlers()` → Active DOM listeners
 
 `DOM Event` → `Handler` → `EventManager.track()` → `Queue` → `SenderManager` → `API Send`
@@ -157,7 +157,7 @@ npm run check           # Lint + format - MUST PASS before commit
 npm run build:all       # Verify both ESM/CJS builds work
 ```
 
-#### 2. Manual SDK Functionality Test (Required)
+#### 2. Manual Library Functionality Test (Required)
 ```bash
 # Terminal 1: Start test server
 npm run serve:test      # Runs on http://localhost:3000
@@ -219,9 +219,9 @@ Use these command outputs to save time instead of running discovery commands:
 
 ### Test Fixture Files (`tests/fixtures/`)
 ```
-index.html          # Main test page with SDK integration
+index.html          # Main test page with library integration
 web-vitals.html     # Web vitals testing page  
-tracelog.js         # Built SDK bundle (generated)
+tracelog.js         # Built library bundle (generated)
 json/               # Test data files
 ```
 

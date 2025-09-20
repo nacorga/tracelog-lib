@@ -1,8 +1,8 @@
-# TraceLog SDK Logging System
+# TraceLog Library Logging System
 
 ## Overview
 
-Dual logging system that separates client configuration errors from internal SDK debugging, with mode-based filtering through the new StateManager architecture.
+Dual logging system that separates client configuration errors from internal library debugging, with mode-based filtering through the new StateManager architecture.
 
 ## Modes & Levels
 
@@ -13,7 +13,7 @@ Dual logging system that separates client configuration errors from internal SDK
 | `debug` | All levels | Developer debugging - includes internal errors |
 
 **Client-Facing (QA mode):** CLIENT_ERROR, CLIENT_WARN, INFO
-**Internal SDK (Debug only):** ERROR, WARN, DEBUG, VERBOSE
+**Internal library (Debug only):** ERROR, WARN, DEBUG, VERBOSE
 
 ## Usage
 
@@ -24,12 +24,12 @@ import { debugLog } from '@/utils/logging';
 debugLog.clientError('ConfigManager', 'Invalid session timeout', { provided, min });
 debugLog.clientWarn('ScrollHandler', 'Invalid CSS selector', { selector });
 
-// Internal SDK issues
+// Internal library issues
 debugLog.error('SessionManager', 'Session state corrupted', { sessionId });
 debugLog.warn('SenderManager', 'Failed to send events', { error, retryCount });
 
 // General information
-debugLog.info('App', 'SDK initialized', { projectId, mode });
+debugLog.info('App', 'Library initialized', { projectId, mode });
 debugLog.debug('PerformanceHandler', 'Web Vitals loaded', { version });
 ```
 
@@ -45,7 +45,7 @@ await TraceLog.init({
 
 await TraceLog.init({
   id: 'project-id',
-  mode: 'debug'   // Shows all logs including internal SDK
+  mode: 'debug'   // Shows all logs including internal library
 });
 ```
 

@@ -1,7 +1,7 @@
 applyTo: "tests/e2e/**/*.spec.ts"
 ---
 
-## Playwright tests for TraceLog SDK
+## Playwright tests for TraceLog Events Library
 
 Follow these repo-specific requirements for reliable, maintainable E2E tests and to get the best results with GitHub Copilot coding agent.
 

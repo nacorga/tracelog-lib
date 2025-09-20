@@ -6,7 +6,7 @@ export type LogLevel =
   | 'CLIENT_ERROR'
   | 'CLIENT_WARN'
   | 'INFO'
-  // Internal SDK logs (debug mode only)
+  // Internal library logs (debug mode only)
   | 'ERROR'
   | 'WARN'
   | 'DEBUG'

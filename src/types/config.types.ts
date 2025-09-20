@@ -99,10 +99,10 @@ export interface AppConfig {
     };
   };
   /**
-   * Logging mode for the SDK.
+   * Logging mode for the library.
    * - 'production': No debug output (default)
    * - 'qa': Shows client-facing logs only (INFO, CLIENT_WARN, CLIENT_ERROR)
-   * - 'debug': Shows all logs including internal SDK errors
+   * - 'debug': Shows all logs including internal library errors
    *
    * @default 'production'
    */

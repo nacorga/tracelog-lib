@@ -3,15 +3,15 @@ globs: tests/e2e/**
 alwaysApply: false
 ---
 
-# E2E Testing Guide for TraceLog SDK
+# E2E Testing Guide for TraceLog Events Library
 
 **Playwright-based E2E testing guide for browser interaction testing**
 
 ## 🎯 Objectives
 
-- **Browser Validation**: Ensure TraceLog SDK works across multiple browsers and devices
+- **Browser Validation**: Ensure TraceLog Events Library works across multiple browsers and devices
 - **User Journey Testing**: Validate complete user flows and interactions
-- **Integration Verification**: Confirm SDK integrates seamlessly with web apps
+- **Integration Verification**: Confirm TraceLog Events Library integrates seamlessly with web apps
 - **Error Handling**: Test graceful degradation and error scenarios
 
 
@@ -20,13 +20,13 @@ alwaysApply: false
 ```
 tests/
 ├── e2e/                         # Playwright test files
-│   ├── initialization/          # SDK initialization tests
+│   ├── initialization/          # Library initialization tests
 │   ├── session-management/      # Session lifecycle tests
 │   ├── event-tracking/          # Event capture tests
 │   └── [other-categories]/      # Organized by feature
 ├── fixtures/                    # Test HTML pages and assets
 │   ├── index.html               # Main test page
-│   ├── tracelog.js              # Built SDK for testing
+│   ├── tracelog.js              # Built Library for testing
 │   └── pages/                   # Additional test pages
 └── constants/                   # Test constants
     ├── index.ts                 # Unified export
@@ -42,7 +42,7 @@ tests/
     └── [other-utils]            # Organized by domain
 ```
 
-**Test Flow**: Page Load → SDK Init → User Interactions → Event Capture → Validation
+**Test Flow**: Page Load → Library Init → User Interactions → Event Capture → Validation
 
 ## 🛠️ Tech Stack
 
@@ -97,7 +97,7 @@ test.describe('Feature Name', () => {
 
 ### Testing Bridge Architecture
 
-The SDK uses a **clean auto-injection testing bridge** that provides access to internal APIs without contaminating the public interface:
+The library uses a **clean auto-injection testing bridge** that provides access to internal APIs without contaminating the public interface:
 
 - **Environment-Based**: Only injects when `NODE_ENV=e2e`
 - **Clean API**: No `forTesting` exports in public API - keeps production bundle clean
@@ -126,7 +126,7 @@ window.__traceLogTestBridge = {
 ### Test Structure
 
 - **Setup:** Console monitoring and navigation
-- **Action:** User interaction and SDK calls
+- **Action:** User interaction and library calls
 - **Validation:** Assertions and error checking
 - **Cleanup:** Resource release in `finally` blocks
 
@@ -140,7 +140,7 @@ npm run test:e2e
 # Start local test server (in separate terminal)
 npm run serve:test
 
-# Build SDK for testing
+# Build library for testing
 npm run build:browser
 
 # Fix formatting and lint errors
@@ -277,7 +277,7 @@ expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
 ## 🎯 Quick Start
 
 ```bash
-# 1. Build SDK
+# 1. Build library
 npm run build:browser
 
 # 2. Start local server in a separate terminal
