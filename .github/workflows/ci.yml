@@ -116,8 +116,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.event.pull_request.number || 'main' }}
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Package Configuration Check
         run: |
