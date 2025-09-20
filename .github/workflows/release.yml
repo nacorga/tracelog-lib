@@ -126,6 +126,8 @@ jobs:
           node-version: 18
           registry-url: 'https://registry.npmjs.org/'
           scope: '@tracelog'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Cache dependencies
         uses: actions/cache@v3
