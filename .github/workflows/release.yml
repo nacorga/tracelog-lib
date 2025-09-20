@@ -76,14 +76,28 @@ jobs:
       - name: Make scripts executable
         run: chmod +x scripts/*.js
 
-      - name: Run pre-release validation
+      - name: Run pre-release validation (without E2E tests)
         run: |
           if [[ "${{ github.event.inputs.skip_tests }}" == "true" ]]; then
             echo "Skipping tests as requested"
-            node scripts/pre-release-check.js --skip-performance
+            node scripts/pre-release-check.js --skip-performance --skip-e2e
           else
-            node scripts/pre-release-check.js
+            node scripts/pre-release-check.js --skip-e2e
           fi
+
+      - name: Run E2E tests
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "Running E2E tests..."
+          npm run test:e2e
+
+      - name: Upload test results (if tests fail)
+        if: failure() && github.event.inputs.skip_tests != 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report-pre-release
+          path: playwright-report/
+          retention-days: 7
 
       - name: Check if release is needed
         id: check-release
@@ -159,6 +173,20 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+      - name: Run E2E tests before release
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "Running final E2E tests before release..."
+          npm run test:e2e
+
+      - name: Upload test results (if release tests fail)
+        if: failure() && github.event.inputs.skip_tests != 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report-release
+          path: playwright-report/
+          retention-days: 7
 
       - name: Execute release
         env:

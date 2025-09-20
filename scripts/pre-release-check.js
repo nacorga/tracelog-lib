@@ -27,6 +27,7 @@ class PreReleaseChecker {
     this.verbose = options.verbose || false;
     this.strict = options.strict || false;
     this.skipPerformance = options.skipPerformance || false;
+    this.skipE2e = options.skipE2e || false;
 
     this.projectRoot = path.join(__dirname, '..');
     this.packagePath = path.join(this.projectRoot, 'package.json');
@@ -61,10 +62,13 @@ class PreReleaseChecker {
       { name: 'Dependencies Security', fn: () => this.checkDependencySecurity() },
       { name: 'Code Quality', fn: () => this.checkCodeQuality() },
       { name: 'Build Integrity', fn: () => this.checkBuildIntegrity() },
-      { name: 'Test Coverage', fn: () => this.checkTestCoverage() },
       { name: 'Package Configuration', fn: () => this.checkPackageConfiguration() },
       { name: 'File Structure', fn: () => this.checkFileStructure() },
     ];
+
+    if (!this.skipE2e) {
+      checks.push({ name: 'Test Coverage', fn: () => this.checkTestCoverage() });
+    }
 
     if (!this.skipPerformance) {
       checks.push({ name: 'Performance Benchmarks', fn: () => this.checkPerformanceBenchmarks() });
@@ -394,6 +398,9 @@ function parseArgs() {
       case '--skip-performance':
         options.skipPerformance = true;
         break;
+      case '--skip-e2e':
+        options.skipE2e = true;
+        break;
       case '--help':
         showHelp();
         process.exit(0);
@@ -414,6 +421,7 @@ Options:
   --verbose           Show detailed output
   --strict            Fail on warnings
   --skip-performance  Skip performance benchmarks
+  --skip-e2e          Skip E2E tests
   --help              Show this help message
 
 Examples:
