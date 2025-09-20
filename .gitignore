@@ -3,9 +3,9 @@
 .DS_Store
 /dist
 /node_modules
-/benchmark
 /coverage
 /test-results
+/test-reports
 /playwright-report
 /tests/fixtures/tracelog.js
 /.llm

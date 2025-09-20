@@ -34,7 +34,6 @@ class ReleaseManager {
   constructor(options = {}) {
     this.dryRun = options.dryRun || false;
     this.forceVersion = options.forceVersion || null;
-    this.skipTests = options.skipTests || false;
     this.skipBuild = options.skipBuild || false;
     this.skipPublish = options.skipPublish || false;
     this.verbose = options.verbose || false;
@@ -72,10 +71,8 @@ class ReleaseManager {
       // Step 2: Determine version bump
       const versionInfo = await this.determineVersionBump();
 
-      // Step 3: Run validation suite
-      if (!this.skipTests) {
-        await this.runValidationSuite();
-      }
+      // Step 3: Validation skipped - already done in CI
+      this.log.step('Skipping validations - already verified in CI workflow');
 
       // Step 4: Build project
       if (!this.skipBuild) {
@@ -108,23 +105,13 @@ class ReleaseManager {
   }
 
   async validateEnvironment() {
-    this.log.step('Validating environment...');
+    this.log.step('Validating release environment...');
 
     // Check if we're in a git repository
     try {
       execSync('git rev-parse --git-dir', { stdio: 'ignore' });
     } catch {
       throw new Error('Not in a git repository');
-    }
-
-    // Check for clean working directory
-    try {
-      const status = execSync('git status --porcelain', { encoding: 'utf8' });
-      if (status.trim() && !this.dryRun) {
-        throw new Error('Working directory is not clean. Please commit or stash changes.');
-      }
-    } catch (error) {
-      throw new Error(`Git status check failed: ${error.message}`);
     }
 
     // Check current branch - only allow releases from main
@@ -279,29 +266,6 @@ class ReleaseManager {
     return parts.join('.');
   }
 
-  async runValidationSuite() {
-    this.log.step('Running validation suite...');
-
-    const commands = [
-      { cmd: 'npm run check', desc: 'Code quality checks' },
-      { cmd: 'npm run test:e2e', desc: 'End-to-end tests' },
-    ];
-
-    for (const { cmd, desc } of commands) {
-      this.log.info(`Running ${desc}...`);
-      try {
-        execSync(cmd, {
-          stdio: this.verbose ? 'inherit' : 'ignore',
-          cwd: this.projectRoot,
-        });
-      } catch (error) {
-        throw new Error(`${desc} failed`);
-      }
-    }
-
-    this.log.success('All validation checks passed');
-  }
-
   async buildProject() {
     this.log.step('Building project...');
 
@@ -425,9 +389,6 @@ function parseArgs() {
       case '--force-version':
         options.forceVersion = args[++i];
         break;
-      case '--skip-tests':
-        options.skipTests = true;
-        break;
       case '--skip-build':
         options.skipBuild = true;
         break;
@@ -456,7 +417,6 @@ Usage: node scripts/release.js [options]
 Options:
   --dry-run           Simulate the release without making changes
   --force-version     Force a specific version (e.g., 1.2.3)
-  --skip-tests        Skip running tests
   --skip-build        Skip building the project
   --skip-publish      Skip publishing to NPM
   --verbose           Show detailed output

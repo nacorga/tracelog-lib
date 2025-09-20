@@ -1,77 +1,112 @@
 # 🚀 Release Management System
 
-The TraceLog SDK release management system fully automates the versioning, documentation, and publishing process.
+**Professional CI/CD workflow** with branch protection, automated validation in Pull Requests, and streamlined releases.
 
-## 🚀 How to Make Your First Release (v0.0.1)
+## 🔄 New Development Workflow
 
-### ✅ Pre-Release Checklist
-- [ ] You're on `main` branch: `git branch --show-current`
-- [ ] Working directory is clean: `git status`
+### 1. **Feature Development**
+```bash
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Make your changes
+# ... code, test, commit ...
+
+# Push to remote
+git push origin feature/your-feature-name
+```
+
+### 2. **Pull Request Process**
+- Create PR to `main` branch
+- **CI automatically runs all validations:**
+  - ✅ Security audit
+  - ✅ Code quality (ESLint + Prettier)
+  - ✅ Build integrity
+  - ✅ E2E tests with Playwright
+  - ✅ Package configuration validation
+- **Cannot merge until CI passes + code review**
+
+### 3. **Release Process**
+Once your PR is merged to `main`:
+
+```bash
+# Go to GitHub Actions → Release workflow
+# Click "Run workflow" → Select options → Run
+```
+
+**That's it!** All validations were already done in CI. Release just handles versioning and publishing.
+
+## 🚀 How to Make Your First Release
+
+### ✅ Prerequisites
+- [ ] Feature merged to `main` branch
+- [ ] CI validation passed
 - [ ] NPM authenticated: `npm whoami`
-- [ ] Tests pass: `npm run test:e2e`
-- [ ] Build works: `npm run build:all`
 
-### Quick Steps for Release v0.0.1
+### Quick Release Steps
+1. **Go to GitHub Actions**
+   - Navigate to your repository
+   - Click "Actions" tab
+   - Select "Release" workflow
+
+2. **Run Release Workflow**
+   - Click "Run workflow"
+   - Select version type (auto/patch/minor/major)
+   - Click "Run workflow"
+
+3. **Monitor Progress**
+   - Watch the workflow execution
+   - Review generated changelog
+   - Verify NPM publication
+
+**No local commands needed!** Everything runs in GitHub Actions.
+
+## 📋 Available Options
+
+### GitHub Actions Release Workflow
+- **Version Type**: `auto` (default), `patch`, `minor`, `major`
+- **Force Version**: Specify exact version (e.g., `1.2.3`)
+- **Dry Run**: Simulate release without publishing
+- **Skip Tests**: Emergency option (not recommended)
+
+### Local Development Commands (Optional)
 ```bash
-# 1. Switch to main branch
-git checkout main && git pull origin main
-
-# 2. Verify clean state
-git status  # Should be clean
-
-# 3. Execute release
-npm run release
+# For local development only
+npm run release:dry-run        # Test release simulation locally
+npm run changelog:generate     # Generate changelog locally
+npm run changelog:preview      # Preview changelog changes
 ```
 
-**It's that simple!** The system automates everything: version detection, CHANGELOG, build, NPM publish, GitHub release.
-
-### If You Prefer to Validate First
+### CI Validation Commands (Automatic)
 ```bash
-# 1. Run validations
-npm run pre-release-check
-
-# 2. Simulate release
-npm run release:dry-run
-
-# 3. If everything OK, do real release
-npm run release
+# These run automatically in CI - no need to run manually
+npm run check                  # Code quality checks
+npm run test:e2e              # E2E tests
+npm run build:all             # Build verification
 ```
 
-## 📋 Available Commands
+## 🔄 CI/CD Pipeline
 
-### Automatic Releases
-```bash
-npm run release                 # Automatic release (detects version type)
-npm run release:dry-run        # Complete release simulation
-```
-
-### Manual Releases
-```bash
-npm run release:patch          # Increment patch version (1.0.0 → 1.0.1)
-npm run release:minor          # Increment minor version (1.0.0 → 1.1.0)
-npm run release:major          # Increment major version (1.0.0 → 2.0.0)
-```
-
-### Validation and Changelog
-```bash
-npm run pre-release-check      # Complete pre-release validation
-npm run changelog:generate     # Generate complete changelog
-npm run changelog:preview      # Preview changelog
-```
-
-## 🔄 Release Process
-
-### 1. **Automatic Validation**
-- ✅ Git repository state (clean, up-to-date)
-- ✅ Dependency vulnerability analysis
-- ✅ Code quality (lint + format)
+### 1. **Pull Request Validation (CI Workflow)**
+**Triggers**: Every PR to `main`
+- ✅ Security audit (npm audit)
+- ✅ Code quality (ESLint + Prettier)
 - ✅ Build integrity (ESM + CJS + Browser)
-- ✅ E2E test coverage
-- ✅ Package.json configuration
-- ✅ File structure
-- ✅ Performance benchmarks
+- ✅ E2E test coverage (Playwright)
+- ✅ Package configuration validation
+- ✅ Upload test artifacts if failures occur
 
-### 2. **Intelligent Version Detection**
+### 2. **Release Process (Release Workflow)**
+**Triggers**: Manual GitHub Actions workflow
+- ✅ Environment validation (git repo, main branch)
+- ✅ Version detection (conventional commits analysis)
+- ✅ Project build
+- ✅ Version update & changelog generation
+- ✅ Git tag creation
+- ✅ NPM publication with verification
+- ✅ GitHub release creation
+
+### 3. **Intelligent Version Detection**
 The system analyzes conventional commits since the last tag:
 
 - `feat:` → **minor** version bump
@@ -79,55 +114,65 @@ The system analyzes conventional commits since the last tag:
 - `BREAKING CHANGE` → **major** version bump
 - No significant changes → **patch** by default
 
-### 3. **Automatic Generation**
+### 4. **Automatic Generation**
 - 📝 **CHANGELOG.md** with automatic categorization
 - 🏷️ **Git tags** with annotations
 - 📦 **NPM publication** with verification
 - 🎯 **GitHub Release** with notes
 
-## 🛡️ Security Validations
+## 🛡️ Quality Gates & Security
 
-### Pre-Release Checks
-- **Branch Protection**: Only releases from `main`
-- **Working Directory**: Must be clean (no changes)
+### Branch Protection (GitHub Settings)
+- **Required Status Checks**: CI must pass before merge
+- **Required Reviews**: Code review mandatory
+- **Up-to-date branches**: PRs must be current with main
+- **Linear History**: Enforced clean git history
+- **Admin Enforcement**: No bypassing rules
+
+### CI Validation Gates
 - **Dependencies**: No critical or high vulnerabilities
-- **Build Verification**: All builds successful
-- **Test Coverage**: Complete E2E test suite
-- **Performance**: Benchmarks within limits
+- **Code Quality**: ESLint + Prettier must pass
+- **Build Verification**: All builds (ESM/CJS/Browser) successful
+- **Test Coverage**: Complete E2E test suite with Playwright
 
-### NPM Publishing
-- **Token Validation**: NPM authentication verification
-- **Version Constraints**: Semantic version validation
-- **Dry Run**: Simulation before real publication
-- **Post-Publish**: Publication success verification
+### Release Security
+- **Branch Restriction**: Only releases from `main`
+- **NPM Authentication**: Automatic token validation
+- **Version Validation**: Semantic versioning enforced
+- **Publication Verification**: Post-publish success check
 
-## 📊 GitHub Actions
+## 📊 GitHub Actions Workflows
 
-### Manual Workflow
+### CI Workflow (`.github/workflows/ci.yml`)
 ```yaml
-# Trigger: workflow_dispatch
-# Options: version_type, force_version, skip_tests, dry_run
+# Triggers: pull_request to main, push to main
+# Jobs: validate (security, quality, build, tests, performance)
+# Artifacts: Playwright reports on test failures
 ```
 
-### Automatic Workflow
+### Release Workflow (`.github/workflows/release.yml`)
 ```yaml
-# Trigger: push to main (excludes release files)
-# Automatically detects conventional commits
+# Trigger: workflow_dispatch (manual)
+# Options: version_type, force_version, dry_run
+# Jobs: check-release-needed → release → notifications
 ```
 
-## 🔧 Advanced Configuration
+## 🔧 Configuration
 
-### Environment Variables
+### Required GitHub Secrets
 ```bash
-NPM_TOKEN=npm_token_here    # For NPM publishing
-GITHUB_TOKEN=github_token_here    # For GitHub releases
+NPM_TOKEN=npm_token_here         # For NPM publishing
+GITHUB_TOKEN=github_token_here   # Auto-provided by GitHub
 ```
 
 ### Release System Scripts
-- `scripts/release.js` - Main orchestrator
-- `scripts/pre-release-check.js` - Validation suite
+- `scripts/release.js` - Main release orchestrator
 - `scripts/generate-changelog.js` - Changelog generator
 - `scripts/version-utils.js` - Version utilities
+- `scripts/extract-performance-data.js` - Performance analysis
+
+### Branch Protection Setup
+See `.github/BRANCH_PROTECTION.md` for complete configuration guide.
 
 ## 📝 Conventional Commits
 
@@ -149,115 +194,109 @@ BREAKING CHANGE: in body         # major bump
 
 ## 🚨 Troubleshooting
 
-### Specific Issues for First Release (v0.0.1)
+### Pull Request Issues
 
-#### ❌ "Releases can only be created from the 'main' branch"
+#### ❌ "CI workflow failing"
+1. Check failed step in GitHub Actions
+2. Download Playwright artifacts if E2E tests fail
+3. Fix issues locally and push new commit
+
+#### ❌ "Cannot merge PR"
+- Ensure CI status checks pass
+- Resolve all PR conversations
+- Get required code review approval
+- Update branch if behind main
+
+### Release Issues
+
+#### ❌ "Release workflow not appearing"
+- Ensure you're on `main` branch
+- Check `.github/workflows/release.yml` exists
+- Verify you have proper repository permissions
+
+#### ❌ "NPM authentication failed in Actions"
 ```bash
-git checkout main
-git pull origin main
+# Add NPM_TOKEN to GitHub repository secrets:
+# Settings → Secrets and variables → Actions → New repository secret
+# Name: NPM_TOKEN
+# Value: your_npm_token
 ```
 
-#### ❌ "Working directory is not clean"
+#### ❌ "Release failed during publishing"
+1. Check GitHub Actions logs for specific error
+2. Verify package.json version is correct
+3. Run dry-run first to test: select "Dry run" option
+
+### Local Development Issues
+
+#### ❌ "E2E tests failing locally"
 ```bash
-# See which files are modified
-git status
-
-# Commit changes
-git add .
-git commit -m "chore: prepare for release"
-
-# Or stash if you don't want to commit
-git stash
-```
-
-#### ❌ "Not authenticated with NPM"
-```bash
-# If you have .npmrc configured (like your case)
-npm whoami  # Should show your username
-
-# If it doesn't work, manual login
-npm login
-```
-
-#### ❌ "Test suite failed"
-```bash
-# Run tests manually to see errors
+# Run tests to see specific failures
 npm run test:e2e
 
-# If they fail, check logs in test-results/
+# Check test artifacts in playwright-report/
+# Fix failing tests and commit
 ```
 
-#### ❌ "Code quality checks failed"
+#### ❌ "Code quality checks failing"
 ```bash
-# Auto-fix
+# Auto-fix most issues
 npm run fix
 
 # Verify it's fixed
 npm run check
 ```
 
-### Failed Release
-1. Review validation logs: `npm run pre-release-check`
-2. Fix issues: `npm run fix`
-3. Verify tests: `npm run test:e2e`
-4. Try dry-run: `npm run release:dry-run`
-
-### Common Errors
-- **Working directory not clean**: Commit or stash changes
-- **NPM authentication**: Run `npm login`
-- **Tests failing**: Review and fix E2E tests
-- **Build errors**: Check dependencies and configuration
-
-### Post-Release Verification v0.0.1
+### Post-Release Verification
 ```bash
-# 1. Verify it published to NPM
+# 1. Verify NPM publication
 npm view @tracelog/sdk version
-# Should show: 0.0.1
 
-# 2. Verify Git tag
-git tag -l
-# Should show: v0.0.1
+# 2. Verify Git tag created
+git tag -l | tail -5
 
-# 3. Verify CHANGELOG.md exists
-cat CHANGELOG.md | head -20
+# 3. Check GitHub Release page
+# Visit: https://github.com/your-username/tracelog-client/releases
 
-# 4. Verify GitHub Release
-# Go to: https://github.com/your-username/tracelog-client/releases
-
-# 5. Installation test
-npm install @tracelog/sdk@0.0.1
+# 4. Test installation
+npm install @tracelog/sdk@latest
 ```
 
-### Recovery
+### Emergency Recovery
 ```bash
-# If release fails mid-process:
-git reset --hard HEAD~1           # Undo version commit
-git tag -d v0.0.1                 # Remove tag if exists (in this case v0.0.1)
-npm version 0.0.1                 # Restore previous version
+# If release partially failed:
+# 1. Check what completed in GitHub Actions logs
+# 2. Manually fix any issues (e.g., unpublish from NPM if needed)
+# 3. Re-run release workflow with --dry-run first
 ```
-
-## 📈 Metrics and Monitoring
-
-### Performance Benchmarks
-- **Initialization**: < 50ms
-- **Event Processing**: < 5ms average
-- **Bundle Size**: < 100KB (browser build)
-
-### Release Analytics
-- Complete release time
-- Tests executed and results
-- Generated build sizes
-- GitHub Actions performance
 
 ## 🎯 Best Practices
 
-1. **Use conventional commits** for automatic detection
-2. **Do dry-run** before important releases
-3. **Review generated changelog** before publishing
-4. **Keep dependencies updated**
-5. **Run pre-release-check** regularly
-6. **Releases only from main** to maintain stability
+### Development Workflow
+1. **Use conventional commits** for automatic version detection
+2. **Create focused PRs** - one feature per pull request
+3. **Write descriptive PR descriptions** explaining the change
+4. **Respond to code review feedback** promptly
+
+### Release Management
+1. **Always run dry-run first** for important releases
+2. **Review generated changelog** before publishing
+3. **Monitor release workflow** for any issues
+4. **Test published package** after release
+5. **Keep NPM tokens secure** in GitHub secrets
+
+### Quality Assurance
+1. **Let CI catch issues** - don't skip failed checks
+2. **Fix failing tests immediately** - don't merge broken code
+3. **Keep dependencies updated** regularly
+4. **Review Playwright artifacts** when E2E tests fail
+
+### Branch Management
+1. **Protect main branch** with required status checks
+2. **Use descriptive branch names** (feature/, fix/, chore/)
+3. **Keep branches up to date** with main
+4. **Delete merged branches** to keep repository clean
 
 ---
 
-**System created for TraceLog SDK** - Complete release automation with intelligent validation and automatic documentation.
+**Professional CI/CD System for TraceLog SDK** - Automated validation in PRs, streamlined releases, and comprehensive quality gates.

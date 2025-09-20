@@ -34,6 +34,7 @@ export class CrossTabSessionManager extends StateManager {
   private tabInfoCleanupTimeout: number | null = null;
   private closingAnnouncementTimeout: number | null = null;
   private leaderHealthCheckInterval: number | null = null;
+  private lastHeartbeatSent = 0;
 
   constructor(
     storageManager: StorageManager,
@@ -515,7 +516,7 @@ export class CrossTabSessionManager extends StateManager {
       }
 
       // If the closing tab was the leader, handle leadership transition
-      const wasLeader = message.data?.isLeader || message.tabId === this.leaderTabId;
+      const wasLeader = message.data?.isLeader ?? message.tabId === this.leaderTabId;
       if (wasLeader && !this.isTabLeader) {
         if (this.config.debugMode) {
           debugLog.debug('CrossTabSession', `Leader tab ${message.tabId} closed, starting leader election`);
@@ -614,7 +615,7 @@ export class CrossTabSessionManager extends StateManager {
 
     // Rate limit heartbeats - only send if we're the leader or haven't sent recently
     const now = Date.now();
-    const lastHeartbeat = (this as any).lastHeartbeatSent || 0;
+    const lastHeartbeat = this.lastHeartbeatSent ?? 0;
     const minHeartbeatInterval = this.config.tabHeartbeatIntervalMs * 0.8; // 80% of interval
 
     if (!this.isTabLeader && now - lastHeartbeat < minHeartbeatInterval) {
@@ -629,7 +630,7 @@ export class CrossTabSessionManager extends StateManager {
     };
 
     this.broadcastChannel.postMessage(message);
-    (this as any).lastHeartbeatSent = now;
+    this.lastHeartbeatSent = now;
   }
 
   /**

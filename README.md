@@ -128,19 +128,50 @@ await TraceLog.init({
 
 **High memory usage** → Reduce `sessionTimeout` → Lower `samplingRate` → Check for event listener leaks (call `destroy()` on cleanup).
 
-**Local development:**
+## Development & Contributing
+
+### Development Setup
 ```bash
+git clone https://github.com/nacorga/tracelog-client.git
+cd tracelog-client
 npm install
-npm run build:all      # Build ESM + CJS
+npm run build:all      # Build ESM + CJS + Browser
 npm run check          # Lint + format check
 npm run test:e2e       # Run E2E tests
 ```
 
-**Quality checks:**
-- Code must pass ESLint + Prettier
-- Maintain TypeScript strict mode
-- Add tests for new features
-- Update types for API changes
+### Development Workflow
+
+This project uses a **branch protection strategy** to ensure code quality:
+
+1. **Feature Development:**
+   ```bash
+   git checkout -b feature/your-feature-name
+   # Make your changes
+   git commit -m "feat: add new feature"
+   git push origin feature/your-feature-name
+   ```
+
+2. **Pull Request Process:**
+   - Create PR to `main` branch
+   - CI automatically runs all validations:
+     - Security audit
+     - Code quality (ESLint + Prettier)
+     - Build integrity
+     - E2E tests
+   - PR cannot be merged until CI passes
+   - Code review required
+
+3. **Release Process:**
+   - Once merged to `main`, code is validated and ready
+   - Run Release workflow manually from GitHub Actions
+   - Automatic version bump, changelog, and NPM publish
+
+### Quality Standards
+- **Code Quality**: ESLint + Prettier enforced in CI
+- **Type Safety**: TypeScript strict mode required
+- **Testing**: E2E tests with Playwright for all features
+- **Security**: Dependency vulnerability scanning
 
 ## Versioning
 
