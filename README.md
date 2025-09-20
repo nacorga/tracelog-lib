@@ -16,15 +16,15 @@ A lightweight TypeScript SDK for web analytics and user behavior tracking. Autom
 
 - npm:
   ```bash
-  npm install @tracelog/sdk
+  npm install @tracelog/events
   ```
 - yarn:
   ```bash
-  yarn add @tracelog/sdk
+  yarn add @tracelog/events
   ```
 - CDN (browser):
   ```html
-  <script src="https://cdn.jsdelivr.net/npm/@tracelog/sdk@latest/dist/browser/tracelog.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tracelog/events@latest/dist/browser/tracelog.js"></script>
   ```
 
 ## Quick Start
@@ -32,7 +32,7 @@ A lightweight TypeScript SDK for web analytics and user behavior tracking. Autom
 Initialize tracking with your project ID and start capturing events immediately:
 
 ```typescript
-import * as TraceLog from '@tracelog/sdk';
+import * as TraceLog from '@tracelog/events';
 
 // Initialize tracking
 await TraceLog.init({

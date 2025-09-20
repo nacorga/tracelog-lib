@@ -1,5 +1,5 @@
 {
-  "name": "@tracelog/sdk",
+  "name": "@tracelog/events",
   "description": "JavaScript library for web analytics and real-time event tracking",
   "license": "MIT",
   "version": "0.0.1",

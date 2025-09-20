@@ -250,7 +250,7 @@ npm run check
 ### Post-Release Verification
 ```bash
 # 1. Verify NPM publication
-npm view @tracelog/sdk version
+npm view @tracelog/events version
 
 # 2. Verify Git tag created
 git tag -l | tail -5
@@ -259,7 +259,7 @@ git tag -l | tail -5
 # Visit: https://github.com/your-username/tracelog-client/releases
 
 # 4. Test installation
-npm install @tracelog/sdk@latest
+npm install @tracelog/events@latest
 ```
 
 ### Emergency Recovery
