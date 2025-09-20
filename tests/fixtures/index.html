@@ -4,32 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TraceLog E2E Test Page</title>
-    <style src="index.css"></style></style>
+    <style type="stylesheet" src="index.css"></style></style>
 </head>
 <body>
     <div class="container">
         <h1 data-testid="title">TraceLog E2E Test Suite</h1>
         <div class="test-data" data-testid="init-status">Status: Ready for testing</div>
-        <button data-testid="test-button" type="button">Test Button</button>
-        
-        <!-- Add scrollable content for scroll tests -->
-        <div class="scroll-content" style="height: 2000px; background: linear-gradient(to bottom, #f0f0f0, #e0e0e0); margin-top: 20px;">
-            <p>This content makes the page scrollable for testing scroll events.</p>
-            <div style="height: 500px; display: flex; align-items: center; justify-content: center;">
-                <p>Scroll content section 1</p>
-            </div>
-            <div style="height: 500px; display: flex; align-items: center; justify-content: center;">
-                <p>Scroll content section 2</p>
-            </div>
-            <div style="height: 500px; display: flex; align-items: center; justify-content: center;">
-                <p>Scroll content section 3</p>
-            </div>
-            <div style="height: 500px; display: flex; align-items: center; justify-content: center;">
-                <p>Scroll content section 4</p>
-            </div>
-        </div>
     </div>
 
-    <script type="module" src="index.js"></script>
+    <script type="module" src="tracelog.js"></script>
 </body>
 </html>

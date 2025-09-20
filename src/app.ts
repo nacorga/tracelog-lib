@@ -21,34 +21,18 @@ import { ProjectIdValidationError } from './types/validation-error.types';
 import { debugLog } from './utils/logging';
 
 export class App extends StateManager {
-  private isInitialized = false;
-  private googleAnalytics: GoogleAnalyticsIntegration | null = null;
-  private storageManager!: StorageManager;
-  private eventManager!: EventManager;
-  private sessionHandler!: SessionHandler;
-  private pageViewHandler!: PageViewHandler;
-  private clickHandler!: ClickHandler;
-  private scrollHandler!: ScrollHandler;
-  private performanceHandler!: PerformanceHandler;
-  private errorHandler!: ErrorHandler;
-  private networkHandler!: NetworkHandler;
-  private suppressNextScrollTimer: number | null = null;
-
-  /**
-   * Get the event manager instance for testing purposes
-   * @internal
-   */
-  get eventManagerInstance(): EventManager | null {
-    return process.env.NODE_ENV === 'e2e' ? this.eventManager : null;
-  }
-
-  /**
-   * Get the scroll handler instance for testing purposes
-   * @internal
-   */
-  get scrollHandlerInstance(): ScrollHandler | null {
-    return process.env.NODE_ENV === 'e2e' ? this.scrollHandler : null;
-  }
+  protected isInitialized = false;
+  protected googleAnalytics: GoogleAnalyticsIntegration | null = null;
+  protected storageManager!: StorageManager;
+  protected eventManager!: EventManager;
+  protected sessionHandler!: SessionHandler;
+  protected pageViewHandler!: PageViewHandler;
+  protected clickHandler!: ClickHandler;
+  protected scrollHandler!: ScrollHandler;
+  protected performanceHandler!: PerformanceHandler;
+  protected errorHandler!: ErrorHandler;
+  protected networkHandler!: NetworkHandler;
+  protected suppressNextScrollTimer: number | null = null;
 
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {

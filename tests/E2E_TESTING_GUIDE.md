@@ -1,93 +1,162 @@
 # E2E Testing Guide
 
-**Quick guide for implementing new E2E tests in TraceLog SDK**
+## 🎯 Core Requirements
 
-## 📋 Quick Checklist
+* **Testing Bridge**: Use `window.__traceLogTestBridge` (auto-injected when `NODE_ENV=e2e`)
+* **TestUtils**: All utilities via `TestUtils` namespace
+* **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`
+* **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile
+* **Test ID**: Use `{ id: 'test' }` for automatic debug mode and full logging
 
-- [ ] Create dedicated constants, utils, and types files
-- [ ] Use `TestUtils` namespace for reusable functions
-- [ ] Implement proper console monitoring and cleanup
-- [ ] Test across multiple browsers (Chromium, Firefox, WebKit, Mobile)
+## 📝 Mandatory Test Structure
 
-## 📁 File Structure
-```
-tests/
-├── constants/[feature].constants.ts  // Test data & config
-├── utils/[feature].utils.ts          // Reusable functions
-├── types/[feature].types.ts          // TypeScript interfaces
-└── e2e/[feature]/test-name.spec.ts   // Test files
-```
-
-## 📝 Test Template
-```typescript
+```ts
 import { test, expect } from '@playwright/test';
-import { TestUtils } from '../../utils';
-import { DEFAULT_CONFIG } from '../../constants/common.constants';
+import { TestUtils } from '../utils';
 
-test.describe('Feature Name', () => {
-  test('should do something', async ({ page }) => {
-    const monitor = TestUtils.createConsoleMonitor(page);
+test('should validate behavior', async ({ page }) => {
+  const monitor = TestUtils.createConsoleMonitor(page);
 
-    try {
-      await TestUtils.navigateAndWaitForReady(page);
+  try {
+    await TestUtils.navigateAndWaitForReady(page, '/');
+    const initResult = await TestUtils.initializeTraceLog(page);
 
-      const initResult = await TestUtils.initializeTraceLog(page, DEFAULT_CONFIG);
-      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
+    expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
+    expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
 
-      // Your test logic here
+    // Test-specific logic here
 
-      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
-    } finally {
-      monitor.cleanup();
-    }
-  });
+  } finally {
+    monitor.cleanup(); // ALWAYS required
+  }
 });
 ```
 
-## 🔧 Required Patterns
+## 📁 File Organization
 
-### Console Monitoring
-```typescript
-const monitor = TestUtils.createConsoleMonitor(page);
-// Always use try/finally for cleanup
-finally { monitor.cleanup(); }
+```
+tests/
+├── constants/[domain].constants.ts   # NO hardcoded values
+├── utils/[domain].utils.ts           # Pure helper functions
+├── types/[domain].types.ts           # TypeScript interfaces
+└── e2e/[domain]/test-name.spec.ts    # Test files by domain
 ```
 
-### Constants & Utils
-```typescript
-// Extract hardcoded values
-export const FEATURE_CONSTANTS = {
-  TIMEOUTS: { SHORT: 500, LONG: 1000 },
-  TEST_DATA: ['value1', 'value2'] as const,
-} as const;
+**Domains**: initialization, session-management, event-tracking, performance-tracking, error-tracking, user-management, storage-management, queue-management, configuration, integrations, security-qa, system-reliability, browser-compatibility, edge-cases
 
-// Use readonly arrays for type safety
-export function validateLogs(logs: string[], patterns: readonly string[]): boolean {
-  return patterns.some(pattern => logs.includes(pattern));
+## 🛠️ Essential Patterns
+
+### Initialization Tests
+```ts
+// Standard test config (auto debug mode + full logging)
+const config = { id: 'test' };
+
+// Valid: { id: 'test' }
+expect(result.success).toBe(true);
+expect(appInstance.isInitialized).toBe(true);
+
+// Invalid: { id: '' }
+expect(result.success).toBe(false);
+expect(result.error).toBeDefined();
+
+// Custom config for specific tests
+const customConfig = { id: 'test', sessionTimeout: 1000 };
+```
+
+### Event Tests
+```ts
+await TestUtils.trackCustomEvent(page, { name: 'test_event', metadata: { key: 'value' } });
+const events = await TestUtils.getTrackedEvents(page);
+const event = events.find((e: any) => e.type === 'CUSTOM');
+expect(event.custom_event.name).toBe('test_event');
+```
+
+### Session Tests
+```ts
+await TestUtils.triggerUserActivity(page);
+await TestUtils.waitForSessionStart(page);
+const session = await TestUtils.getSessionData(page);
+expect((session as any).isActive).toBe(true);
+```
+
+### Event Listening (Advanced)
+```ts
+// Listen for real-time TraceLog events
+const eventListener = await TestUtils.listenForTraceLogEvents(page);
+
+try {
+  await TestUtils.initializeTraceLog(page);
+
+  // Wait for specific events
+  await TestUtils.waitForTraceLogEvent(page, (event: unknown) =>
+    (event as any).namespace === 'App' && (event as any).message.includes('initialization completed')
+  );
+
+} finally {
+  await eventListener.cleanup();
 }
 ```
 
-## ✅ Best Practices
+## 🔧 Test Environment Setup
 
-- **Extract constants** - No hardcoded values in tests
-- **Use TestUtils** - Leverage existing utilities
-- **Type safety** - Prefer interfaces over `any`
-- **Cleanup** - Always use `finally` blocks
-- **Cross-browser** - Test works on Chromium minimum
+### Test Configuration Behavior
+ID `"test"` triggers special behavior in ConfigManager:
+- **Mode**: Automatically set to `"debug"` (full logging)
+- **Error Sampling**: Set to `1` (100% error capture)
+- **API Calls**: Skipped - uses local default config
+- **Logging**: Complete debug output in console
+- **Events**: Emits `tracelog:qa` events for real-time test validation (only for `id: 'test'` or `id: 'demo'`)
 
-## 🚫 Avoid
-- Hardcoding test data
-- Skipping console monitoring
-- Missing cleanup logic
-- Using `any` types
-- Browser-specific code without fallbacks
+### Fixture Modification
+Modify `tests/fixtures/index.html` when testing specific scenarios:
+```html
+<!-- Add custom elements for click/scroll tests -->
+<button id="test-btn" data-tl-name="custom_event">Click Me</button>
+<div id="scroll-container" style="height: 200px; overflow-y: scroll;">...</div>
 
-## 📋 Before Commit
-```bash
-npm run test:e2e        # Tests pass
-npm run check           # Lint & format
-npm run build:browser   # Build succeeds
+<!-- Add test data attributes -->
+<meta name="test-scenario" content="large-payload-test">
 ```
 
-## 📚 Examples
-See `tests/e2e/error-tracking/` for reference implementations following these patterns.
+### Custom Test Pages
+Create specific fixture pages for complex scenarios:
+```
+tests/fixtures/pages/
+├── performance-test.html     # Large DOM for performance tests
+├── error-simulation.html     # Controlled error scenarios
+├── multi-tab-test.html       # Cross-tab coordination tests
+└── storage-test.html         # LocalStorage edge cases
+```
+
+### Network Simulation
+```ts
+// Simulate network failures for API tests
+await page.route('**/api/**', route => route.abort('failed'));
+
+// Mock API responses
+await page.route('**/config', route => route.fulfill({
+  status: 200,
+  body: JSON.stringify({ sampling: 0.5, excludedPaths: ['/admin'] })
+}));
+```
+
+## 🚫 Critical Don'ts
+
+* DON'T skip console monitoring/cleanup
+* DON'T hardcode test data or timeouts
+* DON'T access `TraceLog._app` directly
+* DON'T test single browser only
+* DON'T use real PII in test data
+* DON'T create external dependencies
+* DON'T modify fixtures without cleanup
+* DON'T assume timing - use proper waits
+
+## ✅ Quality Gates
+
+```bash
+npm run test:e2e        # 100% pass rate
+npm run check           # No lint/format errors
+npm run build:browser   # Must succeed
+```
+
+**Success Criteria**: 100% pass rate across all browsers, zero errors, all 70+ E2E_TESTS.json scenarios covered.

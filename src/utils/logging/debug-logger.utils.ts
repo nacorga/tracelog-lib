@@ -142,7 +142,7 @@ class DebugLogger extends StateManager {
   }
 
   /**
-   * Handle the event based on the current mode
+   * Handle the event based on the current mode and project ID
    */
   private handleModeBasedEvent(level: LogLevel, namespace: string, message: string, data?: unknown): void {
     const mode = this.getCurrentMode();
@@ -151,7 +151,9 @@ class DebugLogger extends StateManager {
       return;
     }
 
-    if (mode === 'qa') {
+    const shouldDispatchEvent = this.shouldUseDispatchEvent(mode);
+
+    if (shouldDispatchEvent) {
       this.dispatchEvent(level, namespace, message, data);
     } else if (mode === 'debug') {
       this.logMessage(level, namespace, message, data);
@@ -159,7 +161,30 @@ class DebugLogger extends StateManager {
   }
 
   /**
-   * Dispatch custom event for QA mode
+   * Determine if we should use dispatchEvent based on mode and project ID
+   */
+  private shouldUseDispatchEvent(mode: string): boolean {
+    // Always use dispatchEvent for QA mode
+    if (mode === 'qa') {
+      return true;
+    }
+
+    // For debug mode, only use dispatchEvent for specific test IDs
+    if (mode === 'debug') {
+      try {
+        const config = this.get('config');
+        const projectId = config?.id;
+        return projectId === 'test' || projectId === 'demo';
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Dispatch custom event for QA mode or specific test IDs (test/demo)
    */
   private dispatchEvent(level: LogLevel, namespace: string, message: string, data?: unknown): void {
     if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') {

@@ -12,7 +12,8 @@ export default defineConfig({
     ['github'],
     ['html', { outputFolder: 'playwright-report', open: 'never' }]
   ] : [
-    ['html', { outputFzlder: 'playwright-report' }],
+    ['list'],
+    ['html', { outputFolder: 'playwright-report' }],
     ['json', { outputFile: 'playwright-report/test-results.json' }],
     ['./tests/failed-reporter.ts']
   ],
