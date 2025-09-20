@@ -97,6 +97,11 @@ export class App extends StateManager {
   }
 
   sendCustomEvent(name: string, metadata?: Record<string, unknown>): void {
+    if (!this.eventManager) {
+      debugLog.warn('App', 'Custom event attempted before eventManager initialization', { eventName: name });
+      return;
+    }
+
     const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
 
     if (valid) {

@@ -266,7 +266,6 @@ class ReleaseManager {
     return parts.join('.');
   }
 
-
   async buildProject() {
     this.log.step('Building project...');
 

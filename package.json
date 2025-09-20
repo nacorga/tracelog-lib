@@ -36,6 +36,7 @@
     "fix": "npm run lint:fix && npm run format",
     "serve:test": "http-server tests/fixtures -p 3000 --cors",
     "test:e2e": "npm run build:browser:testing && cp dist/browser/tracelog.js tests/fixtures/tracelog.js && NODE_ENV=e2e playwright test",
+    "test:anomaly-report": "node scripts/test-anomaly-report.js",
     "performance:benchmark": "node scripts/extract-performance-data.js",
     "prepare": "husky",
     "release": "node scripts/release.js",
