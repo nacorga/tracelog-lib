@@ -314,7 +314,7 @@ export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
     const response = json as Record<string, unknown>;
 
     const result: Record<keyof ApiConfig, boolean> = {
-      mode: response['mode'] === undefined || response['mode'] === ('qa' satisfies Mode),
+      mode: response['mode'] === undefined || (['qa', 'debug'] satisfies Mode[]).includes(response['mode'] as Mode),
       samplingRate:
         response['samplingRate'] === undefined ||
         (typeof response['samplingRate'] === 'number' && response['samplingRate'] > 0 && response['samplingRate'] <= 1),

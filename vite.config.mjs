@@ -5,7 +5,7 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
   define: {
     'process.env.NODE_ENV': JSON.stringify(
-      process.env.NODE_ENV === 'e2e' ? 'e2e' : 'production'
+      ['playground', 'e2e'].includes(process.env.NODE_ENV) ? process.env.NODE_ENV : 'production'
     ),
   },
   build: {
@@ -24,7 +24,7 @@ export default defineConfig({
       },
     },
     target: 'es2022',
-    minify: process.env.NODE_ENV !== 'e2e',
-    sourcemap: process.env.NODE_ENV === 'e2e',
+    minify: !['playground', 'e2e'].includes(process.env.NODE_ENV),
+    sourcemap: ['playground', 'e2e'].includes(process.env.NODE_ENV),
   },
 });
