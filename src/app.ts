@@ -40,31 +40,27 @@ export class App extends StateManager {
       return;
     }
 
-    debugLog.info('App', 'App initialization started', { projectId: appConfig.id, mode: appConfig.mode });
+    debugLog.info('App', 'App initialization started', { projectId: appConfig.id });
 
-    // The app layer expects a fully validated and normalized config
-    // This is a final safety check - config should already be validated by api.ts
     this.validateAppReadiness(appConfig);
 
     try {
       this.initStorage();
-
       await this.setState(appConfig);
-
       await this.setIntegrations();
-
       this.setEventManager();
-
       await this.initHandlers();
 
       this.isInitialized = true;
+
       debugLog.info('App', 'App initialization completed successfully', {
         projectId: appConfig.id,
-        mode: appConfig.mode,
       });
     } catch (error) {
       this.isInitialized = false;
+
       debugLog.error('App', 'App initialization failed', { projectId: appConfig.id, error });
+
       throw error;
     }
   }
@@ -82,6 +78,7 @@ export class App extends StateManager {
       debugLog.clientError('App', 'Configuration object is required for initialization', {
         receivedType: typeof appConfig,
       });
+
       throw new ProjectIdValidationError('Configuration object is required', 'app');
     }
 
@@ -92,6 +89,7 @@ export class App extends StateManager {
         idType: typeof appConfig.id,
         idLength: appConfig.id ? appConfig.id.length : 0,
       });
+
       throw new ProjectIdValidationError('Project ID is required', 'app');
     }
   }
@@ -106,6 +104,7 @@ export class App extends StateManager {
 
     if (valid) {
       debugLog.debug('App', 'Custom event validated and queued', { eventName: name, hasMetadata: !!sanitizedMetadata });
+
       this.eventManager.track({
         type: EventType.CUSTOM,
         custom_event: {
@@ -115,6 +114,7 @@ export class App extends StateManager {
       });
     } else {
       const currentMode = this.get('config')?.mode;
+
       debugLog.clientError('App', `Custom event validation failed: ${error ?? 'unknown error'}`, {
         eventName: name,
         validationError: error,

@@ -7,7 +7,7 @@ import {
   SYNC_XHR_TIMEOUT_MS,
   API_BASE_URL,
 } from '../constants';
-import { PersistedQueueData, BaseEventsQueueDto } from '../types';
+import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectIds, Mode } from '../types';
 import { debugLog } from '../utils/logging';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -139,7 +139,8 @@ export class SenderManager extends StateManager {
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
-    const baseUrl = this.get('apiUrl') ?? API_BASE_URL;
+    const isDemo = this.get('config').id === SpecialProjectIds.Demo;
+    const baseUrl = isDemo ? window.location.origin : (this.get('apiUrl') ?? API_BASE_URL);
 
     return {
       url: `${baseUrl}/events`,
@@ -328,7 +329,10 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    return ['demo', 'test'].includes(this.get('config').id);
+    const { id, mode } = this.get('config');
+    const specialModes = ['qa', 'debug'] satisfies Mode[];
+
+    return specialModes.includes(mode as Mode) && !Object.values(SpecialProjectIds).includes(id as SpecialProjectIds);
   }
 
   private isSendBeaconAvailable(): boolean {

@@ -1,8 +1,8 @@
-import { Config } from '../../src/types';
+import { Config, SpecialProjectIds } from '../../src/types';
 
-export const TEST_ID = 'test';
+export const E2E_ID = SpecialProjectIds.E2E;
 
-export const DEFAULT_CONFIG: Config = { id: TEST_ID };
+export const DEFAULT_CONFIG: Config = { id: E2E_ID };
 
 export const TEST_URLS = {
   INITIALIZATION_PAGE: '/',

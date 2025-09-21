@@ -314,6 +314,7 @@ export class EventManager extends StateManager {
         sessionId: body.session_id,
         uniqueEventsAfterDedup: body.events.length,
       });
+
       this.eventsQueue = [];
       this.failureCount = 0;
     } else {
@@ -322,12 +323,15 @@ export class EventManager extends StateManager {
         failureCount: this.failureCount + 1,
         willOpenCircuit: this.failureCount + 1 >= this.MAX_FAILURES,
       });
+
       this.eventsQueue = body.events;
       this.failureCount++;
 
       if (this.failureCount >= this.MAX_FAILURES) {
         this.circuitOpen = true;
+
         const clearedEvents = this.eventsQueue.length;
+
         this.eventsQueue = []; // Clear queue to prevent memory leak
 
         debugLog.warn('EventManager', 'Circuit breaker opened after consecutive failures', {

@@ -1,5 +1,5 @@
 import { MAX_SESSION_TIMEOUT_MS, MIN_SESSION_TIMEOUT_MS, VALIDATION_MESSAGES } from '../../constants';
-import { AppConfig, Config, ApiConfig } from '../../types';
+import { AppConfig, Config, ApiConfig, Mode } from '../../types';
 import {
   ProjectIdValidationError,
   AppConfigValidationError,
@@ -314,6 +314,7 @@ export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
     const response = json as Record<string, unknown>;
 
     const result: Record<keyof ApiConfig, boolean> = {
+      mode: response['mode'] === undefined || response['mode'] === ('qa' satisfies Mode),
       samplingRate:
         response['samplingRate'] === undefined ||
         (typeof response['samplingRate'] === 'number' && response['samplingRate'] > 0 && response['samplingRate'] <= 1),

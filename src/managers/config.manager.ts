@@ -1,19 +1,19 @@
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
-import { ApiConfig, AppConfig, Config } from '../types';
+import { ApiConfig, AppConfig, Config, SpecialProjectIds } from '../types';
 import { isValidUrl, sanitizeApiConfig } from '../utils';
 import { debugLog } from '../utils/logging';
 
 export class ConfigManager {
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
-    const isTestMode = ['demo', 'test'].includes(appConfig.id);
+    if (Object.values(SpecialProjectIds).includes(appConfig.id as SpecialProjectIds)) {
+      debugLog.debug('ConfigManager', 'Using special project id');
 
-    if (isTestMode) {
-      debugLog.debug('ConfigManager', 'Using default config for test mode', { projectId: appConfig.id });
       return this.getDefaultConfig(appConfig);
     }
 
     debugLog.debug('ConfigManager', 'Loading config from API', { apiUrl, projectId: appConfig.id });
-    const config = await this.load(apiUrl, appConfig);
+
+    const config = await this.load(apiUrl, appConfig, appConfig.id === SpecialProjectIds.Demo);
 
     debugLog.info('ConfigManager', 'Config loaded successfully', {
       projectId: appConfig.id,
@@ -25,9 +25,9 @@ export class ConfigManager {
     return config;
   }
 
-  private async load(apiUrl: string, appConfig: AppConfig): Promise<Config> {
+  private async load(apiUrl: string, appConfig: AppConfig, isDemo?: boolean): Promise<Config> {
     try {
-      const configUrl = this.getUrl(apiUrl);
+      const configUrl = isDemo ? `${window.location.origin}/config` : this.getUrl(apiUrl);
 
       if (!configUrl) {
         throw new Error('Config URL is not valid or not allowed');
@@ -40,11 +40,13 @@ export class ConfigManager {
 
       if (!response.ok) {
         const error = `HTTP ${response.status}: ${response.statusText}`;
+
         debugLog.error('ConfigManager', 'Config API request failed', {
           status: response.status,
           statusText: response.statusText,
           configUrl,
         });
+
         throw new Error(error);
       }
 
@@ -55,6 +57,7 @@ export class ConfigManager {
           responseType: typeof rawData,
           isArray: Array.isArray(rawData),
         });
+
         throw new Error('Invalid config API response: expected object');
       }
 
@@ -65,6 +68,7 @@ export class ConfigManager {
       // Check if qaMode=true is in URL and automatically set mode to 'qa'
       const urlParameters = new URLSearchParams(window.location.search);
       const isQaMode = urlParameters.get('qaMode') === 'true';
+
       if (isQaMode && !mergedConfig.mode) {
         mergedConfig.mode = 'qa';
         debugLog.info('ConfigManager', 'QA mode enabled via URL parameter');
@@ -101,16 +105,10 @@ export class ConfigManager {
   }
 
   private getDefaultConfig(appConfig: AppConfig): Config {
-    const defaultConfig: Config = DEFAULT_CONFIG({
+    return DEFAULT_CONFIG({
       ...appConfig,
       errorSampling: 1,
+      ...(Object.values(SpecialProjectIds).includes(appConfig.id as SpecialProjectIds) && { mode: 'debug' }),
     });
-
-    const configRecords: Record<string, Config> = {
-      ['demo']: { ...defaultConfig, mode: 'qa' },
-      ['test']: { ...defaultConfig, mode: 'debug' },
-    };
-
-    return configRecords[appConfig.id] ?? DEFAULT_CONFIG(appConfig);
   }
 }

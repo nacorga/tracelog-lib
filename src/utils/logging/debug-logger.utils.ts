@@ -8,13 +8,11 @@ class DebugLogger extends StateManager {
   /**
    * Get the current logging mode from the global state
    */
-  private getCurrentMode(): Mode {
+  private getCurrentMode(): Mode | undefined {
     try {
-      const config = this.get('config');
-      return config?.mode ?? 'production';
+      return this.get('config')?.mode;
     } catch {
-      // Fallback to production mode if state is not available
-      return 'production';
+      return undefined;
     }
   }
 
@@ -25,9 +23,6 @@ class DebugLogger extends StateManager {
     const mode = this.getCurrentMode();
 
     switch (mode) {
-      case 'production':
-        return false;
-
       case 'qa':
         return ['INFO', 'CLIENT_ERROR', 'CLIENT_WARN'].includes(level);
 
@@ -147,7 +142,7 @@ class DebugLogger extends StateManager {
   private handleModeBasedEvent(level: LogLevel, namespace: string, message: string, data?: unknown): void {
     const mode = this.getCurrentMode();
 
-    if (mode === 'production') {
+    if (!mode) {
       return;
     }
 
@@ -163,24 +158,8 @@ class DebugLogger extends StateManager {
   /**
    * Determine if we should use dispatchEvent based on mode and project ID
    */
-  private shouldUseDispatchEvent(mode: string): boolean {
-    // Always use dispatchEvent for QA mode
-    if (mode === 'qa') {
-      return true;
-    }
-
-    // For debug mode, only use dispatchEvent for specific test IDs
-    if (mode === 'debug') {
-      try {
-        const config = this.get('config');
-        const projectId = config?.id;
-        return projectId === 'test' || projectId === 'demo';
-      } catch {
-        return false;
-      }
-    }
-
-    return false;
+  private shouldUseDispatchEvent(mode: Mode): boolean {
+    return ['qa', 'debug'].includes(mode);
   }
 
   /**

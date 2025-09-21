@@ -22,7 +22,7 @@ let isInitializing = false;
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
   try {
-    debugLog.info('API', 'Library initialization started', { id: appConfig.id, mode: appConfig.mode });
+    debugLog.info('API', 'Library initialization started', { id: appConfig.id });
 
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       debugLog.clientError(
@@ -33,6 +33,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
           hasDocument: typeof document !== 'undefined',
         },
       );
+
       throw new Error('This library can only be used in a browser environment');
     }
 
@@ -40,17 +41,18 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
       debugLog.debug('API', 'Library already initialized, skipping duplicate initialization', {
         projectId: appConfig.id,
       });
+
       return;
     }
 
     if (isInitializing) {
       debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
-      // Instead of throwing, wait for the ongoing initialization to complete
+
       let retries = 0;
-      const maxRetries = 20; // 2 seconds maximum wait (reduced for better performance)
+      const maxRetries = 20;
 
       while (isInitializing && retries < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 50)); // Shorter intervals for faster response
+        await new Promise((resolve) => setTimeout(resolve, 50));
         retries++;
       }
 
@@ -59,7 +61,8 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
           projectId: appConfig.id,
           retriesUsed: retries,
         });
-        return; // Initialization completed successfully
+
+        return;
       }
 
       if (isInitializing) {
@@ -68,6 +71,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
           retriesUsed: retries,
           maxRetries,
         });
+
         throw new Error('App initialization timeout - concurrent initialization took too long');
       }
     }
@@ -83,9 +87,9 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     await instance.init(validatedConfig);
 
     app = instance;
+
     debugLog.info('API', 'Library initialization completed successfully', {
       projectId: validatedConfig.id,
-      mode: validatedConfig.mode,
     });
   } catch (error) {
     app = null;
