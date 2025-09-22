@@ -4,6 +4,22 @@
 
 
 
+
+## [0.0.6] - 2025-09-22
+
+### 🐛 Bug Fixes
+
+- Add Origin and Referer headers to CORS requests in SenderManager ([0532c78](../../commit/0532c7843aacdd69cb63b777517400d7c66be713))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.5...v0.0.6
+
+
 ## [0.0.5] - 2025-09-22
 
 ### 🐛 Bug Fixes
