@@ -2,6 +2,22 @@
 
 
 
+
+## [0.0.4] - 2025-09-22
+
+### 🔧 Other Changes
+
+- Remove API_BASE_URL constant and update SenderManager to use apiUrl directly ([7f3e7af](../../commit/7f3e7af7ca4255ac8e16237436f0e09ddf030309))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.3...v0.0.4
+
+
 ## [0.0.3] - 2025-09-22
 
 ### 🔧 Other Changes
