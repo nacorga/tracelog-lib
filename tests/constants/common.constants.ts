@@ -1,8 +1,6 @@
-import { Config } from '../../src/types';
+import { Config, SpecialProjectId } from '../../src/types';
 
-export const TEST_ID = 'test';
-
-export const DEFAULT_CONFIG: Config = { id: TEST_ID };
+export const DEFAULT_CONFIG: Config = { id: SpecialProjectId.HttpSkip };
 
 export const TEST_URLS = {
   INITIALIZATION_PAGE: '/',

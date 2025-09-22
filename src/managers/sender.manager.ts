@@ -7,7 +7,7 @@ import {
   SYNC_XHR_TIMEOUT_MS,
   API_BASE_URL,
 } from '../constants';
-import { PersistedQueueData, BaseEventsQueueDto } from '../types';
+import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId, Mode } from '../types';
 import { debugLog } from '../utils/logging';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -18,7 +18,8 @@ export class SenderManager extends StateManager {
 
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
-  private lastSendAttempt = 0;
+  private lastAsyncSend = 0;
+  private lastSyncSend = 0;
 
   constructor(storeManager: StorageManager) {
     super();
@@ -51,7 +52,7 @@ export class SenderManager extends StateManager {
       }
 
       const recoveryBody = this.createRecoveryBody(persistedData);
-      const success = this.sendEventsQueue(recoveryBody);
+      const success = this.sendRecoveredEvents(recoveryBody);
 
       if (success) {
         debugLog.info('SenderManager', 'Persisted events recovered successfully', {
@@ -65,7 +66,7 @@ export class SenderManager extends StateManager {
           eventsCount: persistedData.events.length,
         });
 
-        this.scheduleRetry(recoveryBody);
+        this.scheduleRetryForRecoveredEvents(recoveryBody);
       }
     } catch (error) {
       debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
@@ -77,8 +78,35 @@ export class SenderManager extends StateManager {
     this.resetRetryState();
   }
 
-  private canSendNow(): boolean {
-    return Date.now() - this.lastSendAttempt >= RATE_LIMIT_INTERVAL;
+  /**
+   * Sends recovered events without re-deduplication since they were already processed
+   */
+  private sendRecoveredEvents(body: BaseEventsQueueDto): boolean {
+    return this.executeSendSync(body, () => this.sendQueue(body));
+  }
+
+  /**
+   * Schedules retry for recovered events using the specific recovery method
+   */
+  private scheduleRetryForRecoveredEvents(body: BaseEventsQueueDto): void {
+    if (this.retryTimeoutId !== null) {
+      return;
+    }
+
+    this.retryTimeoutId = window.setTimeout(() => {
+      this.retryTimeoutId = null;
+      this.sendRecoveredEvents(body);
+    }, this.retryDelay);
+
+    this.retryDelay = Math.min(this.retryDelay * 2, RETRY_BACKOFF_MAX);
+  }
+
+  private canSendAsync(): boolean {
+    return Date.now() - this.lastAsyncSend >= RATE_LIMIT_INTERVAL;
+  }
+
+  private canSendSync(): boolean {
+    return Date.now() - this.lastSyncSend >= RATE_LIMIT_INTERVAL;
   }
 
   private async sendQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
@@ -139,7 +167,8 @@ export class SenderManager extends StateManager {
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
-    const baseUrl = this.get('apiUrl') ?? API_BASE_URL;
+    const useLocalServer = this.get('config').id === SpecialProjectId.HttpLocal;
+    const baseUrl = useLocalServer ? window.location.origin : (this.get('apiUrl') ?? API_BASE_URL);
 
     return {
       url: `${baseUrl}/events`,
@@ -224,10 +253,10 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    if (!this.canSendNow()) {
-      debugLog.info('SenderManager', `⏱️ Rate limited - skipping send`, {
+    if (!this.canSendAsync()) {
+      debugLog.info('SenderManager', `⏱️ Rate limited - skipping async send`, {
         eventsCount: body.events.length,
-        timeSinceLastSend: Date.now() - this.lastSendAttempt,
+        timeSinceLastSend: Date.now() - this.lastAsyncSend,
       });
 
       return false;
@@ -239,7 +268,7 @@ export class SenderManager extends StateManager {
       userId: body.user_id,
     });
 
-    this.lastSendAttempt = Date.now();
+    this.lastAsyncSend = Date.now();
 
     try {
       const success = await sendFn();
@@ -276,10 +305,10 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    if (!this.canSendNow()) {
-      debugLog.info('SenderManager', `⏱️ Rate limited - skipping send`, {
+    if (!this.canSendSync()) {
+      debugLog.info('SenderManager', `⏱️ Rate limited - skipping sync send`, {
         eventsCount: body.events.length,
-        timeSinceLastSend: Date.now() - this.lastSendAttempt,
+        timeSinceLastSend: Date.now() - this.lastSyncSend,
       });
 
       return false;
@@ -292,7 +321,7 @@ export class SenderManager extends StateManager {
       method: 'sendBeacon/XHR',
     });
 
-    this.lastSendAttempt = Date.now();
+    this.lastSyncSend = Date.now();
 
     try {
       const success = sendFn();
@@ -328,7 +357,14 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    return ['demo', 'test'].includes(this.get('config').id);
+    const { id, mode } = this.get('config');
+    const specialModes: Mode[] = [Mode.QA, Mode.DEBUG];
+
+    if (id === SpecialProjectId.HttpSkip) {
+      return true;
+    }
+
+    return !!mode && specialModes.includes(mode) && id !== SpecialProjectId.HttpLocal;
   }
 
   private isSendBeaconAvailable(): boolean {

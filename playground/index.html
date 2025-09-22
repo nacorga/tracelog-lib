@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TraceLog Playground</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>TraceLog Playground</h1>
+            <div id="status-indicator" class="status-indicator status-not-initialized">
+                Not Initialized
+            </div>
+        </div>
+
+        <!-- Main Layout with Sidebar -->
+        <div class="main-layout">
+            <div class="main-content">
+                <!-- Main Grid -->
+                <div class="grid">
+            <!-- Configuration Panel -->
+            <div class="panel">
+                <h2>Configuration</h2>
+                <form id="config-form">
+                    <div class="form-group">
+                        <label for="project-id">Project ID:</label>
+                        <input type="text" id="project-id" value="playground" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mode">Mode (Fixed to QA for real-time events):</label>
+                        <select id="mode" disabled>
+                            <option value="qa" selected>QA (Required for dispatchEvent)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="session-timeout">Session Timeout:</label>
+                        <select id="session-timeout">
+                            <option value="900000" selected>15 minutes</option>
+                            <option value="1800000">30 minutes</option>
+                            <option value="3600000">1 hour</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="global-metadata">Global Metadata (JSON):</label>
+                        <textarea id="global-metadata" placeholder='{"environment": "playground", "version": "1.0"}'></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="mock-server" checked>
+                            <label for="mock-server">Mock server responses</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Controls Panel -->
+            <div class="panel">
+                <h2>Controls</h2>
+
+                <div class="controls">
+                    <button id="init-btn" class="button button-primary">Init TraceLog</button>
+                    <button id="destroy-btn" class="button button-danger" disabled>Destroy</button>
+                </div>
+
+                <div id="alerts-container"></div>
+
+                <div class="custom-event-form">
+                    <div class="form-group">
+                        <label for="custom-event-name">Custom Event Name:</label>
+                        <input type="text" id="custom-event-name" placeholder="button_click" disabled>
+                    </div>
+                    <button id="send-custom-event" class="button button-secondary" disabled>Send Event</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Demo Area -->
+        <div class="panel">
+            <h2>Demo Elements</h2>
+            <div class="demo-area">
+                <div class="demo-item">
+                    <h3>Click Tracking</h3>
+                    <button id="demo-click" class="button button-primary">Click Me</button>
+                </div>
+
+                <div class="demo-item">
+                    <h3>Scroll Tracking</h3>
+                    <div class="scroll-area">
+                        <div class="scroll-content">
+                            Scroll in this area
+                        </div>
+                    </div>
+                </div>
+
+                <div class="demo-item">
+                    <h3>External Link</h3>
+                    <a href="https://tracelog.dev" target="_blank" rel="noopener">Visit TraceLog</a>
+                </div>
+
+                <div class="demo-item">
+                    <h3>Form Input</h3>
+                    <input type="text" id="demo-input" placeholder="Type something...">
+                </div>
+            </div>
+        </div>
+
+                <!-- Log Console -->
+                <div class="log-console">
+                    <div class="log-header">
+                        <h2>Event Log</h2>
+                        <button id="clear-logs" class="button button-secondary">Clear Logs</button>
+                    </div>
+                    <div id="log-content" class="log-content"></div>
+                </div>
+            </div>
+
+            <!-- Real-time Events Sidebar -->
+            <div class="sidebar">
+                <div class="real-time-events">
+                    <div class="real-time-header">
+                        <h3>Real-time Events <small style="font-size: 11px; opacity: 0.8;">(newest first)</small></h3>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <span id="real-event-counter" class="event-counter">0</span>
+                            <button id="clear-real-events" class="clear-real-events">Clear</button>
+                        </div>
+                    </div>
+                    <div id="real-time-content" class="real-time-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TraceLog Library -->
+    <script type="module">
+        import { TraceLog } from './tracelog.js';
+        window.TraceLog = TraceLog;
+    </script>
+    <!-- Playground Script -->
+    <script src="script.js"></script>
+</body>
+</html>

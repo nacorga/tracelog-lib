@@ -1,4 +1,9 @@
-import { SESSION_HEARTBEAT_INTERVAL_MS, SESSION_STORAGE_KEY, DEFAULT_SESSION_TIMEOUT_MS } from '../constants';
+import {
+  SESSION_HEARTBEAT_INTERVAL_MS,
+  SESSION_STORAGE_KEY,
+  DEFAULT_SESSION_TIMEOUT_MS,
+  SESSION_SYNC_CONSTANTS,
+} from '../constants';
 import { EventType } from '../types';
 import { CrossTabSessionConfig, SessionEndConfig, SessionEndReason } from '../types/session.types';
 import { EventManager } from '../managers/event.manager';
@@ -24,12 +29,23 @@ export class SessionHandler extends StateManager {
   private recoveryManager: SessionRecoveryManager | null = null;
   private _crossTabSessionManager: CrossTabSessionManager | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private _isInitializingCrossTab = false;
 
   private get crossTabSessionManager(): CrossTabSessionManager | null {
-    if (!this._crossTabSessionManager && this.shouldUseCrossTabs()) {
-      const projectId = this.get('config')?.id;
-      if (projectId) {
-        this.initializeCrossTabSessionManager(projectId);
+    if (!this._crossTabSessionManager && !this._isInitializingCrossTab && this.shouldUseCrossTabs()) {
+      this._isInitializingCrossTab = true;
+
+      try {
+        const projectId = this.get('config')?.id;
+        if (projectId) {
+          this.initializeCrossTabSessionManager(projectId);
+        }
+      } catch (error) {
+        debugLog.error('SessionHandler', 'Failed to initialize cross-tab session manager', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      } finally {
+        this._isInitializingCrossTab = false;
       }
     }
     return this._crossTabSessionManager;
@@ -138,8 +154,8 @@ export class SessionHandler extends StateManager {
     const sessionEndConfig: Partial<SessionEndConfig> = {
       enablePageUnloadHandlers: true,
       debugMode: (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') ?? false,
-      syncTimeoutMs: 2000,
-      maxRetries: 3,
+      syncTimeoutMs: SESSION_SYNC_CONSTANTS.SYNC_TIMEOUT_MS,
+      maxRetries: SESSION_SYNC_CONSTANTS.MAX_RETRY_ATTEMPTS,
     };
 
     this.sessionManager = new SessionManager(
@@ -181,6 +197,9 @@ export class SessionHandler extends StateManager {
       this._crossTabSessionManager.destroy();
       this._crossTabSessionManager = null;
     }
+
+    // Reset cross-tab initialization flag
+    this._isInitializingCrossTab = false;
 
     if (this.recoveryManager) {
       this.recoveryManager.cleanupOldRecoveryAttempts();

@@ -13,7 +13,7 @@ import { EventType } from './types/event.types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import { getDeviceType, normalizeUrl } from './utils';
 import { StorageManager } from './managers/storage.manager';
-import { SCROLL_DEBOUNCE_TIME_MS } from './constants';
+import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESSION_CONSTANTS } from './constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 import { NetworkHandler } from './handlers/network.handler';
@@ -34,65 +34,60 @@ export class App extends StateManager {
   protected networkHandler!: NetworkHandler;
   protected suppressNextScrollTimer: number | null = null;
 
+  /**
+   * Returns the initialization status of the app
+   * @returns true if the app is fully initialized, false otherwise
+   */
+  get initialized(): boolean {
+    return this.isInitialized;
+  }
+
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {
       debugLog.debug('App', 'App already initialized, skipping re-initialization', { projectId: appConfig.id });
       return;
     }
 
-    debugLog.info('App', 'App initialization started', { projectId: appConfig.id, mode: appConfig.mode });
+    debugLog.info('App', 'App initialization started', { projectId: appConfig.id });
 
-    // The app layer expects a fully validated and normalized config
-    // This is a final safety check - config should already be validated by api.ts
     this.validateAppReadiness(appConfig);
 
     try {
       this.initStorage();
-
       await this.setState(appConfig);
-
       await this.setIntegrations();
-
       this.setEventManager();
-
       await this.initHandlers();
 
       this.isInitialized = true;
+
       debugLog.info('App', 'App initialization completed successfully', {
         projectId: appConfig.id,
-        mode: appConfig.mode,
       });
     } catch (error) {
       this.isInitialized = false;
+
       debugLog.error('App', 'App initialization failed', { projectId: appConfig.id, error });
+
       throw error;
     }
   }
 
   /**
    * Validates that the app is ready to initialize with the provided config
-   * This is a runtime validation layer that ensures the app receives proper config
+   * This is a lightweight runtime validation layer that ensures the app receives proper config
    * @param appConfig - The validated and normalized configuration
    * @throws {ProjectIdValidationError} If project ID is invalid at runtime
    */
   private validateAppReadiness(appConfig: AppConfig): void {
-    // At this point, config should be validated and normalized by api.ts
-    // This is a safety check for runtime integrity
-    if (!appConfig || typeof appConfig !== 'object') {
-      debugLog.clientError('App', 'Configuration object is required for initialization', {
-        receivedType: typeof appConfig,
+    // Lightweight validation - config should already be validated and normalized by api.ts
+    if (!appConfig?.id) {
+      debugLog.clientError('App', 'Configuration integrity check failed - missing project ID', {
+        hasConfig: !!appConfig,
+        hasId: !!appConfig?.id,
       });
-      throw new ProjectIdValidationError('Configuration object is required', 'app');
-    }
 
-    // Since config comes pre-normalized, an empty ID here indicates a system error
-    if (!appConfig.id || typeof appConfig.id !== 'string' || !appConfig.id.trim()) {
-      debugLog.clientError('App', 'Project ID is required and cannot be empty', {
-        hasId: !!appConfig.id,
-        idType: typeof appConfig.id,
-        idLength: appConfig.id ? appConfig.id.length : 0,
-      });
-      throw new ProjectIdValidationError('Project ID is required', 'app');
+      throw new ProjectIdValidationError('Configuration integrity check failed', 'app');
     }
   }
 
@@ -106,6 +101,7 @@ export class App extends StateManager {
 
     if (valid) {
       debugLog.debug('App', 'Custom event validated and queued', { eventName: name, hasMetadata: !!sanitizedMetadata });
+
       this.eventManager.track({
         type: EventType.CUSTOM,
         custom_event: {
@@ -115,6 +111,7 @@ export class App extends StateManager {
       });
     } else {
       const currentMode = this.get('config')?.mode;
+
       debugLog.clientError('App', `Custom event validation failed: ${error ?? 'unknown error'}`, {
         eventName: name,
         validationError: error,
@@ -235,6 +232,14 @@ export class App extends StateManager {
   }
 
   private async initHandlers(): Promise<void> {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before handlers');
+    }
+
+    if (!this.storageManager) {
+      throw new Error('StorageManager must be initialized before handlers');
+    }
+
     this.initSessionHandler();
 
     this.initPageViewHandler();
@@ -255,15 +260,24 @@ export class App extends StateManager {
   }
 
   private setEventManager(): void {
+    if (!this.storageManager) {
+      throw new Error('StorageManager must be initialized before EventManager');
+    }
     this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
   }
 
   private initSessionHandler(): void {
+    if (!this.storageManager || !this.eventManager) {
+      throw new Error('StorageManager and EventManager must be initialized before SessionHandler');
+    }
     this.sessionHandler = new SessionHandler(this.storageManager, this.eventManager);
     this.sessionHandler.startTracking();
   }
 
   private initPageViewHandler(): void {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before PageViewHandler');
+    }
     const onPageViewTrack = (): void => this.onPageViewTrack();
 
     this.pageViewHandler = new PageViewHandler(this.eventManager, onPageViewTrack);
@@ -280,30 +294,45 @@ export class App extends StateManager {
 
     this.suppressNextScrollTimer = window.setTimeout(() => {
       this.set('suppressNextScroll', false);
-    }, SCROLL_DEBOUNCE_TIME_MS * 2);
+    }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESSION_CONSTANTS.SUPPRESS_MULTIPLIER);
   }
 
   private initClickHandler(): void {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before ClickHandler');
+    }
     this.clickHandler = new ClickHandler(this.eventManager);
     this.clickHandler.startTracking();
   }
 
   private initScrollHandler(): void {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before ScrollHandler');
+    }
     this.scrollHandler = new ScrollHandler(this.eventManager);
     this.scrollHandler.startTracking();
   }
 
   private async initPerformanceHandler(): Promise<void> {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before PerformanceHandler');
+    }
     this.performanceHandler = new PerformanceHandler(this.eventManager);
     await this.performanceHandler.startTracking();
   }
 
   private initErrorHandler(): void {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before ErrorHandler');
+    }
     this.errorHandler = new ErrorHandler(this.eventManager);
     this.errorHandler.startTracking();
   }
 
   private initNetworkHandler(): void {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before NetworkHandler');
+    }
     this.networkHandler = new NetworkHandler(this.eventManager);
     this.networkHandler.startTracking();
   }

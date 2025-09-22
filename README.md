@@ -46,7 +46,7 @@ TraceLog.event('user_signup', {
 });
 ```
 
-**Expected behavior**: Automatic tracking begins immediately. Check browser dev tools console for event logs (when `qaMode: true`).
+**Expected behavior**: Automatic tracking begins immediately. Check browser dev tools console for event logs (when `mode: 'qa'`).
 
 ## Usage
 
@@ -54,8 +54,7 @@ TraceLog.event('user_signup', {
 ```typescript
 await TraceLog.init({
   id: 'your-project-id',
-  sessionTimeout: 30 * 60 * 1000, // 30 minutes
-  qaMode: true // Enable debug logs
+  sessionTimeout: 30 * 60 * 1000 // 30 minutes
 });
 ```
 
@@ -89,7 +88,7 @@ await TraceLog.init({
 **Key configuration options:**
 - `config.id`: Your unique project identifier (required).
 - `config.sessionTimeout`: Session timeout in milliseconds (default: 15 minutes).
-- `config.qaMode`: Enable debug logging and bypass data sending for testing.
+- `config.mode`: Server-side configuration that controls logging mode (`'qa'` or `'debug'`). Not settable from client initialization.
 - `config.globalMetadata`: Metadata automatically attached to all events.
 
 **Metadata types:** `string | number | boolean | string[]`
@@ -97,7 +96,7 @@ await TraceLog.init({
 ## Configuration
 
 **Environment-based settings:**
-- Set `qaMode: true` for development/testing environments
+- Configure `mode: 'qa'` server-side for development/testing environments
 - Use `samplingRate: 0.1` to reduce data volume in high-traffic applications
 - Configure `sessionTimeout` to match your application's user session length
 
@@ -122,7 +121,7 @@ await TraceLog.init({
 
 ## Troubleshooting
 
-**Events not appearing** → Check `qaMode: true` for console logs → Verify project ID is correct → Ensure network connectivity.
+**Events not appearing** → Check console logs → Verify project ID is correct → Ensure network connectivity.
 
 **Session tracking issues** → Verify localStorage is available → Check for cross-tab conflicts → Review session timeout settings.
 

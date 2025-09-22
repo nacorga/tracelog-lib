@@ -3,6 +3,11 @@ import {
   EVENT_SENT_INTERVAL_TEST_MS,
   MAX_EVENTS_QUEUE_LENGTH,
   DUPLICATE_EVENT_THRESHOLD_MS,
+  CIRCUIT_BREAKER_CONSTANTS,
+  MAX_FINGERPRINTS,
+  FINGERPRINT_CLEANUP_MULTIPLIER,
+  CLICK_COORDINATE_PRECISION,
+  EVENT_PERSISTENCE_MAX_AGE_MS,
 } from '../constants';
 import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
 import { getUTMParameters, isUrlPathExcluded } from '../utils';
@@ -19,38 +24,42 @@ export class EventManager extends StateManager {
   private readonly samplingManager: SamplingManager;
   private readonly tagsManager: TagsManager;
   private readonly dataSender: SenderManager;
+  private readonly storageManager: StorageManager;
 
   private eventsQueue: EventData[] = [];
   private lastEvent: EventData | null = null;
   private eventsQueueIntervalId: number | null = null;
+  private intervalActive = false;
 
   // Circuit breaker properties
   private failureCount = 0;
-  private readonly MAX_FAILURES = 5;
+  private readonly MAX_FAILURES = CIRCUIT_BREAKER_CONSTANTS.MAX_FAILURES;
   private circuitOpen = false;
+  private circuitOpenTime = 0;
+  private backoffDelay: number = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+  private circuitResetTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Event deduplication properties
   private readonly eventFingerprints = new Map<string, number>();
 
-  get clearQueueIntervalInstance(): () => void {
-    return process.env.NODE_ENV === 'e2e' ? this.clearQueueInterval : (): void => {};
-  }
-
-  // E2E testing method to access events queue
-  getEventQueue(): EventData[] | null {
-    return process.env.NODE_ENV === 'e2e' ? this.eventsQueue : null;
-  }
+  // Persistence storage key
+  private readonly PERSISTENCE_KEY = 'tl:circuit_breaker_events';
 
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 
+    this.storageManager = storeManager;
     this.googleAnalytics = googleAnalytics;
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
 
+    // Restore any persisted events on initialization
+    this.restoreEventsFromStorage();
+
     debugLog.debug('EventManager', 'EventManager initialized', {
       hasGoogleAnalytics: !!googleAnalytics,
+      restoredEventsCount: this.eventsQueue.length,
     });
   }
 
@@ -168,10 +177,31 @@ export class EventManager extends StateManager {
   }
 
   stop(): void {
+    // Clear interval and reset interval state
     if (this.eventsQueueIntervalId) {
       clearInterval(this.eventsQueueIntervalId);
       this.eventsQueueIntervalId = null;
+      this.intervalActive = false;
     }
+
+    // Clean up circuit breaker timeout
+    if (this.circuitResetTimeoutId) {
+      clearTimeout(this.circuitResetTimeoutId);
+      this.circuitResetTimeoutId = null;
+    }
+
+    // Persist any remaining events before stopping
+    if (this.eventsQueue.length > 0) {
+      this.persistEventsToStorage();
+    }
+
+    // Clean up all state variables
+    this.eventFingerprints.clear();
+    this.circuitOpen = false;
+    this.circuitOpenTime = 0;
+    this.failureCount = 0;
+    this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+    this.lastEvent = null;
 
     // Stop the data sender to clean up retry timeouts
     this.dataSender.stop();
@@ -226,7 +256,7 @@ export class EventManager extends StateManager {
   }
 
   private initEventsQueueInterval(): void {
-    if (this.eventsQueueIntervalId) {
+    if (this.eventsQueueIntervalId || this.intervalActive) {
       return;
     }
 
@@ -237,6 +267,8 @@ export class EventManager extends StateManager {
         this.sendEventsQueue();
       }
     }, interval);
+
+    this.intervalActive = true;
   }
 
   async flushImmediately(): Promise<boolean> {
@@ -286,18 +318,24 @@ export class EventManager extends StateManager {
       circuitOpen: this.circuitOpen,
     });
 
-    // Circuit breaker: skip sending if circuit is open
+    // Circuit breaker: check if it should be reset or continue blocking
     if (this.circuitOpen) {
-      if (this.failureCount > 0) {
-        this.failureCount--;
-      }
-      if (this.failureCount === 0) {
-        this.circuitOpen = false;
-        debugLog.info('EventManager', 'Circuit breaker reset - resuming event sending', {
-          queueLength: this.eventsQueue.length,
+      const timeSinceOpen = Date.now() - this.circuitOpenTime;
+      if (timeSinceOpen >= CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
+        this.resetCircuitBreaker();
+        debugLog.info('EventManager', 'Circuit breaker reset after timeout', {
+          timeSinceOpen,
+          recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
         });
+      } else {
+        debugLog.debug('EventManager', 'Circuit breaker is open - skipping event sending', {
+          queueLength: this.eventsQueue.length,
+          failureCount: this.failureCount,
+          timeSinceOpen,
+          recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
+        });
+        return;
       }
-      return;
     }
 
     if (!this.get('sessionId')) {
@@ -314,27 +352,27 @@ export class EventManager extends StateManager {
         sessionId: body.session_id,
         uniqueEventsAfterDedup: body.events.length,
       });
+
       this.eventsQueue = [];
       this.failureCount = 0;
+      this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+
+      // Clear any persisted events on successful send
+      this.clearPersistedEvents();
     } else {
       debugLog.info('EventManager', `❌ Failed to send event queue`, {
         eventsCount: body.events.length,
         failureCount: this.failureCount + 1,
         willOpenCircuit: this.failureCount + 1 >= this.MAX_FAILURES,
       });
-      this.eventsQueue = body.events;
+
+      // Persist failed events for recovery instead of restoring queue to prevent duplicates
+      this.persistEventsToStorage();
+      this.eventsQueue = [];
       this.failureCount++;
 
       if (this.failureCount >= this.MAX_FAILURES) {
-        this.circuitOpen = true;
-        const clearedEvents = this.eventsQueue.length;
-        this.eventsQueue = []; // Clear queue to prevent memory leak
-
-        debugLog.warn('EventManager', 'Circuit breaker opened after consecutive failures', {
-          maxFailures: this.MAX_FAILURES,
-          clearedEvents,
-          failureCount: this.failureCount,
-        });
+        this.openCircuitBreaker();
       }
     }
   }
@@ -382,6 +420,7 @@ export class EventManager extends StateManager {
     if (this.eventsQueueIntervalId) {
       clearInterval(this.eventsQueueIntervalId);
       this.eventsQueueIntervalId = null;
+      this.intervalActive = false;
     }
   }
 
@@ -390,8 +429,8 @@ export class EventManager extends StateManager {
 
     if (event.click_data) {
       // Round coordinates to reduce false positives
-      const x = Math.round((event.click_data.x || 0) / 10) * 10;
-      const y = Math.round((event.click_data.y || 0) / 10) * 10;
+      const x = Math.round((event.click_data.x || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
+      const y = Math.round((event.click_data.y || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
       return `${key}_${x}_${y}_${event.click_data.tag}_${event.click_data.id}`;
     }
 
@@ -420,7 +459,7 @@ export class EventManager extends StateManager {
 
   private isDuplicatedEvent(event: Partial<EventData>): boolean {
     const fingerprint = this.getEventFingerprint(event);
-    const lastTime = this.eventFingerprints.get(fingerprint) || 0;
+    const lastTime = this.eventFingerprints.get(fingerprint) ?? 0;
     const now = Date.now();
 
     if (now - lastTime < DUPLICATE_EVENT_THRESHOLD_MS) {
@@ -428,6 +467,174 @@ export class EventManager extends StateManager {
     }
 
     this.eventFingerprints.set(fingerprint, now);
+
+    // Clean up old fingerprints to prevent memory leaks
+    this.cleanupOldFingerprints();
+
     return false;
+  }
+
+  /**
+   * Cleans up old fingerprints to prevent memory leaks
+   */
+  private cleanupOldFingerprints(): void {
+    if (this.eventFingerprints.size <= MAX_FINGERPRINTS) {
+      return;
+    }
+
+    const now = Date.now();
+    const cleanupThreshold = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
+    const keysToDelete: string[] = [];
+
+    for (const [key, timestamp] of this.eventFingerprints) {
+      if (now - timestamp > cleanupThreshold) {
+        keysToDelete.push(key);
+      }
+    }
+
+    // Delete old entries
+    for (const key of keysToDelete) {
+      this.eventFingerprints.delete(key);
+    }
+
+    debugLog.debug('EventManager', 'Cleaned up old event fingerprints', {
+      totalFingerprints: this.eventFingerprints.size + keysToDelete.length,
+      cleanedCount: keysToDelete.length,
+      remainingCount: this.eventFingerprints.size,
+      cleanupThreshold,
+    });
+  }
+
+  /**
+   * Opens the circuit breaker with time-based recovery and event persistence
+   */
+  private openCircuitBreaker(): void {
+    this.circuitOpen = true;
+    this.circuitOpenTime = Date.now();
+
+    // Persist events before clearing queue to prevent data loss
+    this.persistEventsToStorage();
+
+    const eventsCount = this.eventsQueue.length;
+    this.eventsQueue = []; // Clear memory queue
+
+    debugLog.warn('EventManager', 'Circuit breaker opened with time-based recovery', {
+      maxFailures: this.MAX_FAILURES,
+      persistedEvents: eventsCount,
+      failureCount: this.failureCount,
+      recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
+      openTime: this.circuitOpenTime,
+    });
+
+    // Increase backoff for next failure
+    this.backoffDelay = Math.min(
+      this.backoffDelay * CIRCUIT_BREAKER_CONSTANTS.BACKOFF_MULTIPLIER,
+      CIRCUIT_BREAKER_CONSTANTS.MAX_BACKOFF_DELAY_MS,
+    );
+  }
+
+  /**
+   * Resets the circuit breaker and attempts to restore persisted events
+   */
+  private resetCircuitBreaker(): void {
+    this.circuitOpen = false;
+    this.circuitOpenTime = 0;
+    this.failureCount = 0;
+    this.circuitResetTimeoutId = null;
+
+    debugLog.info('EventManager', 'Circuit breaker reset - attempting to restore events', {
+      currentQueueLength: this.eventsQueue.length,
+    });
+
+    // Restore persisted events
+    this.restoreEventsFromStorage();
+
+    debugLog.info('EventManager', 'Circuit breaker reset completed', {
+      restoredQueueLength: this.eventsQueue.length,
+      backoffDelay: this.backoffDelay,
+    });
+  }
+
+  /**
+   * Persists current events queue to localStorage for recovery
+   */
+  private persistEventsToStorage(): void {
+    try {
+      if (this.eventsQueue.length === 0) {
+        return;
+      }
+
+      const persistData = {
+        events: this.eventsQueue,
+        timestamp: Date.now(),
+        failureCount: this.failureCount,
+      };
+
+      this.storageManager.setItem(this.PERSISTENCE_KEY, JSON.stringify(persistData));
+
+      debugLog.debug('EventManager', 'Events persisted to storage for recovery', {
+        eventsCount: this.eventsQueue.length,
+        failureCount: this.failureCount,
+      });
+    } catch (error) {
+      debugLog.warn('EventManager', 'Failed to persist events to storage', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        eventsCount: this.eventsQueue.length,
+      });
+    }
+  }
+
+  /**
+   * Restores events from localStorage if available and not expired
+   */
+  private restoreEventsFromStorage(): void {
+    try {
+      const persistedData = this.storageManager.getItem(this.PERSISTENCE_KEY);
+      if (!persistedData) {
+        return;
+      }
+
+      const parsed = JSON.parse(persistedData);
+      const now = Date.now();
+      const maxAge = EVENT_PERSISTENCE_MAX_AGE_MS;
+
+      // Check if persisted data is not too old
+      if (now - parsed.timestamp > maxAge) {
+        this.clearPersistedEvents();
+        debugLog.debug('EventManager', 'Cleared expired persisted events', {
+          age: now - parsed.timestamp,
+          maxAge,
+        });
+        return;
+      }
+
+      // Restore events if we don't already have events in queue
+      if (Array.isArray(parsed.events) && parsed.events.length > 0 && this.eventsQueue.length === 0) {
+        this.eventsQueue = parsed.events;
+        debugLog.info('EventManager', 'Restored events from storage', {
+          restoredCount: parsed.events.length,
+          originalFailureCount: parsed.failureCount ?? 0,
+        });
+      }
+    } catch (error) {
+      debugLog.warn('EventManager', 'Failed to restore events from storage', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      this.clearPersistedEvents();
+    }
+  }
+
+  /**
+   * Clears persisted events from localStorage
+   */
+  private clearPersistedEvents(): void {
+    try {
+      this.storageManager.removeItem(this.PERSISTENCE_KEY);
+      debugLog.debug('EventManager', 'Cleared persisted events from storage');
+    } catch (error) {
+      debugLog.warn('EventManager', 'Failed to clear persisted events', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   }
 }

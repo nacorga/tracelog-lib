@@ -3,6 +3,7 @@ import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
 import { debugLog } from './utils/logging';
 import { validateAndNormalizeConfig } from './utils/validations';
+import { INITIALIZATION_CONSTANTS } from './constants';
 import './types/window.types';
 import { TraceLogTestBridge } from './types/window.types';
 
@@ -22,7 +23,7 @@ let isInitializing = false;
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
   try {
-    debugLog.info('API', 'Library initialization started', { id: appConfig.id, mode: appConfig.mode });
+    debugLog.info('API', 'Library initialization started', { id: appConfig.id });
 
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       debugLog.clientError(
@@ -33,6 +34,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
           hasDocument: typeof document !== 'undefined',
         },
       );
+
       throw new Error('This library can only be used in a browser environment');
     }
 
@@ -40,17 +42,19 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
       debugLog.debug('API', 'Library already initialized, skipping duplicate initialization', {
         projectId: appConfig.id,
       });
+
       return;
     }
 
     if (isInitializing) {
       debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
-      // Instead of throwing, wait for the ongoing initialization to complete
+
       let retries = 0;
-      const maxRetries = 20; // 2 seconds maximum wait (reduced for better performance)
+      const maxRetries = INITIALIZATION_CONSTANTS.MAX_CONCURRENT_RETRIES;
+      const retryDelay = INITIALIZATION_CONSTANTS.CONCURRENT_RETRY_DELAY_MS;
 
       while (isInitializing && retries < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 50)); // Shorter intervals for faster response
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
         retries++;
       }
 
@@ -59,7 +63,8 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
           projectId: appConfig.id,
           retriesUsed: retries,
         });
-        return; // Initialization completed successfully
+
+        return;
       }
 
       if (isInitializing) {
@@ -68,6 +73,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
           retriesUsed: retries,
           maxRetries,
         });
+
         throw new Error('App initialization timeout - concurrent initialization took too long');
       }
     }
@@ -83,11 +89,21 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     await instance.init(validatedConfig);
 
     app = instance;
+
     debugLog.info('API', 'Library initialization completed successfully', {
       projectId: validatedConfig.id,
-      mode: validatedConfig.mode,
     });
   } catch (error) {
+    // Ensure complete cleanup on initialization failure
+    if (app && !app.initialized) {
+      // Clean up partially initialized app instance
+      try {
+        app.destroy();
+      } catch (cleanupError) {
+        debugLog.warn('API', 'Failed to cleanup partially initialized app', { cleanupError });
+      }
+    }
+
     app = null;
 
     debugLog.error('API', 'Initialization failed', { error });
@@ -191,7 +207,7 @@ class TestBridge extends App implements TraceLogTestBridge {
 }
 
 // Auto-inject testing bridge only in development/testing environments
-if (process.env.NODE_ENV === 'e2e') {
+if (process.env.NODE_ENV === 'dev') {
   if (typeof window !== 'undefined') {
     // Wait for DOM to be ready before injecting
     const injectTestingBridge = (): void => {

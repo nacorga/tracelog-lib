@@ -19,6 +19,7 @@ export const RATE_LIMIT_INTERVAL = 1000; // 1 second
 
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 24;
+export const EVENT_PERSISTENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Performance metrics
 export const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;

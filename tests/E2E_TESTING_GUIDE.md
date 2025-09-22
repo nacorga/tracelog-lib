@@ -2,10 +2,13 @@
 
 ## 🎯 Core Requirements
 
-- **Test ID**: Use `{ id: 'test' }` (enables debug mode and full logging)
-- **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`
-- **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile
-- **Testing Bridge**: Auto-injected `window.__traceLogTestBridge` when `NODE_ENV=e2e`
+- **Project IDs**: Always use `SpecialProjectId` from `src/types/api.types.ts` for testing (special ids that automatically enables debug mode and full logging).
+  - Use `SpecialProjectId.HttpLocal` to allow http calls (based on window.location.origin) to load config and send events queues.
+  - Use `SpecialProjectId.HttpSkip` to skip http calls.
+  - Using `SpecialProjectId.HttpSkip` by default on `initializeTraceLog` method.
+- **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`.
+- **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile.
+- **Testing Bridge**: Auto-injected `window.__traceLogTestBridge` when `NODE_ENV=e2e`.
 
 ## 📝 Basic Test Structure
 

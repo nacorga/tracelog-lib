@@ -6,6 +6,12 @@ export type Config = ApiConfig & AppConfig;
 
 export interface ApiConfig {
   /**
+   * Logging mode for the library.
+   * - 'qa': Shows client-facing logs only (INFO, CLIENT_WARN, CLIENT_ERROR)
+   * - 'debug': Shows all logs including internal library errors
+   */
+  mode?: Mode;
+  /**
    * Sampling rate as a percentage (0-1) to control how many events are sent.
    * A value of 1 means all events are sent, while 0.5 means only half of events are sent.
    */
@@ -98,13 +104,4 @@ export interface AppConfig {
       measurementId: string;
     };
   };
-  /**
-   * Logging mode for the library.
-   * - 'production': No debug output (default)
-   * - 'qa': Shows client-facing logs only (INFO, CLIENT_WARN, CLIENT_ERROR)
-   * - 'debug': Shows all logs including internal library errors
-   *
-   * @default 'production'
-   */
-  mode?: Mode;
 }

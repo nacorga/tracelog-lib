@@ -100,10 +100,8 @@ npm run serve:test      # Instant start - Test server on http://localhost:3000
 
 ### Quick Debug Setup
 ```typescript
-// Enable detailed logging for development
-await TraceLog.init({ 
-  id: 'your-project', 
-  qaMode: true  // Shows all events in console
+await TraceLog.init({
+  id: 'your-project'
 });
 
 // Check browser storage (prefix 'tl:')
