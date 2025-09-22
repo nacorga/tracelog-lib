@@ -3,6 +3,22 @@
 
 
 
+
+## [0.0.5] - 2025-09-22
+
+### 🐛 Bug Fixes
+
+- Update CORS settings for fetch requests ([e9d9431](../../commit/e9d9431aa37441dcd054817a3bf0f92824cf5eb5))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.4...v0.0.5
+
+
 ## [0.0.4] - 2025-09-22
 
 ### 🔧 Other Changes
