@@ -16,15 +16,15 @@ A lightweight TypeScript Library for web analytics and user behavior tracking. A
 
 - npm:
   ```bash
-  npm install @tracelog/events
+  npm install @tracelog/lib
   ```
 - yarn:
   ```bash
-  yarn add @tracelog/events
+  yarn add @tracelog/lib
   ```
 - CDN (browser):
   ```html
-  <script src="https://cdn.jsdelivr.net/npm/@tracelog/events@latest/dist/browser/tracelog.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.js"></script>
   ```
 
 ## Quick Start
@@ -32,7 +32,7 @@ A lightweight TypeScript Library for web analytics and user behavior tracking. A
 Initialize tracking with your project ID and start capturing events immediately:
 
 ```typescript
-import * as TraceLog from '@tracelog/events';
+import * as TraceLog from '@tracelog/lib';
 
 // Initialize tracking
 await TraceLog.init({
@@ -163,8 +163,8 @@ npm run ci:health-strict       # Strict mode (blocks on any anomalies)
 
 ### Development Setup
 ```bash
-git clone https://github.com/nacorga/tracelog-events.git
-cd tracelog-events
+git clone https://github.com/nacorga/tracelog-lib.git
+cd tracelog-lib
 npm install
 npm run build:all      # Build ESM + CJS + Browser
 npm run check          # Lint + format check

@@ -223,7 +223,7 @@ jobs:
             ## Installation
 
             ```bash
-            npm install @tracelog/events@${{ steps.get-version.outputs.version }}
+            npm install @tracelog/lib@${{ steps.get-version.outputs.version }}
             ```
 
             ## Documentation
@@ -247,7 +247,7 @@ jobs:
         if: github.event.inputs.dry_run != 'true'
         run: |
           # Verify the package was published
-          PACKAGE_VERSION=$(npm view @tracelog/events version)
+          PACKAGE_VERSION=$(npm view @tracelog/lib version)
           if [[ "$PACKAGE_VERSION" == "${{ steps.get-version.outputs.version }}" ]]; then
             echo "✅ Package successfully published to NPM"
           else

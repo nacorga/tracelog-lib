@@ -250,16 +250,16 @@ npm run check
 ### Post-Release Verification
 ```bash
 # 1. Verify NPM publication
-npm view @tracelog/events version
+npm view @tracelog/lib version
 
 # 2. Verify Git tag created
 git tag -l | tail -5
 
 # 3. Check GitHub Release page
-# Visit: https://github.com/your-username/tracelog-events/releases
+# Visit: https://github.com/your-username/tracelog-lib/releases
 
 # 4. Test installation
-npm install @tracelog/events@latest
+npm install @tracelog/lib@latest
 ```
 
 ### Emergency Recovery
