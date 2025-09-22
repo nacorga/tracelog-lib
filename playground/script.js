@@ -44,7 +44,7 @@ function setupMockServer() {
         }
 
         // Mock events endpoint
-        if (url.includes('/events') && options?.method === 'POST') {
+        if (url.includes('/collect') && options?.method === 'POST') {
             // Simulate network delay
             return new Promise(resolve => {
                 setTimeout(() => {

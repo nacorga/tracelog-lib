@@ -15,7 +15,7 @@ import { Page } from '@playwright/test';
  * await NetworkUtils.blockApiCalls(page);
  *
  * // Simulate network failures
- * await NetworkUtils.simulateNetworkFailure(page, '/api/events');
+ * await NetworkUtils.simulateNetworkFailure(page, '/api/collect');
  *
  * // Mock API responses
  * await NetworkUtils.mockApiResponse(page, '/api/config', { sampling: 0.5 });

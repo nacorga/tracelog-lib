@@ -114,6 +114,8 @@ export class SenderManager extends StateManager {
     try {
       const response = await fetch(url, {
         method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -122,7 +124,15 @@ export class SenderManager extends StateManager {
 
       return response.ok;
     } catch (error) {
-      debugLog.error('SenderManager', 'Failed to send events async', { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCorsError =
+        errorMessage.includes('CORS') || errorMessage.includes('NotSameOrigin') || errorMessage.includes('blocked');
+
+      debugLog.error('SenderManager', 'Failed to send events async', {
+        error: errorMessage,
+        isCorsError,
+        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+      });
 
       return false;
     }
@@ -149,17 +159,27 @@ export class SenderManager extends StateManager {
   }
 
   private sendSyncXHR(url: string, payload: string): boolean {
-    try {
-      const xhr = new XMLHttpRequest();
+    const xhr = new XMLHttpRequest();
 
+    try {
       xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.withCredentials = false;
       xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);
 
       return xhr.status >= 200 && xhr.status < 300;
     } catch (error) {
-      debugLog.error('SenderManager', 'Sync XHR failed', { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCorsError =
+        errorMessage.includes('CORS') || errorMessage.includes('NotSameOrigin') || errorMessage.includes('blocked');
+
+      debugLog.error('SenderManager', 'Sync XHR failed', {
+        error: errorMessage,
+        isCorsError,
+        status: xhr.status ?? 'unknown',
+        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+      });
 
       return false;
     }
@@ -167,7 +187,8 @@ export class SenderManager extends StateManager {
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
     const useLocalServer = this.get('config').id === SpecialProjectId.HttpLocal;
-    const url = useLocalServer ? window.location.origin : this.get('apiUrl');
+    const baseUrl = useLocalServer ? window.location.origin : this.get('apiUrl');
+    const url = `${baseUrl}/collect`;
 
     return {
       url,
