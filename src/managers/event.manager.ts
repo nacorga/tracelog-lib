@@ -259,7 +259,6 @@ export class EventManager extends StateManager {
       return;
     }
 
-    this.intervalActive = true;
     const interval = this.get('config')?.id === 'test' ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
 
     this.eventsQueueIntervalId = window.setInterval(() => {
@@ -267,6 +266,8 @@ export class EventManager extends StateManager {
         this.sendEventsQueue();
       }
     }, interval);
+
+    this.intervalActive = true;
   }
 
   async flushImmediately(): Promise<boolean> {

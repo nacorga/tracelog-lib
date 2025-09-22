@@ -364,7 +364,7 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    return specialModes.includes(mode as Mode) && id !== SpecialProjectId.HttpLocal;
+    return !!mode && specialModes.includes(mode) && id !== SpecialProjectId.HttpLocal;
   }
 
   private isSendBeaconAvailable(): boolean {
