@@ -171,7 +171,7 @@ export class SenderManager extends StateManager {
     const baseUrl = useLocalServer ? window.location.origin : (this.get('apiUrl') ?? API_BASE_URL);
 
     return {
-      url: `${baseUrl}/events`,
+      url: `${baseUrl}/collect`,
       payload: JSON.stringify(body),
     };
   }
