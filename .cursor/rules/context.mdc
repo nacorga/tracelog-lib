@@ -160,14 +160,9 @@ npm run build:all       # Ensure build success
 ### Debug
 
 ```typescript
-// Enable verbose debug mode
 await TraceLog.init({
-  id: 'your-project-id',
-  qaMode: true,               // Enables detailed console logging
+  id: 'your-project-id'
 });
-
-// Inspect state saved in localStorage (keys prefixed with 'tl:')
-// Review BroadcastChannel for session cross-tab synchronization
 ```
 
 

@@ -1,11 +1,11 @@
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
-import { ApiConfig, AppConfig, Config, SpecialProjectIds } from '../types';
+import { ApiConfig, AppConfig, Config, SpecialProjectId } from '../types';
 import { isValidUrl, sanitizeApiConfig } from '../utils';
 import { debugLog } from '../utils/logging';
 
 export class ConfigManager {
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
-    if (Object.values(SpecialProjectIds).includes(appConfig.id as SpecialProjectIds)) {
+    if (appConfig.id === SpecialProjectId.HttpSkip) {
       debugLog.debug('ConfigManager', 'Using special project id');
 
       return this.getDefaultConfig(appConfig);
@@ -13,7 +13,7 @@ export class ConfigManager {
 
     debugLog.debug('ConfigManager', 'Loading config from API', { apiUrl, projectId: appConfig.id });
 
-    const config = await this.load(apiUrl, appConfig, appConfig.id === SpecialProjectIds.Demo);
+    const config = await this.load(apiUrl, appConfig, appConfig.id === SpecialProjectId.HttpLocal);
 
     debugLog.info('ConfigManager', 'Config loaded successfully', {
       projectId: appConfig.id,
@@ -25,9 +25,9 @@ export class ConfigManager {
     return config;
   }
 
-  private async load(apiUrl: string, appConfig: AppConfig, isDemo?: boolean): Promise<Config> {
+  private async load(apiUrl: string, appConfig: AppConfig, useLocalServer?: boolean): Promise<Config> {
     try {
-      const configUrl = isDemo ? `${window.location.origin}/config` : this.getUrl(apiUrl);
+      const configUrl = useLocalServer ? `${window.location.origin}/config` : this.getUrl(apiUrl);
 
       if (!configUrl) {
         throw new Error('Config URL is not valid or not allowed');
@@ -108,7 +108,7 @@ export class ConfigManager {
     return DEFAULT_CONFIG({
       ...appConfig,
       errorSampling: 1,
-      ...(Object.values(SpecialProjectIds).includes(appConfig.id as SpecialProjectIds) && { mode: 'debug' }),
+      ...(Object.values(SpecialProjectId).includes(appConfig.id as SpecialProjectId) && { mode: 'debug' }),
     });
   }
 }

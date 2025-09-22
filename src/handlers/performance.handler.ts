@@ -11,7 +11,7 @@ export class PerformanceHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly reportedByNav: Map<NavigationId, Set<string>> = new Map();
 
-  private observers: PerformanceObserver[] = [];
+  private readonly observers: PerformanceObserver[] = [];
   private lastLongTaskSentAt = 0;
 
   constructor(eventManager: EventManager) {
@@ -30,18 +30,30 @@ export class PerformanceHandler extends StateManager {
   stopTracking(): void {
     debugLog.debug('PerformanceHandler', 'Stopping performance tracking', { observersCount: this.observers.length });
 
-    for (const obs of this.observers) {
+    // Disconnect observers with proper cleanup and error handling
+    for (let i = this.observers.length - 1; i >= 0; i--) {
+      const obs = this.observers[i];
       try {
         obs.disconnect();
       } catch (error) {
         debugLog.warn('PerformanceHandler', 'Failed to disconnect performance observer', {
           error: error instanceof Error ? error.message : 'Unknown error',
+          observerIndex: i,
         });
+      } finally {
+        // Force removal of the observer reference regardless of disconnect success
+        this.observers.splice(i, 1);
       }
     }
 
-    this.observers = [];
+    // Double verification - ensure the array is completely cleared
+    this.observers.length = 0;
     this.reportedByNav.clear();
+
+    debugLog.debug('PerformanceHandler', 'Performance tracking cleanup completed', {
+      remainingObservers: this.observers.length,
+      clearedNavReports: true,
+    });
   }
 
   private observeWebVitalsFallback(): void {

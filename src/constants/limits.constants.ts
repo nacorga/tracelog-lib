@@ -39,3 +39,10 @@ export const WEB_VITALS_LONG_TASK_SAMPLING = 0.2 as const;
 
 // Sync XHR timeout
 export const SYNC_XHR_TIMEOUT_MS = 2000; // 2 seconds
+
+// Event fingerprint management
+export const MAX_FINGERPRINTS = 1000; // Maximum fingerprints stored before cleanup
+export const FINGERPRINT_CLEANUP_MULTIPLIER = 10; // Cleanup fingerprints older than 10x threshold
+
+// Click coordinate precision
+export const CLICK_COORDINATE_PRECISION = 10; // Round click coordinates to nearest 10px

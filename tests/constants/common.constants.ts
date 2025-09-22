@@ -1,6 +1,6 @@
-import { Config, SpecialProjectIds } from '../../src/types';
+import { Config, SpecialProjectId } from '../../src/types';
 
-export const E2E_ID = SpecialProjectIds.E2E;
+export const E2E_ID = SpecialProjectId.E2E;
 
 export const DEFAULT_CONFIG: Config = { id: E2E_ID };
 

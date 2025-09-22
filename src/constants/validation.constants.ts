@@ -8,6 +8,7 @@ import {
 
 // Allowed API config keys for runtime validation
 export const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>([
+  'mode',
   'tags',
   'samplingRate',
   'excludedUrlPaths',
