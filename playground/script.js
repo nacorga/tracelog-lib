@@ -184,7 +184,6 @@ function getConfig() {
 
     return {
         id: projectId,
-        mode: 'qa', // Always use QA mode to see dispatchEvent
         sessionTimeout: sessionTimeout,
         globalMetadata: globalMetadata,
         allowHttp: true // Allow HTTP for local testing

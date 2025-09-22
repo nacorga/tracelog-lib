@@ -7,6 +7,7 @@ import {
   MAX_FINGERPRINTS,
   FINGERPRINT_CLEANUP_MULTIPLIER,
   CLICK_COORDINATE_PRECISION,
+  EVENT_PERSISTENCE_MAX_AGE_MS,
 } from '../constants';
 import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
 import { getUTMParameters, isUrlPathExcluded } from '../utils';
@@ -595,7 +596,7 @@ export class EventManager extends StateManager {
 
       const parsed = JSON.parse(persistedData);
       const now = Date.now();
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      const maxAge = EVENT_PERSISTENCE_MAX_AGE_MS;
 
       // Check if persisted data is not too old
       if (now - parsed.timestamp > maxAge) {
