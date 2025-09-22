@@ -3,412 +3,197 @@ globs: tests/e2e/**
 alwaysApply: false
 ---
 
-# E2E Testing Guide for TraceLog Events Library
+# E2E Testing Guide
 
-**Playwright-based E2E testing guide for browser interaction testing**
+## 🎯 Core Requirements
 
-## 🎯 Objectives
+- **Project IDs**: Always use `SpecialProjectId` from `src/types/api.types.ts` for testing (special ids that automatically enables debug mode and full logging).
+  - Use `SpecialProjectId.HttpLocal` to allow http calls (based on window.location.origin) to load config and send events queues.
+  - Use `SpecialProjectId.HttpSkip` to skip http calls.
+  - Using `SpecialProjectId.HttpSkip` by default on `initializeTraceLog` method.
+- **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`.
+- **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile.
+- **Testing Bridge**: Auto-injected `window.__traceLogBridge` when `NODE_ENV=dev`.
 
-- **Browser Validation**: Ensure TraceLog Events Library works across multiple browsers and devices
-- **User Journey Testing**: Validate complete user flows and interactions
-- **Integration Verification**: Confirm TraceLog Events Library integrates seamlessly with web apps
-- **Error Handling**: Test graceful degradation and error scenarios
+## 📝 Basic Test Structure
 
-
-## 🏗️ Architecture
-
-```
-tests/
-├── e2e/                         # Playwright test files
-│   ├── initialization/          # Library initialization tests
-│   ├── session-management/      # Session lifecycle tests
-│   ├── event-tracking/          # Event capture tests
-│   └── [other-categories]/      # Organized by feature
-├── fixtures/                    # Test HTML pages and assets
-│   ├── index.html               # Main test page
-│   ├── tracelog.js              # Built Library for testing
-│   └── pages/                   # Additional test pages
-└── constants/                   # Test constants
-    ├── index.ts                 # Unified export
-    ├── common.constants.ts      # Core shared utilities
-    └── [other-constants]        # Organized by domain
-└── types/                       # Test types
-    ├── index.ts                 # Unified export
-    ├── common.types.ts          # Core shared utilities
-    └── [other-types]            # Organized by domain
-└── utils/                       # Test utilities
-    ├── index.ts                 # Unified TestUtils export
-    ├── common.utils.ts          # Core shared utilities
-    └── [other-utils]            # Organized by domain
-```
-
-**Test Flow**: Page Load → Library Init → User Interactions → Event Capture → Validation
-
-## 🛠️ Tech Stack
-
-- **Playwright** - Cross-browser end-to-end testing
-- **TypeScript** - Test implementation language
-- **http-server** - Local test server
-- **Multiple Browsers** - Chromium, Firefox, WebKit, Mobile emulation
-
-
-## 📝 Conventions
-
-### File Naming
-
-- Test files use `kebab-case` (e.g., `invalid-project-id.spec.ts`)
-- Test categories use `kebab-case` folders (e.g., `session-management/`)
-- Constants use `UPPER_SNAKE_CASE`
-
-
-### Code Style
-
-```typescript
-// Follow functional programming paradigms with TestUtils helper utilities
-test.describe('Feature Name', () => {
-  test('should validate specific behavior', async ({ page }) => {
-    const monitor = TestUtils.createConsoleMonitor(page);
-
-    try {
-      await TestUtils.navigateAndWaitForReady(page, '/');
-      // actual test logic here
-    } finally {
-      monitor.cleanup();
-    }
-  });
-});
-```
-
-
-### Functional Architecture
-
-- `TestUtils` namespace aggregates all helper utilities
-- All utils are pure functions—no classes
-- Utils grouped by domain (event-tracking, session-management, etc.)
-- Single import: `import { TestUtils } from '../utils'`
-
-
-### Configuration
-
-- Use `TEST_CONFIGS.DEFAULT` with `test` ID for E2E tests
-    - Enables `mode=debug` and local config loading
-    - Avoid for regular mode or API config tests
-- Access constants from `TEST_CONSTANTS` via TestUtils
-
-### Testing Bridge Architecture
-
-The library uses a **clean auto-injection testing bridge** that provides access to internal APIs without contaminating the public interface:
-
-- **Environment-Based**: Only injects when `NODE_ENV=e2e`
-- **Clean API**: No `forTesting` exports in public API - keeps production bundle clean
-- **Tree-Shaking**: Testing bridge completely eliminated from production builds
-- **Zero Runtime**: No runtime detection overhead in production
-
-```typescript
-// Bridge is injected only when NODE_ENV=e2e:
-window.__traceLogTestBridge = {
-  getEventManager(): EventManager | null,
-  isInitialized(): boolean,
-  getAppInstance(): App | null,
-  isInitializing(): boolean,
-  getEnvironmentInfo(): object // For debugging
-};
-```
-
-
-### Logging
-
-- Add log entries at strategic places to detect issues
-- Keep logs concise and non-intrusive to tests
-- Centralize console monitoring with `TestUtils.createConsoleMonitor()`
-
-
-### Test Structure
-
-- **Setup:** Console monitoring and navigation
-- **Action:** User interaction and library calls
-- **Validation:** Assertions and error checking
-- **Cleanup:** Resource release in `finally` blocks
-
-
-## 🚀 Common Commands
-
-```bash
-# Run all E2E tests (uses NODE_ENV=e2e automatically)
-npm run test:e2e
-
-# Start local test server (in separate terminal)
-npm run serve:test
-
-# Build library for testing
-npm run build:browser
-
-# Fix formatting and lint errors
-npm run fix
-
-# Full pipeline (build + test)
-npm run test:e2e
-
-# Run tests with specific browser
-npx playwright test --project=chromium
-npx playwright test --project="Mobile Chrome"
-
-# Debug mode with UI
-npx playwright test --debug
-npx playwright test --headed
-
-# Generate and view test report
-npx playwright show-report
-```
-
-
-## 🔍 Test Patterns
-
-### Basic Test Structure
-
-```typescript
+```ts
 import { test, expect } from '@playwright/test';
 import { TestUtils } from '../utils';
 
-test.describe('Feature Category', () => {
-  test('should validate expected behavior', async ({ page }) => {
-    const monitor = TestUtils.createConsoleMonitor(page);
+test('should validate behavior', async ({ page }) => {
+  const monitor = TestUtils.createConsoleMonitor(page);
 
-    try {
-      await TestUtils.navigateAndWaitForReady(page, '/');
-      const initResult = await TestUtils.initializeTraceLog(page);
+  try {
+    await TestUtils.navigateAndWaitForReady(page, '/');
+    const initResult = await TestUtils.initializeTraceLog(page);
 
-      expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
+    expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
+    expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
 
-      await TestUtils.triggerClickEvent(page);
+    // Test-specific logic here
 
-      expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
-    } finally {
-      monitor.cleanup();
-    }
+  } finally {
+    monitor.cleanup(); // ALWAYS required
+  }
+});
+```
+
+## 📁 File Organization
+
+```
+tests/
+├── constants/[domain].constants.ts   # Test data constants
+├── utils/[domain].utils.ts           # Helper functions
+├── types/[domain].types.ts           # TypeScript types
+└── e2e/[domain]/test-name.spec.ts    # Test files
+```
+
+**Domains**: initialization, session-management, event-tracking, performance-tracking, error-tracking, user-management
+
+## 🛠️ Essential Patterns
+
+### Initialization
+```ts
+const config = { id: 'test' }; // Auto debug mode + full logging
+const initResult = await TestUtils.initializeTraceLog(page, config);
+expect(initResult.success).toBe(true);
+```
+
+### Event Tracking
+```ts
+await TestUtils.trackCustomEvent(page, { name: 'test_event', metadata: { key: 'value' } });
+const events = await TestUtils.getTrackedEvents(page);
+const event = events.find((e: any) => e.type === 'CUSTOM');
+expect(event.custom_event.name).toBe('test_event');
+```
+
+### Session Management
+```ts
+await TestUtils.triggerUserActivity(page);
+await TestUtils.waitForSessionStart(page);
+const session = await TestUtils.getSessionData(page);
+expect((session as any).isActive).toBe(true);
+```
+
+### Event Capture
+```ts
+import { EventCapture, COMMON_FILTERS } from '../utils';
+
+const eventCapture = new EventCapture();
+try {
+  await eventCapture.startCapture(page);
+  await TestUtils.initializeTraceLog(page);
+
+  const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, 3000);
+  expect(initEvent.namespace).toBe('App');
+} finally {
+  await eventCapture.stopCapture();
+}
+```
+
+### Available Filters
+```ts
+COMMON_FILTERS.INITIALIZATION   // App initialization events
+COMMON_FILTERS.SESSION_START    // Session start events
+COMMON_FILTERS.CUSTOM_EVENT     // Custom event tracking
+COMMON_FILTERS.ERROR            // Error events
+```
+
+## 🔧 Environment Setup
+
+### Test Config Behavior
+
+#### Debug Logging
+
+**Output Method:**
+- `NODE_ENV=dev`: Events to `window`
+- Other: Browser console
+
+**Filtering:** Same mode-based filtering for both outputs.
+
+#### SpecialProjectId Usage
+
+Both force `debug` mode automatically:
+
+- `HttpSkip`: No HTTP calls, local config
+- `HttpLocal`: HTTP calls to localhost
+
+```ts
+// ✅ Correct
+await TraceLog.init({ id: SpecialProjectId.HttpSkip });
+
+// ❌ Wrong - mode not configurable
+await TraceLog.init({ id: 'test-id', mode: 'debug' });
+```
+
+#### Event Capture in Tests
+
+```ts
+// Listen for debug log events in E2E tests
+window.addEventListener('tracelog:log', (event) => {
+  // Event structure same as EventLogDispatch type
+});
+```
+
+### Network Simulation
+```ts
+// Block network requests
+await page.route('**/api/**', route => route.abort('failed'));
+
+// Mock responses
+await page.route('**/config', route => route.fulfill({
+  status: 200,
+  body: JSON.stringify({ sampling: 0.5 })
+}));
+```
+
+## ⚡ Best Practices
+
+### Timing
+```ts
+// GOOD: Wait for conditions
+await page.waitForFunction(() => window.__traceLogBridge?.isInitialized());
+
+// BAD: Arbitrary timeouts
+await page.waitForTimeout(1000); // Flaky
+```
+
+### Error Testing
+```ts
+// Trigger JavaScript error
+await page.evaluate(() => {
+  throw new Error('Test error for error tracking');
+});
+
+// Wait for error capture
+const errorEvent = await eventCapture.waitForEvent(COMMON_FILTERS.ERROR, 3000);
+```
+
+### Data Isolation
+```ts
+test.beforeEach(async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.__traceLogBridge?.destroy();
   });
 });
 ```
 
+## 🚫 Critical Don'ts
 
-### Util Usage
+- DON'T skip console monitoring cleanup
+- DON'T hardcode timeouts or test data
+- DON'T access `TraceLog._app` directly
+- DON'T test single browser only
+- DON'T use real PII in tests
+- DON'T assume timing - use proper waits
 
-```typescript
-// Navigation & Setup
-await TestUtils.navigateAndWaitForReady(page, '/custom-page');
-await TestUtils.initializeTraceLog(page);
-
-// Event Tracking with Clean Bridge
-const monitor = await TestUtils.setupTextExtractionTest(page);
-const results = await TestUtils.testTextExtractionFromElements(page, elements);
-
-// Session Management
-await TestUtils.setupSessionTest(page);
-await TestUtils.setupSessionEndMonitoring(page);
-await TestUtils.evaluateSessionData(page);
-
-// User Interactions
-await TestUtils.triggerClickEvent(page, 'button[data-testid="cta"]');
-await TestUtils.simulateUserActivity(page);
-
-// Direct Bridge Access (when needed - only available with NODE_ENV=e2e)
-const eventManager = await page.evaluate(() => {
-  const bridge = window.__traceLogTestBridge;
-  return bridge?.getEventManager() || null;
-});
-
-// Validations
-const isInitialized = await TestUtils.isTraceLogInitialized(page);
-const storageKeys = await TestUtils.getTraceLogStorageKeys(page);
-expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
-```
-
-
-## ⚠️ What NOT to Do
-
-### 🚫 Test Structure
-
-- DON’T write tests without console monitoring and proper cleanup
-- DON’T skip error validation
-- DON’T hardcode timeouts; use `TestUtils.waitForTimeout()`
-- DON’T test without waiting for page readiness
-
-
-### 🚫 Browser Compatibility
-
-- DON’T assume all browsers support identical APIs
-- DON’T use browser-specific features without fallback
-- DON’T ignore device differences, e.g. touch vs mouse
-- DON’T test on a single browser only
-
-
-### 🚫 Async Operations
-
-- DON’T skip `await` on async calls
-- DON’T use `setTimeout()`; always use `page.waitForTimeout()`
-- DON’T ignore appropriate page state waiting
-- DON’T chain promises without error handling
-
-
-### 🚫 Test Data
-
-- DON'T rely on external services; isolate tests
-- DON'T persist test data between tests in localStorage
-- DON'T use production APIs in tests
-- DON'T commit sensitive testing data
-- DON'T store test data in `window` object
-
-### 🚫 Testing Bridge Usage
-
-- DON'T try to access `forTesting` - it doesn't exist in the public API
-- DON'T manually inject testing utilities - they auto-inject in testing environments
-- DON'T access `TraceLog._app` directly - use `__traceLogTestBridge.getEventManager()`
-- DON'T assume the bridge exists in production - it only exists in testing environments
-- DON'T pollute the global namespace - the bridge is automatically managed
-
-
-### 🚫 Performance
-
-- DON’T run tests without cleanup (memory leaks)
-- DON’T use excessive waiting; impacts execution time
-- DON’T ignore flaky tests; identify and fix root causes
-
-
-## 🎯 Quick Start
+## ✅ Quality Gates
 
 ```bash
-# 1. Build library
-npm run build:browser
-
-# 2. Start local server in a separate terminal
-npm run serve:test
-
-# 3. Run tests
-npm run test:e2e
-
-# 4. View report
-npx playwright show-report
+npm run test:e2e        # 100% pass rate
+npm run check           # No lint/format errors
+npm run build:browser   # Must succeed
 ```
-
-
-### Debugging Tests
-
-```bash
-# Run a specific test with debug UI
-npx playwright test tests/e2e/initialization --debug
-
-# Run tests with browser UI visible
-npx playwright test --headed
-
-# Capture trace on failure
-npx playwright test --trace=on
-```
-
-**Key Success Metrics**: All browsers pass, no console errors, proper cleanup, realistic user interaction simulation
-
-## 🧪 Testing Bridge Best Practices
-
-### Environment Detection
-The testing bridge is injected based on build-time environment:
-- **NODE_ENV=e2e**: Testing bridge is included in build and injected
-- **Production**: Testing bridge is completely eliminated via tree-shaking
-- **Zero Runtime Cost**: No runtime detection logic in production builds
-
-### Bridge Usage Patterns
-
-```typescript
-// ✅ GOOD: Use util that abstract bridge access
-const monitor = await TestUtils.setupTextExtractionTest(page);
-const result = await TestUtils.clickElementAndCaptureData(page, selector);
-
-// ✅ GOOD: Direct bridge access when needed
-const eventManager = await page.evaluate(() => {
-  return window.__traceLogTestBridge?.getEventManager() || null;
-});
-
-// ✅ GOOD: Check bridge availability
-const bridgeInfo = await page.evaluate(() => {
-  const bridge = window.__traceLogTestBridge;
-  return bridge ? bridge.getEnvironmentInfo() : null;
-});
-
-// ❌ BAD: Don't access internal APIs directly
-// const app = window.TraceLog._app; // This doesn't exist anymore
-
-// ❌ BAD: Don't assume bridge exists without checking
-// window.__traceLogTestBridge.getEventManager(); // Could be undefined
-```
-
-### Fixture Requirements
-All test fixtures automatically:
-- Import only `TraceLog` (no `forTesting` needed)
-- Work with the environment-based testing bridge (NODE_ENV=e2e)
-- Maintain clean public API surface
-- No special configuration required
-
-## 🛡️ Test Success Requirements
-
-### Mandatory Passing Criteria
-
-- All tests pass with no failures
-- Cross-browser coverage on Chromium, Firefox, WebKit, Mobile
-- No regressions on existing tests after changes
-- Clean execution without console errors or resource leaks
-
-
-### Implementation Principles
-
-- Modify only as necessary for test success without over-engineering
-- Maintain test independence and isolation
-- Follow established patterns and utils
-- Include thorough assertions and error detection
-
-
-### Continuous Improvement
-
-- Identify and address improvement opportunities
-- Enhance reliability and maintainability cautiously
-- Document significant changes to tests or utils
-
-
-### Quality Gates
-
-```bash
-# Before commit verify:
-npm run test:e2e           # All e2e tests pass
-npm run check              # Code style checks
-npm run build:all          # Build succeeds
-npm run fix                # Format and lint fixes
-
-# Verify browser compatibility
-npx playwright test --project=chromium
-npx playwright test --project=firefox
-npx playwright test --project=webkit
-```
-
-**Success Criteria**: 100% pass rate on all browsers without typescript or eslint errors and with zero regressions and measurable test quality improvements
-
-## 🎯 Architecture Benefits
-
-### Clean Public API
-- **Production-Safe**: No testing utilities exposed in production builds
-- **Minimal Surface**: Public API only exports `TraceLog` - nothing else
-- **Zero Pollution**: No global namespace contamination outside testing
-
-### Environment-Based Testing Bridge
-- **Build-Time Optimization**: Uses NODE_ENV=e2e for tree-shaking
-- **Zero Production Cost**: Completely eliminated from production builds
-- **Full Access**: Complete access to internal APIs when needed
-- **Easy Debugging**: Built-in environment info for troubleshooting
-
-### Developer Experience
-- **Zero Configuration**: No manual setup required for testing utilities
-- **Consistent Patterns**: All tests use the same bridge architecture
-- **Future-Proof**: Internal API changes won't break tests
-- **Optimal Performance**: Zero impact on production bundle size or runtime
-
-### Maintenance Benefits
-- **Centralized**: All testing logic in one place
-- **Documented**: Clear patterns and usage examples
-- **Testable**: The testing infrastructure itself is well-tested
-- **Scalable**: Easy to extend with new testing utilities

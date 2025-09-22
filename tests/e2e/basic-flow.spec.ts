@@ -30,7 +30,7 @@ test.describe('TraceLog Basic Flow Validation', () => {
       await page.waitForTimeout(500);
 
       await page.evaluate(() => {
-        window.__traceLogTestBridge?.sendCustomEvent('test_comprehensive_event', {
+        window.__traceLogBridge?.sendCustomEvent('test_comprehensive_event', {
           testPhase: 'validation',
           timestamp: Date.now(),
           testType: 'comprehensive_flow',
@@ -49,7 +49,7 @@ test.describe('TraceLog Basic Flow Validation', () => {
 
       await page.evaluate(() => {
         try {
-          window.__traceLogTestBridge?.sendCustomEvent('', null as any);
+          window.__traceLogBridge?.sendCustomEvent('', null as any);
         } catch {
           // Expected
         }
@@ -76,7 +76,7 @@ test.describe('TraceLog Basic Flow Validation', () => {
       expect(finalAppInstance).toBeDefined();
 
       await page.evaluate(() => {
-        window.__traceLogTestBridge?.sendCustomEvent('final_validation_event', {
+        window.__traceLogBridge?.sendCustomEvent('final_validation_event', {
           testPhase: 'final_validation',
           systemStable: true,
         });
@@ -127,7 +127,7 @@ test.describe('TraceLog Basic Flow Validation', () => {
       await page.evaluate(() => {
         for (let i = 0; i < 10; i++) {
           try {
-            window.__traceLogTestBridge?.sendCustomEvent(`stress_test_event_${i}`, {
+            window.__traceLogBridge?.sendCustomEvent(`stress_test_event_${i}`, {
               iteration: i,
               timestamp: Date.now(),
             });
@@ -153,7 +153,7 @@ test.describe('TraceLog Basic Flow Validation', () => {
       expect(appInstance).toBeDefined();
 
       await page.evaluate(() => {
-        window.__traceLogTestBridge?.sendCustomEvent('recovery_validation_event', {
+        window.__traceLogBridge?.sendCustomEvent('recovery_validation_event', {
           testType: 'recovery',
           systemRecovered: true,
         });
@@ -192,7 +192,7 @@ test.describe('TraceLog Basic Flow Validation', () => {
       expect(initDebugLogs.length).toBeGreaterThan(0);
 
       await page.evaluate(() => {
-        window.__traceLogTestBridge?.sendCustomEvent('debug_test_event', {
+        window.__traceLogBridge?.sendCustomEvent('debug_test_event', {
           logLevel: 'debug',
           testPurpose: 'validate_logging',
         });

@@ -1,13 +1,67 @@
 import { Mode, LogLevel } from '../../types';
 import { StateManager } from '../../managers/state.manager';
+import { TraceLogEvent } from '../../../tests/types';
 
 /**
  * Debug logger class that extends StateManager for clean access to global state
  */
 class DebugLogger extends StateManager {
   /**
-   * Get the current logging mode from the global state
+   * Client-facing error - Configuration/usage errors by the client
+   * Console: qa and debug modes | Events: NODE_ENV=dev
    */
+  clientError(namespace: string, message: string, data?: unknown): void {
+    this.logMessage('CLIENT_ERROR', namespace, message, data);
+  }
+
+  /**
+   * Client-facing warning - Configuration/usage warnings by the client
+   * Console: qa and debug modes | Events: NODE_ENV=dev
+   */
+  clientWarn(namespace: string, message: string, data?: unknown): void {
+    this.logMessage('CLIENT_WARN', namespace, message, data);
+  }
+
+  /**
+   * General operational information
+   * Console: qa and debug modes | Events: NODE_ENV=dev
+   */
+  info(namespace: string, message: string, data?: unknown): void {
+    this.logMessage('INFO', namespace, message, data);
+  }
+
+  /**
+   * Internal library errors
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  error(namespace: string, message: string, data?: unknown): void {
+    this.logMessage('ERROR', namespace, message, data);
+  }
+
+  /**
+   * Internal library warnings
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  warn(namespace: string, message: string, data?: unknown): void {
+    this.logMessage('WARN', namespace, message, data);
+  }
+
+  /**
+   * Strategic debug information
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  debug(namespace: string, message: string, data?: unknown): void {
+    this.logMessage('DEBUG', namespace, message, data);
+  }
+
+  /**
+   * Detailed trace information
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  verbose(namespace: string, message: string, data?: unknown): void {
+    this.logMessage('VERBOSE', namespace, message, data);
+  }
+
   private getCurrentMode(): Mode | undefined {
     try {
       return this.get('config')?.mode;
@@ -16,9 +70,6 @@ class DebugLogger extends StateManager {
     }
   }
 
-  /**
-   * Check if a log level should be shown based on the current mode
-   */
   private shouldShowLog(level: LogLevel): boolean {
     const mode = this.getCurrentMode();
 
@@ -34,16 +85,10 @@ class DebugLogger extends StateManager {
     }
   }
 
-  /**
-   * Format a log message with TraceLog prefix and namespace
-   */
   private formatMessage(namespace: string, message: string): string {
     return `[TraceLog:${namespace}] ${message}`;
   }
 
-  /**
-   * Get the appropriate console method for a log level
-   */
   private getConsoleMethod(level: LogLevel): 'log' | 'warn' | 'error' {
     switch (level) {
       case 'CLIENT_ERROR':
@@ -62,9 +107,6 @@ class DebugLogger extends StateManager {
     }
   }
 
-  /**
-   * Core logging function
-   */
   private logMessage(level: LogLevel, namespace: string, message: string, data?: unknown): void {
     if (!this.shouldShowLog(level)) {
       return;
@@ -78,96 +120,14 @@ class DebugLogger extends StateManager {
     } else {
       console[consoleMethod](formattedMessage);
     }
-  }
 
-  /**
-   * Client-facing error - Configuration/usage errors by the client
-   * Visible in QA and debug modes
-   */
-  clientError(namespace: string, message: string, data?: unknown): void {
-    this.handleModeBasedEvent('CLIENT_ERROR', namespace, message, data);
-  }
-
-  /**
-   * Client-facing warning - Configuration/usage warnings by the client
-   * Visible in QA and debug modes
-   */
-  clientWarn(namespace: string, message: string, data?: unknown): void {
-    this.handleModeBasedEvent('CLIENT_WARN', namespace, message, data);
-  }
-
-  /**
-   * General operational information
-   * QA mode: dispatches custom events, Debug mode: console logs
-   */
-  info(namespace: string, message: string, data?: unknown): void {
-    this.handleModeBasedEvent('INFO', namespace, message, data);
-  }
-
-  /**
-   * Internal library errors
-   * Visible only in debug mode
-   */
-  error(namespace: string, message: string, data?: unknown): void {
-    this.logMessage('ERROR', namespace, message, data);
-  }
-
-  /**
-   * Internal library warnings
-   * Visible only in debug mode
-   */
-  warn(namespace: string, message: string, data?: unknown): void {
-    this.logMessage('WARN', namespace, message, data);
-  }
-
-  /**
-   * Strategic debug information
-   * Visible only in debug mode
-   */
-  debug(namespace: string, message: string, data?: unknown): void {
-    this.logMessage('DEBUG', namespace, message, data);
-  }
-
-  /**
-   * Detailed trace information
-   * Visible only in debug mode
-   */
-  verbose(namespace: string, message: string, data?: unknown): void {
-    this.logMessage('VERBOSE', namespace, message, data);
-  }
-
-  /**
-   * Handle the event based on the current mode and project ID
-   */
-  private handleModeBasedEvent(level: LogLevel, namespace: string, message: string, data?: unknown): void {
-    const mode = this.getCurrentMode();
-
-    if (!mode) {
-      return;
-    }
-
-    const shouldDispatchEvent = this.shouldUseDispatchEvent(mode);
-
-    if (shouldDispatchEvent) {
+    if (process.env.NODE_ENV === 'dev') {
       this.dispatchEvent(level, namespace, message, data);
-    } else if (mode === 'debug') {
-      this.logMessage(level, namespace, message, data);
     }
   }
 
   /**
-   * Determine if we should use dispatchEvent based on mode and project ID
-   */
-  private shouldUseDispatchEvent(mode: Mode | undefined): boolean {
-    if (!mode) {
-      return false;
-    }
-
-    return [Mode.QA, Mode.DEBUG].includes(mode);
-  }
-
-  /**
-   * Dispatch custom event for QA mode or specific test IDs (test/demo)
+   * Dispatches tracelog:log events for E2E testing and development debugging
    */
   private dispatchEvent(level: LogLevel, namespace: string, message: string, data?: unknown): void {
     if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') {
@@ -175,14 +135,14 @@ class DebugLogger extends StateManager {
     }
 
     try {
-      const event = new CustomEvent('tracelog:qa', {
+      const event = new CustomEvent('tracelog:log', {
         detail: {
           timestamp: new Date().toISOString(),
           level,
           namespace,
           message,
           data,
-        },
+        } satisfies TraceLogEvent,
       });
 
       window.dispatchEvent(event);

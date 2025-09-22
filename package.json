@@ -39,7 +39,7 @@
     "serve:playground": "http-server playground -p 3001 --cors",
     "playground:setup": "npm run build:browser:playground && cp dist/browser/tracelog.js playground/tracelog.js",
     "playground:dev": "npm run playground:setup && npm run serve:playground",
-    "test:e2e": "npm run build:browser:testing && cp dist/browser/tracelog.js tests/fixtures/tracelog.js && NODE_ENV=e2e playwright test",
+    "test:e2e": "npm run build:browser:testing && cp dist/browser/tracelog.js tests/fixtures/tracelog.js && NODE_ENV=dev playwright test",
     "test:anomaly-report": "node scripts/test-anomaly-report.js",
     "prepare": "husky",
     "release": "node scripts/release.js",

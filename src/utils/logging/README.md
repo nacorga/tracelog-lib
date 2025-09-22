@@ -2,18 +2,23 @@
 
 ## Overview
 
-Dual logging system that separates client configuration errors from internal library debugging, with mode-based filtering through the new StateManager architecture.
+Dual output system: console logs for runtime debugging, events for E2E testing. Both outputs respect the same mode-based filtering.
 
-## Modes & Levels
+## Output Behavior
 
-| Mode | Visible Logs | Purpose |
-|------|--------------|---------|
-| `production` | None | Production - no debug output |
-| `qa` | CLIENT_ERROR, CLIENT_WARN, INFO | Client testing - configuration errors only |
-| `debug` | All levels | Developer debugging - includes internal errors |
+**Environment determines output method:**
+- **`NODE_ENV=dev`**: Dispatches `tracelog:log` events to `window`
+- **Other environments**: Writes to browser console
 
-**Client-Facing (QA mode):** CLIENT_ERROR, CLIENT_WARN, INFO
-**Internal library (Debug only):** ERROR, WARN, DEBUG, VERBOSE
+**Mode determines visibility:**
+- **None**: No logs
+- **`qa`**: CLIENT_ERROR, CLIENT_WARN, INFO only
+- **`debug`**: All log levels
+
+## Log Levels
+
+**Client-Facing:** CLIENT_ERROR, CLIENT_WARN, INFO
+**Internal Library:** ERROR, WARN, DEBUG, VERBOSE
 
 ## Usage
 
@@ -35,23 +40,27 @@ debugLog.debug('PerformanceHandler', 'Web Vitals loaded', { version });
 
 ## Configuration
 
-Mode is set during initialization and automatically detected by the logging system:
+**Mode Source**: Server configuration or SpecialProjectId override (not client-configurable).
 
 ```typescript
-await TraceLog.init({
-  id: 'project-id',
-  mode: 'qa'      // Shows only client-facing logs
-});
+// ✅ Correct
+await TraceLog.init({ id: 'project-id' });
 
-await TraceLog.init({
-  id: 'project-id',
-  mode: 'debug'   // Shows all logs including internal library
-});
+// ✅ Testing (forces debug mode)
+await TraceLog.init({ id: SpecialProjectId.HttpSkip });
+
+// ❌ Wrong - mode not in AppConfig
+await TraceLog.init({ id: 'project-id', mode: 'debug' });
 ```
 
-## Best Practices
+**SpecialProjectId Behavior:**
+- `HttpSkip`: No HTTP + debug mode (E2E testing)
+- `HttpLocal`: Local HTTP + debug mode (development)
 
-**✅ Do:** Use appropriate log levels, include context data, proper namespaces
-**❌ Don't:** Log sensitive data, mix client/internal errors, spam high-frequency events
+## Event Structure (NODE_ENV=dev)
 
-The logger extends StateManager for clean state access and automatic mode detection.
+```typescript
+window.addEventListener('tracelog:log', (event) => {
+  // { timestamp, level, namespace, message, data? }
+});
+```

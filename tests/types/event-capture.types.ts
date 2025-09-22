@@ -1,7 +1,6 @@
 import { LogLevel } from '../../src/types/log.types';
 
-// TraceLog event structure from tracelog:qa dispatched events
-export interface TraceLogEvent {
+export interface EventLogDispatch {
   timestamp: string;
   level: LogLevel;
   namespace: string;
@@ -9,8 +8,7 @@ export interface TraceLogEvent {
   data?: unknown;
 }
 
-// Simple filter for event matching
-export interface EventFilter {
+export interface EventLogDispatchFilter {
   namespace?: string;
   messageContains?: string;
 }

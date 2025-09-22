@@ -1,12 +1,13 @@
 import { Page } from '@playwright/test';
-import { TraceLogEvent, EventFilter } from '../types';
+import { EventLogDispatch, EventLogDispatchFilter } from '../types';
 
 /**
- * Simple event capture utility for TraceLog E2E testing
+ * Captures tracelog:log events for E2E testing.
+ * Events dispatched when NODE_ENV=dev with mode-based filtering.
  */
 export class EventCapture {
   private page: Page | null = null;
-  private events: TraceLogEvent[] = [];
+  private events: EventLogDispatch[] = [];
   private isActive = false;
 
   /**
@@ -21,13 +22,15 @@ export class EventCapture {
     this.events = [];
     this.isActive = true;
 
-    await this.page.exposeFunction('__tracelogEventCapture', (event: TraceLogEvent) => {
+    await this.page.exposeFunction('__tracelogEventCapture', (event: EventLogDispatch) => {
       this.events.push(event);
     });
 
     await this.page.evaluate(() => {
-      window.addEventListener('tracelog:qa', ((event: CustomEvent<TraceLogEvent>) => {
-        (window as any).__tracelogEventCapture(event.detail);
+      window.addEventListener('tracelog:log', ((event: CustomEvent<EventLogDispatch>) => {
+        (
+          window as typeof window & { __tracelogEventCapture: (event: EventLogDispatch) => void }
+        ).__tracelogEventCapture(event.detail);
       }) as EventListener);
     });
   }
@@ -47,7 +50,7 @@ export class EventCapture {
   /**
    * Get all captured events, optionally filtered
    */
-  getEvents(filter?: EventFilter): TraceLogEvent[] {
+  getEvents(filter?: EventLogDispatchFilter): EventLogDispatch[] {
     if (!filter) {
       return [...this.events];
     }
@@ -68,7 +71,7 @@ export class EventCapture {
   /**
    * Wait for a specific event matching the filter
    */
-  async waitForEvent(filter: EventFilter, timeout = 5000): Promise<TraceLogEvent> {
+  async waitForEvent(filter: EventLogDispatchFilter, timeout = 5000): Promise<EventLogDispatch> {
     const startTime = Date.now();
 
     return new Promise((resolve, reject) => {

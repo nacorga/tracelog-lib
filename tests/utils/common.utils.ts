@@ -10,7 +10,7 @@ import { Config, TraceLogTestBridge } from '../../src/types';
 
 export function getAppInstance(page: Page): Promise<TraceLogTestBridge | null> {
   return page.evaluate(() => {
-    return window.__traceLogTestBridge ?? null;
+    return window.__traceLogBridge ?? null;
   });
 }
 
@@ -119,7 +119,7 @@ export async function initializeTraceLog(
 ): Promise<{ success: boolean; error: unknown }> {
   return await page.evaluate(async (config) => {
     try {
-      await window.__traceLogTestBridge?.init(config);
+      await window.__traceLogBridge?.init(config);
       return { success: true, error: null };
     } catch (error) {
       return { success: false, error: error };
