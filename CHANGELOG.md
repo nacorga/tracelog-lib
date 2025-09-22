@@ -1,6 +1,36 @@
 # Changelog
 
 
+
+## [0.0.3] - 2025-09-22
+
+### 🐛 Bug Fixes
+
+- Enhance mode validation in DebugLogger to handle undefined values ([949f5f7](../../commit/949f5f7f8cb5feeb0afc399f0ba2383c74138224))
+- Correct interval activation logic in EventManager and enhance mode validation in SenderManager ([ba241ee](../../commit/ba241eefaa82cedf5083ede62c32de94bca857aa))
+- Update default configuration to use HttpSkip project ID ([da34742](../../commit/da347429adc30acff623f044ea902a4b7af495ee))
+
+### ♻️ Refactoring
+
+- Replace string literals with enum values for application modes across multiple managers and handlers ([d5b3469](../../commit/d5b3469903ccb8fed47be967e361229073acfc3b))
+- Streamline initialization process and update configuration handling for logging modes ([e09d1a7](../../commit/e09d1a7d319be01ebd1ce5fa3006c95cfcc8acad))
+- Simplify initialization logging and enhance configuration handling for special project IDs ([87a6afd](../../commit/87a6afde318a198a4a8ae2881b57c77ebf2a8505))
+
+### 🔧 Other Changes
+
+- Merge pull request #5 from nacorga/release/20250922.1 ([fa8b63a](../../commit/fa8b63a1d7c5dc9af814102639a1921adf50fddd))
+- Add playground setup and development scripts, enhance Vite configuration for playground environment ([92a4a00](../../commit/92a4a0050c8e4c648790730f1bc7a9b8c22baeba))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-sdk/compare/v0.0.2...v0.0.3
+
+
 ## [0.0.2] - 2025-09-20
 
 ### 🔧 Other Changes
