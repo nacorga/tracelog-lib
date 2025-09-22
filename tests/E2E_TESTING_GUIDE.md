@@ -8,7 +8,7 @@
   - Using `SpecialProjectId.HttpSkip` by default on `initializeTraceLog` method.
 - **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`.
 - **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile.
-- **Testing Bridge**: Auto-injected `window.__traceLogTestBridge` when `NODE_ENV=e2e`.
+- **Testing Bridge**: Auto-injected `window.__traceLogBridge` when `NODE_ENV=dev`.
 
 ## 📝 Basic Test Structure
 
@@ -98,11 +98,38 @@ COMMON_FILTERS.ERROR            // Error events
 ## 🔧 Environment Setup
 
 ### Test Config Behavior
-`{ id: 'test' }` triggers:
-- Debug mode with full console logging
-- 100% error capture (errorSampling: 1)
-- Skips API calls, uses local config
-- Emits `tracelog:qa` events for validation
+
+#### Debug Logging
+
+**Output Method:**
+- `NODE_ENV=dev`: Events to `window`
+- Other: Browser console
+
+**Filtering:** Same mode-based filtering for both outputs.
+
+#### SpecialProjectId Usage
+
+Both force `debug` mode automatically:
+
+- `HttpSkip`: No HTTP calls, local config
+- `HttpLocal`: HTTP calls to localhost
+
+```ts
+// ✅ Correct
+await TraceLog.init({ id: SpecialProjectId.HttpSkip });
+
+// ❌ Wrong - mode not configurable
+await TraceLog.init({ id: 'test-id', mode: 'debug' });
+```
+
+#### Event Capture in Tests
+
+```ts
+// Listen for debug log events in E2E tests
+window.addEventListener('tracelog:log', (event) => {
+  // Event structure same as EventLogDispatch type
+});
+```
 
 ### Network Simulation
 ```ts
@@ -121,7 +148,7 @@ await page.route('**/config', route => route.fulfill({
 ### Timing
 ```ts
 // GOOD: Wait for conditions
-await page.waitForFunction(() => window.__traceLogTestBridge?.isInitialized());
+await page.waitForFunction(() => window.__traceLogBridge?.isInitialized());
 
 // BAD: Arbitrary timeouts
 await page.waitForTimeout(1000); // Flaky
@@ -144,7 +171,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.clear();
-    window.__traceLogTestBridge?.destroy();
+    window.__traceLogBridge?.destroy();
   });
 });
 ```

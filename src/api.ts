@@ -211,7 +211,7 @@ if (process.env.NODE_ENV === 'dev') {
   if (typeof window !== 'undefined') {
     // Wait for DOM to be ready before injecting
     const injectTestingBridge = (): void => {
-      window.__traceLogTestBridge = new TestBridge();
+      window.__traceLogBridge = new TestBridge();
     };
 
     // Inject immediately if DOM is ready, otherwise wait

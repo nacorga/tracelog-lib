@@ -1,4 +1,4 @@
-# TraceLog Events Library
+# TraceLog Library
 
 A lightweight TypeScript Library for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
 
@@ -16,15 +16,15 @@ A lightweight TypeScript Library for web analytics and user behavior tracking. A
 
 - npm:
   ```bash
-  npm install @tracelog/events
+  npm install @tracelog/lib
   ```
 - yarn:
   ```bash
-  yarn add @tracelog/events
+  yarn add @tracelog/lib
   ```
 - CDN (browser):
   ```html
-  <script src="https://cdn.jsdelivr.net/npm/@tracelog/events@latest/dist/browser/tracelog.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.js"></script>
   ```
 
 ## Quick Start
@@ -32,7 +32,7 @@ A lightweight TypeScript Library for web analytics and user behavior tracking. A
 Initialize tracking with your project ID and start capturing events immediately:
 
 ```typescript
-import * as TraceLog from '@tracelog/events';
+import * as TraceLog from '@tracelog/lib';
 
 // Initialize tracking
 await TraceLog.init({
@@ -88,7 +88,6 @@ await TraceLog.init({
 **Key configuration options:**
 - `config.id`: Your unique project identifier (required).
 - `config.sessionTimeout`: Session timeout in milliseconds (default: 15 minutes).
-- `config.mode`: Server-side configuration that controls logging mode (`'qa'` or `'debug'`). Not settable from client initialization.
 - `config.globalMetadata`: Metadata automatically attached to all events.
 
 **Metadata types:** `string | number | boolean | string[]`
@@ -96,7 +95,6 @@ await TraceLog.init({
 ## Configuration
 
 **Environment-based settings:**
-- Configure `mode: 'qa'` server-side for development/testing environments
 - Use `samplingRate: 0.1` to reduce data volume in high-traffic applications
 - Configure `sessionTimeout` to match your application's user session length
 
@@ -119,20 +117,54 @@ await TraceLog.init({
 - **TypeScript**: Full type definitions included
 - **Frameworks**: React, Vue, Angular, Svelte, vanilla JS
 
-## Troubleshooting
+## Logging & Debug
 
-**Events not appearing** → Check console logs → Verify project ID is correct → Ensure network connectivity.
+**Development mode** → Set `NODE_ENV=dev` for event-based logging to `window` → Use browser console for runtime debugging.
+
+**Log levels** → `qa` mode shows CLIENT_ERROR, CLIENT_WARN, INFO → `debug` mode shows all levels → Configure via server-side settings.
+
+```typescript
+// Enable debug logging (forces debug mode)
+await TraceLog.init({ id: SpecialProjectId.HttpSkip });
+
+// Listen to debug events in development
+window.addEventListener('tracelog:log', (event) => {
+  console.log(event.detail); // { timestamp, level, namespace, message, data? }
+});
+```
+
+## CI/CD Integration
+
+**Automated health checks** → Validates library integrity before deployment → Detects critical issues early.
+
+```bash
+# Install and run health check
+npm ci && npx playwright install --with-deps
+npm run build:all
+npm run ci:health-check        # Standard mode (allows warnings)
+npm run ci:health-strict       # Strict mode (blocks on any anomalies)
+```
+
+**GitHub Actions** → Pre-configured workflows available:
+- `health-check.yml` - Runs on PR and push
+- `release-quality-gate.yml` - Validates releases
+
+**Exit codes** → `0` = healthy deploy approved → `1` = critical issues deploy blocked
+
+## Troubleshooting
 
 **Session tracking issues** → Verify localStorage is available → Check for cross-tab conflicts → Review session timeout settings.
 
 **High memory usage** → Reduce `sessionTimeout` → Lower `samplingRate` → Check for event listener leaks (call `destroy()` on cleanup).
 
+**CI health check failures** → Verify Playwright installation → Check Node.js ≥18 → Review anomaly detection patterns.
+
 ## Development & Contributing
 
 ### Development Setup
 ```bash
-git clone https://github.com/nacorga/tracelog-client.git
-cd tracelog-client
+git clone https://github.com/nacorga/tracelog-lib.git
+cd tracelog-lib
 npm install
 npm run build:all      # Build ESM + CJS + Browser
 npm run check          # Lint + format check
