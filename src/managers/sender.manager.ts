@@ -5,7 +5,6 @@ import {
   RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
   SYNC_XHR_TIMEOUT_MS,
-  API_BASE_URL,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId, Mode } from '../types';
 import { debugLog } from '../utils/logging';
@@ -168,10 +167,10 @@ export class SenderManager extends StateManager {
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
     const useLocalServer = this.get('config').id === SpecialProjectId.HttpLocal;
-    const baseUrl = useLocalServer ? window.location.origin : (this.get('apiUrl') ?? API_BASE_URL);
+    const url = useLocalServer ? window.location.origin : this.get('apiUrl');
 
     return {
-      url: `${baseUrl}/collect`,
+      url,
       payload: JSON.stringify(body),
     };
   }
