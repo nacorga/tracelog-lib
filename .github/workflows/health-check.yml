@@ -1,0 +1,147 @@
+name: TraceLog Health Check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC to catch degradation
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+        - development
+        - staging
+        - production
+
+jobs:
+  tracelog-anomaly-detection:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build TraceLog library
+        run: npm run build:all
+
+      - name: Run TraceLog Health Check
+        id: health-check
+        run: |
+          echo "Running TraceLog anomaly detection..."
+          node scripts/test-anomaly-report.js > health-output.txt 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Parse Health Report
+        id: parse-report
+        run: |
+          if [ -f "test-reports/anomaly-report.json" ]; then
+            STATUS=$(jq -r '.overallStatus' test-reports/anomaly-report.json)
+            ANOMALIES=$(jq -r '.summary.totalAnomalies' test-reports/anomaly-report.json)
+            CRITICAL=$(jq -r '.summary.criticalIssues' test-reports/anomaly-report.json)
+            SUCCESS_RATE=$(jq -r '.summary.successRate' test-reports/anomaly-report.json)
+
+            echo "status=$STATUS" >> $GITHUB_OUTPUT
+            echo "anomalies=$ANOMALIES" >> $GITHUB_OUTPUT
+            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+            echo "success_rate=$SUCCESS_RATE" >> $GITHUB_OUTPUT
+          else
+            echo "status=UNKNOWN" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Health Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tracelog-health-report-node${{ matrix.node-version }}
+          path: |
+            test-reports/anomaly-report.json
+            health-output.txt
+          retention-days: 30
+
+      - name: Comment PR with Health Status
+        if: github.event_name == 'pull_request' && steps.parse-report.outputs.status != 'HEALTHY'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.parse-report.outputs.status }}';
+            const anomalies = '${{ steps.parse-report.outputs.anomalies }}';
+            const critical = '${{ steps.parse-report.outputs.critical }}';
+            const successRate = '${{ steps.parse-report.outputs.success_rate }}';
+
+            const statusIcon = status === 'HEALTHY' ? '✅' : status === 'DEGRADED' ? '⚠️' : '❌';
+
+            const comment = `## ${statusIcon} TraceLog Health Check
+
+            **Status:** ${status}
+            **Success Rate:** ${successRate}
+            **Anomalies Detected:** ${anomalies}
+            **Critical Issues:** ${critical}
+
+            ${critical > 0 ? '🚨 **Critical issues detected!** Please review the health report before merging.' : ''}
+            ${anomalies > 0 ? '⚠️ Some anomalies detected. Consider reviewing before deployment.' : ''}
+
+            📄 [Download full report from artifacts](../actions/runs/${{ github.run_id }})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Fail on Critical Issues
+        if: steps.parse-report.outputs.critical > 0
+        run: |
+          echo "❌ Critical TraceLog issues detected (${{ steps.parse-report.outputs.critical }})"
+          echo "🔍 Check the health report for details"
+          exit 1
+
+      - name: Warn on Anomalies
+        if: steps.parse-report.outputs.anomalies > 0 && steps.parse-report.outputs.critical == 0
+        run: |
+          echo "⚠️ TraceLog anomalies detected (${{ steps.parse-report.outputs.anomalies }})"
+          echo "✅ No critical issues, but monitor for degradation"
+
+  notify-teams:
+    runs-on: ubuntu-latest
+    needs: tracelog-anomaly-detection
+    if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    steps:
+      - name: Notify Teams on Critical Failure
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: |
+            🚨 **TraceLog Health Check Failed**
+
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+
+            Critical TraceLog library issues detected!
+            Check the workflow logs for details.
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

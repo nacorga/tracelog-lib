@@ -19,108 +19,364 @@ if (!fs.existsSync(REPORT_DIR)) {
 
 const anomalyReport = {
   timestamp: new Date().toISOString(),
-  testSuite: 'TraceLog Basic Flow',
+  testSuite: 'TraceLog Flow Validation',
+  overallStatus: 'UNKNOWN', // HEALTHY | DEGRADED | CRITICAL
   summary: {
     totalTests: 0,
-    passedTests: 0,
     failedTests: 0,
+    successRate: '0%',
     totalAnomalies: 0,
-    criticalAnomalies: 0,
-    warnings: 0,
+    criticalIssues: 0,
+    executionTime: 0,
   },
+  // Only include problems, not successful tests
+  failures: [],
   anomalies: [],
-  testResults: [],
+  browserCompatibility: {
+    failingBrowsers: [],
+    inconsistentBehavior: [],
+  },
   systemHealth: {
     traceLogErrors: 0,
-    contextErrors: 0,
     memoryLeaks: false,
-    crossBrowserCompatibility: {},
+    performanceIssues: [],
   },
+  // Actionable recommendations
+  recommendations: [],
 };
+
+let testStartTime = Date.now();
 
 function parseTestOutput(output) {
   const lines = output.split('\n');
-  let currentTest = null;
+  let currentFailure = null;
+
+  // Reset for fresh parsing
+  anomalyReport.summary.failedTests = 0;
+  anomalyReport.failures = [];
+  anomalyReport.anomalies = [];
+  anomalyReport.summary.criticalIssues = 0;
+  anomalyReport.summary.totalAnomalies = 0;
 
   for (const line of lines) {
-    // Track test execution - simplified pattern
-    if (
-      line.includes('[chromium]') ||
-      line.includes('[firefox]') ||
-      line.includes('[webkit]') ||
-      line.includes('[Mobile')
-    ) {
-      const browserMatch = line.match(/\[([^\]]+)\]/);
-      if (browserMatch && line.includes('basic-flow.spec.ts')) {
-        const browser = browserMatch[1];
-        const testName = line.includes('error scenarios') ? 'error-scenarios' : 'basic-flow';
-        currentTest = { browser, testName, anomalies: [], passed: false };
-      }
-    }
+    // Detect failed tests - only track failures
+    if (line.includes('✘') && line.includes('basic-flow.spec.ts')) {
+      const matches = line.match(
+        /\[(\d+)\/(\d+)\]\s*\[([^\]]+)\]\s*›.*basic-flow\.spec\.ts:\d+:\d+\s*›\s*Flow Validation\s*›\s*(.+)/,
+      );
+      if (matches) {
+        const [, testNumber, totalTests, browser, testDescription] = matches;
 
-    // Detect test completion
-    if (line.includes('✓') && line.includes('basic-flow.spec.ts')) {
-      if (currentTest) {
-        currentTest.passed = true;
-        anomalyReport.testResults.push(currentTest);
-        anomalyReport.summary.passedTests++;
-      }
-      currentTest = null;
-    } else if (line.includes('✘') && line.includes('basic-flow.spec.ts')) {
-      if (currentTest) {
-        currentTest.passed = false;
-        anomalyReport.testResults.push(currentTest);
+        currentFailure = {
+          browser,
+          testDescription,
+          testNumber: parseInt(testNumber),
+          errorDetails: [],
+          severity: 'CRITICAL',
+        };
+
+        anomalyReport.failures.push(currentFailure);
         anomalyReport.summary.failedTests++;
+
+        // Track browser failures
+        if (!anomalyReport.browserCompatibility.failingBrowsers.includes(browser)) {
+          anomalyReport.browserCompatibility.failingBrowsers.push(browser);
+        }
       }
-      currentTest = null;
     }
 
-    // Parse final summary lines
+    // This logic is now handled above in the main parsing section
+    // Keep this for any edge cases that might be missed
+
+    // Get total tests from summary
     if (line.match(/\d+ passed/)) {
       const passedMatch = line.match(/(\d+) passed/);
       if (passedMatch) {
-        anomalyReport.summary.passedTests = parseInt(passedMatch[1]);
+        const passed = parseInt(passedMatch[1]);
+        anomalyReport.summary.totalTests = passed + anomalyReport.summary.failedTests;
       }
     }
 
+    // Detect failures from final summary
     if (line.match(/\d+ failed/)) {
       const failedMatch = line.match(/(\d+) failed/);
       if (failedMatch) {
-        anomalyReport.summary.failedTests = parseInt(failedMatch[1]);
+        const failedCount = parseInt(failedMatch[1]);
+
+        // If we didn't catch individual failures, create generic failure entries
+        if (anomalyReport.failures.length === 0 && failedCount > 0) {
+          for (let i = 0; i < failedCount; i++) {
+            anomalyReport.failures.push({
+              browser: 'multiple',
+              testDescription: 'Failed test (details not captured)',
+              severity: 'CRITICAL',
+              errorDetails: [
+                {
+                  type: 'Test Failure',
+                  message: 'Test failed - check full logs for details',
+                  severity: 'CRITICAL',
+                },
+              ],
+            });
+          }
+        }
+
+        anomalyReport.summary.failedTests = Math.max(anomalyReport.summary.failedTests, failedCount);
+
+        // Update total tests calculation
+        if (anomalyReport.summary.totalTests === 0) {
+          // Estimate total tests if not detected elsewhere
+          anomalyReport.summary.totalTests = failedCount * 5; // Assume 5 browsers
+        }
       }
     }
 
-    // Capture anomaly patterns - look for color codes and error mentions
-    if (line.includes("'") && (line.includes('error') || line.includes('warning') || line.includes('timeout'))) {
-      const anomalyMatches = line.matchAll(/'([^']+)'/g);
-      for (const match of anomalyMatches) {
-        const anomalyText = match[1];
-        if (
-          anomalyText.includes('error') ||
-          anomalyText.includes('warning') ||
-          anomalyText.includes('timeout') ||
-          anomalyText.includes('failures')
-        ) {
-          const anomaly = {
-            type: anomalyText,
-            severity: anomalyText.toLowerCase().includes('tracelog errors') ? 'critical' : 'warning',
-            browser: currentTest?.browser || 'general',
-            testContext: currentTest?.testName || 'general',
-          };
+    // Capture detailed error information for current failure
+    if (currentFailure && (line.includes('Error:') || line.includes('Expected:') || line.includes('Received:'))) {
+      let errorType = 'Unknown Error';
+      let severity = 'WARNING';
 
-          // Avoid duplicates
-          const exists = anomalyReport.anomalies.some((a) => a.type === anomaly.type && a.browser === anomaly.browser);
-          if (!exists) {
-            anomalyReport.anomalies.push(anomaly);
+      // Classify error types
+      if (line.includes('TimeoutError:')) {
+        errorType = 'Timeout';
+        severity = 'CRITICAL';
+      } else if (line.includes('Error: expect(')) {
+        errorType = 'Assertion Failure';
+        severity = 'WARNING';
+      } else if (line.includes('TraceLog')) {
+        errorType = 'TraceLog System Error';
+        severity = 'CRITICAL';
+      } else if (line.includes('network') || line.includes('fetch')) {
+        errorType = 'Network Error';
+        severity = 'WARNING';
+      }
 
-            if (anomaly.severity === 'critical') {
-              anomalyReport.summary.criticalAnomalies++;
-            } else {
-              anomalyReport.summary.warnings++;
-            }
-          }
+      currentFailure.errorDetails.push({
+        type: errorType,
+        message: line.trim().substring(0, 150),
+        severity,
+      });
+
+      currentFailure.severity = severity === 'CRITICAL' ? 'CRITICAL' : currentFailure.severity;
+    }
+
+    // Track TraceLog-specific system health indicators
+    if (line.includes('TraceLog errors:')) {
+      const errorMatch = line.match(/TraceLog errors: (\d+)/);
+      if (errorMatch) {
+        const errorCount = parseInt(errorMatch[1]);
+        anomalyReport.systemHealth.traceLogErrors = errorCount;
+
+        if (errorCount > 0) {
+          anomalyReport.anomalies.push({
+            type: 'TraceLog Core Errors',
+            count: errorCount,
+            severity: 'CRITICAL',
+            impact: 'Library initialization or core functionality failing',
+          });
+          anomalyReport.summary.criticalIssues++;
         }
       }
+    }
+
+    // === TRACELOG LIBRARY-SPECIFIC ANOMALY DETECTION ===
+
+    // Detect TraceLog bridge initialization issues
+    if (line.includes('__traceLogBridge') && (line.includes('undefined') || line.includes('null'))) {
+      anomalyReport.anomalies.push({
+        type: 'TraceLog Bridge Failure',
+        severity: 'CRITICAL',
+        impact: 'Event tracking not functional - bridge not initialized',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Check if TraceLog.init() was called before bridge usage',
+      });
+      anomalyReport.summary.criticalIssues++;
+    }
+
+    // Detect TraceLog initialization failures
+    if (line.includes('initializeTraceLog') && (line.includes('failed') || line.includes('error'))) {
+      anomalyReport.anomalies.push({
+        type: 'TraceLog Initialization Failure',
+        severity: 'CRITICAL',
+        impact: 'Library failed to initialize - no event tracking available',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Verify project ID, API URL configuration, and network connectivity',
+      });
+      anomalyReport.summary.criticalIssues++;
+    }
+
+    // Detect event sending failures
+    if (
+      line.includes('Failed to send events') ||
+      line.includes('sendEventsQueue failed') ||
+      line.includes('sendBeacon failed')
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Event Transmission Failure',
+        severity: 'HIGH',
+        impact: 'Events not reaching server - data loss occurring',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Check network connectivity, API endpoints, and CORS configuration',
+      });
+    }
+
+    // Detect custom event sending failures
+    if (line.includes('sendCustomEvent') && (line.includes('Error') || line.includes('failed'))) {
+      anomalyReport.anomalies.push({
+        type: 'Custom Event Failure',
+        severity: 'MEDIUM',
+        impact: 'Custom events not being tracked properly',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Validate custom event data structure and metadata',
+      });
+    }
+
+    // Detect session management issues
+    if (
+      line.includes('Session recovery failed') ||
+      line.includes('SessionManager error') ||
+      line.includes('Cross-tab sync failed')
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Session Management Issue',
+        severity: 'MEDIUM',
+        impact: 'Session tracking inconsistent - user journey fragmented',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Check localStorage availability and cross-tab communication',
+      });
+    }
+
+    // Detect configuration issues
+    if (
+      line.includes('Invalid configuration') ||
+      line.includes('Missing project ID') ||
+      line.includes('Config validation failed')
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Configuration Error',
+        severity: 'HIGH',
+        impact: 'Library not properly configured - tracking may be incomplete',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Validate TraceLog.init() parameters and project settings',
+      });
+    }
+
+    // Detect event validation failures
+    if (
+      line.includes('Event validation failed') ||
+      line.includes('Invalid event data') ||
+      line.includes('Event schema error')
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Event Validation Failure',
+        severity: 'MEDIUM',
+        impact: 'Some events rejected - incomplete tracking data',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Check custom event data structure and metadata validation',
+      });
+    }
+
+    // Detect handler errors
+    if (
+      line.includes('Handler error') ||
+      line.includes('Event listener failed') ||
+      line.includes('Tracking handler stopped')
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Event Handler Failure',
+        severity: 'MEDIUM',
+        impact: 'Specific interaction tracking disabled - partial data loss',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Check DOM element availability and handler initialization',
+      });
+    }
+
+    // Detect storage issues
+    if (
+      line.includes('localStorage unavailable') ||
+      line.includes('Storage quota exceeded') ||
+      line.includes('Storage operation failed')
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Storage Issue',
+        severity: 'MEDIUM',
+        impact: 'Session persistence and event queuing affected',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Check browser storage settings and available space',
+      });
+    }
+
+    // Detect network-related issues
+    if (line.includes('CORS error') || line.includes('Network timeout') || line.includes('API endpoint unreachable')) {
+      anomalyReport.anomalies.push({
+        type: 'Network Connectivity Issue',
+        severity: 'HIGH',
+        impact: 'Events cannot reach analytics server',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Verify API URL, CORS headers, and network connectivity',
+      });
+    }
+
+    // Detect event queue issues
+    if (
+      line.includes('Event queue overflow') ||
+      line.includes('Queue capacity exceeded') ||
+      line.includes('Events dropped')
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Event Queue Overflow',
+        severity: 'MEDIUM',
+        impact: 'Events being dropped due to queue limits',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Review event sampling rates and send frequency',
+      });
+    }
+
+    // Detect Web Vitals tracking issues
+    if (
+      line.includes('Web Vitals') &&
+      (line.includes('failed') || line.includes('error') || line.includes('not supported'))
+    ) {
+      anomalyReport.anomalies.push({
+        type: 'Web Vitals Tracking Issue',
+        severity: 'LOW',
+        impact: 'Performance metrics not being captured',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Check browser compatibility for Web Vitals API',
+      });
+    }
+
+    // Detect integration issues
+    if (line.includes('Google Analytics') && (line.includes('failed') || line.includes('error'))) {
+      anomalyReport.anomalies.push({
+        type: 'Integration Failure',
+        severity: 'LOW',
+        impact: 'Third-party integration not working properly',
+        details: line.trim().substring(0, 100),
+        recommendation: 'Verify integration configuration and API keys',
+      });
+    }
+
+    // Detect performance issues
+    if (line.includes('performance') && (line.includes('slow') || line.includes('high') || line.includes('memory'))) {
+      anomalyReport.systemHealth.performanceIssues.push({
+        type: 'Performance Warning',
+        details: line.trim().substring(0, 100),
+      });
+    }
+
+    // Detect memory leak indicators
+    if (
+      line.includes('memory') &&
+      (line.includes('leak') || line.includes('growing') || line.includes('not released'))
+    ) {
+      anomalyReport.systemHealth.memoryLeaks = true;
+      anomalyReport.anomalies.push({
+        type: 'Memory Leak Detected',
+        severity: 'WARNING',
+        impact: 'Potential memory consumption issues in long-running sessions',
+        details: line.trim().substring(0, 100),
+      });
     }
 
     // Track system health indicators
@@ -145,42 +401,162 @@ function parseTestOutput(output) {
     }
   }
 
-  // Count total tests
-  anomalyReport.summary.totalTests = anomalyReport.summary.passedTests + anomalyReport.summary.failedTests;
+  // Calculate final metrics
+  if (anomalyReport.summary.totalTests > 0) {
+    const successRate = (
+      ((anomalyReport.summary.totalTests - anomalyReport.summary.failedTests) / anomalyReport.summary.totalTests) *
+      100
+    ).toFixed(1);
+    anomalyReport.summary.successRate = `${successRate}%`;
+  } else {
+    anomalyReport.summary.successRate = '0%';
+  }
+
   anomalyReport.summary.totalAnomalies = anomalyReport.anomalies.length;
+  anomalyReport.summary.executionTime = Date.now() - testStartTime;
+
+  // Determine overall status
+  if (anomalyReport.summary.criticalIssues > 0 || anomalyReport.summary.failedTests > 0) {
+    anomalyReport.overallStatus = 'CRITICAL';
+  } else if (anomalyReport.summary.totalAnomalies > 0) {
+    anomalyReport.overallStatus = 'DEGRADED';
+  } else {
+    anomalyReport.overallStatus = 'HEALTHY';
+  }
+
+  // Generate actionable recommendations
+  generateRecommendations();
 }
 
-function generateSummary() {
-  const { summary, systemHealth } = anomalyReport;
+function generateRecommendations() {
+  const recommendations = [];
 
-  // Categorize anomalies
-  const criticalIssues = anomalyReport.anomalies.filter((a) => a.severity === 'critical');
-  const warnings = anomalyReport.anomalies.filter((a) => a.severity === 'warning');
+  // Analyze failures and suggest fixes
+  if (anomalyReport.failures.length > 0) {
+    const failuresByBrowser = {};
+    anomalyReport.failures.forEach((failure) => {
+      if (!failuresByBrowser[failure.browser]) {
+        failuresByBrowser[failure.browser] = [];
+      }
+      failuresByBrowser[failure.browser].push(failure);
+    });
 
-  // Browser compatibility
-  const browsers = [...new Set(anomalyReport.testResults.map((t) => t.browser))];
-  browsers.forEach((browser) => {
-    const browserTests = anomalyReport.testResults.filter((t) => t.browser === browser);
-    const passed = browserTests.filter((t) => t.passed).length;
-    const total = browserTests.length;
+    // Browser-specific issues
+    Object.entries(failuresByBrowser).forEach(([browser, failures]) => {
+      if (failures.length > 1) {
+        recommendations.push({
+          priority: 'HIGH',
+          category: 'Browser Compatibility',
+          issue: `Multiple failures in ${browser} (${failures.length} tests)`,
+          action: `Focus testing efforts on ${browser} - possible browser-specific issues`,
+        });
+      }
+    });
+  }
 
-    systemHealth.crossBrowserCompatibility[browser] = {
-      passRate: total > 0 ? ((passed / total) * 100).toFixed(1) + '%' : '0%',
-      passed,
-      total,
-      anomalies: anomalyReport.anomalies.filter((a) => a.browser === browser).length,
-    };
+  // TraceLog-specific recommendations
+  if (anomalyReport.systemHealth.traceLogErrors > 0) {
+    recommendations.push({
+      priority: 'CRITICAL',
+      category: 'TraceLog Core',
+      issue: `TraceLog system errors detected (${anomalyReport.systemHealth.traceLogErrors})`,
+      action: 'Check TraceLog initialization, API configuration, and network connectivity',
+    });
+  }
+
+  // Generate specific recommendations for each anomaly type
+  const anomaliesByType = {};
+  anomalyReport.anomalies.forEach((anomaly) => {
+    if (!anomaliesByType[anomaly.type]) {
+      anomaliesByType[anomaly.type] = [];
+    }
+    anomaliesByType[anomaly.type].push(anomaly);
   });
 
-  return {
-    overallHealth: criticalIssues.length === 0 ? 'HEALTHY' : 'CRITICAL',
-    testPassRate: summary.totalTests > 0 ? ((summary.passedTests / summary.totalTests) * 100).toFixed(1) + '%' : '0%',
-    riskLevel: criticalIssues.length > 0 ? 'HIGH' : warnings.length > 10 ? 'MEDIUM' : 'LOW',
-  };
+  // Process each anomaly type and create consolidated recommendations
+  Object.entries(anomaliesByType).forEach(([type, anomalies]) => {
+    const firstAnomaly = anomalies[0];
+    const count = anomalies.length;
+
+    // Use the recommendation from the anomaly if available
+    if (firstAnomaly.recommendation) {
+      const priority =
+        firstAnomaly.severity === 'CRITICAL'
+          ? 'CRITICAL'
+          : firstAnomaly.severity === 'HIGH'
+            ? 'HIGH'
+            : firstAnomaly.severity === 'MEDIUM'
+              ? 'MEDIUM'
+              : 'LOW';
+
+      recommendations.push({
+        priority,
+        category: 'TraceLog Library',
+        issue: count > 1 ? `${type} (${count} occurrences)` : type,
+        action: firstAnomaly.recommendation,
+        impact: firstAnomaly.impact,
+      });
+    }
+  });
+
+  // Additional consolidated recommendations for TraceLog health
+  const criticalAnomalies = anomalyReport.anomalies.filter((a) => a.severity === 'CRITICAL');
+  const highAnomalies = anomalyReport.anomalies.filter((a) => a.severity === 'HIGH');
+
+  if (criticalAnomalies.length > 0) {
+    recommendations.push({
+      priority: 'CRITICAL',
+      category: 'System Health',
+      issue: `${criticalAnomalies.length} critical TraceLog issues detected`,
+      action: 'Immediate attention required - core tracking functionality is compromised',
+    });
+  }
+
+  if (highAnomalies.length > 2) {
+    recommendations.push({
+      priority: 'HIGH',
+      category: 'System Stability',
+      issue: `Multiple high-severity issues (${highAnomalies.length})`,
+      action: 'Review TraceLog integration and configuration comprehensively',
+    });
+  }
+
+  // Memory and performance recommendations
+  if (anomalyReport.systemHealth.memoryLeaks) {
+    recommendations.push({
+      priority: 'MEDIUM',
+      category: 'Performance',
+      issue: 'Memory leak indicators detected',
+      action: 'Review event listener cleanup and memory management in TraceLog integration',
+    });
+  }
+
+  if (anomalyReport.systemHealth.performanceIssues.length > 0) {
+    recommendations.push({
+      priority: 'MEDIUM',
+      category: 'Performance',
+      issue: `Performance issues detected (${anomalyReport.systemHealth.performanceIssues.length})`,
+      action: 'Consider optimizing TraceLog configuration or reducing event frequency',
+    });
+  }
+
+  // Performance recommendations
+  if (anomalyReport.summary.executionTime > 60000) {
+    // > 1 minute
+    recommendations.push({
+      priority: 'MEDIUM',
+      category: 'Performance',
+      issue: 'Test execution time is high',
+      action: 'Consider optimizing test setup or parallelization',
+    });
+  }
+
+  anomalyReport.recommendations = recommendations;
 }
 
 async function runTests() {
   console.log('🔍 Running TraceLog Anomaly Detection Tests...');
+  testStartTime = Date.now(); // Reset start time
 
   return new Promise((resolve, reject) => {
     const testProcess = spawn('npm', ['run', 'test:e2e', '--', 'tests/e2e/basic-flow.spec.ts', '--reporter=line'], {
@@ -205,9 +581,6 @@ async function runTests() {
       // Parse output regardless of exit code
       parseTestOutput(stdout + stderr);
 
-      const summary = generateSummary();
-      anomalyReport.summary = { ...anomalyReport.summary, ...summary };
-
       resolve({ code, stdout, stderr });
     });
 
@@ -224,41 +597,83 @@ async function main() {
     // Write report
     fs.writeFileSync(REPORT_FILE, JSON.stringify(anomalyReport, null, 2));
 
-    // Display summary
-    console.log('\n📋 ANOMALY DETECTION REPORT SUMMARY');
-    console.log('=====================================');
-    console.log(`Overall Health: ${anomalyReport.summary.overallHealth}`);
-    console.log(`Test Pass Rate: ${anomalyReport.summary.testPassRate}`);
-    console.log(`Risk Level: ${anomalyReport.summary.riskLevel}`);
-    console.log(`Total Anomalies: ${anomalyReport.summary.totalAnomalies}`);
-    console.log(`Critical Issues: ${anomalyReport.summary.criticalAnomalies}`);
-    console.log(`Warnings: ${anomalyReport.summary.warnings}`);
-    console.log(`TraceLog Errors: ${anomalyReport.systemHealth.traceLogErrors}`);
-    console.log(`Context Errors: ${anomalyReport.systemHealth.contextErrors}`);
+    // Display useful summary
+    console.log('\n📋 TRACELOG HEALTH REPORT');
+    console.log('==========================');
+    console.log(`Status: ${getStatusIcon(anomalyReport.overallStatus)} ${anomalyReport.overallStatus}`);
+    console.log(
+      `Success Rate: ${anomalyReport.summary.successRate} (${anomalyReport.summary.totalTests - anomalyReport.summary.failedTests}/${anomalyReport.summary.totalTests} tests)`,
+    );
+    console.log(`Execution Time: ${(anomalyReport.summary.executionTime / 1000).toFixed(1)}s`);
 
-    console.log('\n🌐 Browser Compatibility:');
-    Object.entries(anomalyReport.systemHealth.crossBrowserCompatibility).forEach(([browser, stats]) => {
-      console.log(
-        `  ${browser}: ${stats.passRate} (${stats.passed}/${stats.total} tests, ${stats.anomalies} anomalies)`,
-      );
-    });
+    // Only show problems
+    if (anomalyReport.summary.failedTests > 0) {
+      console.log(`\n❌ FAILED TESTS (${anomalyReport.summary.failedTests}):`);
+      anomalyReport.failures.forEach((failure, index) => {
+        console.log(`  ${index + 1}. [${failure.browser}] ${failure.testDescription}`);
+        if (failure.errorDetails.length > 0) {
+          console.log(`     → ${failure.errorDetails[0].type}: ${failure.errorDetails[0].message.substring(0, 80)}...`);
+        }
+      });
+    }
 
-    if (anomalyReport.summary.criticalAnomalies > 0) {
-      console.log('\n⚠️  CRITICAL ANOMALIES DETECTED:');
-      anomalyReport.anomalies
-        .filter((a) => a.severity === 'critical')
-        .forEach((anomaly) => {
-          console.log(`  - ${anomaly.type} (${anomaly.browser})`);
-        });
+    if (anomalyReport.summary.totalAnomalies > 0) {
+      console.log(`\n⚠️  TRACELOG LIBRARY ANOMALIES (${anomalyReport.summary.totalAnomalies}):`);
+      anomalyReport.anomalies.forEach((anomaly, index) => {
+        console.log(`  ${index + 1}. ${getSeverityIcon(anomaly.severity)} ${anomaly.type}`);
+        if (anomaly.impact) console.log(`     Impact: ${anomaly.impact}`);
+        if (anomaly.recommendation) console.log(`     Fix: ${anomaly.recommendation}`);
+      });
+    }
+
+    if (anomalyReport.browserCompatibility.failingBrowsers.length > 0) {
+      console.log(`\n🌐 BROWSER ISSUES:`);
+      console.log(`  Failing browsers: ${anomalyReport.browserCompatibility.failingBrowsers.join(', ')}`);
+    }
+
+    if (anomalyReport.recommendations.length > 0) {
+      console.log(`\n💡 RECOMMENDATIONS:`);
+      anomalyReport.recommendations.forEach((rec, index) => {
+        console.log(`  ${index + 1}. [${rec.priority}] ${rec.category}: ${rec.issue}`);
+        console.log(`     → ${rec.action}`);
+      });
+    }
+
+    if (anomalyReport.overallStatus === 'HEALTHY') {
+      console.log('\n✅ All systems operational - no issues detected');
     }
 
     console.log(`\n📄 Full report saved: ${REPORT_FILE}`);
 
     // Exit with appropriate code
-    process.exit(anomalyReport.summary.criticalAnomalies > 0 ? 1 : 0);
+    process.exit(anomalyReport.summary.criticalIssues > 0 || anomalyReport.summary.failedTests > 0 ? 1 : 0);
   } catch (error) {
     console.error('❌ Error running anomaly detection:', error);
     process.exit(1);
+  }
+}
+
+function getStatusIcon(status) {
+  switch (status) {
+    case 'HEALTHY':
+      return '✅';
+    case 'DEGRADED':
+      return '⚠️';
+    case 'CRITICAL':
+      return '❌';
+    default:
+      return '❓';
+  }
+}
+
+function getSeverityIcon(severity) {
+  switch (severity) {
+    case 'CRITICAL':
+      return '🔴';
+    case 'WARNING':
+      return '🟡';
+    default:
+      return '🔵';
   }
 }
 
@@ -266,4 +681,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { runTests, parseTestOutput, generateSummary };
+module.exports = { runTests, parseTestOutput, generateRecommendations };

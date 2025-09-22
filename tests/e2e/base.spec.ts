@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { TestUtils, EventCapture, COMMON_FILTERS } from '../utils';
+import { TestUtils, COMMON_FILTERS } from '../utils';
 
 test.describe('TraceLog Base Functionality', () => {
   test('should initialize and capture events', async ({ page }) => {
     const monitor = TestUtils.createConsoleMonitor(page);
-    const eventCapture = new EventCapture();
+    const eventCapture = TestUtils.createEventCapture();
 
     try {
-      await TestUtils.navigateAndWaitForReady(page, '/');
+      await TestUtils.navigateAndWaitForReady(page, { url: '/' });
       await eventCapture.startCapture(page);
 
       const initResult = await TestUtils.initializeTraceLog(page);
@@ -20,7 +20,7 @@ test.describe('TraceLog Base Functionality', () => {
       expect(appInstance).toBeDefined();
 
       // Wait for initialization event
-      const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, 3000);
+      const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, { timeout: 3000 });
       expect(initEvent.namespace).toBe('App');
       expect(initEvent.message).toContain('initialization');
 

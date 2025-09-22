@@ -1,6 +1,5 @@
 import { Mode, LogLevel } from '../../types';
 import { StateManager } from '../../managers/state.manager';
-import { TraceLogEvent } from '../../../tests/types';
 
 /**
  * Debug logger class that extends StateManager for clean access to global state
@@ -142,7 +141,7 @@ class DebugLogger extends StateManager {
           namespace,
           message,
           data,
-        } satisfies TraceLogEvent,
+        },
       });
 
       window.dispatchEvent(event);

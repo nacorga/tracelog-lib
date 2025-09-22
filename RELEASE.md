@@ -256,7 +256,7 @@ npm view @tracelog/events version
 git tag -l | tail -5
 
 # 3. Check GitHub Release page
-# Visit: https://github.com/your-username/tracelog-client/releases
+# Visit: https://github.com/your-username/tracelog-events/releases
 
 # 4. Test installation
 npm install @tracelog/events@latest

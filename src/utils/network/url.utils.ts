@@ -189,7 +189,7 @@ export const isUrlPathExcluded = (url: string, excludedPaths: string[] = []): bo
   debugLog.debug('URLUtils', 'URL path exclusion check completed', {
     path,
     isExcluded,
-    matchedPattern: matchedPattern || null,
+    matchedPattern: matchedPattern ?? null,
     totalPatternsChecked: excludedPaths.length,
   });
 

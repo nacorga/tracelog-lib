@@ -1,0 +1,139 @@
+name: Release Quality Gate
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+
+jobs:
+  pre-release-health-check:
+    runs-on: ubuntu-latest
+    outputs:
+      health-status: ${{ steps.health.outputs.status }}
+      can-release: ${{ steps.health.outputs.can-release }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build for release
+        run: npm run build:all
+
+      - name: Comprehensive Health Check
+        id: health
+        run: |
+          echo "🔍 Running comprehensive TraceLog health assessment..."
+
+          # Run multiple test cycles to ensure stability
+          for i in {1..3}; do
+            echo "Health check cycle $i/3..."
+            node scripts/test-anomaly-report.js
+
+            if [ -f "test-reports/anomaly-report.json" ]; then
+              STATUS=$(jq -r '.overallStatus' test-reports/anomaly-report.json)
+              CRITICAL=$(jq -r '.summary.criticalIssues' test-reports/anomaly-report.json)
+
+              if [ "$STATUS" != "HEALTHY" ] || [ "$CRITICAL" -gt 0 ]; then
+                echo "❌ Health check failed in cycle $i"
+                echo "status=FAILED" >> $GITHUB_OUTPUT
+                echo "can-release=false" >> $GITHUB_OUTPUT
+                exit 1
+              fi
+            else
+              echo "❌ Health report not generated"
+              echo "status=UNKNOWN" >> $GITHUB_OUTPUT
+              echo "can-release=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+
+            sleep 10  # Wait between cycles
+          done
+
+          echo "✅ All health checks passed"
+          echo "status=HEALTHY" >> $GITHUB_OUTPUT
+          echo "can-release=true" >> $GITHUB_OUTPUT
+
+      - name: Upload Release Health Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-health-report
+          path: test-reports/anomaly-report.json
+
+  release:
+    runs-on: ubuntu-latest
+    needs: pre-release-health-check
+    if: needs.pre-release-health-check.outputs.can-release == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for production
+        run: npm run build:all
+
+      - name: Publish to NPM
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            ## TraceLog Library Release
+
+            ✅ **Health Status:** ${{ needs.pre-release-health-check.outputs.health-status }}
+
+            This release has passed comprehensive health checks and anomaly detection.
+
+            ### Quality Assurance
+            - [x] Comprehensive E2E testing
+            - [x] TraceLog library anomaly detection
+            - [x] Multi-cycle stability testing
+            - [x] Cross-browser compatibility verified
+
+            📄 [Health Report](../actions/runs/${{ github.run_id }})
+
+  release-failed:
+    runs-on: ubuntu-latest
+    needs: pre-release-health-check
+    if: needs.pre-release-health-check.outputs.can-release == 'false'
+
+    steps:
+      - name: Block Release
+        run: |
+          echo "🚫 Release blocked due to health check failures"
+          echo "Status: ${{ needs.pre-release-health-check.outputs.health-status }}"
+          echo "Manual review required before release"
+          exit 1
