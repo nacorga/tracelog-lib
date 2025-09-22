@@ -159,7 +159,7 @@ class DebugLogger extends StateManager {
    * Determine if we should use dispatchEvent based on mode and project ID
    */
   private shouldUseDispatchEvent(mode: Mode): boolean {
-    return ['qa', 'debug'].includes(mode);
+    return [Mode.QA, Mode.DEBUG].includes(mode);
   }
 
   /**

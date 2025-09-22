@@ -30,23 +30,17 @@ export class PerformanceHandler extends StateManager {
   stopTracking(): void {
     debugLog.debug('PerformanceHandler', 'Stopping performance tracking', { observersCount: this.observers.length });
 
-    // Disconnect observers with proper cleanup and error handling
-    for (let i = this.observers.length - 1; i >= 0; i--) {
-      const obs = this.observers[i];
+    this.observers.forEach((obs, index) => {
       try {
         obs.disconnect();
       } catch (error) {
         debugLog.warn('PerformanceHandler', 'Failed to disconnect performance observer', {
           error: error instanceof Error ? error.message : 'Unknown error',
-          observerIndex: i,
+          observerIndex: index,
         });
-      } finally {
-        // Force removal of the observer reference regardless of disconnect success
-        this.observers.splice(i, 1);
       }
-    }
+    });
 
-    // Double verification - ensure the array is completely cleared
     this.observers.length = 0;
     this.reportedByNav.clear();
 

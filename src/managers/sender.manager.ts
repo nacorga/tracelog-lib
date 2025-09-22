@@ -358,7 +358,7 @@ export class SenderManager extends StateManager {
 
   private shouldSkipSend(): boolean {
     const { id, mode } = this.get('config');
-    const specialModes: Mode[] = ['qa', 'debug'];
+    const specialModes: Mode[] = [Mode.QA, Mode.DEBUG];
 
     if (id === SpecialProjectId.HttpSkip) {
       return true;

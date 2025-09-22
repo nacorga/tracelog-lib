@@ -1,5 +1,5 @@
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
-import { ApiConfig, AppConfig, Config, SpecialProjectId } from '../types';
+import { ApiConfig, AppConfig, Config, Mode, SpecialProjectId } from '../types';
 import { isValidUrl, sanitizeApiConfig } from '../utils';
 import { debugLog } from '../utils/logging';
 
@@ -70,12 +70,14 @@ export class ConfigManager {
       const isQaMode = urlParameters.get('qaMode') === 'true';
 
       if (isQaMode && !mergedConfig.mode) {
-        mergedConfig.mode = 'qa';
+        mergedConfig.mode = Mode.QA;
         debugLog.info('ConfigManager', 'QA mode enabled via URL parameter');
       }
 
-      const errorSampling =
-        mergedConfig.mode === 'qa' || mergedConfig.mode === 'debug' ? 1 : (mergedConfig.errorSampling ?? 0.1);
+      const errorSampling = Object.values(Mode).includes(mergedConfig.mode as Mode)
+        ? 1
+        : (mergedConfig.errorSampling ?? 0.1);
+
       const finalConfig: Config = { ...mergedConfig, errorSampling };
 
       return finalConfig;
@@ -108,7 +110,7 @@ export class ConfigManager {
     return DEFAULT_CONFIG({
       ...appConfig,
       errorSampling: 1,
-      ...(Object.values(SpecialProjectId).includes(appConfig.id as SpecialProjectId) && { mode: 'debug' }),
+      ...(Object.values(SpecialProjectId).includes(appConfig.id as SpecialProjectId) && { mode: Mode.DEBUG }),
     });
   }
 }

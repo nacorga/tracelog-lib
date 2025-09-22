@@ -1,4 +1,7 @@
 /**
  * App modes for the TraceLog Library
  */
-export type Mode = 'qa' | 'debug';
+export enum Mode {
+  QA = 'qa',
+  DEBUG = 'debug',
+}

@@ -341,8 +341,6 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Create backup of original queue before processing
-    const originalQueue = [...this.eventsQueue];
     const body = this.buildEventsPayload();
     const success = this.dataSender.sendEventsQueue(body);
 
@@ -366,8 +364,9 @@ export class EventManager extends StateManager {
         willOpenCircuit: this.failureCount + 1 >= this.MAX_FAILURES,
       });
 
-      // Restore original queue to prevent data loss
-      this.eventsQueue = originalQueue;
+      // Persist failed events for recovery instead of restoring queue to prevent duplicates
+      this.persistEventsToStorage();
+      this.eventsQueue = [];
       this.failureCount++;
 
       if (this.failureCount >= this.MAX_FAILURES) {
