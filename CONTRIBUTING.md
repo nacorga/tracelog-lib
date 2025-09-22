@@ -1,6 +1,6 @@
-# Contributing to TraceLog Events Library
+# Contributing to TraceLog Library
 
-Thank you for your interest in contributing to the TraceLog Events Library! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to the TraceLog Library! This document provides guidelines and information for contributors.
 
 ## Table of Contents
 
@@ -312,4 +312,4 @@ export function event(name: string, metadata?: Record<string, MetadataType>): vo
 
 ---
 
-Thank you for contributing to TraceLog Events Library! 🚀 
+Thank you for contributing to TraceLog Library! 🚀 

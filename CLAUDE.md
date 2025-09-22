@@ -1,4 +1,4 @@
-# TraceLog Events Library
+# TraceLog Library
 
 **JavaScript library for web analytics and real-time event tracking**
 

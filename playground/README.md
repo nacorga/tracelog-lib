@@ -1,6 +1,6 @@
 # TraceLog Playground
 
-A fully functional playground for testing the TraceLog Events Library with a simple and intuitive interface.
+A fully functional playground for testing the TraceLog Library with a simple and intuitive interface.
 
 ## Quick Start
 

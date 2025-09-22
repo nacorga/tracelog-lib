@@ -1,4 +1,4 @@
-# TraceLog Events Library
+# TraceLog Library
 
 A lightweight TypeScript Library for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
 
