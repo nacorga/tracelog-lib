@@ -116,10 +116,12 @@ export class SenderManager extends StateManager {
         method: 'POST',
         mode: 'cors',
         credentials: 'omit',
+        body: payload,
         headers: {
           'Content-Type': 'application/json',
+          Origin: window.location.origin,
+          Referer: window.location.href,
         },
-        body: payload,
       });
 
       return response.ok;
@@ -164,6 +166,8 @@ export class SenderManager extends StateManager {
     try {
       xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Origin', window.location.origin);
+      xhr.setRequestHeader('Referer', window.location.href);
       xhr.withCredentials = false;
       xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);
