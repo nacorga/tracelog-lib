@@ -1,6 +1,22 @@
 # Changelog
 
 
+
+## [0.0.3] - 2025-09-22
+
+### 🔧 Other Changes
+
+- Update event URL in SenderManager to use '/collect' endpoint ([4c7c614](../../commit/4c7c6142951505b89a217ea72d59d734f3872fd1))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.2...v0.0.3
+
+
 ## [0.0.2] - 2025-09-22
 
 ### 🔧 Other Changes

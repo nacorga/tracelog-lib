@@ -2,7 +2,7 @@
   "name": "@tracelog/lib",
   "description": "JavaScript library for web analytics and real-time event tracking",
   "license": "MIT",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "./dist/cjs/public-api.js",
   "module": "./dist/esm/public-api.js",
   "types": "./dist/esm/public-api.d.ts",
