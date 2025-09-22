@@ -1,5 +1,21 @@
 # Changelog
 
+
+## [0.0.2] - 2025-09-22
+
+### 🔧 Other Changes
+
+- Add mode.types export to app.types for improved type management ([f490001](../../commit/f490001244d3c80575a0ad47a2b6aa5eca2472e2))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.1...v0.0.2
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
