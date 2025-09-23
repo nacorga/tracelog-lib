@@ -115,7 +115,7 @@ export class SenderManager extends StateManager {
       const response = await fetch(url, {
         method: 'POST',
         mode: 'cors',
-        credentials: 'omit',
+        credentials: 'include',
         body: payload,
         headers: {
           'Content-Type': 'application/json',
@@ -170,7 +170,7 @@ export class SenderManager extends StateManager {
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.setRequestHeader('Origin', window.location.origin);
       xhr.setRequestHeader('Referer', window.location.href);
-      xhr.withCredentials = false;
+      xhr.withCredentials = true;
       xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);
 
