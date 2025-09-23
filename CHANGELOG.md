@@ -5,6 +5,22 @@
 
 
 
+
+## [0.0.7] - 2025-09-23
+
+### 🐛 Bug Fixes
+
+- Use Blob for payload in sendBeacon calls in SenderManager ([26449b3](../../commit/26449b31d163d9f4b118ed8811da1a6319905e35))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.6...v0.0.7
+
+
 ## [0.0.6] - 2025-09-22
 
 ### 🐛 Bug Fixes
