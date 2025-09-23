@@ -7,7 +7,6 @@ import {
   MAX_FINGERPRINTS,
   FINGERPRINT_CLEANUP_MULTIPLIER,
   CLICK_COORDINATE_PRECISION,
-  EVENT_PERSISTENCE_MAX_AGE_MS,
 } from '../constants';
 import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
 import { getUTMParameters, isUrlPathExcluded } from '../utils';
@@ -42,9 +41,6 @@ export class EventManager extends StateManager {
   // Event deduplication properties
   private readonly eventFingerprints = new Map<string, number>();
 
-  // Persistence storage key
-  private readonly PERSISTENCE_KEY = 'tl:circuit_breaker_events';
-
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 
@@ -54,12 +50,8 @@ export class EventManager extends StateManager {
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
 
-    // Restore any persisted events on initialization
-    this.restoreEventsFromStorage();
-
     debugLog.debug('EventManager', 'EventManager initialized', {
       hasGoogleAnalytics: !!googleAnalytics,
-      restoredEventsCount: this.eventsQueue.length,
     });
   }
 
@@ -188,11 +180,6 @@ export class EventManager extends StateManager {
     if (this.circuitResetTimeoutId) {
       clearTimeout(this.circuitResetTimeoutId);
       this.circuitResetTimeoutId = null;
-    }
-
-    // Persist any remaining events before stopping
-    if (this.eventsQueue.length > 0) {
-      this.persistEventsToStorage();
     }
 
     // Clean up all state variables
@@ -356,9 +343,6 @@ export class EventManager extends StateManager {
       this.eventsQueue = [];
       this.failureCount = 0;
       this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
-
-      // Clear any persisted events on successful send
-      this.clearPersistedEvents();
     } else {
       debugLog.info('EventManager', `❌ Failed to send event queue`, {
         eventsCount: body.events.length,
@@ -366,8 +350,6 @@ export class EventManager extends StateManager {
         willOpenCircuit: this.failureCount + 1 >= this.MAX_FAILURES,
       });
 
-      // Persist failed events for recovery instead of restoring queue to prevent duplicates
-      this.persistEventsToStorage();
       this.eventsQueue = [];
       this.failureCount++;
 
@@ -511,16 +493,14 @@ export class EventManager extends StateManager {
   private openCircuitBreaker(): void {
     this.circuitOpen = true;
     this.circuitOpenTime = Date.now();
-
-    // Persist events before clearing queue to prevent data loss
-    this.persistEventsToStorage();
+    this.set('circuitBreakerOpen', true);
 
     const eventsCount = this.eventsQueue.length;
-    this.eventsQueue = []; // Clear memory queue
+    this.eventsQueue = [];
 
     debugLog.warn('EventManager', 'Circuit breaker opened with time-based recovery', {
       maxFailures: this.MAX_FAILURES,
-      persistedEvents: eventsCount,
+      eventsCount,
       failureCount: this.failureCount,
       recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
       openTime: this.circuitOpenTime,
@@ -541,100 +521,11 @@ export class EventManager extends StateManager {
     this.circuitOpenTime = 0;
     this.failureCount = 0;
     this.circuitResetTimeoutId = null;
-
-    debugLog.info('EventManager', 'Circuit breaker reset - attempting to restore events', {
-      currentQueueLength: this.eventsQueue.length,
-    });
-
-    // Restore persisted events
-    this.restoreEventsFromStorage();
+    this.set('circuitBreakerOpen', false);
 
     debugLog.info('EventManager', 'Circuit breaker reset completed', {
-      restoredQueueLength: this.eventsQueue.length,
+      currentQueueLength: this.eventsQueue.length,
       backoffDelay: this.backoffDelay,
     });
-  }
-
-  /**
-   * Persists current events queue to localStorage for recovery
-   */
-  private persistEventsToStorage(): void {
-    try {
-      if (this.eventsQueue.length === 0) {
-        return;
-      }
-
-      const persistData = {
-        events: this.eventsQueue,
-        timestamp: Date.now(),
-        failureCount: this.failureCount,
-      };
-
-      this.storageManager.setItem(this.PERSISTENCE_KEY, JSON.stringify(persistData));
-
-      debugLog.debug('EventManager', 'Events persisted to storage for recovery', {
-        eventsCount: this.eventsQueue.length,
-        failureCount: this.failureCount,
-      });
-    } catch (error) {
-      debugLog.warn('EventManager', 'Failed to persist events to storage', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        eventsCount: this.eventsQueue.length,
-      });
-    }
-  }
-
-  /**
-   * Restores events from localStorage if available and not expired
-   */
-  private restoreEventsFromStorage(): void {
-    try {
-      const persistedData = this.storageManager.getItem(this.PERSISTENCE_KEY);
-      if (!persistedData) {
-        return;
-      }
-
-      const parsed = JSON.parse(persistedData);
-      const now = Date.now();
-      const maxAge = EVENT_PERSISTENCE_MAX_AGE_MS;
-
-      // Check if persisted data is not too old
-      if (now - parsed.timestamp > maxAge) {
-        this.clearPersistedEvents();
-        debugLog.debug('EventManager', 'Cleared expired persisted events', {
-          age: now - parsed.timestamp,
-          maxAge,
-        });
-        return;
-      }
-
-      // Restore events if we don't already have events in queue
-      if (Array.isArray(parsed.events) && parsed.events.length > 0 && this.eventsQueue.length === 0) {
-        this.eventsQueue = parsed.events;
-        debugLog.info('EventManager', 'Restored events from storage', {
-          restoredCount: parsed.events.length,
-          originalFailureCount: parsed.failureCount ?? 0,
-        });
-      }
-    } catch (error) {
-      debugLog.warn('EventManager', 'Failed to restore events from storage', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      this.clearPersistedEvents();
-    }
-  }
-
-  /**
-   * Clears persisted events from localStorage
-   */
-  private clearPersistedEvents(): void {
-    try {
-      this.storageManager.removeItem(this.PERSISTENCE_KEY);
-      debugLog.debug('EventManager', 'Cleared persisted events from storage');
-    } catch (error) {
-      debugLog.warn('EventManager', 'Failed to clear persisted events', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
   }
 }

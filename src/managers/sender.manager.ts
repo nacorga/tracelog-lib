@@ -5,6 +5,7 @@ import {
   RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
   SYNC_XHR_TIMEOUT_MS,
+  MAX_RETRY_ATTEMPTS,
 } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId, Mode } from '../types';
 import { debugLog } from '../utils/logging';
@@ -17,6 +18,7 @@ export class SenderManager extends StateManager {
 
   private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
+  private retryCount = 0;
   private lastAsyncSend = 0;
   private lastSyncSend = 0;
 
@@ -92,8 +94,36 @@ export class SenderManager extends StateManager {
       return;
     }
 
+    if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+      debugLog.warn('SenderManager', 'Max retry attempts reached for recovered events, clearing', {
+        retryCount: this.retryCount,
+        maxRetries: MAX_RETRY_ATTEMPTS,
+        eventsCount: body.events.length,
+      });
+      this.clearPersistedEvents();
+      this.resetRetryState();
+      return;
+    }
+
+    if (this.isCircuitBreakerOpen()) {
+      debugLog.debug('SenderManager', 'Circuit breaker is open, skipping recovered event retry', {
+        retryCount: this.retryCount,
+      });
+      return;
+    }
+
+    this.retryCount++;
+
     this.retryTimeoutId = window.setTimeout(() => {
       this.retryTimeoutId = null;
+
+      if (this.isCircuitBreakerOpen()) {
+        debugLog.debug('SenderManager', 'Circuit breaker opened during retry delay, canceling recovered event retry', {
+          retryCount: this.retryCount,
+        });
+        return;
+      }
+
       this.sendRecoveredEvents(body);
     }, this.retryDelay);
 
@@ -256,6 +286,7 @@ export class SenderManager extends StateManager {
 
   private resetRetryState(): void {
     this.retryDelay = RETRY_BACKOFF_INITIAL;
+    this.retryCount = 0;
     this.clearRetryTimeout();
   }
 
@@ -264,12 +295,47 @@ export class SenderManager extends StateManager {
       return;
     }
 
+    if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+      debugLog.warn('SenderManager', 'Max retry attempts reached, clearing persisted events', {
+        retryCount: this.retryCount,
+        maxRetries: MAX_RETRY_ATTEMPTS,
+        eventsCount: body.events.length,
+      });
+      this.clearPersistedEvents();
+      this.resetRetryState();
+      return;
+    }
+
+    if (this.isCircuitBreakerOpen()) {
+      debugLog.debug('SenderManager', 'Circuit breaker is open, skipping retry', {
+        retryCount: this.retryCount,
+        eventsCount: body.events.length,
+      });
+      return;
+    }
+
+    this.retryCount++;
+
     this.retryTimeoutId = window.setTimeout(() => {
       this.retryTimeoutId = null;
+
+      if (this.isCircuitBreakerOpen()) {
+        debugLog.debug('SenderManager', 'Circuit breaker opened during retry delay, canceling retry', {
+          retryCount: this.retryCount,
+        });
+        return;
+      }
+
       this.sendEventsQueue(body);
     }, this.retryDelay);
 
     this.retryDelay = Math.min(this.retryDelay * 2, RETRY_BACKOFF_MAX);
+
+    debugLog.debug('SenderManager', 'Retry scheduled', {
+      retryCount: this.retryCount,
+      retryDelay: this.retryDelay,
+      eventsCount: body.events.length,
+    });
   }
 
   private async executeSend(body: BaseEventsQueueDto, sendFn: () => Promise<boolean>): Promise<boolean> {
@@ -406,5 +472,9 @@ export class SenderManager extends StateManager {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
+  }
+
+  private isCircuitBreakerOpen(): boolean {
+    return this.get('circuitBreakerOpen') === true;
   }
 }

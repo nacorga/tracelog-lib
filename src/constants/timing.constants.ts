@@ -16,6 +16,7 @@ export const EVENT_SENT_INTERVAL_TEST_MS = 2500;
 export const RETRY_BACKOFF_INITIAL = 1000; // 1 second
 export const RETRY_BACKOFF_MAX = 30_000; // 30 seconds
 export const RATE_LIMIT_INTERVAL = 1000; // 1 second
+export const MAX_RETRY_ATTEMPTS = 10;
 
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 24;
