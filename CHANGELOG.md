@@ -6,6 +6,22 @@
 
 
 
+
+## [0.0.8] - 2025-09-23
+
+### 🐛 Bug Fixes
+
+- Update credentials settings for CORS requests in SenderManager ([681f153](../../commit/681f15364f408961cb8ab7735c2c684de1c36f07))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.7...v0.0.8
+
+
 ## [0.0.7] - 2025-09-23
 
 ### 🐛 Bug Fixes
