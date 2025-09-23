@@ -142,8 +142,9 @@ export class SenderManager extends StateManager {
 
   private sendQueueSync(body: BaseEventsQueueDto): boolean {
     const { url, payload } = this.prepareRequest(body);
+    const blob = new Blob([payload], { type: 'application/json' });
 
-    if (this.isSendBeaconAvailable() && navigator.sendBeacon(url, payload)) {
+    if (this.isSendBeaconAvailable() && navigator.sendBeacon(url, blob)) {
       return true;
     }
 
@@ -156,8 +157,9 @@ export class SenderManager extends StateManager {
     }
 
     const { url, payload } = this.prepareRequest(body);
+    const blob = new Blob([payload], { type: 'application/json' });
 
-    return navigator.sendBeacon(url, payload);
+    return navigator.sendBeacon(url, blob);
   }
 
   private sendSyncXHR(url: string, payload: string): boolean {
