@@ -1,4 +1,4 @@
-import { SCROLL_DEBOUNCE_TIME_MS, SIGNIFICANT_SCROLL_DELTA } from '../constants';
+import { MAX_RETRY_ATTEMPTS, RETRY_DELAY_MS, SCROLL_DEBOUNCE_TIME_MS, SIGNIFICANT_SCROLL_DELTA } from '../constants';
 import { EventType, ScrollData, ScrollDirection } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
@@ -15,9 +15,6 @@ interface PendingSelector {
   selector: string;
   retryCount: number;
 }
-
-const MAX_RETRY_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 1000;
 
 export class ScrollHandler extends StateManager {
   private readonly eventManager: EventManager;
