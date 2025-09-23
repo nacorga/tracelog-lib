@@ -46,3 +46,7 @@ export const FINGERPRINT_CLEANUP_MULTIPLIER = 10; // Cleanup fingerprints older 
 
 // Click coordinate precision
 export const CLICK_COORDINATE_PRECISION = 10; // Round click coordinates to nearest 10px
+
+// Retry limits
+export const MAX_RETRY_ATTEMPTS = 3;
+export const RETRY_DELAY_MS = 1000;
