@@ -7,6 +7,31 @@
 
 
 
+
+## [0.1.0] - 2025-09-23
+
+### ✨ Features
+
+- Enhance ScrollHandler with retry logic for dynamic selectors and add mutation observer for pending elements ([e603bac](../../commit/e603baca421ace9cffcab09f18425b9784be141d))
+
+### ♻️ Refactoring
+
+- Add retry limits constants for ScrollHandler ([47c25e6](../../commit/47c25e6818b7929f53c1d23c79bd257f444e6ecf))
+
+### 🔧 Other Changes
+
+- Merge pull request #7 from nacorga/release/20250923.1 ([5bb1db5](../../commit/5bb1db5fa1f7e07295802180f0beb8547e4c652b))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.8...v0.1.0
+
+
 ## [0.0.8] - 2025-09-23
 
 ### 🐛 Bug Fixes
