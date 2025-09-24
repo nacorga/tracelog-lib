@@ -41,11 +41,21 @@ export class StorageManager {
     try {
       if (this.storage) {
         this.storage.setItem(key, value);
-        return;
+      } else {
+        this.fallbackStorage.set(key, value);
+      }
+    } catch (error) {
+      const shouldRetry = this.handleStorageError(error as Error, key, 'set');
+
+      if (shouldRetry) {
+        try {
+          this.storage?.setItem(key, value);
+          return;
+        } catch (retryError) {
+          debugLog.warn('StorageManager', 'Storage retry failed, using memory fallback', { key, retryError });
+        }
       }
 
-      this.fallbackStorage.set(key, value);
-    } catch (error) {
       debugLog.warn('StorageManager', 'Storage setItem failed, using memory fallback', { key, error });
       this.storageAvailable = false;
       this.fallbackStorage.set(key, value);
@@ -70,6 +80,54 @@ export class StorageManager {
       this.storageAvailable = false;
       this.fallbackStorage.delete(key);
     }
+  }
+
+  private performStorageCleanup(): boolean {
+    try {
+      const keysToClean: string[] = [];
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('tracelog_')) {
+          try {
+            const data = JSON.parse(localStorage.getItem(key) ?? '{}');
+            const age = Date.now() - (data.timestamp ?? 0);
+
+            if (age > 24 * 60 * 60 * 1000) {
+              keysToClean.push(key);
+            }
+          } catch {
+            keysToClean.push(key);
+          }
+        }
+      }
+
+      keysToClean.forEach((key) => localStorage.removeItem(key));
+
+      debugLog.info('StorageManager', 'Storage cleanup completed', {
+        keysRemoved: keysToClean.length,
+      });
+
+      return keysToClean.length > 0;
+    } catch (error) {
+      debugLog.error('StorageManager', 'Storage cleanup failed', { error });
+      return false;
+    }
+  }
+
+  private handleStorageError(error: Error, key: string, operation: 'get' | 'set'): boolean {
+    if (error.name === 'QuotaExceededError') {
+      debugLog.warn('StorageManager', 'Storage quota exceeded, attempting cleanup', { key, operation });
+
+      const cleanupSuccess = this.performStorageCleanup();
+
+      if (cleanupSuccess && operation === 'set') {
+        debugLog.info('StorageManager', 'Retrying storage operation after cleanup', { key });
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private init(): globalThis.Storage | null {

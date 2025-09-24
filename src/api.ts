@@ -200,6 +200,77 @@ export const destroy = (): void => {
   }
 };
 
+/**
+ * Gets current error recovery statistics for monitoring purposes.
+ * @returns Object with recovery statistics and system status, or null if not initialized
+ * @example
+ * const stats = getRecoveryStats();
+ * if (stats) {
+ *   console.log('Circuit breaker resets:', stats.circuitBreakerResets);
+ *   console.log('Network timeouts:', stats.networkTimeouts);
+ * }
+ */
+export const getRecoveryStats = () => {
+  try {
+    if (!app) {
+      debugLog.warn('API', 'Recovery stats requested but Library was not initialized');
+      return null;
+    }
+
+    return app.getRecoveryStats();
+  } catch (error) {
+    debugLog.error('API', 'Failed to get recovery stats', { error });
+    return null;
+  }
+};
+
+/**
+ * Triggers manual system recovery to attempt fixing error states.
+ * This can help recover from stuck circuit breakers, failed event persistence, or other error conditions.
+ * @returns Promise that resolves when recovery attempt is complete
+ * @example
+ * await attemptSystemRecovery();
+ * console.log('Recovery attempt completed');
+ */
+export const attemptSystemRecovery = async (): Promise<void> => {
+  try {
+    if (!app) {
+      debugLog.warn('API', 'System recovery attempted but Library was not initialized');
+      throw new Error('App not initialized');
+    }
+
+    debugLog.info('API', 'Manual system recovery initiated');
+    await app.attemptSystemRecovery();
+    debugLog.info('API', 'Manual system recovery completed');
+  } catch (error) {
+    debugLog.error('API', 'System recovery failed', { error });
+    throw error;
+  }
+};
+
+/**
+ * Triggers aggressive fingerprint cleanup to free memory.
+ * This removes old event fingerprints to prevent memory leaks in long-running sessions.
+ * @example
+ * aggressiveFingerprintCleanup();
+ * console.log('Fingerprint cleanup completed');
+ */
+export const aggressiveFingerprintCleanup = (): void => {
+  try {
+    if (!app) {
+      debugLog.warn('API', 'Fingerprint cleanup attempted but Library was not initialized');
+      throw new Error('App not initialized');
+    }
+
+    debugLog.info('API', 'Manual fingerprint cleanup initiated');
+    app.aggressiveFingerprintCleanup();
+    debugLog.info('API', 'Manual fingerprint cleanup completed');
+  } catch (error) {
+    debugLog.error('API', 'Fingerprint cleanup failed', { error });
+    throw error;
+  }
+};
+
 class TestBridge extends App implements TraceLogTestBridge {
   isInitializing(): boolean {
     return isInitializing;

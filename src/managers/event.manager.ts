@@ -10,6 +10,8 @@ import {
   MAX_FINGERPRINTS_HARD_LIMIT,
   FINGERPRINT_CLEANUP_INTERVAL_MS,
   CLICK_COORDINATE_PRECISION,
+  CIRCUIT_BREAKER_MAX_STUCK_TIME_MS,
+  CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS,
 } from '../constants';
 import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
 import { getUTMParameters, isUrlPathExcluded, BackoffManager } from '../utils';
@@ -46,6 +48,17 @@ export class EventManager extends StateManager {
   private readonly eventFingerprints = new Map<string, number>();
   private lastFingerprintCleanup = Date.now();
 
+  // Circuit breaker health monitoring
+  private circuitBreakerHealthCheckInterval: number | null = null;
+
+  // Enhanced error recovery statistics
+  private readonly errorRecoveryStats = {
+    circuitBreakerResets: 0,
+    persistenceFailures: 0,
+    networkTimeouts: 0,
+    lastRecoveryAttempt: 0,
+  };
+
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 
@@ -57,13 +70,15 @@ export class EventManager extends StateManager {
     this.backoffManager = new BackoffManager(BACKOFF_CONFIGS.CIRCUIT_BREAKER, 'EventManager-CircuitBreaker');
     this.set('circuitBreakerOpen', false);
 
+    this.setupCircuitBreakerHealthCheck();
+
     debugLog.debug('EventManager', 'EventManager initialized', {
       hasGoogleAnalytics: !!googleAnalytics,
     });
   }
 
   /**
-   * Recovers persisted events from localStorage
+   * Recovers persisted events from localStorage with enhanced error tracking
    * Should be called after initialization to recover any events that failed to send
    */
   async recoverPersistedEvents(): Promise<void> {
@@ -71,9 +86,20 @@ export class EventManager extends StateManager {
       onSuccess: () => {
         this.failureCount = 0;
         this.backoffManager.reset();
+
+        debugLog.info('EventManager', 'Persisted events recovered successfully', {
+          recoveryStats: this.errorRecoveryStats,
+        });
       },
       onFailure: async () => {
         this.failureCount++;
+        this.errorRecoveryStats.persistenceFailures++;
+
+        debugLog.warn('EventManager', 'Failed to recover persisted events', {
+          failureCount: this.failureCount,
+          persistenceFailures: this.errorRecoveryStats.persistenceFailures,
+        });
+
         if (this.failureCount >= this.MAX_FAILURES) {
           await this.openCircuitBreaker();
         }
@@ -207,6 +233,12 @@ export class EventManager extends StateManager {
       this.circuitResetTimeoutId = null;
     }
 
+    // Clean up circuit breaker health check interval
+    if (this.circuitBreakerHealthCheckInterval) {
+      clearInterval(this.circuitBreakerHealthCheckInterval);
+      this.circuitBreakerHealthCheckInterval = null;
+    }
+
     // Clean up all state variables
     this.eventFingerprints.clear();
     this.lastFingerprintCleanup = Date.now();
@@ -216,8 +248,16 @@ export class EventManager extends StateManager {
     this.backoffManager.reset();
     this.lastEvent = null;
 
+    // Reset error recovery statistics
+    this.errorRecoveryStats.circuitBreakerResets = 0;
+    this.errorRecoveryStats.persistenceFailures = 0;
+    this.errorRecoveryStats.networkTimeouts = 0;
+    this.errorRecoveryStats.lastRecoveryAttempt = 0;
+
     // Stop the data sender to clean up retry timeouts
     this.dataSender.stop();
+
+    debugLog.debug('EventManager', 'EventManager stopped and all intervals cleaned up');
   }
 
   private processAndSend(payload: EventData): void {
@@ -341,6 +381,18 @@ export class EventManager extends StateManager {
     return this.eventsQueue.length;
   }
 
+  /**
+   * Gets current error recovery statistics for monitoring purposes
+   */
+  getRecoveryStats() {
+    return {
+      ...this.errorRecoveryStats,
+      currentFailureCount: this.failureCount,
+      circuitBreakerOpen: this.circuitOpen,
+      fingerprintMapSize: this.eventFingerprints.size,
+    };
+  }
+
   private async sendEventsQueue(): Promise<void> {
     // Validaciones tempranas
     if (this.isSending) {
@@ -413,7 +465,13 @@ export class EventManager extends StateManager {
         debugLog.warn('EventManager', 'Events send failed, keeping in queue', {
           eventCount: eventsToSend.length,
           failureCount: this.failureCount,
+          networkTimeouts: this.errorRecoveryStats.networkTimeouts,
         });
+
+        // Trigger system recovery attempt when failure count is high
+        if (this.failureCount >= Math.floor(this.MAX_FAILURES / 2)) {
+          await this.attemptSystemRecovery();
+        }
 
         if (this.failureCount >= this.MAX_FAILURES) {
           await this.openCircuitBreaker();
@@ -548,9 +606,11 @@ export class EventManager extends StateManager {
 
   /**
    * Performs aggressive cleanup when hard limit is exceeded
+   * Enhanced with recovery statistics tracking
    */
-  private aggressiveFingerprintCleanup(): void {
+  aggressiveFingerprintCleanup(): void {
     const entries = Array.from(this.eventFingerprints.entries());
+    const initialSize = entries.length;
 
     // Ordenar por timestamp (más antiguos primero)
     entries.sort((a, b) => a[1] - b[1]);
@@ -565,8 +625,10 @@ export class EventManager extends StateManager {
     debugLog.warn('EventManager', 'Aggressive fingerprint cleanup performed', {
       removed: toRemove,
       remaining: this.eventFingerprints.size,
-      trigger: 'hard_limit_exceeded',
+      initialSize,
+      trigger: 'recovery_system',
       hardLimit: MAX_FINGERPRINTS_HARD_LIMIT,
+      recoveryStats: this.errorRecoveryStats,
     });
   }
 
@@ -599,6 +661,33 @@ export class EventManager extends StateManager {
       remainingCount: this.eventFingerprints.size,
       cleanupThreshold,
     });
+  }
+
+  /**
+   * Sets up circuit breaker health monitoring to detect and recover from stuck states
+   */
+  private setupCircuitBreakerHealthCheck(): void {
+    this.circuitBreakerHealthCheckInterval = window.setInterval(async () => {
+      if (this.circuitOpen) {
+        const stuckTime = Date.now() - this.circuitOpenTime;
+
+        if (stuckTime > CIRCUIT_BREAKER_MAX_STUCK_TIME_MS) {
+          debugLog.warn('EventManager', 'Circuit breaker appears stuck, forcing reset', {
+            stuckTime,
+            maxStuckTime: CIRCUIT_BREAKER_MAX_STUCK_TIME_MS,
+            failureCount: this.failureCount,
+          });
+
+          // Force reset con logging y recovery
+          this.resetCircuitBreaker();
+          this.failureCount = 0; // Reset failure count para evitar re-stuck
+          this.errorRecoveryStats.circuitBreakerResets++;
+
+          // Attempt comprehensive recovery
+          await this.attemptSystemRecovery();
+        }
+      }
+    }, CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS);
   }
 
   /**
@@ -714,5 +803,52 @@ export class EventManager extends StateManager {
       const eventId = event.timestamp + '_' + event.type;
       return !eventIdSet.has(eventId);
     });
+  }
+
+  /**
+   * Determines if system recovery should be attempted based on timing constraints
+   */
+  private shouldAttemptRecovery(): boolean {
+    const now = Date.now();
+    const timeSinceLastRecovery = now - this.errorRecoveryStats.lastRecoveryAttempt;
+
+    // No intentar recovery más de una vez por minuto
+    return timeSinceLastRecovery > 60000;
+  }
+
+  /**
+   * Attempts comprehensive system recovery from various error states
+   */
+  async attemptSystemRecovery(): Promise<void> {
+    if (!this.shouldAttemptRecovery()) {
+      return;
+    }
+
+    this.errorRecoveryStats.lastRecoveryAttempt = Date.now();
+
+    debugLog.info('EventManager', 'Attempting system recovery', {
+      stats: this.errorRecoveryStats,
+    });
+
+    try {
+      // 1. Reset circuit breaker si está stuck
+      if (this.circuitOpen) {
+        const stuckTime = Date.now() - this.circuitOpenTime;
+        if (stuckTime > 2 * CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
+          this.resetCircuitBreaker();
+          this.errorRecoveryStats.circuitBreakerResets++;
+        }
+      }
+
+      // 2. Intentar recuperar eventos persistidos
+      await this.recoverPersistedEvents();
+
+      // 3. Limpiar fingerprints para liberar memoria
+      this.aggressiveFingerprintCleanup();
+
+      debugLog.info('EventManager', 'System recovery completed successfully');
+    } catch (error) {
+      debugLog.error('EventManager', 'System recovery failed', { error });
+    }
   }
 }

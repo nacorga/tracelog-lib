@@ -130,6 +130,46 @@ export class App extends StateManager {
     }
   }
 
+  /**
+   * Gets current error recovery statistics for monitoring purposes
+   * @returns Object with recovery statistics and system status
+   */
+  getRecoveryStats(): ReturnType<EventManager['getRecoveryStats']> | null {
+    if (!this.eventManager) {
+      debugLog.warn('App', 'Recovery stats requested before eventManager initialization');
+      return null;
+    }
+
+    return this.eventManager.getRecoveryStats();
+  }
+
+  /**
+   * Triggers manual system recovery to attempt fixing error states
+   * @returns Promise that resolves when recovery attempt is complete
+   */
+  async attemptSystemRecovery(): Promise<void> {
+    if (!this.eventManager) {
+      debugLog.warn('App', 'System recovery attempted before eventManager initialization');
+      return;
+    }
+
+    debugLog.info('App', 'Manual system recovery triggered');
+    await this.eventManager.attemptSystemRecovery();
+  }
+
+  /**
+   * Triggers aggressive fingerprint cleanup to free memory
+   */
+  aggressiveFingerprintCleanup(): void {
+    if (!this.eventManager) {
+      debugLog.warn('App', 'Fingerprint cleanup attempted before eventManager initialization');
+      return;
+    }
+
+    debugLog.info('App', 'Manual fingerprint cleanup triggered');
+    this.eventManager.aggressiveFingerprintCleanup();
+  }
+
   destroy(): void {
     if (!this.isInitialized) {
       debugLog.warn('App', 'Destroy called but app was not initialized');

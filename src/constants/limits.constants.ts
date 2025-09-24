@@ -48,3 +48,7 @@ export const FINGERPRINT_CLEANUP_INTERVAL_MS = 60000; // Cleanup interval (1 min
 
 // Click coordinate precision
 export const CLICK_COORDINATE_PRECISION = 10; // Round click coordinates to nearest 10px
+
+// Circuit breaker health monitoring
+export const CIRCUIT_BREAKER_MAX_STUCK_TIME_MS = 5 * 60 * 1000; // 5 minutes
+export const CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS = 60000; // Check every minute
