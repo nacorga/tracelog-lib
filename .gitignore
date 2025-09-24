@@ -2,11 +2,14 @@
 .npmrc
 .DS_Store
 /dist
+/dist_v2
 /node_modules
 /coverage
 /test-results
 /test-reports
 /playwright-report
 /tests/fixtures/tracelog.js
+/tests/fixtures/tracelog-v2.js
 /.llm
 /.playwright-mcp
+src_backup_*

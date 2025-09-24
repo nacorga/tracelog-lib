@@ -1,0 +1,899 @@
+import {
+  EVENT_SENT_INTERVAL_MS,
+  EVENT_SENT_INTERVAL_TEST_MS,
+  MAX_EVENTS_QUEUE_LENGTH,
+  DUPLICATE_EVENT_THRESHOLD_MS,
+  CIRCUIT_BREAKER_CONSTANTS,
+  BACKOFF_CONFIGS,
+  MAX_FINGERPRINTS,
+  FINGERPRINT_CLEANUP_MULTIPLIER,
+  MAX_FINGERPRINTS_HARD_LIMIT,
+  FINGERPRINT_CLEANUP_INTERVAL_MS,
+  CLICK_COORDINATE_PRECISION,
+  CIRCUIT_BREAKER_MAX_STUCK_TIME_MS,
+  CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS,
+} from '../constants';
+import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
+import { getUTMParameters, isUrlPathExcluded, BackoffManager } from '../utils';
+import { debugLog } from '../utils/logging';
+import { SenderManager } from './sender.manager';
+import { SamplingManager } from './sampling.manager';
+import { StateManager } from './state.manager';
+import { TagsManager } from './tags.manager';
+import { StorageManager } from './storage.manager';
+import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
+
+export class EventManager extends StateManager {
+  private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
+  private readonly samplingManager: SamplingManager;
+  private readonly tagsManager: TagsManager;
+  private readonly dataSender: SenderManager;
+
+  private eventsQueue: EventData[] = [];
+  private lastEvent: EventData | null = null;
+  private eventsQueueIntervalId: number | null = null;
+  private intervalActive = false;
+
+  // Circuit breaker properties
+  private failureCount = 0;
+  private readonly MAX_FAILURES = CIRCUIT_BREAKER_CONSTANTS.MAX_FAILURES;
+  private circuitOpen = false;
+  private circuitOpenTime = 0;
+  private readonly backoffManager: BackoffManager;
+  private circuitResetTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private isSending = false;
+  private circuitRecoveryAttempts = 0;
+  private readonly MAX_RECOVERY_ATTEMPTS = 5;
+
+  // Event deduplication properties
+  private readonly eventFingerprints = new Map<string, number>();
+  private lastFingerprintCleanup = Date.now();
+
+  // Circuit breaker health monitoring
+  private circuitBreakerHealthCheckInterval: number | null = null;
+
+  // Enhanced error recovery statistics
+  private readonly errorRecoveryStats = {
+    circuitBreakerResets: 0,
+    persistenceFailures: 0,
+    networkTimeouts: 0,
+    lastRecoveryAttempt: 0,
+  };
+
+  constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
+    super();
+
+    this.googleAnalytics = googleAnalytics;
+    this.samplingManager = new SamplingManager();
+    this.tagsManager = new TagsManager();
+    this.dataSender = new SenderManager(storeManager);
+    this.backoffManager = new BackoffManager(BACKOFF_CONFIGS.CIRCUIT_BREAKER, 'EventManager-CircuitBreaker');
+    this.set('circuitBreakerOpen', false);
+
+    this.setupCircuitBreakerHealthCheck();
+
+    debugLog.debug('EventManager', 'EventManager initialized', {
+      hasGoogleAnalytics: !!googleAnalytics,
+    });
+  }
+
+  /**
+   * Recovers persisted events from localStorage with enhanced error tracking
+   * Should be called after initialization to recover any events that failed to send
+   */
+  async recoverPersistedEvents(): Promise<void> {
+    await this.dataSender.recoverPersistedEvents({
+      onSuccess: (eventCount, recoveredEvents) => {
+        this.failureCount = 0;
+        this.backoffManager.reset();
+
+        // Remove recovered events from in-memory queue to prevent duplicates
+        if (recoveredEvents && recoveredEvents.length > 0) {
+          const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
+          this.removeProcessedEvents(eventIds);
+
+          debugLog.debug('EventManager', 'Removed recovered events from in-memory queue', {
+            removedCount: recoveredEvents.length,
+            remainingQueueLength: this.eventsQueue.length,
+          });
+        }
+
+        debugLog.info('EventManager', 'Persisted events recovered successfully', {
+          eventCount: eventCount || 0,
+          recoveryStats: this.errorRecoveryStats,
+        });
+      },
+      onFailure: async () => {
+        this.errorRecoveryStats.persistenceFailures++;
+
+        debugLog.warn('EventManager', 'Failed to recover persisted events', {
+          persistenceFailures: this.errorRecoveryStats.persistenceFailures,
+        });
+      },
+    });
+  }
+
+  track({
+    type,
+    page_url,
+    from_page_url,
+    scroll_data,
+    click_data,
+    custom_event,
+    web_vitals,
+    session_end_reason,
+    session_start_recovered,
+  }: Partial<EventData>): void {
+    if (this.circuitOpen) {
+      debugLog.debug('EventManager', 'Event dropped - circuit breaker is open', { type });
+      return;
+    }
+
+    // Gestión proactiva de memoria de fingerprints
+    this.manageFingerprintMemory();
+
+    if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
+      debugLog.debug('EventManager', 'Event filtered by sampling', { type, samplingActive: true });
+
+      return;
+    }
+
+    const isDuplicatedEvent = this.isDuplicatedEvent({
+      type,
+      page_url,
+      scroll_data,
+      click_data,
+      custom_event,
+      web_vitals,
+      session_end_reason,
+      session_start_recovered,
+    });
+
+    if (isDuplicatedEvent) {
+      const now = Date.now();
+
+      if (this.eventsQueue && this.eventsQueue.length > 0) {
+        const lastEvent = this.eventsQueue.at(-1);
+        if (lastEvent) {
+          lastEvent.timestamp = now;
+        }
+      }
+
+      if (this.lastEvent) {
+        this.lastEvent.timestamp = now;
+      }
+
+      debugLog.debug('EventManager', 'Duplicate event detected, timestamp updated', {
+        type,
+        queueLength: this.eventsQueue.length,
+      });
+
+      return;
+    }
+
+    const effectivePageUrl = (page_url as string) || this.get('pageUrl');
+    const isRouteExcluded = isUrlPathExcluded(effectivePageUrl, this.get('config').excludedUrlPaths);
+    const hasStartSession = this.get('hasStartSession');
+    const isSessionEndEvent = type == EventType.SESSION_END;
+
+    if (isRouteExcluded && (!isSessionEndEvent || (isSessionEndEvent && !hasStartSession))) {
+      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+        debugLog.debug('EventManager', `Event ${type} on excluded route: ${page_url}`);
+      }
+
+      return;
+    }
+
+    const isSessionStartEvent = type === EventType.SESSION_START;
+
+    if (isSessionStartEvent) {
+      this.set('hasStartSession', true);
+    }
+
+    const utmParams = isSessionStartEvent ? getUTMParameters() : undefined;
+
+    const payload: EventData = {
+      type: type as EventType,
+      page_url: isRouteExcluded ? 'excluded' : effectivePageUrl,
+      timestamp: Date.now(),
+      ...(isSessionStartEvent && { referrer: document.referrer || 'Direct' }),
+      ...(from_page_url && !isRouteExcluded ? { from_page_url } : {}),
+      ...(scroll_data && { scroll_data }),
+      ...(click_data && { click_data }),
+      ...(custom_event && { custom_event }),
+      ...(utmParams && { utm: utmParams }),
+      ...(web_vitals && { web_vitals }),
+      ...(session_end_reason && { session_end_reason }),
+      ...(session_start_recovered && { session_start_recovered }),
+    };
+
+    if (this.get('config')?.tags?.length) {
+      const matchedTags = this.tagsManager.getEventTagsIds(payload, this.get('device'));
+
+      if (matchedTags?.length) {
+        payload.tags =
+          this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug'
+            ? matchedTags.map((id) => ({
+                id,
+                key: this.get('config')?.tags?.find((t) => t.id === id)?.key ?? '',
+              }))
+            : matchedTags;
+      }
+    }
+
+    this.lastEvent = payload;
+    this.processAndSend(payload);
+  }
+
+  stop(): void {
+    // Clear interval and reset interval state
+    if (this.eventsQueueIntervalId) {
+      clearInterval(this.eventsQueueIntervalId);
+      this.eventsQueueIntervalId = null;
+      this.intervalActive = false;
+    }
+
+    // Clean up circuit breaker timeout
+    if (this.circuitResetTimeoutId) {
+      clearTimeout(this.circuitResetTimeoutId);
+      this.circuitResetTimeoutId = null;
+    }
+
+    // Clean up circuit breaker health check interval
+    if (this.circuitBreakerHealthCheckInterval) {
+      clearInterval(this.circuitBreakerHealthCheckInterval);
+      this.circuitBreakerHealthCheckInterval = null;
+    }
+
+    // Clean up all state variables
+    this.eventFingerprints.clear();
+    this.lastFingerprintCleanup = Date.now();
+    this.circuitOpen = false;
+    this.circuitOpenTime = 0;
+    this.failureCount = 0;
+    this.backoffManager.reset();
+    this.lastEvent = null;
+
+    // Reset error recovery statistics
+    this.errorRecoveryStats.circuitBreakerResets = 0;
+    this.errorRecoveryStats.persistenceFailures = 0;
+    this.errorRecoveryStats.networkTimeouts = 0;
+    this.errorRecoveryStats.lastRecoveryAttempt = 0;
+    this.circuitRecoveryAttempts = 0;
+
+    // Stop the data sender to clean up retry timeouts
+    this.dataSender.stop();
+
+    debugLog.debug('EventManager', 'EventManager stopped and all intervals cleaned up');
+  }
+
+  private processAndSend(payload: EventData): void {
+    if (this.get('config').ipExcluded) {
+      return;
+    }
+
+    this.eventsQueue.push(payload);
+
+    if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
+      const removedEvent = this.eventsQueue.shift();
+
+      debugLog.warn('EventManager', 'Event queue overflow, oldest event removed', {
+        maxLength: MAX_EVENTS_QUEUE_LENGTH,
+        currentLength: this.eventsQueue.length,
+        removedEventType: removedEvent?.type,
+      });
+    }
+
+    debugLog.info('EventManager', `📥 Event captured: ${payload.type}`, payload);
+
+    if (!this.eventsQueueIntervalId) {
+      this.initEventsQueueInterval();
+    }
+
+    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
+      const customEvent = payload.custom_event as CustomEventData;
+
+      this.trackGoogleAnalyticsEvent(customEvent);
+    }
+  }
+
+  private trackGoogleAnalyticsEvent(customEvent: CustomEventData): void {
+    if (this.get('config').mode === 'qa' || this.get('config').mode === 'debug') {
+      debugLog.debug('EventManager', `Google Analytics event: ${JSON.stringify(customEvent)}`);
+    } else if (this.googleAnalytics) {
+      this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
+    }
+  }
+
+  private initEventsQueueInterval(): void {
+    if (this.eventsQueueIntervalId || this.intervalActive) {
+      return;
+    }
+
+    const isTestEnv = this.get('config')?.id === 'test' || this.get('config')?.mode === 'debug';
+    const interval = isTestEnv ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
+
+    this.eventsQueueIntervalId = window.setInterval(() => {
+      if (this.eventsQueue.length > 0 || this.circuitOpen) {
+        this.sendEventsQueue();
+      }
+    }, interval);
+
+    this.intervalActive = true;
+  }
+
+  async flushImmediately(): Promise<boolean> {
+    if (this.eventsQueue.length === 0) {
+      return true;
+    }
+
+    const body = this.buildEventsPayload();
+
+    // Create immutable copy of events to send
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + '_' + e.type);
+
+    const success = await this.dataSender.sendEventsQueueAsync(body);
+
+    if (success) {
+      // Only remove events that were sent successfully
+      this.removeProcessedEvents(eventIds);
+      this.clearQueueInterval();
+
+      debugLog.info('EventManager', 'Flush immediately successful', {
+        eventCount: eventsToSend.length,
+        remainingQueueLength: this.eventsQueue.length,
+      });
+    } else {
+      debugLog.warn('EventManager', 'Flush immediately failed, keeping events in queue', {
+        eventCount: eventsToSend.length,
+      });
+    }
+
+    return success;
+  }
+
+  flushImmediatelySync(): boolean {
+    if (this.eventsQueue.length === 0) {
+      return true;
+    }
+
+    const body = this.buildEventsPayload();
+
+    // Create immutable copy of events to send
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + '_' + e.type);
+
+    const success = this.dataSender.sendEventsQueueSync(body);
+
+    if (success) {
+      // Only remove events that were sent successfully
+      this.removeProcessedEvents(eventIds);
+      this.clearQueueInterval();
+
+      debugLog.info('EventManager', 'Flush immediately sync successful', {
+        eventCount: eventsToSend.length,
+        remainingQueueLength: this.eventsQueue.length,
+      });
+    } else {
+      debugLog.warn('EventManager', 'Flush immediately sync failed, keeping events in queue', {
+        eventCount: eventsToSend.length,
+      });
+    }
+
+    return success;
+  }
+
+  getQueueLength(): number {
+    return this.eventsQueue.length;
+  }
+
+  /**
+   * Gets current error recovery statistics for monitoring purposes
+   */
+  getRecoveryStats(): {
+    circuitBreakerResets: number;
+    persistenceFailures: number;
+    networkTimeouts: number;
+    lastRecoveryAttempt: number;
+    currentFailureCount: number;
+    circuitBreakerOpen: boolean;
+    fingerprintMapSize: number;
+  } {
+    return {
+      ...this.errorRecoveryStats,
+      currentFailureCount: this.failureCount,
+      circuitBreakerOpen: this.circuitOpen,
+      fingerprintMapSize: this.eventFingerprints.size,
+    };
+  }
+
+  private async sendEventsQueue(): Promise<void> {
+    // Validaciones tempranas
+    if (this.isSending) {
+      debugLog.debug('EventManager', 'Send already in progress, skipping');
+      return;
+    }
+
+    if (!this.get('sessionId')) {
+      debugLog.debug('EventManager', 'No session ID available, skipping send');
+      return;
+    }
+
+    if (this.eventsQueue.length === 0 && !this.circuitOpen) {
+      return;
+    }
+
+    if (this.circuitOpen) {
+      const timeSinceOpen = Date.now() - this.circuitOpenTime;
+
+      if (timeSinceOpen >= CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
+        if (this.circuitRecoveryAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
+          debugLog.error('EventManager', 'Circuit breaker permanently opened after max recovery attempts', {
+            attempts: this.circuitRecoveryAttempts,
+            maxAttempts: this.MAX_RECOVERY_ATTEMPTS,
+          });
+
+          this.notifyCircuitBreakerPermanentFailure();
+          return;
+        }
+
+        this.circuitRecoveryAttempts++;
+
+        const recoverySuccess = await this.handleCircuitBreakerRecovery();
+
+        if (!recoverySuccess) {
+          this.scheduleCircuitBreakerRetry();
+          return;
+        }
+
+        this.circuitRecoveryAttempts = 0;
+      } else {
+        debugLog.debug('EventManager', 'Circuit breaker is open - skipping event sending', {
+          queueLength: this.eventsQueue.length,
+          failureCount: this.failureCount,
+          timeSinceOpen,
+          recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
+        });
+        return;
+      }
+    }
+
+    const body = this.buildEventsPayload();
+
+    // Set sending flag to prevent concurrent sends
+    this.isSending = true;
+
+    // Create immutable copy of events to send
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + '_' + e.type);
+
+    // Use callbacks to handle async success/failure from fetch
+    await this.dataSender.sendEventsQueue(body, {
+      onSuccess: () => {
+        this.failureCount = 0;
+        this.backoffManager.reset();
+
+        // Only remove events that were sent successfully
+        this.removeProcessedEvents(eventIds);
+
+        debugLog.info('EventManager', 'Events sent successfully', {
+          eventCount: eventsToSend.length,
+          remainingQueueLength: this.eventsQueue.length,
+        });
+      },
+      onFailure: async () => {
+        this.failureCount++;
+
+        // Events remain in queue for retry
+        debugLog.warn('EventManager', 'Events send failed, keeping in queue', {
+          eventCount: eventsToSend.length,
+          failureCount: this.failureCount,
+          networkTimeouts: this.errorRecoveryStats.networkTimeouts,
+        });
+
+        // Trigger system recovery attempt when failure count is high
+        if (this.failureCount >= Math.floor(this.MAX_FAILURES / 2)) {
+          await this.attemptSystemRecovery();
+        }
+
+        if (this.failureCount >= this.MAX_FAILURES) {
+          await this.openCircuitBreaker();
+        }
+      },
+    });
+
+    this.isSending = false;
+  }
+
+  private buildEventsPayload(): BaseEventsQueueDto {
+    const uniqueEvents = new Map<string, EventData>();
+
+    for (const event of this.eventsQueue) {
+      let key = `${event.type}_${event.page_url}`;
+
+      if (event.click_data) {
+        key += `_${event.click_data.x}_${event.click_data.y}`;
+      }
+
+      if (event.scroll_data) {
+        key += `_${event.scroll_data.depth}_${event.scroll_data.direction}`;
+      }
+
+      if (event.custom_event) {
+        key += `_${event.custom_event.name}`;
+      }
+
+      if (event.web_vitals) {
+        key += `_${event.web_vitals.type}`;
+      }
+
+      if (!uniqueEvents.has(key)) {
+        uniqueEvents.set(key, event);
+      }
+    }
+
+    const deduplicatedEvents = [...uniqueEvents.values()];
+    deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
+
+    return {
+      user_id: this.get('userId'),
+      session_id: this.get('sessionId') as string,
+      device: this.get('device'),
+      events: deduplicatedEvents,
+      ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
+    };
+  }
+
+  private clearQueueInterval(): void {
+    if (this.eventsQueueIntervalId) {
+      clearInterval(this.eventsQueueIntervalId);
+      this.eventsQueueIntervalId = null;
+      this.intervalActive = false;
+    }
+  }
+
+  private getEventFingerprint(event: Partial<EventData>): string {
+    const key = `${event.type}_${event.page_url}`;
+
+    if (event.click_data) {
+      // Round coordinates to reduce false positives
+      const x = Math.round((event.click_data.x || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
+      const y = Math.round((event.click_data.y || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
+      return `${key}_${x}_${y}_${event.click_data.tag}_${event.click_data.id}`;
+    }
+
+    if (event.scroll_data) {
+      return `${key}_${event.scroll_data.depth}_${event.scroll_data.direction}`;
+    }
+
+    if (event.custom_event) {
+      return `${key}_${event.custom_event.name}`;
+    }
+
+    if (event.web_vitals) {
+      return `${key}_${event.web_vitals.type}`;
+    }
+
+    if (event.session_end_reason) {
+      return `${key}_${event.session_end_reason}`;
+    }
+
+    if (event.session_start_recovered !== undefined) {
+      return `${key}_${event.session_start_recovered}`;
+    }
+
+    return key;
+  }
+
+  private isDuplicatedEvent(event: Partial<EventData>): boolean {
+    const fingerprint = this.getEventFingerprint(event);
+    const lastTime = this.eventFingerprints.get(fingerprint) ?? 0;
+    const now = Date.now();
+
+    if (now - lastTime < DUPLICATE_EVENT_THRESHOLD_MS) {
+      return true;
+    }
+
+    this.eventFingerprints.set(fingerprint, now);
+
+    // Clean up old fingerprints to prevent memory leaks
+    this.cleanupOldFingerprints();
+
+    return false;
+  }
+
+  /**
+   * Manages fingerprint memory with proactive and reactive cleanup strategies
+   */
+  private manageFingerprintMemory(): void {
+    const now = Date.now();
+    const shouldCleanup =
+      this.eventFingerprints.size > MAX_FINGERPRINTS ||
+      now - this.lastFingerprintCleanup > FINGERPRINT_CLEANUP_INTERVAL_MS ||
+      this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT;
+
+    if (!shouldCleanup) {
+      return;
+    }
+
+    if (this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
+      // Cleanup agresivo si se excede límite duro
+      this.aggressiveFingerprintCleanup();
+    } else {
+      // Cleanup normal basado en tiempo
+      this.cleanupOldFingerprints();
+    }
+
+    this.lastFingerprintCleanup = now;
+  }
+
+  /**
+   * Performs aggressive cleanup when hard limit is exceeded
+   * Enhanced with recovery statistics tracking
+   */
+  aggressiveFingerprintCleanup(): void {
+    const entries = Array.from(this.eventFingerprints.entries());
+    const initialSize = entries.length;
+
+    // Ordenar por timestamp (más antiguos primero)
+    entries.sort((a, b) => a[1] - b[1]);
+
+    // Remover el 50% más antiguo
+    const toRemove = Math.floor(entries.length * 0.5);
+
+    for (let i = 0; i < toRemove; i++) {
+      this.eventFingerprints.delete(entries[i][0]);
+    }
+
+    debugLog.warn('EventManager', 'Aggressive fingerprint cleanup performed', {
+      removed: toRemove,
+      remaining: this.eventFingerprints.size,
+      initialSize,
+      trigger: 'recovery_system',
+      hardLimit: MAX_FINGERPRINTS_HARD_LIMIT,
+      recoveryStats: this.errorRecoveryStats,
+    });
+  }
+
+  /**
+   * Cleans up old fingerprints to prevent memory leaks
+   */
+  private cleanupOldFingerprints(): void {
+    if (this.eventFingerprints.size <= MAX_FINGERPRINTS) {
+      return;
+    }
+
+    const now = Date.now();
+    const cleanupThreshold = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
+    const keysToDelete: string[] = [];
+
+    for (const [key, timestamp] of this.eventFingerprints) {
+      if (now - timestamp > cleanupThreshold) {
+        keysToDelete.push(key);
+      }
+    }
+
+    // Delete old entries
+    for (const key of keysToDelete) {
+      this.eventFingerprints.delete(key);
+    }
+
+    debugLog.debug('EventManager', 'Cleaned up old event fingerprints', {
+      totalFingerprints: this.eventFingerprints.size + keysToDelete.length,
+      cleanedCount: keysToDelete.length,
+      remainingCount: this.eventFingerprints.size,
+      cleanupThreshold,
+    });
+  }
+
+  /**
+   * Sets up circuit breaker health monitoring to detect and recover from stuck states
+   */
+  private setupCircuitBreakerHealthCheck(): void {
+    this.circuitBreakerHealthCheckInterval = window.setInterval(async () => {
+      if (this.circuitOpen) {
+        const stuckTime = Date.now() - this.circuitOpenTime;
+
+        if (stuckTime > CIRCUIT_BREAKER_MAX_STUCK_TIME_MS) {
+          debugLog.warn('EventManager', 'Circuit breaker appears stuck, forcing reset', {
+            stuckTime,
+            maxStuckTime: CIRCUIT_BREAKER_MAX_STUCK_TIME_MS,
+            failureCount: this.failureCount,
+          });
+
+          await this.resetCircuitBreaker();
+          this.failureCount = 0; // Reset failure count para evitar re-stuck
+          this.errorRecoveryStats.circuitBreakerResets++;
+
+          // Attempt comprehensive recovery
+          await this.attemptSystemRecovery();
+        }
+      }
+    }, CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS);
+  }
+
+  /**
+   * Opens the circuit breaker with time-based recovery and event persistence
+   */
+  private async openCircuitBreaker(): Promise<void> {
+    this.circuitOpen = true;
+    this.circuitOpenTime = Date.now();
+    await this.set('circuitBreakerOpen', true);
+
+    const eventsCount = this.eventsQueue.length;
+
+    if (eventsCount > 0) {
+      const body = this.buildEventsPayload();
+
+      // Delegate persistence to SenderManager
+      const persistSuccess = await this.dataSender.persistEventsForRecovery(body);
+
+      if (persistSuccess) {
+        debugLog.info('EventManager', 'Events persisted before circuit breaker opened', {
+          eventsCount,
+        });
+      } else {
+        debugLog.error('EventManager', 'Failed to persist events before circuit breaker opened');
+      }
+    }
+
+    this.eventsQueue = [];
+
+    debugLog.warn('EventManager', 'Circuit breaker opened with time-based recovery', {
+      maxFailures: this.MAX_FAILURES,
+      eventsCount,
+      failureCount: this.failureCount,
+      recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
+      openTime: this.circuitOpenTime,
+    });
+
+    this.backoffManager.getNextDelay();
+  }
+
+  /**
+   * Handles circuit breaker recovery attempt
+   * Returns true if recovery was successful, false otherwise
+   */
+  private async handleCircuitBreakerRecovery(): Promise<boolean> {
+    await this.resetCircuitBreaker();
+
+    this.isSending = true;
+    let recoverySuccess = false;
+
+    try {
+      await this.dataSender.recoverPersistedEvents({
+        onSuccess: () => {
+          recoverySuccess = true;
+          this.failureCount = 0;
+          this.backoffManager.reset();
+          debugLog.info('EventManager', 'Circuit breaker recovery successful');
+        },
+        onFailure: () => {
+          recoverySuccess = false;
+          debugLog.warn('EventManager', 'Circuit breaker recovery failed');
+        },
+      });
+    } catch (error) {
+      recoverySuccess = false;
+      debugLog.error('EventManager', 'Circuit breaker recovery error', { error });
+    } finally {
+      this.isSending = false;
+    }
+
+    return recoverySuccess;
+  }
+
+  /**
+   * Schedules circuit breaker retry with progressive backoff
+   */
+  private scheduleCircuitBreakerRetry(): void {
+    // Incrementar backoff delay para evitar retry agresivo
+    const nextRetryDelay = this.backoffManager.getNextDelay();
+
+    // Reabrir circuit breaker con delay aumentado
+    this.circuitOpen = true;
+    this.circuitOpenTime = Date.now();
+
+    debugLog.warn('EventManager', 'Circuit breaker retry scheduled', {
+      nextRetryDelay,
+      failureCount: this.failureCount,
+    });
+  }
+
+  /**
+   * Resets the circuit breaker and attempts to restore persisted events
+   */
+  private async resetCircuitBreaker(): Promise<void> {
+    this.circuitOpen = false;
+    this.circuitOpenTime = 0;
+    this.failureCount = 0;
+    this.circuitResetTimeoutId = null;
+    await this.set('circuitBreakerOpen', false);
+
+    this.dataSender.stop();
+
+    debugLog.info('EventManager', 'Circuit breaker reset completed', {
+      currentQueueLength: this.eventsQueue.length,
+      backoffDelay: this.backoffManager.getCurrentDelay(),
+    });
+  }
+
+  /**
+   * Notifies system and users that circuit breaker has permanently failed
+   */
+  private notifyCircuitBreakerPermanentFailure(): void {
+    debugLog.error('EventManager', 'CIRCUIT BREAKER PERMANENTLY OPEN - MANUAL INTERVENTION REQUIRED', {
+      attempts: this.circuitRecoveryAttempts,
+      timestamp: Date.now(),
+      failureCount: this.failureCount,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tracelog:circuit-breaker-failure', {
+          detail: {
+            attempts: this.circuitRecoveryAttempts,
+            timestamp: Date.now(),
+            failureCount: this.failureCount,
+          },
+        }),
+      );
+    }
+  }
+
+  private removeProcessedEvents(eventIds: string[]): void {
+    const eventIdSet = new Set(eventIds);
+
+    this.eventsQueue = this.eventsQueue.filter((event) => {
+      const eventId = event.timestamp + '_' + event.type;
+      return !eventIdSet.has(eventId);
+    });
+  }
+
+  /**
+   * Determines if system recovery should be attempted based on timing constraints
+   */
+  private shouldAttemptRecovery(): boolean {
+    const now = Date.now();
+    const timeSinceLastRecovery = now - this.errorRecoveryStats.lastRecoveryAttempt;
+
+    // No intentar recovery más de una vez por minuto
+    return timeSinceLastRecovery > 60000;
+  }
+
+  /**
+   * Attempts comprehensive system recovery from various error states
+   */
+  async attemptSystemRecovery(): Promise<void> {
+    if (!this.shouldAttemptRecovery()) {
+      return;
+    }
+
+    this.errorRecoveryStats.lastRecoveryAttempt = Date.now();
+
+    debugLog.info('EventManager', 'Attempting system recovery', {
+      stats: this.errorRecoveryStats,
+    });
+
+    try {
+      if (this.circuitOpen) {
+        const stuckTime = Date.now() - this.circuitOpenTime;
+        if (stuckTime > 2 * CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
+          await this.resetCircuitBreaker();
+          this.errorRecoveryStats.circuitBreakerResets++;
+        }
+      }
+
+      // 2. Intentar recuperar eventos persistidos
+      await this.recoverPersistedEvents();
+
+      // 3. Limpiar fingerprints para liberar memoria
+      this.aggressiveFingerprintCleanup();
+
+      debugLog.info('EventManager', 'System recovery completed successfully');
+    } catch (error) {
+      debugLog.error('EventManager', 'System recovery failed', { error });
+    }
+  }
+}
