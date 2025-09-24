@@ -1,148 +1,344 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TraceLog Playground</title>
+    <title>TechShop - Tu tienda de tecnología</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1>TraceLog Playground</h1>
-            <div id="status-indicator" class="status-indicator status-not-initialized">
-                Not Initialized
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="brand-icon">🛒</span>
+                <span class="brand-text">TechShop</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#inicio" class="nav-link active" data-page="inicio">Inicio</a></li>
+                <li><a href="#productos" class="nav-link" data-page="productos">Productos</a></li>
+                <li><a href="#nosotros" class="nav-link" data-page="nosotros">Nosotros</a></li>
+                <li><a href="#contacto" class="nav-link" data-page="contacto">Contacto</a></li>
+            </ul>
+            <div class="nav-cart">
+                <button class="cart-btn">
+                    <span>🛒</span>
+                    <span class="cart-count" id="cart-count">0</span>
+                </button>
             </div>
         </div>
+    </nav>
 
-        <!-- Main Layout with Sidebar -->
-        <div class="main-layout">
-            <div class="main-content">
-                <!-- Main Grid -->
-                <div class="grid">
-            <!-- Configuration Panel -->
-            <div class="panel">
-                <h2>Configuration</h2>
-                <form id="config-form">
-                    <div class="form-group">
-                        <label for="project-id">Project ID:</label>
-                        <input type="text" id="project-id" value="playground" required>
+    <!-- Page: Inicio -->
+    <div id="page-inicio" class="page active">
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-container">
+                <div class="hero-content">
+                    <h1 class="hero-title">La mejor tecnología al mejor precio</h1>
+                    <p class="hero-subtitle">Descubre nuestros productos premium seleccionados para ti</p>
+                    <div class="hero-buttons">
+                        <button class="btn btn-primary" data-action="cta-ver-productos">Ver Productos</button>
+                        <button class="btn btn-secondary" data-action="cta-contacto">Contáctanos</button>
                     </div>
-
-                    <div class="form-group">
-                        <label for="mode">Mode (Fixed to QA for real-time events):</label>
-                        <select id="mode" disabled>
-                            <option value="qa" selected>QA (Required for dispatchEvent)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="session-timeout">Session Timeout:</label>
-                        <select id="session-timeout">
-                            <option value="900000" selected>15 minutes</option>
-                            <option value="1800000">30 minutes</option>
-                            <option value="3600000">1 hour</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="global-metadata">Global Metadata (JSON):</label>
-                        <textarea id="global-metadata" placeholder='{"environment": "playground", "version": "1.0"}'></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="mock-server" checked>
-                            <label for="mock-server">Mock server responses</label>
-                        </div>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Controls Panel -->
-            <div class="panel">
-                <h2>Controls</h2>
-
-                <div class="controls">
-                    <button id="init-btn" class="button button-primary">Init TraceLog</button>
-                    <button id="destroy-btn" class="button button-danger" disabled>Destroy</button>
                 </div>
-
-                <div id="alerts-container"></div>
-
-                <div class="custom-event-form">
-                    <div class="form-group">
-                        <label for="custom-event-name">Custom Event Name:</label>
-                        <input type="text" id="custom-event-name" placeholder="button_click" disabled>
-                    </div>
-                    <button id="send-custom-event" class="button button-secondary" disabled>Send Event</button>
+                <div class="hero-image">
+                    <div class="hero-placeholder">📱💻⌚</div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- Demo Area -->
-        <div class="panel">
-            <h2>Demo Elements</h2>
-            <div class="demo-area">
-                <div class="demo-item">
-                    <h3>Click Tracking</h3>
-                    <button id="demo-click" class="button button-primary">Click Me</button>
-                </div>
-
-                <div class="demo-item">
-                    <h3>Scroll Tracking</h3>
-                    <div class="scroll-area">
-                        <div class="scroll-content">
-                            Scroll in this area
-                        </div>
+        <!-- Features Section -->
+        <section class="features">
+            <div class="container">
+                <h2 class="section-title">¿Por qué elegir TechShop?</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🚚</div>
+                        <h3>Envío Gratis</h3>
+                        <p>En compras superiores a $50</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🔒</div>
+                        <h3>Pago Seguro</h3>
+                        <p>Transacciones 100% protegidas</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">💬</div>
+                        <h3>Soporte 24/7</h3>
+                        <p>Siempre estamos para ayudarte</p>
                     </div>
                 </div>
-
-                <div class="demo-item">
-                    <h3>External Link</h3>
-                    <a href="https://tracelog.dev" target="_blank" rel="noopener">Visit TraceLog</a>
-                </div>
-
-                <div class="demo-item">
-                    <h3>Form Input</h3>
-                    <input type="text" id="demo-input" placeholder="Type something...">
-                </div>
             </div>
-        </div>
+        </section>
 
-                <!-- Log Console -->
-                <div class="log-console">
-                    <div class="log-header">
-                        <h2>Event Log</h2>
-                        <button id="clear-logs" class="button button-secondary">Clear Logs</button>
+        <!-- Products Preview -->
+        <section class="products-preview">
+            <div class="container">
+                <h2 class="section-title">Productos Destacados</h2>
+                <div class="products-grid">
+                    <div class="product-card" data-product="laptop-pro">
+                        <div class="product-image">💻</div>
+                        <h3 class="product-name">Laptop Pro M2</h3>
+                        <p class="product-price">$1,299</p>
+                        <button class="btn btn-add-cart" data-product-id="1" data-product-name="Laptop Pro M2">Añadir al Carrito</button>
                     </div>
-                    <div id="log-content" class="log-content"></div>
-                </div>
-            </div>
-
-            <!-- Real-time Events Sidebar -->
-            <div class="sidebar">
-                <div class="real-time-events">
-                    <div class="real-time-header">
-                        <h3>Real-time Events <small style="font-size: 11px; opacity: 0.8;">(newest first)</small></h3>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <span id="real-event-counter" class="event-counter">0</span>
-                            <button id="clear-real-events" class="clear-real-events">Clear</button>
-                        </div>
+                    <div class="product-card" data-product="smartphone-x">
+                        <div class="product-image">📱</div>
+                        <h3 class="product-name">Smartphone X</h3>
+                        <p class="product-price">$899</p>
+                        <button class="btn btn-add-cart" data-product-id="2" data-product-name="Smartphone X">Añadir al Carrito</button>
                     </div>
-                    <div id="real-time-content" class="real-time-content"></div>
+                    <div class="product-card" data-product="smartwatch-ultra">
+                        <div class="product-image">⌚</div>
+                        <h3 class="product-name">Smartwatch Ultra</h3>
+                        <p class="product-price">$499</p>
+                        <button class="btn btn-add-cart" data-product-id="3" data-product-name="Smartwatch Ultra">Añadir al Carrito</button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </section>
     </div>
+
+    <!-- Page: Productos -->
+    <div id="page-productos" class="page">
+        <section class="page-header">
+            <div class="container">
+                <h1>Nuestros Productos</h1>
+                <p>Explora nuestra colección completa de tecnología premium</p>
+            </div>
+        </section>
+        <section class="products-full">
+            <div class="container">
+                <div class="products-grid">
+                    <div class="product-card" data-product="laptop-pro">
+                        <div class="product-image">💻</div>
+                        <h3 class="product-name">Laptop Pro M2</h3>
+                        <p class="product-desc">Potencia y rendimiento profesional</p>
+                        <p class="product-price">$1,299</p>
+                        <button class="btn btn-add-cart" data-product-id="1" data-product-name="Laptop Pro M2">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="smartphone-x">
+                        <div class="product-image">📱</div>
+                        <h3 class="product-name">Smartphone X</h3>
+                        <p class="product-desc">Última generación en telefonía móvil</p>
+                        <p class="product-price">$899</p>
+                        <button class="btn btn-add-cart" data-product-id="2" data-product-name="Smartphone X">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="smartwatch-ultra">
+                        <div class="product-image">⌚</div>
+                        <h3 class="product-name">Smartwatch Ultra</h3>
+                        <p class="product-desc">Fitness y salud en tu muñeca</p>
+                        <p class="product-price">$499</p>
+                        <button class="btn btn-add-cart" data-product-id="3" data-product-name="Smartwatch Ultra">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="headphones-pro">
+                        <div class="product-image">🎧</div>
+                        <h3 class="product-name">Headphones Pro</h3>
+                        <p class="product-desc">Sonido de alta fidelidad</p>
+                        <p class="product-price">$349</p>
+                        <button class="btn btn-add-cart" data-product-id="4" data-product-name="Headphones Pro">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="tablet-air">
+                        <div class="product-image">📲</div>
+                        <h3 class="product-name">Tablet Air</h3>
+                        <p class="product-desc">Diseño ultradelgado y potente</p>
+                        <p class="product-price">$699</p>
+                        <button class="btn btn-add-cart" data-product-id="5" data-product-name="Tablet Air">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="camera-4k">
+                        <div class="product-image">📷</div>
+                        <h3 class="product-name">Camera 4K</h3>
+                        <p class="product-desc">Captura momentos en alta definición</p>
+                        <p class="product-price">$1,199</p>
+                        <button class="btn btn-add-cart" data-product-id="6" data-product-name="Camera 4K">Añadir al Carrito</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Page: Nosotros -->
+    <div id="page-nosotros" class="page">
+        <section class="page-header">
+            <div class="container">
+                <h1>Sobre Nosotros</h1>
+                <p>Conoce más sobre TechShop y nuestro equipo</p>
+            </div>
+        </section>
+        <section class="about-content">
+            <div class="container">
+                <div class="about-text">
+                    <h2>Nuestra Historia</h2>
+                    <p>TechShop nació en 2020 con la misión de acercar la mejor tecnología a todos. Comenzamos como una pequeña tienda en línea y hoy somos líderes en el mercado digital.</p>
+                    <p>Nos especializamos en productos de alta calidad cuidadosamente seleccionados para satisfacer las necesidades de nuestros clientes más exigentes.</p>
+                </div>
+                <div class="team-section">
+                    <h2>Nuestro Equipo</h2>
+                    <div class="team-grid">
+                        <div class="team-member">
+                            <div class="team-avatar">👨‍💼</div>
+                            <h3>Juan Pérez</h3>
+                            <p>CEO & Fundador</p>
+                        </div>
+                        <div class="team-member">
+                            <div class="team-avatar">👩‍💻</div>
+                            <h3>María García</h3>
+                            <p>CTO</p>
+                        </div>
+                        <div class="team-member">
+                            <div class="team-avatar">👨‍🔧</div>
+                            <h3>Carlos López</h3>
+                            <p>Product Manager</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Page: Contacto -->
+    <div id="page-contacto" class="page">
+        <section class="page-header">
+            <div class="container">
+                <h1>Contáctanos</h1>
+                <p>Estamos aquí para ayudarte</p>
+            </div>
+        </section>
+        <section class="contact-content">
+            <div class="container">
+                <div class="contact-grid">
+                    <div class="contact-info">
+                        <h2>Información de Contacto</h2>
+                        <div class="contact-item">
+                            <span class="contact-icon">📍</span>
+                            <div>
+                                <h3>Dirección</h3>
+                                <p>Av. Tecnología 123, Madrid, España</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <span class="contact-icon">📧</span>
+                            <div>
+                                <h3>Email</h3>
+                                <p>hola@techshop.com</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <span class="contact-icon">📞</span>
+                            <div>
+                                <h3>Teléfono</h3>
+                                <p>+34 900 123 456</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="contact-form-container">
+                        <h2>Envíanos un Mensaje</h2>
+                        <form id="contact-form" class="contact-form">
+                            <div class="form-group">
+                                <label for="name">Nombre</label>
+                                <input type="text" id="name" name="name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="email">Email</label>
+                                <input type="email" id="email" name="email" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="message">Mensaje</label>
+                                <textarea id="message" name="message" rows="5" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Enviar Mensaje</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Floating Console Toggle Button -->
+    <button id="console-toggle" class="console-toggle">
+        <span class="console-icon">📊</span>
+        <span class="console-badge" id="console-badge">0</span>
+    </button>
+
+    <!-- Floating Console -->
+    <div id="floating-console" class="floating-console">
+        <div class="console-header" id="console-header">
+            <div class="console-title">
+                <span class="console-status" id="console-status">🟢</span>
+                <span>TraceLog Monitor</span>
+            </div>
+            <div class="console-actions">
+                <button class="console-btn" id="console-minimize" title="Minimizar">─</button>
+                <button class="console-btn" id="console-close" title="Cerrar">×</button>
+            </div>
+        </div>
+        <div class="console-tabs">
+            <button class="console-tab active" data-tab="events">Eventos</button>
+            <button class="console-tab" data-tab="network">Red</button>
+            <button class="console-tab" data-tab="storage">Almacenamiento</button>
+        </div>
+        <div class="console-content">
+            <!-- Events Tab -->
+            <div id="tab-events" class="console-tab-content active">
+                <div class="console-filters">
+                    <select id="event-filter" class="console-select">
+                        <option value="all">Todos los eventos</option>
+                        <option value="page_view">page_view</option>
+                        <option value="click">click</option>
+                        <option value="scroll">scroll</option>
+                        <option value="custom">custom</option>
+                        <option value="session_start">session_start</option>
+                        <option value="session_end">session_end</option>
+                        <option value="web_vitals">web_vitals</option>
+                        <option value="error">error</option>
+                    </select>
+                    <button id="clear-events" class="console-btn-small">Limpiar</button>
+                </div>
+                <div id="events-list" class="console-list"></div>
+            </div>
+            <!-- Network Tab -->
+            <div id="tab-network" class="console-tab-content">
+                <div class="network-controls">
+                    <div class="server-indicator">
+                        <span class="server-status-dot" id="server-status-dot">🟢</span>
+                        <span id="server-status-text">Servidor: Online</span>
+                    </div>
+                    <button id="toggle-server" class="btn btn-small btn-danger">Simular Fallo</button>
+                </div>
+                <div id="network-list" class="console-list"></div>
+            </div>
+            <!-- Storage Tab -->
+            <div id="tab-storage" class="console-tab-content">
+                <div class="storage-info">
+                    <div class="storage-item">
+                        <span class="storage-label">Eventos Persistidos:</span>
+                        <span class="storage-value" id="persisted-count">0</span>
+                    </div>
+                    <div class="storage-item">
+                        <span class="storage-label">SessionID:</span>
+                        <span class="storage-value" id="session-id">-</span>
+                    </div>
+                </div>
+                <div id="storage-list" class="console-list"></div>
+            </div>
+        </div>
+        <div class="console-resize-handle" id="console-resize"></div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 TechShop. Todos los derechos reservados.</p>
+        </div>
+    </footer>
 
     <!-- TraceLog Library -->
     <script type="module">
         import { TraceLog } from './tracelog.js';
         window.TraceLog = TraceLog;
     </script>
-    <!-- Playground Script -->
+    <!-- Demo Script -->
     <script src="script.js"></script>
 </body>
 </html>
