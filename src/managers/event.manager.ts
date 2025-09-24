@@ -342,11 +342,18 @@ export class EventManager extends StateManager {
   }
 
   private async sendEventsQueue(): Promise<void> {
-    // Prevent concurrent sends
+    // Validaciones tempranas
     if (this.isSending) {
-      debugLog.debug('EventManager', 'Send already in progress, skipping', {
-        queueLength: this.eventsQueue.length,
-      });
+      debugLog.debug('EventManager', 'Send already in progress, skipping');
+      return;
+    }
+
+    if (!this.get('sessionId')) {
+      debugLog.debug('EventManager', 'No session ID available, skipping send');
+      return;
+    }
+
+    if (this.eventsQueue.length === 0 && !this.circuitOpen) {
       return;
     }
 
@@ -374,14 +381,6 @@ export class EventManager extends StateManager {
         });
         return;
       }
-    }
-
-    if (this.eventsQueue.length === 0) {
-      return;
-    }
-
-    if (!this.get('sessionId')) {
-      return;
     }
 
     const body = this.buildEventsPayload();

@@ -9,8 +9,8 @@ export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
 export const DUPLICATE_EVENT_THRESHOLD_MS = 1000;
 
 // Event processing intervals
-export const EVENT_SENT_INTERVAL_MS = 10000;
-export const EVENT_SENT_INTERVAL_TEST_MS = 2500;
+export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds - production
+export const EVENT_SENT_INTERVAL_TEST_MS = 1000; // 1 second - testing (faster)
 
 // Network timing
 export const RETRY_BACKOFF_INITIAL = 1000; // 1 second
