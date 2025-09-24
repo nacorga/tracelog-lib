@@ -15,7 +15,7 @@ import { StorageManager } from './storage.manager';
 export class CrossTabSessionManager extends StateManager {
   private readonly config: CrossTabSessionConfig;
   private readonly storageManager: StorageManager;
-  private readonly broadcastChannel: BroadcastChannel | null;
+  private broadcastChannel: BroadcastChannel | null;
   private readonly tabId: string;
   private readonly tabInfo: TabInfo;
   private readonly projectId: string;
@@ -302,6 +302,18 @@ export class CrossTabSessionManager extends StateManager {
   }
 
   /**
+   * Clean up health check interval to prevent memory leaks
+   */
+  private cleanupHealthCheckInterval(): void {
+    if (this.leaderHealthCheckInterval) {
+      clearInterval(this.leaderHealthCheckInterval);
+      this.leaderHealthCheckInterval = null;
+
+      debugLog.debug('CrossTabSession', 'Health check interval cleaned up');
+    }
+  }
+
+  /**
    * Setup fallback mechanism to ensure a leader is always elected
    */
   private setupLeadershipFallback(): void {
@@ -360,10 +372,14 @@ export class CrossTabSessionManager extends StateManager {
     // Clean up the health check interval when session ends
     const originalEndSession = this.endSession.bind(this);
     this.endSession = (reason: SessionEndReason): void => {
-      if (this.leaderHealthCheckInterval) {
-        clearInterval(this.leaderHealthCheckInterval);
-        this.leaderHealthCheckInterval = null;
+      // Cleanup robusto de todos los intervals
+      this.cleanupHealthCheckInterval();
+
+      if (this.fallbackLeadershipTimeout) {
+        clearTimeout(this.fallbackLeadershipTimeout);
+        this.fallbackLeadershipTimeout = null;
       }
+
       originalEndSession(reason);
     };
   }
@@ -834,6 +850,8 @@ export class CrossTabSessionManager extends StateManager {
    * Cleanup resources
    */
   destroy(): void {
+    this.cleanupHealthCheckInterval();
+
     // Clear intervals and timeouts
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -871,17 +889,15 @@ export class CrossTabSessionManager extends StateManager {
       this.closingAnnouncementTimeout = null;
     }
 
-    if (this.leaderHealthCheckInterval) {
-      clearInterval(this.leaderHealthCheckInterval);
-      this.leaderHealthCheckInterval = null;
-    }
-
     // End session and cleanup
     this.endSession('manual_stop');
 
     // Close BroadcastChannel
     if (this.broadcastChannel) {
       this.broadcastChannel.close();
+      this.broadcastChannel = null;
     }
+
+    debugLog.debug('CrossTabSession', 'CrossTabSessionManager destroyed');
   }
 }

@@ -1,6 +1,6 @@
 import { QUEUE_KEY, BACKOFF_CONFIGS, EVENT_EXPIRY_HOURS, SYNC_XHR_TIMEOUT_MS, MAX_RETRY_ATTEMPTS } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId, Mode } from '../types';
-import { debugLog, BackoffManager } from '../utils';
+import { debugLog, BackoffManager, fetchWithTimeout } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -171,22 +171,23 @@ export class SenderManager extends StateManager {
   }
 
   private async send(body: BaseEventsQueueDto): Promise<boolean> {
-    const { url } = this.prepareRequest(body);
+    const { url, payload } = this.prepareRequest(body);
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
-        body: JSON.stringify(body),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: payload,
         keepalive: true,
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000, // 15 segundos timeout para events
       });
 
       return response.ok;
     } catch (error) {
-      debugLog.warn('SenderManager', 'Send failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      debugLog.error('SenderManager', 'Send request failed', { error });
       return false;
     }
   }

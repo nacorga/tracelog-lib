@@ -1,6 +1,6 @@
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
 import { ApiConfig, AppConfig, Config, Mode, SpecialProjectId } from '../types';
-import { isValidUrl, sanitizeApiConfig } from '../utils';
+import { isValidUrl, sanitizeApiConfig, fetchWithTimeout } from '../utils';
 import { debugLog } from '../utils/logging';
 
 export class ConfigManager {
@@ -33,9 +33,10 @@ export class ConfigManager {
         throw new Error('Config URL is not valid or not allowed');
       }
 
-      const response = await fetch(configUrl, {
+      const response = await fetchWithTimeout(configUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
+        timeout: 10000, // 10 segundos timeout
       });
 
       if (!response.ok) {

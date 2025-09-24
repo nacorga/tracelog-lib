@@ -429,49 +429,75 @@ export class SessionManager extends StateManager {
     };
   }
 
+  private createSessionEndTimeout(): Promise<never> {
+    return new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Session end timeout'));
+      }, this.sessionEndConfig.syncTimeoutMs || 5000);
+    });
+  }
+
   async endSessionManaged(reason: SessionEndReason): Promise<SessionEndResult> {
-    return (this.sessionEndLock = this.sessionEndLock.then(async () => {
-      this.sessionEndStats.totalSessionEnds++;
-      this.sessionEndStats.reasonCounts[reason]++;
+    return (this.sessionEndLock = this.sessionEndLock
+      .then(async (): Promise<SessionEndResult> => {
+        this.sessionEndStats.totalSessionEnds++;
+        this.sessionEndStats.reasonCounts[reason]++;
 
-      if (this.pendingSessionEnd) {
-        this.sessionEndStats.duplicatePrevented++;
-
-        debugLog.debug('SessionManager', 'Session end already pending, waiting for completion', { reason });
-
-        return this.waitForCompletion();
-      }
-
-      if (!this.shouldProceedWithSessionEnd(reason)) {
-        if (this.sessionEndConfig.debugMode) {
-          debugLog.debug(
-            'SessionManager',
-            `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
-          );
+        if (this.pendingSessionEnd) {
+          this.sessionEndStats.duplicatePrevented++;
+          debugLog.debug('SessionManager', 'Session end already pending, waiting for completion', { reason });
+          return this.waitForCompletion();
         }
+
+        if (!this.shouldProceedWithSessionEnd(reason)) {
+          if (this.sessionEndConfig.debugMode) {
+            debugLog.debug(
+              'SessionManager',
+              `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`,
+            );
+          }
+
+          return {
+            success: false,
+            reason,
+            timestamp: Date.now(),
+            eventsFlushed: 0,
+            method: 'async',
+          };
+        }
+
+        this.sessionEndReason = reason;
+        this.pendingSessionEnd = true;
+        this.sessionEndPromise = Promise.race([
+          this.performSessionEnd(reason, 'async'),
+          this.createSessionEndTimeout(),
+        ]) as Promise<SessionEndResult>;
+
+        try {
+          const result = await this.sessionEndPromise;
+          return result;
+        } finally {
+          this.pendingSessionEnd = false;
+          this.sessionEndPromise = null;
+          this.sessionEndReason = null;
+        }
+      })
+      .catch((error): SessionEndResult => {
+        // Recovery del lock en caso de error
+        this.pendingSessionEnd = false;
+        this.sessionEndPromise = null;
+        this.sessionEndReason = null;
+
+        debugLog.error('SessionManager', 'Session end lock failed, recovering', { error, reason });
 
         return {
           success: false,
           reason,
           timestamp: Date.now(),
           eventsFlushed: 0,
-          method: 'async',
+          method: 'async' as const,
         };
-      }
-
-      this.sessionEndReason = reason;
-      this.pendingSessionEnd = true;
-      this.sessionEndPromise = this.performSessionEnd(reason, 'async');
-
-      try {
-        const result = await this.sessionEndPromise;
-        return result;
-      } finally {
-        this.pendingSessionEnd = false;
-        this.sessionEndPromise = null;
-        this.sessionEndReason = null;
-      }
-    }));
+      }));
   }
 
   endSessionSafely(
