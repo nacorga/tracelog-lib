@@ -1,13 +1,6 @@
-import {
-  QUEUE_KEY,
-  RETRY_BACKOFF_INITIAL,
-  RETRY_BACKOFF_MAX,
-  EVENT_EXPIRY_HOURS,
-  SYNC_XHR_TIMEOUT_MS,
-  MAX_RETRY_ATTEMPTS,
-} from '../constants';
+import { QUEUE_KEY, BACKOFF_CONFIGS, EVENT_EXPIRY_HOURS, SYNC_XHR_TIMEOUT_MS, MAX_RETRY_ATTEMPTS } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId, Mode } from '../types';
-import { debugLog } from '../utils/logging';
+import { debugLog, BackoffManager } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -31,8 +24,8 @@ interface MemoryFallbackData {
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly memoryFallbackStorage = new Map<string, MemoryFallbackData>();
+  private readonly retryBackoffManager: BackoffManager;
 
-  private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
   private retryCount = 0;
   private isRetrying = false;
@@ -41,6 +34,7 @@ export class SenderManager extends StateManager {
     super();
 
     this.storeManager = storeManager;
+    this.retryBackoffManager = new BackoffManager(BACKOFF_CONFIGS.RETRY, 'SenderManager-Retry');
   }
 
   getQueueStorageKey(): string {
@@ -438,7 +432,7 @@ export class SenderManager extends StateManager {
   }
 
   private resetRetryState(): void {
-    this.retryDelay = RETRY_BACKOFF_INITIAL;
+    this.retryBackoffManager.reset();
     this.retryCount = 0;
     this.isRetrying = false;
     this.clearRetryTimeout();
@@ -484,13 +478,13 @@ export class SenderManager extends StateManager {
       } else {
         this.scheduleRetry(body, originalCallbacks);
       }
-    }, this.retryDelay);
+    }, this.retryBackoffManager.getCurrentDelay());
 
-    this.retryDelay = Math.min(this.retryDelay * 2, RETRY_BACKOFF_MAX);
+    const nextRetryDelay = this.retryBackoffManager.getNextDelay();
 
     debugLog.debug('SenderManager', 'Retry scheduled', {
       retryCount: this.retryCount,
-      retryDelay: this.retryDelay,
+      retryDelay: nextRetryDelay,
       eventsCount: body.events.length,
     });
   }

@@ -4,12 +4,15 @@ import {
   MAX_EVENTS_QUEUE_LENGTH,
   DUPLICATE_EVENT_THRESHOLD_MS,
   CIRCUIT_BREAKER_CONSTANTS,
+  BACKOFF_CONFIGS,
   MAX_FINGERPRINTS,
   FINGERPRINT_CLEANUP_MULTIPLIER,
+  MAX_FINGERPRINTS_HARD_LIMIT,
+  FINGERPRINT_CLEANUP_INTERVAL_MS,
   CLICK_COORDINATE_PRECISION,
 } from '../constants';
 import { BaseEventsQueueDto, CustomEventData, EventData, EventType } from '../types';
-import { getUTMParameters, isUrlPathExcluded } from '../utils';
+import { getUTMParameters, isUrlPathExcluded, BackoffManager } from '../utils';
 import { debugLog } from '../utils/logging';
 import { SenderManager } from './sender.manager';
 import { SamplingManager } from './sampling.manager';
@@ -35,12 +38,13 @@ export class EventManager extends StateManager {
   private readonly MAX_FAILURES = CIRCUIT_BREAKER_CONSTANTS.MAX_FAILURES;
   private circuitOpen = false;
   private circuitOpenTime = 0;
-  private backoffDelay: number = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+  private readonly backoffManager: BackoffManager;
   private circuitResetTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private isSending = false;
 
   // Event deduplication properties
   private readonly eventFingerprints = new Map<string, number>();
+  private lastFingerprintCleanup = Date.now();
 
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
@@ -50,6 +54,7 @@ export class EventManager extends StateManager {
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
+    this.backoffManager = new BackoffManager(BACKOFF_CONFIGS.CIRCUIT_BREAKER, 'EventManager-CircuitBreaker');
     this.set('circuitBreakerOpen', false);
 
     debugLog.debug('EventManager', 'EventManager initialized', {
@@ -65,12 +70,12 @@ export class EventManager extends StateManager {
     await this.dataSender.recoverPersistedEvents({
       onSuccess: () => {
         this.failureCount = 0;
-        this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+        this.backoffManager.reset();
       },
-      onFailure: () => {
+      onFailure: async () => {
         this.failureCount++;
         if (this.failureCount >= this.MAX_FAILURES) {
-          this.openCircuitBreaker();
+          await this.openCircuitBreaker();
         }
       },
     });
@@ -91,6 +96,9 @@ export class EventManager extends StateManager {
       debugLog.debug('EventManager', 'Event dropped - circuit breaker is open', { type });
       return;
     }
+
+    // Gestión proactiva de memoria de fingerprints
+    this.manageFingerprintMemory();
 
     if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
       debugLog.debug('EventManager', 'Event filtered by sampling', { type, samplingActive: true });
@@ -201,10 +209,11 @@ export class EventManager extends StateManager {
 
     // Clean up all state variables
     this.eventFingerprints.clear();
+    this.lastFingerprintCleanup = Date.now();
     this.circuitOpen = false;
     this.circuitOpenTime = 0;
     this.failureCount = 0;
-    this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+    this.backoffManager.reset();
     this.lastEvent = null;
 
     // Stop the data sender to clean up retry timeouts
@@ -388,7 +397,7 @@ export class EventManager extends StateManager {
     await this.dataSender.sendEventsQueue(body, {
       onSuccess: () => {
         this.failureCount = 0;
-        this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+        this.backoffManager.reset();
 
         // Only remove events that were sent successfully
         this.removeProcessedEvents(eventIds);
@@ -398,7 +407,7 @@ export class EventManager extends StateManager {
           remainingQueueLength: this.eventsQueue.length,
         });
       },
-      onFailure: () => {
+      onFailure: async () => {
         this.failureCount++;
 
         // Events remain in queue for retry
@@ -408,7 +417,7 @@ export class EventManager extends StateManager {
         });
 
         if (this.failureCount >= this.MAX_FAILURES) {
-          this.openCircuitBreaker();
+          await this.openCircuitBreaker();
         }
       },
     });
@@ -514,6 +523,55 @@ export class EventManager extends StateManager {
   }
 
   /**
+   * Manages fingerprint memory with proactive and reactive cleanup strategies
+   */
+  private manageFingerprintMemory(): void {
+    const now = Date.now();
+    const shouldCleanup =
+      this.eventFingerprints.size > MAX_FINGERPRINTS ||
+      now - this.lastFingerprintCleanup > FINGERPRINT_CLEANUP_INTERVAL_MS ||
+      this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT;
+
+    if (!shouldCleanup) {
+      return;
+    }
+
+    if (this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
+      // Cleanup agresivo si se excede límite duro
+      this.aggressiveFingerprintCleanup();
+    } else {
+      // Cleanup normal basado en tiempo
+      this.cleanupOldFingerprints();
+    }
+
+    this.lastFingerprintCleanup = now;
+  }
+
+  /**
+   * Performs aggressive cleanup when hard limit is exceeded
+   */
+  private aggressiveFingerprintCleanup(): void {
+    const entries = Array.from(this.eventFingerprints.entries());
+
+    // Ordenar por timestamp (más antiguos primero)
+    entries.sort((a, b) => a[1] - b[1]);
+
+    // Remover el 50% más antiguo
+    const toRemove = Math.floor(entries.length * 0.5);
+
+    for (let i = 0; i < toRemove; i++) {
+      this.eventFingerprints.delete(entries[i][0]);
+    }
+
+    debugLog.warn('EventManager', 'Aggressive fingerprint cleanup performed', {
+      removed: toRemove,
+      remaining: this.eventFingerprints.size,
+      trigger: 'hard_limit_exceeded',
+      hardLimit: MAX_FINGERPRINTS_HARD_LIMIT,
+    });
+  }
+
+  /**
    * Cleans up old fingerprints to prevent memory leaks
    */
   private cleanupOldFingerprints(): void {
@@ -547,7 +605,7 @@ export class EventManager extends StateManager {
   /**
    * Opens the circuit breaker with time-based recovery and event persistence
    */
-  private openCircuitBreaker(): void {
+  private async openCircuitBreaker(): Promise<void> {
     this.circuitOpen = true;
     this.circuitOpenTime = Date.now();
     this.set('circuitBreakerOpen', true);
@@ -555,23 +613,17 @@ export class EventManager extends StateManager {
     const eventsCount = this.eventsQueue.length;
 
     if (eventsCount > 0) {
-      const persistedData = {
-        userId: this.get('userId'),
-        sessionId: this.get('sessionId') as string,
-        device: this.get('device'),
-        events: this.eventsQueue,
-        timestamp: Date.now(),
-        ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
-      };
+      const body = this.buildEventsPayload();
 
-      try {
-        const queueKey = this.dataSender.getQueueStorageKey();
-        this.storageManager.setItem(queueKey, JSON.stringify(persistedData));
+      // Delegate persistence to SenderManager
+      const persistSuccess = await this.dataSender.persistEventsForRecovery(body);
+
+      if (persistSuccess) {
         debugLog.info('EventManager', 'Events persisted before circuit breaker opened', {
           eventsCount,
         });
-      } catch (error) {
-        debugLog.error('EventManager', 'Failed to persist events before circuit breaker opened', { error });
+      } else {
+        debugLog.error('EventManager', 'Failed to persist events before circuit breaker opened');
       }
     }
 
@@ -585,10 +637,7 @@ export class EventManager extends StateManager {
       openTime: this.circuitOpenTime,
     });
 
-    this.backoffDelay = Math.min(
-      this.backoffDelay * CIRCUIT_BREAKER_CONSTANTS.BACKOFF_MULTIPLIER,
-      CIRCUIT_BREAKER_CONSTANTS.MAX_BACKOFF_DELAY_MS,
-    );
+    this.backoffManager.getNextDelay();
   }
 
   /**
@@ -606,7 +655,7 @@ export class EventManager extends StateManager {
         onSuccess: () => {
           recoverySuccess = true;
           this.failureCount = 0;
-          this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+          this.backoffManager.reset();
           debugLog.info('EventManager', 'Circuit breaker recovery successful');
         },
         onFailure: () => {
@@ -629,17 +678,14 @@ export class EventManager extends StateManager {
    */
   private scheduleCircuitBreakerRetry(): void {
     // Incrementar backoff delay para evitar retry agresivo
-    this.backoffDelay = Math.min(
-      this.backoffDelay * CIRCUIT_BREAKER_CONSTANTS.BACKOFF_MULTIPLIER,
-      CIRCUIT_BREAKER_CONSTANTS.MAX_BACKOFF_DELAY_MS,
-    );
+    const nextRetryDelay = this.backoffManager.getNextDelay();
 
     // Reabrir circuit breaker con delay aumentado
     this.circuitOpen = true;
     this.circuitOpenTime = Date.now();
 
     debugLog.warn('EventManager', 'Circuit breaker retry scheduled', {
-      nextRetryDelay: this.backoffDelay,
+      nextRetryDelay,
       failureCount: this.failureCount,
     });
   }
@@ -658,7 +704,7 @@ export class EventManager extends StateManager {
 
     debugLog.info('EventManager', 'Circuit breaker reset completed', {
       currentQueueLength: this.eventsQueue.length,
-      backoffDelay: this.backoffDelay,
+      backoffDelay: this.backoffManager.getCurrentDelay(),
     });
   }
 

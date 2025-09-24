@@ -43,6 +43,8 @@ export const SYNC_XHR_TIMEOUT_MS = 2000; // 2 seconds
 // Event fingerprint management
 export const MAX_FINGERPRINTS = 1000; // Maximum fingerprints stored before cleanup
 export const FINGERPRINT_CLEANUP_MULTIPLIER = 10; // Cleanup fingerprints older than 10x threshold
+export const MAX_FINGERPRINTS_HARD_LIMIT = 2000; // Hard limit for aggressive cleanup
+export const FINGERPRINT_CLEANUP_INTERVAL_MS = 60000; // Cleanup interval (1 minute)
 
 // Click coordinate precision
 export const CLICK_COORDINATE_PRECISION = 10; // Round click coordinates to nearest 10px

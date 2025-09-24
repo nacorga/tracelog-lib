@@ -1,4 +1,5 @@
 export * from './api.constants';
+export * from './backoff.constants';
 export * from './browser.constants';
 export * from './initialization.constants';
 export * from './limits.constants';
