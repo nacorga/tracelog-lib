@@ -12,7 +12,6 @@ interface ExtendedXHR extends XMLHttpRequest {
 
 export class NetworkHandler extends StateManager {
   private readonly eventManager: EventManager;
-  private readonly originalFetch: typeof fetch;
   private readonly originalXHROpen: typeof XMLHttpRequest.prototype.open;
   private readonly originalXHRSend: typeof XMLHttpRequest.prototype.send;
 
@@ -21,7 +20,6 @@ export class NetworkHandler extends StateManager {
 
     this.eventManager = eventManager;
 
-    this.originalFetch = window.fetch;
     this.originalXHROpen = XMLHttpRequest.prototype.open;
     this.originalXHRSend = XMLHttpRequest.prototype.send;
   }
@@ -29,66 +27,14 @@ export class NetworkHandler extends StateManager {
   startTracking(): void {
     debugLog.debug('NetworkHandler', 'Starting network error tracking');
 
-    this.interceptFetch();
     this.interceptXHR();
   }
 
   stopTracking(): void {
     debugLog.debug('NetworkHandler', 'Stopping network error tracking');
 
-    window.fetch = this.originalFetch;
     XMLHttpRequest.prototype.open = this.originalXHROpen;
     XMLHttpRequest.prototype.send = this.originalXHRSend;
-  }
-
-  private interceptFetch(): void {
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const startTime = Date.now();
-      const url = typeof input === 'string' ? input : input.toString();
-      const method = init?.method ?? 'GET';
-
-      try {
-        const response = await this.originalFetch(input, init);
-        const duration = Date.now() - startTime;
-
-        if (!response.ok) {
-          debugLog.debug('NetworkHandler', 'Fetch error detected', {
-            method,
-            url: this.normalizeUrlForTracking(url),
-            status: response.status,
-            statusText: response.statusText,
-          });
-          this.trackNetworkError(
-            method.toUpperCase(),
-            this.normalizeUrlForTracking(url),
-            response.status,
-            response.statusText,
-            duration,
-          );
-        }
-
-        return response;
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        const errorMessage = error instanceof Error ? error.message : 'Network Error';
-
-        debugLog.debug('NetworkHandler', 'Fetch exception caught', {
-          method,
-          url: this.normalizeUrlForTracking(url),
-          error: errorMessage,
-        });
-
-        this.trackNetworkError(
-          method.toUpperCase(),
-          this.normalizeUrlForTracking(url),
-          undefined,
-          errorMessage,
-          duration,
-        );
-
-        throw error;
-      }
-    };
   }
 
   private interceptXHR(): void {
@@ -126,7 +72,10 @@ export class NetworkHandler extends StateManager {
         if (xhr.readyState === XMLHttpRequest.DONE) {
           const duration = Date.now() - startTime;
 
-          if (xhr.status === 0 || xhr.status >= 400) {
+          // Don't track errors for the analytics collection endpoint to avoid infinite loops
+          const isCollectEndpoint = url.includes('/collect') || url.includes('/config');
+
+          if ((xhr.status === 0 || xhr.status >= 400) && !isCollectEndpoint) {
             const statusText = xhr.statusText || 'Request Failed';
             debugLog.debug('NetworkHandler', 'XHR error detected', {
               method,

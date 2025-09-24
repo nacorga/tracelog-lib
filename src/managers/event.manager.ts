@@ -37,6 +37,7 @@ export class EventManager extends StateManager {
   private circuitOpenTime = 0;
   private backoffDelay: number = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
   private circuitResetTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private isSending = false;
 
   // Event deduplication properties
   private readonly eventFingerprints = new Map<string, number>();
@@ -49,9 +50,29 @@ export class EventManager extends StateManager {
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
+    this.set('circuitBreakerOpen', false);
 
     debugLog.debug('EventManager', 'EventManager initialized', {
       hasGoogleAnalytics: !!googleAnalytics,
+    });
+  }
+
+  /**
+   * Recovers persisted events from localStorage
+   * Should be called after initialization to recover any events that failed to send
+   */
+  async recoverPersistedEvents(): Promise<void> {
+    await this.dataSender.recoverPersistedEvents({
+      onSuccess: () => {
+        this.failureCount = 0;
+        this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+      },
+      onFailure: () => {
+        this.failureCount++;
+        if (this.failureCount >= this.MAX_FAILURES) {
+          this.openCircuitBreaker();
+        }
+      },
     });
   }
 
@@ -66,14 +87,10 @@ export class EventManager extends StateManager {
     session_end_reason,
     session_start_recovered,
   }: Partial<EventData>): void {
-    debugLog.info('EventManager', `📥 Event captured: ${type}`, {
-      type,
-      page_url,
-      hasCustomEvent: !!custom_event,
-      hasClickData: !!click_data,
-      hasScrollData: !!scroll_data,
-      hasWebVitals: !!web_vitals,
-    });
+    if (this.circuitOpen) {
+      debugLog.debug('EventManager', 'Event dropped - circuit breaker is open', { type });
+      return;
+    }
 
     if (!this.samplingManager.shouldSampleEvent(type as EventType, web_vitals)) {
       debugLog.debug('EventManager', 'Event filtered by sampling', { type, samplingActive: true });
@@ -195,16 +212,7 @@ export class EventManager extends StateManager {
   }
 
   private processAndSend(payload: EventData): void {
-    debugLog.info('EventManager', `🔄 Event processed and queued: ${payload.type}`, {
-      type: payload.type,
-      timestamp: payload.timestamp,
-      page_url: payload.page_url,
-      queueLengthBefore: this.eventsQueue.length,
-    });
-
     if (this.get('config').ipExcluded) {
-      debugLog.info('EventManager', `❌ Event blocked: IP excluded`);
-
       return;
     }
 
@@ -220,11 +228,10 @@ export class EventManager extends StateManager {
       });
     }
 
+    debugLog.info('EventManager', `📥 Event captured: ${payload.type}`, payload);
+
     if (!this.eventsQueueIntervalId) {
       this.initEventsQueueInterval();
-      debugLog.info('EventManager', `⏰ Event sender initialized - queue will be sent periodically`, {
-        queueLength: this.eventsQueue.length,
-      });
     }
 
     if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
@@ -247,10 +254,11 @@ export class EventManager extends StateManager {
       return;
     }
 
-    const interval = this.get('config')?.id === 'test' ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
+    const isTestEnv = this.get('config')?.id === 'test' || this.get('config')?.mode === 'debug';
+    const interval = isTestEnv ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
 
     this.eventsQueueIntervalId = window.setInterval(() => {
-      if (this.eventsQueue.length > 0) {
+      if (this.eventsQueue.length > 0 || this.circuitOpen) {
         this.sendEventsQueue();
       }
     }, interval);
@@ -264,11 +272,26 @@ export class EventManager extends StateManager {
     }
 
     const body = this.buildEventsPayload();
+
+    // Create immutable copy of events to send
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + '_' + e.type);
+
     const success = await this.dataSender.sendEventsQueueAsync(body);
 
     if (success) {
-      this.eventsQueue = [];
+      // Only remove events that were sent successfully
+      this.removeProcessedEvents(eventIds);
       this.clearQueueInterval();
+
+      debugLog.info('EventManager', 'Flush immediately successful', {
+        eventCount: eventsToSend.length,
+        remainingQueueLength: this.eventsQueue.length,
+      });
+    } else {
+      debugLog.warn('EventManager', 'Flush immediately failed, keeping events in queue', {
+        eventCount: eventsToSend.length,
+      });
     }
 
     return success;
@@ -280,11 +303,26 @@ export class EventManager extends StateManager {
     }
 
     const body = this.buildEventsPayload();
+
+    // Create immutable copy of events to send
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + '_' + e.type);
+
     const success = this.dataSender.sendEventsQueueSync(body);
 
     if (success) {
-      this.eventsQueue = [];
+      // Only remove events that were sent successfully
+      this.removeProcessedEvents(eventIds);
       this.clearQueueInterval();
+
+      debugLog.info('EventManager', 'Flush immediately sync successful', {
+        eventCount: eventsToSend.length,
+        remainingQueueLength: this.eventsQueue.length,
+      });
+    } else {
+      debugLog.warn('EventManager', 'Flush immediately sync failed, keeping events in queue', {
+        eventCount: eventsToSend.length,
+      });
     }
 
     return success;
@@ -294,26 +332,30 @@ export class EventManager extends StateManager {
     return this.eventsQueue.length;
   }
 
-  private sendEventsQueue(): void {
-    if (this.eventsQueue.length === 0) {
+  private async sendEventsQueue(): Promise<void> {
+    // Prevent concurrent sends
+    if (this.isSending) {
+      debugLog.debug('EventManager', 'Send already in progress, skipping', {
+        queueLength: this.eventsQueue.length,
+      });
       return;
     }
 
-    debugLog.info('EventManager', `📤 Preparing to send event queue`, {
-      queueLength: this.eventsQueue.length,
-      hasSessionId: !!this.get('sessionId'),
-      circuitOpen: this.circuitOpen,
-    });
-
-    // Circuit breaker: check if it should be reset or continue blocking
+    // Circuit breaker: check if it should be reset BEFORE checking queue length
+    // This ensures the circuit breaker can reset even when queue is empty
     if (this.circuitOpen) {
       const timeSinceOpen = Date.now() - this.circuitOpenTime;
       if (timeSinceOpen >= CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
-        this.resetCircuitBreaker();
-        debugLog.info('EventManager', 'Circuit breaker reset after timeout', {
-          timeSinceOpen,
-          recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
-        });
+        const recoverySuccess = await this.handleCircuitBreakerRecovery();
+
+        if (!recoverySuccess) {
+          // No reabrir inmediatamente, usar backoff progresivo
+          this.scheduleCircuitBreakerRetry();
+          return;
+        }
+
+        // Solo procesar cola normal si recovery fue exitoso
+        // Continuar con el flujo normal...
       } else {
         debugLog.debug('EventManager', 'Circuit breaker is open - skipping event sending', {
           queueLength: this.eventsQueue.length,
@@ -325,38 +367,53 @@ export class EventManager extends StateManager {
       }
     }
 
+    if (this.eventsQueue.length === 0) {
+      return;
+    }
+
     if (!this.get('sessionId')) {
-      debugLog.info('EventManager', `⏳ Queue waiting: ${this.eventsQueue.length} events waiting for active session`);
       return;
     }
 
     const body = this.buildEventsPayload();
-    const success = this.dataSender.sendEventsQueue(body);
 
-    if (success) {
-      debugLog.info('EventManager', `✅ Event queue sent successfully`, {
-        eventsCount: body.events.length,
-        sessionId: body.session_id,
-        uniqueEventsAfterDedup: body.events.length,
-      });
+    // Set sending flag to prevent concurrent sends
+    this.isSending = true;
 
-      this.eventsQueue = [];
-      this.failureCount = 0;
-      this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
-    } else {
-      debugLog.info('EventManager', `❌ Failed to send event queue`, {
-        eventsCount: body.events.length,
-        failureCount: this.failureCount + 1,
-        willOpenCircuit: this.failureCount + 1 >= this.MAX_FAILURES,
-      });
+    // Create immutable copy of events to send
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + '_' + e.type);
 
-      this.eventsQueue = [];
-      this.failureCount++;
+    // Use callbacks to handle async success/failure from fetch
+    await this.dataSender.sendEventsQueue(body, {
+      onSuccess: () => {
+        this.failureCount = 0;
+        this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
 
-      if (this.failureCount >= this.MAX_FAILURES) {
-        this.openCircuitBreaker();
-      }
-    }
+        // Only remove events that were sent successfully
+        this.removeProcessedEvents(eventIds);
+
+        debugLog.info('EventManager', 'Events sent successfully', {
+          eventCount: eventsToSend.length,
+          remainingQueueLength: this.eventsQueue.length,
+        });
+      },
+      onFailure: () => {
+        this.failureCount++;
+
+        // Events remain in queue for retry
+        debugLog.warn('EventManager', 'Events send failed, keeping in queue', {
+          eventCount: eventsToSend.length,
+          failureCount: this.failureCount,
+        });
+
+        if (this.failureCount >= this.MAX_FAILURES) {
+          this.openCircuitBreaker();
+        }
+      },
+    });
+
+    this.isSending = false;
   }
 
   private buildEventsPayload(): BaseEventsQueueDto {
@@ -496,6 +553,28 @@ export class EventManager extends StateManager {
     this.set('circuitBreakerOpen', true);
 
     const eventsCount = this.eventsQueue.length;
+
+    if (eventsCount > 0) {
+      const persistedData = {
+        userId: this.get('userId'),
+        sessionId: this.get('sessionId') as string,
+        device: this.get('device'),
+        events: this.eventsQueue,
+        timestamp: Date.now(),
+        ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
+      };
+
+      try {
+        const queueKey = this.dataSender.getQueueStorageKey();
+        this.storageManager.setItem(queueKey, JSON.stringify(persistedData));
+        debugLog.info('EventManager', 'Events persisted before circuit breaker opened', {
+          eventsCount,
+        });
+      } catch (error) {
+        debugLog.error('EventManager', 'Failed to persist events before circuit breaker opened', { error });
+      }
+    }
+
     this.eventsQueue = [];
 
     debugLog.warn('EventManager', 'Circuit breaker opened with time-based recovery', {
@@ -506,11 +585,63 @@ export class EventManager extends StateManager {
       openTime: this.circuitOpenTime,
     });
 
-    // Increase backoff for next failure
     this.backoffDelay = Math.min(
       this.backoffDelay * CIRCUIT_BREAKER_CONSTANTS.BACKOFF_MULTIPLIER,
       CIRCUIT_BREAKER_CONSTANTS.MAX_BACKOFF_DELAY_MS,
     );
+  }
+
+  /**
+   * Handles circuit breaker recovery attempt
+   * Returns true if recovery was successful, false otherwise
+   */
+  private async handleCircuitBreakerRecovery(): Promise<boolean> {
+    this.resetCircuitBreaker();
+
+    this.isSending = true;
+    let recoverySuccess = false;
+
+    try {
+      await this.dataSender.recoverPersistedEvents({
+        onSuccess: () => {
+          recoverySuccess = true;
+          this.failureCount = 0;
+          this.backoffDelay = CIRCUIT_BREAKER_CONSTANTS.INITIAL_BACKOFF_DELAY_MS;
+          debugLog.info('EventManager', 'Circuit breaker recovery successful');
+        },
+        onFailure: () => {
+          recoverySuccess = false;
+          debugLog.warn('EventManager', 'Circuit breaker recovery failed');
+        },
+      });
+    } catch (error) {
+      recoverySuccess = false;
+      debugLog.error('EventManager', 'Circuit breaker recovery error', { error });
+    } finally {
+      this.isSending = false;
+    }
+
+    return recoverySuccess;
+  }
+
+  /**
+   * Schedules circuit breaker retry with progressive backoff
+   */
+  private scheduleCircuitBreakerRetry(): void {
+    // Incrementar backoff delay para evitar retry agresivo
+    this.backoffDelay = Math.min(
+      this.backoffDelay * CIRCUIT_BREAKER_CONSTANTS.BACKOFF_MULTIPLIER,
+      CIRCUIT_BREAKER_CONSTANTS.MAX_BACKOFF_DELAY_MS,
+    );
+
+    // Reabrir circuit breaker con delay aumentado
+    this.circuitOpen = true;
+    this.circuitOpenTime = Date.now();
+
+    debugLog.warn('EventManager', 'Circuit breaker retry scheduled', {
+      nextRetryDelay: this.backoffDelay,
+      failureCount: this.failureCount,
+    });
   }
 
   /**
@@ -523,9 +654,20 @@ export class EventManager extends StateManager {
     this.circuitResetTimeoutId = null;
     this.set('circuitBreakerOpen', false);
 
+    this.dataSender.stop();
+
     debugLog.info('EventManager', 'Circuit breaker reset completed', {
       currentQueueLength: this.eventsQueue.length,
       backoffDelay: this.backoffDelay,
+    });
+  }
+
+  private removeProcessedEvents(eventIds: string[]): void {
+    const eventIdSet = new Set(eventIds);
+
+    this.eventsQueue = this.eventsQueue.filter((event) => {
+      const eventId = event.timestamp + '_' + event.type;
+      return !eventIdSet.has(eventId);
     });
   }
 }

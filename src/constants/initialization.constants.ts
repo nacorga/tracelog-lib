@@ -16,7 +16,7 @@ export const INITIALIZATION_CONSTANTS = {
 // Circuit breaker constants
 export const CIRCUIT_BREAKER_CONSTANTS = {
   /** Maximum number of consecutive failures before opening circuit */
-  MAX_FAILURES: 10,
+  MAX_FAILURES: 3,
   /** Initial backoff delay when circuit opens (ms) */
   INITIAL_BACKOFF_DELAY_MS: 1000,
   /** Maximum backoff delay (ms) */

@@ -59,6 +59,9 @@ export class App extends StateManager {
       this.setEventManager();
       await this.initHandlers();
 
+      // Recover any persisted events after handlers are initialized
+      await this.eventManager.recoverPersistedEvents();
+
       this.isInitialized = true;
 
       debugLog.info('App', 'App initialization completed successfully', {
@@ -199,9 +202,14 @@ export class App extends StateManager {
 
   private async setConfig(appConfig: AppConfig): Promise<void> {
     const configManager = new ConfigManager();
-    const config = await configManager.get(this.get('apiUrl'), appConfig);
 
-    this.set('config', config);
+    try {
+      const config = await configManager.get(this.get('apiUrl'), appConfig);
+      this.set('config', config);
+    } catch (error) {
+      debugLog.clientError('App', 'CONFIG LOAD FAILED', { error });
+      throw error;
+    }
   }
 
   private setUserId(): void {
@@ -241,17 +249,11 @@ export class App extends StateManager {
     }
 
     this.initSessionHandler();
-
-    this.initPageViewHandler();
-
-    this.initClickHandler();
-
     this.initScrollHandler();
-
+    this.initPageViewHandler();
+    this.initClickHandler();
     await this.initPerformanceHandler();
-
     this.initErrorHandler();
-
     this.initNetworkHandler();
   }
 
@@ -272,6 +274,14 @@ export class App extends StateManager {
     }
     this.sessionHandler = new SessionHandler(this.storageManager, this.eventManager);
     this.sessionHandler.startTracking();
+  }
+
+  private initScrollHandler(): void {
+    if (!this.eventManager) {
+      throw new Error('EventManager must be initialized before ScrollHandler');
+    }
+    this.scrollHandler = new ScrollHandler(this.eventManager);
+    this.scrollHandler.startTracking();
   }
 
   private initPageViewHandler(): void {
@@ -303,14 +313,6 @@ export class App extends StateManager {
     }
     this.clickHandler = new ClickHandler(this.eventManager);
     this.clickHandler.startTracking();
-  }
-
-  private initScrollHandler(): void {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before ScrollHandler');
-    }
-    this.scrollHandler = new ScrollHandler(this.eventManager);
-    this.scrollHandler.startTracking();
   }
 
   private async initPerformanceHandler(): Promise<void> {

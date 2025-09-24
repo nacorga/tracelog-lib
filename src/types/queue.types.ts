@@ -23,4 +23,5 @@ export interface PersistedQueueData {
   events: BaseEventsQueueDto['events'];
   timestamp: number;
   global_metadata?: BaseEventsQueueDto['global_metadata'];
+  fallbackMode?: boolean;
 }

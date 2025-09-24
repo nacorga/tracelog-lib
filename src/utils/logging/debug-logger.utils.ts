@@ -72,6 +72,21 @@ class DebugLogger extends StateManager {
   private shouldShowLog(level: LogLevel): boolean {
     const mode = this.getCurrentMode();
 
+    // In development/test environment, show all log levels
+    if (process.env.NODE_ENV === 'dev') {
+      return true;
+    }
+
+    // Always show critical errors and client errors, even when mode is undefined
+    if (['CLIENT_ERROR', 'ERROR'].includes(level)) {
+      return true;
+    }
+
+    // When mode is not set (during initialization), show CLIENT_WARN as well
+    if (!mode) {
+      return ['CLIENT_ERROR', 'CLIENT_WARN'].includes(level);
+    }
+
     switch (mode) {
       case 'qa':
         return ['INFO', 'CLIENT_ERROR', 'CLIENT_WARN'].includes(level);
