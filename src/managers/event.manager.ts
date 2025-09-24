@@ -28,7 +28,6 @@ export class EventManager extends StateManager {
   private readonly samplingManager: SamplingManager;
   private readonly tagsManager: TagsManager;
   private readonly dataSender: SenderManager;
-  private readonly storageManager: StorageManager;
 
   private eventsQueue: EventData[] = [];
   private lastEvent: EventData | null = null;
@@ -43,6 +42,8 @@ export class EventManager extends StateManager {
   private readonly backoffManager: BackoffManager;
   private circuitResetTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private isSending = false;
+  private circuitRecoveryAttempts = 0;
+  private readonly MAX_RECOVERY_ATTEMPTS = 5;
 
   // Event deduplication properties
   private readonly eventFingerprints = new Map<string, number>();
@@ -62,7 +63,6 @@ export class EventManager extends StateManager {
   constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
     super();
 
-    this.storageManager = storeManager;
     this.googleAnalytics = googleAnalytics;
     this.samplingManager = new SamplingManager();
     this.tagsManager = new TagsManager();
@@ -253,6 +253,7 @@ export class EventManager extends StateManager {
     this.errorRecoveryStats.persistenceFailures = 0;
     this.errorRecoveryStats.networkTimeouts = 0;
     this.errorRecoveryStats.lastRecoveryAttempt = 0;
+    this.circuitRecoveryAttempts = 0;
 
     // Stop the data sender to clean up retry timeouts
     this.dataSender.stop();
@@ -384,7 +385,15 @@ export class EventManager extends StateManager {
   /**
    * Gets current error recovery statistics for monitoring purposes
    */
-  getRecoveryStats() {
+  getRecoveryStats(): {
+    circuitBreakerResets: number;
+    persistenceFailures: number;
+    networkTimeouts: number;
+    lastRecoveryAttempt: number;
+    currentFailureCount: number;
+    circuitBreakerOpen: boolean;
+    fingerprintMapSize: number;
+  } {
     return {
       ...this.errorRecoveryStats,
       currentFailureCount: this.failureCount,
@@ -409,21 +418,30 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Circuit breaker: check if it should be reset BEFORE checking queue length
-    // This ensures the circuit breaker can reset even when queue is empty
     if (this.circuitOpen) {
       const timeSinceOpen = Date.now() - this.circuitOpenTime;
+
       if (timeSinceOpen >= CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
+        if (this.circuitRecoveryAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
+          debugLog.error('EventManager', 'Circuit breaker permanently opened after max recovery attempts', {
+            attempts: this.circuitRecoveryAttempts,
+            maxAttempts: this.MAX_RECOVERY_ATTEMPTS,
+          });
+
+          this.notifyCircuitBreakerPermanentFailure();
+          return;
+        }
+
+        this.circuitRecoveryAttempts++;
+
         const recoverySuccess = await this.handleCircuitBreakerRecovery();
 
         if (!recoverySuccess) {
-          // No reabrir inmediatamente, usar backoff progresivo
           this.scheduleCircuitBreakerRetry();
           return;
         }
 
-        // Solo procesar cola normal si recovery fue exitoso
-        // Continuar con el flujo normal...
+        this.circuitRecoveryAttempts = 0;
       } else {
         debugLog.debug('EventManager', 'Circuit breaker is open - skipping event sending', {
           queueLength: this.eventsQueue.length,
@@ -678,8 +696,7 @@ export class EventManager extends StateManager {
             failureCount: this.failureCount,
           });
 
-          // Force reset con logging y recovery
-          this.resetCircuitBreaker();
+          await this.resetCircuitBreaker();
           this.failureCount = 0; // Reset failure count para evitar re-stuck
           this.errorRecoveryStats.circuitBreakerResets++;
 
@@ -696,7 +713,7 @@ export class EventManager extends StateManager {
   private async openCircuitBreaker(): Promise<void> {
     this.circuitOpen = true;
     this.circuitOpenTime = Date.now();
-    this.set('circuitBreakerOpen', true);
+    await this.set('circuitBreakerOpen', true);
 
     const eventsCount = this.eventsQueue.length;
 
@@ -733,7 +750,7 @@ export class EventManager extends StateManager {
    * Returns true if recovery was successful, false otherwise
    */
   private async handleCircuitBreakerRecovery(): Promise<boolean> {
-    this.resetCircuitBreaker();
+    await this.resetCircuitBreaker();
 
     this.isSending = true;
     let recoverySuccess = false;
@@ -781,12 +798,12 @@ export class EventManager extends StateManager {
   /**
    * Resets the circuit breaker and attempts to restore persisted events
    */
-  private resetCircuitBreaker(): void {
+  private async resetCircuitBreaker(): Promise<void> {
     this.circuitOpen = false;
     this.circuitOpenTime = 0;
     this.failureCount = 0;
     this.circuitResetTimeoutId = null;
-    this.set('circuitBreakerOpen', false);
+    await this.set('circuitBreakerOpen', false);
 
     this.dataSender.stop();
 
@@ -794,6 +811,29 @@ export class EventManager extends StateManager {
       currentQueueLength: this.eventsQueue.length,
       backoffDelay: this.backoffManager.getCurrentDelay(),
     });
+  }
+
+  /**
+   * Notifies system and users that circuit breaker has permanently failed
+   */
+  private notifyCircuitBreakerPermanentFailure(): void {
+    debugLog.error('EventManager', 'CIRCUIT BREAKER PERMANENTLY OPEN - MANUAL INTERVENTION REQUIRED', {
+      attempts: this.circuitRecoveryAttempts,
+      timestamp: Date.now(),
+      failureCount: this.failureCount,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tracelog:circuit-breaker-failure', {
+          detail: {
+            attempts: this.circuitRecoveryAttempts,
+            timestamp: Date.now(),
+            failureCount: this.failureCount,
+          },
+        }),
+      );
+    }
   }
 
   private removeProcessedEvents(eventIds: string[]): void {
@@ -831,11 +871,10 @@ export class EventManager extends StateManager {
     });
 
     try {
-      // 1. Reset circuit breaker si está stuck
       if (this.circuitOpen) {
         const stuckTime = Date.now() - this.circuitOpenTime;
         if (stuckTime > 2 * CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
-          this.resetCircuitBreaker();
+          await this.resetCircuitBreaker();
           this.errorRecoveryStats.circuitBreakerResets++;
         }
       }

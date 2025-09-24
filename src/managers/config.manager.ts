@@ -4,6 +4,19 @@ import { isValidUrl, sanitizeApiConfig, fetchWithTimeout } from '../utils';
 import { debugLog } from '../utils/logging';
 
 export class ConfigManager {
+  // Allowed origins for local development and production
+  private readonly ALLOWED_ORIGINS = [
+    // Development origins
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:8080',
+  ];
+
+  private readonly ALLOWED_ORIGIN_PATTERNS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
+
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
     if (appConfig.id === SpecialProjectId.HttpSkip) {
       debugLog.debug('ConfigManager', 'Using special project id');
@@ -27,7 +40,35 @@ export class ConfigManager {
 
   private async load(apiUrl: string, appConfig: AppConfig, useLocalServer?: boolean): Promise<Config> {
     try {
-      const configUrl = useLocalServer ? `${window.location.origin}/config` : this.getUrl(apiUrl);
+      let configUrl: string;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+      if (useLocalServer) {
+        const currentOrigin = window.location.origin;
+
+        // Validate origin before using it
+        if (!this.isAllowedOrigin(currentOrigin, appConfig.id)) {
+          debugLog.clientError('ConfigManager', 'Untrusted origin detected', {
+            origin: currentOrigin,
+            projectId: appConfig.id,
+          });
+
+          throw new Error(
+            `Security: Origin '${currentOrigin}' is not allowed to load configuration. Please use an authorized domain.`,
+          );
+        }
+
+        configUrl = `${currentOrigin}/config`;
+        // Add security header for local server validation
+        headers['X-TraceLog-Project'] = appConfig.id;
+
+        debugLog.debug('ConfigManager', 'Using local server with validated origin', {
+          origin: currentOrigin,
+          projectId: appConfig.id,
+        });
+      } else {
+        configUrl = this.getUrl(apiUrl);
+      }
 
       if (!configUrl) {
         throw new Error('Config URL is not valid or not allowed');
@@ -35,7 +76,7 @@ export class ConfigManager {
 
       const response = await fetchWithTimeout(configUrl, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         timeout: 10000, // 10 segundos timeout
       });
 
@@ -49,6 +90,18 @@ export class ConfigManager {
         });
 
         throw new Error(error);
+      }
+
+      // Validate response content-type for security
+      const contentType = response.headers.get('content-type');
+
+      if (!contentType?.includes('application/json')) {
+        debugLog.clientError('ConfigManager', 'Invalid response content-type', {
+          contentType,
+          configUrl,
+        });
+
+        throw new Error(`Security: Invalid response content-type. Expected application/json, got ${contentType}`);
       }
 
       const rawData = await response.json();
@@ -105,6 +158,39 @@ export class ConfigManager {
     }
 
     return configUrl;
+  }
+
+  /**
+   * Validates if an origin is allowed to load configuration
+   * @param origin - The origin to validate (e.g., 'http://localhost:3000')
+   * @param projectId - The project ID for logging purposes
+   * @returns True if the origin is allowed, false otherwise
+   */
+  private isAllowedOrigin(origin: string, projectId: string): boolean {
+    // Check exact match in allowed origins list
+    if (this.ALLOWED_ORIGINS.includes(origin)) {
+      debugLog.debug('ConfigManager', 'Origin validated via exact match', { origin, projectId });
+
+      return true;
+    }
+
+    // Check pattern match for production domains
+    const matchesPattern = this.ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+
+    if (matchesPattern) {
+      debugLog.debug('ConfigManager', 'Origin validated via pattern match', { origin, projectId });
+
+      return true;
+    }
+
+    // Origin not allowed
+    debugLog.clientError('ConfigManager', 'Origin validation failed', {
+      origin,
+      projectId,
+      allowedOrigins: this.ALLOWED_ORIGINS,
+    });
+
+    return false;
   }
 
   private getDefaultConfig(appConfig: AppConfig): Config {

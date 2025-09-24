@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TestUtils, COMMON_FILTERS } from '../utils';
 
-test.describe('TraceLog Base Functionality', () => {
+test.describe('Base Functionality', () => {
   test('should initialize and capture events', async ({ page }) => {
     const monitor = TestUtils.createConsoleMonitor(page);
     const eventCapture = TestUtils.createEventCapture();

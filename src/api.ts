@@ -6,12 +6,14 @@ import { validateAndNormalizeConfig } from './utils/validations';
 import { INITIALIZATION_CONSTANTS } from './constants';
 import './types/window.types';
 import { TraceLogTestBridge } from './types/window.types';
+import { InitializationTimeoutError } from './types/validation-error.types';
 
 export * as Types from './app.types';
 export * as Constants from './app.constants';
 
 let app: App | null = null;
 let isInitializing = false;
+let isDestroying = false;
 
 /**
  * Initializes the tracelog app with the provided configuration.
@@ -49,32 +51,62 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     if (isInitializing) {
       debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
 
-      let retries = 0;
       const maxRetries = INITIALIZATION_CONSTANTS.MAX_CONCURRENT_RETRIES;
       const retryDelay = INITIALIZATION_CONSTANTS.CONCURRENT_RETRY_DELAY_MS;
+      const globalTimeout = INITIALIZATION_CONSTANTS.INITIALIZATION_TIMEOUT_MS;
 
-      while (isInitializing && retries < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelay));
-        retries++;
-      }
+      const retryPromise = (async (): Promise<number> => {
+        let retries = 0;
 
-      if (app) {
-        debugLog.debug('API', 'Concurrent initialization completed successfully', {
-          projectId: appConfig.id,
-          retriesUsed: retries,
-        });
+        while (isInitializing && retries < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          retries++;
+        }
 
-        return;
-      }
+        return retries;
+      })();
 
-      if (isInitializing) {
-        debugLog.error('API', 'Initialization timeout - concurrent initialization took too long', {
-          projectId: appConfig.id,
-          retriesUsed: retries,
-          maxRetries,
-        });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new InitializationTimeoutError(
+              `Initialization exceeded ${globalTimeout}ms timeout - concurrent initialization took too long`,
+              globalTimeout,
+            ),
+          );
+        }, globalTimeout);
+      });
 
-        throw new Error('App initialization timeout - concurrent initialization took too long');
+      try {
+        const retries = await Promise.race([retryPromise, timeoutPromise]);
+
+        if (app) {
+          debugLog.debug('API', 'Concurrent initialization completed successfully', {
+            projectId: appConfig.id,
+            retriesUsed: retries,
+          });
+
+          return;
+        }
+
+        if (isInitializing) {
+          debugLog.error('API', 'Initialization timeout - concurrent initialization took too long', {
+            projectId: appConfig.id,
+            retriesUsed: retries,
+            maxRetries,
+          });
+
+          throw new Error('App initialization timeout - concurrent initialization took too long');
+        }
+      } catch (error) {
+        if (error instanceof InitializationTimeoutError) {
+          debugLog.error('API', 'Initialization global timeout exceeded', {
+            projectId: appConfig.id,
+            timeoutMs: globalTimeout,
+          });
+        }
+
+        throw error;
       }
     }
 
@@ -96,9 +128,8 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
   } catch (error) {
     // Ensure complete cleanup on initialization failure
     if (app && !app.initialized) {
-      // Clean up partially initialized app instance
       try {
-        app.destroy();
+        await app.destroy();
       } catch (cleanupError) {
         debugLog.warn('API', 'Failed to cleanup partially initialized app', { cleanupError });
       }
@@ -182,21 +213,54 @@ export const getInitializationStatus = (): {
 /**
  * Destroys the current app instance and cleans up resources.
  */
-export const destroy = (): void => {
+export const destroy = async (): Promise<void> => {
   try {
     debugLog.info('API', 'Library cleanup initiated');
+
+    if (isDestroying) {
+      debugLog.warn('API', 'Cleanup already in progress, skipping duplicate cleanup');
+      return;
+    }
 
     if (!app) {
       debugLog.warn('API', 'Cleanup called but Library was not initialized');
       throw new Error('App not initialized');
     }
 
-    app.destroy();
+    isDestroying = true;
+
+    try {
+      debugLog.debug('API', 'Calling app.destroy()');
+      await app.destroy();
+      debugLog.debug('API', 'app.destroy() completed successfully');
+    } catch (destroyError) {
+      debugLog.error('API', 'app.destroy() failed, performing forced cleanup', { destroyError });
+
+      try {
+        debugLog.debug('API', 'Forcing app cleanup');
+        if (app) {
+          app = null;
+        }
+        debugLog.debug('API', 'Forced cleanup completed');
+      } catch (cleanupError) {
+        debugLog.error('API', 'Forced cleanup failed', { cleanupError });
+      }
+
+      throw destroyError;
+    }
+
+    debugLog.debug('API', 'Nullifying app instance');
     app = null;
+
+    debugLog.debug('API', 'Resetting initialization flags');
     isInitializing = false;
+
     debugLog.info('API', 'Library cleanup completed successfully');
   } catch (error) {
     debugLog.error('API', 'Cleanup failed', { error, hadApp: !!app, wasInitializing: isInitializing });
+    throw error;
+  } finally {
+    isDestroying = false;
   }
 };
 
@@ -210,7 +274,15 @@ export const destroy = (): void => {
  *   console.log('Network timeouts:', stats.networkTimeouts);
  * }
  */
-export const getRecoveryStats = () => {
+export const getRecoveryStats = (): {
+  circuitBreakerResets: number;
+  persistenceFailures: number;
+  networkTimeouts: number;
+  lastRecoveryAttempt: number;
+  currentFailureCount: number;
+  circuitBreakerOpen: boolean;
+  fingerprintMapSize: number;
+} | null => {
   try {
     if (!app) {
       debugLog.warn('API', 'Recovery stats requested but Library was not initialized');
@@ -280,7 +352,6 @@ class TestBridge extends App implements TraceLogTestBridge {
 // Auto-inject testing bridge only in development/testing environments
 if (process.env.NODE_ENV === 'dev') {
   if (typeof window !== 'undefined') {
-    // Wait for DOM to be ready before injecting
     const injectTestingBridge = (): void => {
       window.__traceLogBridge = new TestBridge();
     };

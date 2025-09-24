@@ -1,5 +1,3 @@
-import { debugLog } from './logging';
-
 export interface BackoffConfig {
   initialDelay: number;
   maxDelay: number;
@@ -20,25 +18,12 @@ export class BackoffManager {
     this.multiplier = config.multiplier;
     this.currentDelay = this.initialDelay;
     this.name = name;
-
-    debugLog.debug(this.name, 'BackoffManager initialized', {
-      initialDelay: this.initialDelay,
-      maxDelay: this.maxDelay,
-      multiplier: this.multiplier,
-    });
   }
 
   getNextDelay(): number {
     const delay = this.currentDelay;
     this.currentDelay = Math.min(this.currentDelay * this.multiplier, this.maxDelay);
     this.attemptCount++;
-
-    debugLog.debug(this.name, 'Backoff delay calculated', {
-      currentDelay: delay,
-      nextDelay: this.currentDelay,
-      attemptCount: this.attemptCount,
-    });
-
     return delay;
   }
 
@@ -47,16 +32,8 @@ export class BackoffManager {
   }
 
   reset(): void {
-    const wasReset = this.currentDelay !== this.initialDelay || this.attemptCount > 0;
-
     this.currentDelay = this.initialDelay;
     this.attemptCount = 0;
-
-    if (wasReset) {
-      debugLog.debug(this.name, 'BackoffManager reset', {
-        resetToDelay: this.initialDelay,
-      });
-    }
   }
 
   getAttemptCount(): number {

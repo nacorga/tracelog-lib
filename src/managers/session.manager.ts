@@ -585,7 +585,7 @@ export class SessionManager extends StateManager {
 
         const flushResult = await this.eventManager.flushImmediately();
 
-        this.cleanupSession();
+        await this.cleanupSessionAsync();
 
         const result: SessionEndResult = {
           success: flushResult,
@@ -604,7 +604,7 @@ export class SessionManager extends StateManager {
         return result;
       }
 
-      this.cleanupSession();
+      await this.cleanupSessionAsync();
 
       const result: SessionEndResult = {
         success: true,
@@ -622,7 +622,7 @@ export class SessionManager extends StateManager {
 
       debugLog.error('SessionManager', 'Session end failed', { error, reason, method });
 
-      this.cleanupSession();
+      await this.cleanupSessionAsync();
 
       return {
         success: false,
@@ -637,8 +637,19 @@ export class SessionManager extends StateManager {
   private cleanupSession(): void {
     this.endSession();
     this.clearTimers();
-    this.set('sessionId', null);
-    this.set('hasStartSession', false);
+    this.set('sessionId', null).catch((error) => {
+      debugLog.error('SessionManager', 'Failed to clear sessionId', { error });
+    });
+    this.set('hasStartSession', false).catch((error) => {
+      debugLog.error('SessionManager', 'Failed to clear hasStartSession', { error });
+    });
+  }
+
+  private async cleanupSessionAsync(): Promise<void> {
+    this.endSession();
+    this.clearTimers();
+    await this.set('sessionId', null);
+    await this.set('hasStartSession', false);
   }
 
   private endSessionManagedSync(reason: SessionEndReason): SessionEndResult {

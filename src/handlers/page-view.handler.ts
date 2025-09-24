@@ -61,7 +61,7 @@ export class PageViewHandler extends StateManager {
     };
   }
 
-  private readonly trackCurrentPage = (): void => {
+  private readonly trackCurrentPage = async (): Promise<void> => {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 
@@ -70,7 +70,7 @@ export class PageViewHandler extends StateManager {
 
       debugLog.debug('PageViewHandler', 'Page navigation detected', { from: fromUrl, to: normalizedUrl });
 
-      this.set('pageUrl', normalizedUrl);
+      await this.set('pageUrl', normalizedUrl);
 
       this.eventManager.track({
         type: EventType.PAGE_VIEW,

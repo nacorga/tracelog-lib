@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { BACKOFF_CONFIGS } from '../../src/constants/backoff.constants';
 import { BackoffManager } from '../../src/utils/backoff.manager';
 
-test.describe('Backoff Consistency Tests', () => {
+test.describe('Backoff Consistency', () => {
   test('BackoffManager should follow exponential backoff pattern', () => {
     const backoffManager = new BackoffManager(BACKOFF_CONFIGS.DEFAULT, 'Test');
 

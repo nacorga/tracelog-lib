@@ -71,9 +71,9 @@ export class ScrollHandler extends StateManager {
       listener: () => {},
     };
 
-    const handleScroll = (): void => {
+    const handleScroll = async (): Promise<void> => {
       if (this.get('suppressNextScroll')) {
-        this.set('suppressNextScroll', false);
+        await this.set('suppressNextScroll', false);
         return;
       }
 

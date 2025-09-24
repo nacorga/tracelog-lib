@@ -30,25 +30,58 @@ export class SessionHandler extends StateManager {
   private _crossTabSessionManager: CrossTabSessionManager | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private _isInitializingCrossTab = false;
+  private _crossTabInitLock: Promise<CrossTabSessionManager | null> | null = null;
 
-  private get crossTabSessionManager(): CrossTabSessionManager | null {
-    if (!this._crossTabSessionManager && !this._isInitializingCrossTab && this.shouldUseCrossTabs()) {
-      this._isInitializingCrossTab = true;
-
-      try {
-        const projectId = this.get('config')?.id;
-        if (projectId) {
-          this.initializeCrossTabSessionManager(projectId);
-        }
-      } catch (error) {
-        debugLog.error('SessionHandler', 'Failed to initialize cross-tab session manager', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-      } finally {
-        this._isInitializingCrossTab = false;
-      }
+  private get crossTabSessionManager(): Promise<CrossTabSessionManager | null> {
+    if (this._crossTabSessionManager) {
+      return Promise.resolve(this._crossTabSessionManager);
     }
-    return this._crossTabSessionManager;
+
+    if (this._crossTabInitLock) {
+      return this._crossTabInitLock;
+    }
+
+    if (!this.shouldUseCrossTabs()) {
+      return Promise.resolve(null);
+    }
+
+    this._crossTabInitLock = this.initializeCrossTabWithLock();
+
+    return this._crossTabInitLock;
+  }
+
+  private async initializeCrossTabWithLock(): Promise<CrossTabSessionManager | null> {
+    if (this._crossTabSessionManager) {
+      this._crossTabInitLock = null;
+      return this._crossTabSessionManager;
+    }
+
+    if (this._isInitializingCrossTab) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      this._crossTabInitLock = null;
+      return this._crossTabSessionManager;
+    }
+
+    this._isInitializingCrossTab = true;
+
+    try {
+      const projectId = this.get('config')?.id;
+      if (!projectId) {
+        throw new Error('ProjectId not available for cross-tab initialization');
+      }
+
+      this.initializeCrossTabSessionManager(projectId);
+
+      return this._crossTabSessionManager;
+    } catch (error) {
+      debugLog.error('SessionHandler', 'Failed to initialize cross-tab session manager', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return null;
+    } finally {
+      this._isInitializingCrossTab = false;
+      this._crossTabInitLock = null;
+    }
   }
 
   private shouldUseCrossTabs(): boolean {
@@ -68,7 +101,8 @@ export class SessionHandler extends StateManager {
 
     if (projectId) {
       this.initializeSessionRecoveryManager(projectId);
-      // CrossTabSessionManager will be initialized lazily when needed via the getter
+    } else {
+      debugLog.warn('SessionHandler', 'ProjectId not available, recovery manager will be initialized later');
     }
   }
 
@@ -80,11 +114,14 @@ export class SessionHandler extends StateManager {
 
     debugLog.debug('SessionHandler', 'Starting session tracking');
 
+    this.ensureRecoveryManagerInitialized();
+
     this.checkOrphanedSessions();
 
     const onActivity = async (): Promise<void> => {
-      if (this.crossTabSessionManager) {
-        this.crossTabSessionManager.updateSessionActivity();
+      const crossTab = await this.crossTabSessionManager;
+      if (crossTab) {
+        crossTab.updateSessionActivity();
       }
 
       if (this.get('sessionId')) {
@@ -93,12 +130,13 @@ export class SessionHandler extends StateManager {
 
       try {
         const sessionResult = await this.createOrJoinSession();
-        this.set('sessionId', sessionResult.sessionId);
+        await this.set('sessionId', sessionResult.sessionId);
 
+        const crossTabActive = !!(await this.crossTabSessionManager);
         debugLog.info('SessionHandler', '🏁 Session started', {
           sessionId: sessionResult.sessionId,
           recovered: sessionResult.recovered,
-          crossTabActive: !!this.crossTabSessionManager,
+          crossTabActive,
         });
 
         this.trackSession(EventType.SESSION_START, sessionResult.recovered);
@@ -109,16 +147,17 @@ export class SessionHandler extends StateManager {
           'SessionHandler',
           `Session creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         );
-        this.forceCleanupSession();
+        await this.forceCleanupSession();
       }
     };
 
-    const onInactivity = (): void => {
+    const onInactivity = async (): Promise<void> => {
       if (!this.get('sessionId')) {
         return;
       }
 
-      if (this.crossTabSessionManager && this.crossTabSessionManager.getEffectiveSessionTimeout() > 0) {
+      const crossTab = await this.crossTabSessionManager;
+      if (crossTab && crossTab.getEffectiveSessionTimeout() > 0) {
         if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
           debugLog.debug('SessionHandler', 'Session kept alive by cross-tab activity');
         }
@@ -127,7 +166,7 @@ export class SessionHandler extends StateManager {
       }
 
       this.sessionManager!.endSessionManaged('inactivity')
-        .then((result) => {
+        .then(async (result) => {
           debugLog.info('SessionHandler', '🛑 Session ended by inactivity', {
             sessionId: this.get('sessionId'),
             reason: result.reason,
@@ -135,19 +174,20 @@ export class SessionHandler extends StateManager {
             eventsFlushed: result.eventsFlushed,
           });
 
-          if (this.crossTabSessionManager) {
-            this.crossTabSessionManager.endSession('inactivity');
+          const crossTabManager = await this.crossTabSessionManager;
+          if (crossTabManager) {
+            crossTabManager.endSession('inactivity');
           }
 
           this.clearPersistedSession();
           this.stopHeartbeat();
         })
-        .catch((error) => {
+        .catch(async (error) => {
           debugLog.error(
             'SessionHandler',
             `Session end failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
           );
-          this.forceCleanupSession();
+          await this.forceCleanupSession();
         });
     };
 
@@ -171,7 +211,7 @@ export class SessionHandler extends StateManager {
     this.startInitialSession();
   }
 
-  stopTracking(): void {
+  async stopTracking(): Promise<void> {
     debugLog.info('SessionHandler', 'Stopping session tracking');
 
     if (this.sessionManager) {
@@ -185,7 +225,7 @@ export class SessionHandler extends StateManager {
             'SessionHandler',
             `Manual session stop failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
           );
-          this.forceCleanupSession();
+          await this.forceCleanupSession();
         }
       }
 
@@ -198,8 +238,8 @@ export class SessionHandler extends StateManager {
       this._crossTabSessionManager = null;
     }
 
-    // Reset cross-tab initialization flag
     this._isInitializingCrossTab = false;
+    this._crossTabInitLock = null;
 
     if (this.recoveryManager) {
       this.recoveryManager.cleanupOldRecoveryAttempts();
@@ -217,12 +257,12 @@ export class SessionHandler extends StateManager {
       debugMode: (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') ?? false,
     };
 
-    const onSessionStart = (sessionId: string): void => {
+    const onSessionStart = async (sessionId: string): Promise<void> => {
       if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
         debugLog.debug('SessionHandler', `Cross-tab session started: ${sessionId}`);
       }
 
-      this.set('sessionId', sessionId);
+      await this.set('sessionId', sessionId);
       this.trackSession(EventType.SESSION_START, false);
       this.persistSession(sessionId);
       this.startHeartbeat();
@@ -265,40 +305,46 @@ export class SessionHandler extends StateManager {
     debugLog.debug('SessionHandler', 'Cross-tab session manager initialized', { projectId });
   }
 
+  private ensureRecoveryManagerInitialized(): void {
+    if (!this.recoveryManager) {
+      const projectId = this.get('config')?.id;
+
+      if (projectId) {
+        this.initializeSessionRecoveryManager(projectId);
+      } else {
+        debugLog.error('SessionHandler', 'Cannot initialize recovery manager without projectId');
+      }
+    }
+  }
+
   private async createOrJoinSession(): Promise<{ sessionId: string; recovered: boolean }> {
-    if (this.crossTabSessionManager) {
-      const existingSessionId = this.crossTabSessionManager.getSessionId();
+    const crossTab = await this.crossTabSessionManager;
+    if (crossTab) {
+      const existingSessionId = crossTab.getSessionId();
       if (existingSessionId) {
         return { sessionId: existingSessionId, recovered: false };
       }
 
-      // If cross-tab manager exists but no session, create one through regular session manager
-      // The cross-tab manager will coordinate with other tabs automatically
       const sessionResult = this.sessionManager!.startSession();
       return { sessionId: sessionResult.sessionId, recovered: sessionResult.recovered ?? false };
     }
 
-    // Fallback: create regular session when no cross-tab manager
     const sessionResult = this.sessionManager!.startSession();
     return { sessionId: sessionResult.sessionId, recovered: sessionResult.recovered ?? false };
   }
 
-  private forceCleanupSession(): void {
-    // Clear session state
-    this.set('sessionId', null);
+  private async forceCleanupSession(): Promise<void> {
+    await this.set('sessionId', null);
 
-    // Clear persisted session data
     this.clearPersistedSession();
 
-    // Stop heartbeat timer
     this.stopHeartbeat();
 
-    // Clean up cross-tab session if exists
-    if (this.crossTabSessionManager) {
+    const crossTab = await this.crossTabSessionManager;
+    if (crossTab) {
       try {
-        this.crossTabSessionManager.endSession('orphaned_cleanup');
+        crossTab.endSession('orphaned_cleanup');
       } catch (error) {
-        // Silent cleanup - we're already in error recovery
         if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
           debugLog.warn(
             'SessionHandler',
@@ -308,11 +354,9 @@ export class SessionHandler extends StateManager {
       }
     }
 
-    // Track session end for analytics
     try {
       this.trackSession(EventType.SESSION_END, false, 'orphaned_cleanup');
     } catch (error) {
-      // Silent tracking failure - we're already in error recovery
       if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
         debugLog.warn(
           'SessionHandler',
@@ -339,7 +383,7 @@ export class SessionHandler extends StateManager {
     });
   }
 
-  private startInitialSession(): void {
+  private async startInitialSession(): Promise<void> {
     if (this.get('sessionId')) {
       debugLog.debug('SessionHandler', 'Session already exists, skipping initial session creation');
       return;
@@ -347,28 +391,24 @@ export class SessionHandler extends StateManager {
 
     debugLog.debug('SessionHandler', 'Starting initial session');
 
-    // Check if there's already a cross-tab session active
-    if (this.crossTabSessionManager) {
-      const existingSessionId = this.crossTabSessionManager.getSessionId();
+    const crossTab = await this.crossTabSessionManager;
+    if (crossTab) {
+      const existingSessionId = crossTab.getSessionId();
 
       if (existingSessionId) {
-        // Join existing cross-tab session
-        this.set('sessionId', existingSessionId);
+        await this.set('sessionId', existingSessionId);
         this.persistSession(existingSessionId);
         this.startHeartbeat();
         return;
       }
 
-      // No existing cross-tab session, so trigger activity to potentially create one
-      // The cross-tab session manager will handle session creation when activity occurs
       return;
     }
 
-    // Fallback: no cross-tab session manager, start regular session
     debugLog.debug('SessionHandler', 'Starting regular session (no cross-tab)');
     const sessionResult = this.sessionManager!.startSession();
 
-    this.set('sessionId', sessionResult.sessionId);
+    await this.set('sessionId', sessionResult.sessionId);
     this.trackSession(EventType.SESSION_START, sessionResult.recovered);
     this.persistSession(sessionResult.sessionId);
     this.startHeartbeat();
@@ -385,27 +425,25 @@ export class SessionHandler extends StateManager {
         const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
 
         if (timeSinceLastHeartbeat > sessionTimeout) {
-          const canRecover = this.recoveryManager?.hasRecoverableSession();
+          const canRecover = this.recoveryManager?.hasRecoverableSession() ?? false;
 
-          if (canRecover) {
-            if (this.recoveryManager) {
-              const sessionContext = {
-                sessionId: session.sessionId,
-                startTime: session.startTime,
-                lastActivity: session.lastHeartbeat,
-                tabCount: 1,
-                recoveryAttempts: 0,
-                metadata: {
-                  userAgent: navigator.userAgent,
-                  pageUrl: this.get('pageUrl'),
-                },
-              };
+          if (canRecover && this.recoveryManager) {
+            const sessionContext = {
+              sessionId: session.sessionId,
+              startTime: session.startTime,
+              lastActivity: session.lastHeartbeat,
+              tabCount: 1,
+              recoveryAttempts: 0,
+              metadata: {
+                userAgent: navigator.userAgent,
+                pageUrl: this.get('pageUrl'),
+              },
+            };
 
-              this.recoveryManager.storeSessionContextForRecovery(sessionContext);
+            this.recoveryManager.storeSessionContextForRecovery(sessionContext);
 
-              if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
-                debugLog.debug('SessionHandler', `Orphaned session stored for recovery: ${session.sessionId}`);
-              }
+            if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+              debugLog.debug('SessionHandler', `Orphaned session stored for recovery: ${session.sessionId}`);
             }
           }
 
