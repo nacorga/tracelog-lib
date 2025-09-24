@@ -5,7 +5,7 @@ import { ConsoleMonitoringConfig } from '../types';
  * Default configuration for TraceLog initialization in tests
  */
 export const DEFAULT_CONFIG: Config = {
-  id: SpecialProjectId.HttpSkip,
+  id: SpecialProjectId.Skip,
 };
 
 /**
@@ -155,7 +155,7 @@ export const TIMEOUTS = {
  */
 export const TEST_DATA = {
   /** Valid project IDs for testing */
-  VALID_PROJECT_IDS: [SpecialProjectId.HttpSkip, 'test-project-123', 'valid-id-456'],
+  VALID_PROJECT_IDS: [SpecialProjectId.Skip, 'test-project-123', 'valid-id-456'],
   /** Invalid project IDs for negative testing */
   INVALID_PROJECT_IDS: [
     '',
@@ -169,20 +169,20 @@ export const TEST_DATA = {
   ],
   /** Sample configurations for testing */
   CONFIGS: {
-    MINIMAL: { id: SpecialProjectId.HttpSkip },
+    MINIMAL: { id: SpecialProjectId.Skip },
     WITH_SESSION_TIMEOUT: {
-      id: SpecialProjectId.HttpSkip,
+      id: SpecialProjectId.Skip,
       sessionTimeout: 900000, // 15 minutes
     },
     WITH_METADATA: {
-      id: SpecialProjectId.HttpSkip,
+      id: SpecialProjectId.Skip,
       globalMetadata: {
         testEnvironment: 'e2e',
         version: '1.0.0',
       },
     },
     WITH_INTEGRATIONS: {
-      id: SpecialProjectId.HttpSkip,
+      id: SpecialProjectId.Skip,
       integrations: {
         googleAnalytics: {
           measurementId: 'G-TEST123456',

@@ -39,7 +39,7 @@
                     <p class="hero-subtitle">Descubre nuestros productos premium seleccionados para ti</p>
                     <div class="hero-buttons">
                         <button class="btn btn-primary" data-action="cta-ver-productos">Ver Productos</button>
-                        <button class="btn btn-secondary" data-action="cta-contacto">Contáctanos</button>
+                        <button class="btn btn-secondary" data-action="cta-contacto" data-tl-name="Test HTML event" data-tl-value="VALUE XX">Contáctanos</button>
                     </div>
                 </div>
                 <div class="hero-image">
@@ -255,75 +255,17 @@
         </section>
     </div>
 
-    <!-- Floating Console Toggle Button -->
-    <button id="console-toggle" class="console-toggle">
-        <span class="console-icon">📊</span>
-        <span class="console-badge" id="console-badge">0</span>
-    </button>
-
-    <!-- Floating Console -->
-    <div id="floating-console" class="floating-console">
-        <div class="console-header" id="console-header">
-            <div class="console-title">
-                <span class="console-status" id="console-status">🟢</span>
-                <span>TraceLog Monitor</span>
-            </div>
-            <div class="console-actions">
-                <button class="console-btn" id="console-minimize" title="Minimizar">─</button>
-                <button class="console-btn" id="console-close" title="Cerrar">×</button>
-            </div>
+    <!-- Floating Monitor -->
+    <div id="floating-monitor" class="floating-monitor">
+        <div class="monitor-header">
+            <span class="monitor-title">TraceLog Monitor</span>
+            <button id="clear-events" class="monitor-clear">Limpiar</button>
         </div>
-        <div class="console-tabs">
-            <button class="console-tab active" data-tab="events">Eventos</button>
-            <button class="console-tab" data-tab="network">Red</button>
-            <button class="console-tab" data-tab="storage">Almacenamiento</button>
+        <div class="monitor-queue">
+            <span>Cola: <span id="queue-count">0</span></span>
+            <span id="queue-status">⏸</span>
         </div>
-        <div class="console-content">
-            <!-- Events Tab -->
-            <div id="tab-events" class="console-tab-content active">
-                <div class="console-filters">
-                    <select id="event-filter" class="console-select">
-                        <option value="all">Todos los eventos</option>
-                        <option value="page_view">page_view</option>
-                        <option value="click">click</option>
-                        <option value="scroll">scroll</option>
-                        <option value="custom">custom</option>
-                        <option value="session_start">session_start</option>
-                        <option value="session_end">session_end</option>
-                        <option value="web_vitals">web_vitals</option>
-                        <option value="error">error</option>
-                    </select>
-                    <button id="clear-events" class="console-btn-small">Limpiar</button>
-                </div>
-                <div id="events-list" class="console-list"></div>
-            </div>
-            <!-- Network Tab -->
-            <div id="tab-network" class="console-tab-content">
-                <div class="network-controls">
-                    <div class="server-indicator">
-                        <span class="server-status-dot" id="server-status-dot">🟢</span>
-                        <span id="server-status-text">Servidor: Online</span>
-                    </div>
-                    <button id="toggle-server" class="btn btn-small btn-danger">Simular Fallo</button>
-                </div>
-                <div id="network-list" class="console-list"></div>
-            </div>
-            <!-- Storage Tab -->
-            <div id="tab-storage" class="console-tab-content">
-                <div class="storage-info">
-                    <div class="storage-item">
-                        <span class="storage-label">Eventos Persistidos:</span>
-                        <span class="storage-value" id="persisted-count">0</span>
-                    </div>
-                    <div class="storage-item">
-                        <span class="storage-label">SessionID:</span>
-                        <span class="storage-value" id="session-id">-</span>
-                    </div>
-                </div>
-                <div id="storage-list" class="console-list"></div>
-            </div>
-        </div>
-        <div class="console-resize-handle" id="console-resize"></div>
+        <div id="events-list" class="monitor-events"></div>
     </div>
 
     <!-- Footer -->

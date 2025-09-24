@@ -312,7 +312,12 @@ export class SessionManager extends StateManager {
     }
 
     this.listenerManagers.push(
-      new VisibilityListenerManager(this.handleActivity, this.handleVisibilityChange, this.deviceCapabilities.isMobile),
+      new VisibilityListenerManager(
+        this.handleActivity,
+        this.handleVisibilityChange,
+        this.deviceCapabilities.isMobile,
+        this.handleNetworkRestored,
+      ),
     );
 
     this.listenerManagers.push(new UnloadListenerManager(this.handleInactivity));
@@ -374,6 +379,18 @@ export class SessionManager extends StateManager {
     // Track session timeout for health monitoring
     this.trackSessionHealth('timeout');
     this.onInactivity();
+  };
+
+  private readonly handleNetworkRestored = async (): Promise<void> => {
+    debugLog.info('SessionManager', 'Network connection restored, attempting to recover persisted events');
+
+    if (this.eventManager) {
+      try {
+        await this.eventManager.recoverPersistedEvents();
+      } catch (error) {
+        debugLog.error('SessionManager', 'Failed to recover events after network restoration', { error });
+      }
+    }
   };
 
   private readonly handleVisibilityChange = (): void => {

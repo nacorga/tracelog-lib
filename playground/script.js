@@ -5,68 +5,11 @@
 const state = {
   currentPage: 'inicio',
   cartCount: 0,
-  eventCount: 0,
-  isServerFailing: false,
-  isConsoleOpen: false,
-  isConsoleMinimized: false,
+  queueCount: 0,
   events: [],
-  networkLogs: [],
-  persistedEvents: [],
 };
 
-// ============================================================================
-// MOCK SERVER
-// ============================================================================
-
-const originalFetch = window.fetch;
-
-function setupMockServer() {
-  window.fetch = function (url, options) {
-    // Mock config endpoint
-    if (url.includes('/config')) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            samplingRate: 1,
-            tags: [],
-            excludedUrlPaths: [],
-            ipExcluded: false,
-          }),
-      });
-    }
-
-    // Mock events endpoint
-    if (url.includes('/collect') && options?.method === 'POST') {
-      return new Promise((resolve) => {
-        const delay = 100 + Math.random() * 100;
-
-        setTimeout(() => {
-          if (state.isServerFailing) {
-            addNetworkLog('POST /collect', 500, 'Failed');
-            updateConsoleStatus('error');
-            resolve({
-              ok: false,
-              status: 500,
-              json: () => Promise.resolve({ error: 'Internal Server Error' }),
-            });
-          } else {
-            addNetworkLog('POST /collect', 200, 'Success');
-            updateConsoleStatus('success');
-            resolve({
-              ok: true,
-              status: 200,
-              json: () => Promise.resolve({ success: true }),
-            });
-          }
-        }, delay);
-      });
-    }
-
-    return originalFetch(url, options);
-  };
-}
+// No mock server - using real API at localhost:3002
 
 // ============================================================================
 // SPA ROUTING
@@ -186,296 +129,70 @@ function setupContactForm() {
   });
 }
 
+
 // ============================================================================
-// FLOATING CONSOLE
+// FLOATING MONITOR
 // ============================================================================
 
-function setupFloatingConsole() {
-  const consoleEl = document.getElementById('floating-console');
-  const toggleBtn = document.getElementById('console-toggle');
-  const minimizeBtn = document.getElementById('console-minimize');
-  const closeBtn = document.getElementById('console-close');
-  const header = document.getElementById('console-header');
-  const resizeHandle = document.getElementById('console-resize');
-
-  let isDragging = false;
-  let isResizing = false;
-  let startX, startY, startWidth, startHeight, startLeft, startTop;
-
-  // Toggle console
-  toggleBtn.addEventListener('click', () => {
-    state.isConsoleOpen = !state.isConsoleOpen;
-    consoleEl.classList.toggle('open', state.isConsoleOpen);
-    if (state.isConsoleOpen && state.isConsoleMinimized) {
-      state.isConsoleMinimized = false;
-      consoleEl.classList.remove('minimized');
-    }
-  });
-
-  // Minimize console
-  minimizeBtn.addEventListener('click', () => {
-    state.isConsoleMinimized = !state.isConsoleMinimized;
-    consoleEl.classList.toggle('minimized', state.isConsoleMinimized);
-  });
-
-  // Close console
-  closeBtn.addEventListener('click', () => {
-    state.isConsoleOpen = false;
-    consoleEl.classList.remove('open');
-  });
-
-  // Drag functionality
-  header.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.console-btn')) return;
-    isDragging = true;
-    const rect = consoleEl.getBoundingClientRect();
-    startX = e.clientX - rect.left;
-    startY = e.clientY - rect.top;
-    header.style.cursor = 'grabbing';
-  });
-
-  // Resize functionality
-  resizeHandle.addEventListener('mousedown', (e) => {
-    e.stopPropagation();
-    isResizing = true;
-    const rect = consoleEl.getBoundingClientRect();
-    startWidth = rect.width;
-    startHeight = rect.height;
-    startX = e.clientX;
-    startY = e.clientY;
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (isDragging) {
-      const x = e.clientX - startX;
-      const y = e.clientY - startY;
-      consoleEl.style.left = `${Math.max(0, Math.min(x, window.innerWidth - consoleEl.offsetWidth))}px`;
-      consoleEl.style.top = `${Math.max(0, Math.min(y, window.innerHeight - consoleEl.offsetHeight))}px`;
-      consoleEl.style.right = 'auto';
-      consoleEl.style.bottom = 'auto';
-    }
-
-    if (isResizing) {
-      const deltaX = e.clientX - startX;
-      const deltaY = startY - e.clientY;
-      const newWidth = Math.max(300, Math.min(startWidth + deltaX, window.innerWidth - 20));
-      const newHeight = Math.max(200, Math.min(startHeight + deltaY, window.innerHeight - 100));
-      consoleEl.style.width = `${newWidth}px`;
-      consoleEl.style.height = `${newHeight}px`;
-    }
-  });
-
-  document.addEventListener('mouseup', () => {
-    isDragging = false;
-    isResizing = false;
-    header.style.cursor = 'grab';
-  });
-
-  // Tab switching
-  document.querySelectorAll('.console-tab').forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const tabName = tab.dataset.tab;
-      document.querySelectorAll('.console-tab').forEach((t) => t.classList.remove('active'));
-      document.querySelectorAll('.console-tab-content').forEach((c) => c.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(`tab-${tabName}`).classList.add('active');
-
-      if (tabName === 'storage') {
-        updateStorageTab();
-      }
-    });
-  });
-
-  // Event filter
-  document.getElementById('event-filter').addEventListener('change', (e) => {
-    filterEvents(e.target.value);
-  });
-
-  // Clear events
+function setupFloatingMonitor() {
   document.getElementById('clear-events').addEventListener('click', () => {
-    state.events = [];
-    state.eventCount = 0;
-    document.getElementById('events-list').innerHTML = '';
-    updateBadge(0);
-  });
-
-  // Server toggle
-  document.getElementById('toggle-server').addEventListener('click', () => {
-    state.isServerFailing = !state.isServerFailing;
-    const btn = document.getElementById('toggle-server');
-    const statusDot = document.getElementById('server-status-dot');
-    const statusText = document.getElementById('server-status-text');
-
-    if (state.isServerFailing) {
-      btn.textContent = 'Restaurar Servidor';
-      btn.classList.remove('btn-danger');
-      btn.classList.add('btn-success');
-      statusDot.textContent = '🔴';
-      statusText.textContent = 'Servidor: Offline';
-      addNetworkLog('Server status', 500, 'Simulated failure');
-    } else {
-      btn.textContent = 'Simular Fallo';
-      btn.classList.remove('btn-success');
-      btn.classList.add('btn-danger');
-      statusDot.textContent = '🟢';
-      statusText.textContent = 'Servidor: Online';
-      addNetworkLog('Server status', 200, 'Restored');
-    }
+    clearEventsMonitor();
   });
 }
 
-function updateConsoleStatus(status) {
-  const statusEl = document.getElementById('console-status');
-  const statusMap = {
-    success: '🟢',
-    error: '🔴',
-    retrying: '🔄',
-    idle: '⚪',
-  };
-  statusEl.textContent = statusMap[status] || '⚪';
+function updateQueueCount(count) {
+  document.getElementById('queue-count').textContent = count;
 }
 
-function updateBadge(count) {
-  const badge = document.getElementById('console-badge');
-  badge.textContent = count;
-  badge.style.display = count > 0 ? 'flex' : 'none';
+function updateQueueStatus(icon) {
+  document.getElementById('queue-status').textContent = icon;
 }
 
-function addEventToConsole(eventType, message, data = {}) {
-  const event = {
-    type: eventType,
-    message,
-    data,
-    timestamp: new Date(),
-    status: 'pending',
-  };
-
-  state.events.unshift(event);
-  state.eventCount++;
-  updateBadge(state.eventCount);
-
+function addEventToMonitor(eventType, status = '⏳') {
   const eventsList = document.getElementById('events-list');
   if (!eventsList) return;
 
-  const eventEl = createEventElement(event);
+  const eventEl = document.createElement('div');
+  eventEl.className = 'monitor-event';
+  eventEl.dataset.eventId = Date.now();
+
+  eventEl.innerHTML = `
+    <span class="event-type-badge event-type-${eventType}">${eventType}</span>
+    <span class="event-status-icon">${status}</span>
+  `;
+
   eventsList.insertBefore(eventEl, eventsList.firstChild);
 
-  // Limit to 100 events
-  while (eventsList.children.length > 100) {
+  state.events.unshift({ type: eventType, timestamp: Date.now(), id: eventEl.dataset.eventId });
+  state.queueCount++;
+  updateQueueCount(state.queueCount);
+
+  while (eventsList.children.length > 50) {
     eventsList.removeChild(eventsList.lastChild);
+    state.events.pop();
   }
+
+  return eventEl.dataset.eventId;
 }
 
-function createEventElement(event) {
-  const el = document.createElement('div');
-  el.className = `console-event event-${event.status}`;
-
-  const icons = {
-    pending: '⏳',
-    success: '✓',
-    retry: '🔄',
-    error: '❌',
-  };
-
-  const typeColors = {
-    page_view: '#007bff',      // Azul - navegación
-    click: '#28a745',          // Verde - interacción
-    scroll: '#17a2b8',         // Cyan - scroll
-    custom: '#6f42c1',         // Púrpura - custom events
-    session_start: '#ffc107',  // Amarillo - inicio sesión
-    session_end: '#fd7e14',    // Naranja - fin sesión
-    web_vitals: '#e83e8c',     // Rosa - métricas
-    error: '#dc3545',          // Rojo - errores
-  };
-
-  const time = event.timestamp.toTimeString().slice(0, 8);
-  const icon = icons[event.status] || 'ℹ';
-
-  el.innerHTML = `
-    <span class="event-icon">${icon}</span>
-    <div class="event-details">
-      <div class="event-message">
-        <span class="event-type" style="color: ${typeColors[event.type] || '#6c757d'}">${event.type}</span>
-        <span class="event-text">${event.message}</span>
-      </div>
-      <span class="event-time">${time}</span>
-    </div>
-  `;
-
-  return el;
-}
-
-function filterEvents(type) {
+function removeEventsFromMonitor(count) {
   const eventsList = document.getElementById('events-list');
-  eventsList.innerHTML = '';
+  if (!eventsList) return;
 
-  const filtered = type === 'all' ? state.events : state.events.filter((e) => e.type === type);
-
-  filtered.forEach((event) => {
-    const eventEl = createEventElement(event);
-    eventsList.appendChild(eventEl);
-  });
-}
-
-function addNetworkLog(request, status, message) {
-  const log = {
-    request,
-    status,
-    message,
-    timestamp: new Date(),
-  };
-
-  state.networkLogs.unshift(log);
-
-  const networkList = document.getElementById('network-list');
-  const logEl = document.createElement('div');
-  logEl.className = `network-log ${status >= 200 && status < 300 ? 'network-success' : 'network-error'}`;
-
-  const time = log.timestamp.toTimeString().slice(0, 8);
-
-  logEl.innerHTML = `
-    <div class="network-request">
-      <span class="network-status">[${status}]</span>
-      <span>${request}</span>
-    </div>
-    <div class="network-meta">
-      <span>${message}</span>
-      <span class="network-time">${time}</span>
-    </div>
-  `;
-
-  networkList.insertBefore(logEl, networkList.firstChild);
-
-  while (networkList.children.length > 50) {
-    networkList.removeChild(networkList.lastChild);
+  for (let i = 0; i < count && eventsList.children.length > 0; i++) {
+    eventsList.removeChild(eventsList.firstChild);
+    state.events.shift();
   }
 }
 
-function updateStorageTab() {
-  const persistedData = localStorage.getItem('tracelog_persisted_events');
-  const sessionData = localStorage.getItem('tracelog_session');
-
-  const persistedCount = persistedData ? JSON.parse(persistedData).length : 0;
-  const sessionId = sessionData ? JSON.parse(sessionData).sessionId : '-';
-
-  document.getElementById('persisted-count').textContent = persistedCount;
-  document.getElementById('session-id').textContent = sessionId || '-';
-
-  const storageList = document.getElementById('storage-list');
-  storageList.innerHTML = '';
-
-  if (persistedData) {
-    const events = JSON.parse(persistedData);
-    events.forEach((event) => {
-      const eventEl = document.createElement('div');
-      eventEl.className = 'storage-event';
-      eventEl.innerHTML = `
-        <div class="storage-event-type">${event.type}</div>
-        <div class="storage-event-data">${JSON.stringify(event.data || {}).slice(0, 50)}...</div>
-      `;
-      storageList.appendChild(eventEl);
-    });
+function clearEventsMonitor() {
+  const eventsList = document.getElementById('events-list');
+  if (eventsList) {
+    eventsList.innerHTML = '';
   }
+  state.events = [];
+  state.queueCount = 0;
+  updateQueueCount(0);
 }
 
 // ============================================================================
@@ -484,43 +201,98 @@ function updateStorageTab() {
 
 function setupTraceLogListener() {
   window.addEventListener('tracelog:log', (event) => {
-    console.log('tracelog:log', event);
-    const { namespace, level, message, data } = event.detail || {};
+    const { namespace, message, data } = event.detail || {};
 
-    // Event captured - capturar todos los tipos de eventos
+    // Debug: log todos los eventos de EventManager
+    if (namespace === 'EventManager') {
+      console.log('[EventManager]', message, data);
+    }
+
     if (namespace === 'EventManager' && message?.includes('Event captured')) {
       const eventType = data?.type || 'UNKNOWN';
-      addEventToConsole(eventType, 'Evento capturado', data);
+      console.log('📥 Capturando evento:', eventType, data);
+
+      // Filter out web_vitals events from visual monitor
+      if (eventType !== 'web_vitals') {
+        addEventToMonitor(eventType);
+      }
     }
 
-    // Successfully sent
-    if (namespace === 'SenderManager' && message?.includes('Successfully sent')) {
-      const eventsCount = data?.eventsCount || 1;
-      state.events.slice(0, eventsCount).forEach((e) => (e.status = 'success'));
-      filterEvents(document.getElementById('event-filter').value);
+    if (namespace === 'EventManager' && message?.includes('Events sent successfully')) {
+      const eventsCount = data?.eventCount || 1;
+      removeEventsFromMonitor(eventsCount);
+      state.queueCount = Math.max(0, state.queueCount - eventsCount);
+      updateQueueCount(state.queueCount);
+      updateQueueStatus('✓');
     }
 
-    // Failed to send (persisted)
-    if (namespace === 'SenderManager' && message?.includes('Failed to send')) {
-      const eventsCount = data?.eventsCount || 1;
-      state.events.slice(0, eventsCount).forEach((e) => (e.status = 'error'));
-      filterEvents(document.getElementById('event-filter').value);
-      updateConsoleStatus('error');
+    // Debug: log todos los eventos de SessionManager y SenderManager
+    if (namespace === 'SessionManager' || namespace === 'SenderManager') {
+      console.log(`[${namespace}]`, message, data);
     }
 
-    // Retry scheduled
-    if (namespace === 'SenderManager' && message?.includes('Retry scheduled')) {
-      const retryDelay = Math.round((data?.retryDelay || 2000) / 1000);
-      addNetworkLog('Retry', 0, `En ${retryDelay}s...`);
-      state.events.slice(0, 1).forEach((e) => (e.status = 'retry'));
-      filterEvents(document.getElementById('event-filter').value);
-      updateConsoleStatus('retrying');
+    if (namespace === 'SessionManager' && message?.includes('Network connection restored')) {
+      console.log('🔌 Red restaurada, recuperando eventos...');
+      updateQueueStatus('🔄');
     }
 
-    // Events recovered
     if (namespace === 'SenderManager' && message?.includes('Persisted events recovered')) {
-      const eventsCount = data?.eventsCount || 1;
-      addNetworkLog('Recovery', 200, `${eventsCount} eventos recuperados`);
+      const eventsCount = data?.eventsCount || 0;
+      const recoveredEvents = data?.events || [];
+
+      console.log('📦 Eventos recuperados:', { eventsCount, recoveredEvents });
+
+      clearEventsMonitor();
+      state.queueCount = 0;
+
+      // Mostrar los eventos recuperados con sus tipos reales (filtrar web_vitals)
+      recoveredEvents.forEach((event, i) => {
+        const eventType = event.type || 'UNKNOWN';
+
+        // Filter out web_vitals events
+        if (eventType === 'web_vitals') {
+          return;
+        }
+
+        const eventEl = document.createElement('div');
+        eventEl.className = 'monitor-event';
+        eventEl.dataset.eventId = Date.now() + i;
+
+        eventEl.innerHTML = `
+          <span class="event-type-badge event-type-${eventType}">${eventType}</span>
+          <span class="event-status-icon">🔄</span>
+        `;
+
+        const eventsList = document.getElementById('events-list');
+        if (eventsList) {
+          eventsList.insertBefore(eventEl, eventsList.firstChild);
+        }
+
+        state.events.unshift({ type: eventType, timestamp: Date.now(), id: eventEl.dataset.eventId });
+        state.queueCount++;
+      });
+
+      updateQueueCount(state.queueCount);
+      updateQueueStatus('🔄');
+    }
+
+    if (namespace === 'EventManager' && message?.includes('Persisted events recovered successfully')) {
+      const eventCount = data?.eventCount || 0;
+      console.log('✅ Eventos recuperados exitosamente:', eventCount);
+
+      // Remove recovered events from visual list
+      removeEventsFromMonitor(eventCount);
+      state.queueCount = Math.max(0, state.queueCount - eventCount);
+      updateQueueCount(state.queueCount);
+      updateQueueStatus('✓');
+    }
+
+    if (namespace === 'SenderManager' && (message?.includes('Send request failed') || message?.includes('Failed to send'))) {
+      updateQueueStatus('❌');
+    }
+
+    if (namespace === 'SenderManager' && message?.includes('Retry scheduled')) {
+      updateQueueStatus('🔄');
     }
   });
 }
@@ -530,26 +302,20 @@ function setupTraceLogListener() {
 // ============================================================================
 
 async function initializeApp() {
-  setupMockServer();
   setupNavigation();
   setupCartInteractions();
   setupContactForm();
-  setupFloatingConsole();
+  setupFloatingMonitor();
   setupTraceLogListener();
 
-  // Auto-initialize TraceLog
   try {
     await TraceLog.init({
-      id: 'http-local',
-      allowHttp: true,
+      id: 'localhost:3002',
     });
-
-    addNetworkLog('TraceLog Init', 200, 'Initialized successfully');
-    updateConsoleStatus('success');
+    updateQueueStatus('▶️');
   } catch (error) {
     console.error('TraceLog init error:', error);
-    addNetworkLog('TraceLog Init', 500, error.message);
-    updateConsoleStatus('error');
+    updateQueueStatus('❌');
   }
 }
 

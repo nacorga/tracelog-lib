@@ -8,9 +8,11 @@ export class ConfigManager {
   private readonly ALLOWED_ORIGINS = [
     // Development origins
     'http://localhost:3000',
+    'http://localhost:3002',
     'http://localhost:5173',
     'http://localhost:8080',
     'http://127.0.0.1:3000',
+    'http://127.0.0.1:3002',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:8080',
   ];
@@ -18,15 +20,16 @@ export class ConfigManager {
   private readonly ALLOWED_ORIGIN_PATTERNS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
 
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
-    if (appConfig.id === SpecialProjectId.HttpSkip) {
-      debugLog.debug('ConfigManager', 'Using special project id');
+    if (appConfig.id === SpecialProjectId.Skip) {
+      debugLog.debug('ConfigManager', 'Using special project id: skip');
 
       return this.getDefaultConfig(appConfig);
     }
 
     debugLog.debug('ConfigManager', 'Loading config from API', { apiUrl, projectId: appConfig.id });
 
-    const config = await this.load(apiUrl, appConfig, appConfig.id === SpecialProjectId.HttpLocal);
+    const isLocalhostMode = appConfig.id.startsWith(SpecialProjectId.Localhost);
+    const config = await this.load(apiUrl, appConfig, isLocalhostMode);
 
     debugLog.info('ConfigManager', 'Config loaded successfully', {
       projectId: appConfig.id,
@@ -38,32 +41,37 @@ export class ConfigManager {
     return config;
   }
 
-  private async load(apiUrl: string, appConfig: AppConfig, useLocalServer?: boolean): Promise<Config> {
+  private async load(apiUrl: string, appConfig: AppConfig, useLocalhost?: boolean): Promise<Config> {
     try {
       let configUrl: string;
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-      if (useLocalServer) {
-        const currentOrigin = window.location.origin;
+      if (useLocalhost) {
+        this.validateLocalhostId(appConfig.id);
 
-        // Validate origin before using it
-        if (!this.isAllowedOrigin(currentOrigin, appConfig.id)) {
+        const origin = this.extractOriginFromProjectId(appConfig.id);
+        configUrl = `${origin}/config`;
+
+        if (!isValidUrl(configUrl, true)) {
+          debugLog.clientError('ConfigManager', 'Invalid config URL constructed', { configUrl });
+          throw new Error('Config URL is not valid or not allowed');
+        }
+
+        if (!this.isAllowedOrigin(origin, appConfig.id)) {
           debugLog.clientError('ConfigManager', 'Untrusted origin detected', {
-            origin: currentOrigin,
+            origin,
             projectId: appConfig.id,
           });
 
           throw new Error(
-            `Security: Origin '${currentOrigin}' is not allowed to load configuration. Please use an authorized domain.`,
+            `Security: Origin '${origin}' is not allowed to load configuration. Please use an authorized domain.`,
           );
         }
 
-        configUrl = `${currentOrigin}/config`;
-        // Add security header for local server validation
         headers['X-TraceLog-Project'] = appConfig.id;
 
         debugLog.debug('ConfigManager', 'Using local server with validated origin', {
-          origin: currentOrigin,
+          origin,
           projectId: appConfig.id,
         });
       } else {
@@ -193,11 +201,40 @@ export class ConfigManager {
     return false;
   }
 
+  private extractOriginFromProjectId(id: string): string {
+    return `http://${id}`;
+  }
+
+  private validateLocalhostId(id: string): void {
+    const pattern = /^localhost:\d{1,5}$/;
+
+    if (!pattern.test(id)) {
+      debugLog.clientError('ConfigManager', 'Invalid localhost project ID format', {
+        projectId: id,
+        expectedFormat: 'localhost:PORT',
+      });
+
+      throw new Error(`Invalid localhost format. Expected 'localhost:PORT', got '${id}'`);
+    }
+
+    const portString = id.split(':')[1];
+
+    if (!portString) {
+      throw new Error(`Invalid localhost format. Port is required, got '${id}'`);
+    }
+
+    const port = parseInt(portString, 10);
+
+    if (isNaN(port) || port < 1 || port > 65535) {
+      throw new Error(`Invalid port number. Port must be between 1 and 65535, got ${portString}`);
+    }
+  }
+
   private getDefaultConfig(appConfig: AppConfig): Config {
     return DEFAULT_CONFIG({
       ...appConfig,
       errorSampling: 1,
-      ...(Object.values(SpecialProjectId).includes(appConfig.id as SpecialProjectId) && { mode: Mode.DEBUG }),
+      ...(appConfig.id === SpecialProjectId.Skip && { mode: Mode.DEBUG }),
     });
   }
 }

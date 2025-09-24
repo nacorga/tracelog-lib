@@ -4,12 +4,19 @@ import { debugLog } from '../utils/logging';
 export class VisibilityListenerManager implements EventListenerManager {
   private readonly onActivity: () => void;
   private readonly onVisibilityChange: () => void;
+  private readonly onNetworkRestored?: () => void;
   private readonly isMobile: boolean;
   private readonly options = { passive: true };
 
-  constructor(onActivity: () => void, onVisibilityChange: () => void, isMobile: boolean) {
+  constructor(
+    onActivity: () => void,
+    onVisibilityChange: () => void,
+    isMobile: boolean,
+    onNetworkRestored?: () => void,
+  ) {
     this.onActivity = onActivity;
     this.onVisibilityChange = onVisibilityChange;
+    this.onNetworkRestored = onNetworkRestored;
     this.isMobile = isMobile;
   }
 
@@ -25,7 +32,7 @@ export class VisibilityListenerManager implements EventListenerManager {
 
       const hasNetworkAPI = 'onLine' in navigator;
       if (hasNetworkAPI) {
-        window.addEventListener('online', this.onActivity, this.options);
+        window.addEventListener('online', this.handleOnline, this.options);
         window.addEventListener('offline', this.onVisibilityChange, this.options);
       }
 
@@ -48,7 +55,7 @@ export class VisibilityListenerManager implements EventListenerManager {
       window.removeEventListener('focus', this.onActivity);
 
       if ('onLine' in navigator) {
-        window.removeEventListener('online', this.onActivity);
+        window.removeEventListener('online', this.handleOnline);
         window.removeEventListener('offline', this.onVisibilityChange);
       }
 
@@ -92,4 +99,9 @@ export class VisibilityListenerManager implements EventListenerManager {
       debugLog.warn('VisibilityListenerManager', 'Error during mobile listeners cleanup', { error });
     }
   }
+
+  private readonly handleOnline = (): void => {
+    this.onActivity();
+    this.onNetworkRestored?.();
+  };
 }

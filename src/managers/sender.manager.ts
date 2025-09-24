@@ -1,12 +1,17 @@
 import { QUEUE_KEY, BACKOFF_CONFIGS, EVENT_EXPIRY_HOURS, SYNC_XHR_TIMEOUT_MS, MAX_RETRY_ATTEMPTS } from '../constants';
-import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId, Mode } from '../types';
+import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId } from '../types';
 import { debugLog, BackoffManager, fetchWithTimeout } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
 interface SendCallbacks {
-  onSuccess?: () => void;
+  onSuccess?: (eventCount?: number, events?: EventData[]) => void;
   onFailure?: () => void;
+}
+
+interface EventData {
+  timestamp: number;
+  type: string;
 }
 
 interface PersistenceResult {
@@ -142,6 +147,7 @@ export class SenderManager extends StateManager {
       debugLog.info('SenderManager', 'Persisted events recovered', {
         eventsCount: persistedData.events.length,
         sessionId: persistedData.sessionId,
+        events: persistedData.events,
       });
 
       const body = this.createRecoveryBody(persistedData);
@@ -150,7 +156,7 @@ export class SenderManager extends StateManager {
       if (success) {
         this.clearPersistedEvents();
         this.resetRetryState();
-        callbacks?.onSuccess?.();
+        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events);
       } else {
         this.scheduleRetry(body, callbacks);
         callbacks?.onFailure?.();
@@ -233,9 +239,7 @@ export class SenderManager extends StateManager {
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
-    const useLocalServer = this.get('config').id === SpecialProjectId.HttpLocal;
-    const baseUrl = useLocalServer ? window.location.origin : this.get('apiUrl');
-    const url = `${baseUrl}/collect`;
+    const url = `${this.get('apiUrl')}/collect`;
 
     return {
       url,
@@ -492,16 +496,9 @@ export class SenderManager extends StateManager {
 
   private shouldSkipSend(): boolean {
     const config = this.get('config');
-    const { id, mode } = config || {};
-    const specialModes: Mode[] = [Mode.QA, Mode.DEBUG];
+    const { id } = config || {};
 
-    if (id === SpecialProjectId.HttpSkip) {
-      return true;
-    }
-
-    const shouldSkip = !!mode && specialModes.includes(mode) && id !== SpecialProjectId.HttpLocal;
-
-    return shouldSkip;
+    return id === SpecialProjectId.Skip;
   }
 
   private isSendBeaconAvailable(): boolean {

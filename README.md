@@ -125,7 +125,7 @@ await TraceLog.init({
 
 ```typescript
 // Enable debug logging (forces debug mode)
-await TraceLog.init({ id: SpecialProjectId.HttpSkip });
+await TraceLog.init({ id: SpecialProjectId.Skip });
 
 // Listen to debug events in development
 window.addEventListener('tracelog:log', (event) => {

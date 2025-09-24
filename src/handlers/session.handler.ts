@@ -397,11 +397,19 @@ export class SessionHandler extends StateManager {
 
       if (existingSessionId) {
         await this.set('sessionId', existingSessionId);
+        this.trackSession(EventType.SESSION_START, false);
         this.persistSession(existingSessionId);
         this.startHeartbeat();
+
+        debugLog.info('SessionHandler', '🏁 Session started (joined cross-tab session)', {
+          sessionId: existingSessionId,
+        });
+
         return;
       }
 
+      // No existing session in cross-tab, let activity trigger create one
+      debugLog.debug('SessionHandler', 'No existing cross-tab session, waiting for activity');
       return;
     }
 

@@ -83,26 +83,32 @@ export class EventManager extends StateManager {
    */
   async recoverPersistedEvents(): Promise<void> {
     await this.dataSender.recoverPersistedEvents({
-      onSuccess: () => {
+      onSuccess: (eventCount, recoveredEvents) => {
         this.failureCount = 0;
         this.backoffManager.reset();
 
+        // Remove recovered events from in-memory queue to prevent duplicates
+        if (recoveredEvents && recoveredEvents.length > 0) {
+          const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
+          this.removeProcessedEvents(eventIds);
+
+          debugLog.debug('EventManager', 'Removed recovered events from in-memory queue', {
+            removedCount: recoveredEvents.length,
+            remainingQueueLength: this.eventsQueue.length,
+          });
+        }
+
         debugLog.info('EventManager', 'Persisted events recovered successfully', {
+          eventCount: eventCount || 0,
           recoveryStats: this.errorRecoveryStats,
         });
       },
       onFailure: async () => {
-        this.failureCount++;
         this.errorRecoveryStats.persistenceFailures++;
 
         debugLog.warn('EventManager', 'Failed to recover persisted events', {
-          failureCount: this.failureCount,
           persistenceFailures: this.errorRecoveryStats.persistenceFailures,
         });
-
-        if (this.failureCount >= this.MAX_FAILURES) {
-          await this.openCircuitBreaker();
-        }
       },
     });
   }

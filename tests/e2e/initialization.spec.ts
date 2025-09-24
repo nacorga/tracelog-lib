@@ -13,7 +13,7 @@ test.describe('Initialization System', () => {
         await eventCapture.startCapture(page);
 
         const initResult = await TestUtils.initializeTraceLog(page, {
-          id: SpecialProjectId.HttpSkip,
+          id: SpecialProjectId.Skip,
         });
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
@@ -39,7 +39,7 @@ test.describe('Initialization System', () => {
         await eventCapture.startCapture(page);
 
         const initResult = await TestUtils.initializeTraceLog(page, {
-          id: SpecialProjectId.HttpSkip,
+          id: SpecialProjectId.Skip,
           sessionTimeout: 900000,
           globalMetadata: {
             environment: 'e2e-test',
@@ -93,11 +93,7 @@ test.describe('Initialization System', () => {
         const results = await page.evaluate(async () => {
           const bridge = (window as any).__traceLogBridge;
 
-          const promises = [
-            bridge.init({ id: 'http-skip' }),
-            bridge.init({ id: 'http-skip' }),
-            bridge.init({ id: 'http-skip' }),
-          ];
+          const promises = [bridge.init({ id: 'skip' }), bridge.init({ id: 'skip' }), bridge.init({ id: 'skip' })];
 
           const results = await Promise.all(promises);
           return results;
@@ -126,11 +122,11 @@ test.describe('Initialization System', () => {
         await page.evaluate(async () => {
           const bridge = (window as any).__traceLogBridge;
 
-          const firstInit = bridge.init({ id: 'http-skip' });
+          const firstInit = bridge.init({ id: 'skip' });
 
           await new Promise((resolve) => setTimeout(resolve, 50));
 
-          const secondInit = bridge.init({ id: 'http-skip' });
+          const secondInit = bridge.init({ id: 'skip' });
 
           await Promise.all([firstInit, secondInit]);
         });
@@ -154,7 +150,7 @@ test.describe('Initialization System', () => {
           (window as any).__forceInitLock = true;
 
           try {
-            await bridge.init({ id: 'http-skip' });
+            await bridge.init({ id: 'skip' });
             return { success: true, error: null };
           } catch (error: any) {
             return { success: false, error: error.message };
@@ -401,7 +397,7 @@ test.describe('Initialization System', () => {
               const bridge = (window as any).__traceLogBridge;
               await bridge.destroy();
               await bridge.init({
-                id: 'http-skip',
+                id: 'skip',
                 scrollContainerSelectors: [sel],
               });
               return { success: true };
@@ -426,7 +422,7 @@ test.describe('Initialization System', () => {
         await TestUtils.navigateAndWaitForReady(page, { url: '/' });
 
         await TestUtils.initializeTraceLog(page, {
-          id: SpecialProjectId.HttpSkip,
+          id: SpecialProjectId.Skip,
           scrollContainerSelectors: ['#valid-selector', '#another-valid'],
         });
 
@@ -437,36 +433,26 @@ test.describe('Initialization System', () => {
     });
   });
 
-  test.describe('Origin Validation', () => {
-    test('should validate Content-Type in config response', async ({ page }) => {
+  test.describe('Localhost Validation', () => {
+    test('should validate localhost format and reject invalid configurations', async ({ page }) => {
       const monitor = TestUtils.createConsoleMonitor(page);
 
       try {
         await TestUtils.navigateAndWaitForReady(page, { url: '/' });
 
-        await page.route('**/config', (route) => {
-          route.fulfill({
-            status: 200,
-            contentType: 'text/plain',
-            body: JSON.stringify({ mode: 'qa' }),
-          });
-        });
-
         const result = await page.evaluate(async () => {
           try {
             const bridge = (window as any).__traceLogBridge;
-            await bridge.init({ id: 'http-local' });
+            await bridge.init({ id: 'localhost:99999' });
             return { success: true };
           } catch (error: any) {
             return { success: false, error: error.message };
           }
         });
 
-        if (!result.success) {
-          expect(result.error).toContain('content-type');
-        }
+        expect(result.success).toBe(false);
+        expect(result.error).toBeTruthy();
       } finally {
-        await page.unroute('**/config');
         monitor.cleanup();
       }
     });

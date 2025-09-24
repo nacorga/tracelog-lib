@@ -2,10 +2,10 @@
 
 ## 🎯 Core Requirements
 
-- **Project IDs**: Always use `SpecialProjectId` from `src/types/api.types.ts` for testing (special ids that automatically enables debug mode and full logging).
-  - Use `SpecialProjectId.HttpLocal` to allow http calls (based on window.location.origin) to load config and send events queues.
-  - Use `SpecialProjectId.HttpSkip` to skip http calls.
-  - Using `SpecialProjectId.HttpSkip` by default on `initializeTraceLog` method.
+- **Project IDs**: Always use `SpecialProjectId` from `src/types/api.types.ts` for testing (special ids that automatically enable debug mode and full logging).
+  - Use `SpecialProjectId.Skip` (value: `'skip'`) to skip ALL HTTP calls. Uses local config, no network requests.
+  - Use `'localhost:PORT'` format (e.g., `'localhost:3000'`) to make HTTP calls to local server. Converts to `http://localhost:PORT/config`.
+  - Using `SpecialProjectId.Skip` by default on `initializeTraceLog` method.
 - **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`.
 - **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile.
 - **Testing Bridge**: Auto-injected `window.__traceLogBridge` when `NODE_ENV=dev`.
@@ -111,15 +111,22 @@ COMMON_FILTERS.ERROR            // Error events
 
 Both force `debug` mode automatically:
 
-- `HttpSkip`: No HTTP calls, local config
-- `HttpLocal`: HTTP calls to localhost
+- `Skip` (value: `'skip'`): No HTTP calls, uses local config only
+- `localhost:PORT`: HTTP calls to local server (e.g., `'localhost:3000'` → `http://localhost:3000/config`)
 
 ```ts
-// ✅ Correct
-await TraceLog.init({ id: SpecialProjectId.HttpSkip });
+// ✅ Correct - Skip mode (no HTTP)
+await TraceLog.init({ id: SpecialProjectId.Skip });
+await TraceLog.init({ id: 'skip' });
 
-// ❌ Wrong - mode not configurable
-await TraceLog.init({ id: 'test-id', mode: 'debug' });
+// ✅ Correct - Localhost mode (with HTTP)
+await TraceLog.init({ id: 'localhost:3000' });
+await TraceLog.init({ id: 'localhost:5173' });
+
+// ❌ Wrong - invalid formats
+await TraceLog.init({ id: 'localhost' }); // Missing port
+await TraceLog.init({ id: 'localhost:' }); // Missing port number
+await TraceLog.init({ id: 'test-id', mode: 'debug' }); // Mode not configurable
 ```
 
 #### Event Capture in Tests

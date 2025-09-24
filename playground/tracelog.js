@@ -1,165 +1,29 @@
-const W = {};
-class v {
-  get(e) {
-    return W[e];
-  }
-  set(e, t) {
-    const s = W[e];
-    W[e] = t, (e === "sessionId" || e === "config" || e === "hasStartSession") && i.debug("StateManager", "Critical state updated", {
-      key: e,
-      oldValue: e === "config" ? !!s : s,
-      newValue: e === "config" ? !!t : t
-    });
-  }
-}
-class De extends v {
-  /**
-   * Client-facing error - Configuration/usage errors by the client
-   * Console: qa and debug modes | Events: NODE_ENV=dev
-   */
-  clientError(e, t, s) {
-    this.logMessage("CLIENT_ERROR", e, t, s);
-  }
-  /**
-   * Client-facing warning - Configuration/usage warnings by the client
-   * Console: qa and debug modes | Events: NODE_ENV=dev
-   */
-  clientWarn(e, t, s) {
-    this.logMessage("CLIENT_WARN", e, t, s);
-  }
-  /**
-   * General operational information
-   * Console: qa and debug modes | Events: NODE_ENV=dev
-   */
-  info(e, t, s) {
-    this.logMessage("INFO", e, t, s);
-  }
-  /**
-   * Internal library errors
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  error(e, t, s) {
-    this.logMessage("ERROR", e, t, s);
-  }
-  /**
-   * Internal library warnings
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  warn(e, t, s) {
-    this.logMessage("WARN", e, t, s);
-  }
-  /**
-   * Strategic debug information
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  debug(e, t, s) {
-    this.logMessage("DEBUG", e, t, s);
-  }
-  /**
-   * Detailed trace information
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  verbose(e, t, s) {
-    this.logMessage("VERBOSE", e, t, s);
-  }
-  getCurrentMode() {
-    try {
-      return this.get("config")?.mode;
-    } catch {
-      return;
-    }
-  }
-  shouldShowLog(e) {
-    const t = this.getCurrentMode();
-    if (["CLIENT_ERROR", "ERROR"].includes(e))
-      return !0;
-    if (!t)
-      return ["CLIENT_ERROR", "CLIENT_WARN"].includes(e);
-    switch (t) {
-      case "qa":
-        return ["INFO", "CLIENT_ERROR", "CLIENT_WARN"].includes(e);
-      case "debug":
-        return !0;
-      default:
-        return !1;
-    }
-  }
-  formatMessage(e, t) {
-    return `[TraceLog:${e}] ${t}`;
-  }
-  getConsoleMethod(e) {
-    switch (e) {
-      case "CLIENT_ERROR":
-      case "ERROR":
-        return "error";
-      case "CLIENT_WARN":
-      case "WARN":
-        return "warn";
-      case "INFO":
-      case "DEBUG":
-      case "VERBOSE":
-      default:
-        return "log";
-    }
-  }
-  logMessage(e, t, s, n) {
-    if (!this.shouldShowLog(e))
-      return;
-    const a = this.formatMessage(t, s), o = this.getConsoleMethod(e);
-    n !== void 0 ? console[o](a, n) : console[o](a);
-  }
-  /**
-   * Dispatches tracelog:log events for E2E testing and development debugging
-   */
-  dispatchEvent(e, t, s, n) {
-    if (!(typeof window > "u" || typeof CustomEvent > "u"))
-      try {
-        const a = new CustomEvent("tracelog:log", {
-          detail: {
-            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-            level: e,
-            namespace: t,
-            message: s,
-            data: n
-          }
-        });
-        window.dispatchEvent(a);
-      } catch {
-        console.log(`[TraceLog:${t}] ${s}`, n);
-      }
-  }
-}
-const i = new De();
-class we {
+class BackoffManager {
   currentDelay;
   initialDelay;
   maxDelay;
   multiplier;
   attemptCount = 0;
   name;
-  constructor(e, t = "BackoffManager") {
-    this.initialDelay = e.initialDelay, this.maxDelay = e.maxDelay, this.multiplier = e.multiplier, this.currentDelay = this.initialDelay, this.name = t, i.debug(this.name, "BackoffManager initialized", {
-      initialDelay: this.initialDelay,
-      maxDelay: this.maxDelay,
-      multiplier: this.multiplier
-    });
+  constructor(config, name = "BackoffManager") {
+    this.initialDelay = config.initialDelay;
+    this.maxDelay = config.maxDelay;
+    this.multiplier = config.multiplier;
+    this.currentDelay = this.initialDelay;
+    this.name = name;
   }
   getNextDelay() {
-    const e = this.currentDelay;
-    return this.currentDelay = Math.min(this.currentDelay * this.multiplier, this.maxDelay), this.attemptCount++, i.debug(this.name, "Backoff delay calculated", {
-      currentDelay: e,
-      nextDelay: this.currentDelay,
-      attemptCount: this.attemptCount
-    }), e;
+    const delay = this.currentDelay;
+    this.currentDelay = Math.min(this.currentDelay * this.multiplier, this.maxDelay);
+    this.attemptCount++;
+    return delay;
   }
   getCurrentDelay() {
     return this.currentDelay;
   }
   reset() {
-    const e = this.currentDelay !== this.initialDelay || this.attemptCount > 0;
-    this.currentDelay = this.initialDelay, this.attemptCount = 0, e && i.debug(this.name, "BackoffManager reset", {
-      resetToDelay: this.initialDelay
-    });
+    this.currentDelay = this.initialDelay;
+    this.attemptCount = 0;
   }
   getAttemptCount() {
     return this.attemptCount;
@@ -175,49 +39,308 @@ class we {
     return this.currentDelay >= this.maxDelay;
   }
 }
-var E = /* @__PURE__ */ ((r) => (r.Mobile = "mobile", r.Tablet = "tablet", r.Desktop = "desktop", r.Unknown = "unknown", r))(E || {});
-let Z, Ie;
-const He = () => {
-  typeof window < "u" && !Z && (Z = window.matchMedia("(pointer: coarse)"), Ie = window.matchMedia("(hover: none)"));
-}, Te = () => {
-  try {
-    i.debug("DeviceDetector", "Starting device detection");
-    const r = navigator;
-    if (r.userAgentData && typeof r.userAgentData.mobile == "boolean") {
-      if (i.debug("DeviceDetector", "Using modern User-Agent Client Hints API", {
-        mobile: r.userAgentData.mobile,
-        platform: r.userAgentData.platform
-      }), r.userAgentData.platform && /ipad|tablet/i.test(r.userAgentData.platform))
-        return i.debug("DeviceDetector", "Device detected as tablet via platform hint"), E.Tablet;
-      const l = r.userAgentData.mobile ? E.Mobile : E.Desktop;
-      return i.debug("DeviceDetector", "Device detected via User-Agent hints", { result: l }), l;
+var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
+  DeviceType2["Mobile"] = "mobile";
+  DeviceType2["Tablet"] = "tablet";
+  DeviceType2["Desktop"] = "desktop";
+  DeviceType2["Unknown"] = "unknown";
+  return DeviceType2;
+})(DeviceType || {});
+const globalState = {};
+let stateVersion = 0;
+const updateQueue = [];
+let isUpdating = false;
+class StateManager {
+  get(key) {
+    return globalState[key];
+  }
+  async set(key, value) {
+    return new Promise((resolve) => {
+      const update = () => {
+        const oldValue = globalState[key];
+        const oldVersion = stateVersion;
+        globalState[key] = value;
+        stateVersion++;
+        if (key === "sessionId" || key === "config" || key === "hasStartSession") {
+          debugLog.debug("StateManager", "Critical state updated", {
+            key,
+            oldValue: key === "config" ? !!oldValue : oldValue,
+            newValue: key === "config" ? !!value : value,
+            version: stateVersion,
+            previousVersion: oldVersion
+          });
+        }
+        resolve();
+        this.processNextUpdate();
+      };
+      updateQueue.push(update);
+      this.processNextUpdate();
+    });
+  }
+  processNextUpdate() {
+    if (isUpdating || updateQueue.length === 0) {
+      return;
     }
-    i.debug("DeviceDetector", "Using fallback detection methods"), He();
-    const e = window.innerWidth, t = Z?.matches ?? !1, s = Ie?.matches ?? !1, n = "ontouchstart" in window || navigator.maxTouchPoints > 0, a = navigator.userAgent.toLowerCase(), o = /mobile|android|iphone|ipod|blackberry|iemobile|opera mini/.test(a), d = /tablet|ipad|android(?!.*mobile)/.test(a), c = {
-      width: e,
-      hasCoarsePointer: t,
-      hasNoHover: s,
-      hasTouchSupport: n,
-      isMobileUA: o,
-      isTabletUA: d,
+    isUpdating = true;
+    const update = updateQueue.shift();
+    if (update) {
+      update();
+    }
+    isUpdating = false;
+    if (updateQueue.length > 0) {
+      this.processNextUpdate();
+    }
+  }
+  getStateVersion() {
+    return stateVersion;
+  }
+}
+class DebugLogger extends StateManager {
+  /**
+   * Client-facing error - Configuration/usage errors by the client
+   * Console: qa and debug modes | Events: NODE_ENV=dev
+   */
+  clientError(namespace, message, data) {
+    this.logMessage("CLIENT_ERROR", namespace, message, data);
+  }
+  /**
+   * Client-facing warning - Configuration/usage warnings by the client
+   * Console: qa and debug modes | Events: NODE_ENV=dev
+   */
+  clientWarn(namespace, message, data) {
+    this.logMessage("CLIENT_WARN", namespace, message, data);
+  }
+  /**
+   * General operational information
+   * Console: qa and debug modes | Events: NODE_ENV=dev
+   */
+  info(namespace, message, data) {
+    this.logMessage("INFO", namespace, message, data);
+  }
+  /**
+   * Internal library errors
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  error(namespace, message, data) {
+    this.logMessage("ERROR", namespace, message, data);
+  }
+  /**
+   * Internal library warnings
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  warn(namespace, message, data) {
+    this.logMessage("WARN", namespace, message, data);
+  }
+  /**
+   * Strategic debug information
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  debug(namespace, message, data) {
+    this.logMessage("DEBUG", namespace, message, data);
+  }
+  /**
+   * Detailed trace information
+   * Console: debug mode only | Events: NODE_ENV=dev
+   */
+  verbose(namespace, message, data) {
+    this.logMessage("VERBOSE", namespace, message, data);
+  }
+  getCurrentMode() {
+    try {
+      return this.get("config")?.mode;
+    } catch {
+      return void 0;
+    }
+  }
+  shouldShowLog(level) {
+    const mode = this.getCurrentMode();
+    if (["CLIENT_ERROR", "ERROR"].includes(level)) {
+      return true;
+    }
+    if (!mode) {
+      return ["CLIENT_ERROR", "CLIENT_WARN"].includes(level);
+    }
+    switch (mode) {
+      case "qa":
+        return ["INFO", "CLIENT_ERROR", "CLIENT_WARN"].includes(level);
+      case "debug":
+        return true;
+      default:
+        return false;
+    }
+  }
+  formatMessage(namespace, message) {
+    return `[TraceLog:${namespace}] ${message}`;
+  }
+  getConsoleMethod(level) {
+    switch (level) {
+      case "CLIENT_ERROR":
+      case "ERROR":
+        return "error";
+      case "CLIENT_WARN":
+      case "WARN":
+        return "warn";
+      case "INFO":
+      case "DEBUG":
+      case "VERBOSE":
+      default:
+        return "log";
+    }
+  }
+  logMessage(level, namespace, message, data) {
+    if (!this.shouldShowLog(level)) {
+      return;
+    }
+    const formattedMessage = this.formatMessage(namespace, message);
+    const consoleMethod = this.getConsoleMethod(level);
+    if (data !== void 0) {
+      console[consoleMethod](formattedMessage, data);
+    } else {
+      console[consoleMethod](formattedMessage);
+    }
+    {
+      this.dispatchEvent(level, namespace, message, data);
+    }
+  }
+  /**
+   * Dispatches tracelog:log events for E2E testing and development debugging
+   */
+  dispatchEvent(level, namespace, message, data) {
+    if (typeof window === "undefined" || typeof CustomEvent === "undefined") {
+      return;
+    }
+    try {
+      const event2 = new CustomEvent("tracelog:log", {
+        detail: {
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          level,
+          namespace,
+          message,
+          data
+        }
+      });
+      window.dispatchEvent(event2);
+    } catch {
+      console.log(`[TraceLog:${namespace}] ${message}`, data);
+    }
+  }
+}
+const debugLog = new DebugLogger();
+let coarsePointerQuery;
+let noHoverQuery;
+const initMediaQueries = () => {
+  if (typeof window !== "undefined" && !coarsePointerQuery) {
+    coarsePointerQuery = window.matchMedia("(pointer: coarse)");
+    noHoverQuery = window.matchMedia("(hover: none)");
+  }
+};
+const getDeviceType = () => {
+  try {
+    debugLog.debug("DeviceDetector", "Starting device detection");
+    const nav = navigator;
+    if (nav.userAgentData && typeof nav.userAgentData.mobile === "boolean") {
+      debugLog.debug("DeviceDetector", "Using modern User-Agent Client Hints API", {
+        mobile: nav.userAgentData.mobile,
+        platform: nav.userAgentData.platform
+      });
+      if (nav.userAgentData.platform && /ipad|tablet/i.test(nav.userAgentData.platform)) {
+        debugLog.debug("DeviceDetector", "Device detected as tablet via platform hint");
+        return DeviceType.Tablet;
+      }
+      const result = nav.userAgentData.mobile ? DeviceType.Mobile : DeviceType.Desktop;
+      debugLog.debug("DeviceDetector", "Device detected via User-Agent hints", { result });
+      return result;
+    }
+    debugLog.debug("DeviceDetector", "Using fallback detection methods");
+    initMediaQueries();
+    const width = window.innerWidth;
+    const hasCoarsePointer = coarsePointerQuery?.matches ?? false;
+    const hasNoHover = noHoverQuery?.matches ?? false;
+    const hasTouchSupport = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    const ua = navigator.userAgent.toLowerCase();
+    const isMobileUA = /mobile|android|iphone|ipod|blackberry|iemobile|opera mini/.test(ua);
+    const isTabletUA = /tablet|ipad|android(?!.*mobile)/.test(ua);
+    const detectionData = {
+      width,
+      hasCoarsePointer,
+      hasNoHover,
+      hasTouchSupport,
+      isMobileUA,
+      isTabletUA,
       maxTouchPoints: navigator.maxTouchPoints
     };
-    return e <= 767 || o && n ? (i.debug("DeviceDetector", "Device detected as mobile", c), E.Mobile) : e >= 768 && e <= 1024 || d || t && s && n ? (i.debug("DeviceDetector", "Device detected as tablet", c), E.Tablet) : (i.debug("DeviceDetector", "Device detected as desktop", c), E.Desktop);
-  } catch (r) {
-    return i.warn("DeviceDetector", "Device detection failed, defaulting to desktop", {
-      error: r instanceof Error ? r.message : r
-    }), E.Desktop;
+    if (width <= 767 || isMobileUA && hasTouchSupport) {
+      debugLog.debug("DeviceDetector", "Device detected as mobile", detectionData);
+      return DeviceType.Mobile;
+    }
+    if (width >= 768 && width <= 1024 || isTabletUA || hasCoarsePointer && hasNoHover && hasTouchSupport) {
+      debugLog.debug("DeviceDetector", "Device detected as tablet", detectionData);
+      return DeviceType.Tablet;
+    }
+    debugLog.debug("DeviceDetector", "Device detected as desktop", detectionData);
+    return DeviceType.Desktop;
+  } catch (error) {
+    debugLog.warn("DeviceDetector", "Device detection failed, defaulting to desktop", {
+      error: error instanceof Error ? error.message : error
+    });
+    return DeviceType.Desktop;
   }
-}, Ue = 2, Oe = 10, Me = 1, re = 500, ee = 3e4, te = 864e5, ae = 120, oe = 8 * 1024, ce = 10, le = 10, A = 255, T = 1e3, q = 100, de = 3, k = 2, xe = 4, Fe = 0.75, ze = 0.2, Ve = 2e3, ue = 1e3, $e = 10, X = 2e3, Be = 6e4, F = 10, he = 5 * 60 * 1e3, je = 6e4, _ = 15 * 60 * 1e3, Ge = 3e4, Ae = 1e3, Ce = 250, Qe = 2e3, ge = 1e3, We = 1e4, qe = 1e3, fe = 10, Xe = 24, Ke = Ae, Ye = 5e3, Je = 2e3, Ze = 2, et = 3, K = 24 * 60 * 60 * 1e3, Y = 2 * 60 * 1e3, Re = {
-  samplingRate: Me,
+};
+const DEFAULT_MOTION_THRESHOLD = 2;
+const SIGNIFICANT_SCROLL_DELTA = 10;
+const DEFAULT_SAMPLING_RATE = 1;
+const MAX_EVENTS_QUEUE_LENGTH = 500;
+const MIN_SESSION_TIMEOUT_MS = 3e4;
+const MAX_SESSION_TIMEOUT_MS = 864e5;
+const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
+const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024;
+const MAX_CUSTOM_EVENT_KEYS = 10;
+const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
+const MAX_TEXT_LENGTH = 255;
+const MAX_STRING_LENGTH = 1e3;
+const MAX_ARRAY_LENGTH = 100;
+const MAX_OBJECT_DEPTH = 3;
+const PRECISION_TWO_DECIMALS = 2;
+const PRECISION_FOUR_DECIMALS = 4;
+const WEB_VITALS_SAMPLING = 0.75;
+const WEB_VITALS_LONG_TASK_SAMPLING = 0.2;
+const SYNC_XHR_TIMEOUT_MS = 2e3;
+const MAX_FINGERPRINTS = 1e3;
+const FINGERPRINT_CLEANUP_MULTIPLIER = 10;
+const MAX_FINGERPRINTS_HARD_LIMIT = 2e3;
+const FINGERPRINT_CLEANUP_INTERVAL_MS = 6e4;
+const CLICK_COORDINATE_PRECISION = 10;
+const CIRCUIT_BREAKER_MAX_STUCK_TIME_MS = 5 * 60 * 1e3;
+const CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS = 6e4;
+const DEFAULT_SESSION_TIMEOUT_MS = 15 * 60 * 1e3;
+const SESSION_HEARTBEAT_INTERVAL_MS = 3e4;
+const DEFAULT_THROTTLE_DELAY_MS = 1e3;
+const SCROLL_DEBOUNCE_TIME_MS = 250;
+const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
+const DUPLICATE_EVENT_THRESHOLD_MS = 1e3;
+const EVENT_SENT_INTERVAL_MS = 1e4;
+const EVENT_SENT_INTERVAL_TEST_MS = 1e3;
+const MAX_RETRY_ATTEMPTS = 10;
+const EVENT_EXPIRY_HOURS = 24;
+const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;
+const TAB_HEARTBEAT_INTERVAL_MS = 5e3;
+const TAB_ELECTION_TIMEOUT_MS = 2e3;
+const SESSION_RECOVERY_WINDOW_MULTIPLIER = 2;
+const MAX_SESSION_RECOVERY_ATTEMPTS = 3;
+const MAX_SESSION_RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1e3;
+const MIN_SESSION_RECOVERY_WINDOW_MS = 2 * 60 * 1e3;
+const DEFAULT_API_CONFIG = {
+  samplingRate: DEFAULT_SAMPLING_RATE,
   tags: [],
   excludedUrlPaths: []
-}, tt = (r) => ({
-  ...Re,
-  ...r,
-  sessionTimeout: _,
-  allowHttp: !1
-}), _e = {
+};
+const DEFAULT_CONFIG = (config) => ({
+  ...DEFAULT_API_CONFIG,
+  ...config,
+  sessionTimeout: DEFAULT_SESSION_TIMEOUT_MS,
+  allowHttp: false
+});
+const BACKOFF_CONFIGS = {
   /** Circuit breaker backoff configuration for EventManager */
   CIRCUIT_BREAKER: {
     initialDelay: 1e3,
@@ -234,7 +357,18 @@ const He = () => {
     // 30 seconds
     multiplier: 2
   }
-}, z = "data-tl", me = [
+};
+const validateBackoffSync = () => {
+  const { CIRCUIT_BREAKER, RETRY } = BACKOFF_CONFIGS;
+  if (CIRCUIT_BREAKER.initialDelay !== RETRY.initialDelay || CIRCUIT_BREAKER.maxDelay !== RETRY.maxDelay || CIRCUIT_BREAKER.multiplier !== RETRY.multiplier) {
+    console.warn("TraceLog: Backoff configurations are not synchronized between components");
+  }
+};
+{
+  validateBackoffSync();
+}
+const HTML_DATA_ATTR_PREFIX = "data-tl";
+const INTERACTIVE_SELECTORS = [
   "button",
   "a",
   'input[type="button"]',
@@ -266,14 +400,17 @@ const He = () => {
   ".menu-item",
   "[data-testid]",
   '[tabindex="0"]'
-], st = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"], pe = {
+];
+const UTM_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+const INITIALIZATION_CONSTANTS = {
   /** Maximum number of retries when waiting for concurrent initialization */
   MAX_CONCURRENT_RETRIES: 20,
   /** Delay between retries when waiting for concurrent initialization (ms) */
   CONCURRENT_RETRY_DELAY_MS: 50,
   /** Timeout for overall initialization process (ms) */
   INITIALIZATION_TIMEOUT_MS: 1e4
-}, D = {
+};
+const CIRCUIT_BREAKER_CONSTANTS = {
   /** Maximum number of consecutive failures before opening circuit */
   MAX_FAILURES: 3,
   /** Initial backoff delay when circuit opens (ms) */
@@ -285,33 +422,46 @@ const He = () => {
   /** Time-based recovery period for circuit breaker (ms) */
   RECOVERY_TIME_MS: 3e4
   // 30 seconds
-}, ve = {
+};
+const SESSION_SYNC_CONSTANTS = {
   /** Timeout for session synchronization operations (ms) */
   SYNC_TIMEOUT_MS: 2e3,
   /** Maximum retry attempts for session operations */
   MAX_RETRY_ATTEMPTS: 3
-}, it = {
+};
+const SCROLL_SUPPRESSION_CONSTANTS = {
   /** Multiplier for scroll debounce time when suppressing scroll events */
   SUPPRESS_MULTIPLIER: 2
-}, Le = [
+};
+const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
   /javascript:/gi,
   /on\w+\s*=/gi,
   /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
   /<embed\b[^>]*>/gi,
   /<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi
-], y = "tl", ye = (r) => r ? `${y}:${r}:uid` : `${y}:uid`, nt = (r) => r ? `${y}:${r}:queue` : `${y}:queue`, rt = (r) => r ? `${y}:${r}:session` : `${y}:session`, J = (r) => r ? `${y}:${r}:cross_tab_session` : `${y}:cross_tab_session`, Se = (r, e) => `${y}:${r}:tab:${e}:info`, V = (r) => r ? `${y}:${r}:recovery` : `${y}:recovery`, at = (r) => r ? `${y}:${r}:broadcast` : `${y}:broadcast`, ot = /* @__PURE__ */ new Set([
+];
+const STORAGE_BASE_KEY = "tl";
+const USER_ID_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:uid` : `${STORAGE_BASE_KEY}:uid`;
+const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
+const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
+const CROSS_TAB_SESSION_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:cross_tab_session` : `${STORAGE_BASE_KEY}:cross_tab_session`;
+const TAB_SPECIFIC_INFO_KEY = (projectId, tabId) => `${STORAGE_BASE_KEY}:${projectId}:tab:${tabId}:info`;
+const SESSION_RECOVERY_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:recovery` : `${STORAGE_BASE_KEY}:recovery`;
+const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
+const ALLOWED_API_CONFIG_KEYS = /* @__PURE__ */ new Set([
   "mode",
   "tags",
   "samplingRate",
   "excludedUrlPaths",
   "ipExcluded"
-]), w = {
+]);
+const VALIDATION_MESSAGES = {
   // Project ID validation - consistent message across all layers
   MISSING_PROJECT_ID: "Project ID is required",
   PROJECT_ID_EMPTY_AFTER_TRIM: "Project ID is required",
   // Session timeout validation
-  INVALID_SESSION_TIMEOUT: `Session timeout must be between ${ee}ms (30 seconds) and ${te}ms (24 hours)`,
+  INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
   INVALID_ERROR_SAMPLING_RATE: "Error sampling must be between 0 and 1",
   // Integration validation
   INVALID_GOOGLE_ANALYTICS_ID: "Google Analytics measurement ID is required when integration is enabled",
@@ -321,1099 +471,1753 @@ const He = () => {
   INVALID_GLOBAL_METADATA: "Global metadata must be an object",
   // Array validation
   INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings"
-}, ct = () => {
-  i.debug("UTMParams", "Extracting UTM parameters from URL", {
+};
+const getUTMParameters = () => {
+  debugLog.debug("UTMParams", "Extracting UTM parameters from URL", {
     url: window.location.href,
     search: window.location.search
   });
-  const r = new URLSearchParams(window.location.search), e = {};
-  st.forEach((s) => {
-    const n = r.get(s);
-    if (n) {
-      const a = s.split("utm_")[1];
-      e[a] = n, i.debug("UTMParams", "Found UTM parameter", { param: s, key: a, value: n });
+  const urlParams = new URLSearchParams(window.location.search);
+  const utmParams = {};
+  UTM_PARAMS.forEach((param) => {
+    const value = urlParams.get(param);
+    if (value) {
+      const key = param.split("utm_")[1];
+      utmParams[key] = value;
+      debugLog.debug("UTMParams", "Found UTM parameter", { param, key, value });
     }
   });
-  const t = Object.keys(e).length ? e : void 0;
-  return t ? i.debug("UTMParams", "UTM parameters extracted successfully", {
-    parameterCount: Object.keys(t).length,
-    parameters: Object.keys(t)
-  }) : i.debug("UTMParams", "No UTM parameters found in URL"), t;
-}, $ = () => {
-  const r = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (e) => {
-    const t = Math.random() * 16 | 0;
-    return (e === "x" ? t : t & 3 | 8).toString(16);
-  });
-  return i.verbose("UUIDUtils", "Generated new UUID", { uuid: r }), r;
+  const result = Object.keys(utmParams).length ? utmParams : void 0;
+  if (result) {
+    debugLog.debug("UTMParams", "UTM parameters extracted successfully", {
+      parameterCount: Object.keys(result).length,
+      parameters: Object.keys(result)
+    });
+  } else {
+    debugLog.debug("UTMParams", "No UTM parameters found in URL");
+  }
+  return result;
 };
-var C = /* @__PURE__ */ ((r) => (r.HttpSkip = "http-skip", r.HttpLocal = "http-local", r))(C || {}), u = /* @__PURE__ */ ((r) => (r.PAGE_VIEW = "page_view", r.CLICK = "click", r.SCROLL = "scroll", r.SESSION_START = "session_start", r.SESSION_END = "session_end", r.CUSTOM = "custom", r.WEB_VITALS = "web_vitals", r.ERROR = "error", r))(u || {}), B = /* @__PURE__ */ ((r) => (r.UP = "up", r.DOWN = "down", r))(B || {}), U = /* @__PURE__ */ ((r) => (r.JS_ERROR = "js_error", r.PROMISE_REJECTION = "promise_rejection", r.NETWORK_ERROR = "network_error", r))(U || {}), R = /* @__PURE__ */ ((r) => (r.QA = "qa", r.DEBUG = "debug", r))(R || {}), j = /* @__PURE__ */ ((r) => (r.AND = "AND", r.OR = "OR", r))(j || {}), p = /* @__PURE__ */ ((r) => (r.URL_MATCHES = "url_matches", r.ELEMENT_MATCHES = "element_matches", r.DEVICE_TYPE = "device_type", r.ELEMENT_TEXT = "element_text", r.ELEMENT_ATTRIBUTE = "element_attribute", r.UTM_SOURCE = "utm_source", r.UTM_MEDIUM = "utm_medium", r.UTM_CAMPAIGN = "utm_campaign", r))(p || {}), f = /* @__PURE__ */ ((r) => (r.EQUALS = "equals", r.CONTAINS = "contains", r.STARTS_WITH = "starts_with", r.ENDS_WITH = "ends_with", r.REGEX = "regex", r.GREATER_THAN = "greater_than", r.LESS_THAN = "less_than", r.EXISTS = "exists", r.NOT_EXISTS = "not_exists", r))(f || {});
-class O extends Error {
-  constructor(e, t, s) {
-    super(e), this.errorCode = t, this.layer = s, this.name = this.constructor.name, Error.captureStackTrace && Error.captureStackTrace(this, this.constructor);
+const generateUUID = () => {
+  const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === "x" ? r : r & 3 | 8;
+    return v.toString(16);
+  });
+  debugLog.verbose("UUIDUtils", "Generated new UUID", { uuid });
+  return uuid;
+};
+var SpecialProjectId = /* @__PURE__ */ ((SpecialProjectId2) => {
+  SpecialProjectId2["Skip"] = "skip";
+  SpecialProjectId2["Localhost"] = "localhost:";
+  return SpecialProjectId2;
+})(SpecialProjectId || {});
+var EventType = /* @__PURE__ */ ((EventType2) => {
+  EventType2["PAGE_VIEW"] = "page_view";
+  EventType2["CLICK"] = "click";
+  EventType2["SCROLL"] = "scroll";
+  EventType2["SESSION_START"] = "session_start";
+  EventType2["SESSION_END"] = "session_end";
+  EventType2["CUSTOM"] = "custom";
+  EventType2["WEB_VITALS"] = "web_vitals";
+  EventType2["ERROR"] = "error";
+  return EventType2;
+})(EventType || {});
+var ScrollDirection = /* @__PURE__ */ ((ScrollDirection2) => {
+  ScrollDirection2["UP"] = "up";
+  ScrollDirection2["DOWN"] = "down";
+  return ScrollDirection2;
+})(ScrollDirection || {});
+var ErrorType = /* @__PURE__ */ ((ErrorType2) => {
+  ErrorType2["JS_ERROR"] = "js_error";
+  ErrorType2["PROMISE_REJECTION"] = "promise_rejection";
+  ErrorType2["NETWORK_ERROR"] = "network_error";
+  return ErrorType2;
+})(ErrorType || {});
+var Mode = /* @__PURE__ */ ((Mode2) => {
+  Mode2["QA"] = "qa";
+  Mode2["DEBUG"] = "debug";
+  return Mode2;
+})(Mode || {});
+var TagLogicalOperator = /* @__PURE__ */ ((TagLogicalOperator2) => {
+  TagLogicalOperator2["AND"] = "AND";
+  TagLogicalOperator2["OR"] = "OR";
+  return TagLogicalOperator2;
+})(TagLogicalOperator || {});
+var TagConditionType = /* @__PURE__ */ ((TagConditionType2) => {
+  TagConditionType2["URL_MATCHES"] = "url_matches";
+  TagConditionType2["ELEMENT_MATCHES"] = "element_matches";
+  TagConditionType2["DEVICE_TYPE"] = "device_type";
+  TagConditionType2["ELEMENT_TEXT"] = "element_text";
+  TagConditionType2["ELEMENT_ATTRIBUTE"] = "element_attribute";
+  TagConditionType2["UTM_SOURCE"] = "utm_source";
+  TagConditionType2["UTM_MEDIUM"] = "utm_medium";
+  TagConditionType2["UTM_CAMPAIGN"] = "utm_campaign";
+  return TagConditionType2;
+})(TagConditionType || {});
+var TagConditionOperator = /* @__PURE__ */ ((TagConditionOperator2) => {
+  TagConditionOperator2["EQUALS"] = "equals";
+  TagConditionOperator2["CONTAINS"] = "contains";
+  TagConditionOperator2["STARTS_WITH"] = "starts_with";
+  TagConditionOperator2["ENDS_WITH"] = "ends_with";
+  TagConditionOperator2["REGEX"] = "regex";
+  TagConditionOperator2["GREATER_THAN"] = "greater_than";
+  TagConditionOperator2["LESS_THAN"] = "less_than";
+  TagConditionOperator2["EXISTS"] = "exists";
+  TagConditionOperator2["NOT_EXISTS"] = "not_exists";
+  return TagConditionOperator2;
+})(TagConditionOperator || {});
+class TraceLogValidationError extends Error {
+  constructor(message, errorCode, layer) {
+    super(message);
+    this.errorCode = errorCode;
+    this.layer = layer;
+    this.name = this.constructor.name;
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
-class G extends O {
-  constructor(e = "Project ID is required", t = "config") {
-    super(e, "PROJECT_ID_INVALID", t);
+class ProjectIdValidationError extends TraceLogValidationError {
+  constructor(message = "Project ID is required", layer = "config") {
+    super(message, "PROJECT_ID_INVALID", layer);
   }
 }
-class H extends O {
-  constructor(e, t = "config") {
-    super(e, "APP_CONFIG_INVALID", t);
+class AppConfigValidationError extends TraceLogValidationError {
+  constructor(message, layer = "config") {
+    super(message, "APP_CONFIG_INVALID", layer);
   }
 }
-class lt extends O {
-  constructor(e, t = "config") {
-    super(e, "SESSION_TIMEOUT_INVALID", t);
+class SessionTimeoutValidationError extends TraceLogValidationError {
+  constructor(message, layer = "config") {
+    super(message, "SESSION_TIMEOUT_INVALID", layer);
   }
 }
-class dt extends O {
-  constructor(e, t = "config") {
-    super(e, "SAMPLING_RATE_INVALID", t);
+class SamplingRateValidationError extends TraceLogValidationError {
+  constructor(message, layer = "config") {
+    super(message, "SAMPLING_RATE_INVALID", layer);
   }
 }
-class be extends O {
-  constructor(e, t = "config") {
-    super(e, "INTEGRATION_INVALID", t);
+class IntegrationValidationError extends TraceLogValidationError {
+  constructor(message, layer = "config") {
+    super(message, "INTEGRATION_INVALID", layer);
   }
 }
-const ut = (r) => {
-  if (!r || typeof r != "object")
-    throw i.clientError("ConfigValidation", "Configuration must be an object", { config: r }), new H("Configuration must be an object", "config");
-  if (!("id" in r))
-    throw i.clientError("ConfigValidation", "Project ID is missing from configuration"), new G(w.MISSING_PROJECT_ID, "config");
-  if (r.id === null || r.id === void 0 || typeof r.id != "string")
-    throw i.clientError("ConfigValidation", "Project ID must be a non-empty string", {
-      providedId: r.id,
-      type: typeof r.id
-    }), new G(w.MISSING_PROJECT_ID, "config");
-  if (r.sessionTimeout !== void 0 && (typeof r.sessionTimeout != "number" || r.sessionTimeout < ee || r.sessionTimeout > te))
-    throw i.clientError("ConfigValidation", "Invalid session timeout", {
-      provided: r.sessionTimeout,
-      min: ee,
-      max: te
-    }), new lt(w.INVALID_SESSION_TIMEOUT, "config");
-  if (r.globalMetadata !== void 0 && (typeof r.globalMetadata != "object" || r.globalMetadata === null))
-    throw i.clientError("ConfigValidation", "Global metadata must be an object", {
-      provided: r.globalMetadata,
-      type: typeof r.globalMetadata
-    }), new H(w.INVALID_GLOBAL_METADATA, "config");
-  if (r.scrollContainerSelectors !== void 0 && ht(r.scrollContainerSelectors), r.integrations && gt(r.integrations), r.sensitiveQueryParams !== void 0) {
-    if (!Array.isArray(r.sensitiveQueryParams))
-      throw i.clientError("ConfigValidation", "Sensitive query params must be an array", {
-        provided: r.sensitiveQueryParams,
-        type: typeof r.sensitiveQueryParams
-      }), new H(w.INVALID_SENSITIVE_QUERY_PARAMS, "config");
-    for (const e of r.sensitiveQueryParams)
-      if (typeof e != "string")
-        throw i.clientError("ConfigValidation", "All sensitive query params must be strings", {
-          param: e,
-          type: typeof e
-        }), new H("All sensitive query params must be strings", "config");
+class InitializationTimeoutError extends TraceLogValidationError {
+  constructor(message, timeoutMs, layer = "runtime") {
+    super(message, "INITIALIZATION_TIMEOUT", layer);
+    this.timeoutMs = timeoutMs;
   }
-  if (r.errorSampling !== void 0 && (typeof r.errorSampling != "number" || r.errorSampling < 0 || r.errorSampling > 1))
-    throw i.clientError("ConfigValidation", "Invalid error sampling rate", {
-      provided: r.errorSampling,
-      expected: "0-1"
-    }), new dt(w.INVALID_ERROR_SAMPLING_RATE, "config");
-}, ht = (r) => {
-  const e = Array.isArray(r) ? r : [r];
-  for (const t of e) {
-    if (typeof t != "string" || t.trim() === "")
-      throw i.clientError("ConfigValidation", "Invalid scroll container selector", {
-        selector: t,
-        type: typeof t,
-        isEmpty: t === "" || typeof t == "string" && t.trim() === ""
-      }), new H(w.INVALID_SCROLL_CONTAINER_SELECTORS, "config");
-    if (typeof document < "u")
-      try {
-        document.querySelector(t);
-      } catch {
-        i.clientWarn("ConfigValidation", `Invalid CSS selector will be ignored: "${t}"`);
+}
+const validateAppConfig = (config) => {
+  if (!config || typeof config !== "object") {
+    debugLog.clientError("ConfigValidation", "Configuration must be an object", { config });
+    throw new AppConfigValidationError("Configuration must be an object", "config");
+  }
+  if (!("id" in config)) {
+    debugLog.clientError("ConfigValidation", "Project ID is missing from configuration");
+    throw new ProjectIdValidationError(VALIDATION_MESSAGES.MISSING_PROJECT_ID, "config");
+  }
+  if (config.id === null || config.id === void 0 || typeof config.id !== "string") {
+    debugLog.clientError("ConfigValidation", "Project ID must be a non-empty string", {
+      providedId: config.id,
+      type: typeof config.id
+    });
+    throw new ProjectIdValidationError(VALIDATION_MESSAGES.MISSING_PROJECT_ID, "config");
+  }
+  if (config.sessionTimeout !== void 0) {
+    if (typeof config.sessionTimeout !== "number" || config.sessionTimeout < MIN_SESSION_TIMEOUT_MS || config.sessionTimeout > MAX_SESSION_TIMEOUT_MS) {
+      debugLog.clientError("ConfigValidation", "Invalid session timeout", {
+        provided: config.sessionTimeout,
+        min: MIN_SESSION_TIMEOUT_MS,
+        max: MAX_SESSION_TIMEOUT_MS
+      });
+      throw new SessionTimeoutValidationError(VALIDATION_MESSAGES.INVALID_SESSION_TIMEOUT, "config");
+    }
+  }
+  if (config.globalMetadata !== void 0) {
+    if (typeof config.globalMetadata !== "object" || config.globalMetadata === null) {
+      debugLog.clientError("ConfigValidation", "Global metadata must be an object", {
+        provided: config.globalMetadata,
+        type: typeof config.globalMetadata
+      });
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_GLOBAL_METADATA, "config");
+    }
+  }
+  if (config.scrollContainerSelectors !== void 0) {
+    validateScrollContainerSelectors(config.scrollContainerSelectors);
+  }
+  if (config.integrations) {
+    validateIntegrations(config.integrations);
+  }
+  if (config.sensitiveQueryParams !== void 0) {
+    if (!Array.isArray(config.sensitiveQueryParams)) {
+      debugLog.clientError("ConfigValidation", "Sensitive query params must be an array", {
+        provided: config.sensitiveQueryParams,
+        type: typeof config.sensitiveQueryParams
+      });
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SENSITIVE_QUERY_PARAMS, "config");
+    }
+    for (const param of config.sensitiveQueryParams) {
+      if (typeof param !== "string") {
+        debugLog.clientError("ConfigValidation", "All sensitive query params must be strings", {
+          param,
+          type: typeof param
+        });
+        throw new AppConfigValidationError("All sensitive query params must be strings", "config");
       }
+    }
   }
-}, gt = (r) => {
-  if (r && r.googleAnalytics) {
-    if (!r.googleAnalytics.measurementId || typeof r.googleAnalytics.measurementId != "string" || r.googleAnalytics.measurementId.trim() === "")
-      throw i.clientError("ConfigValidation", "Invalid Google Analytics measurement ID", {
-        provided: r.googleAnalytics.measurementId,
-        type: typeof r.googleAnalytics.measurementId
-      }), new be(w.INVALID_GOOGLE_ANALYTICS_ID, "config");
-    const e = r.googleAnalytics.measurementId.trim();
-    if (!e.match(/^(G-|UA-)/))
-      throw i.clientError("ConfigValidation", 'Google Analytics measurement ID must start with "G-" or "UA-"', {
-        provided: e
-      }), new be('Google Analytics measurement ID must start with "G-" or "UA-"', "config");
+  if (config.errorSampling !== void 0) {
+    if (typeof config.errorSampling !== "number" || config.errorSampling < 0 || config.errorSampling > 1) {
+      debugLog.clientError("ConfigValidation", "Invalid error sampling rate", {
+        provided: config.errorSampling,
+        expected: "0-1"
+      });
+      throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_ERROR_SAMPLING_RATE, "config");
+    }
   }
-}, ft = (r) => {
-  ut(r);
-  const e = {
-    ...r,
-    id: r.id.trim(),
-    globalMetadata: r.globalMetadata ?? {},
-    sensitiveQueryParams: r.sensitiveQueryParams ?? []
+};
+const isValidCssSelectorSyntax = (selector) => {
+  if (selector.includes("<") || selector.includes(">") || /on\w+\s*=/i.test(selector)) {
+    return false;
+  }
+  const safePattern = /^[a-zA-Z0-9\-_#.[\]="':, >+~*()]+$/;
+  if (!safePattern.test(selector)) {
+    return false;
+  }
+  let parenthesesCount = 0;
+  for (const char of selector) {
+    if (char === "(") parenthesesCount++;
+    if (char === ")") parenthesesCount--;
+    if (parenthesesCount < 0) return false;
+  }
+  if (parenthesesCount !== 0) return false;
+  let bracketsCount = 0;
+  for (const char of selector) {
+    if (char === "[") bracketsCount++;
+    if (char === "]") bracketsCount--;
+    if (bracketsCount < 0) return false;
+  }
+  if (bracketsCount !== 0) return false;
+  return true;
+};
+const validateScrollContainerSelectors = (selectors) => {
+  const selectorsArray = Array.isArray(selectors) ? selectors : [selectors];
+  for (const selector of selectorsArray) {
+    if (typeof selector !== "string" || selector.trim() === "") {
+      debugLog.clientError("ConfigValidation", "Invalid scroll container selector", {
+        selector,
+        type: typeof selector,
+        isEmpty: selector === "" || typeof selector === "string" && selector.trim() === ""
+      });
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, "config");
+    }
+    if (!isValidCssSelectorSyntax(selector)) {
+      debugLog.clientError("ConfigValidation", "Invalid or potentially unsafe CSS selector", {
+        selector,
+        reason: "Failed security validation"
+      });
+      throw new AppConfigValidationError("Invalid or potentially unsafe CSS selector", "config");
+    }
+  }
+};
+const validateIntegrations = (integrations) => {
+  if (!integrations) return;
+  if (integrations.googleAnalytics) {
+    if (!integrations.googleAnalytics.measurementId || typeof integrations.googleAnalytics.measurementId !== "string" || integrations.googleAnalytics.measurementId.trim() === "") {
+      debugLog.clientError("ConfigValidation", "Invalid Google Analytics measurement ID", {
+        provided: integrations.googleAnalytics.measurementId,
+        type: typeof integrations.googleAnalytics.measurementId
+      });
+      throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_GOOGLE_ANALYTICS_ID, "config");
+    }
+    const measurementId = integrations.googleAnalytics.measurementId.trim();
+    if (!measurementId.match(/^(G-|UA-)/)) {
+      debugLog.clientError("ConfigValidation", 'Google Analytics measurement ID must start with "G-" or "UA-"', {
+        provided: measurementId
+      });
+      throw new IntegrationValidationError('Google Analytics measurement ID must start with "G-" or "UA-"', "config");
+    }
+  }
+};
+const validateAndNormalizeConfig = (config) => {
+  validateAppConfig(config);
+  const normalizedConfig = {
+    ...config,
+    id: config.id.trim(),
+    globalMetadata: config.globalMetadata ?? {},
+    sensitiveQueryParams: config.sensitiveQueryParams ?? []
   };
-  if (!e.id)
-    throw i.clientError("ConfigValidation", "Project ID is empty after trimming whitespace", {
-      originalId: r.id,
-      normalizedId: e.id
-    }), new G(w.PROJECT_ID_EMPTY_AFTER_TRIM, "config");
-  return e;
-}, Ee = (r) => {
-  if (!r || typeof r != "string" || r.trim().length === 0)
-    return i.debug("Sanitize", "String sanitization skipped - empty or invalid input", { value: r, type: typeof r }), "";
-  const e = r.length;
-  let t = r;
-  r.length > T && (t = r.slice(0, Math.max(0, T)), i.warn("Sanitize", "String truncated due to length limit", {
-    originalLength: e,
-    maxLength: T,
-    truncatedLength: t.length
-  }));
-  let s = 0;
-  for (const a of Le) {
-    const o = t;
-    t = t.replace(a, ""), o !== t && s++;
+  if (!normalizedConfig.id) {
+    debugLog.clientError("ConfigValidation", "Project ID is empty after trimming whitespace", {
+      originalId: config.id,
+      normalizedId: normalizedConfig.id
+    });
+    throw new ProjectIdValidationError(VALIDATION_MESSAGES.PROJECT_ID_EMPTY_AFTER_TRIM, "config");
   }
-  s > 0 && i.warn("Sanitize", "XSS patterns detected and removed", {
-    patternMatches: s,
-    originalValue: r.slice(0, 100)
-    // Log first 100 chars for debugging
-  }), t = t.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#x27;").replaceAll("/", "&#x2F;");
-  const n = t.trim();
-  return (e > 50 || s > 0) && i.debug("Sanitize", "String sanitization completed", {
-    originalLength: e,
-    sanitizedLength: n.length,
-    xssPatternMatches: s,
-    wasTruncated: e > T
-  }), n;
-}, mt = (r) => {
-  if (typeof r != "string")
+  return normalizedConfig;
+};
+const sanitizeString = (value) => {
+  if (!value || typeof value !== "string" || value.trim().length === 0) {
+    debugLog.debug("Sanitize", "String sanitization skipped - empty or invalid input", { value, type: typeof value });
     return "";
-  r.length > T && (r = r.slice(0, Math.max(0, T)));
-  let e = r;
-  for (const t of Le)
-    e = e.replace(t, "");
-  return e = e.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#x27;"), e.trim();
-}, Q = (r, e = 0) => {
-  if (e > de)
-    return i.warn("Sanitize", "Maximum object depth exceeded during sanitization", {
-      depth: e,
-      maxDepth: de
-    }), null;
-  if (r == null)
+  }
+  const originalLength = value.length;
+  let sanitized = value;
+  if (value.length > MAX_STRING_LENGTH) {
+    sanitized = value.slice(0, Math.max(0, MAX_STRING_LENGTH));
+    debugLog.warn("Sanitize", "String truncated due to length limit", {
+      originalLength,
+      maxLength: MAX_STRING_LENGTH,
+      truncatedLength: sanitized.length
+    });
+  }
+  let xssPatternMatches = 0;
+  for (const pattern of XSS_PATTERNS) {
+    const beforeReplace = sanitized;
+    sanitized = sanitized.replace(pattern, "");
+    if (beforeReplace !== sanitized) {
+      xssPatternMatches++;
+    }
+  }
+  if (xssPatternMatches > 0) {
+    debugLog.warn("Sanitize", "XSS patterns detected and removed", {
+      patternMatches: xssPatternMatches,
+      originalValue: value.slice(0, 100)
+      // Log first 100 chars for debugging
+    });
+  }
+  sanitized = sanitized.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#x27;").replaceAll("/", "&#x2F;");
+  const result = sanitized.trim();
+  if (originalLength > 50 || xssPatternMatches > 0) {
+    debugLog.debug("Sanitize", "String sanitization completed", {
+      originalLength,
+      sanitizedLength: result.length,
+      xssPatternMatches,
+      wasTruncated: originalLength > MAX_STRING_LENGTH
+    });
+  }
+  return result;
+};
+const sanitizePathString = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  if (value.length > MAX_STRING_LENGTH) {
+    value = value.slice(0, Math.max(0, MAX_STRING_LENGTH));
+  }
+  let sanitized = value;
+  for (const pattern of XSS_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "");
+  }
+  sanitized = sanitized.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#x27;");
+  return sanitized.trim();
+};
+const sanitizeValue = (value, depth = 0) => {
+  if (depth > MAX_OBJECT_DEPTH) {
+    debugLog.warn("Sanitize", "Maximum object depth exceeded during sanitization", {
+      depth,
+      maxDepth: MAX_OBJECT_DEPTH
+    });
     return null;
-  if (typeof r == "string")
-    return Ee(r);
-  if (typeof r == "number")
-    return !Number.isFinite(r) || r < -Number.MAX_SAFE_INTEGER || r > Number.MAX_SAFE_INTEGER ? (i.warn("Sanitize", "Invalid number sanitized to 0", { value: r, isFinite: Number.isFinite(r) }), 0) : r;
-  if (typeof r == "boolean")
-    return r;
-  if (Array.isArray(r)) {
-    const t = r.length, s = r.slice(0, q);
-    t > q && i.warn("Sanitize", "Array truncated due to length limit", {
-      originalLength: t,
-      maxLength: q,
-      depth: e
-    });
-    const n = s.map((a) => Q(a, e + 1)).filter((a) => a !== null);
-    return t > 0 && n.length === 0 && i.warn("Sanitize", "All array items were filtered out during sanitization", { originalLength: t, depth: e }), n;
   }
-  if (typeof r == "object") {
-    const t = {}, s = Object.entries(r), n = s.length, a = s.slice(0, 20);
-    n > 20 && i.warn("Sanitize", "Object keys truncated due to limit", {
-      originalKeys: n,
-      maxKeys: 20,
-      depth: e
-    });
-    let o = 0;
-    for (const [d, c] of a) {
-      const l = Ee(d);
-      if (l) {
-        const h = Q(c, e + 1);
-        h !== null ? t[l] = h : o++;
-      } else
-        o++;
+  if (value === null || value === void 0) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return sanitizeString(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < -Number.MAX_SAFE_INTEGER || value > Number.MAX_SAFE_INTEGER) {
+      debugLog.warn("Sanitize", "Invalid number sanitized to 0", { value, isFinite: Number.isFinite(value) });
+      return 0;
     }
-    return o > 0 && i.debug("Sanitize", "Object properties filtered during sanitization", {
-      filteredKeysCount: o,
-      remainingKeys: Object.keys(t).length,
-      depth: e
-    }), t;
+    return value;
   }
-  return i.debug("Sanitize", "Unknown value type sanitized to null", { type: typeof r, depth: e }), null;
-}, pt = (r) => {
-  i.debug("Sanitize", "Starting API config sanitization");
-  const e = {};
-  if (typeof r != "object" || r === null)
-    return i.warn("Sanitize", "API config data is not an object", { data: r, type: typeof r }), e;
-  try {
-    const t = Object.keys(r);
-    let s = 0, n = 0;
-    for (const a of t)
-      if (ot.has(a)) {
-        const o = r[a];
-        if (a === "excludedUrlPaths") {
-          const d = Array.isArray(o) ? o : typeof o == "string" ? [o] : [], c = d.length;
-          e.excludedUrlPaths = d.map((h) => mt(String(h))).filter(Boolean);
-          const l = c - e.excludedUrlPaths.length;
-          l > 0 && i.warn("Sanitize", "Some excluded URL paths were filtered during sanitization", {
-            originalCount: c,
-            filteredCount: l
-          });
-        } else if (a === "tags")
-          Array.isArray(o) ? (e.tags = o, i.debug("Sanitize", "Tags processed", { count: o.length })) : i.warn("Sanitize", "Tags value is not an array", { value: o, type: typeof o });
-        else {
-          const d = Q(o);
-          d !== null ? e[a] = d : i.warn("Sanitize", "API config value sanitized to null", { key: a, originalValue: o });
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const originalLength = value.length;
+    const limitedArray = value.slice(0, MAX_ARRAY_LENGTH);
+    if (originalLength > MAX_ARRAY_LENGTH) {
+      debugLog.warn("Sanitize", "Array truncated due to length limit", {
+        originalLength,
+        maxLength: MAX_ARRAY_LENGTH,
+        depth
+      });
+    }
+    const sanitizedArray = limitedArray.map((item) => sanitizeValue(item, depth + 1)).filter((item) => item !== null);
+    if (originalLength > 0 && sanitizedArray.length === 0) {
+      debugLog.warn("Sanitize", "All array items were filtered out during sanitization", { originalLength, depth });
+    }
+    return sanitizedArray;
+  }
+  if (typeof value === "object") {
+    const sanitizedObject = {};
+    const entries = Object.entries(value);
+    const originalKeysCount = entries.length;
+    const limitedEntries = entries.slice(0, 20);
+    if (originalKeysCount > 20) {
+      debugLog.warn("Sanitize", "Object keys truncated due to limit", {
+        originalKeys: originalKeysCount,
+        maxKeys: 20,
+        depth
+      });
+    }
+    let filteredKeysCount = 0;
+    for (const [key, value_] of limitedEntries) {
+      const sanitizedKey = sanitizeString(key);
+      if (sanitizedKey) {
+        const sanitizedValue = sanitizeValue(value_, depth + 1);
+        if (sanitizedValue !== null) {
+          sanitizedObject[sanitizedKey] = sanitizedValue;
+        } else {
+          filteredKeysCount++;
         }
-        s++;
-      } else
-        n++, i.debug("Sanitize", "API config key not allowed", { key: a });
-    i.info("Sanitize", "API config sanitization completed", {
-      originalKeys: t.length,
-      processedKeys: s,
-      filteredKeys: n,
-      finalKeys: Object.keys(e).length
-    });
-  } catch (t) {
-    throw i.error("Sanitize", "API config sanitization failed", {
-      error: t instanceof Error ? t.message : t
-    }), new Error(`API config sanitization failed: ${t instanceof Error ? t.message : "Unknown error"}`);
-  }
-  return e;
-}, vt = (r) => {
-  if (i.debug("Sanitize", "Starting metadata sanitization", { hasMetadata: r != null }), typeof r != "object" || r === null)
-    return i.debug("Sanitize", "Metadata is not an object, returning empty object", {
-      metadata: r,
-      type: typeof r
-    }), {};
-  try {
-    const e = Object.keys(r).length, t = Q(r), s = typeof t == "object" && t !== null ? t : {}, n = Object.keys(s).length;
-    return i.debug("Sanitize", "Metadata sanitization completed", {
-      originalKeys: e,
-      finalKeys: n,
-      keysFiltered: e - n
-    }), s;
-  } catch (e) {
-    throw i.error("Sanitize", "Metadata sanitization failed", {
-      error: e instanceof Error ? e.message : e
-    }), new Error(`Metadata sanitization failed: ${e instanceof Error ? e.message : "Unknown error"}`);
-  }
-}, yt = (r) => {
-  if (typeof r != "object" || r === null)
-    return !1;
-  for (const e of Object.values(r)) {
-    if (e == null)
-      continue;
-    const t = typeof e;
-    if (!(t === "string" || t === "number" || t === "boolean")) {
-      if (Array.isArray(e)) {
-        if (!e.every((s) => typeof s == "string"))
-          return !1;
-        continue;
+      } else {
+        filteredKeysCount++;
       }
-      return !1;
     }
+    if (filteredKeysCount > 0) {
+      debugLog.debug("Sanitize", "Object properties filtered during sanitization", {
+        filteredKeysCount,
+        remainingKeys: Object.keys(sanitizedObject).length,
+        depth
+      });
+    }
+    return sanitizedObject;
   }
-  return !0;
-}, St = (r) => typeof r != "string" ? {
-  valid: !1,
-  error: "Event name must be a string"
-} : r.length === 0 ? {
-  valid: !1,
-  error: "Event name cannot be empty"
-} : r.length > ae ? {
-  valid: !1,
-  error: `Event name is too long (max ${ae} characters)`
-} : r.includes("<") || r.includes(">") || r.includes("&") ? {
-  valid: !1,
-  error: "Event name contains invalid characters"
-} : ["constructor", "prototype", "__proto__", "eval", "function", "var", "let", "const"].includes(r.toLowerCase()) ? {
-  valid: !1,
-  error: "Event name cannot be a reserved word"
-} : { valid: !0 }, bt = (r, e, t) => {
-  const s = vt(e), n = `${t} "${r}" metadata error`;
-  if (!yt(s))
-    return {
-      valid: !1,
-      error: `${n}: object has invalid types. Valid types are string, number, boolean or string arrays.`
-    };
-  let a;
+  debugLog.debug("Sanitize", "Unknown value type sanitized to null", { type: typeof value, depth });
+  return null;
+};
+const sanitizeApiConfig = (data) => {
+  debugLog.debug("Sanitize", "Starting API config sanitization");
+  const safeData = {};
+  if (typeof data !== "object" || data === null) {
+    debugLog.warn("Sanitize", "API config data is not an object", { data, type: typeof data });
+    return safeData;
+  }
   try {
-    a = JSON.stringify(s);
+    const originalKeys = Object.keys(data);
+    let processedKeys = 0;
+    let filteredKeys = 0;
+    for (const key of originalKeys) {
+      if (ALLOWED_API_CONFIG_KEYS.has(key)) {
+        const value = data[key];
+        if (key === "excludedUrlPaths") {
+          const paths = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+          const originalPathsCount = paths.length;
+          safeData.excludedUrlPaths = paths.map((path) => sanitizePathString(String(path))).filter(Boolean);
+          const filteredPathsCount = originalPathsCount - safeData.excludedUrlPaths.length;
+          if (filteredPathsCount > 0) {
+            debugLog.warn("Sanitize", "Some excluded URL paths were filtered during sanitization", {
+              originalCount: originalPathsCount,
+              filteredCount: filteredPathsCount
+            });
+          }
+        } else if (key === "tags") {
+          if (Array.isArray(value)) {
+            safeData.tags = value;
+            debugLog.debug("Sanitize", "Tags processed", { count: value.length });
+          } else {
+            debugLog.warn("Sanitize", "Tags value is not an array", { value, type: typeof value });
+          }
+        } else {
+          const sanitizedValue = sanitizeValue(value);
+          if (sanitizedValue !== null) {
+            safeData[key] = sanitizedValue;
+          } else {
+            debugLog.warn("Sanitize", "API config value sanitized to null", { key, originalValue: value });
+          }
+        }
+        processedKeys++;
+      } else {
+        filteredKeys++;
+        debugLog.debug("Sanitize", "API config key not allowed", { key });
+      }
+    }
+    debugLog.info("Sanitize", "API config sanitization completed", {
+      originalKeys: originalKeys.length,
+      processedKeys,
+      filteredKeys,
+      finalKeys: Object.keys(safeData).length
+    });
+  } catch (error) {
+    debugLog.error("Sanitize", "API config sanitization failed", {
+      error: error instanceof Error ? error.message : error
+    });
+    throw new Error(`API config sanitization failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
+  return safeData;
+};
+const sanitizeMetadata = (metadata) => {
+  debugLog.debug("Sanitize", "Starting metadata sanitization", { hasMetadata: metadata != null });
+  if (typeof metadata !== "object" || metadata === null) {
+    debugLog.debug("Sanitize", "Metadata is not an object, returning empty object", {
+      metadata,
+      type: typeof metadata
+    });
+    return {};
+  }
+  try {
+    const originalKeys = Object.keys(metadata).length;
+    const sanitized = sanitizeValue(metadata);
+    const result = typeof sanitized === "object" && sanitized !== null ? sanitized : {};
+    const finalKeys = Object.keys(result).length;
+    debugLog.debug("Sanitize", "Metadata sanitization completed", {
+      originalKeys,
+      finalKeys,
+      keysFiltered: originalKeys - finalKeys
+    });
+    return result;
+  } catch (error) {
+    debugLog.error("Sanitize", "Metadata sanitization failed", {
+      error: error instanceof Error ? error.message : error
+    });
+    throw new Error(`Metadata sanitization failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
+};
+const isOnlyPrimitiveFields = (object) => {
+  if (typeof object !== "object" || object === null) {
+    return false;
+  }
+  for (const value of Object.values(object)) {
+    if (value === null || value === void 0) {
+      continue;
+    }
+    const type = typeof value;
+    if (type === "string" || type === "number" || type === "boolean") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (!value.every((item) => typeof item === "string")) {
+        return false;
+      }
+      continue;
+    }
+    return false;
+  }
+  return true;
+};
+const isValidEventName = (eventName) => {
+  if (typeof eventName !== "string") {
+    return {
+      valid: false,
+      error: "Event name must be a string"
+    };
+  }
+  if (eventName.length === 0) {
+    return {
+      valid: false,
+      error: "Event name cannot be empty"
+    };
+  }
+  if (eventName.length > MAX_CUSTOM_EVENT_NAME_LENGTH) {
+    return {
+      valid: false,
+      error: `Event name is too long (max ${MAX_CUSTOM_EVENT_NAME_LENGTH} characters)`
+    };
+  }
+  if (eventName.includes("<") || eventName.includes(">") || eventName.includes("&")) {
+    return {
+      valid: false,
+      error: "Event name contains invalid characters"
+    };
+  }
+  const reservedWords = ["constructor", "prototype", "__proto__", "eval", "function", "var", "let", "const"];
+  if (reservedWords.includes(eventName.toLowerCase())) {
+    return {
+      valid: false,
+      error: "Event name cannot be a reserved word"
+    };
+  }
+  return { valid: true };
+};
+const isValidMetadata = (eventName, metadata, type) => {
+  const sanitizedMetadata = sanitizeMetadata(metadata);
+  const intro = `${type} "${eventName}" metadata error`;
+  if (!isOnlyPrimitiveFields(sanitizedMetadata)) {
+    return {
+      valid: false,
+      error: `${intro}: object has invalid types. Valid types are string, number, boolean or string arrays.`
+    };
+  }
+  let jsonString;
+  try {
+    jsonString = JSON.stringify(sanitizedMetadata);
   } catch {
     return {
-      valid: !1,
-      error: `${n}: object contains circular references or cannot be serialized.`
+      valid: false,
+      error: `${intro}: object contains circular references or cannot be serialized.`
     };
   }
-  if (a.length > oe)
+  if (jsonString.length > MAX_CUSTOM_EVENT_STRING_SIZE) {
     return {
-      valid: !1,
-      error: `${n}: object is too large (max ${oe / 1024} KB).`
+      valid: false,
+      error: `${intro}: object is too large (max ${MAX_CUSTOM_EVENT_STRING_SIZE / 1024} KB).`
     };
-  if (Object.keys(s).length > ce)
+  }
+  const keyCount = Object.keys(sanitizedMetadata).length;
+  if (keyCount > MAX_CUSTOM_EVENT_KEYS) {
     return {
-      valid: !1,
-      error: `${n}: object has too many keys (max ${ce} keys).`
+      valid: false,
+      error: `${intro}: object has too many keys (max ${MAX_CUSTOM_EVENT_KEYS} keys).`
     };
-  for (const [d, c] of Object.entries(s)) {
-    if (Array.isArray(c)) {
-      if (c.length > le)
+  }
+  for (const [key, value] of Object.entries(sanitizedMetadata)) {
+    if (Array.isArray(value)) {
+      if (value.length > MAX_CUSTOM_EVENT_ARRAY_SIZE) {
         return {
-          valid: !1,
-          error: `${n}: array property "${d}" is too large (max ${le} items).`
+          valid: false,
+          error: `${intro}: array property "${key}" is too large (max ${MAX_CUSTOM_EVENT_ARRAY_SIZE} items).`
         };
-      for (const l of c)
-        if (typeof l == "string" && l.length > 500)
+      }
+      for (const item of value) {
+        if (typeof item === "string" && item.length > 500) {
           return {
-            valid: !1,
-            error: `${n}: array property "${d}" contains strings that are too long (max 500 characters).`
+            valid: false,
+            error: `${intro}: array property "${key}" contains strings that are too long (max 500 characters).`
           };
+        }
+      }
     }
-    if (typeof c == "string" && c.length > T)
+    if (typeof value === "string" && value.length > MAX_STRING_LENGTH) {
       return {
-        valid: !1,
-        error: `${n}: property "${d}" is too long (max ${T} characters).`
+        valid: false,
+        error: `${intro}: property "${key}" is too long (max ${MAX_STRING_LENGTH} characters).`
       };
+    }
   }
   return {
-    valid: !0,
-    sanitizedMetadata: s
+    valid: true,
+    sanitizedMetadata
   };
-}, Et = (r, e) => {
-  const t = St(r);
-  if (!t.valid)
-    return i.clientError("EventValidation", "Event name validation failed", { eventName: r, error: t.error }), t;
-  if (!e)
-    return { valid: !0 };
-  const s = bt(r, e, "customEvent");
-  return s.valid || i.clientError("EventValidation", "Event metadata validation failed", {
-    eventName: r,
-    error: s.error
-  }), s;
-}, se = (r, e = !1) => {
-  try {
-    const t = new URL(r), s = t.protocol === "https:", n = t.protocol === "http:";
-    return s || e && n;
-  } catch {
-    return !1;
+};
+const isEventValid = (eventName, metadata) => {
+  const nameValidation = isValidEventName(eventName);
+  if (!nameValidation.valid) {
+    debugLog.clientError("EventValidation", "Event name validation failed", { eventName, error: nameValidation.error });
+    return nameValidation;
   }
-}, wt = (r, e = !1) => {
-  i.debug("URLUtils", "Generating API URL", { projectId: r, allowHttp: e });
-  const t = new URL(window.location.href), s = t.hostname, n = s.split(".");
-  if (n.length === 0)
-    throw i.clientError("URLUtils", "Invalid hostname - no domain parts found", { hostname: s }), new Error("Invalid URL");
-  const a = n.slice(-2).join("."), o = e && t.protocol === "http:" ? "http" : "https", d = `${o}://${r}.${a}`;
-  if (i.debug("URLUtils", "Generated API URL", {
+  if (!metadata) {
+    return { valid: true };
+  }
+  const metadataValidation = isValidMetadata(eventName, metadata, "customEvent");
+  if (!metadataValidation.valid) {
+    debugLog.clientError("EventValidation", "Event metadata validation failed", {
+      eventName,
+      error: metadataValidation.error
+    });
+  }
+  return metadataValidation;
+};
+const isValidUrl = (url, allowHttp = false) => {
+  try {
+    const parsed = new URL(url);
+    const isHttps = parsed.protocol === "https:";
+    const isHttp = parsed.protocol === "http:";
+    return isHttps || allowHttp && isHttp;
+  } catch {
+    return false;
+  }
+};
+const getApiUrl = (id, allowHttp = false) => {
+  debugLog.debug("URLUtils", "Generating API URL", { projectId: id, allowHttp });
+  const url = new URL(window.location.href);
+  const host = url.hostname;
+  const parts = host.split(".");
+  if (parts.length === 0) {
+    debugLog.clientError("URLUtils", "Invalid hostname - no domain parts found", { hostname: host });
+    throw new Error("Invalid URL");
+  }
+  const cleanDomain = parts.slice(-2).join(".");
+  const protocol = allowHttp && url.protocol === "http:" ? "http" : "https";
+  const apiUrl = `${protocol}://${id}.${cleanDomain}`;
+  debugLog.debug("URLUtils", "Generated API URL", {
     originalUrl: window.location.href,
-    hostname: s,
-    domainParts: n.length,
-    cleanDomain: a,
-    protocol: o,
-    generatedUrl: d
-  }), !se(d, e))
-    throw i.clientError("URLUtils", "Generated API URL failed validation", {
-      apiUrl: d,
-      allowHttp: e
-    }), new Error("Invalid URL");
-  return i.debug("URLUtils", "API URL generation completed successfully", { apiUrl: d }), d;
-}, ie = (r, e = []) => {
-  i.debug("URLUtils", "Normalizing URL", {
-    urlLength: r.length,
-    sensitiveParamsCount: e.length
+    hostname: host,
+    domainParts: parts.length,
+    cleanDomain,
+    protocol,
+    generatedUrl: apiUrl
+  });
+  const isValid = isValidUrl(apiUrl, allowHttp);
+  if (!isValid) {
+    debugLog.clientError("URLUtils", "Generated API URL failed validation", {
+      apiUrl,
+      allowHttp
+    });
+    throw new Error("Invalid URL");
+  }
+  debugLog.debug("URLUtils", "API URL generation completed successfully", { apiUrl });
+  return apiUrl;
+};
+const normalizeUrl = (url, sensitiveQueryParams = []) => {
+  debugLog.debug("URLUtils", "Normalizing URL", {
+    urlLength: url.length,
+    sensitiveParamsCount: sensitiveQueryParams.length
   });
   try {
-    const t = new URL(r), s = t.searchParams, n = Array.from(s.keys()).length;
-    let a = !1;
-    const o = [];
-    if (e.forEach((c) => {
-      s.has(c) && (s.delete(c), a = !0, o.push(c));
-    }), a && i.debug("URLUtils", "Sensitive parameters removed from URL", {
-      removedParams: o,
-      originalParamCount: n,
-      finalParamCount: Array.from(s.keys()).length
-    }), !a && r.includes("?"))
-      return i.debug("URLUtils", "URL normalization - no changes needed"), r;
-    t.search = s.toString();
-    const d = t.toString();
-    return i.debug("URLUtils", "URL normalization completed", {
-      hasChanged: a,
-      originalLength: r.length,
-      normalizedLength: d.length
-    }), d;
-  } catch (t) {
-    return i.warn("URLUtils", "URL normalization failed, returning original", {
-      url: r.slice(0, 100),
-      error: t instanceof Error ? t.message : t
-    }), r;
-  }
-}, It = (r, e = []) => {
-  if (i.debug("URLUtils", "Checking if URL path is excluded", {
-    urlLength: r.length,
-    excludedPathsCount: e.length
-  }), e.length === 0)
-    return i.debug("URLUtils", "No excluded paths configured"), !1;
-  let t;
-  try {
-    t = new URL(r, window.location.origin).pathname, i.debug("URLUtils", "Extracted path from URL", { path: t });
-  } catch (c) {
-    return i.warn("URLUtils", "Failed to parse URL for path exclusion check", {
-      url: r.slice(0, 100),
-      error: c instanceof Error ? c.message : c
-    }), !1;
-  }
-  const s = (c) => typeof c == "object" && c !== void 0 && typeof c.test == "function", n = (c) => c.replaceAll(/[$()*+.?[\\\]^{|}]/g, "\\$&"), a = (c) => new RegExp(
-    "^" + c.split("*").map((l) => n(l)).join(".+") + "$"
-  ), o = e.find((c) => {
-    try {
-      if (s(c)) {
-        const h = c.test(t);
-        return h && i.debug("URLUtils", "Path matched regex pattern", { path: t, pattern: c.toString() }), h;
+    const urlObject = new URL(url);
+    const searchParams = urlObject.searchParams;
+    const originalParamCount = Array.from(searchParams.keys()).length;
+    let hasChanged = false;
+    const removedParams = [];
+    sensitiveQueryParams.forEach((param) => {
+      if (searchParams.has(param)) {
+        searchParams.delete(param);
+        hasChanged = true;
+        removedParams.push(param);
       }
-      if (c.includes("*")) {
-        const h = a(c), g = h.test(t);
-        return g && i.debug("URLUtils", "Path matched wildcard pattern", { path: t, pattern: c, regex: h.toString() }), g;
-      }
-      const l = c === t;
-      return l && i.debug("URLUtils", "Path matched exact pattern", { path: t, pattern: c }), l;
-    } catch (l) {
-      return i.warn("URLUtils", "Error testing exclusion pattern", {
-        pattern: c,
-        path: t,
-        error: l instanceof Error ? l.message : l
-      }), !1;
-    }
-  }), d = !!o;
-  return i.debug("URLUtils", "URL path exclusion check completed", {
-    path: t,
-    isExcluded: d,
-    matchedPattern: o ?? null,
-    totalPatternsChecked: e.length
-  }), d;
-};
-async function ke(r, e = {}) {
-  const { timeout: t = 1e4, ...s } = e, n = new AbortController(), a = setTimeout(() => {
-    n.abort();
-  }, t);
-  try {
-    const o = await fetch(r, {
-      ...s,
-      signal: n.signal
     });
-    return clearTimeout(a), o;
-  } catch (o) {
-    throw clearTimeout(a), o instanceof Error && o.name === "AbortError" ? new Error(`Request timeout after ${t}ms`) : o;
+    if (hasChanged) {
+      debugLog.debug("URLUtils", "Sensitive parameters removed from URL", {
+        removedParams,
+        originalParamCount,
+        finalParamCount: Array.from(searchParams.keys()).length
+      });
+    }
+    if (!hasChanged && url.includes("?")) {
+      debugLog.debug("URLUtils", "URL normalization - no changes needed");
+      return url;
+    }
+    urlObject.search = searchParams.toString();
+    const result = urlObject.toString();
+    debugLog.debug("URLUtils", "URL normalization completed", {
+      hasChanged,
+      originalLength: url.length,
+      normalizedLength: result.length
+    });
+    return result;
+  } catch (error) {
+    debugLog.warn("URLUtils", "URL normalization failed, returning original", {
+      url: url.slice(0, 100),
+      error: error instanceof Error ? error.message : error
+    });
+    return url;
   }
-}
-class Tt {
-  getUrl(e, t = !1) {
-    const s = wt(e, t);
-    if (!se(s, t))
-      throw new Error("Invalid URL");
-    return s;
+};
+const isUrlPathExcluded = (url, excludedPaths = []) => {
+  debugLog.debug("URLUtils", "Checking if URL path is excluded", {
+    urlLength: url.length,
+    excludedPathsCount: excludedPaths.length
+  });
+  if (excludedPaths.length === 0) {
+    debugLog.debug("URLUtils", "No excluded paths configured");
+    return false;
   }
-}
-class Mt {
-  async get(e, t) {
-    if (t.id === C.HttpSkip)
-      return i.debug("ConfigManager", "Using special project id"), this.getDefaultConfig(t);
-    i.debug("ConfigManager", "Loading config from API", { apiUrl: e, projectId: t.id });
-    const s = await this.load(e, t, t.id === C.HttpLocal);
-    return i.info("ConfigManager", "Config loaded successfully", {
-      projectId: t.id,
-      mode: s.mode,
-      hasExcludedPaths: !!s.excludedUrlPaths?.length,
-      hasGlobalMetadata: !!s.globalMetadata
-    }), s;
+  let path;
+  try {
+    path = new URL(url, window.location.origin).pathname;
+    debugLog.debug("URLUtils", "Extracted path from URL", { path });
+  } catch (error) {
+    debugLog.warn("URLUtils", "Failed to parse URL for path exclusion check", {
+      url: url.slice(0, 100),
+      error: error instanceof Error ? error.message : error
+    });
+    return false;
   }
-  async load(e, t, s) {
+  const isRegularExpression = (value) => typeof value === "object" && value !== void 0 && typeof value.test === "function";
+  const escapeRegexString = (string_) => string_.replaceAll(/[$()*+.?[\\\]^{|}]/g, "\\$&");
+  const wildcardToRegex = (string_) => new RegExp(
+    "^" + string_.split("*").map((element) => escapeRegexString(element)).join(".+") + "$"
+  );
+  const matchedPattern = excludedPaths.find((pattern) => {
     try {
-      const n = s ? `${window.location.origin}/config` : this.getUrl(e);
-      if (!n)
+      if (isRegularExpression(pattern)) {
+        const matches2 = pattern.test(path);
+        if (matches2) {
+          debugLog.debug("URLUtils", "Path matched regex pattern", { path, pattern: pattern.toString() });
+        }
+        return matches2;
+      }
+      if (pattern.includes("*")) {
+        const regex = wildcardToRegex(pattern);
+        const matches2 = regex.test(path);
+        if (matches2) {
+          debugLog.debug("URLUtils", "Path matched wildcard pattern", { path, pattern, regex: regex.toString() });
+        }
+        return matches2;
+      }
+      const matches = pattern === path;
+      if (matches) {
+        debugLog.debug("URLUtils", "Path matched exact pattern", { path, pattern });
+      }
+      return matches;
+    } catch (error) {
+      debugLog.warn("URLUtils", "Error testing exclusion pattern", {
+        pattern,
+        path,
+        error: error instanceof Error ? error.message : error
+      });
+      return false;
+    }
+  });
+  const isExcluded = !!matchedPattern;
+  debugLog.debug("URLUtils", "URL path exclusion check completed", {
+    path,
+    isExcluded,
+    matchedPattern: matchedPattern ?? null,
+    totalPatternsChecked: excludedPaths.length
+  });
+  return isExcluded;
+};
+async function fetchWithTimeout(url, options = {}) {
+  const { timeout = 1e4, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timeout after ${timeout}ms`);
+    }
+    throw error;
+  }
+}
+class ApiManager {
+  getUrl(id, allowHttp = false) {
+    if (id.startsWith(SpecialProjectId.Localhost)) {
+      const url2 = `http://${id}`;
+      if (!isValidUrl(url2, true)) {
+        throw new Error("Invalid URL");
+      }
+      return url2;
+    }
+    const url = getApiUrl(id, allowHttp);
+    if (!isValidUrl(url, allowHttp)) {
+      throw new Error("Invalid URL");
+    }
+    return url;
+  }
+}
+class ConfigManager {
+  // Allowed origins for local development and production
+  ALLOWED_ORIGINS = [
+    // Development origins
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3002",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8080"
+  ];
+  ALLOWED_ORIGIN_PATTERNS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
+  async get(apiUrl, appConfig) {
+    if (appConfig.id === SpecialProjectId.Skip) {
+      debugLog.debug("ConfigManager", "Using special project id: skip");
+      return this.getDefaultConfig(appConfig);
+    }
+    debugLog.debug("ConfigManager", "Loading config from API", { apiUrl, projectId: appConfig.id });
+    const isLocalhostMode = appConfig.id.startsWith(SpecialProjectId.Localhost);
+    const config = await this.load(apiUrl, appConfig, isLocalhostMode);
+    debugLog.info("ConfigManager", "Config loaded successfully", {
+      projectId: appConfig.id,
+      mode: config.mode,
+      hasExcludedPaths: !!config.excludedUrlPaths?.length,
+      hasGlobalMetadata: !!config.globalMetadata
+    });
+    return config;
+  }
+  async load(apiUrl, appConfig, useLocalhost) {
+    try {
+      let configUrl;
+      const headers = { "Content-Type": "application/json" };
+      if (useLocalhost) {
+        this.validateLocalhostId(appConfig.id);
+        const origin = this.extractOriginFromProjectId(appConfig.id);
+        configUrl = `${origin}/config`;
+        if (!isValidUrl(configUrl, true)) {
+          debugLog.clientError("ConfigManager", "Invalid config URL constructed", { configUrl });
+          throw new Error("Config URL is not valid or not allowed");
+        }
+        if (!this.isAllowedOrigin(origin, appConfig.id)) {
+          debugLog.clientError("ConfigManager", "Untrusted origin detected", {
+            origin,
+            projectId: appConfig.id
+          });
+          throw new Error(
+            `Security: Origin '${origin}' is not allowed to load configuration. Please use an authorized domain.`
+          );
+        }
+        headers["X-TraceLog-Project"] = appConfig.id;
+        debugLog.debug("ConfigManager", "Using local server with validated origin", {
+          origin,
+          projectId: appConfig.id
+        });
+      } else {
+        configUrl = this.getUrl(apiUrl);
+      }
+      if (!configUrl) {
         throw new Error("Config URL is not valid or not allowed");
-      const a = await ke(n, {
+      }
+      const response = await fetchWithTimeout(configUrl, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers,
         timeout: 1e4
         // 10 segundos timeout
       });
-      if (!a.ok) {
-        const b = `HTTP ${a.status}: ${a.statusText}`;
-        throw i.error("ConfigManager", "Config API request failed", {
-          status: a.status,
-          statusText: a.statusText,
-          configUrl: n
-        }), new Error(b);
+      if (!response.ok) {
+        const error = `HTTP ${response.status}: ${response.statusText}`;
+        debugLog.error("ConfigManager", "Config API request failed", {
+          status: response.status,
+          statusText: response.statusText,
+          configUrl
+        });
+        throw new Error(error);
       }
-      const o = await a.json();
-      if (o == null || typeof o != "object" || Array.isArray(o))
-        throw i.error("ConfigManager", "Invalid config API response format", {
-          responseType: typeof o,
-          isArray: Array.isArray(o)
-        }), new Error("Invalid config API response: expected object");
-      const d = pt(o), l = { ...{ ...Re, ...d }, ...t };
-      new URLSearchParams(window.location.search).get("qaMode") === "true" && !l.mode && (l.mode = R.QA, i.info("ConfigManager", "QA mode enabled via URL parameter"));
-      const S = Object.values(R).includes(l.mode) ? 1 : l.errorSampling ?? 0.1;
-      return { ...l, errorSampling: S };
-    } catch (n) {
-      const a = n instanceof Error ? n.message : "Unknown error";
-      throw i.error("ConfigManager", "Failed to load config", { error: a, apiUrl: e }), new Error(`Failed to load config: ${a}`);
+      const contentType = response.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
+        debugLog.clientError("ConfigManager", "Invalid response content-type", {
+          contentType,
+          configUrl
+        });
+        throw new Error(`Security: Invalid response content-type. Expected application/json, got ${contentType}`);
+      }
+      const rawData = await response.json();
+      if (rawData === void 0 || rawData === null || typeof rawData !== "object" || Array.isArray(rawData)) {
+        debugLog.error("ConfigManager", "Invalid config API response format", {
+          responseType: typeof rawData,
+          isArray: Array.isArray(rawData)
+        });
+        throw new Error("Invalid config API response: expected object");
+      }
+      const safeApiConfig = sanitizeApiConfig(rawData);
+      const apiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
+      const mergedConfig = { ...apiConfig, ...appConfig };
+      const urlParameters = new URLSearchParams(window.location.search);
+      const isQaMode = urlParameters.get("qaMode") === "true";
+      if (isQaMode && !mergedConfig.mode) {
+        mergedConfig.mode = Mode.QA;
+        debugLog.info("ConfigManager", "QA mode enabled via URL parameter");
+      }
+      const errorSampling = Object.values(Mode).includes(mergedConfig.mode) ? 1 : mergedConfig.errorSampling ?? 0.1;
+      const finalConfig = { ...mergedConfig, errorSampling };
+      return finalConfig;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      debugLog.error("ConfigManager", "Failed to load config", { error: errorMessage, apiUrl });
+      throw new Error(`Failed to load config: ${errorMessage}`);
     }
   }
-  getUrl(e) {
-    const s = new URLSearchParams(window.location.search).get("qaMode") === "true";
-    let n = `${e}/config`;
-    if (s && (n += "?qaMode=true"), !se(n))
-      throw i.clientError("ConfigManager", "Invalid config URL provided", { configUrl: n }), new Error("Config URL is not valid or not allowed");
-    return n;
+  getUrl(apiUrl) {
+    const urlParameters = new URLSearchParams(window.location.search);
+    const isQaMode = urlParameters.get("qaMode") === "true";
+    let configUrl = `${apiUrl}/config`;
+    if (isQaMode) {
+      configUrl += "?qaMode=true";
+    }
+    if (!isValidUrl(configUrl)) {
+      debugLog.clientError("ConfigManager", "Invalid config URL provided", { configUrl });
+      throw new Error("Config URL is not valid or not allowed");
+    }
+    return configUrl;
   }
-  getDefaultConfig(e) {
-    return tt({
-      ...e,
+  /**
+   * Validates if an origin is allowed to load configuration
+   * @param origin - The origin to validate (e.g., 'http://localhost:3000')
+   * @param projectId - The project ID for logging purposes
+   * @returns True if the origin is allowed, false otherwise
+   */
+  isAllowedOrigin(origin, projectId) {
+    if (this.ALLOWED_ORIGINS.includes(origin)) {
+      debugLog.debug("ConfigManager", "Origin validated via exact match", { origin, projectId });
+      return true;
+    }
+    const matchesPattern = this.ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+    if (matchesPattern) {
+      debugLog.debug("ConfigManager", "Origin validated via pattern match", { origin, projectId });
+      return true;
+    }
+    debugLog.clientError("ConfigManager", "Origin validation failed", {
+      origin,
+      projectId,
+      allowedOrigins: this.ALLOWED_ORIGINS
+    });
+    return false;
+  }
+  extractOriginFromProjectId(id) {
+    return `http://${id}`;
+  }
+  validateLocalhostId(id) {
+    const pattern = /^localhost:\d{1,5}$/;
+    if (!pattern.test(id)) {
+      debugLog.clientError("ConfigManager", "Invalid localhost project ID format", {
+        projectId: id,
+        expectedFormat: "localhost:PORT"
+      });
+      throw new Error(`Invalid localhost format. Expected 'localhost:PORT', got '${id}'`);
+    }
+    const portString = id.split(":")[1];
+    if (!portString) {
+      throw new Error(`Invalid localhost format. Port is required, got '${id}'`);
+    }
+    const port = parseInt(portString, 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+      throw new Error(`Invalid port number. Port must be between 1 and 65535, got ${portString}`);
+    }
+  }
+  getDefaultConfig(appConfig) {
+    return DEFAULT_CONFIG({
+      ...appConfig,
       errorSampling: 1,
-      ...Object.values(C).includes(e.id) && { mode: R.DEBUG }
+      ...appConfig.id === SpecialProjectId.Skip && { mode: Mode.DEBUG }
     });
   }
 }
-class At extends v {
+class SenderManager extends StateManager {
   storeManager;
   memoryFallbackStorage = /* @__PURE__ */ new Map();
   retryBackoffManager;
   retryTimeoutId = null;
   retryCount = 0;
-  isRetrying = !1;
-  constructor(e) {
-    super(), this.storeManager = e, this.retryBackoffManager = new we(_e.RETRY, "SenderManager-Retry");
+  isRetrying = false;
+  constructor(storeManager) {
+    super();
+    this.storeManager = storeManager;
+    this.retryBackoffManager = new BackoffManager(BACKOFF_CONFIGS.RETRY, "SenderManager-Retry");
   }
   getQueueStorageKey() {
-    return `${nt(this.get("config")?.id)}:${this.get("userId")}`;
+    const key = `${QUEUE_KEY(this.get("config")?.id)}:${this.get("userId")}`;
+    return key;
   }
-  async sendEventsQueueAsync(e) {
-    if (this.shouldSkipSend())
-      return this.logQueue(e), !0;
-    if (!(await this.persistWithFallback(e)).success)
-      return !!await this.sendImmediate(e);
-    const s = await this.send(e);
-    return s ? (this.clearPersistedEvents(), this.resetRetryState()) : this.scheduleRetry(e), s;
+  async sendEventsQueueAsync(body) {
+    if (this.shouldSkipSend()) {
+      this.logQueue(body);
+      return true;
+    }
+    const persistResult = await this.persistWithFallback(body);
+    if (!persistResult.success) {
+      const immediateSuccess = await this.sendImmediate(body);
+      if (!immediateSuccess) {
+        return false;
+      }
+      return true;
+    }
+    const success = await this.send(body);
+    if (success) {
+      this.clearPersistedEvents();
+      this.resetRetryState();
+    } else {
+      this.scheduleRetry(body);
+    }
+    return success;
   }
-  sendEventsQueueSync(e) {
-    if (this.shouldSkipSend())
-      return this.logQueue(e), !0;
-    const t = this.sendQueueSyncInternal(e);
-    return t && (this.clearPersistedEvents(), this.resetRetryState()), t;
+  sendEventsQueueSync(body) {
+    if (this.shouldSkipSend()) {
+      this.logQueue(body);
+      return true;
+    }
+    const success = this.sendQueueSyncInternal(body);
+    if (success) {
+      this.clearPersistedEvents();
+      this.resetRetryState();
+    }
+    return success;
   }
-  async sendEventsQueue(e, t) {
-    if (this.shouldSkipSend())
-      return this.logQueue(e), !0;
-    const s = await this.persistWithFallback(e);
-    if (!s.success)
-      return i.error("SenderManager", "All persistence methods failed", {
-        primaryError: s.primaryError,
-        fallbackError: s.fallbackError,
-        eventCount: e.events.length
-      }), await this.sendImmediate(e) ? (t?.onSuccess?.(), !0) : (t?.onFailure?.(), !1);
-    const n = await this.send(e);
-    return n ? (this.clearPersistedEvents(), this.resetRetryState(), t?.onSuccess?.()) : (this.scheduleRetry(e, t), t?.onFailure?.()), n;
+  async sendEventsQueue(body, callbacks) {
+    if (this.shouldSkipSend()) {
+      this.logQueue(body);
+      return true;
+    }
+    const persistResult = await this.persistWithFallback(body);
+    if (!persistResult.success) {
+      debugLog.error("SenderManager", "All persistence methods failed", {
+        primaryError: persistResult.primaryError,
+        fallbackError: persistResult.fallbackError,
+        eventCount: body.events.length
+      });
+      const immediateSuccess = await this.sendImmediate(body);
+      if (!immediateSuccess) {
+        callbacks?.onFailure?.();
+        return false;
+      }
+      callbacks?.onSuccess?.();
+      return true;
+    }
+    const success = await this.send(body);
+    if (success) {
+      this.clearPersistedEvents();
+      this.resetRetryState();
+      callbacks?.onSuccess?.();
+    } else {
+      this.scheduleRetry(body, callbacks);
+      callbacks?.onFailure?.();
+    }
+    return success;
   }
-  async recoverPersistedEvents(e) {
+  async recoverPersistedEvents(callbacks) {
     try {
-      const t = this.getPersistedData();
-      if (!t || !this.isDataRecent(t) || t.events.length === 0) {
+      const persistedData = this.getPersistedData();
+      if (!persistedData || !this.isDataRecent(persistedData) || persistedData.events.length === 0) {
         this.clearPersistedEvents();
         return;
       }
-      i.info("SenderManager", "Persisted events recovered", {
-        eventsCount: t.events.length,
-        sessionId: t.sessionId
+      debugLog.info("SenderManager", "Persisted events recovered", {
+        eventsCount: persistedData.events.length,
+        sessionId: persistedData.sessionId,
+        events: persistedData.events
       });
-      const s = this.createRecoveryBody(t);
-      await this.send(s) ? (this.clearPersistedEvents(), this.resetRetryState(), e?.onSuccess?.()) : (this.scheduleRetry(s, e), e?.onFailure?.());
-    } catch (t) {
-      i.error("SenderManager", "Failed to recover persisted events", { error: t });
+      const body = this.createRecoveryBody(persistedData);
+      const success = await this.send(body);
+      if (success) {
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events);
+      } else {
+        this.scheduleRetry(body, callbacks);
+        callbacks?.onFailure?.();
+      }
+    } catch (error) {
+      debugLog.error("SenderManager", "Failed to recover persisted events", { error });
     }
   }
-  async persistEventsForRecovery(e) {
-    return (await this.persistWithFallback(e)).success;
+  async persistEventsForRecovery(body) {
+    const result = await this.persistWithFallback(body);
+    return result.success;
   }
   stop() {
-    this.clearRetryTimeout(), this.resetRetryState();
+    this.clearRetryTimeout();
+    this.resetRetryState();
   }
-  async send(e) {
-    const { url: t, payload: s } = this.prepareRequest(e);
+  async send(body) {
+    const { url, payload } = this.prepareRequest(body);
     try {
-      return (await ke(t, {
+      const response = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: s,
-        keepalive: !0,
+        body: payload,
+        keepalive: true,
         credentials: "include",
         timeout: 15e3
         // 15 segundos timeout para events
-      })).ok;
-    } catch (n) {
-      return i.error("SenderManager", "Send request failed", { error: n }), !1;
+      });
+      return response.ok;
+    } catch (error) {
+      debugLog.error("SenderManager", "Send request failed", { error });
+      return false;
     }
   }
-  sendQueueSyncInternal(e) {
-    const { url: t, payload: s } = this.prepareRequest(e), n = new Blob([s], { type: "application/json" });
-    return this.isSendBeaconAvailable() && navigator.sendBeacon(t, n) ? !0 : this.sendSyncXHR(t, s);
+  sendQueueSyncInternal(body) {
+    const { url, payload } = this.prepareRequest(body);
+    const blob = new Blob([payload], { type: "application/json" });
+    if (this.isSendBeaconAvailable() && navigator.sendBeacon(url, blob)) {
+      return true;
+    }
+    return this.sendSyncXHR(url, payload);
   }
-  sendSyncXHR(e, t) {
-    const s = new XMLHttpRequest();
+  sendSyncXHR(url, payload) {
+    const xhr = new XMLHttpRequest();
     try {
-      return s.open("POST", e, !1), s.setRequestHeader("Content-Type", "application/json"), s.setRequestHeader("Origin", window.location.origin), s.setRequestHeader("Referer", window.location.href), s.withCredentials = !0, s.timeout = Ve, s.send(t), s.status >= 200 && s.status < 300;
-    } catch (n) {
-      const a = n instanceof Error ? n.message : String(n), o = a.includes("CORS") || a.includes("NotSameOrigin") || a.includes("blocked");
-      return i.warn("SenderManager", "Sync XHR failed", {
-        error: a,
-        isCorsError: o,
-        status: s.status ?? "unknown",
-        url: e.replace(/\/\/[^/]+/, "//[DOMAIN]")
-      }), !1;
+      xhr.open("POST", url, false);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.setRequestHeader("Origin", window.location.origin);
+      xhr.setRequestHeader("Referer", window.location.href);
+      xhr.withCredentials = true;
+      xhr.timeout = SYNC_XHR_TIMEOUT_MS;
+      xhr.send(payload);
+      return xhr.status >= 200 && xhr.status < 300;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCorsError = errorMessage.includes("CORS") || errorMessage.includes("NotSameOrigin") || errorMessage.includes("blocked");
+      debugLog.warn("SenderManager", "Sync XHR failed", {
+        error: errorMessage,
+        isCorsError,
+        status: xhr.status ?? "unknown",
+        url: url.replace(/\/\/[^/]+/, "//[DOMAIN]")
+      });
+      return false;
     }
   }
-  prepareRequest(e) {
+  prepareRequest(body) {
+    const url = `${this.get("apiUrl")}/collect`;
     return {
-      url: `${this.get("config").id === C.HttpLocal ? window.location.origin : this.get("apiUrl")}/collect`,
-      payload: JSON.stringify(e)
+      url,
+      payload: JSON.stringify(body)
     };
   }
   getPersistedData() {
     try {
-      const e = this.getQueueStorageKey(), t = this.storeManager.getItem(e);
-      if (t)
-        return JSON.parse(t);
-    } catch (e) {
-      i.warn("SenderManager", "Failed to get persisted data from localStorage", { error: e });
-    }
-    try {
-      const e = this.getQueueStorageKey() + "_session_fallback", t = sessionStorage.getItem(e);
-      if (t)
-        return i.info("SenderManager", "Recovering data from sessionStorage fallback"), JSON.parse(t);
-    } catch (e) {
-      i.warn("SenderManager", "Failed to get persisted data from sessionStorage", { error: e });
-    }
-    try {
-      const e = this.get("sessionId");
-      if (e && this.memoryFallbackStorage.has(e)) {
-        const t = this.memoryFallbackStorage.get(e);
-        if (t)
-          return i.info("SenderManager", "Recovering data from memory fallback"), {
-            userId: t.data.user_id,
-            sessionId: t.data.session_id,
-            device: t.data.device,
-            events: t.data.events,
-            timestamp: t.timestamp,
-            fallbackMode: !0,
-            ...t.data.global_metadata && { global_metadata: t.data.global_metadata }
-          };
+      const storageKey = this.getQueueStorageKey();
+      const persistedDataString = this.storeManager.getItem(storageKey);
+      if (persistedDataString) {
+        return JSON.parse(persistedDataString);
       }
-    } catch (e) {
-      i.warn("SenderManager", "Failed to get persisted data from memory fallback", { error: e });
+    } catch (error) {
+      debugLog.warn("SenderManager", "Failed to get persisted data from localStorage", { error });
+    }
+    try {
+      const sessionKey = this.getQueueStorageKey() + "_session_fallback";
+      const sessionDataString = sessionStorage.getItem(sessionKey);
+      if (sessionDataString) {
+        debugLog.info("SenderManager", "Recovering data from sessionStorage fallback");
+        return JSON.parse(sessionDataString);
+      }
+    } catch (error) {
+      debugLog.warn("SenderManager", "Failed to get persisted data from sessionStorage", { error });
+    }
+    try {
+      const sessionId = this.get("sessionId");
+      if (sessionId && this.memoryFallbackStorage.has(sessionId)) {
+        const memoryData = this.memoryFallbackStorage.get(sessionId);
+        if (memoryData) {
+          debugLog.info("SenderManager", "Recovering data from memory fallback");
+          return {
+            userId: memoryData.data.user_id,
+            sessionId: memoryData.data.session_id,
+            device: memoryData.data.device,
+            events: memoryData.data.events,
+            timestamp: memoryData.timestamp,
+            fallbackMode: true,
+            ...memoryData.data.global_metadata && { global_metadata: memoryData.data.global_metadata }
+          };
+        }
+      }
+    } catch (error) {
+      debugLog.warn("SenderManager", "Failed to get persisted data from memory fallback", { error });
     }
     return null;
   }
-  isDataRecent(e) {
-    return (Date.now() - e.timestamp) / 36e5 < Xe;
+  isDataRecent(data) {
+    const ageInHours = (Date.now() - data.timestamp) / (1e3 * 60 * 60);
+    return ageInHours < EVENT_EXPIRY_HOURS;
   }
-  createRecoveryBody(e) {
+  createRecoveryBody(data) {
     return {
-      user_id: e.userId,
-      session_id: e.sessionId,
-      device: e.device,
-      events: e.events,
-      ...e.global_metadata && { global_metadata: e.global_metadata }
+      user_id: data.userId,
+      session_id: data.sessionId,
+      device: data.device,
+      events: data.events,
+      ...data.global_metadata && { global_metadata: data.global_metadata }
     };
   }
-  logQueue(e) {
-    i.info("SenderManager", " ⏩ Queue snapshot", e);
+  logQueue(queue) {
+    debugLog.info("SenderManager", ` ⏩ Queue snapshot`, queue);
   }
-  async persistWithFallback(e) {
+  async persistWithFallback(body) {
     try {
-      if (this.persistFailedEvents(e))
-        return { success: !0 };
-    } catch (t) {
-      i.warn("SenderManager", "Primary persistence failed", { primaryError: t });
+      const primarySuccess = this.persistFailedEvents(body);
+      if (primarySuccess) {
+        return { success: true };
+      }
+    } catch (primaryError) {
+      debugLog.warn("SenderManager", "Primary persistence failed", { primaryError });
     }
     try {
-      if (this.persistToSessionStorage(e))
-        return i.info("SenderManager", "Using sessionStorage fallback for persistence"), { success: !0 };
-    } catch (t) {
-      i.warn("SenderManager", "Fallback persistence failed", { fallbackError: t });
+      const fallbackSuccess = this.persistToSessionStorage(body);
+      if (fallbackSuccess) {
+        debugLog.info("SenderManager", "Using sessionStorage fallback for persistence");
+        return { success: true };
+      }
+    } catch (fallbackError) {
+      debugLog.warn("SenderManager", "Fallback persistence failed", { fallbackError });
     }
     try {
-      return this.memoryFallbackStorage.set(e.session_id, {
-        data: e,
+      this.memoryFallbackStorage.set(body.session_id, {
+        data: body,
         timestamp: Date.now(),
         retryCount: 0
-      }), i.warn("SenderManager", "Using memory fallback for persistence (data will be lost on page reload)"), { success: !0 };
+      });
+      debugLog.warn("SenderManager", "Using memory fallback for persistence (data will be lost on page reload)");
+      return { success: true };
     } catch {
       return {
-        success: !1,
+        success: false,
         primaryError: "localStorage failed",
         fallbackError: "All persistence methods failed"
       };
     }
   }
-  persistToSessionStorage(e) {
+  persistToSessionStorage(body) {
     try {
-      const t = this.getQueueStorageKey() + "_session_fallback", s = {
-        userId: e.user_id,
-        sessionId: e.session_id,
-        device: e.device,
-        events: e.events,
+      const storageKey = this.getQueueStorageKey() + "_session_fallback";
+      const persistedData = {
+        userId: body.user_id,
+        sessionId: body.session_id,
+        device: body.device,
+        events: body.events,
         timestamp: Date.now(),
-        fallbackMode: !0,
-        ...e.global_metadata && { global_metadata: e.global_metadata }
+        fallbackMode: true,
+        ...body.global_metadata && { global_metadata: body.global_metadata }
       };
-      return sessionStorage.setItem(t, JSON.stringify(s)), !!sessionStorage.getItem(t);
-    } catch (t) {
-      return i.error("SenderManager", "SessionStorage persistence failed", { error: t }), !1;
+      sessionStorage.setItem(storageKey, JSON.stringify(persistedData));
+      return !!sessionStorage.getItem(storageKey);
+    } catch (error) {
+      debugLog.error("SenderManager", "SessionStorage persistence failed", { error });
+      return false;
     }
   }
-  async sendImmediate(e) {
-    i.warn("SenderManager", "Attempting immediate send as last resort");
+  async sendImmediate(body) {
+    debugLog.warn("SenderManager", "Attempting immediate send as last resort");
     try {
-      const t = await this.send(e);
-      return t && i.info("SenderManager", "Immediate send successful, events saved"), t;
-    } catch (t) {
-      return i.error("SenderManager", "Immediate send failed", { error: t }), !1;
+      const success = await this.send(body);
+      if (success) {
+        debugLog.info("SenderManager", "Immediate send successful, events saved");
+      }
+      return success;
+    } catch (error) {
+      debugLog.error("SenderManager", "Immediate send failed", { error });
+      return false;
     }
   }
-  persistFailedEvents(e) {
+  persistFailedEvents(body) {
     try {
-      const t = {
-        userId: e.user_id,
-        sessionId: e.session_id,
-        device: e.device,
-        events: e.events,
+      const persistedData = {
+        userId: body.user_id,
+        sessionId: body.session_id,
+        device: body.device,
+        events: body.events,
         timestamp: Date.now(),
-        ...e.global_metadata && { global_metadata: e.global_metadata }
-      }, s = this.getQueueStorageKey();
-      return this.storeManager.setItem(s, JSON.stringify(t)), !!this.storeManager.getItem(s);
-    } catch (t) {
-      return i.error("SenderManager", "Failed to persist events", { error: t }), !1;
+        ...body.global_metadata && { global_metadata: body.global_metadata }
+      };
+      const storageKey = this.getQueueStorageKey();
+      this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
+      return !!this.storeManager.getItem(storageKey);
+    } catch (error) {
+      debugLog.error("SenderManager", "Failed to persist events", { error });
+      return false;
     }
   }
   clearPersistedEvents() {
     this.storeManager.removeItem(this.getQueueStorageKey());
     try {
-      const t = this.getQueueStorageKey() + "_session_fallback";
-      sessionStorage.removeItem(t);
-    } catch (t) {
-      i.warn("SenderManager", "Failed to clear sessionStorage fallback", { error: t });
+      const sessionKey = this.getQueueStorageKey() + "_session_fallback";
+      sessionStorage.removeItem(sessionKey);
+    } catch (error) {
+      debugLog.warn("SenderManager", "Failed to clear sessionStorage fallback", { error });
     }
-    const e = this.get("sessionId");
-    e && this.memoryFallbackStorage.has(e) && (this.memoryFallbackStorage.delete(e), i.debug("SenderManager", "Cleared memory fallback storage", { sessionId: e }));
+    const sessionId = this.get("sessionId");
+    if (sessionId && this.memoryFallbackStorage.has(sessionId)) {
+      this.memoryFallbackStorage.delete(sessionId);
+      debugLog.debug("SenderManager", "Cleared memory fallback storage", { sessionId });
+    }
   }
   resetRetryState() {
-    this.retryBackoffManager.reset(), this.retryCount = 0, this.isRetrying = !1, this.clearRetryTimeout();
+    this.retryBackoffManager.reset();
+    this.retryCount = 0;
+    this.isRetrying = false;
+    this.clearRetryTimeout();
   }
-  scheduleRetry(e, t) {
-    if (this.retryTimeoutId !== null || this.isRetrying)
-      return;
-    if (this.retryCount >= fe) {
-      this.clearPersistedEvents(), this.resetRetryState(), t?.onFailure?.();
+  scheduleRetry(body, originalCallbacks) {
+    if (this.retryTimeoutId !== null || this.isRetrying) {
       return;
     }
-    if (this.isCircuitBreakerOpen())
+    if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+      this.clearPersistedEvents();
+      this.resetRetryState();
+      originalCallbacks?.onFailure?.();
       return;
+    }
+    if (this.isCircuitBreakerOpen()) {
+      return;
+    }
     this.retryTimeoutId = window.setTimeout(async () => {
-      if (this.retryTimeoutId = null, this.isCircuitBreakerOpen() || this.isRetrying)
+      this.retryTimeoutId = null;
+      if (this.isCircuitBreakerOpen() || this.isRetrying) {
         return;
-      this.retryCount++, this.isRetrying = !0;
-      const n = await this.send(e);
-      this.isRetrying = !1, n ? (this.clearPersistedEvents(), this.resetRetryState(), t?.onSuccess?.()) : this.retryCount >= fe ? (this.clearPersistedEvents(), this.resetRetryState(), t?.onFailure?.()) : this.scheduleRetry(e, t);
+      }
+      this.retryCount++;
+      this.isRetrying = true;
+      const success = await this.send(body);
+      this.isRetrying = false;
+      if (success) {
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        originalCallbacks?.onSuccess?.();
+      } else if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        originalCallbacks?.onFailure?.();
+      } else {
+        this.scheduleRetry(body, originalCallbacks);
+      }
     }, this.retryBackoffManager.getCurrentDelay());
-    const s = this.retryBackoffManager.getNextDelay();
-    i.debug("SenderManager", "Retry scheduled", {
+    const nextRetryDelay = this.retryBackoffManager.getNextDelay();
+    debugLog.debug("SenderManager", "Retry scheduled", {
       retryCount: this.retryCount,
-      retryDelay: s,
-      eventsCount: e.events.length
+      retryDelay: nextRetryDelay,
+      eventsCount: body.events.length
     });
   }
   shouldSkipSend() {
-    const e = this.get("config"), { id: t, mode: s } = e || {}, n = [R.QA, R.DEBUG];
-    return t === C.HttpSkip ? !0 : !!s && n.includes(s) && t !== C.HttpLocal;
+    const config = this.get("config");
+    const { id } = config || {};
+    return id === SpecialProjectId.Skip;
   }
   isSendBeaconAvailable() {
-    return typeof navigator.sendBeacon == "function";
+    if (typeof navigator.sendBeacon !== "function") {
+      return false;
+    }
+    return true;
   }
   clearRetryTimeout() {
-    this.retryTimeoutId !== null && (clearTimeout(this.retryTimeoutId), this.retryTimeoutId = null);
+    if (this.retryTimeoutId !== null) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
+    }
   }
   isCircuitBreakerOpen() {
-    return this.get("circuitBreakerOpen") === !0;
+    return this.get("circuitBreakerOpen") === true;
   }
 }
-class Ct extends v {
-  shouldSampleEvent(e, t) {
-    return this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug" ? !0 : e === u.WEB_VITALS ? this.isWebVitalEventSampledIn(t?.type) : this.isSampledIn();
+class SamplingManager extends StateManager {
+  shouldSampleEvent(type, webVitals) {
+    const isQaMode = this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug";
+    if (isQaMode) {
+      return true;
+    }
+    if (type === EventType.WEB_VITALS) {
+      return this.isWebVitalEventSampledIn(webVitals?.type);
+    }
+    return this.isSampledIn();
   }
   isSampledIn() {
-    const e = this.get("config").samplingRate ?? Me;
-    return e >= 1 ? !0 : e <= 0 ? !1 : this.getHash(this.get("userId")) % 100 / 100 < e;
-  }
-  isWebVitalEventSampledIn(e) {
-    const t = e === "LONG_TASK", s = t ? ze : Fe;
-    if (s >= 1) return !0;
-    if (s <= 0) return !1;
-    const n = `${this.get("userId")}|${t ? "long_task" : "web_vitals"}`;
-    return this.getHash(n) % 100 / 100 < s;
-  }
-  getHash(e) {
-    let t = 0;
-    for (let s = 0; s < e.length; s++) {
-      const n = e.charCodeAt(s);
-      t = (t << 5) - t + n, t |= 0;
+    const samplingRate = this.get("config").samplingRate ?? DEFAULT_SAMPLING_RATE;
+    if (samplingRate >= 1) {
+      return true;
     }
-    return Math.abs(t);
+    if (samplingRate <= 0) {
+      return false;
+    }
+    const userHash = this.getHash(this.get("userId"));
+    const userValue = userHash % 100 / 100;
+    const isSampled = userValue < samplingRate;
+    return isSampled;
+  }
+  isWebVitalEventSampledIn(type) {
+    const isLongTask = type === "LONG_TASK";
+    const rate = isLongTask ? WEB_VITALS_LONG_TASK_SAMPLING : WEB_VITALS_SAMPLING;
+    if (rate >= 1) return true;
+    if (rate <= 0) return false;
+    const seed = `${this.get("userId")}|${isLongTask ? "long_task" : "web_vitals"}`;
+    const hash = this.getHash(seed);
+    const value = hash % 100 / 100;
+    return value < rate;
+  }
+  getHash(input) {
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      const char = input.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash |= 0;
+    }
+    return Math.abs(hash);
   }
 }
-class Rt extends v {
-  getEventTagsIds(e, t) {
-    switch (e.type) {
-      case u.PAGE_VIEW:
-        return this.checkEventTypePageView(e, t);
-      case u.CLICK:
-        return this.checkEventTypeClick(e, t);
-      default:
+class TagsManager extends StateManager {
+  getEventTagsIds(event2, deviceType) {
+    switch (event2.type) {
+      case EventType.PAGE_VIEW: {
+        return this.checkEventTypePageView(event2, deviceType);
+      }
+      case EventType.CLICK: {
+        return this.checkEventTypeClick(event2, deviceType);
+      }
+      default: {
         return [];
+      }
     }
   }
-  checkEventTypePageView(e, t) {
-    const s = this.get("config")?.tags?.filter((a) => a.triggerType === u.PAGE_VIEW) ?? [];
-    if (s.length === 0)
+  checkEventTypePageView(event2, deviceType) {
+    const tags = this.get("config")?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) ?? [];
+    if (tags.length === 0) {
       return [];
-    const n = [];
-    for (const a of s) {
-      const { id: o, logicalOperator: d, conditions: c } = a, l = [];
-      for (const g of c)
-        switch (g.type) {
-          case p.URL_MATCHES: {
-            l.push(this.matchUrlMatches(g, e.page_url));
+    }
+    const matchedTagIds = [];
+    for (const tag of tags) {
+      const { id, logicalOperator, conditions } = tag;
+      const results = [];
+      for (const condition of conditions) {
+        switch (condition.type) {
+          case TagConditionType.URL_MATCHES: {
+            results.push(this.matchUrlMatches(condition, event2.page_url));
             break;
           }
-          case p.DEVICE_TYPE: {
-            l.push(this.matchDeviceType(g, t));
+          case TagConditionType.DEVICE_TYPE: {
+            results.push(this.matchDeviceType(condition, deviceType));
             break;
           }
-          case p.UTM_SOURCE: {
-            l.push(this.matchUtmCondition(g, e.utm?.source));
+          case TagConditionType.UTM_SOURCE: {
+            results.push(this.matchUtmCondition(condition, event2.utm?.source));
             break;
           }
-          case p.UTM_MEDIUM: {
-            l.push(this.matchUtmCondition(g, e.utm?.medium));
+          case TagConditionType.UTM_MEDIUM: {
+            results.push(this.matchUtmCondition(condition, event2.utm?.medium));
             break;
           }
-          case p.UTM_CAMPAIGN: {
-            l.push(this.matchUtmCondition(g, e.utm?.campaign));
+          case TagConditionType.UTM_CAMPAIGN: {
+            results.push(this.matchUtmCondition(condition, event2.utm?.campaign));
             break;
           }
         }
-      let h = !1;
-      h = d === j.AND ? l.every(Boolean) : l.some(Boolean), h && n.push(o);
+      }
+      let isMatch = false;
+      isMatch = logicalOperator === TagLogicalOperator.AND ? results.every(Boolean) : results.some(Boolean);
+      if (isMatch) {
+        matchedTagIds.push(id);
+      }
     }
-    return n;
+    return matchedTagIds;
   }
-  checkEventTypeClick(e, t) {
-    const s = this.get("config")?.tags?.filter((a) => a.triggerType === u.CLICK) ?? [];
-    if (s.length === 0)
+  checkEventTypeClick(event2, deviceType) {
+    const tags = this.get("config")?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) ?? [];
+    if (tags.length === 0) {
       return [];
-    const n = [];
-    for (const a of s) {
-      const { id: o, logicalOperator: d, conditions: c } = a, l = [];
-      for (const g of c) {
-        if (!e.click_data) {
-          l.push(!1);
+    }
+    const matchedTagIds = [];
+    for (const tag of tags) {
+      const { id, logicalOperator, conditions } = tag;
+      const results = [];
+      for (const condition of conditions) {
+        if (!event2.click_data) {
+          results.push(false);
           continue;
         }
-        const S = e.click_data;
-        switch (g.type) {
-          case p.ELEMENT_MATCHES: {
-            l.push(this.matchElementSelector(g, S));
+        const clickData = event2.click_data;
+        switch (condition.type) {
+          case TagConditionType.ELEMENT_MATCHES: {
+            results.push(this.matchElementSelector(condition, clickData));
             break;
           }
-          case p.DEVICE_TYPE: {
-            l.push(this.matchDeviceType(g, t));
+          case TagConditionType.DEVICE_TYPE: {
+            results.push(this.matchDeviceType(condition, deviceType));
             break;
           }
-          case p.URL_MATCHES: {
-            l.push(this.matchUrlMatches(g, e.page_url));
+          case TagConditionType.URL_MATCHES: {
+            results.push(this.matchUrlMatches(condition, event2.page_url));
             break;
           }
-          case p.UTM_SOURCE: {
-            l.push(this.matchUtmCondition(g, e.utm?.source));
+          case TagConditionType.UTM_SOURCE: {
+            results.push(this.matchUtmCondition(condition, event2.utm?.source));
             break;
           }
-          case p.UTM_MEDIUM: {
-            l.push(this.matchUtmCondition(g, e.utm?.medium));
+          case TagConditionType.UTM_MEDIUM: {
+            results.push(this.matchUtmCondition(condition, event2.utm?.medium));
             break;
           }
-          case p.UTM_CAMPAIGN: {
-            l.push(this.matchUtmCondition(g, e.utm?.campaign));
+          case TagConditionType.UTM_CAMPAIGN: {
+            results.push(this.matchUtmCondition(condition, event2.utm?.campaign));
             break;
           }
         }
       }
-      let h = !1;
-      h = d === j.AND ? l.every(Boolean) : l.some(Boolean), h && n.push(o);
+      let isMatch = false;
+      isMatch = logicalOperator === TagLogicalOperator.AND ? results.every(Boolean) : results.some(Boolean);
+      if (isMatch) {
+        matchedTagIds.push(id);
+      }
     }
-    return n;
+    return matchedTagIds;
   }
-  matchUrlMatches(e, t) {
-    if (e.type !== p.URL_MATCHES)
-      return !1;
-    const s = e.value.toLowerCase(), n = t.toLowerCase();
-    switch (e.operator) {
-      case f.EQUALS:
-        return n === s;
-      case f.CONTAINS:
-        return n.includes(s);
-      case f.STARTS_WITH:
-        return n.startsWith(s);
-      case f.ENDS_WITH:
-        return n.endsWith(s);
-      case f.REGEX:
+  matchUrlMatches(condition, url) {
+    if (condition.type !== TagConditionType.URL_MATCHES) {
+      return false;
+    }
+    const targetValue = condition.value.toLowerCase();
+    const targetUrl = url.toLowerCase();
+    switch (condition.operator) {
+      case TagConditionOperator.EQUALS: {
+        return targetUrl === targetValue;
+      }
+      case TagConditionOperator.CONTAINS: {
+        return targetUrl.includes(targetValue);
+      }
+      case TagConditionOperator.STARTS_WITH: {
+        return targetUrl.startsWith(targetValue);
+      }
+      case TagConditionOperator.ENDS_WITH: {
+        return targetUrl.endsWith(targetValue);
+      }
+      case TagConditionOperator.REGEX: {
         try {
-          return new RegExp(s, "gi").test(n);
+          const regex = new RegExp(targetValue, "gi");
+          return regex.test(targetUrl);
         } catch {
-          return !1;
+          return false;
         }
-      default:
-        return !1;
+      }
+      default: {
+        return false;
+      }
     }
   }
-  matchDeviceType(e, t) {
-    if (e.type !== p.DEVICE_TYPE)
-      return !1;
-    const s = e.value.toLowerCase(), n = t.toLowerCase();
-    switch (e.operator) {
-      case f.EQUALS:
-        return n === s;
-      case f.CONTAINS:
-        return n.includes(s);
-      case f.STARTS_WITH:
-        return n.startsWith(s);
-      case f.ENDS_WITH:
-        return n.endsWith(s);
-      case f.REGEX:
+  matchDeviceType(condition, deviceType) {
+    if (condition.type !== TagConditionType.DEVICE_TYPE) {
+      return false;
+    }
+    const targetValue = condition.value.toLowerCase();
+    const targetDevice = deviceType.toLowerCase();
+    switch (condition.operator) {
+      case TagConditionOperator.EQUALS: {
+        return targetDevice === targetValue;
+      }
+      case TagConditionOperator.CONTAINS: {
+        return targetDevice.includes(targetValue);
+      }
+      case TagConditionOperator.STARTS_WITH: {
+        return targetDevice.startsWith(targetValue);
+      }
+      case TagConditionOperator.ENDS_WITH: {
+        return targetDevice.endsWith(targetValue);
+      }
+      case TagConditionOperator.REGEX: {
         try {
-          return new RegExp(s, "gi").test(n);
+          const regex = new RegExp(targetValue, "gi");
+          return regex.test(targetDevice);
         } catch {
-          return !1;
+          return false;
         }
-      default:
-        return !1;
+      }
+      default: {
+        return false;
+      }
     }
   }
-  matchElementSelector(e, t) {
-    if (e.type !== p.ELEMENT_MATCHES)
-      return !1;
-    const s = [
-      t.id ?? "",
-      t.class ?? "",
-      t.tag ?? "",
-      t.text ?? "",
-      t.href ?? "",
-      t.title ?? "",
-      t.alt ?? "",
-      t.role ?? "",
-      t.ariaLabel ?? "",
-      ...Object.values(t.dataAttributes ?? {})
-    ].join(" "), n = e.value.toLowerCase(), a = s.toLowerCase();
-    switch (e.operator) {
-      case f.EQUALS:
-        return this.checkElementFieldEquals(t, n);
-      case f.CONTAINS:
-        return a.includes(n);
-      case f.STARTS_WITH:
-        return a.startsWith(n);
-      case f.ENDS_WITH:
-        return a.endsWith(n);
-      case f.REGEX:
+  matchElementSelector(condition, clickData) {
+    if (condition.type !== TagConditionType.ELEMENT_MATCHES) {
+      return false;
+    }
+    const elementData = [
+      clickData.id ?? "",
+      clickData.class ?? "",
+      clickData.tag ?? "",
+      clickData.text ?? "",
+      clickData.href ?? "",
+      clickData.title ?? "",
+      clickData.alt ?? "",
+      clickData.role ?? "",
+      clickData.ariaLabel ?? "",
+      ...Object.values(clickData.dataAttributes ?? {})
+    ].join(" ");
+    const targetValue = condition.value.toLowerCase();
+    const targetElementData = elementData.toLowerCase();
+    switch (condition.operator) {
+      case TagConditionOperator.EQUALS: {
+        return this.checkElementFieldEquals(clickData, targetValue);
+      }
+      case TagConditionOperator.CONTAINS: {
+        return targetElementData.includes(targetValue);
+      }
+      case TagConditionOperator.STARTS_WITH: {
+        return targetElementData.startsWith(targetValue);
+      }
+      case TagConditionOperator.ENDS_WITH: {
+        return targetElementData.endsWith(targetValue);
+      }
+      case TagConditionOperator.REGEX: {
         try {
-          return new RegExp(n, "gi").test(a);
+          const regex = new RegExp(targetValue, "gi");
+          return regex.test(targetElementData);
         } catch {
-          return !1;
+          return false;
         }
-      default:
-        return !1;
+      }
+      default: {
+        return false;
+      }
     }
   }
-  matchUtmCondition(e, t) {
-    if (![p.UTM_SOURCE, p.UTM_MEDIUM, p.UTM_CAMPAIGN].includes(
-      e.type
-    ))
-      return !1;
-    const s = t ?? "", n = e.value.toLowerCase(), a = s.toLowerCase();
-    switch (e.operator) {
-      case f.EQUALS:
-        return a === n;
-      case f.CONTAINS:
-        return a.includes(n);
-      case f.STARTS_WITH:
-        return a.startsWith(n);
-      case f.ENDS_WITH:
-        return a.endsWith(n);
-      case f.REGEX:
+  matchUtmCondition(condition, utmValue) {
+    if (![TagConditionType.UTM_SOURCE, TagConditionType.UTM_MEDIUM, TagConditionType.UTM_CAMPAIGN].includes(
+      condition.type
+    )) {
+      return false;
+    }
+    const value = utmValue ?? "";
+    const targetValue = condition.value.toLowerCase();
+    const targetUtmValue = value.toLowerCase();
+    switch (condition.operator) {
+      case TagConditionOperator.EQUALS: {
+        return targetUtmValue === targetValue;
+      }
+      case TagConditionOperator.CONTAINS: {
+        return targetUtmValue.includes(targetValue);
+      }
+      case TagConditionOperator.STARTS_WITH: {
+        return targetUtmValue.startsWith(targetValue);
+      }
+      case TagConditionOperator.ENDS_WITH: {
+        return targetUtmValue.endsWith(targetValue);
+      }
+      case TagConditionOperator.REGEX: {
         try {
-          return new RegExp(n, "gi").test(a);
+          const regex = new RegExp(targetValue, "gi");
+          return regex.test(targetUtmValue);
         } catch {
-          return !1;
+          return false;
         }
-      default:
-        return !1;
+      }
+      default: {
+        return false;
+      }
     }
   }
-  checkElementFieldEquals(e, t) {
-    const s = [
-      e.id,
-      e.class,
-      e.tag,
-      e.text,
-      e.href,
-      e.title,
-      e.alt,
-      e.role,
-      e.ariaLabel
+  checkElementFieldEquals(clickData, targetValue) {
+    const fields = [
+      clickData.id,
+      clickData.class,
+      clickData.tag,
+      clickData.text,
+      clickData.href,
+      clickData.title,
+      clickData.alt,
+      clickData.role,
+      clickData.ariaLabel
     ];
-    for (const n of s)
-      if (n) {
-        const a = n.toLowerCase(), o = t.toLowerCase();
-        if (a === o)
-          return !0;
+    for (const field of fields) {
+      if (field) {
+        const fieldValue = field.toLowerCase();
+        const target = targetValue.toLowerCase();
+        if (fieldValue === target) {
+          return true;
+        }
       }
-    if (e.dataAttributes)
-      for (const n of Object.values(e.dataAttributes)) {
-        const a = n.toLowerCase(), o = t.toLowerCase();
-        if (a === o)
-          return !0;
+    }
+    if (clickData.dataAttributes) {
+      for (const dataValue of Object.values(clickData.dataAttributes)) {
+        const fieldValue = dataValue.toLowerCase();
+        const target = targetValue.toLowerCase();
+        if (fieldValue === target) {
+          return true;
+        }
       }
-    return !1;
+    }
+    return false;
   }
 }
-class _t extends v {
+class EventManager extends StateManager {
   googleAnalytics;
   samplingManager;
   tagsManager;
   dataSender;
-  storageManager;
   eventsQueue = [];
   lastEvent = null;
   eventsQueueIntervalId = null;
-  intervalActive = !1;
+  intervalActive = false;
   // Circuit breaker properties
   failureCount = 0;
-  MAX_FAILURES = D.MAX_FAILURES;
-  circuitOpen = !1;
+  MAX_FAILURES = CIRCUIT_BREAKER_CONSTANTS.MAX_FAILURES;
+  circuitOpen = false;
   circuitOpenTime = 0;
   backoffManager;
   circuitResetTimeoutId = null;
-  isSending = !1;
+  isSending = false;
+  circuitRecoveryAttempts = 0;
+  MAX_RECOVERY_ATTEMPTS = 5;
   // Event deduplication properties
   eventFingerprints = /* @__PURE__ */ new Map();
   lastFingerprintCleanup = Date.now();
@@ -1426,9 +2230,17 @@ class _t extends v {
     networkTimeouts: 0,
     lastRecoveryAttempt: 0
   };
-  constructor(e, t = null) {
-    super(), this.storageManager = e, this.googleAnalytics = t, this.samplingManager = new Ct(), this.tagsManager = new Rt(), this.dataSender = new At(e), this.backoffManager = new we(_e.CIRCUIT_BREAKER, "EventManager-CircuitBreaker"), this.set("circuitBreakerOpen", !1), this.setupCircuitBreakerHealthCheck(), i.debug("EventManager", "EventManager initialized", {
-      hasGoogleAnalytics: !!t
+  constructor(storeManager, googleAnalytics = null) {
+    super();
+    this.googleAnalytics = googleAnalytics;
+    this.samplingManager = new SamplingManager();
+    this.tagsManager = new TagsManager();
+    this.dataSender = new SenderManager(storeManager);
+    this.backoffManager = new BackoffManager(BACKOFF_CONFIGS.CIRCUIT_BREAKER, "EventManager-CircuitBreaker");
+    this.set("circuitBreakerOpen", false);
+    this.setupCircuitBreakerHealthCheck();
+    debugLog.debug("EventManager", "EventManager initialized", {
+      hasGoogleAnalytics: !!googleAnalytics
     });
   }
   /**
@@ -1437,140 +2249,232 @@ class _t extends v {
    */
   async recoverPersistedEvents() {
     await this.dataSender.recoverPersistedEvents({
-      onSuccess: () => {
-        this.failureCount = 0, this.backoffManager.reset(), i.info("EventManager", "Persisted events recovered successfully", {
+      onSuccess: (eventCount, recoveredEvents) => {
+        this.failureCount = 0;
+        this.backoffManager.reset();
+        if (recoveredEvents && recoveredEvents.length > 0) {
+          const eventIds = recoveredEvents.map((e) => e.timestamp + "_" + e.type);
+          this.removeProcessedEvents(eventIds);
+          debugLog.debug("EventManager", "Removed recovered events from in-memory queue", {
+            removedCount: recoveredEvents.length,
+            remainingQueueLength: this.eventsQueue.length
+          });
+        }
+        debugLog.info("EventManager", "Persisted events recovered successfully", {
+          eventCount: eventCount || 0,
           recoveryStats: this.errorRecoveryStats
         });
       },
       onFailure: async () => {
-        this.failureCount++, this.errorRecoveryStats.persistenceFailures++, i.warn("EventManager", "Failed to recover persisted events", {
-          failureCount: this.failureCount,
+        this.errorRecoveryStats.persistenceFailures++;
+        debugLog.warn("EventManager", "Failed to recover persisted events", {
           persistenceFailures: this.errorRecoveryStats.persistenceFailures
-        }), this.failureCount >= this.MAX_FAILURES && await this.openCircuitBreaker();
+        });
       }
     });
   }
   track({
-    type: e,
-    page_url: t,
-    from_page_url: s,
-    scroll_data: n,
-    click_data: a,
-    custom_event: o,
-    web_vitals: d,
-    session_end_reason: c,
-    session_start_recovered: l
+    type,
+    page_url,
+    from_page_url,
+    scroll_data,
+    click_data,
+    custom_event,
+    web_vitals,
+    session_end_reason,
+    session_start_recovered
   }) {
     if (this.circuitOpen) {
-      i.debug("EventManager", "Event dropped - circuit breaker is open", { type: e });
+      debugLog.debug("EventManager", "Event dropped - circuit breaker is open", { type });
       return;
     }
-    if (this.manageFingerprintMemory(), !this.samplingManager.shouldSampleEvent(e, d)) {
-      i.debug("EventManager", "Event filtered by sampling", { type: e, samplingActive: !0 });
+    this.manageFingerprintMemory();
+    if (!this.samplingManager.shouldSampleEvent(type, web_vitals)) {
+      debugLog.debug("EventManager", "Event filtered by sampling", { type, samplingActive: true });
       return;
     }
-    if (this.isDuplicatedEvent({
-      type: e,
-      page_url: t,
-      scroll_data: n,
-      click_data: a,
-      custom_event: o,
-      web_vitals: d,
-      session_end_reason: c,
-      session_start_recovered: l
-    })) {
-      const L = Date.now();
+    const isDuplicatedEvent = this.isDuplicatedEvent({
+      type,
+      page_url,
+      scroll_data,
+      click_data,
+      custom_event,
+      web_vitals,
+      session_end_reason,
+      session_start_recovered
+    });
+    if (isDuplicatedEvent) {
+      const now = Date.now();
       if (this.eventsQueue && this.eventsQueue.length > 0) {
-        const N = this.eventsQueue.at(-1);
-        N && (N.timestamp = L);
+        const lastEvent = this.eventsQueue.at(-1);
+        if (lastEvent) {
+          lastEvent.timestamp = now;
+        }
       }
-      this.lastEvent && (this.lastEvent.timestamp = L), i.debug("EventManager", "Duplicate event detected, timestamp updated", {
-        type: e,
+      if (this.lastEvent) {
+        this.lastEvent.timestamp = now;
+      }
+      debugLog.debug("EventManager", "Duplicate event detected, timestamp updated", {
+        type,
         queueLength: this.eventsQueue.length
       });
       return;
     }
-    const g = t || this.get("pageUrl"), S = It(g, this.get("config").excludedUrlPaths), M = this.get("hasStartSession"), b = e == u.SESSION_END;
-    if (S && (!b || b && !M)) {
-      (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug("EventManager", `Event ${e} on excluded route: ${t}`);
+    const effectivePageUrl = page_url || this.get("pageUrl");
+    const isRouteExcluded = isUrlPathExcluded(effectivePageUrl, this.get("config").excludedUrlPaths);
+    const hasStartSession = this.get("hasStartSession");
+    const isSessionEndEvent = type == EventType.SESSION_END;
+    if (isRouteExcluded && (!isSessionEndEvent || isSessionEndEvent && !hasStartSession)) {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.debug("EventManager", `Event ${type} on excluded route: ${page_url}`);
+      }
       return;
     }
-    const P = e === u.SESSION_START;
-    P && this.set("hasStartSession", !0);
-    const ne = P ? ct() : void 0, x = {
-      type: e,
-      page_url: S ? "excluded" : g,
+    const isSessionStartEvent = type === EventType.SESSION_START;
+    if (isSessionStartEvent) {
+      this.set("hasStartSession", true);
+    }
+    const utmParams = isSessionStartEvent ? getUTMParameters() : void 0;
+    const payload = {
+      type,
+      page_url: isRouteExcluded ? "excluded" : effectivePageUrl,
       timestamp: Date.now(),
-      ...P && { referrer: document.referrer || "Direct" },
-      ...s && !S ? { from_page_url: s } : {},
-      ...n && { scroll_data: n },
-      ...a && { click_data: a },
-      ...o && { custom_event: o },
-      ...ne && { utm: ne },
-      ...d && { web_vitals: d },
-      ...c && { session_end_reason: c },
-      ...l && { session_start_recovered: l }
+      ...isSessionStartEvent && { referrer: document.referrer || "Direct" },
+      ...from_page_url && !isRouteExcluded ? { from_page_url } : {},
+      ...scroll_data && { scroll_data },
+      ...click_data && { click_data },
+      ...custom_event && { custom_event },
+      ...utmParams && { utm: utmParams },
+      ...web_vitals && { web_vitals },
+      ...session_end_reason && { session_end_reason },
+      ...session_start_recovered && { session_start_recovered }
     };
     if (this.get("config")?.tags?.length) {
-      const L = this.tagsManager.getEventTagsIds(x, this.get("device"));
-      L?.length && (x.tags = this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug" ? L.map((N) => ({
-        id: N,
-        key: this.get("config")?.tags?.find((Ne) => Ne.id === N)?.key ?? ""
-      })) : L);
+      const matchedTags = this.tagsManager.getEventTagsIds(payload, this.get("device"));
+      if (matchedTags?.length) {
+        payload.tags = this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug" ? matchedTags.map((id) => ({
+          id,
+          key: this.get("config")?.tags?.find((t) => t.id === id)?.key ?? ""
+        })) : matchedTags;
+      }
     }
-    this.lastEvent = x, this.processAndSend(x);
+    this.lastEvent = payload;
+    this.processAndSend(payload);
   }
   stop() {
-    this.eventsQueueIntervalId && (clearInterval(this.eventsQueueIntervalId), this.eventsQueueIntervalId = null, this.intervalActive = !1), this.circuitResetTimeoutId && (clearTimeout(this.circuitResetTimeoutId), this.circuitResetTimeoutId = null), this.circuitBreakerHealthCheckInterval && (clearInterval(this.circuitBreakerHealthCheckInterval), this.circuitBreakerHealthCheckInterval = null), this.eventFingerprints.clear(), this.lastFingerprintCleanup = Date.now(), this.circuitOpen = !1, this.circuitOpenTime = 0, this.failureCount = 0, this.backoffManager.reset(), this.lastEvent = null, this.errorRecoveryStats.circuitBreakerResets = 0, this.errorRecoveryStats.persistenceFailures = 0, this.errorRecoveryStats.networkTimeouts = 0, this.errorRecoveryStats.lastRecoveryAttempt = 0, this.dataSender.stop(), i.debug("EventManager", "EventManager stopped and all intervals cleaned up");
+    if (this.eventsQueueIntervalId) {
+      clearInterval(this.eventsQueueIntervalId);
+      this.eventsQueueIntervalId = null;
+      this.intervalActive = false;
+    }
+    if (this.circuitResetTimeoutId) {
+      clearTimeout(this.circuitResetTimeoutId);
+      this.circuitResetTimeoutId = null;
+    }
+    if (this.circuitBreakerHealthCheckInterval) {
+      clearInterval(this.circuitBreakerHealthCheckInterval);
+      this.circuitBreakerHealthCheckInterval = null;
+    }
+    this.eventFingerprints.clear();
+    this.lastFingerprintCleanup = Date.now();
+    this.circuitOpen = false;
+    this.circuitOpenTime = 0;
+    this.failureCount = 0;
+    this.backoffManager.reset();
+    this.lastEvent = null;
+    this.errorRecoveryStats.circuitBreakerResets = 0;
+    this.errorRecoveryStats.persistenceFailures = 0;
+    this.errorRecoveryStats.networkTimeouts = 0;
+    this.errorRecoveryStats.lastRecoveryAttempt = 0;
+    this.circuitRecoveryAttempts = 0;
+    this.dataSender.stop();
+    debugLog.debug("EventManager", "EventManager stopped and all intervals cleaned up");
   }
-  processAndSend(e) {
-    if (!this.get("config").ipExcluded) {
-      if (this.eventsQueue.push(e), this.eventsQueue.length > re) {
-        const t = this.eventsQueue.shift();
-        i.warn("EventManager", "Event queue overflow, oldest event removed", {
-          maxLength: re,
-          currentLength: this.eventsQueue.length,
-          removedEventType: t?.type
-        });
-      }
-      if (i.info("EventManager", `📥 Event captured: ${e.type}`, e), this.eventsQueueIntervalId || this.initEventsQueueInterval(), this.googleAnalytics && e.type === u.CUSTOM) {
-        const t = e.custom_event;
-        this.trackGoogleAnalyticsEvent(t);
-      }
+  processAndSend(payload) {
+    if (this.get("config").ipExcluded) {
+      return;
+    }
+    this.eventsQueue.push(payload);
+    if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
+      const removedEvent = this.eventsQueue.shift();
+      debugLog.warn("EventManager", "Event queue overflow, oldest event removed", {
+        maxLength: MAX_EVENTS_QUEUE_LENGTH,
+        currentLength: this.eventsQueue.length,
+        removedEventType: removedEvent?.type
+      });
+    }
+    debugLog.info("EventManager", `📥 Event captured: ${payload.type}`, payload);
+    if (!this.eventsQueueIntervalId) {
+      this.initEventsQueueInterval();
+    }
+    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
+      const customEvent = payload.custom_event;
+      this.trackGoogleAnalyticsEvent(customEvent);
     }
   }
-  trackGoogleAnalyticsEvent(e) {
-    this.get("config").mode === "qa" || this.get("config").mode === "debug" ? i.debug("EventManager", `Google Analytics event: ${JSON.stringify(e)}`) : this.googleAnalytics && this.googleAnalytics.trackEvent(e.name, e.metadata ?? {});
+  trackGoogleAnalyticsEvent(customEvent) {
+    if (this.get("config").mode === "qa" || this.get("config").mode === "debug") {
+      debugLog.debug("EventManager", `Google Analytics event: ${JSON.stringify(customEvent)}`);
+    } else if (this.googleAnalytics) {
+      this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
+    }
   }
   initEventsQueueInterval() {
-    if (this.eventsQueueIntervalId || this.intervalActive)
+    if (this.eventsQueueIntervalId || this.intervalActive) {
       return;
-    const t = this.get("config")?.id === "test" || this.get("config")?.mode === "debug" ? qe : We;
+    }
+    const isTestEnv = this.get("config")?.id === "test" || this.get("config")?.mode === "debug";
+    const interval = isTestEnv ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
     this.eventsQueueIntervalId = window.setInterval(() => {
-      (this.eventsQueue.length > 0 || this.circuitOpen) && this.sendEventsQueue();
-    }, t), this.intervalActive = !0;
+      if (this.eventsQueue.length > 0 || this.circuitOpen) {
+        this.sendEventsQueue();
+      }
+    }, interval);
+    this.intervalActive = true;
   }
   async flushImmediately() {
-    if (this.eventsQueue.length === 0)
-      return !0;
-    const e = this.buildEventsPayload(), t = [...this.eventsQueue], s = t.map((a) => a.timestamp + "_" + a.type), n = await this.dataSender.sendEventsQueueAsync(e);
-    return n ? (this.removeProcessedEvents(s), this.clearQueueInterval(), i.info("EventManager", "Flush immediately successful", {
-      eventCount: t.length,
-      remainingQueueLength: this.eventsQueue.length
-    })) : i.warn("EventManager", "Flush immediately failed, keeping events in queue", {
-      eventCount: t.length
-    }), n;
+    if (this.eventsQueue.length === 0) {
+      return true;
+    }
+    const body = this.buildEventsPayload();
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + "_" + e.type);
+    const success = await this.dataSender.sendEventsQueueAsync(body);
+    if (success) {
+      this.removeProcessedEvents(eventIds);
+      this.clearQueueInterval();
+      debugLog.info("EventManager", "Flush immediately successful", {
+        eventCount: eventsToSend.length,
+        remainingQueueLength: this.eventsQueue.length
+      });
+    } else {
+      debugLog.warn("EventManager", "Flush immediately failed, keeping events in queue", {
+        eventCount: eventsToSend.length
+      });
+    }
+    return success;
   }
   flushImmediatelySync() {
-    if (this.eventsQueue.length === 0)
-      return !0;
-    const e = this.buildEventsPayload(), t = [...this.eventsQueue], s = t.map((a) => a.timestamp + "_" + a.type), n = this.dataSender.sendEventsQueueSync(e);
-    return n ? (this.removeProcessedEvents(s), this.clearQueueInterval(), i.info("EventManager", "Flush immediately sync successful", {
-      eventCount: t.length,
-      remainingQueueLength: this.eventsQueue.length
-    })) : i.warn("EventManager", "Flush immediately sync failed, keeping events in queue", {
-      eventCount: t.length
-    }), n;
+    if (this.eventsQueue.length === 0) {
+      return true;
+    }
+    const body = this.buildEventsPayload();
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + "_" + e.type);
+    const success = this.dataSender.sendEventsQueueSync(body);
+    if (success) {
+      this.removeProcessedEvents(eventIds);
+      this.clearQueueInterval();
+      debugLog.info("EventManager", "Flush immediately sync successful", {
+        eventCount: eventsToSend.length,
+        remainingQueueLength: this.eventsQueue.length
+      });
+    } else {
+      debugLog.warn("EventManager", "Flush immediately sync failed, keeping events in queue", {
+        eventCount: eventsToSend.length
+      });
+    }
+    return success;
   }
   getQueueLength() {
     return this.eventsQueue.length;
@@ -1588,104 +2492,181 @@ class _t extends v {
   }
   async sendEventsQueue() {
     if (this.isSending) {
-      i.debug("EventManager", "Send already in progress, skipping");
+      debugLog.debug("EventManager", "Send already in progress, skipping");
       return;
     }
     if (!this.get("sessionId")) {
-      i.debug("EventManager", "No session ID available, skipping send");
+      debugLog.debug("EventManager", "No session ID available, skipping send");
       return;
     }
-    if (this.eventsQueue.length === 0 && !this.circuitOpen)
+    if (this.eventsQueue.length === 0 && !this.circuitOpen) {
       return;
+    }
     if (this.circuitOpen) {
-      const n = Date.now() - this.circuitOpenTime;
-      if (n >= D.RECOVERY_TIME_MS) {
-        if (!await this.handleCircuitBreakerRecovery()) {
+      const timeSinceOpen = Date.now() - this.circuitOpenTime;
+      if (timeSinceOpen >= CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
+        if (this.circuitRecoveryAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
+          debugLog.error("EventManager", "Circuit breaker permanently opened after max recovery attempts", {
+            attempts: this.circuitRecoveryAttempts,
+            maxAttempts: this.MAX_RECOVERY_ATTEMPTS
+          });
+          this.notifyCircuitBreakerPermanentFailure();
+          return;
+        }
+        this.circuitRecoveryAttempts++;
+        const recoverySuccess = await this.handleCircuitBreakerRecovery();
+        if (!recoverySuccess) {
           this.scheduleCircuitBreakerRetry();
           return;
         }
+        this.circuitRecoveryAttempts = 0;
       } else {
-        i.debug("EventManager", "Circuit breaker is open - skipping event sending", {
+        debugLog.debug("EventManager", "Circuit breaker is open - skipping event sending", {
           queueLength: this.eventsQueue.length,
           failureCount: this.failureCount,
-          timeSinceOpen: n,
-          recoveryTime: D.RECOVERY_TIME_MS
+          timeSinceOpen,
+          recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS
         });
         return;
       }
     }
-    const e = this.buildEventsPayload();
-    this.isSending = !0;
-    const t = [...this.eventsQueue], s = t.map((n) => n.timestamp + "_" + n.type);
-    await this.dataSender.sendEventsQueue(e, {
+    const body = this.buildEventsPayload();
+    this.isSending = true;
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e) => e.timestamp + "_" + e.type);
+    await this.dataSender.sendEventsQueue(body, {
       onSuccess: () => {
-        this.failureCount = 0, this.backoffManager.reset(), this.removeProcessedEvents(s), i.info("EventManager", "Events sent successfully", {
-          eventCount: t.length,
+        this.failureCount = 0;
+        this.backoffManager.reset();
+        this.removeProcessedEvents(eventIds);
+        debugLog.info("EventManager", "Events sent successfully", {
+          eventCount: eventsToSend.length,
           remainingQueueLength: this.eventsQueue.length
         });
       },
       onFailure: async () => {
-        this.failureCount++, i.warn("EventManager", "Events send failed, keeping in queue", {
-          eventCount: t.length,
+        this.failureCount++;
+        debugLog.warn("EventManager", "Events send failed, keeping in queue", {
+          eventCount: eventsToSend.length,
           failureCount: this.failureCount,
           networkTimeouts: this.errorRecoveryStats.networkTimeouts
-        }), this.failureCount >= Math.floor(this.MAX_FAILURES / 2) && await this.attemptSystemRecovery(), this.failureCount >= this.MAX_FAILURES && await this.openCircuitBreaker();
+        });
+        if (this.failureCount >= Math.floor(this.MAX_FAILURES / 2)) {
+          await this.attemptSystemRecovery();
+        }
+        if (this.failureCount >= this.MAX_FAILURES) {
+          await this.openCircuitBreaker();
+        }
       }
-    }), this.isSending = !1;
+    });
+    this.isSending = false;
   }
   buildEventsPayload() {
-    const e = /* @__PURE__ */ new Map();
-    for (const s of this.eventsQueue) {
-      let n = `${s.type}_${s.page_url}`;
-      s.click_data && (n += `_${s.click_data.x}_${s.click_data.y}`), s.scroll_data && (n += `_${s.scroll_data.depth}_${s.scroll_data.direction}`), s.custom_event && (n += `_${s.custom_event.name}`), s.web_vitals && (n += `_${s.web_vitals.type}`), e.has(n) || e.set(n, s);
+    const uniqueEvents = /* @__PURE__ */ new Map();
+    for (const event2 of this.eventsQueue) {
+      let key = `${event2.type}_${event2.page_url}`;
+      if (event2.click_data) {
+        key += `_${event2.click_data.x}_${event2.click_data.y}`;
+      }
+      if (event2.scroll_data) {
+        key += `_${event2.scroll_data.depth}_${event2.scroll_data.direction}`;
+      }
+      if (event2.custom_event) {
+        key += `_${event2.custom_event.name}`;
+      }
+      if (event2.web_vitals) {
+        key += `_${event2.web_vitals.type}`;
+      }
+      if (!uniqueEvents.has(key)) {
+        uniqueEvents.set(key, event2);
+      }
     }
-    const t = [...e.values()];
-    return t.sort((s, n) => s.timestamp - n.timestamp), {
+    const deduplicatedEvents = [...uniqueEvents.values()];
+    deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
+    return {
       user_id: this.get("userId"),
       session_id: this.get("sessionId"),
       device: this.get("device"),
-      events: t,
+      events: deduplicatedEvents,
       ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata }
     };
   }
   clearQueueInterval() {
-    this.eventsQueueIntervalId && (clearInterval(this.eventsQueueIntervalId), this.eventsQueueIntervalId = null, this.intervalActive = !1);
-  }
-  getEventFingerprint(e) {
-    const t = `${e.type}_${e.page_url}`;
-    if (e.click_data) {
-      const s = Math.round((e.click_data.x || 0) / F) * F, n = Math.round((e.click_data.y || 0) / F) * F;
-      return `${t}_${s}_${n}_${e.click_data.tag}_${e.click_data.id}`;
+    if (this.eventsQueueIntervalId) {
+      clearInterval(this.eventsQueueIntervalId);
+      this.eventsQueueIntervalId = null;
+      this.intervalActive = false;
     }
-    return e.scroll_data ? `${t}_${e.scroll_data.depth}_${e.scroll_data.direction}` : e.custom_event ? `${t}_${e.custom_event.name}` : e.web_vitals ? `${t}_${e.web_vitals.type}` : e.session_end_reason ? `${t}_${e.session_end_reason}` : e.session_start_recovered !== void 0 ? `${t}_${e.session_start_recovered}` : t;
   }
-  isDuplicatedEvent(e) {
-    const t = this.getEventFingerprint(e), s = this.eventFingerprints.get(t) ?? 0, n = Date.now();
-    return n - s < ge ? !0 : (this.eventFingerprints.set(t, n), this.cleanupOldFingerprints(), !1);
+  getEventFingerprint(event2) {
+    const key = `${event2.type}_${event2.page_url}`;
+    if (event2.click_data) {
+      const x = Math.round((event2.click_data.x || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
+      const y = Math.round((event2.click_data.y || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
+      return `${key}_${x}_${y}_${event2.click_data.tag}_${event2.click_data.id}`;
+    }
+    if (event2.scroll_data) {
+      return `${key}_${event2.scroll_data.depth}_${event2.scroll_data.direction}`;
+    }
+    if (event2.custom_event) {
+      return `${key}_${event2.custom_event.name}`;
+    }
+    if (event2.web_vitals) {
+      return `${key}_${event2.web_vitals.type}`;
+    }
+    if (event2.session_end_reason) {
+      return `${key}_${event2.session_end_reason}`;
+    }
+    if (event2.session_start_recovered !== void 0) {
+      return `${key}_${event2.session_start_recovered}`;
+    }
+    return key;
+  }
+  isDuplicatedEvent(event2) {
+    const fingerprint = this.getEventFingerprint(event2);
+    const lastTime = this.eventFingerprints.get(fingerprint) ?? 0;
+    const now = Date.now();
+    if (now - lastTime < DUPLICATE_EVENT_THRESHOLD_MS) {
+      return true;
+    }
+    this.eventFingerprints.set(fingerprint, now);
+    this.cleanupOldFingerprints();
+    return false;
   }
   /**
    * Manages fingerprint memory with proactive and reactive cleanup strategies
    */
   manageFingerprintMemory() {
-    const e = Date.now();
-    (this.eventFingerprints.size > ue || e - this.lastFingerprintCleanup > Be || this.eventFingerprints.size > X) && (this.eventFingerprints.size > X ? this.aggressiveFingerprintCleanup() : this.cleanupOldFingerprints(), this.lastFingerprintCleanup = e);
+    const now = Date.now();
+    const shouldCleanup = this.eventFingerprints.size > MAX_FINGERPRINTS || now - this.lastFingerprintCleanup > FINGERPRINT_CLEANUP_INTERVAL_MS || this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT;
+    if (!shouldCleanup) {
+      return;
+    }
+    if (this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
+      this.aggressiveFingerprintCleanup();
+    } else {
+      this.cleanupOldFingerprints();
+    }
+    this.lastFingerprintCleanup = now;
   }
   /**
    * Performs aggressive cleanup when hard limit is exceeded
    * Enhanced with recovery statistics tracking
    */
   aggressiveFingerprintCleanup() {
-    const e = Array.from(this.eventFingerprints.entries()), t = e.length;
-    e.sort((n, a) => n[1] - a[1]);
-    const s = Math.floor(e.length * 0.5);
-    for (let n = 0; n < s; n++)
-      this.eventFingerprints.delete(e[n][0]);
-    i.warn("EventManager", "Aggressive fingerprint cleanup performed", {
-      removed: s,
+    const entries = Array.from(this.eventFingerprints.entries());
+    const initialSize = entries.length;
+    entries.sort((a, b) => a[1] - b[1]);
+    const toRemove = Math.floor(entries.length * 0.5);
+    for (let i = 0; i < toRemove; i++) {
+      this.eventFingerprints.delete(entries[i][0]);
+    }
+    debugLog.warn("EventManager", "Aggressive fingerprint cleanup performed", {
+      removed: toRemove,
       remaining: this.eventFingerprints.size,
-      initialSize: t,
+      initialSize,
       trigger: "recovery_system",
-      hardLimit: X,
+      hardLimit: MAX_FINGERPRINTS_HARD_LIMIT,
       recoveryStats: this.errorRecoveryStats
     });
   }
@@ -1693,18 +2674,25 @@ class _t extends v {
    * Cleans up old fingerprints to prevent memory leaks
    */
   cleanupOldFingerprints() {
-    if (this.eventFingerprints.size <= ue)
+    if (this.eventFingerprints.size <= MAX_FINGERPRINTS) {
       return;
-    const e = Date.now(), t = ge * $e, s = [];
-    for (const [n, a] of this.eventFingerprints)
-      e - a > t && s.push(n);
-    for (const n of s)
-      this.eventFingerprints.delete(n);
-    i.debug("EventManager", "Cleaned up old event fingerprints", {
-      totalFingerprints: this.eventFingerprints.size + s.length,
-      cleanedCount: s.length,
+    }
+    const now = Date.now();
+    const cleanupThreshold = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
+    const keysToDelete = [];
+    for (const [key, timestamp] of this.eventFingerprints) {
+      if (now - timestamp > cleanupThreshold) {
+        keysToDelete.push(key);
+      }
+    }
+    for (const key of keysToDelete) {
+      this.eventFingerprints.delete(key);
+    }
+    debugLog.debug("EventManager", "Cleaned up old event fingerprints", {
+      totalFingerprints: this.eventFingerprints.size + keysToDelete.length,
+      cleanedCount: keysToDelete.length,
       remainingCount: this.eventFingerprints.size,
-      cleanupThreshold: t
+      cleanupThreshold
     });
   }
   /**
@@ -1713,361 +2701,566 @@ class _t extends v {
   setupCircuitBreakerHealthCheck() {
     this.circuitBreakerHealthCheckInterval = window.setInterval(async () => {
       if (this.circuitOpen) {
-        const e = Date.now() - this.circuitOpenTime;
-        e > he && (i.warn("EventManager", "Circuit breaker appears stuck, forcing reset", {
-          stuckTime: e,
-          maxStuckTime: he,
-          failureCount: this.failureCount
-        }), this.resetCircuitBreaker(), this.failureCount = 0, this.errorRecoveryStats.circuitBreakerResets++, await this.attemptSystemRecovery());
+        const stuckTime = Date.now() - this.circuitOpenTime;
+        if (stuckTime > CIRCUIT_BREAKER_MAX_STUCK_TIME_MS) {
+          debugLog.warn("EventManager", "Circuit breaker appears stuck, forcing reset", {
+            stuckTime,
+            maxStuckTime: CIRCUIT_BREAKER_MAX_STUCK_TIME_MS,
+            failureCount: this.failureCount
+          });
+          await this.resetCircuitBreaker();
+          this.failureCount = 0;
+          this.errorRecoveryStats.circuitBreakerResets++;
+          await this.attemptSystemRecovery();
+        }
       }
-    }, je);
+    }, CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS);
   }
   /**
    * Opens the circuit breaker with time-based recovery and event persistence
    */
   async openCircuitBreaker() {
-    this.circuitOpen = !0, this.circuitOpenTime = Date.now(), this.set("circuitBreakerOpen", !0);
-    const e = this.eventsQueue.length;
-    if (e > 0) {
-      const t = this.buildEventsPayload();
-      await this.dataSender.persistEventsForRecovery(t) ? i.info("EventManager", "Events persisted before circuit breaker opened", {
-        eventsCount: e
-      }) : i.error("EventManager", "Failed to persist events before circuit breaker opened");
+    this.circuitOpen = true;
+    this.circuitOpenTime = Date.now();
+    await this.set("circuitBreakerOpen", true);
+    const eventsCount = this.eventsQueue.length;
+    if (eventsCount > 0) {
+      const body = this.buildEventsPayload();
+      const persistSuccess = await this.dataSender.persistEventsForRecovery(body);
+      if (persistSuccess) {
+        debugLog.info("EventManager", "Events persisted before circuit breaker opened", {
+          eventsCount
+        });
+      } else {
+        debugLog.error("EventManager", "Failed to persist events before circuit breaker opened");
+      }
     }
-    this.eventsQueue = [], i.warn("EventManager", "Circuit breaker opened with time-based recovery", {
+    this.eventsQueue = [];
+    debugLog.warn("EventManager", "Circuit breaker opened with time-based recovery", {
       maxFailures: this.MAX_FAILURES,
-      eventsCount: e,
+      eventsCount,
       failureCount: this.failureCount,
-      recoveryTime: D.RECOVERY_TIME_MS,
+      recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
       openTime: this.circuitOpenTime
-    }), this.backoffManager.getNextDelay();
+    });
+    this.backoffManager.getNextDelay();
   }
   /**
    * Handles circuit breaker recovery attempt
    * Returns true if recovery was successful, false otherwise
    */
   async handleCircuitBreakerRecovery() {
-    this.resetCircuitBreaker(), this.isSending = !0;
-    let e = !1;
+    await this.resetCircuitBreaker();
+    this.isSending = true;
+    let recoverySuccess = false;
     try {
       await this.dataSender.recoverPersistedEvents({
         onSuccess: () => {
-          e = !0, this.failureCount = 0, this.backoffManager.reset(), i.info("EventManager", "Circuit breaker recovery successful");
+          recoverySuccess = true;
+          this.failureCount = 0;
+          this.backoffManager.reset();
+          debugLog.info("EventManager", "Circuit breaker recovery successful");
         },
         onFailure: () => {
-          e = !1, i.warn("EventManager", "Circuit breaker recovery failed");
+          recoverySuccess = false;
+          debugLog.warn("EventManager", "Circuit breaker recovery failed");
         }
       });
-    } catch (t) {
-      e = !1, i.error("EventManager", "Circuit breaker recovery error", { error: t });
+    } catch (error) {
+      recoverySuccess = false;
+      debugLog.error("EventManager", "Circuit breaker recovery error", { error });
     } finally {
-      this.isSending = !1;
+      this.isSending = false;
     }
-    return e;
+    return recoverySuccess;
   }
   /**
    * Schedules circuit breaker retry with progressive backoff
    */
   scheduleCircuitBreakerRetry() {
-    const e = this.backoffManager.getNextDelay();
-    this.circuitOpen = !0, this.circuitOpenTime = Date.now(), i.warn("EventManager", "Circuit breaker retry scheduled", {
-      nextRetryDelay: e,
+    const nextRetryDelay = this.backoffManager.getNextDelay();
+    this.circuitOpen = true;
+    this.circuitOpenTime = Date.now();
+    debugLog.warn("EventManager", "Circuit breaker retry scheduled", {
+      nextRetryDelay,
       failureCount: this.failureCount
     });
   }
   /**
    * Resets the circuit breaker and attempts to restore persisted events
    */
-  resetCircuitBreaker() {
-    this.circuitOpen = !1, this.circuitOpenTime = 0, this.failureCount = 0, this.circuitResetTimeoutId = null, this.set("circuitBreakerOpen", !1), this.dataSender.stop(), i.info("EventManager", "Circuit breaker reset completed", {
+  async resetCircuitBreaker() {
+    this.circuitOpen = false;
+    this.circuitOpenTime = 0;
+    this.failureCount = 0;
+    this.circuitResetTimeoutId = null;
+    await this.set("circuitBreakerOpen", false);
+    this.dataSender.stop();
+    debugLog.info("EventManager", "Circuit breaker reset completed", {
       currentQueueLength: this.eventsQueue.length,
       backoffDelay: this.backoffManager.getCurrentDelay()
     });
   }
-  removeProcessedEvents(e) {
-    const t = new Set(e);
-    this.eventsQueue = this.eventsQueue.filter((s) => {
-      const n = s.timestamp + "_" + s.type;
-      return !t.has(n);
+  /**
+   * Notifies system and users that circuit breaker has permanently failed
+   */
+  notifyCircuitBreakerPermanentFailure() {
+    debugLog.error("EventManager", "CIRCUIT BREAKER PERMANENTLY OPEN - MANUAL INTERVENTION REQUIRED", {
+      attempts: this.circuitRecoveryAttempts,
+      timestamp: Date.now(),
+      failureCount: this.failureCount
+    });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("tracelog:circuit-breaker-failure", {
+          detail: {
+            attempts: this.circuitRecoveryAttempts,
+            timestamp: Date.now(),
+            failureCount: this.failureCount
+          }
+        })
+      );
+    }
+  }
+  removeProcessedEvents(eventIds) {
+    const eventIdSet = new Set(eventIds);
+    this.eventsQueue = this.eventsQueue.filter((event2) => {
+      const eventId = event2.timestamp + "_" + event2.type;
+      return !eventIdSet.has(eventId);
     });
   }
   /**
    * Determines if system recovery should be attempted based on timing constraints
    */
   shouldAttemptRecovery() {
-    return Date.now() - this.errorRecoveryStats.lastRecoveryAttempt > 6e4;
+    const now = Date.now();
+    const timeSinceLastRecovery = now - this.errorRecoveryStats.lastRecoveryAttempt;
+    return timeSinceLastRecovery > 6e4;
   }
   /**
    * Attempts comprehensive system recovery from various error states
    */
   async attemptSystemRecovery() {
-    if (this.shouldAttemptRecovery()) {
-      this.errorRecoveryStats.lastRecoveryAttempt = Date.now(), i.info("EventManager", "Attempting system recovery", {
-        stats: this.errorRecoveryStats
-      });
-      try {
-        this.circuitOpen && Date.now() - this.circuitOpenTime > 2 * D.RECOVERY_TIME_MS && (this.resetCircuitBreaker(), this.errorRecoveryStats.circuitBreakerResets++), await this.recoverPersistedEvents(), this.aggressiveFingerprintCleanup(), i.info("EventManager", "System recovery completed successfully");
-      } catch (e) {
-        i.error("EventManager", "System recovery failed", { error: e });
+    if (!this.shouldAttemptRecovery()) {
+      return;
+    }
+    this.errorRecoveryStats.lastRecoveryAttempt = Date.now();
+    debugLog.info("EventManager", "Attempting system recovery", {
+      stats: this.errorRecoveryStats
+    });
+    try {
+      if (this.circuitOpen) {
+        const stuckTime = Date.now() - this.circuitOpenTime;
+        if (stuckTime > 2 * CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
+          await this.resetCircuitBreaker();
+          this.errorRecoveryStats.circuitBreakerResets++;
+        }
       }
+      await this.recoverPersistedEvents();
+      this.aggressiveFingerprintCleanup();
+      debugLog.info("EventManager", "System recovery completed successfully");
+    } catch (error) {
+      debugLog.error("EventManager", "System recovery failed", { error });
     }
   }
 }
-class Lt extends v {
+class UserManager extends StateManager {
   storageManager;
-  constructor(e) {
-    super(), this.storageManager = e;
+  constructor(storageManager) {
+    super();
+    this.storageManager = storageManager;
   }
   getId() {
-    const e = this.storageManager.getItem(ye(this.get("config")?.id));
-    if (e)
-      return e;
-    const t = $();
-    return this.storageManager.setItem(ye(this.get("config")?.id), t), t;
+    const storedUserId = this.storageManager.getItem(USER_ID_KEY(this.get("config")?.id));
+    if (storedUserId) {
+      return storedUserId;
+    }
+    const newUserId = generateUUID();
+    this.storageManager.setItem(USER_ID_KEY(this.get("config")?.id), newUserId);
+    return newUserId;
   }
 }
-class kt {
+class ActivityListenerManager {
   onActivity;
-  options = { passive: !0 };
-  constructor(e) {
-    this.onActivity = e;
+  options = { passive: true };
+  constructor(onActivity) {
+    this.onActivity = onActivity;
   }
   setup() {
     try {
-      window.addEventListener("scroll", this.onActivity, this.options), window.addEventListener("resize", this.onActivity, this.options), window.addEventListener("focus", this.onActivity, this.options);
-    } catch (e) {
-      throw i.error("ActivityListenerManager", "Failed to setup activity listeners", { error: e }), e;
+      window.addEventListener("scroll", this.onActivity, this.options);
+      window.addEventListener("resize", this.onActivity, this.options);
+      window.addEventListener("focus", this.onActivity, this.options);
+    } catch (error) {
+      debugLog.error("ActivityListenerManager", "Failed to setup activity listeners", { error });
+      throw error;
     }
   }
   cleanup() {
     try {
-      window.removeEventListener("scroll", this.onActivity), window.removeEventListener("resize", this.onActivity), window.removeEventListener("focus", this.onActivity);
-    } catch (e) {
-      i.warn("ActivityListenerManager", "Error during activity listeners cleanup", { error: e });
+      window.removeEventListener("scroll", this.onActivity);
+      window.removeEventListener("resize", this.onActivity);
+      window.removeEventListener("focus", this.onActivity);
+    } catch (error) {
+      debugLog.warn("ActivityListenerManager", "Error during activity listeners cleanup", { error });
     }
   }
 }
-class Pt {
+class TouchListenerManager {
   onActivity;
-  options = { passive: !0 };
+  options = { passive: true };
   motionThreshold;
-  constructor(e, t) {
-    this.onActivity = e, this.motionThreshold = t;
+  constructor(onActivity, motionThreshold) {
+    this.onActivity = onActivity;
+    this.motionThreshold = motionThreshold;
   }
   setup() {
     try {
-      window.addEventListener("touchstart", this.onActivity, this.options), window.addEventListener("touchmove", this.onActivity, this.options), window.addEventListener("touchend", this.onActivity, this.options), window.addEventListener("orientationchange", this.onActivity, this.options), "DeviceMotionEvent" in window && window.addEventListener("devicemotion", this.handleDeviceMotion, this.options);
-    } catch (e) {
-      throw i.error("TouchListenerManager", "Failed to setup touch listeners", { error: e }), e;
+      window.addEventListener("touchstart", this.onActivity, this.options);
+      window.addEventListener("touchmove", this.onActivity, this.options);
+      window.addEventListener("touchend", this.onActivity, this.options);
+      window.addEventListener("orientationchange", this.onActivity, this.options);
+      const hasDeviceMotion = "DeviceMotionEvent" in window;
+      if (hasDeviceMotion) {
+        window.addEventListener("devicemotion", this.handleDeviceMotion, this.options);
+      }
+    } catch (error) {
+      debugLog.error("TouchListenerManager", "Failed to setup touch listeners", { error });
+      throw error;
     }
   }
   cleanup() {
     try {
-      window.removeEventListener("touchstart", this.onActivity), window.removeEventListener("touchmove", this.onActivity), window.removeEventListener("touchend", this.onActivity), window.removeEventListener("orientationchange", this.onActivity), "DeviceMotionEvent" in window && window.removeEventListener("devicemotion", this.handleDeviceMotion);
-    } catch (e) {
-      i.warn("TouchListenerManager", "Error during touch listeners cleanup", { error: e });
+      window.removeEventListener("touchstart", this.onActivity);
+      window.removeEventListener("touchmove", this.onActivity);
+      window.removeEventListener("touchend", this.onActivity);
+      window.removeEventListener("orientationchange", this.onActivity);
+      if ("DeviceMotionEvent" in window) {
+        window.removeEventListener("devicemotion", this.handleDeviceMotion);
+      }
+    } catch (error) {
+      debugLog.warn("TouchListenerManager", "Error during touch listeners cleanup", { error });
     }
   }
-  handleDeviceMotion = (e) => {
+  handleDeviceMotion = (event2) => {
     try {
-      const t = e.acceleration;
-      t && Math.abs(t.x ?? 0) + Math.abs(t.y ?? 0) + Math.abs(t.z ?? 0) > this.motionThreshold && this.onActivity();
-    } catch (t) {
-      i.warn("TouchListenerManager", "Error handling device motion event", { error: t });
+      const acceleration = event2.acceleration;
+      if (acceleration) {
+        const totalAcceleration = Math.abs(acceleration.x ?? 0) + Math.abs(acceleration.y ?? 0) + Math.abs(acceleration.z ?? 0);
+        if (totalAcceleration > this.motionThreshold) {
+          this.onActivity();
+        }
+      }
+    } catch (error) {
+      debugLog.warn("TouchListenerManager", "Error handling device motion event", { error });
     }
   };
 }
-class Nt {
+class MouseListenerManager {
   onActivity;
-  options = { passive: !0 };
-  constructor(e) {
-    this.onActivity = e;
+  options = { passive: true };
+  constructor(onActivity) {
+    this.onActivity = onActivity;
   }
   setup() {
     try {
-      window.addEventListener("mousemove", this.onActivity, this.options), window.addEventListener("mousedown", this.onActivity, this.options), window.addEventListener("wheel", this.onActivity, this.options);
-    } catch (e) {
-      throw i.error("MouseListenerManager", "Failed to setup mouse listeners", { error: e }), e;
+      window.addEventListener("mousemove", this.onActivity, this.options);
+      window.addEventListener("mousedown", this.onActivity, this.options);
+      window.addEventListener("wheel", this.onActivity, this.options);
+    } catch (error) {
+      debugLog.error("MouseListenerManager", "Failed to setup mouse listeners", { error });
+      throw error;
     }
   }
   cleanup() {
     try {
-      window.removeEventListener("mousemove", this.onActivity), window.removeEventListener("mousedown", this.onActivity), window.removeEventListener("wheel", this.onActivity);
-    } catch (e) {
-      i.warn("MouseListenerManager", "Error during mouse listeners cleanup", { error: e });
+      window.removeEventListener("mousemove", this.onActivity);
+      window.removeEventListener("mousedown", this.onActivity);
+      window.removeEventListener("wheel", this.onActivity);
+    } catch (error) {
+      debugLog.warn("MouseListenerManager", "Error during mouse listeners cleanup", { error });
     }
   }
 }
-class Dt {
+class KeyboardListenerManager {
   onActivity;
-  options = { passive: !0 };
-  constructor(e) {
-    this.onActivity = e;
+  options = { passive: true };
+  constructor(onActivity) {
+    this.onActivity = onActivity;
   }
   setup() {
     try {
-      window.addEventListener("keydown", this.onActivity, this.options), window.addEventListener("keypress", this.onActivity, this.options);
-    } catch (e) {
-      throw i.error("KeyboardListenerManager", "Failed to setup keyboard listeners", { error: e }), e;
+      window.addEventListener("keydown", this.onActivity, this.options);
+      window.addEventListener("keypress", this.onActivity, this.options);
+    } catch (error) {
+      debugLog.error("KeyboardListenerManager", "Failed to setup keyboard listeners", { error });
+      throw error;
     }
   }
   cleanup() {
     try {
-      window.removeEventListener("keydown", this.onActivity), window.removeEventListener("keypress", this.onActivity);
-    } catch (e) {
-      i.warn("KeyboardListenerManager", "Error during keyboard listeners cleanup", { error: e });
+      window.removeEventListener("keydown", this.onActivity);
+      window.removeEventListener("keypress", this.onActivity);
+    } catch (error) {
+      debugLog.warn("KeyboardListenerManager", "Error during keyboard listeners cleanup", { error });
     }
   }
 }
-class Ht {
+class VisibilityListenerManager {
   onActivity;
   onVisibilityChange;
+  onNetworkRestored;
   isMobile;
-  options = { passive: !0 };
-  constructor(e, t, s) {
-    this.onActivity = e, this.onVisibilityChange = t, this.isMobile = s;
+  options = { passive: true };
+  constructor(onActivity, onVisibilityChange, isMobile, onNetworkRestored) {
+    this.onActivity = onActivity;
+    this.onVisibilityChange = onVisibilityChange;
+    this.onNetworkRestored = onNetworkRestored;
+    this.isMobile = isMobile;
   }
   setup() {
     try {
-      "visibilityState" in document && document.addEventListener("visibilitychange", this.onVisibilityChange, this.options), window.addEventListener("blur", this.onVisibilityChange, this.options), window.addEventListener("focus", this.onActivity, this.options), "onLine" in navigator && (window.addEventListener("online", this.onActivity, this.options), window.addEventListener("offline", this.onVisibilityChange, this.options)), this.isMobile && this.setupMobileEvents();
-    } catch (e) {
-      throw i.error("VisibilityListenerManager", "Failed to setup visibility listeners", { error: e }), e;
+      const hasVisibilityAPI = "visibilityState" in document;
+      if (hasVisibilityAPI) {
+        document.addEventListener("visibilitychange", this.onVisibilityChange, this.options);
+      }
+      window.addEventListener("blur", this.onVisibilityChange, this.options);
+      window.addEventListener("focus", this.onActivity, this.options);
+      const hasNetworkAPI = "onLine" in navigator;
+      if (hasNetworkAPI) {
+        window.addEventListener("online", this.handleOnline, this.options);
+        window.addEventListener("offline", this.onVisibilityChange, this.options);
+      }
+      if (this.isMobile) {
+        this.setupMobileEvents();
+      }
+    } catch (error) {
+      debugLog.error("VisibilityListenerManager", "Failed to setup visibility listeners", { error });
+      throw error;
     }
   }
   cleanup() {
     try {
-      "visibilityState" in document && document.removeEventListener("visibilitychange", this.onVisibilityChange), window.removeEventListener("blur", this.onVisibilityChange), window.removeEventListener("focus", this.onActivity), "onLine" in navigator && (window.removeEventListener("online", this.onActivity), window.removeEventListener("offline", this.onVisibilityChange)), this.isMobile && this.cleanupMobileEvents();
-    } catch (e) {
-      i.warn("VisibilityListenerManager", "Error during visibility listeners cleanup", { error: e });
+      if ("visibilityState" in document) {
+        document.removeEventListener("visibilitychange", this.onVisibilityChange);
+      }
+      window.removeEventListener("blur", this.onVisibilityChange);
+      window.removeEventListener("focus", this.onActivity);
+      if ("onLine" in navigator) {
+        window.removeEventListener("online", this.handleOnline);
+        window.removeEventListener("offline", this.onVisibilityChange);
+      }
+      if (this.isMobile) {
+        this.cleanupMobileEvents();
+      }
+    } catch (error) {
+      debugLog.warn("VisibilityListenerManager", "Error during visibility listeners cleanup", { error });
     }
   }
   setupMobileEvents() {
     try {
-      document.addEventListener("pause", this.onVisibilityChange, this.options), document.addEventListener("resume", this.onActivity, this.options), "orientation" in screen && screen.orientation.addEventListener("change", this.onActivity, this.options), window.addEventListener("pageshow", this.onActivity, this.options), window.addEventListener("pagehide", this.onActivity, this.options);
-    } catch (e) {
-      i.warn("VisibilityListenerManager", "Failed to setup mobile listeners", { error: e });
+      document.addEventListener("pause", this.onVisibilityChange, this.options);
+      document.addEventListener("resume", this.onActivity, this.options);
+      const hasOrientationAPI = "orientation" in screen;
+      if (hasOrientationAPI) {
+        screen.orientation.addEventListener("change", this.onActivity, this.options);
+      }
+      window.addEventListener("pageshow", this.onActivity, this.options);
+      window.addEventListener("pagehide", this.onActivity, this.options);
+    } catch (error) {
+      debugLog.warn("VisibilityListenerManager", "Failed to setup mobile listeners", { error });
     }
   }
   cleanupMobileEvents() {
     try {
-      document.removeEventListener("pause", this.onVisibilityChange), document.removeEventListener("resume", this.onActivity), "orientation" in screen && screen.orientation.removeEventListener("change", this.onActivity), window.removeEventListener("pageshow", this.onActivity), window.removeEventListener("pagehide", this.onActivity);
-    } catch (e) {
-      i.warn("VisibilityListenerManager", "Error during mobile listeners cleanup", { error: e });
+      document.removeEventListener("pause", this.onVisibilityChange);
+      document.removeEventListener("resume", this.onActivity);
+      if ("orientation" in screen) {
+        screen.orientation.removeEventListener("change", this.onActivity);
+      }
+      window.removeEventListener("pageshow", this.onActivity);
+      window.removeEventListener("pagehide", this.onActivity);
+    } catch (error) {
+      debugLog.warn("VisibilityListenerManager", "Error during mobile listeners cleanup", { error });
     }
   }
+  handleOnline = () => {
+    this.onActivity();
+    this.onNetworkRestored?.();
+  };
 }
-class Ut {
+class UnloadListenerManager {
   onInactivity;
-  options = { passive: !0 };
-  constructor(e) {
-    this.onInactivity = e;
+  options = { passive: true };
+  constructor(onInactivity) {
+    this.onInactivity = onInactivity;
   }
   setup() {
     try {
-      window.addEventListener("beforeunload", this.onInactivity, this.options), window.addEventListener("pagehide", this.onInactivity, this.options);
-    } catch (e) {
-      throw i.error("UnloadListenerManager", "Failed to setup unload listeners", { error: e }), e;
+      window.addEventListener("beforeunload", this.onInactivity, this.options);
+      window.addEventListener("pagehide", this.onInactivity, this.options);
+    } catch (error) {
+      debugLog.error("UnloadListenerManager", "Failed to setup unload listeners", { error });
+      throw error;
     }
   }
   cleanup() {
     try {
-      window.removeEventListener("beforeunload", this.onInactivity), window.removeEventListener("pagehide", this.onInactivity);
-    } catch (e) {
-      i.warn("UnloadListenerManager", "Error during unload listeners cleanup", { error: e });
+      window.removeEventListener("beforeunload", this.onInactivity);
+      window.removeEventListener("pagehide", this.onInactivity);
+    } catch (error) {
+      debugLog.warn("UnloadListenerManager", "Error during unload listeners cleanup", { error });
     }
   }
 }
-class Pe extends v {
+class SessionRecoveryManager extends StateManager {
   config;
   storageManager;
   eventManager;
   projectId;
   debugMode;
-  constructor(e, t, s, n) {
-    super(), this.storageManager = e, this.eventManager = s ?? null, this.projectId = t, this.debugMode = (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? !1, this.config = {
+  constructor(storageManager, projectId, eventManager, config) {
+    super();
+    this.storageManager = storageManager;
+    this.eventManager = eventManager ?? null;
+    this.projectId = projectId;
+    this.debugMode = (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false;
+    this.config = {
       recoveryWindowMs: this.calculateRecoveryWindow(),
-      maxRecoveryAttempts: et,
-      contextPreservation: !0,
-      ...n
+      maxRecoveryAttempts: MAX_SESSION_RECOVERY_ATTEMPTS,
+      contextPreservation: true,
+      ...config
     };
   }
   /**
    * Attempt to recover a session
    */
-  attemptSessionRecovery(e) {
-    this.debugMode && i.debug("SessionRecovery", "Attempting session recovery");
-    const t = this.getStoredRecoveryAttempts(), s = this.getLastRecoveryAttempt();
-    if (!this.canAttemptRecovery(s))
-      return this.debugMode && i.debug(
-        "SessionRecovery",
-        "Session recovery not possible - outside recovery window or max attempts reached"
-      ), {
-        recovered: !1
+  attemptSessionRecovery(currentSessionId) {
+    if (this.debugMode) {
+      debugLog.debug("SessionRecovery", "Attempting session recovery");
+    }
+    const recoveryAttempts = this.getStoredRecoveryAttempts();
+    const lastAttempt = this.getLastRecoveryAttempt();
+    if (!this.canAttemptRecovery(lastAttempt)) {
+      if (this.debugMode) {
+        debugLog.debug(
+          "SessionRecovery",
+          "Session recovery not possible - outside recovery window or max attempts reached"
+        );
+      }
+      return {
+        recovered: false
       };
-    const n = s?.context;
-    if (!n)
-      return this.debugMode && i.debug("SessionRecovery", "No session context available for recovery"), {
-        recovered: !1
+    }
+    const lastSessionContext = lastAttempt?.context;
+    if (!lastSessionContext) {
+      if (this.debugMode) {
+        debugLog.debug("SessionRecovery", "No session context available for recovery");
+      }
+      return {
+        recovered: false
       };
-    const a = Date.now();
-    if (a - n.lastActivity > this.config.recoveryWindowMs)
-      return this.debugMode && i.debug("SessionRecovery", "Session recovery failed - outside recovery window"), {
-        recovered: !1
+    }
+    const now = Date.now();
+    const timeSinceLastActivity = now - lastSessionContext.lastActivity;
+    if (timeSinceLastActivity > this.config.recoveryWindowMs) {
+      if (this.debugMode) {
+        debugLog.debug("SessionRecovery", "Session recovery failed - outside recovery window");
+      }
+      return {
+        recovered: false
       };
-    const d = n.sessionId, c = (s?.attempt ?? 0) + 1, l = {
-      sessionId: e ?? d,
-      timestamp: a,
-      attempt: c,
+    }
+    const recoveredSessionId = lastSessionContext.sessionId;
+    const attemptNumber = (lastAttempt?.attempt ?? 0) + 1;
+    const recoveryAttempt = {
+      sessionId: currentSessionId ?? recoveredSessionId,
+      timestamp: now,
+      attempt: attemptNumber,
       context: {
-        ...n,
-        recoveryAttempts: c,
-        lastActivity: a
+        ...lastSessionContext,
+        recoveryAttempts: attemptNumber,
+        lastActivity: now
       }
     };
-    return t.push(l), this.storeRecoveryAttempts(t), this.debugMode && i.debug("SessionRecovery", `Session recovery successful: recovery of session ${d}`), {
-      recovered: !0,
-      recoveredSessionId: d,
-      context: l.context
+    recoveryAttempts.push(recoveryAttempt);
+    this.storeRecoveryAttempts(recoveryAttempts);
+    if (this.debugMode) {
+      debugLog.debug("SessionRecovery", `Session recovery successful: recovery of session ${recoveredSessionId}`);
+    }
+    return {
+      recovered: true,
+      recoveredSessionId,
+      context: recoveryAttempt.context
     };
   }
   /**
    * Calculate the recovery window with bounds checking
    */
   calculateRecoveryWindow() {
-    const t = (this.get("config")?.sessionTimeout ?? _) * Ze, s = Math.max(
-      Math.min(t, K),
-      Y
+    const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+    const calculatedRecoveryWindow = sessionTimeout * SESSION_RECOVERY_WINDOW_MULTIPLIER;
+    const boundedRecoveryWindow = Math.max(
+      Math.min(calculatedRecoveryWindow, MAX_SESSION_RECOVERY_WINDOW_MS),
+      MIN_SESSION_RECOVERY_WINDOW_MS
     );
-    return this.debugMode && (t > K ? i.warn(
-      "SessionRecovery",
-      `Recovery window capped at ${K}ms (24h). Calculated: ${t}ms`
-    ) : t < Y && i.warn(
-      "SessionRecovery",
-      `Recovery window increased to minimum ${Y}ms (2min). Calculated: ${t}ms`
-    )), s;
+    if (this.debugMode) {
+      if (calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
+        debugLog.warn(
+          "SessionRecovery",
+          `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`
+        );
+      } else if (calculatedRecoveryWindow < MIN_SESSION_RECOVERY_WINDOW_MS) {
+        debugLog.warn(
+          "SessionRecovery",
+          `Recovery window increased to minimum ${MIN_SESSION_RECOVERY_WINDOW_MS}ms (2min). Calculated: ${calculatedRecoveryWindow}ms`
+        );
+      }
+    }
+    return boundedRecoveryWindow;
   }
   /**
    * Check if session recovery can be attempted
    */
-  canAttemptRecovery(e) {
-    return e ? !(Date.now() - e.context.lastActivity > this.config.recoveryWindowMs || e.attempt >= this.config.maxRecoveryAttempts) : !0;
+  canAttemptRecovery(lastAttempt) {
+    if (!lastAttempt) {
+      return true;
+    }
+    const now = Date.now();
+    const timeSinceLastActivity = now - lastAttempt.context.lastActivity;
+    if (timeSinceLastActivity > this.config.recoveryWindowMs) {
+      return false;
+    }
+    if (lastAttempt.attempt >= this.config.maxRecoveryAttempts) {
+      return false;
+    }
+    return true;
   }
   /**
    * Store session context for potential recovery
    */
-  storeSessionContextForRecovery(e) {
+  storeSessionContextForRecovery(sessionContext) {
     try {
-      const t = this.getStoredRecoveryAttempts(), s = {
-        sessionId: e.sessionId,
+      const recoveryAttempts = this.getStoredRecoveryAttempts();
+      const recoveryAttempt = {
+        sessionId: sessionContext.sessionId,
         timestamp: Date.now(),
         attempt: 0,
-        context: e
+        context: sessionContext
       };
-      t.push(s);
-      const n = 5;
-      t.length > n && t.splice(0, t.length - n), this.storeRecoveryAttempts(t), this.debugMode && i.debug("SessionRecovery", `Stored session context for recovery: ${e.sessionId}`);
-    } catch (t) {
-      this.debugMode && i.warn("SessionRecovery", "Failed to store session context for recovery", { error: t });
+      recoveryAttempts.push(recoveryAttempt);
+      const maxStoredRecoveryAttempts = 5;
+      if (recoveryAttempts.length > maxStoredRecoveryAttempts) {
+        recoveryAttempts.splice(0, recoveryAttempts.length - maxStoredRecoveryAttempts);
+      }
+      this.storeRecoveryAttempts(recoveryAttempts);
+      if (this.debugMode) {
+        debugLog.debug("SessionRecovery", `Stored session context for recovery: ${sessionContext.sessionId}`);
+      }
+    } catch (error) {
+      if (this.debugMode) {
+        debugLog.warn("SessionRecovery", "Failed to store session context for recovery", { error });
+      }
     }
   }
   /**
@@ -2075,15 +3268,15 @@ class Pe extends v {
    */
   getStoredRecoveryAttempts() {
     try {
-      const e = this.storageManager.getItem(V(this.projectId));
-      return e ? JSON.parse(e) : [];
-    } catch (e) {
+      const stored = this.storageManager.getItem(SESSION_RECOVERY_KEY(this.projectId));
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
       if (this.debugMode) {
-        const t = this.storageManager.getItem(V(this.projectId));
-        i.warn(
+        const stored = this.storageManager.getItem(SESSION_RECOVERY_KEY(this.projectId));
+        debugLog.warn(
           "SessionRecovery",
-          `Failed to parse stored recovery attempts for projectId ${this.projectId}. Data: ${t}`,
-          { error: e }
+          `Failed to parse stored recovery attempts for projectId ${this.projectId}. Data: ${stored}`,
+          { error }
         );
       }
       return [];
@@ -2092,34 +3285,46 @@ class Pe extends v {
   /**
    * Store recovery attempts
    */
-  storeRecoveryAttempts(e) {
+  storeRecoveryAttempts(attempts) {
     try {
-      this.storageManager.setItem(V(this.projectId), JSON.stringify(e));
-    } catch (t) {
-      this.debugMode && i.warn("SessionRecovery", "Failed to store recovery attempts", { error: t });
+      this.storageManager.setItem(SESSION_RECOVERY_KEY(this.projectId), JSON.stringify(attempts));
+    } catch (error) {
+      if (this.debugMode) {
+        debugLog.warn("SessionRecovery", "Failed to store recovery attempts", { error });
+      }
     }
   }
   /**
    * Get the last recovery attempt
    */
   getLastRecoveryAttempt() {
-    const e = this.getStoredRecoveryAttempts();
-    return e.length > 0 ? e[e.length - 1] : null;
+    const attempts = this.getStoredRecoveryAttempts();
+    return attempts.length > 0 ? attempts[attempts.length - 1] : null;
   }
   /**
    * Clean up old recovery attempts
    */
   cleanupOldRecoveryAttempts() {
-    const e = this.getStoredRecoveryAttempts(), t = Date.now(), s = e.filter((n) => t - n.timestamp <= this.config.recoveryWindowMs);
-    s.length !== e.length && (this.storeRecoveryAttempts(s), this.debugMode && i.debug("SessionRecovery", `Cleaned up ${e.length - s.length} old recovery attempts`));
+    const attempts = this.getStoredRecoveryAttempts();
+    const now = Date.now();
+    const validAttempts = attempts.filter((attempt) => now - attempt.timestamp <= this.config.recoveryWindowMs);
+    if (validAttempts.length !== attempts.length) {
+      this.storeRecoveryAttempts(validAttempts);
+      if (this.debugMode) {
+        debugLog.debug("SessionRecovery", `Cleaned up ${attempts.length - validAttempts.length} old recovery attempts`);
+      }
+    }
   }
   /**
    * Check if there's a recoverable session.
    * Returns false when no recovery attempts are stored.
    */
   hasRecoverableSession() {
-    const e = this.getLastRecoveryAttempt();
-    return e ? this.canAttemptRecovery(e) : !1;
+    const lastAttempt = this.getLastRecoveryAttempt();
+    if (!lastAttempt) {
+      return false;
+    }
+    return this.canAttemptRecovery(lastAttempt);
   }
   /**
    * Get recovery window in milliseconds
@@ -2137,10 +3342,13 @@ class Pe extends v {
    * Clear all stored recovery data
    */
   clearRecoveryData() {
-    this.storageManager.removeItem(V(this.projectId)), this.debugMode && i.debug("SessionRecovery", "Cleared all recovery data");
+    this.storageManager.removeItem(SESSION_RECOVERY_KEY(this.projectId));
+    if (this.debugMode) {
+      debugLog.debug("SessionRecovery", "Cleared all recovery data");
+    }
   }
 }
-class Ot extends v {
+class SessionManager extends StateManager {
   config;
   eventManager = null;
   storageManager = null;
@@ -2150,7 +3358,7 @@ class Ot extends v {
   onInactivity;
   // Recovery manager
   recoveryManager = null;
-  isSessionActive = !1;
+  isSessionActive = false;
   lastActivityTime = 0;
   inactivityTimer = null;
   sessionStartTime = 0;
@@ -2158,10 +3366,10 @@ class Ot extends v {
   // Track visibility change timeout for proper cleanup
   visibilityChangeTimeout = null;
   // Session End Management
-  pendingSessionEnd = !1;
+  pendingSessionEnd = false;
   sessionEndPromise = null;
   sessionEndLock = Promise.resolve({
-    success: !0,
+    success: true,
     reason: "manual_stop",
     timestamp: Date.now(),
     eventsFlushed: 0,
@@ -2197,19 +3405,33 @@ class Ot extends v {
     crossTabConflicts: 0,
     lastHealthCheck: Date.now()
   };
-  constructor(e, t, s, n, a) {
-    super(), this.config = {
-      throttleDelay: Ae,
-      visibilityTimeout: Qe,
-      motionThreshold: Ue,
-      timeout: this.get("config")?.sessionTimeout ?? _
-    }, this.sessionEndConfig = {
-      enablePageUnloadHandlers: !0,
+  constructor(onActivity, onInactivity, eventManager, storageManager, sessionEndConfig) {
+    super();
+    this.config = {
+      throttleDelay: DEFAULT_THROTTLE_DELAY_MS,
+      visibilityTimeout: DEFAULT_VISIBILITY_TIMEOUT_MS,
+      motionThreshold: DEFAULT_MOTION_THRESHOLD,
+      timeout: this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS
+    };
+    this.sessionEndConfig = {
+      enablePageUnloadHandlers: true,
       syncTimeoutMs: 1e3,
       maxRetries: 2,
-      debugMode: !1,
-      ...a
-    }, this.onActivity = e, this.onInactivity = t, this.eventManager = s ?? null, this.storageManager = n ?? null, this.deviceCapabilities = this.detectDeviceCapabilities(), this.initializeRecoveryManager(), this.initializeListenerManagers(), this.setupAllListeners(), this.sessionEndConfig.enablePageUnloadHandlers && this.setupPageUnloadHandlers(), i.debug("SessionManager", "SessionManager initialized", {
+      debugMode: false,
+      ...sessionEndConfig
+    };
+    this.onActivity = onActivity;
+    this.onInactivity = onInactivity;
+    this.eventManager = eventManager ?? null;
+    this.storageManager = storageManager ?? null;
+    this.deviceCapabilities = this.detectDeviceCapabilities();
+    this.initializeRecoveryManager();
+    this.initializeListenerManagers();
+    this.setupAllListeners();
+    if (this.sessionEndConfig.enablePageUnloadHandlers) {
+      this.setupPageUnloadHandlers();
+    }
+    debugLog.debug("SessionManager", "SessionManager initialized", {
       sessionTimeout: this.config.timeout,
       deviceCapabilities: this.deviceCapabilities,
       unloadHandlersEnabled: this.sessionEndConfig.enablePageUnloadHandlers
@@ -2220,23 +3442,24 @@ class Ot extends v {
    */
   initializeRecoveryManager() {
     if (!this.storageManager) return;
-    const e = this.get("config")?.id;
-    if (e)
-      try {
-        this.recoveryManager = new Pe(this.storageManager, e, this.eventManager ?? void 0), i.debug("SessionManager", "Recovery manager initialized", { projectId: e });
-      } catch (t) {
-        i.error("SessionManager", "Failed to initialize recovery manager", { error: t, projectId: e });
-      }
+    const projectId = this.get("config")?.id;
+    if (!projectId) return;
+    try {
+      this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager ?? void 0);
+      debugLog.debug("SessionManager", "Recovery manager initialized", { projectId });
+    } catch (error) {
+      debugLog.error("SessionManager", "Failed to initialize recovery manager", { error, projectId });
+    }
   }
   /**
    * Store session context for recovery
    */
   storeSessionContextForRecovery() {
     if (!this.recoveryManager) return;
-    const e = this.get("sessionId");
-    if (!e) return;
-    const t = {
-      sessionId: e,
+    const sessionId = this.get("sessionId");
+    if (!sessionId) return;
+    const sessionContext = {
+      sessionId,
       startTime: this.sessionStartTime,
       lastActivity: this.lastActivityTime,
       tabCount: 1,
@@ -2247,82 +3470,197 @@ class Ot extends v {
         pageUrl: this.get("pageUrl")
       }
     };
-    this.recoveryManager.storeSessionContextForRecovery(t);
+    this.recoveryManager.storeSessionContextForRecovery(sessionContext);
   }
   startSession() {
-    const e = Date.now();
-    let t = "", s = !1;
+    const now = Date.now();
+    let sessionId = "";
+    let wasRecovered = false;
     if (this.recoveryManager?.hasRecoverableSession()) {
-      const n = this.recoveryManager.attemptSessionRecovery();
-      n.recovered && n.recoveredSessionId && (t = n.recoveredSessionId, s = !0, this.trackSessionHealth("recovery"), n.context ? (this.sessionStartTime = n.context.startTime, this.lastActivityTime = e) : (this.sessionStartTime = e, this.lastActivityTime = e), i.info("SessionManager", "Session successfully recovered", {
-        sessionId: t,
-        recoveryAttempts: this.sessionHealth.recoveryAttempts
-      }));
+      const recoveryResult = this.recoveryManager.attemptSessionRecovery();
+      if (recoveryResult.recovered && recoveryResult.recoveredSessionId) {
+        sessionId = recoveryResult.recoveredSessionId;
+        wasRecovered = true;
+        this.trackSessionHealth("recovery");
+        if (recoveryResult.context) {
+          this.sessionStartTime = recoveryResult.context.startTime;
+          this.lastActivityTime = now;
+        } else {
+          this.sessionStartTime = now;
+          this.lastActivityTime = now;
+        }
+        debugLog.info("SessionManager", "Session successfully recovered", {
+          sessionId,
+          recoveryAttempts: this.sessionHealth.recoveryAttempts
+        });
+      }
     }
-    return s || (t = $(), this.sessionStartTime = e, this.lastActivityTime = e, i.info("SessionManager", "New session started", { sessionId: t })), this.isSessionActive = !0, this.resetInactivityTimer(), this.storeSessionContextForRecovery(), { sessionId: t, recovered: s };
+    if (!wasRecovered) {
+      sessionId = generateUUID();
+      this.sessionStartTime = now;
+      this.lastActivityTime = now;
+      debugLog.info("SessionManager", "New session started", { sessionId });
+    }
+    this.isSessionActive = true;
+    this.resetInactivityTimer();
+    this.storeSessionContextForRecovery();
+    return { sessionId, recovered: wasRecovered };
   }
   endSession() {
-    if (this.sessionStartTime === 0)
+    if (this.sessionStartTime === 0) {
       return 0;
-    const e = Date.now() - this.sessionStartTime;
-    return this.sessionStartTime = 0, this.isSessionActive = !1, this.inactivityTimer && (clearTimeout(this.inactivityTimer), this.inactivityTimer = null), e;
+    }
+    const durationMs = Date.now() - this.sessionStartTime;
+    this.sessionStartTime = 0;
+    this.isSessionActive = false;
+    if (this.inactivityTimer) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
+    return durationMs;
   }
   destroy() {
-    this.clearTimers(), this.cleanupAllListeners(), this.resetState(), this.cleanupHandlers.forEach((e) => e()), this.cleanupHandlers = [], this.pendingSessionEnd = !1, this.sessionEndPromise = null, this.sessionEndLock = Promise.resolve({
-      success: !0,
+    this.clearTimers();
+    this.cleanupAllListeners();
+    this.resetState();
+    this.cleanupHandlers.forEach((cleanup) => cleanup());
+    this.cleanupHandlers = [];
+    this.pendingSessionEnd = false;
+    this.sessionEndPromise = null;
+    this.sessionEndLock = Promise.resolve({
+      success: true,
       reason: "manual_stop",
       timestamp: Date.now(),
       eventsFlushed: 0,
       method: "async"
-    }), this.recoveryManager && (this.recoveryManager.cleanupOldRecoveryAttempts(), this.recoveryManager = null);
+    });
+    if (this.recoveryManager) {
+      this.recoveryManager.cleanupOldRecoveryAttempts();
+      this.recoveryManager = null;
+    }
   }
   detectDeviceCapabilities() {
-    const e = "ontouchstart" in window || navigator.maxTouchPoints > 0, t = window.matchMedia("(pointer: fine)").matches, s = !window.matchMedia("(pointer: coarse)").matches, n = Te() === E.Mobile;
-    return { hasTouch: e, hasMouse: t, hasKeyboard: s, isMobile: n };
+    const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    const hasMouse = window.matchMedia("(pointer: fine)").matches;
+    const hasKeyboard = !window.matchMedia("(pointer: coarse)").matches;
+    const isMobile = getDeviceType() === DeviceType.Mobile;
+    return { hasTouch, hasMouse, hasKeyboard, isMobile };
   }
   initializeListenerManagers() {
-    this.listenerManagers.push(new kt(this.handleActivity)), this.deviceCapabilities.hasTouch && this.listenerManagers.push(new Pt(this.handleActivity, this.config.motionThreshold)), this.deviceCapabilities.hasMouse && this.listenerManagers.push(new Nt(this.handleActivity)), this.deviceCapabilities.hasKeyboard && this.listenerManagers.push(new Dt(this.handleActivity)), this.listenerManagers.push(
-      new Ht(this.handleActivity, this.handleVisibilityChange, this.deviceCapabilities.isMobile)
-    ), this.listenerManagers.push(new Ut(this.handleInactivity));
+    this.listenerManagers.push(new ActivityListenerManager(this.handleActivity));
+    if (this.deviceCapabilities.hasTouch) {
+      this.listenerManagers.push(new TouchListenerManager(this.handleActivity, this.config.motionThreshold));
+    }
+    if (this.deviceCapabilities.hasMouse) {
+      this.listenerManagers.push(new MouseListenerManager(this.handleActivity));
+    }
+    if (this.deviceCapabilities.hasKeyboard) {
+      this.listenerManagers.push(new KeyboardListenerManager(this.handleActivity));
+    }
+    this.listenerManagers.push(
+      new VisibilityListenerManager(
+        this.handleActivity,
+        this.handleVisibilityChange,
+        this.deviceCapabilities.isMobile,
+        this.handleNetworkRestored
+      )
+    );
+    this.listenerManagers.push(new UnloadListenerManager(this.handleInactivity));
   }
   setupAllListeners() {
-    this.listenerManagers.forEach((e) => e.setup());
+    this.listenerManagers.forEach((manager) => manager.setup());
   }
   cleanupAllListeners() {
-    this.listenerManagers.forEach((e) => e.cleanup());
+    this.listenerManagers.forEach((manager) => manager.cleanup());
   }
   clearTimers() {
-    this.inactivityTimer && (clearTimeout(this.inactivityTimer), this.inactivityTimer = null), this.throttleTimeout && (clearTimeout(this.throttleTimeout), this.throttleTimeout = null);
+    if (this.inactivityTimer) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
+    if (this.throttleTimeout) {
+      clearTimeout(this.throttleTimeout);
+      this.throttleTimeout = null;
+    }
   }
   resetState() {
-    this.isSessionActive = !1, this.lastActivityTime = 0, this.sessionStartTime = 0;
+    this.isSessionActive = false;
+    this.lastActivityTime = 0;
+    this.sessionStartTime = 0;
   }
   handleActivity = () => {
-    const e = Date.now();
-    e - this.lastActivityTime < this.config.throttleDelay || (this.lastActivityTime = e, this.isSessionActive ? (this.onActivity(), this.resetInactivityTimer()) : (this.throttleTimeout && (clearTimeout(this.throttleTimeout), this.throttleTimeout = null), this.throttleTimeout = window.setTimeout(() => {
-      this.onActivity(), this.throttleTimeout = null;
-    }, 100)));
+    const now = Date.now();
+    if (now - this.lastActivityTime < this.config.throttleDelay) {
+      return;
+    }
+    this.lastActivityTime = now;
+    if (this.isSessionActive) {
+      this.onActivity();
+      this.resetInactivityTimer();
+    } else {
+      if (this.throttleTimeout) {
+        clearTimeout(this.throttleTimeout);
+        this.throttleTimeout = null;
+      }
+      this.throttleTimeout = window.setTimeout(() => {
+        this.onActivity();
+        this.throttleTimeout = null;
+      }, 100);
+    }
   };
   handleInactivity = () => {
-    this.trackSessionHealth("timeout"), this.onInactivity();
+    this.trackSessionHealth("timeout");
+    this.onInactivity();
+  };
+  handleNetworkRestored = async () => {
+    debugLog.info("SessionManager", "Network connection restored, attempting to recover persisted events");
+    if (this.eventManager) {
+      try {
+        await this.eventManager.recoverPersistedEvents();
+      } catch (error) {
+        debugLog.error("SessionManager", "Failed to recover events after network restoration", { error });
+      }
+    }
   };
   handleVisibilityChange = () => {
-    document.hidden ? this.isSessionActive && (this.inactivityTimer && (clearTimeout(this.inactivityTimer), this.inactivityTimer = null), this.inactivityTimer = window.setTimeout(this.handleInactivity, this.config.visibilityTimeout)) : this.handleActivity();
+    if (document.hidden) {
+      if (this.isSessionActive) {
+        if (this.inactivityTimer) {
+          clearTimeout(this.inactivityTimer);
+          this.inactivityTimer = null;
+        }
+        this.inactivityTimer = window.setTimeout(this.handleInactivity, this.config.visibilityTimeout);
+      }
+    } else {
+      this.handleActivity();
+    }
   };
   resetInactivityTimer = () => {
-    this.inactivityTimer && (clearTimeout(this.inactivityTimer), this.inactivityTimer = null), this.isSessionActive && (this.inactivityTimer = window.setTimeout(() => {
-      this.handleInactivity();
-    }, this.config.timeout));
+    if (this.inactivityTimer) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
+    if (this.isSessionActive) {
+      this.inactivityTimer = window.setTimeout(() => {
+        this.handleInactivity();
+      }, this.config.timeout);
+    }
   };
   clearInactivityTimer() {
-    this.inactivityTimer && (clearTimeout(this.inactivityTimer), this.inactivityTimer = null);
+    if (this.inactivityTimer) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
   }
-  shouldProceedWithSessionEnd(e) {
-    return !this.sessionEndReason || this.sessionEndPriority[e] > this.sessionEndPriority[this.sessionEndReason];
+  shouldProceedWithSessionEnd(reason) {
+    return !this.sessionEndReason || this.sessionEndPriority[reason] > this.sessionEndPriority[this.sessionEndReason];
   }
   async waitForCompletion() {
-    return this.sessionEndPromise ? await this.sessionEndPromise : {
-      success: !1,
+    if (this.sessionEndPromise) {
+      return await this.sessionEndPromise;
+    }
+    return {
+      success: false,
       reason: "inactivity",
       timestamp: Date.now(),
       eventsFlushed: 0,
@@ -2330,46 +3668,70 @@ class Ot extends v {
     };
   }
   createSessionEndTimeout() {
-    return new Promise((e, t) => {
+    return new Promise((_, reject) => {
       setTimeout(() => {
-        t(new Error("Session end timeout"));
+        reject(new Error("Session end timeout"));
       }, this.sessionEndConfig.syncTimeoutMs || 5e3);
     });
   }
-  async endSessionManaged(e) {
+  async endSessionManaged(reason) {
     return this.sessionEndLock = this.sessionEndLock.then(async () => {
-      if (this.sessionEndStats.totalSessionEnds++, this.sessionEndStats.reasonCounts[e]++, this.pendingSessionEnd)
-        return this.sessionEndStats.duplicatePrevented++, i.debug("SessionManager", "Session end already pending, waiting for completion", { reason: e }), this.waitForCompletion();
-      if (!this.shouldProceedWithSessionEnd(e))
-        return this.sessionEndConfig.debugMode && i.debug(
-          "SessionManager",
-          `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${e}`
-        ), {
-          success: !1,
-          reason: e,
+      this.sessionEndStats.totalSessionEnds++;
+      this.sessionEndStats.reasonCounts[reason]++;
+      if (this.pendingSessionEnd) {
+        this.sessionEndStats.duplicatePrevented++;
+        debugLog.debug("SessionManager", "Session end already pending, waiting for completion", { reason });
+        return this.waitForCompletion();
+      }
+      if (!this.shouldProceedWithSessionEnd(reason)) {
+        if (this.sessionEndConfig.debugMode) {
+          debugLog.debug(
+            "SessionManager",
+            `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`
+          );
+        }
+        return {
+          success: false,
+          reason,
           timestamp: Date.now(),
           eventsFlushed: 0,
           method: "async"
         };
-      this.sessionEndReason = e, this.pendingSessionEnd = !0, this.sessionEndPromise = Promise.race([
-        this.performSessionEnd(e, "async"),
+      }
+      this.sessionEndReason = reason;
+      this.pendingSessionEnd = true;
+      this.sessionEndPromise = Promise.race([
+        this.performSessionEnd(reason, "async"),
         this.createSessionEndTimeout()
       ]);
       try {
-        return await this.sessionEndPromise;
+        const result = await this.sessionEndPromise;
+        return result;
       } finally {
-        this.pendingSessionEnd = !1, this.sessionEndPromise = null, this.sessionEndReason = null;
+        this.pendingSessionEnd = false;
+        this.sessionEndPromise = null;
+        this.sessionEndReason = null;
       }
-    }).catch((t) => (this.pendingSessionEnd = !1, this.sessionEndPromise = null, this.sessionEndReason = null, i.error("SessionManager", "Session end lock failed, recovering", { error: t, reason: e }), {
-      success: !1,
-      reason: e,
-      timestamp: Date.now(),
-      eventsFlushed: 0,
-      method: "async"
-    }));
+    }).catch((error) => {
+      this.pendingSessionEnd = false;
+      this.sessionEndPromise = null;
+      this.sessionEndReason = null;
+      debugLog.error("SessionManager", "Session end lock failed, recovering", { error, reason });
+      return {
+        success: false,
+        reason,
+        timestamp: Date.now(),
+        eventsFlushed: 0,
+        method: "async"
+      };
+    });
   }
-  endSessionSafely(e, t) {
-    return t?.forceSync ?? (t?.allowSync && ["page_unload", "tab_closed"].includes(e)) ? this.endSessionManagedSync(e) : this.endSessionManaged(e);
+  endSessionSafely(reason, options) {
+    const shouldUseSync = options?.forceSync ?? (options?.allowSync && ["page_unload", "tab_closed"].includes(reason));
+    if (shouldUseSync) {
+      return this.endSessionManagedSync(reason);
+    }
+    return this.endSessionManaged(reason);
   }
   isPendingSessionEnd() {
     return this.pendingSessionEnd;
@@ -2377,9 +3739,9 @@ class Ot extends v {
   /**
    * Track session health events for monitoring and diagnostics
    */
-  trackSessionHealth(e) {
-    const t = Date.now();
-    switch (e) {
+  trackSessionHealth(event2) {
+    const now = Date.now();
+    switch (event2) {
       case "recovery":
         this.sessionHealth.recoveryAttempts++;
         break;
@@ -2390,157 +3752,242 @@ class Ot extends v {
         this.sessionHealth.crossTabConflicts++;
         break;
     }
-    this.sessionHealth.lastHealthCheck = t, this.sessionHealth.recoveryAttempts > 3 && this.eventManager && (this.eventManager.track({
-      type: u.CUSTOM,
-      custom_event: {
-        name: "session_health_degraded",
-        metadata: {
-          ...this.sessionHealth,
-          event_trigger: e
+    this.sessionHealth.lastHealthCheck = now;
+    if (this.sessionHealth.recoveryAttempts > 3 && this.eventManager) {
+      this.eventManager.track({
+        type: EventType.CUSTOM,
+        custom_event: {
+          name: "session_health_degraded",
+          metadata: {
+            ...this.sessionHealth,
+            event_trigger: event2
+          }
         }
+      });
+      if (this.sessionEndConfig.debugMode) {
+        debugLog.warn(
+          "SessionManager",
+          `Session health degraded: ${this.sessionHealth.recoveryAttempts} recovery attempts`
+        );
       }
-    }), this.sessionEndConfig.debugMode && i.warn(
-      "SessionManager",
-      `Session health degraded: ${this.sessionHealth.recoveryAttempts} recovery attempts`
-    )), this.sessionEndConfig.debugMode && i.debug("SessionManager", `Session health event tracked: ${e}`);
+    }
+    if (this.sessionEndConfig.debugMode) {
+      debugLog.debug("SessionManager", `Session health event tracked: ${event2}`);
+    }
   }
-  async performSessionEnd(e, t) {
-    const s = Date.now();
-    let n = 0;
+  async performSessionEnd(reason, method) {
+    const timestamp = Date.now();
+    let eventsFlushed = 0;
     try {
-      if (i.info("SessionManager", "Starting session end", { method: t, reason: e, timestamp: s }), this.eventManager) {
+      debugLog.info("SessionManager", "Starting session end", { method, reason, timestamp });
+      if (this.eventManager) {
         this.eventManager.track({
-          type: u.SESSION_END,
-          session_end_reason: e
-        }), n = this.eventManager.getQueueLength();
-        const o = await this.eventManager.flushImmediately();
-        this.cleanupSession();
-        const d = {
-          success: o,
-          reason: e,
-          timestamp: s,
-          eventsFlushed: n,
-          method: t
+          type: EventType.SESSION_END,
+          session_end_reason: reason
+        });
+        eventsFlushed = this.eventManager.getQueueLength();
+        const flushResult = await this.eventManager.flushImmediately();
+        await this.cleanupSessionAsync();
+        const result2 = {
+          success: flushResult,
+          reason,
+          timestamp,
+          eventsFlushed,
+          method
         };
-        return o ? this.sessionEndStats.successfulEnds++ : this.sessionEndStats.failedEnds++, d;
+        if (flushResult) {
+          this.sessionEndStats.successfulEnds++;
+        } else {
+          this.sessionEndStats.failedEnds++;
+        }
+        return result2;
       }
-      this.cleanupSession();
-      const a = {
-        success: !0,
-        reason: e,
-        timestamp: s,
+      await this.cleanupSessionAsync();
+      const result = {
+        success: true,
+        reason,
+        timestamp,
         eventsFlushed: 0,
-        method: t
+        method
       };
-      return this.sessionEndStats.successfulEnds++, a;
-    } catch (a) {
-      return this.sessionEndStats.failedEnds++, i.error("SessionManager", "Session end failed", { error: a, reason: e, method: t }), this.cleanupSession(), {
-        success: !1,
-        reason: e,
-        timestamp: s,
-        eventsFlushed: n,
-        method: t
+      this.sessionEndStats.successfulEnds++;
+      return result;
+    } catch (error) {
+      this.sessionEndStats.failedEnds++;
+      debugLog.error("SessionManager", "Session end failed", { error, reason, method });
+      await this.cleanupSessionAsync();
+      return {
+        success: false,
+        reason,
+        timestamp,
+        eventsFlushed,
+        method
       };
     }
   }
   cleanupSession() {
-    this.endSession(), this.clearTimers(), this.set("sessionId", null), this.set("hasStartSession", !1);
+    this.endSession();
+    this.clearTimers();
+    this.set("sessionId", null).catch((error) => {
+      debugLog.error("SessionManager", "Failed to clear sessionId", { error });
+    });
+    this.set("hasStartSession", false).catch((error) => {
+      debugLog.error("SessionManager", "Failed to clear hasStartSession", { error });
+    });
   }
-  endSessionManagedSync(e) {
-    if (this.sessionEndStats.totalSessionEnds++, this.sessionEndStats.reasonCounts[e]++, this.pendingSessionEnd && (this.sessionEndStats.duplicatePrevented++, i.warn("SessionManager", "Sync session end called while async end pending", { reason: e })), !this.shouldProceedWithSessionEnd(e))
-      return this.sessionEndConfig.debugMode && i.debug(
-        "SessionManager",
-        `Sync session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${e}`
-      ), {
-        success: !1,
-        reason: e,
+  async cleanupSessionAsync() {
+    this.endSession();
+    this.clearTimers();
+    await this.set("sessionId", null);
+    await this.set("hasStartSession", false);
+  }
+  endSessionManagedSync(reason) {
+    this.sessionEndStats.totalSessionEnds++;
+    this.sessionEndStats.reasonCounts[reason]++;
+    if (this.pendingSessionEnd) {
+      this.sessionEndStats.duplicatePrevented++;
+      debugLog.warn("SessionManager", "Sync session end called while async end pending", { reason });
+    }
+    if (!this.shouldProceedWithSessionEnd(reason)) {
+      if (this.sessionEndConfig.debugMode) {
+        debugLog.debug(
+          "SessionManager",
+          `Sync session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`
+        );
+      }
+      return {
+        success: false,
+        reason,
         timestamp: Date.now(),
         eventsFlushed: 0,
         method: "sync"
       };
-    this.sessionEndReason = e, this.pendingSessionEnd = !0;
+    }
+    this.sessionEndReason = reason;
+    this.pendingSessionEnd = true;
     try {
-      return this.performSessionEndSync(e);
+      return this.performSessionEndSync(reason);
     } finally {
-      this.pendingSessionEnd = !1, this.sessionEndPromise = null, this.sessionEndReason = null;
+      this.pendingSessionEnd = false;
+      this.sessionEndPromise = null;
+      this.sessionEndReason = null;
     }
   }
-  performSessionEndSync(e) {
-    const t = Date.now();
-    let s = 0;
+  performSessionEndSync(reason) {
+    const timestamp = Date.now();
+    let eventsFlushed = 0;
     try {
       if (this.eventManager) {
         this.eventManager.track({
-          type: u.SESSION_END,
-          session_end_reason: e
-        }), s = this.eventManager.getQueueLength();
-        const a = this.eventManager.flushImmediatelySync();
+          type: EventType.SESSION_END,
+          session_end_reason: reason
+        });
+        eventsFlushed = this.eventManager.getQueueLength();
+        const success = this.eventManager.flushImmediatelySync();
         this.cleanupSession();
-        const o = {
-          success: a,
-          reason: e,
-          timestamp: t,
-          eventsFlushed: s,
+        const result2 = {
+          success,
+          reason,
+          timestamp,
+          eventsFlushed,
           method: "sync"
         };
-        return a ? this.sessionEndStats.successfulEnds++ : this.sessionEndStats.failedEnds++, o;
+        if (success) {
+          this.sessionEndStats.successfulEnds++;
+        } else {
+          this.sessionEndStats.failedEnds++;
+        }
+        return result2;
       }
       this.cleanupSession();
-      const n = {
-        success: !0,
-        reason: e,
-        timestamp: t,
+      const result = {
+        success: true,
+        reason,
+        timestamp,
         eventsFlushed: 0,
         method: "sync"
       };
-      return this.sessionEndStats.successfulEnds++, n;
-    } catch (n) {
-      return this.sessionEndStats.failedEnds++, this.cleanupSession(), i.error("SessionManager", "Sync session end failed", { error: n, reason: e }), {
-        success: !1,
-        reason: e,
-        timestamp: t,
-        eventsFlushed: s,
+      this.sessionEndStats.successfulEnds++;
+      return result;
+    } catch (error) {
+      this.sessionEndStats.failedEnds++;
+      this.cleanupSession();
+      debugLog.error("SessionManager", "Sync session end failed", { error, reason });
+      return {
+        success: false,
+        reason,
+        timestamp,
+        eventsFlushed,
         method: "sync"
       };
     }
   }
   setupPageUnloadHandlers() {
-    let e = !1;
-    const t = () => {
-      e || !this.get("sessionId") || (e = !0, this.clearInactivityTimer(), this.endSessionSafely("page_unload", { forceSync: !0 }));
-    }, s = () => {
-      t();
-    }, n = (o) => {
-      o.persisted || t();
-    }, a = () => {
-      document.visibilityState === "hidden" && this.get("sessionId") && !e && (this.visibilityChangeTimeout = window.setTimeout(() => {
-        document.visibilityState === "hidden" && this.get("sessionId") && !e && t(), this.visibilityChangeTimeout = null;
-      }, 1e3));
+    let unloadHandled = false;
+    const handlePageUnload = () => {
+      if (unloadHandled || !this.get("sessionId")) {
+        return;
+      }
+      unloadHandled = true;
+      this.clearInactivityTimer();
+      this.endSessionSafely("page_unload", { forceSync: true });
     };
-    window.addEventListener("beforeunload", s), window.addEventListener("pagehide", n), document.addEventListener("visibilitychange", a), this.cleanupHandlers.push(
-      () => window.removeEventListener("beforeunload", s),
-      () => window.removeEventListener("pagehide", n),
-      () => document.removeEventListener("visibilitychange", a),
+    const beforeUnloadHandler = () => {
+      handlePageUnload();
+    };
+    const pageHideHandler = (event2) => {
+      if (!event2.persisted) {
+        handlePageUnload();
+      }
+    };
+    const visibilityChangeHandler = () => {
+      if (document.visibilityState === "hidden" && this.get("sessionId") && !unloadHandled) {
+        this.visibilityChangeTimeout = window.setTimeout(() => {
+          if (document.visibilityState === "hidden" && this.get("sessionId") && !unloadHandled) {
+            handlePageUnload();
+          }
+          this.visibilityChangeTimeout = null;
+        }, 1e3);
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+    window.addEventListener("pagehide", pageHideHandler);
+    document.addEventListener("visibilitychange", visibilityChangeHandler);
+    this.cleanupHandlers.push(
+      () => window.removeEventListener("beforeunload", beforeUnloadHandler),
+      () => window.removeEventListener("pagehide", pageHideHandler),
+      () => document.removeEventListener("visibilitychange", visibilityChangeHandler),
       () => {
-        this.visibilityChangeTimeout && (clearTimeout(this.visibilityChangeTimeout), this.visibilityChangeTimeout = null);
+        if (this.visibilityChangeTimeout) {
+          clearTimeout(this.visibilityChangeTimeout);
+          this.visibilityChangeTimeout = null;
+        }
       }
     );
   }
 }
-class xt extends v {
-  constructor(e, t, s, n) {
-    super(), this.callbacks = n, this.storageManager = e, this.projectId = t, this.tabId = $(), this.config = {
-      tabHeartbeatIntervalMs: Ye,
-      tabElectionTimeoutMs: Je,
-      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? !1,
-      ...s
-    }, this.tabInfo = {
+class CrossTabSessionManager extends StateManager {
+  constructor(storageManager, projectId, config, callbacks) {
+    super();
+    this.callbacks = callbacks;
+    this.storageManager = storageManager;
+    this.projectId = projectId;
+    this.tabId = generateUUID();
+    this.config = {
+      tabHeartbeatIntervalMs: TAB_HEARTBEAT_INTERVAL_MS,
+      tabElectionTimeoutMs: TAB_ELECTION_TIMEOUT_MS,
+      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false,
+      ...config
+    };
+    this.tabInfo = {
       id: this.tabId,
       lastHeartbeat: Date.now(),
-      isLeader: !1,
+      isLeader: false,
       sessionId: "",
       startTime: Date.now()
-    }, this.broadcastChannel = this.initializeBroadcastChannel(), this.initialize();
+    };
+    this.broadcastChannel = this.initializeBroadcastChannel();
+    this.initialize();
   }
   config;
   storageManager;
@@ -2549,11 +3996,11 @@ class xt extends v {
   tabInfo;
   projectId;
   leaderTabId = null;
-  isTabLeader = !1;
+  isTabLeader = false;
   heartbeatInterval = null;
   electionTimeout = null;
   cleanupTimeout = null;
-  sessionEnded = !1;
+  sessionEnded = false;
   // Additional timeout tracking for proper cleanup
   fallbackLeadershipTimeout = null;
   electionDelayTimeout = null;
@@ -2565,13 +4012,18 @@ class xt extends v {
    * Initialize BroadcastChannel if supported
    */
   initializeBroadcastChannel() {
-    if (!this.isBroadcastChannelSupported())
+    if (!this.isBroadcastChannelSupported()) {
       return null;
+    }
     try {
-      const e = new BroadcastChannel(at(this.projectId));
-      return this.setupBroadcastListeners(e), e;
-    } catch (e) {
-      return this.config.debugMode && i.warn("CrossTabSession", "Failed to initialize BroadcastChannel", { error: e }), null;
+      const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME(this.projectId));
+      this.setupBroadcastListeners(channel);
+      return channel;
+    } catch (error) {
+      if (this.config.debugMode) {
+        debugLog.warn("CrossTabSession", "Failed to initialize BroadcastChannel", { error });
+      }
+      return null;
     }
   }
   /**
@@ -2582,248 +4034,396 @@ class xt extends v {
       this.becomeLeader();
       return;
     }
-    const e = this.getStoredSessionContext();
-    e ? this.tryJoinExistingSession(e) : this.startLeaderElection(), this.startHeartbeat(), this.broadcastChannel && this.setupLeadershipFallback();
+    const existingSession = this.getStoredSessionContext();
+    if (existingSession) {
+      this.tryJoinExistingSession(existingSession);
+    } else {
+      this.startLeaderElection();
+    }
+    this.startHeartbeat();
+    if (this.broadcastChannel) {
+      this.setupLeadershipFallback();
+    }
   }
   /**
    * Check if this tab should be the session leader
    */
-  tryJoinExistingSession(e) {
-    this.config.debugMode && i.debug("CrossTabSession", `Attempting to join existing session: ${e.sessionId}`), this.tabInfo.sessionId = e.sessionId, this.requestLeadershipStatus(), e.tabCount += 1, e.lastActivity = Date.now(), this.storeSessionContext(e), this.callbacks?.onTabActivity && this.callbacks.onTabActivity();
+  tryJoinExistingSession(sessionContext) {
+    if (this.config.debugMode) {
+      debugLog.debug("CrossTabSession", `Attempting to join existing session: ${sessionContext.sessionId}`);
+    }
+    this.tabInfo.sessionId = sessionContext.sessionId;
+    this.requestLeadershipStatus();
+    sessionContext.tabCount += 1;
+    sessionContext.lastActivity = Date.now();
+    this.storeSessionContext(sessionContext);
+    if (this.callbacks?.onTabActivity) {
+      this.callbacks.onTabActivity();
+    }
   }
   /**
    * Request leadership status from other tabs
    */
   requestLeadershipStatus() {
     if (!this.broadcastChannel) return;
-    this.electionTimeout && (clearTimeout(this.electionTimeout), this.electionTimeout = null);
-    const e = {
+    if (this.electionTimeout) {
+      clearTimeout(this.electionTimeout);
+      this.electionTimeout = null;
+    }
+    const message = {
       type: "election_request",
       tabId: this.tabId,
       sessionId: this.tabInfo.sessionId,
       timestamp: Date.now()
     };
-    this.broadcastChannel.postMessage(e);
-    const t = Math.floor(Math.random() * 500);
+    this.broadcastChannel.postMessage(message);
+    const randomDelay = Math.floor(Math.random() * 500);
     this.electionTimeout = window.setTimeout(() => {
-      this.isTabLeader || this.becomeLeader();
-    }, this.config.tabElectionTimeoutMs + t);
+      if (!this.isTabLeader) {
+        this.becomeLeader();
+      }
+    }, this.config.tabElectionTimeoutMs + randomDelay);
   }
   /**
    * Start leader election process with debouncing to prevent excessive elections
    */
   startLeaderElection() {
     if (this.electionTimeout) {
-      this.config.debugMode && i.debug("CrossTabSession", "Leader election already in progress, skipping");
+      if (this.config.debugMode) {
+        debugLog.debug("CrossTabSession", "Leader election already in progress, skipping");
+      }
       return;
     }
-    this.config.debugMode && i.debug("CrossTabSession", "Starting leader election");
-    const e = Math.floor(Math.random() * 50) + 10;
+    if (this.config.debugMode) {
+      debugLog.debug("CrossTabSession", "Starting leader election");
+    }
+    const randomDelay = Math.floor(Math.random() * 50) + 10;
     this.electionTimeout = window.setTimeout(() => {
-      this.electionTimeout = null, this.requestLeadershipStatus();
-    }, e);
+      this.electionTimeout = null;
+      this.requestLeadershipStatus();
+    }, randomDelay);
   }
   /**
    * Become the session leader
    */
   becomeLeader() {
-    if (!this.isTabLeader) {
-      if (this.isTabLeader = !0, this.tabInfo.isLeader = !0, this.leaderTabId = this.tabId, this.config.debugMode && i.debug("CrossTabSession", `Tab ${this.tabId} became session leader`), this.electionTimeout && (clearTimeout(this.electionTimeout), this.electionTimeout = null), this.tabInfo.sessionId) {
-        const e = this.getStoredSessionContext();
-        e && (e.lastActivity = Date.now(), this.storeSessionContext(e));
-      } else {
-        const e = $();
-        this.tabInfo.sessionId = e;
-        const t = {
-          sessionId: e,
-          startTime: Date.now(),
-          lastActivity: Date.now(),
-          tabCount: 1,
-          recoveryAttempts: 0
-        };
-        this.storeSessionContext(t), this.callbacks?.onSessionStart && this.callbacks.onSessionStart(e), this.announceSessionStart(e);
-      }
-      this.storeTabInfo(), this.announceLeadership();
+    if (this.isTabLeader) {
+      return;
     }
+    this.isTabLeader = true;
+    this.tabInfo.isLeader = true;
+    this.leaderTabId = this.tabId;
+    if (this.config.debugMode) {
+      debugLog.debug("CrossTabSession", `Tab ${this.tabId} became session leader`);
+    }
+    if (this.electionTimeout) {
+      clearTimeout(this.electionTimeout);
+      this.electionTimeout = null;
+    }
+    if (!this.tabInfo.sessionId) {
+      const sessionId = generateUUID();
+      this.tabInfo.sessionId = sessionId;
+      const sessionContext = {
+        sessionId,
+        startTime: Date.now(),
+        lastActivity: Date.now(),
+        tabCount: 1,
+        recoveryAttempts: 0
+      };
+      this.storeSessionContext(sessionContext);
+      if (this.callbacks?.onSessionStart) {
+        this.callbacks.onSessionStart(sessionId);
+      }
+      this.announceSessionStart(sessionId);
+    } else {
+      const sessionContext = this.getStoredSessionContext();
+      if (sessionContext) {
+        sessionContext.lastActivity = Date.now();
+        this.storeSessionContext(sessionContext);
+      }
+    }
+    this.storeTabInfo();
+    this.announceLeadership();
   }
   /**
    * Announce session start to other tabs
    */
-  announceSessionStart(e) {
+  announceSessionStart(sessionId) {
     if (!this.broadcastChannel) return;
-    const t = {
+    const message = {
       type: "session_start",
       tabId: this.tabId,
-      sessionId: e,
+      sessionId,
       timestamp: Date.now()
     };
-    this.broadcastChannel.postMessage(t);
+    this.broadcastChannel.postMessage(message);
   }
   /**
    * Announce leadership to other tabs
    */
   announceLeadership() {
     if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
-    const e = {
+    const message = {
       type: "election_response",
       tabId: this.tabId,
       sessionId: this.tabInfo.sessionId,
       timestamp: Date.now(),
-      data: { isLeader: !0 }
+      data: { isLeader: true }
     };
-    this.broadcastChannel.postMessage(e);
+    this.broadcastChannel.postMessage(message);
   }
   /**
    * Clean up health check interval to prevent memory leaks
    */
   cleanupHealthCheckInterval() {
-    this.leaderHealthCheckInterval && (clearInterval(this.leaderHealthCheckInterval), this.leaderHealthCheckInterval = null, i.debug("CrossTabSession", "Health check interval cleaned up"));
+    if (this.leaderHealthCheckInterval) {
+      clearInterval(this.leaderHealthCheckInterval);
+      this.leaderHealthCheckInterval = null;
+      debugLog.debug("CrossTabSession", "Health check interval cleaned up");
+    }
   }
   /**
    * Setup fallback mechanism to ensure a leader is always elected
    */
   setupLeadershipFallback() {
-    const e = this.config.tabElectionTimeoutMs + 1500;
+    const fallbackDelay = this.config.tabElectionTimeoutMs + 1500;
     this.fallbackLeadershipTimeout = window.setTimeout(() => {
-      !this.isTabLeader && !this.leaderTabId && (this.tabInfo.sessionId ? (this.config.debugMode && i.warn(
-        "CrossTabSession",
-        `No leader detected after ${e}ms, forcing leadership for tab ${this.tabId}`
-      ), this.becomeLeader()) : (this.config.debugMode && i.warn(
-        "CrossTabSession",
-        `No session or leader detected after ${e}ms, starting new session for tab ${this.tabId}`
-      ), this.becomeLeader())), this.fallbackLeadershipTimeout = null;
-    }, e), this.leaderHealthCheckInterval = window.setInterval(() => {
+      if (!this.isTabLeader && !this.leaderTabId) {
+        if (this.tabInfo.sessionId) {
+          if (this.config.debugMode) {
+            debugLog.warn(
+              "CrossTabSession",
+              `No leader detected after ${fallbackDelay}ms, forcing leadership for tab ${this.tabId}`
+            );
+          }
+          this.becomeLeader();
+        } else {
+          if (this.config.debugMode) {
+            debugLog.warn(
+              "CrossTabSession",
+              `No session or leader detected after ${fallbackDelay}ms, starting new session for tab ${this.tabId}`
+            );
+          }
+          this.becomeLeader();
+        }
+      }
+      this.fallbackLeadershipTimeout = null;
+    }, fallbackDelay);
+    this.leaderHealthCheckInterval = window.setInterval(() => {
       if (!this.sessionEnded && this.leaderTabId && !this.isTabLeader) {
-        const s = this.getStoredSessionContext();
-        if (s) {
-          const n = Date.now() - s.lastActivity, a = this.config.tabHeartbeatIntervalMs * 3;
-          n > a && (this.config.debugMode && i.warn(
-            "CrossTabSession",
-            `Leader tab appears inactive (${n}ms), attempting to become leader`
-          ), this.leaderTabId = null, this.startLeaderElection());
+        const sessionContext = this.getStoredSessionContext();
+        if (sessionContext) {
+          const timeSinceLastActivity = Date.now() - sessionContext.lastActivity;
+          const maxInactiveTime = this.config.tabHeartbeatIntervalMs * 3;
+          if (timeSinceLastActivity > maxInactiveTime) {
+            if (this.config.debugMode) {
+              debugLog.warn(
+                "CrossTabSession",
+                `Leader tab appears inactive (${timeSinceLastActivity}ms), attempting to become leader`
+              );
+            }
+            this.leaderTabId = null;
+            this.startLeaderElection();
+          }
         }
       }
     }, this.config.tabHeartbeatIntervalMs * 2);
-    const t = this.endSession.bind(this);
-    this.endSession = (s) => {
-      this.cleanupHealthCheckInterval(), this.fallbackLeadershipTimeout && (clearTimeout(this.fallbackLeadershipTimeout), this.fallbackLeadershipTimeout = null), t(s);
+    const originalEndSession = this.endSession.bind(this);
+    this.endSession = (reason) => {
+      this.cleanupHealthCheckInterval();
+      if (this.fallbackLeadershipTimeout) {
+        clearTimeout(this.fallbackLeadershipTimeout);
+        this.fallbackLeadershipTimeout = null;
+      }
+      originalEndSession(reason);
     };
   }
   /**
    * Setup BroadcastChannel event listeners
    */
-  setupBroadcastListeners(e) {
-    e.addEventListener("message", (t) => {
-      const s = t.data;
-      s.tabId !== this.tabId && this.handleCrossTabMessage(s);
+  setupBroadcastListeners(channel) {
+    channel.addEventListener("message", (event2) => {
+      const message = event2.data;
+      if (message.tabId === this.tabId) {
+        return;
+      }
+      this.handleCrossTabMessage(message);
     });
   }
   /**
    * Handle cross-tab messages
    */
-  handleCrossTabMessage(e) {
-    switch (this.config.debugMode && i.debug("CrossTabSession", `Received cross-tab message: ${e.type} from ${e.tabId}`), e.type) {
+  handleCrossTabMessage(message) {
+    if (this.config.debugMode) {
+      debugLog.debug("CrossTabSession", `Received cross-tab message: ${message.type} from ${message.tabId}`);
+    }
+    switch (message.type) {
       case "heartbeat":
-        this.handleHeartbeatMessage(e);
+        this.handleHeartbeatMessage(message);
         break;
       case "session_start":
-        this.handleSessionStartMessage(e);
+        this.handleSessionStartMessage(message);
         break;
       case "session_end":
-        this.handleSessionEndMessage(e);
+        this.handleSessionEndMessage(message);
         break;
       case "tab_closing":
-        this.handleTabClosingMessage(e);
+        this.handleTabClosingMessage(message);
         break;
       case "election_request":
-        this.handleElectionRequest(e);
+        this.handleElectionRequest(message);
         break;
       case "election_response":
-        this.handleElectionResponse(e);
+        this.handleElectionResponse(message);
         break;
     }
   }
   /**
    * Handle heartbeat message from another tab
    */
-  handleHeartbeatMessage(e) {
-    if (e.sessionId === this.tabInfo.sessionId) {
-      const t = this.getStoredSessionContext();
-      t && (t.lastActivity = Date.now(), this.storeSessionContext(t), this.callbacks?.onTabActivity && this.callbacks.onTabActivity());
+  handleHeartbeatMessage(message) {
+    if (message.sessionId === this.tabInfo.sessionId) {
+      const sessionContext = this.getStoredSessionContext();
+      if (sessionContext) {
+        sessionContext.lastActivity = Date.now();
+        this.storeSessionContext(sessionContext);
+        if (this.callbacks?.onTabActivity) {
+          this.callbacks.onTabActivity();
+        }
+      }
     }
   }
   /**
    * Handle session start message from another tab
    */
-  handleSessionStartMessage(e) {
-    if (e.sessionId && !this.tabInfo.sessionId) {
-      this.tabInfo.sessionId = e.sessionId, this.storeTabInfo();
-      const t = this.getStoredSessionContext();
-      t && (t.tabCount += 1, this.storeSessionContext(t));
+  handleSessionStartMessage(message) {
+    if (!message.sessionId) return;
+    if (!this.tabInfo.sessionId) {
+      this.tabInfo.sessionId = message.sessionId;
+      this.storeTabInfo();
+      const sessionContext = this.getStoredSessionContext();
+      if (sessionContext) {
+        sessionContext.tabCount += 1;
+        this.storeSessionContext(sessionContext);
+      }
     }
   }
   /**
    * Handle session end message from another tab
    */
-  handleSessionEndMessage(e) {
+  handleSessionEndMessage(message) {
     if (this.isTabLeader) {
-      this.config.debugMode && i.debug("CrossTabSession", `Ignoring session end message from ${e.tabId} (this tab is leader)`);
-      return;
-    }
-    if (!this.leaderTabId || e.tabId !== this.leaderTabId) {
       if (this.config.debugMode) {
-        const s = this.leaderTabId ? `; leader is ${this.leaderTabId}` : "";
-        i.debug("CrossTabSession", `Ignoring session end message from ${e.tabId}${s}`);
+        debugLog.debug("CrossTabSession", `Ignoring session end message from ${message.tabId} (this tab is leader)`);
       }
       return;
     }
-    this.tabInfo.sessionId = "", this.storeTabInfo(), this.leaderTabId = null, this.getStoredSessionContext() || (this.broadcastChannel ? this.startLeaderElection() : this.becomeLeader());
+    if (!this.leaderTabId || message.tabId !== this.leaderTabId) {
+      if (this.config.debugMode) {
+        const extra = this.leaderTabId ? `; leader is ${this.leaderTabId}` : "";
+        debugLog.debug("CrossTabSession", `Ignoring session end message from ${message.tabId}${extra}`);
+      }
+      return;
+    }
+    this.tabInfo.sessionId = "";
+    this.storeTabInfo();
+    this.leaderTabId = null;
+    const sessionContext = this.getStoredSessionContext();
+    if (!sessionContext) {
+      if (this.broadcastChannel) {
+        this.startLeaderElection();
+      } else {
+        this.becomeLeader();
+      }
+    }
   }
   /**
    * Handle tab closing message from another tab
    */
-  handleTabClosingMessage(e) {
-    const t = this.getStoredSessionContext();
-    if (t && e.sessionId === t.sessionId) {
-      const s = t.tabCount;
-      t.tabCount = Math.max(1, t.tabCount - 1), t.lastActivity = Date.now(), this.storeSessionContext(t), this.config.debugMode && i.debug(
-        "CrossTabSession",
-        `Tab count updated from ${s} to ${t.tabCount} after tab ${e.tabId} closed`
-      ), (e.data?.isLeader ?? e.tabId === this.leaderTabId) && !this.isTabLeader && (this.config.debugMode && i.debug("CrossTabSession", `Leader tab ${e.tabId} closed, starting leader election`), this.leaderTabId = null, this.electionDelayTimeout = window.setTimeout(() => {
-        this.startLeaderElection(), this.electionDelayTimeout = null;
-      }, 200));
+  handleTabClosingMessage(message) {
+    const sessionContext = this.getStoredSessionContext();
+    if (sessionContext && message.sessionId === sessionContext.sessionId) {
+      const oldCount = sessionContext.tabCount;
+      sessionContext.tabCount = Math.max(1, sessionContext.tabCount - 1);
+      sessionContext.lastActivity = Date.now();
+      this.storeSessionContext(sessionContext);
+      if (this.config.debugMode) {
+        debugLog.debug(
+          "CrossTabSession",
+          `Tab count updated from ${oldCount} to ${sessionContext.tabCount} after tab ${message.tabId} closed`
+        );
+      }
+      const wasLeader = message.data?.isLeader ?? message.tabId === this.leaderTabId;
+      if (wasLeader && !this.isTabLeader) {
+        if (this.config.debugMode) {
+          debugLog.debug("CrossTabSession", `Leader tab ${message.tabId} closed, starting leader election`);
+        }
+        this.leaderTabId = null;
+        this.electionDelayTimeout = window.setTimeout(() => {
+          this.startLeaderElection();
+          this.electionDelayTimeout = null;
+        }, 200);
+      }
     }
   }
   /**
    * Handle election request from another tab
    */
-  handleElectionRequest(e) {
+  handleElectionRequest(_message) {
     if (this.isTabLeader) {
-      const t = {
+      const response = {
         type: "election_response",
         tabId: this.tabId,
         sessionId: this.tabInfo.sessionId,
         timestamp: Date.now(),
-        data: { isLeader: !0 }
+        data: { isLeader: true }
       };
-      this.broadcastChannel && this.broadcastChannel.postMessage(t);
+      if (this.broadcastChannel) {
+        this.broadcastChannel.postMessage(response);
+      }
     }
   }
   /**
    * Handle election response from another tab
    */
-  handleElectionResponse(e) {
-    e.data?.isLeader && (this.isTabLeader ? this.config.debugMode && (i.warn(
-      "CrossTabSession",
-      `Received leadership claim from ${e.tabId} but this tab is already leader`
-    ), this.callbacks?.onCrossTabConflict && this.callbacks.onCrossTabConflict()) : (this.isTabLeader = !1, this.tabInfo.isLeader = !1, this.leaderTabId = e.tabId, this.config.debugMode && i.debug("CrossTabSession", `Acknowledging tab ${e.tabId} as leader`), this.electionTimeout && (clearTimeout(this.electionTimeout), this.electionTimeout = null), e.sessionId && (this.tabInfo.sessionId = e.sessionId, this.storeTabInfo())));
+  handleElectionResponse(message) {
+    if (message.data?.isLeader) {
+      if (!this.isTabLeader) {
+        this.isTabLeader = false;
+        this.tabInfo.isLeader = false;
+        this.leaderTabId = message.tabId;
+        if (this.config.debugMode) {
+          debugLog.debug("CrossTabSession", `Acknowledging tab ${message.tabId} as leader`);
+        }
+        if (this.electionTimeout) {
+          clearTimeout(this.electionTimeout);
+          this.electionTimeout = null;
+        }
+        if (message.sessionId) {
+          this.tabInfo.sessionId = message.sessionId;
+          this.storeTabInfo();
+        }
+      } else if (this.config.debugMode) {
+        debugLog.warn(
+          "CrossTabSession",
+          `Received leadership claim from ${message.tabId} but this tab is already leader`
+        );
+        if (this.callbacks?.onCrossTabConflict) {
+          this.callbacks.onCrossTabConflict();
+        }
+      }
+    }
   }
   /**
    * Start heartbeat to keep session active
    */
   startHeartbeat() {
-    this.heartbeatInterval && clearInterval(this.heartbeatInterval), this.heartbeatInterval = window.setInterval(() => {
-      this.sendHeartbeat(), this.updateTabInfo();
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    this.heartbeatInterval = window.setInterval(() => {
+      this.sendHeartbeat();
+      this.updateTabInfo();
     }, this.config.tabHeartbeatIntervalMs);
   }
   /**
@@ -2831,63 +4431,84 @@ class xt extends v {
    */
   sendHeartbeat() {
     if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
-    const e = Date.now(), t = this.lastHeartbeatSent ?? 0, s = this.config.tabHeartbeatIntervalMs * 0.8;
-    if (!this.isTabLeader && e - t < s)
+    const now = Date.now();
+    const lastHeartbeat = this.lastHeartbeatSent ?? 0;
+    const minHeartbeatInterval = this.config.tabHeartbeatIntervalMs * 0.8;
+    if (!this.isTabLeader && now - lastHeartbeat < minHeartbeatInterval) {
       return;
-    const n = {
+    }
+    const message = {
       type: "heartbeat",
       tabId: this.tabId,
       sessionId: this.tabInfo.sessionId,
-      timestamp: e
+      timestamp: now
     };
-    this.broadcastChannel.postMessage(n), this.lastHeartbeatSent = e;
+    this.broadcastChannel.postMessage(message);
+    this.lastHeartbeatSent = now;
   }
   /**
    * Update tab info with current timestamp
    */
   updateTabInfo() {
-    this.tabInfo.lastHeartbeat = Date.now(), this.storeTabInfo();
+    this.tabInfo.lastHeartbeat = Date.now();
+    this.storeTabInfo();
   }
   /**
    * End session and notify other tabs
    */
-  endSession(e) {
-    this.sessionEnded || (this.sessionEnded = !0, this.config.debugMode && i.debug(
-      "CrossTabSession",
-      `Ending cross-tab session: ${e} (tab: ${this.tabId}, isLeader: ${this.isTabLeader})`
-    ), this.announceTabClosing(), this.isTabLeader && e !== "manual_stop" && this.announceSessionEnd(e), this.tabInfoCleanupTimeout = window.setTimeout(() => {
-      this.clearTabInfo(), this.tabInfoCleanupTimeout = null;
-    }, 150));
+  endSession(reason) {
+    if (this.sessionEnded) {
+      return;
+    }
+    this.sessionEnded = true;
+    if (this.config.debugMode) {
+      debugLog.debug(
+        "CrossTabSession",
+        `Ending cross-tab session: ${reason} (tab: ${this.tabId}, isLeader: ${this.isTabLeader})`
+      );
+    }
+    this.announceTabClosing();
+    if (this.isTabLeader && reason !== "manual_stop") {
+      this.announceSessionEnd(reason);
+    }
+    this.tabInfoCleanupTimeout = window.setTimeout(() => {
+      this.clearTabInfo();
+      this.tabInfoCleanupTimeout = null;
+    }, 150);
   }
   /**
    * Announce tab is closing to other tabs
    */
   announceTabClosing() {
     if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
-    const e = {
+    const message = {
       type: "tab_closing",
       tabId: this.tabId,
       sessionId: this.tabInfo.sessionId,
       timestamp: Date.now(),
       data: { isLeader: this.isTabLeader }
     };
-    this.broadcastChannel.postMessage(e), this.closingAnnouncementTimeout = window.setTimeout(() => {
-      this.config.debugMode && i.debug("CrossTabSession", `Tab ${this.tabId} closing announcement sent`), this.closingAnnouncementTimeout = null;
+    this.broadcastChannel.postMessage(message);
+    this.closingAnnouncementTimeout = window.setTimeout(() => {
+      if (this.config.debugMode) {
+        debugLog.debug("CrossTabSession", `Tab ${this.tabId} closing announcement sent`);
+      }
+      this.closingAnnouncementTimeout = null;
     }, 100);
   }
   /**
    * Announce session end to other tabs
    */
-  announceSessionEnd(e) {
+  announceSessionEnd(reason) {
     if (!this.broadcastChannel) return;
-    const t = {
+    const message = {
       type: "session_end",
       tabId: this.tabId,
       sessionId: this.tabInfo.sessionId,
       timestamp: Date.now(),
-      data: { reason: e }
+      data: { reason }
     };
-    this.broadcastChannel.postMessage(t);
+    this.broadcastChannel.postMessage(message);
   }
   /**
    * Get current session ID
@@ -2912,75 +4533,123 @@ class xt extends v {
    */
   getStoredSessionContext() {
     try {
-      const e = this.storageManager.getItem(J(this.projectId));
-      return e ? JSON.parse(e) : null;
-    } catch (e) {
-      return this.config.debugMode && i.warn("CrossTabSession", "Failed to parse stored session context", { error: e }), null;
+      const stored = this.storageManager.getItem(CROSS_TAB_SESSION_KEY(this.projectId));
+      return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+      if (this.config.debugMode) {
+        debugLog.warn("CrossTabSession", "Failed to parse stored session context", { error });
+      }
+      return null;
     }
   }
   /**
    * Store session context to localStorage
    */
-  storeSessionContext(e) {
+  storeSessionContext(context) {
     try {
-      this.storageManager.setItem(J(this.projectId), JSON.stringify(e));
-    } catch (t) {
-      this.config.debugMode && i.warn("CrossTabSession", "Failed to store session context", { error: t });
+      this.storageManager.setItem(CROSS_TAB_SESSION_KEY(this.projectId), JSON.stringify(context));
+    } catch (error) {
+      if (this.config.debugMode) {
+        debugLog.warn("CrossTabSession", "Failed to store session context", { error });
+      }
     }
   }
   /**
    * Clear stored session context
    */
   clearStoredSessionContext() {
-    this.storageManager.removeItem(J(this.projectId));
+    this.storageManager.removeItem(CROSS_TAB_SESSION_KEY(this.projectId));
   }
   /**
    * Store tab info to localStorage
    */
   storeTabInfo() {
     try {
-      this.storageManager.setItem(Se(this.projectId, this.tabId), JSON.stringify(this.tabInfo));
-    } catch (e) {
-      this.config.debugMode && i.warn("CrossTabSession", "Failed to store tab info", { error: e });
+      this.storageManager.setItem(TAB_SPECIFIC_INFO_KEY(this.projectId, this.tabId), JSON.stringify(this.tabInfo));
+    } catch (error) {
+      if (this.config.debugMode) {
+        debugLog.warn("CrossTabSession", "Failed to store tab info", { error });
+      }
     }
   }
   /**
    * Clear tab info from localStorage
    */
   clearTabInfo() {
-    this.storageManager.removeItem(Se(this.projectId, this.tabId));
+    this.storageManager.removeItem(TAB_SPECIFIC_INFO_KEY(this.projectId, this.tabId));
   }
   /**
    * Check if BroadcastChannel is supported
    */
   isBroadcastChannelSupported() {
-    return typeof window < "u" && "BroadcastChannel" in window;
+    return typeof window !== "undefined" && "BroadcastChannel" in window;
   }
   /**
    * Get session timeout considering cross-tab activity
    */
   getEffectiveSessionTimeout() {
-    const e = this.getStoredSessionContext();
-    if (!e)
-      return this.get("config")?.sessionTimeout ?? _;
-    const s = Date.now() - e.lastActivity, n = this.get("config")?.sessionTimeout ?? _;
-    return Math.max(0, n - s);
+    const sessionContext = this.getStoredSessionContext();
+    if (!sessionContext) {
+      return this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+    }
+    const now = Date.now();
+    const timeSinceLastActivity = now - sessionContext.lastActivity;
+    const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+    return Math.max(0, sessionTimeout - timeSinceLastActivity);
   }
   /**
    * Update session activity from any tab
    */
   updateSessionActivity() {
-    const e = this.getStoredSessionContext();
-    e && (e.lastActivity = Date.now(), this.storeSessionContext(e)), this.sendHeartbeat();
+    const sessionContext = this.getStoredSessionContext();
+    if (sessionContext) {
+      sessionContext.lastActivity = Date.now();
+      this.storeSessionContext(sessionContext);
+    }
+    this.sendHeartbeat();
   }
   /**
    * Cleanup resources
    */
   destroy() {
-    this.cleanupHealthCheckInterval(), this.heartbeatInterval && (clearInterval(this.heartbeatInterval), this.heartbeatInterval = null), this.electionTimeout && (clearTimeout(this.electionTimeout), this.electionTimeout = null), this.cleanupTimeout && (clearTimeout(this.cleanupTimeout), this.cleanupTimeout = null), this.fallbackLeadershipTimeout && (clearTimeout(this.fallbackLeadershipTimeout), this.fallbackLeadershipTimeout = null), this.electionDelayTimeout && (clearTimeout(this.electionDelayTimeout), this.electionDelayTimeout = null), this.tabInfoCleanupTimeout && (clearTimeout(this.tabInfoCleanupTimeout), this.tabInfoCleanupTimeout = null), this.closingAnnouncementTimeout && (clearTimeout(this.closingAnnouncementTimeout), this.closingAnnouncementTimeout = null), this.endSession("manual_stop"), this.broadcastChannel && (this.broadcastChannel.close(), this.broadcastChannel = null), i.debug("CrossTabSession", "CrossTabSessionManager destroyed");
+    this.cleanupHealthCheckInterval();
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    if (this.electionTimeout) {
+      clearTimeout(this.electionTimeout);
+      this.electionTimeout = null;
+    }
+    if (this.cleanupTimeout) {
+      clearTimeout(this.cleanupTimeout);
+      this.cleanupTimeout = null;
+    }
+    if (this.fallbackLeadershipTimeout) {
+      clearTimeout(this.fallbackLeadershipTimeout);
+      this.fallbackLeadershipTimeout = null;
+    }
+    if (this.electionDelayTimeout) {
+      clearTimeout(this.electionDelayTimeout);
+      this.electionDelayTimeout = null;
+    }
+    if (this.tabInfoCleanupTimeout) {
+      clearTimeout(this.tabInfoCleanupTimeout);
+      this.tabInfoCleanupTimeout = null;
+    }
+    if (this.closingAnnouncementTimeout) {
+      clearTimeout(this.closingAnnouncementTimeout);
+      this.closingAnnouncementTimeout = null;
+    }
+    this.endSession("manual_stop");
+    if (this.broadcastChannel) {
+      this.broadcastChannel.close();
+      this.broadcastChannel = null;
+    }
+    debugLog.debug("CrossTabSession", "CrossTabSessionManager destroyed");
   }
 }
-class Ft extends v {
+class SessionHandler extends StateManager {
   eventManager;
   storageManager;
   sessionStorageKey;
@@ -2988,190 +4657,329 @@ class Ft extends v {
   recoveryManager = null;
   _crossTabSessionManager = null;
   heartbeatInterval = null;
-  _isInitializingCrossTab = !1;
+  _isInitializingCrossTab = false;
+  _crossTabInitLock = null;
   get crossTabSessionManager() {
-    if (!this._crossTabSessionManager && !this._isInitializingCrossTab && this.shouldUseCrossTabs()) {
-      this._isInitializingCrossTab = !0;
-      try {
-        const e = this.get("config")?.id;
-        e && this.initializeCrossTabSessionManager(e);
-      } catch (e) {
-        i.error("SessionHandler", "Failed to initialize cross-tab session manager", {
-          error: e instanceof Error ? e.message : "Unknown error"
-        });
-      } finally {
-        this._isInitializingCrossTab = !1;
-      }
+    if (this._crossTabSessionManager) {
+      return Promise.resolve(this._crossTabSessionManager);
     }
-    return this._crossTabSessionManager;
+    if (this._crossTabInitLock) {
+      return this._crossTabInitLock;
+    }
+    if (!this.shouldUseCrossTabs()) {
+      return Promise.resolve(null);
+    }
+    this._crossTabInitLock = this.initializeCrossTabWithLock();
+    return this._crossTabInitLock;
+  }
+  async initializeCrossTabWithLock() {
+    if (this._crossTabSessionManager) {
+      this._crossTabInitLock = null;
+      return this._crossTabSessionManager;
+    }
+    if (this._isInitializingCrossTab) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      this._crossTabInitLock = null;
+      return this._crossTabSessionManager;
+    }
+    this._isInitializingCrossTab = true;
+    try {
+      const projectId = this.get("config")?.id;
+      if (!projectId) {
+        throw new Error("ProjectId not available for cross-tab initialization");
+      }
+      this.initializeCrossTabSessionManager(projectId);
+      return this._crossTabSessionManager;
+    } catch (error) {
+      debugLog.error("SessionHandler", "Failed to initialize cross-tab session manager", {
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+      return null;
+    } finally {
+      this._isInitializingCrossTab = false;
+      this._crossTabInitLock = null;
+    }
   }
   shouldUseCrossTabs() {
-    return typeof BroadcastChannel < "u" && typeof navigator < "u" && "serviceWorker" in navigator;
+    return typeof BroadcastChannel !== "undefined" && typeof navigator !== "undefined" && "serviceWorker" in navigator;
   }
-  constructor(e, t) {
-    super(), this.eventManager = t, this.storageManager = e, this.sessionStorageKey = rt(this.get("config")?.id);
-    const s = this.get("config")?.id;
-    s && this.initializeSessionRecoveryManager(s);
+  constructor(storageManager, eventManager) {
+    super();
+    this.eventManager = eventManager;
+    this.storageManager = storageManager;
+    this.sessionStorageKey = SESSION_STORAGE_KEY(this.get("config")?.id);
+    const projectId = this.get("config")?.id;
+    if (projectId) {
+      this.initializeSessionRecoveryManager(projectId);
+    } else {
+      debugLog.warn("SessionHandler", "ProjectId not available, recovery manager will be initialized later");
+    }
   }
   startTracking() {
     if (this.sessionManager) {
-      i.debug("SessionHandler", "Session tracking already active");
+      debugLog.debug("SessionHandler", "Session tracking already active");
       return;
     }
-    i.debug("SessionHandler", "Starting session tracking"), this.checkOrphanedSessions();
-    const e = async () => {
-      if (this.crossTabSessionManager && this.crossTabSessionManager.updateSessionActivity(), !this.get("sessionId"))
-        try {
-          const n = await this.createOrJoinSession();
-          this.set("sessionId", n.sessionId), i.info("SessionHandler", "🏁 Session started", {
-            sessionId: n.sessionId,
-            recovered: n.recovered,
-            crossTabActive: !!this.crossTabSessionManager
-          }), this.trackSession(u.SESSION_START, n.recovered), this.persistSession(n.sessionId), this.startHeartbeat();
-        } catch (n) {
-          i.error(
-            "SessionHandler",
-            `Session creation failed: ${n instanceof Error ? n.message : "Unknown error"}`
-          ), this.forceCleanupSession();
-        }
-    }, t = () => {
+    debugLog.debug("SessionHandler", "Starting session tracking");
+    this.ensureRecoveryManagerInitialized();
+    this.checkOrphanedSessions();
+    const onActivity = async () => {
+      const crossTab = await this.crossTabSessionManager;
+      if (crossTab) {
+        crossTab.updateSessionActivity();
+      }
       if (this.get("sessionId")) {
-        if (this.crossTabSessionManager && this.crossTabSessionManager.getEffectiveSessionTimeout() > 0) {
-          (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug("SessionHandler", "Session kept alive by cross-tab activity");
-          return;
-        }
-        this.sessionManager.endSessionManaged("inactivity").then((n) => {
-          i.info("SessionHandler", "🛑 Session ended by inactivity", {
-            sessionId: this.get("sessionId"),
-            reason: n.reason,
-            success: n.success,
-            eventsFlushed: n.eventsFlushed
-          }), this.crossTabSessionManager && this.crossTabSessionManager.endSession("inactivity"), this.clearPersistedSession(), this.stopHeartbeat();
-        }).catch((n) => {
-          i.error(
-            "SessionHandler",
-            `Session end failed: ${n instanceof Error ? n.message : "Unknown error"}`
-          ), this.forceCleanupSession();
-        });
-      }
-    }, s = {
-      enablePageUnloadHandlers: !0,
-      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? !1,
-      syncTimeoutMs: ve.SYNC_TIMEOUT_MS,
-      maxRetries: ve.MAX_RETRY_ATTEMPTS
-    };
-    this.sessionManager = new Ot(
-      e,
-      t,
-      this.eventManager,
-      this.storageManager,
-      s
-    ), i.debug("SessionHandler", "Session manager initialized"), this.startInitialSession();
-  }
-  stopTracking() {
-    if (i.info("SessionHandler", "Stopping session tracking"), this.sessionManager) {
-      if (this.get("sessionId"))
-        try {
-          this.sessionManager.endSessionSafely("manual_stop", { forceSync: !0 }), this.clearPersistedSession(), this.stopHeartbeat();
-        } catch (e) {
-          i.error(
-            "SessionHandler",
-            `Manual session stop failed: ${e instanceof Error ? e.message : "Unknown error"}`
-          ), this.forceCleanupSession();
-        }
-      this.sessionManager.destroy(), this.sessionManager = null;
-    }
-    this._crossTabSessionManager && (this._crossTabSessionManager.destroy(), this._crossTabSessionManager = null), this._isInitializingCrossTab = !1, this.recoveryManager && (this.recoveryManager.cleanupOldRecoveryAttempts(), this.recoveryManager = null);
-  }
-  initializeSessionRecoveryManager(e) {
-    this.recoveryManager = new Pe(this.storageManager, e, this.eventManager), i.debug("SessionHandler", "Session recovery manager initialized", { projectId: e });
-  }
-  initializeCrossTabSessionManager(e) {
-    const t = {
-      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? !1
-    }, d = {
-      onSessionStart: (c) => {
-        (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug("SessionHandler", `Cross-tab session started: ${c}`), this.set("sessionId", c), this.trackSession(u.SESSION_START, !1), this.persistSession(c), this.startHeartbeat();
-      },
-      onSessionEnd: (c) => {
-        (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug("SessionHandler", `Cross-tab session ended: ${c}`), this.clearPersistedSession(), this.trackSession(u.SESSION_END, !1, c);
-      },
-      onTabActivity: () => {
-        (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug("SessionHandler", "Cross-tab activity detected");
-      },
-      onCrossTabConflict: () => {
-        (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.warn("SessionHandler", "Cross-tab conflict detected"), this.sessionManager && this.sessionManager.trackSessionHealth("conflict");
-      }
-    };
-    this._crossTabSessionManager = new xt(this.storageManager, e, t, d), i.debug("SessionHandler", "Cross-tab session manager initialized", { projectId: e });
-  }
-  async createOrJoinSession() {
-    if (this.crossTabSessionManager) {
-      const t = this.crossTabSessionManager.getSessionId();
-      if (t)
-        return { sessionId: t, recovered: !1 };
-      const s = this.sessionManager.startSession();
-      return { sessionId: s.sessionId, recovered: s.recovered ?? !1 };
-    }
-    const e = this.sessionManager.startSession();
-    return { sessionId: e.sessionId, recovered: e.recovered ?? !1 };
-  }
-  forceCleanupSession() {
-    if (this.set("sessionId", null), this.clearPersistedSession(), this.stopHeartbeat(), this.crossTabSessionManager)
-      try {
-        this.crossTabSessionManager.endSession("orphaned_cleanup");
-      } catch (e) {
-        (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.warn(
-          "SessionHandler",
-          `Cross-tab cleanup failed during force cleanup: ${e instanceof Error ? e.message : "Unknown error"}`
-        );
-      }
-    try {
-      this.trackSession(u.SESSION_END, !1, "orphaned_cleanup");
-    } catch (e) {
-      (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.warn(
-        "SessionHandler",
-        `Session tracking failed during force cleanup: ${e instanceof Error ? e.message : "Unknown error"}`
-      );
-    }
-    (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug("SessionHandler", "Forced session cleanup completed");
-  }
-  trackSession(e, t = !1, s) {
-    this.eventManager.track({
-      type: e,
-      ...e === u.SESSION_START && t && { session_start_recovered: t },
-      ...e === u.SESSION_END && { session_end_reason: s ?? "orphaned_cleanup" }
-    });
-  }
-  startInitialSession() {
-    if (this.get("sessionId")) {
-      i.debug("SessionHandler", "Session already exists, skipping initial session creation");
-      return;
-    }
-    if (i.debug("SessionHandler", "Starting initial session"), this.crossTabSessionManager) {
-      const t = this.crossTabSessionManager.getSessionId();
-      if (t) {
-        this.set("sessionId", t), this.persistSession(t), this.startHeartbeat();
         return;
       }
+      try {
+        const sessionResult = await this.createOrJoinSession();
+        await this.set("sessionId", sessionResult.sessionId);
+        const crossTabActive = !!await this.crossTabSessionManager;
+        debugLog.info("SessionHandler", "🏁 Session started", {
+          sessionId: sessionResult.sessionId,
+          recovered: sessionResult.recovered,
+          crossTabActive
+        });
+        this.trackSession(EventType.SESSION_START, sessionResult.recovered);
+        this.persistSession(sessionResult.sessionId);
+        this.startHeartbeat();
+      } catch (error) {
+        debugLog.error(
+          "SessionHandler",
+          `Session creation failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+        await this.forceCleanupSession();
+      }
+    };
+    const onInactivity = async () => {
+      if (!this.get("sessionId")) {
+        return;
+      }
+      const crossTab = await this.crossTabSessionManager;
+      if (crossTab && crossTab.getEffectiveSessionTimeout() > 0) {
+        if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+          debugLog.debug("SessionHandler", "Session kept alive by cross-tab activity");
+        }
+        return;
+      }
+      this.sessionManager.endSessionManaged("inactivity").then(async (result) => {
+        debugLog.info("SessionHandler", "🛑 Session ended by inactivity", {
+          sessionId: this.get("sessionId"),
+          reason: result.reason,
+          success: result.success,
+          eventsFlushed: result.eventsFlushed
+        });
+        const crossTabManager = await this.crossTabSessionManager;
+        if (crossTabManager) {
+          crossTabManager.endSession("inactivity");
+        }
+        this.clearPersistedSession();
+        this.stopHeartbeat();
+      }).catch(async (error) => {
+        debugLog.error(
+          "SessionHandler",
+          `Session end failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+        await this.forceCleanupSession();
+      });
+    };
+    const sessionEndConfig = {
+      enablePageUnloadHandlers: true,
+      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false,
+      syncTimeoutMs: SESSION_SYNC_CONSTANTS.SYNC_TIMEOUT_MS,
+      maxRetries: SESSION_SYNC_CONSTANTS.MAX_RETRY_ATTEMPTS
+    };
+    this.sessionManager = new SessionManager(
+      onActivity,
+      onInactivity,
+      this.eventManager,
+      this.storageManager,
+      sessionEndConfig
+    );
+    debugLog.debug("SessionHandler", "Session manager initialized");
+    this.startInitialSession();
+  }
+  async stopTracking() {
+    debugLog.info("SessionHandler", "Stopping session tracking");
+    if (this.sessionManager) {
+      if (this.get("sessionId")) {
+        try {
+          this.sessionManager.endSessionSafely("manual_stop", { forceSync: true });
+          this.clearPersistedSession();
+          this.stopHeartbeat();
+        } catch (error) {
+          debugLog.error(
+            "SessionHandler",
+            `Manual session stop failed: ${error instanceof Error ? error.message : "Unknown error"}`
+          );
+          await this.forceCleanupSession();
+        }
+      }
+      this.sessionManager.destroy();
+      this.sessionManager = null;
+    }
+    if (this._crossTabSessionManager) {
+      this._crossTabSessionManager.destroy();
+      this._crossTabSessionManager = null;
+    }
+    this._isInitializingCrossTab = false;
+    this._crossTabInitLock = null;
+    if (this.recoveryManager) {
+      this.recoveryManager.cleanupOldRecoveryAttempts();
+      this.recoveryManager = null;
+    }
+  }
+  initializeSessionRecoveryManager(projectId) {
+    this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager);
+    debugLog.debug("SessionHandler", "Session recovery manager initialized", { projectId });
+  }
+  initializeCrossTabSessionManager(projectId) {
+    const config = {
+      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false
+    };
+    const onSessionStart = async (sessionId) => {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.debug("SessionHandler", `Cross-tab session started: ${sessionId}`);
+      }
+      await this.set("sessionId", sessionId);
+      this.trackSession(EventType.SESSION_START, false);
+      this.persistSession(sessionId);
+      this.startHeartbeat();
+    };
+    const onSessionEnd = (reason) => {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.debug("SessionHandler", `Cross-tab session ended: ${reason}`);
+      }
+      this.clearPersistedSession();
+      this.trackSession(EventType.SESSION_END, false, reason);
+    };
+    const onTabActivity = () => {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.debug("SessionHandler", "Cross-tab activity detected");
+      }
+    };
+    const onCrossTabConflict = () => {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.warn("SessionHandler", "Cross-tab conflict detected");
+      }
+      if (this.sessionManager) {
+        this.sessionManager.trackSessionHealth("conflict");
+      }
+    };
+    const callbacks = {
+      onSessionStart,
+      onSessionEnd,
+      onTabActivity,
+      onCrossTabConflict
+    };
+    this._crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
+    debugLog.debug("SessionHandler", "Cross-tab session manager initialized", { projectId });
+  }
+  ensureRecoveryManagerInitialized() {
+    if (!this.recoveryManager) {
+      const projectId = this.get("config")?.id;
+      if (projectId) {
+        this.initializeSessionRecoveryManager(projectId);
+      } else {
+        debugLog.error("SessionHandler", "Cannot initialize recovery manager without projectId");
+      }
+    }
+  }
+  async createOrJoinSession() {
+    const crossTab = await this.crossTabSessionManager;
+    if (crossTab) {
+      const existingSessionId = crossTab.getSessionId();
+      if (existingSessionId) {
+        return { sessionId: existingSessionId, recovered: false };
+      }
+      const sessionResult2 = this.sessionManager.startSession();
+      return { sessionId: sessionResult2.sessionId, recovered: sessionResult2.recovered ?? false };
+    }
+    const sessionResult = this.sessionManager.startSession();
+    return { sessionId: sessionResult.sessionId, recovered: sessionResult.recovered ?? false };
+  }
+  async forceCleanupSession() {
+    await this.set("sessionId", null);
+    this.clearPersistedSession();
+    this.stopHeartbeat();
+    const crossTab = await this.crossTabSessionManager;
+    if (crossTab) {
+      try {
+        crossTab.endSession("orphaned_cleanup");
+      } catch (error) {
+        if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+          debugLog.warn(
+            "SessionHandler",
+            `Cross-tab cleanup failed during force cleanup: ${error instanceof Error ? error.message : "Unknown error"}`
+          );
+        }
+      }
+    }
+    try {
+      this.trackSession(EventType.SESSION_END, false, "orphaned_cleanup");
+    } catch (error) {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.warn(
+          "SessionHandler",
+          `Session tracking failed during force cleanup: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+    if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+      debugLog.debug("SessionHandler", "Forced session cleanup completed");
+    }
+  }
+  trackSession(eventType, sessionStartRecovered = false, sessionEndReason) {
+    this.eventManager.track({
+      type: eventType,
+      ...eventType === EventType.SESSION_START && sessionStartRecovered && { session_start_recovered: sessionStartRecovered },
+      ...eventType === EventType.SESSION_END && { session_end_reason: sessionEndReason ?? "orphaned_cleanup" }
+    });
+  }
+  async startInitialSession() {
+    if (this.get("sessionId")) {
+      debugLog.debug("SessionHandler", "Session already exists, skipping initial session creation");
       return;
     }
-    i.debug("SessionHandler", "Starting regular session (no cross-tab)");
-    const e = this.sessionManager.startSession();
-    this.set("sessionId", e.sessionId), this.trackSession(u.SESSION_START, e.recovered), this.persistSession(e.sessionId), this.startHeartbeat();
+    debugLog.debug("SessionHandler", "Starting initial session");
+    const crossTab = await this.crossTabSessionManager;
+    if (crossTab) {
+      const existingSessionId = crossTab.getSessionId();
+      if (existingSessionId) {
+        await this.set("sessionId", existingSessionId);
+        this.trackSession(EventType.SESSION_START, false);
+        this.persistSession(existingSessionId);
+        this.startHeartbeat();
+        debugLog.info("SessionHandler", "🏁 Session started (joined cross-tab session)", {
+          sessionId: existingSessionId
+        });
+        return;
+      }
+      debugLog.debug("SessionHandler", "No existing cross-tab session, waiting for activity");
+      return;
+    }
+    debugLog.debug("SessionHandler", "Starting regular session (no cross-tab)");
+    const sessionResult = this.sessionManager.startSession();
+    await this.set("sessionId", sessionResult.sessionId);
+    this.trackSession(EventType.SESSION_START, sessionResult.recovered);
+    this.persistSession(sessionResult.sessionId);
+    this.startHeartbeat();
   }
   checkOrphanedSessions() {
-    const e = this.storageManager.getItem(this.sessionStorageKey);
-    if (e)
+    const storedSessionData = this.storageManager.getItem(this.sessionStorageKey);
+    if (storedSessionData) {
       try {
-        const t = JSON.parse(e), n = Date.now() - t.lastHeartbeat, a = this.get("config")?.sessionTimeout ?? _;
-        if (n > a) {
-          const o = this.recoveryManager?.hasRecoverableSession();
-          if (o && this.recoveryManager) {
-            const d = {
-              sessionId: t.sessionId,
-              startTime: t.startTime,
-              lastActivity: t.lastHeartbeat,
+        const session = JSON.parse(storedSessionData);
+        const now = Date.now();
+        const timeSinceLastHeartbeat = now - session.lastHeartbeat;
+        const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+        if (timeSinceLastHeartbeat > sessionTimeout) {
+          const canRecover = this.recoveryManager?.hasRecoverableSession() ?? false;
+          if (canRecover && this.recoveryManager) {
+            const sessionContext = {
+              sessionId: session.sessionId,
+              startTime: session.startTime,
+              lastActivity: session.lastHeartbeat,
               tabCount: 1,
               recoveryAttempts: 0,
               metadata: {
@@ -3179,676 +4987,917 @@ class Ft extends v {
                 pageUrl: this.get("pageUrl")
               }
             };
-            this.recoveryManager.storeSessionContextForRecovery(d), (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug("SessionHandler", `Orphaned session stored for recovery: ${t.sessionId}`);
+            this.recoveryManager.storeSessionContextForRecovery(sessionContext);
+            if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+              debugLog.debug("SessionHandler", `Orphaned session stored for recovery: ${session.sessionId}`);
+            }
           }
-          this.trackSession(u.SESSION_END), this.clearPersistedSession(), (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") && i.debug(
-            "SessionHandler",
-            `Orphaned session ended: ${t.sessionId}, recovery available: ${o}`
-          );
+          this.trackSession(EventType.SESSION_END);
+          this.clearPersistedSession();
+          if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+            debugLog.debug(
+              "SessionHandler",
+              `Orphaned session ended: ${session.sessionId}, recovery available: ${canRecover}`
+            );
+          }
         }
       } catch {
         this.clearPersistedSession();
       }
+    }
   }
-  persistSession(e) {
-    const t = {
-      sessionId: e,
+  persistSession(sessionId) {
+    const sessionData = {
+      sessionId,
       startTime: Date.now(),
       lastHeartbeat: Date.now()
     };
-    this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(t));
+    this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(sessionData));
   }
   clearPersistedSession() {
     this.storageManager.removeItem(this.sessionStorageKey);
   }
   startHeartbeat() {
-    this.stopHeartbeat(), this.heartbeatInterval = setInterval(() => {
-      const e = this.storageManager.getItem(this.sessionStorageKey);
-      if (e)
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      const storedSessionData = this.storageManager.getItem(this.sessionStorageKey);
+      if (storedSessionData) {
         try {
-          const t = JSON.parse(e);
-          t.lastHeartbeat = Date.now(), this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(t));
+          const session = JSON.parse(storedSessionData);
+          session.lastHeartbeat = Date.now();
+          this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(session));
         } catch {
           this.clearPersistedSession();
         }
-    }, Ge);
+      }
+    }, SESSION_HEARTBEAT_INTERVAL_MS);
   }
   stopHeartbeat() {
-    this.heartbeatInterval && (clearInterval(this.heartbeatInterval), this.heartbeatInterval = null);
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
   }
 }
-class zt extends v {
+class PageViewHandler extends StateManager {
   eventManager;
   onTrack;
   originalPushState;
   originalReplaceState;
-  constructor(e, t) {
-    super(), this.eventManager = e, this.onTrack = t;
+  constructor(eventManager, onTrack) {
+    super();
+    this.eventManager = eventManager;
+    this.onTrack = onTrack;
   }
   startTracking() {
-    i.debug("PageViewHandler", "Starting page view tracking"), this.trackInitialPageView(), this.trackCurrentPage(), window.addEventListener("popstate", this.trackCurrentPage), window.addEventListener("hashchange", this.trackCurrentPage), this.patchHistory("pushState"), this.patchHistory("replaceState");
+    debugLog.debug("PageViewHandler", "Starting page view tracking");
+    this.trackInitialPageView();
+    this.trackCurrentPage();
+    window.addEventListener("popstate", this.trackCurrentPage);
+    window.addEventListener("hashchange", this.trackCurrentPage);
+    this.patchHistory("pushState");
+    this.patchHistory("replaceState");
   }
   stopTracking() {
-    i.debug("PageViewHandler", "Stopping page view tracking"), window.removeEventListener("popstate", this.trackCurrentPage), window.removeEventListener("hashchange", this.trackCurrentPage), this.originalPushState && (window.history.pushState = this.originalPushState), this.originalReplaceState && (window.history.replaceState = this.originalReplaceState);
+    debugLog.debug("PageViewHandler", "Stopping page view tracking");
+    window.removeEventListener("popstate", this.trackCurrentPage);
+    window.removeEventListener("hashchange", this.trackCurrentPage);
+    if (this.originalPushState) {
+      window.history.pushState = this.originalPushState;
+    }
+    if (this.originalReplaceState) {
+      window.history.replaceState = this.originalReplaceState;
+    }
   }
-  patchHistory(e) {
-    e === "pushState" && !this.originalPushState ? this.originalPushState = window.history.pushState : e === "replaceState" && !this.originalReplaceState && (this.originalReplaceState = window.history.replaceState);
-    const t = window.history[e];
-    window.history[e] = (...s) => {
-      t.apply(window.history, s), this.trackCurrentPage();
+  patchHistory(method) {
+    if (method === "pushState" && !this.originalPushState) {
+      this.originalPushState = window.history.pushState;
+    } else if (method === "replaceState" && !this.originalReplaceState) {
+      this.originalReplaceState = window.history.replaceState;
+    }
+    const original = window.history[method];
+    window.history[method] = (...args) => {
+      original.apply(window.history, args);
+      this.trackCurrentPage();
     };
   }
-  trackCurrentPage = () => {
-    const e = window.location.href, t = ie(e, this.get("config").sensitiveQueryParams);
-    if (this.get("pageUrl") !== t) {
-      const s = this.get("pageUrl");
-      i.debug("PageViewHandler", "Page navigation detected", { from: s, to: t }), this.set("pageUrl", t), this.eventManager.track({
-        type: u.PAGE_VIEW,
+  trackCurrentPage = async () => {
+    const rawUrl = window.location.href;
+    const normalizedUrl = normalizeUrl(rawUrl, this.get("config").sensitiveQueryParams);
+    if (this.get("pageUrl") !== normalizedUrl) {
+      const fromUrl = this.get("pageUrl");
+      debugLog.debug("PageViewHandler", "Page navigation detected", { from: fromUrl, to: normalizedUrl });
+      await this.set("pageUrl", normalizedUrl);
+      this.eventManager.track({
+        type: EventType.PAGE_VIEW,
         page_url: this.get("pageUrl"),
-        from_page_url: s,
+        from_page_url: fromUrl,
         ...this.extractPageViewData() && { page_view: this.extractPageViewData() }
-      }), this.onTrack();
+      });
+      this.onTrack();
     }
   };
   trackInitialPageView() {
     this.eventManager.track({
-      type: u.PAGE_VIEW,
+      type: EventType.PAGE_VIEW,
       page_url: this.get("pageUrl"),
       ...this.extractPageViewData() && { page_view: this.extractPageViewData() }
-    }), this.onTrack();
+    });
+    this.onTrack();
   }
   extractPageViewData() {
-    const e = window.location, t = {
+    const location = window.location;
+    const data = {
       ...document.referrer && { referrer: document.referrer },
       ...document.title && { title: document.title },
-      ...e.pathname && { pathname: e.pathname },
-      ...e.search && { search: e.search },
-      ...e.hash && { hash: e.hash }
+      ...location.pathname && { pathname: location.pathname },
+      ...location.search && { search: location.search },
+      ...location.hash && { hash: location.hash }
     };
-    return Object.values(t).some((s) => !!s) ? t : void 0;
+    return Object.values(data).some((value) => !!value) ? data : void 0;
   }
 }
-class Vt extends v {
+class ClickHandler extends StateManager {
   eventManager;
   clickHandler;
-  constructor(e) {
-    super(), this.eventManager = e;
+  constructor(eventManager) {
+    super();
+    this.eventManager = eventManager;
   }
   startTracking() {
     if (this.clickHandler) {
-      i.debug("ClickHandler", "Click tracking already active");
+      debugLog.debug("ClickHandler", "Click tracking already active");
       return;
     }
-    i.debug("ClickHandler", "Starting click tracking"), this.clickHandler = (e) => {
-      const t = e, s = t.target, n = s instanceof HTMLElement ? s : s instanceof Node && s.parentElement instanceof HTMLElement ? s.parentElement : null;
-      if (!n) {
-        i.warn("ClickHandler", "Click target not found or not an element");
+    debugLog.debug("ClickHandler", "Starting click tracking");
+    this.clickHandler = (event2) => {
+      const mouseEvent = event2;
+      const target = mouseEvent.target;
+      const clickedElement = target instanceof HTMLElement ? target : target instanceof Node && target.parentElement instanceof HTMLElement ? target.parentElement : null;
+      if (!clickedElement) {
+        debugLog.warn("ClickHandler", "Click target not found or not an element");
         return;
       }
-      i.info("ClickHandler", "🖱️ Click detected on element", {
-        tagName: n.tagName,
-        className: n.className || "none",
-        textContent: n.textContent?.slice(0, 50) ?? "empty"
+      debugLog.info("ClickHandler", "🖱️ Click detected on element", {
+        tagName: clickedElement.tagName,
+        className: clickedElement.className || "none",
+        textContent: clickedElement.textContent?.slice(0, 50) ?? "empty"
       });
-      const a = this.findTrackingElement(n), o = this.getRelevantClickElement(n), d = this.calculateClickCoordinates(t, n);
-      if (a) {
-        const l = this.extractTrackingData(a);
-        if (l) {
-          const h = this.createCustomEventData(l);
+      const trackingElement = this.findTrackingElement(clickedElement);
+      const relevantClickElement = this.getRelevantClickElement(clickedElement);
+      const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);
+      if (trackingElement) {
+        const trackingData = this.extractTrackingData(trackingElement);
+        if (trackingData) {
+          const attributeData = this.createCustomEventData(trackingData);
           this.eventManager.track({
-            type: u.CUSTOM,
+            type: EventType.CUSTOM,
             custom_event: {
-              name: h.name,
-              ...h.value && { metadata: { value: h.value } }
+              name: attributeData.name,
+              ...attributeData.value && { metadata: { value: attributeData.value } }
             }
           });
         }
       }
-      const c = this.generateClickData(n, o, d);
+      const clickData = this.generateClickData(clickedElement, relevantClickElement, coordinates);
       this.eventManager.track({
-        type: u.CLICK,
-        click_data: c
+        type: EventType.CLICK,
+        click_data: clickData
       });
-    }, window.addEventListener("click", this.clickHandler, !0);
+    };
+    window.addEventListener("click", this.clickHandler, true);
   }
   stopTracking() {
-    this.clickHandler && (window.removeEventListener("click", this.clickHandler, !0), this.clickHandler = void 0);
+    if (this.clickHandler) {
+      window.removeEventListener("click", this.clickHandler, true);
+      this.clickHandler = void 0;
+    }
   }
-  findTrackingElement(e) {
-    return e.hasAttribute(`${z}-name`) ? e : e.closest(`[${z}-name]`) || void 0;
+  findTrackingElement(element) {
+    if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-name`)) {
+      return element;
+    }
+    const closest = element.closest(`[${HTML_DATA_ATTR_PREFIX}-name]`);
+    return closest || void 0;
   }
-  getRelevantClickElement(e) {
-    for (const t of me)
+  getRelevantClickElement(element) {
+    for (const selector of INTERACTIVE_SELECTORS) {
       try {
-        if (e.matches(t))
-          return e;
-      } catch (s) {
-        i.warn("ClickHandler", "Invalid selector in interactive elements check", {
-          selector: t,
-          error: s instanceof Error ? s.message : "Unknown error"
+        if (element.matches(selector)) {
+          return element;
+        }
+      } catch (error) {
+        debugLog.warn("ClickHandler", "Invalid selector in interactive elements check", {
+          selector,
+          error: error instanceof Error ? error.message : "Unknown error"
         });
         continue;
       }
-    for (const t of me)
+    }
+    for (const selector of INTERACTIVE_SELECTORS) {
       try {
-        const s = e.closest(t);
-        if (s)
-          return s;
-      } catch (s) {
-        i.warn("ClickHandler", "Invalid selector in parent element search", {
-          selector: t,
-          error: s instanceof Error ? s.message : "Unknown error"
+        const parent = element.closest(selector);
+        if (parent) {
+          return parent;
+        }
+      } catch (error) {
+        debugLog.warn("ClickHandler", "Invalid selector in parent element search", {
+          selector,
+          error: error instanceof Error ? error.message : "Unknown error"
         });
         continue;
       }
-    return e;
+    }
+    return element;
   }
-  calculateClickCoordinates(e, t) {
-    const s = t.getBoundingClientRect(), n = e.clientX, a = e.clientY, o = s.width > 0 ? Math.max(0, Math.min(1, Number(((n - s.left) / s.width).toFixed(3)))) : 0, d = s.height > 0 ? Math.max(0, Math.min(1, Number(((a - s.top) / s.height).toFixed(3)))) : 0;
-    return { x: n, y: a, relativeX: o, relativeY: d };
+  calculateClickCoordinates(event2, element) {
+    const rect = element.getBoundingClientRect();
+    const x = event2.clientX;
+    const y = event2.clientY;
+    const relativeX = rect.width > 0 ? Math.max(0, Math.min(1, Number(((x - rect.left) / rect.width).toFixed(3)))) : 0;
+    const relativeY = rect.height > 0 ? Math.max(0, Math.min(1, Number(((y - rect.top) / rect.height).toFixed(3)))) : 0;
+    return { x, y, relativeX, relativeY };
   }
-  extractTrackingData(e) {
-    const t = e.getAttribute(`${z}-name`), s = e.getAttribute(`${z}-value`);
-    if (t)
-      return {
-        element: e,
-        name: t,
-        ...s && { value: s }
-      };
-  }
-  generateClickData(e, t, s) {
-    const { x: n, y: a, relativeX: o, relativeY: d } = s, c = this.getRelevantText(e, t), l = this.extractElementAttributes(t), h = t.getAttribute("href"), g = t.getAttribute("title"), S = t.getAttribute("alt"), M = t.getAttribute("role"), b = t.getAttribute("aria-label"), P = typeof t.className == "string" ? t.className : String(t.className);
+  extractTrackingData(trackingElement) {
+    const name = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
+    const value = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-value`);
+    if (!name) {
+      return void 0;
+    }
     return {
-      x: n,
-      y: a,
-      relativeX: o,
-      relativeY: d,
-      tag: t.tagName.toLowerCase(),
-      ...t.id && { id: t.id },
-      ...t.className && { class: P },
-      ...c && { text: c },
-      ...h && { href: h },
-      ...g && { title: g },
-      ...S && { alt: S },
-      ...M && { role: M },
-      ...b && { ariaLabel: b },
-      ...Object.keys(l).length > 0 && { dataAttributes: l }
+      element: trackingElement,
+      name,
+      ...value && { value }
     };
   }
-  getRelevantText(e, t) {
-    const s = ["main", "section", "article", "body", "html", "header", "footer", "aside", "nav"], n = e.textContent?.trim() ?? "", a = t.textContent?.trim() ?? "";
-    if (!n && !a)
-      return "";
-    if (n && n.length <= A)
-      return n;
-    const o = s.includes(t.tagName.toLowerCase()), d = a.length > A * 2;
-    return o && d ? n && n.length <= A ? n : "" : a.length <= A ? a : n && n.length < a.length * 0.1 ? n.length <= A ? n : n.slice(0, A - 3) + "..." : a.slice(0, A - 3) + "...";
-  }
-  extractElementAttributes(e) {
-    const t = ["id", "class", "data-testid", "aria-label", "title", "href", "type", "name"], s = {};
-    for (const n of t) {
-      const a = e.getAttribute(n);
-      a && (s[n] = a);
-    }
-    return s;
-  }
-  createCustomEventData(e) {
+  generateClickData(clickedElement, relevantElement, coordinates) {
+    const { x, y, relativeX, relativeY } = coordinates;
+    const text = this.getRelevantText(clickedElement, relevantElement);
+    const attributes = this.extractElementAttributes(relevantElement);
+    const href = relevantElement.getAttribute("href");
+    const title = relevantElement.getAttribute("title");
+    const alt = relevantElement.getAttribute("alt");
+    const role = relevantElement.getAttribute("role");
+    const ariaLabel = relevantElement.getAttribute("aria-label");
+    const className = typeof relevantElement.className === "string" ? relevantElement.className : String(relevantElement.className);
     return {
-      name: e.name,
-      ...e.value && { value: e.value }
+      x,
+      y,
+      relativeX,
+      relativeY,
+      tag: relevantElement.tagName.toLowerCase(),
+      ...relevantElement.id && { id: relevantElement.id },
+      ...relevantElement.className && { class: className },
+      ...text && { text },
+      ...href && { href },
+      ...title && { title },
+      ...alt && { alt },
+      ...role && { role },
+      ...ariaLabel && { ariaLabel },
+      ...Object.keys(attributes).length > 0 && { dataAttributes: attributes }
+    };
+  }
+  getRelevantText(clickedElement, relevantElement) {
+    const LARGE_CONTAINER_TAGS = ["main", "section", "article", "body", "html", "header", "footer", "aside", "nav"];
+    const clickedText = clickedElement.textContent?.trim() ?? "";
+    const relevantText = relevantElement.textContent?.trim() ?? "";
+    if (!clickedText && !relevantText) {
+      return "";
+    }
+    if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
+      return clickedText;
+    }
+    const isLargeContainer = LARGE_CONTAINER_TAGS.includes(relevantElement.tagName.toLowerCase());
+    const hasExcessiveText = relevantText.length > MAX_TEXT_LENGTH * 2;
+    if (isLargeContainer && hasExcessiveText) {
+      return clickedText && clickedText.length <= MAX_TEXT_LENGTH ? clickedText : "";
+    }
+    if (relevantText.length <= MAX_TEXT_LENGTH) {
+      return relevantText;
+    }
+    if (clickedText && clickedText.length < relevantText.length * 0.1) {
+      return clickedText.length <= MAX_TEXT_LENGTH ? clickedText : clickedText.slice(0, MAX_TEXT_LENGTH - 3) + "...";
+    }
+    return relevantText.slice(0, MAX_TEXT_LENGTH - 3) + "...";
+  }
+  extractElementAttributes(element) {
+    const commonAttributes = ["id", "class", "data-testid", "aria-label", "title", "href", "type", "name"];
+    const result = {};
+    for (const attributeName of commonAttributes) {
+      const value = element.getAttribute(attributeName);
+      if (value) {
+        result[attributeName] = value;
+      }
+    }
+    return result;
+  }
+  createCustomEventData(trackingData) {
+    return {
+      name: trackingData.name,
+      ...trackingData.value && { value: trackingData.value }
     };
   }
 }
-class $t extends v {
+class ScrollHandler extends StateManager {
   eventManager;
   containers = [];
-  constructor(e) {
-    super(), this.eventManager = e;
+  constructor(eventManager) {
+    super();
+    this.eventManager = eventManager;
   }
   startTracking() {
-    const e = this.get("config").scrollContainerSelectors, t = Array.isArray(e) ? e : typeof e == "string" ? [e] : [];
-    i.debug("ScrollHandler", "Starting scroll tracking", { selectorsCount: t.length });
-    const s = t.map((n) => this.safeQuerySelector(n)).filter((n) => n instanceof HTMLElement);
-    s.length === 0 && s.push(window);
-    for (const n of s)
-      this.setupScrollContainer(n);
+    const raw = this.get("config").scrollContainerSelectors;
+    const selectors = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+    debugLog.debug("ScrollHandler", "Starting scroll tracking", { selectorsCount: selectors.length });
+    const elements = selectors.map((sel) => this.safeQuerySelector(sel)).filter((element) => element instanceof HTMLElement);
+    if (elements.length === 0) {
+      elements.push(window);
+    }
+    for (const element of elements) {
+      this.setupScrollContainer(element);
+    }
   }
   stopTracking() {
-    i.debug("ScrollHandler", "Stopping scroll tracking", { containersCount: this.containers.length });
-    for (const e of this.containers)
-      e.debounceTimer && clearTimeout(e.debounceTimer), e.element instanceof Window ? window.removeEventListener("scroll", e.listener) : e.element.removeEventListener("scroll", e.listener);
+    debugLog.debug("ScrollHandler", "Stopping scroll tracking", { containersCount: this.containers.length });
+    for (const container of this.containers) {
+      if (container.debounceTimer) {
+        clearTimeout(container.debounceTimer);
+      }
+      if (container.element instanceof Window) {
+        window.removeEventListener("scroll", container.listener);
+      } else {
+        container.element.removeEventListener("scroll", container.listener);
+      }
+    }
     this.containers.length = 0;
   }
-  setupScrollContainer(e) {
-    if (e !== window && !this.isElementScrollable(e))
+  setupScrollContainer(element) {
+    if (element !== window && !this.isElementScrollable(element)) {
       return;
-    const t = {
-      element: e,
-      lastScrollPos: this.getScrollTop(e),
+    }
+    const container = {
+      element,
+      lastScrollPos: this.getScrollTop(element),
       debounceTimer: null,
       listener: () => {
       }
-    }, s = () => {
+    };
+    const handleScroll = async () => {
       if (this.get("suppressNextScroll")) {
-        this.set("suppressNextScroll", !1);
+        await this.set("suppressNextScroll", false);
         return;
       }
-      t.debounceTimer && clearTimeout(t.debounceTimer), t.debounceTimer = window.setTimeout(() => {
-        const n = this.calculateScrollData(t);
-        n && this.eventManager.track({
-          type: u.SCROLL,
-          scroll_data: n
-        }), t.debounceTimer = null;
-      }, Ce);
+      if (container.debounceTimer) {
+        clearTimeout(container.debounceTimer);
+      }
+      container.debounceTimer = window.setTimeout(() => {
+        const scrollData = this.calculateScrollData(container);
+        if (scrollData) {
+          this.eventManager.track({
+            type: EventType.SCROLL,
+            scroll_data: scrollData
+          });
+        }
+        container.debounceTimer = null;
+      }, SCROLL_DEBOUNCE_TIME_MS);
     };
-    t.listener = s, this.containers.push(t), e instanceof Window ? window.addEventListener("scroll", s, { passive: !0 }) : e.addEventListener("scroll", s, { passive: !0 });
+    container.listener = handleScroll;
+    this.containers.push(container);
+    if (element instanceof Window) {
+      window.addEventListener("scroll", handleScroll, { passive: true });
+    } else {
+      element.addEventListener("scroll", handleScroll, { passive: true });
+    }
   }
-  calculateScrollData(e) {
-    const { element: t, lastScrollPos: s } = e, n = this.getScrollTop(t), a = this.getViewportHeight(t), o = this.getScrollHeight(t);
-    if (t === window && o <= a)
+  calculateScrollData(container) {
+    const { element, lastScrollPos } = container;
+    const scrollTop = this.getScrollTop(element);
+    const viewportHeight = this.getViewportHeight(element);
+    const scrollHeight = this.getScrollHeight(element);
+    if (element === window && scrollHeight <= viewportHeight) {
       return null;
-    const d = n > s ? B.DOWN : B.UP, c = o > a ? Math.min(100, Math.max(0, Math.floor(n / (o - a) * 100))) : 0;
-    return Math.abs(n - s) < Oe ? null : (e.lastScrollPos = n, { depth: c, direction: d });
+    }
+    const direction = scrollTop > lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
+    const depth = scrollHeight > viewportHeight ? Math.min(100, Math.max(0, Math.floor(scrollTop / (scrollHeight - viewportHeight) * 100))) : 0;
+    const positionDelta = Math.abs(scrollTop - lastScrollPos);
+    if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
+      return null;
+    }
+    container.lastScrollPos = scrollTop;
+    return { depth, direction };
   }
-  getScrollTop(e) {
-    return e instanceof Window ? window.scrollY : e.scrollTop;
+  getScrollTop(element) {
+    return element instanceof Window ? window.scrollY : element.scrollTop;
   }
-  getViewportHeight(e) {
-    return e instanceof Window ? window.innerHeight : e.clientHeight;
+  getViewportHeight(element) {
+    return element instanceof Window ? window.innerHeight : element.clientHeight;
   }
-  getScrollHeight(e) {
-    return e instanceof Window ? document.documentElement.scrollHeight : e.scrollHeight;
+  getScrollHeight(element) {
+    return element instanceof Window ? document.documentElement.scrollHeight : element.scrollHeight;
   }
-  isElementScrollable(e) {
-    const t = getComputedStyle(e), s = t.overflowY === "auto" || t.overflowY === "scroll" || t.overflowX === "auto" || t.overflowX === "scroll" || t.overflow === "auto" || t.overflow === "scroll", n = e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth;
-    return s && n;
+  isElementScrollable(element) {
+    const style = getComputedStyle(element);
+    const hasScrollableOverflow = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflowX === "auto" || style.overflowX === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
+    const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+    return hasScrollableOverflow && hasOverflowContent;
   }
-  safeQuerySelector(e) {
+  safeQuerySelector(selector) {
     try {
-      return document.querySelector(e);
-    } catch (t) {
-      return i.clientWarn("ScrollHandler", "Invalid CSS selector", {
-        selector: e,
-        error: t instanceof Error ? t.message : "Unknown error"
-      }), null;
+      return document.querySelector(selector);
+    } catch (error) {
+      debugLog.clientWarn("ScrollHandler", "Invalid CSS selector", {
+        selector,
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+      return null;
     }
   }
 }
-class Bt extends v {
-  isInitialized = !1;
+class GoogleAnalyticsIntegration extends StateManager {
+  isInitialized = false;
   constructor() {
     super();
   }
   async initialize() {
-    if (this.isInitialized)
+    if (this.isInitialized) {
       return;
-    const e = this.get("config").integrations?.googleAnalytics?.measurementId;
-    if (!e?.trim()) {
-      i.clientWarn("GoogleAnalytics", "Google Analytics integration disabled - measurementId not configured", {
+    }
+    const measurementId = this.get("config").integrations?.googleAnalytics?.measurementId;
+    if (!measurementId?.trim()) {
+      debugLog.clientWarn("GoogleAnalytics", "Google Analytics integration disabled - measurementId not configured", {
         hasIntegrations: !!this.get("config").integrations,
         hasGoogleAnalytics: !!this.get("config").integrations?.googleAnalytics
       });
       return;
     }
-    const t = this.get("userId");
-    if (!t?.trim()) {
-      i.warn("GoogleAnalytics", "Google Analytics initialization delayed - userId not available", {
-        measurementId: e.substring(0, 8) + "..."
+    const userId = this.get("userId");
+    if (!userId?.trim()) {
+      debugLog.warn("GoogleAnalytics", "Google Analytics initialization delayed - userId not available", {
+        measurementId: measurementId.substring(0, 8) + "..."
       });
       return;
     }
     try {
       if (this.isScriptAlreadyLoaded()) {
-        i.info("GoogleAnalytics", "Google Analytics script already loaded", { measurementId: e }), this.isInitialized = !0;
+        debugLog.info("GoogleAnalytics", "Google Analytics script already loaded", { measurementId });
+        this.isInitialized = true;
         return;
       }
-      await this.loadScript(e), this.configureGtag(e, t), this.isInitialized = !0, i.info("GoogleAnalytics", "Google Analytics integration initialized successfully", {
-        measurementId: e,
-        userId: t
+      await this.loadScript(measurementId);
+      this.configureGtag(measurementId, userId);
+      this.isInitialized = true;
+      debugLog.info("GoogleAnalytics", "Google Analytics integration initialized successfully", {
+        measurementId,
+        userId
       });
-    } catch (s) {
-      i.error("GoogleAnalytics", "Google Analytics initialization failed", {
-        error: s instanceof Error ? s.message : "Unknown error",
-        measurementId: e,
-        userId: t
+    } catch (error) {
+      debugLog.error("GoogleAnalytics", "Google Analytics initialization failed", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        measurementId,
+        userId
       });
     }
   }
-  trackEvent(e, t) {
-    if (!e?.trim()) {
-      i.clientWarn("GoogleAnalytics", "Event tracking skipped - invalid event name provided", {
-        eventName: e,
-        hasMetadata: !!t && Object.keys(t).length > 0
+  trackEvent(eventName, metadata) {
+    if (!eventName?.trim()) {
+      debugLog.clientWarn("GoogleAnalytics", "Event tracking skipped - invalid event name provided", {
+        eventName,
+        hasMetadata: !!metadata && Object.keys(metadata).length > 0
       });
       return;
     }
-    if (this.isInitialized) {
-      if (typeof window.gtag != "function") {
-        i.warn("GoogleAnalytics", "Event tracking failed - gtag function not available", {
-          eventName: e,
-          hasGtag: typeof window.gtag,
-          hasDataLayer: Array.isArray(window.dataLayer)
-        });
-        return;
-      }
-      try {
-        window.gtag("event", e, t);
-      } catch (s) {
-        i.error("GoogleAnalytics", "Event tracking failed", {
-          eventName: e,
-          error: s instanceof Error ? s.message : "Unknown error",
-          metadataKeys: Object.keys(t || {})
-        });
-      }
+    if (!this.isInitialized) {
+      return;
+    }
+    if (typeof window.gtag !== "function") {
+      debugLog.warn("GoogleAnalytics", "Event tracking failed - gtag function not available", {
+        eventName,
+        hasGtag: typeof window.gtag,
+        hasDataLayer: Array.isArray(window.dataLayer)
+      });
+      return;
+    }
+    try {
+      window.gtag("event", eventName, metadata);
+    } catch (error) {
+      debugLog.error("GoogleAnalytics", "Event tracking failed", {
+        eventName,
+        error: error instanceof Error ? error.message : "Unknown error",
+        metadataKeys: Object.keys(metadata || {})
+      });
     }
   }
   cleanup() {
-    this.isInitialized = !1;
-    const e = document.getElementById("tracelog-ga-script");
-    e && e.remove(), i.info("GoogleAnalytics", "Google Analytics integration cleanup completed");
+    this.isInitialized = false;
+    const script = document.getElementById("tracelog-ga-script");
+    if (script) {
+      script.remove();
+    }
+    debugLog.info("GoogleAnalytics", "Google Analytics integration cleanup completed");
   }
   isScriptAlreadyLoaded() {
-    if (document.getElementById("tracelog-ga-script"))
-      return !0;
-    const t = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
-    return t ? (i.clientWarn("GoogleAnalytics", "Google Analytics script already loaded from external source", {
-      scriptSrc: t.getAttribute("src"),
-      hasGtag: typeof window.gtag == "function"
-    }), !0) : !1;
+    const tracelogScript = document.getElementById("tracelog-ga-script");
+    if (tracelogScript) {
+      return true;
+    }
+    const existingGAScript = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
+    if (existingGAScript) {
+      debugLog.clientWarn("GoogleAnalytics", "Google Analytics script already loaded from external source", {
+        scriptSrc: existingGAScript.getAttribute("src"),
+        hasGtag: typeof window.gtag === "function"
+      });
+      return true;
+    }
+    return false;
   }
-  async loadScript(e) {
-    return new Promise((t, s) => {
+  async loadScript(measurementId) {
+    return new Promise((resolve, reject) => {
       try {
-        const n = document.createElement("script");
-        n.id = "tracelog-ga-script", n.async = !0, n.src = `https://www.googletagmanager.com/gtag/js?id=${e}`, n.onload = () => {
-          t();
-        }, n.onerror = () => {
-          const a = new Error("Failed to load Google Analytics script");
-          i.error("GoogleAnalytics", "Google Analytics script load failed", {
-            measurementId: e,
-            error: a.message,
-            scriptSrc: n.src
-          }), s(a);
-        }, document.head.appendChild(n);
-      } catch (n) {
-        const a = n instanceof Error ? n : new Error(String(n));
-        i.error("GoogleAnalytics", "Error creating Google Analytics script", {
-          measurementId: e,
-          error: a.message
-        }), s(a);
+        const script = document.createElement("script");
+        script.id = "tracelog-ga-script";
+        script.async = true;
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+        script.onload = () => {
+          resolve();
+        };
+        script.onerror = () => {
+          const error = new Error("Failed to load Google Analytics script");
+          debugLog.error("GoogleAnalytics", "Google Analytics script load failed", {
+            measurementId,
+            error: error.message,
+            scriptSrc: script.src
+          });
+          reject(error);
+        };
+        document.head.appendChild(script);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error : new Error(String(error));
+        debugLog.error("GoogleAnalytics", "Error creating Google Analytics script", {
+          measurementId,
+          error: errorMsg.message
+        });
+        reject(errorMsg);
       }
     });
   }
-  configureGtag(e, t) {
+  configureGtag(measurementId, userId) {
     try {
-      const s = document.createElement("script");
-      s.innerHTML = `
+      const gaScriptConfig = document.createElement("script");
+      gaScriptConfig.innerHTML = `
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-        gtag('config', '${e}', {
-          'user_id': '${t}'
+        gtag('config', '${measurementId}', {
+          'user_id': '${userId}'
         });
-      `, document.head.appendChild(s);
-    } catch (s) {
-      throw i.error("GoogleAnalytics", "Failed to configure Google Analytics", {
-        measurementId: e,
-        userId: t,
-        error: s instanceof Error ? s.message : "Unknown error"
-      }), s;
+      `;
+      document.head.appendChild(gaScriptConfig);
+    } catch (error) {
+      debugLog.error("GoogleAnalytics", "Failed to configure Google Analytics", {
+        measurementId,
+        userId,
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+      throw error;
     }
   }
 }
-class jt {
+class StorageManager {
   storage = null;
   fallbackStorage = /* @__PURE__ */ new Map();
-  storageAvailable = !1;
+  storageAvailable = false;
   constructor() {
-    this.storage = this.init(), this.storageAvailable = this.storage !== null, this.storageAvailable || i.warn("StorageManager", "localStorage not available, using memory fallback");
-  }
-  getItem(e) {
-    if (!this.storageAvailable)
-      return this.fallbackStorage.get(e) ?? null;
-    try {
-      return this.storage ? this.storage.getItem(e) : this.fallbackStorage.get(e) ?? null;
-    } catch (t) {
-      return i.warn("StorageManager", "Storage getItem failed, using memory fallback", { key: e, error: t }), this.storageAvailable = !1, this.fallbackStorage.get(e) ?? null;
+    this.storage = this.init();
+    this.storageAvailable = this.storage !== null;
+    if (!this.storageAvailable) {
+      debugLog.warn("StorageManager", "localStorage not available, using memory fallback");
     }
   }
-  setItem(e, t) {
+  getItem(key) {
     if (!this.storageAvailable) {
-      this.fallbackStorage.set(e, t);
-      return;
+      return this.fallbackStorage.get(key) ?? null;
     }
     try {
-      this.storage ? this.storage.setItem(e, t) : this.fallbackStorage.set(e, t);
-    } catch (s) {
-      if (this.handleStorageError(s, e, "set"))
-        try {
-          this.storage?.setItem(e, t);
-          return;
-        } catch (a) {
-          i.warn("StorageManager", "Storage retry failed, using memory fallback", { key: e, retryError: a });
-        }
-      i.warn("StorageManager", "Storage setItem failed, using memory fallback", { key: e, error: s }), this.storageAvailable = !1, this.fallbackStorage.set(e, t);
+      if (this.storage) {
+        return this.storage.getItem(key);
+      }
+      return this.fallbackStorage.get(key) ?? null;
+    } catch (error) {
+      debugLog.warn("StorageManager", "Storage getItem failed, using memory fallback", { key, error });
+      this.storageAvailable = false;
+      return this.fallbackStorage.get(key) ?? null;
     }
   }
-  removeItem(e) {
+  setItem(key, value) {
     if (!this.storageAvailable) {
-      this.fallbackStorage.delete(e);
+      this.fallbackStorage.set(key, value);
       return;
     }
     try {
       if (this.storage) {
-        this.storage.removeItem(e);
+        this.storage.setItem(key, value);
+      } else {
+        this.fallbackStorage.set(key, value);
+      }
+    } catch (error) {
+      const shouldRetry = this.handleStorageError(error, key, "set");
+      if (shouldRetry) {
+        try {
+          this.storage?.setItem(key, value);
+          return;
+        } catch (retryError) {
+          debugLog.warn("StorageManager", "Storage retry failed, using memory fallback", { key, retryError });
+        }
+      }
+      debugLog.warn("StorageManager", "Storage setItem failed, using memory fallback", { key, error });
+      this.storageAvailable = false;
+      this.fallbackStorage.set(key, value);
+    }
+  }
+  removeItem(key) {
+    if (!this.storageAvailable) {
+      this.fallbackStorage.delete(key);
+      return;
+    }
+    try {
+      if (this.storage) {
+        this.storage.removeItem(key);
         return;
       }
-      this.fallbackStorage.delete(e);
-    } catch (t) {
-      i.warn("StorageManager", "Storage removeItem failed, using memory fallback", { key: e, error: t }), this.storageAvailable = !1, this.fallbackStorage.delete(e);
+      this.fallbackStorage.delete(key);
+    } catch (error) {
+      debugLog.warn("StorageManager", "Storage removeItem failed, using memory fallback", { key, error });
+      this.storageAvailable = false;
+      this.fallbackStorage.delete(key);
     }
   }
   performStorageCleanup() {
     try {
-      const e = [];
-      for (let t = 0; t < localStorage.length; t++) {
-        const s = localStorage.key(t);
-        if (s?.startsWith("tracelog_"))
+      const keysToClean = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("tracelog_")) {
           try {
-            const n = JSON.parse(localStorage.getItem(s) ?? "{}");
-            Date.now() - (n.timestamp ?? 0) > 24 * 60 * 60 * 1e3 && e.push(s);
+            const data = JSON.parse(localStorage.getItem(key) ?? "{}");
+            const age = Date.now() - (data.timestamp ?? 0);
+            if (age > 24 * 60 * 60 * 1e3) {
+              keysToClean.push(key);
+            }
           } catch {
-            e.push(s);
+            keysToClean.push(key);
           }
+        }
       }
-      return e.forEach((t) => localStorage.removeItem(t)), i.info("StorageManager", "Storage cleanup completed", {
-        keysRemoved: e.length
-      }), e.length > 0;
-    } catch (e) {
-      return i.error("StorageManager", "Storage cleanup failed", { error: e }), !1;
+      keysToClean.forEach((key) => localStorage.removeItem(key));
+      debugLog.info("StorageManager", "Storage cleanup completed", {
+        keysRemoved: keysToClean.length
+      });
+      return keysToClean.length > 0;
+    } catch (error) {
+      debugLog.error("StorageManager", "Storage cleanup failed", { error });
+      return false;
     }
   }
-  handleStorageError(e, t, s) {
-    return e.name === "QuotaExceededError" && (i.warn("StorageManager", "Storage quota exceeded, attempting cleanup", { key: t, operation: s }), this.performStorageCleanup() && s === "set") ? (i.info("StorageManager", "Retrying storage operation after cleanup", { key: t }), !0) : !1;
+  handleStorageError(error, key, operation) {
+    if (error.name === "QuotaExceededError") {
+      debugLog.warn("StorageManager", "Storage quota exceeded, attempting cleanup", { key, operation });
+      const cleanupSuccess = this.performStorageCleanup();
+      if (cleanupSuccess && operation === "set") {
+        debugLog.info("StorageManager", "Retrying storage operation after cleanup", { key });
+        return true;
+      }
+    }
+    return false;
   }
   init() {
     try {
-      const e = "__storage_test__", t = window.localStorage;
-      return t.setItem(e, e), t.removeItem(e), t;
+      const test = "__storage_test__";
+      const storage = window["localStorage"];
+      storage.setItem(test, test);
+      storage.removeItem(test);
+      return storage;
     } catch {
       return null;
     }
   }
 }
-class Gt extends v {
+class PerformanceHandler extends StateManager {
   eventManager;
   reportedByNav = /* @__PURE__ */ new Map();
   observers = [];
   lastLongTaskSentAt = 0;
-  constructor(e) {
-    super(), this.eventManager = e;
+  constructor(eventManager) {
+    super();
+    this.eventManager = eventManager;
   }
   async startTracking() {
-    i.debug("PerformanceHandler", "Starting performance tracking"), await this.initWebVitals(), this.observeLongTasks(), this.reportTTFB();
+    debugLog.debug("PerformanceHandler", "Starting performance tracking");
+    await this.initWebVitals();
+    this.observeLongTasks();
+    this.reportTTFB();
   }
   stopTracking() {
-    i.debug("PerformanceHandler", "Stopping performance tracking", { observersCount: this.observers.length }), this.observers.forEach((e, t) => {
+    debugLog.debug("PerformanceHandler", "Stopping performance tracking", { observersCount: this.observers.length });
+    this.observers.forEach((obs, index) => {
       try {
-        e.disconnect();
-      } catch (s) {
-        i.warn("PerformanceHandler", "Failed to disconnect performance observer", {
-          error: s instanceof Error ? s.message : "Unknown error",
-          observerIndex: t
+        obs.disconnect();
+      } catch (error) {
+        debugLog.warn("PerformanceHandler", "Failed to disconnect performance observer", {
+          error: error instanceof Error ? error.message : "Unknown error",
+          observerIndex: index
         });
       }
-    }), this.observers.length = 0, this.reportedByNav.clear(), i.debug("PerformanceHandler", "Performance tracking cleanup completed", {
+    });
+    this.observers.length = 0;
+    this.reportedByNav.clear();
+    debugLog.debug("PerformanceHandler", "Performance tracking cleanup completed", {
       remainingObservers: this.observers.length,
-      clearedNavReports: !0
+      clearedNavReports: true
     });
   }
   observeWebVitalsFallback() {
-    this.reportTTFB(), this.safeObserve(
+    this.reportTTFB();
+    this.safeObserve(
       "largest-contentful-paint",
-      (t) => {
-        const s = t.getEntries(), n = s[s.length - 1];
-        n && this.sendVital({ type: "LCP", value: Number(n.startTime.toFixed(k)) });
+      (list) => {
+        const entries = list.getEntries();
+        const last = entries[entries.length - 1];
+        if (!last) {
+          return;
+        }
+        this.sendVital({ type: "LCP", value: Number(last.startTime.toFixed(PRECISION_TWO_DECIMALS)) });
       },
-      { type: "largest-contentful-paint", buffered: !0 },
-      !0
+      { type: "largest-contentful-paint", buffered: true },
+      true
     );
-    let e = 0;
+    let clsValue = 0;
     this.safeObserve(
       "layout-shift",
-      (t) => {
-        const s = t.getEntries();
-        for (const n of s) {
-          if (n.hadRecentInput === !0)
+      (list) => {
+        const entries = list.getEntries();
+        for (const entry of entries) {
+          if (entry.hadRecentInput === true) {
             continue;
-          const a = typeof n.value == "number" ? n.value : 0;
-          e += a;
+          }
+          const value = typeof entry.value === "number" ? entry.value : 0;
+          clsValue += value;
         }
-        this.sendVital({ type: "CLS", value: Number(e.toFixed(xe)) });
+        this.sendVital({ type: "CLS", value: Number(clsValue.toFixed(PRECISION_FOUR_DECIMALS)) });
       },
-      { type: "layout-shift", buffered: !0 }
-    ), this.safeObserve(
+      { type: "layout-shift", buffered: true }
+    );
+    this.safeObserve(
       "paint",
-      (t) => {
-        for (const s of t.getEntries())
-          s.name === "first-contentful-paint" && this.sendVital({ type: "FCP", value: Number(s.startTime.toFixed(k)) });
-      },
-      { type: "paint", buffered: !0 },
-      !0
-    ), this.safeObserve(
-      "event",
-      (t) => {
-        let s = 0;
-        const n = t.getEntries();
-        for (const a of n) {
-          const o = (a.processingEnd ?? 0) - (a.startTime ?? 0);
-          s = Math.max(s, o);
+      (list) => {
+        for (const entry of list.getEntries()) {
+          if (entry.name === "first-contentful-paint") {
+            this.sendVital({ type: "FCP", value: Number(entry.startTime.toFixed(PRECISION_TWO_DECIMALS)) });
+          }
         }
-        s > 0 && this.sendVital({ type: "INP", value: Number(s.toFixed(k)) });
       },
-      { type: "event", buffered: !0 }
+      { type: "paint", buffered: true },
+      true
+    );
+    this.safeObserve(
+      "event",
+      (list) => {
+        let worst = 0;
+        const entries = list.getEntries();
+        for (const entry of entries) {
+          const dur = (entry.processingEnd ?? 0) - (entry.startTime ?? 0);
+          worst = Math.max(worst, dur);
+        }
+        if (worst > 0) {
+          this.sendVital({ type: "INP", value: Number(worst.toFixed(PRECISION_TWO_DECIMALS)) });
+        }
+      },
+      { type: "event", buffered: true }
     );
   }
   async initWebVitals() {
     try {
-      const { onLCP: e, onCLS: t, onFCP: s, onTTFB: n, onINP: a } = await import("./web-vitals-CCnqwnC8.mjs"), o = (d) => (c) => {
-        const l = Number(c.value.toFixed(k));
-        this.sendVital({ type: d, value: l });
+      const { onLCP, onCLS, onFCP, onTTFB, onINP } = await import("./web-vitals-Dz7_abrn.mjs");
+      const report = (type) => (metric) => {
+        const value = Number(metric.value.toFixed(PRECISION_TWO_DECIMALS));
+        this.sendVital({ type, value });
       };
-      e(o("LCP")), t(o("CLS")), s(o("FCP")), n(o("TTFB")), a(o("INP"));
-    } catch (e) {
-      i.warn("PerformanceHandler", "Failed to load web-vitals library, using fallback", {
-        error: e instanceof Error ? e.message : "Unknown error"
-      }), this.observeWebVitalsFallback();
+      onLCP(report("LCP"));
+      onCLS(report("CLS"));
+      onFCP(report("FCP"));
+      onTTFB(report("TTFB"));
+      onINP(report("INP"));
+    } catch (error) {
+      debugLog.warn("PerformanceHandler", "Failed to load web-vitals library, using fallback", {
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+      this.observeWebVitalsFallback();
     }
   }
   reportTTFB() {
     try {
-      const e = performance.getEntriesByType("navigation")[0];
-      if (!e) {
-        i.debug("PerformanceHandler", "Navigation timing not available for TTFB");
+      const nav = performance.getEntriesByType("navigation")[0];
+      if (!nav) {
+        debugLog.debug("PerformanceHandler", "Navigation timing not available for TTFB");
         return;
       }
-      const t = e.responseStart;
-      typeof t == "number" && Number.isFinite(t) ? this.sendVital({ type: "TTFB", value: Number(t.toFixed(k)) }) : i.debug("PerformanceHandler", "TTFB value is not a valid number", { ttfb: t });
-    } catch (e) {
-      i.warn("PerformanceHandler", "Failed to report TTFB", {
-        error: e instanceof Error ? e.message : "Unknown error"
+      const ttfb = nav.responseStart;
+      if (typeof ttfb === "number" && Number.isFinite(ttfb)) {
+        this.sendVital({ type: "TTFB", value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
+      } else {
+        debugLog.debug("PerformanceHandler", "TTFB value is not a valid number", { ttfb });
+      }
+    } catch (error) {
+      debugLog.warn("PerformanceHandler", "Failed to report TTFB", {
+        error: error instanceof Error ? error.message : "Unknown error"
       });
     }
   }
   observeLongTasks() {
     this.safeObserve(
       "longtask",
-      (e) => {
-        const t = e.getEntries();
-        for (const s of t) {
-          const n = Number(s.duration.toFixed(k)), a = Date.now();
-          a - this.lastLongTaskSentAt >= Ke && (this.trackWebVital("LONG_TASK", n), this.lastLongTaskSentAt = a);
+      (list) => {
+        const entries = list.getEntries();
+        for (const entry of entries) {
+          const duration = Number(entry.duration.toFixed(PRECISION_TWO_DECIMALS));
+          const now = Date.now();
+          if (now - this.lastLongTaskSentAt >= LONG_TASK_THROTTLE_MS) {
+            this.trackWebVital("LONG_TASK", duration);
+            this.lastLongTaskSentAt = now;
+          }
         }
       },
-      { type: "longtask", buffered: !0 }
+      { type: "longtask", buffered: true }
     );
   }
-  sendVital(e) {
-    const t = this.getNavigationId(), s = `${e.type}`;
-    if (t) {
-      this.reportedByNav.has(t) || this.reportedByNav.set(t, /* @__PURE__ */ new Set());
-      const n = this.reportedByNav.get(t);
-      if (n.has(s))
+  sendVital(sample) {
+    const navId = this.getNavigationId();
+    const key = `${sample.type}`;
+    if (navId) {
+      if (!this.reportedByNav.has(navId)) {
+        this.reportedByNav.set(navId, /* @__PURE__ */ new Set());
+      }
+      const sent = this.reportedByNav.get(navId);
+      if (sent.has(key)) {
         return;
-      n.add(s);
+      }
+      sent.add(key);
     }
-    this.trackWebVital(e.type, e.value);
+    this.trackWebVital(sample.type, sample.value);
   }
-  trackWebVital(e, t) {
-    if (typeof t != "number" || !Number.isFinite(t)) {
-      i.warn("PerformanceHandler", "Invalid web vital value", { type: e, value: t });
+  trackWebVital(type, value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      debugLog.warn("PerformanceHandler", "Invalid web vital value", { type, value });
       return;
     }
     this.eventManager.track({
-      type: u.WEB_VITALS,
+      type: EventType.WEB_VITALS,
       web_vitals: {
-        type: e,
-        value: t
+        type,
+        value
       }
     });
   }
   getNavigationId() {
     try {
-      const e = performance.getEntriesByType("navigation")[0];
-      return e ? `${Math.round(e.startTime)}_${window.location.pathname}` : null;
-    } catch (e) {
-      return i.warn("PerformanceHandler", "Failed to get navigation ID", {
-        error: e instanceof Error ? e.message : "Unknown error"
-      }), null;
+      const nav = performance.getEntriesByType("navigation")[0];
+      if (!nav) {
+        return null;
+      }
+      return `${Math.round(nav.startTime)}_${window.location.pathname}`;
+    } catch (error) {
+      debugLog.warn("PerformanceHandler", "Failed to get navigation ID", {
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+      return null;
     }
   }
-  safeObserve(e, t, s, n = !1) {
+  safeObserve(type, cb, options, once = false) {
     try {
-      if (typeof PerformanceObserver > "u") return;
-      const a = PerformanceObserver.supportedEntryTypes;
-      if (a && !a.includes(e)) return;
-      const o = new PerformanceObserver((d, c) => {
-        if (t(d, c), n)
+      if (typeof PerformanceObserver === "undefined") return;
+      const supported = PerformanceObserver.supportedEntryTypes;
+      if (supported && !supported.includes(type)) return;
+      const obs = new PerformanceObserver((list, observer) => {
+        cb(list, observer);
+        if (once) {
           try {
-            c.disconnect();
+            observer.disconnect();
           } catch {
           }
+        }
       });
-      o.observe(s ?? { type: e, buffered: !0 }), n || this.observers.push(o);
-    } catch (a) {
-      i.warn("PerformanceHandler", "Failed to create performance observer", {
-        type: e,
-        error: a instanceof Error ? a.message : "Unknown error"
+      obs.observe(options ?? { type, buffered: true });
+      if (!once) {
+        this.observers.push(obs);
+      }
+    } catch (error) {
+      debugLog.warn("PerformanceHandler", "Failed to create performance observer", {
+        type,
+        error: error instanceof Error ? error.message : "Unknown error"
       });
     }
   }
 }
-class Qt extends v {
+class ErrorHandler extends StateManager {
   eventManager;
   piiPatterns = [
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
@@ -3856,14 +5905,19 @@ class Qt extends v {
     /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
     /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g
   ];
-  constructor(e) {
-    super(), this.eventManager = e;
+  constructor(eventManager) {
+    super();
+    this.eventManager = eventManager;
   }
   startTracking() {
-    i.debug("ErrorHandler", "Starting error tracking"), this.setupErrorListener(), this.setupUnhandledRejectionListener();
+    debugLog.debug("ErrorHandler", "Starting error tracking");
+    this.setupErrorListener();
+    this.setupUnhandledRejectionListener();
   }
   stopTracking() {
-    i.debug("ErrorHandler", "Stopping error tracking"), window.removeEventListener("error", this.handleError), window.removeEventListener("unhandledrejection", this.handleUnhandledRejection);
+    debugLog.debug("ErrorHandler", "Stopping error tracking");
+    window.removeEventListener("error", this.handleError);
+    window.removeEventListener("unhandledrejection", this.handleUnhandledRejection);
   }
   setupErrorListener() {
     window.addEventListener("error", this.handleError);
@@ -3871,143 +5925,177 @@ class Qt extends v {
   setupUnhandledRejectionListener() {
     window.addEventListener("unhandledrejection", this.handleUnhandledRejection);
   }
-  handleError = (e) => {
-    const t = this.get("config");
-    if (!this.shouldSample(t?.errorSampling ?? 0.1)) {
-      i.debug("ErrorHandler", `Error not sampled, skipping (errorSampling: ${t?.errorSampling})`, {
-        errorSampling: t?.errorSampling
+  handleError = (event2) => {
+    const config = this.get("config");
+    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
+      debugLog.debug("ErrorHandler", `Error not sampled, skipping (errorSampling: ${config?.errorSampling})`, {
+        errorSampling: config?.errorSampling
       });
       return;
     }
-    i.warn(
+    debugLog.warn(
       "ErrorHandler",
-      `JavaScript error captured: ${e.message} (filename: ${e.filename}, lineno: ${e.lineno})`,
+      `JavaScript error captured: ${event2.message} (filename: ${event2.filename}, lineno: ${event2.lineno})`,
       {
-        message: e.message,
-        filename: e.filename,
-        lineno: e.lineno
+        message: event2.message,
+        filename: event2.filename,
+        lineno: event2.lineno
       }
-    ), this.eventManager.track({
-      type: u.ERROR,
+    );
+    this.eventManager.track({
+      type: EventType.ERROR,
       error_data: {
-        type: U.JS_ERROR,
-        message: this.sanitizeText(e.message || "Unknown error")
+        type: ErrorType.JS_ERROR,
+        message: this.sanitizeText(event2.message || "Unknown error")
       }
     });
   };
-  handleUnhandledRejection = (e) => {
-    const t = this.get("config");
-    if (!this.shouldSample(t?.errorSampling ?? 0.1)) {
-      i.debug("ErrorHandler", "Promise rejection not sampled, skipping", {
-        errorSampling: t?.errorSampling
+  handleUnhandledRejection = (event2) => {
+    const config = this.get("config");
+    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
+      debugLog.debug("ErrorHandler", "Promise rejection not sampled, skipping", {
+        errorSampling: config?.errorSampling
       });
       return;
     }
-    i.warn("ErrorHandler", `Unhandled promise rejection captured (reason: ${typeof e.reason})`, {
-      reason: typeof e.reason
+    debugLog.warn("ErrorHandler", `Unhandled promise rejection captured (reason: ${typeof event2.reason})`, {
+      reason: typeof event2.reason
     });
-    let s = "Unknown rejection";
-    e.reason && (typeof e.reason == "string" ? s = e.reason : e.reason instanceof Error ? s = e.reason.message || e.reason.toString() : s = String(e.reason)), this.eventManager.track({
-      type: u.ERROR,
+    let reason = "Unknown rejection";
+    if (event2.reason) {
+      if (typeof event2.reason === "string") {
+        reason = event2.reason;
+      } else if (event2.reason instanceof Error) {
+        reason = event2.reason.message || event2.reason.toString();
+      } else {
+        reason = String(event2.reason);
+      }
+    }
+    this.eventManager.track({
+      type: EventType.ERROR,
       error_data: {
-        type: U.PROMISE_REJECTION,
-        message: this.sanitizeText(s)
+        type: ErrorType.PROMISE_REJECTION,
+        message: this.sanitizeText(reason)
       }
     });
   };
-  sanitizeText(e) {
-    let t = e;
-    for (const s of this.piiPatterns)
-      t = t.replace(s, "[REDACTED]");
-    return t;
+  sanitizeText(text) {
+    let sanitized = text;
+    for (const pattern of this.piiPatterns) {
+      sanitized = sanitized.replace(pattern, "[REDACTED]");
+    }
+    return sanitized;
   }
-  shouldSample(e) {
-    return Math.random() < e;
+  shouldSample(rate) {
+    return Math.random() < rate;
   }
 }
-class Wt extends v {
+class NetworkHandler extends StateManager {
   eventManager;
   originalXHROpen;
   originalXHRSend;
-  constructor(e) {
-    super(), this.eventManager = e, this.originalXHROpen = XMLHttpRequest.prototype.open, this.originalXHRSend = XMLHttpRequest.prototype.send;
+  constructor(eventManager) {
+    super();
+    this.eventManager = eventManager;
+    this.originalXHROpen = XMLHttpRequest.prototype.open;
+    this.originalXHRSend = XMLHttpRequest.prototype.send;
   }
   startTracking() {
-    i.debug("NetworkHandler", "Starting network error tracking"), this.interceptXHR();
+    debugLog.debug("NetworkHandler", "Starting network error tracking");
+    this.interceptXHR();
   }
   stopTracking() {
-    i.debug("NetworkHandler", "Stopping network error tracking"), XMLHttpRequest.prototype.open = this.originalXHROpen, XMLHttpRequest.prototype.send = this.originalXHRSend;
+    debugLog.debug("NetworkHandler", "Stopping network error tracking");
+    XMLHttpRequest.prototype.open = this.originalXHROpen;
+    XMLHttpRequest.prototype.send = this.originalXHRSend;
   }
   interceptXHR() {
-    const e = this.trackNetworkError.bind(this), t = this.normalizeUrlForTracking.bind(this), s = this.originalXHROpen, n = this.originalXHRSend;
-    XMLHttpRequest.prototype.open = function(a, o, d, c, l) {
-      const h = d ?? !0, g = this;
-      return g._tracelogStartTime = Date.now(), g._tracelogMethod = a.toUpperCase(), g._tracelogUrl = o.toString(), s.call(this, a, o, h, c, l);
-    }, XMLHttpRequest.prototype.send = function(a) {
-      const o = this, d = o._tracelogStartTime ?? Date.now(), c = o._tracelogMethod ?? "GET", l = o._tracelogUrl ?? "", h = o.onreadystatechange;
-      return o.onreadystatechange = (g) => {
-        if (o.readyState === XMLHttpRequest.DONE) {
-          const S = Date.now() - d, M = l.includes("/collect") || l.includes("/config");
-          if ((o.status === 0 || o.status >= 400) && !M) {
-            const b = o.statusText || "Request Failed";
-            i.debug("NetworkHandler", "XHR error detected", {
-              method: c,
-              url: t(l),
-              status: o.status,
-              statusText: b
-            }), e(c, t(l), o.status, b, S);
+    const trackNetworkError = this.trackNetworkError.bind(this);
+    const normalizeUrlForTracking = this.normalizeUrlForTracking.bind(this);
+    const originalXHROpen = this.originalXHROpen;
+    const originalXHRSend = this.originalXHRSend;
+    XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+      const asyncMode = async ?? true;
+      const extendedThis = this;
+      extendedThis._tracelogStartTime = Date.now();
+      extendedThis._tracelogMethod = method.toUpperCase();
+      extendedThis._tracelogUrl = url.toString();
+      return originalXHROpen.call(this, method, url, asyncMode, user, password);
+    };
+    XMLHttpRequest.prototype.send = function(body) {
+      const xhr = this;
+      const startTime = xhr._tracelogStartTime ?? Date.now();
+      const method = xhr._tracelogMethod ?? "GET";
+      const url = xhr._tracelogUrl ?? "";
+      const originalOnReadyStateChange = xhr.onreadystatechange;
+      xhr.onreadystatechange = (ev) => {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          const duration = Date.now() - startTime;
+          const isCollectEndpoint = url.includes("/collect") || url.includes("/config");
+          if ((xhr.status === 0 || xhr.status >= 400) && !isCollectEndpoint) {
+            const statusText = xhr.statusText || "Request Failed";
+            debugLog.debug("NetworkHandler", "XHR error detected", {
+              method,
+              url: normalizeUrlForTracking(url),
+              status: xhr.status,
+              statusText
+            });
+            trackNetworkError(method, normalizeUrlForTracking(url), xhr.status, statusText, duration);
           }
         }
-        if (h)
-          return h.call(o, g);
-      }, n.call(this, a);
+        if (originalOnReadyStateChange) {
+          return originalOnReadyStateChange.call(xhr, ev);
+        }
+      };
+      return originalXHRSend.call(this, body);
     };
   }
-  trackNetworkError(e, t, s, n, a) {
-    const o = this.get("config");
-    if (!this.shouldSample(o?.errorSampling ?? 0.1)) {
-      i.debug(
+  trackNetworkError(method, url, status, statusText, duration) {
+    const config = this.get("config");
+    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
+      debugLog.debug(
         "NetworkHandler",
-        `Network error not sampled, skipping (errorSampling: ${o?.errorSampling}, method: ${e}, url: ${t})`,
+        `Network error not sampled, skipping (errorSampling: ${config?.errorSampling}, method: ${method}, url: ${url})`,
         {
-          errorSampling: o?.errorSampling,
-          method: e,
-          url: t
+          errorSampling: config?.errorSampling,
+          method,
+          url
         }
       );
       return;
     }
-    i.warn(
+    debugLog.warn(
       "NetworkHandler",
-      `Network error tracked: ${e} ${t} (status: ${s}, statusText: ${n}, duration: ${a}ms)`,
-      { method: e, url: t, status: s, statusText: n, duration: a }
-    ), this.eventManager.track({
-      type: u.ERROR,
+      `Network error tracked: ${method} ${url} (status: ${status}, statusText: ${statusText}, duration: ${duration}ms)`,
+      { method, url, status, statusText, duration }
+    );
+    this.eventManager.track({
+      type: EventType.ERROR,
       error_data: {
-        type: U.NETWORK_ERROR,
-        message: n,
-        method: e,
-        url: t,
-        status: s,
-        statusText: n,
-        duration: a
+        type: ErrorType.NETWORK_ERROR,
+        message: statusText,
+        method,
+        url,
+        status,
+        statusText,
+        duration
       }
     });
   }
-  normalizeUrlForTracking(e) {
+  normalizeUrlForTracking(url) {
     try {
-      const t = this.get("config");
-      return ie(e, t?.sensitiveQueryParams);
+      const config = this.get("config");
+      return normalizeUrl(url, config?.sensitiveQueryParams);
     } catch {
-      return e;
+      return url;
     }
   }
-  shouldSample(e) {
-    return Math.random() < e;
+  shouldSample(rate) {
+    return Math.random() < rate;
   }
 }
-class qt extends v {
-  isInitialized = !1;
+class App extends StateManager {
+  isInitialized = false;
   googleAnalytics = null;
   storageManager;
   eventManager;
@@ -4026,58 +6114,233 @@ class qt extends v {
   get initialized() {
     return this.isInitialized;
   }
-  async init(e) {
+  async init(appConfig) {
     if (this.isInitialized) {
-      i.debug("App", "App already initialized, skipping re-initialization", { projectId: e.id });
+      debugLog.debug("App", "App already initialized, skipping re-initialization", { projectId: appConfig.id });
       return;
     }
-    i.info("App", "App initialization started", { projectId: e.id }), this.validateAppReadiness(e);
+    debugLog.info("App", "App initialization started", { projectId: appConfig.id });
     try {
-      this.initStorage(), await this.setState(e), await this.setIntegrations(), this.setEventManager(), await this.initHandlers(), await this.eventManager.recoverPersistedEvents(), this.isInitialized = !0, i.info("App", "App initialization completed successfully", {
-        projectId: e.id
+      debugLog.debug("App", "Initializing storage manager");
+      this.initStorage();
+      this.validateStorageManager();
+      debugLog.debug("App", "Setting application state");
+      await this.setState(appConfig);
+      this.validateState();
+      debugLog.debug("App", "Setting integrations");
+      await this.setIntegrations();
+      debugLog.debug("App", "Initializing event manager");
+      this.setEventManager();
+      this.validateEventManager();
+      debugLog.debug("App", "Initializing handlers");
+      await this.initHandlers();
+      this.validateHandlersInitialized();
+      debugLog.debug("App", "Recovering persisted events");
+      await this.eventManager.recoverPersistedEvents();
+      this.isInitialized = true;
+      debugLog.info("App", "App initialization completed successfully", {
+        projectId: appConfig.id
       });
-    } catch (t) {
-      throw this.isInitialized = !1, i.error("App", "App initialization failed", { projectId: e.id, error: t }), t;
+    } catch (error) {
+      this.isInitialized = false;
+      debugLog.error("App", "App initialization failed, performing rollback", { projectId: appConfig.id, error });
+      await this.rollbackInitialization();
+      throw error;
     }
   }
   /**
-   * Validates that the app is ready to initialize with the provided config
-   * This is a lightweight runtime validation layer that ensures the app receives proper config
-   * @param appConfig - The validated and normalized configuration
-   * @throws {ProjectIdValidationError} If project ID is invalid at runtime
+   * Validates that StorageManager was properly initialized
+   * @throws {Error} If StorageManager is not initialized
    */
-  validateAppReadiness(e) {
-    if (!e?.id)
-      throw i.clientError("App", "Configuration integrity check failed - missing project ID", {
-        hasConfig: !!e,
-        hasId: !!e?.id
-      }), new G("Configuration integrity check failed", "app");
+  validateStorageManager() {
+    if (!this.storageManager) {
+      debugLog.error("App", "StorageManager validation failed - not initialized");
+      throw new Error("StorageManager initialization failed");
+    }
   }
-  sendCustomEvent(e, t) {
+  /**
+   * Validates that required state properties are set
+   * @throws {Error} If required state is missing
+   */
+  validateState() {
+    const missingState = [];
+    if (!this.get("apiUrl")) {
+      missingState.push("apiUrl");
+    }
+    if (!this.get("config")) {
+      missingState.push("config");
+    }
+    if (!this.get("userId")) {
+      missingState.push("userId");
+    }
+    if (!this.get("device")) {
+      missingState.push("device");
+    }
+    if (!this.get("pageUrl")) {
+      missingState.push("pageUrl");
+    }
+    if (missingState.length > 0) {
+      debugLog.error("App", "State validation failed - missing required properties", { missingState });
+      throw new Error(`State initialization failed - missing: ${missingState.join(", ")}`);
+    }
+  }
+  /**
+   * Validates that EventManager was properly initialized
+   * @throws {Error} If EventManager is not initialized
+   */
+  validateEventManager() {
     if (!this.eventManager) {
-      i.warn("App", "Custom event attempted before eventManager initialization", { eventName: e });
+      debugLog.error("App", "EventManager validation failed - not initialized");
+      throw new Error("EventManager initialization failed");
+    }
+  }
+  /**
+   * Validates that all required handlers are initialized
+   * @throws {Error} If any required handler is missing
+   */
+  validateHandlersInitialized() {
+    const requiredHandlers = [
+      { name: "sessionHandler", handler: this.sessionHandler },
+      { name: "scrollHandler", handler: this.scrollHandler },
+      { name: "pageViewHandler", handler: this.pageViewHandler },
+      { name: "clickHandler", handler: this.clickHandler },
+      { name: "performanceHandler", handler: this.performanceHandler },
+      { name: "errorHandler", handler: this.errorHandler },
+      { name: "networkHandler", handler: this.networkHandler }
+    ];
+    const missingHandlers = [];
+    for (const { name, handler } of requiredHandlers) {
+      if (!handler) {
+        missingHandlers.push(name);
+      }
+    }
+    if (missingHandlers.length > 0) {
+      debugLog.error("App", "Handlers validation failed - missing required handlers", { missingHandlers });
+      throw new Error(`Handlers initialization failed - missing: ${missingHandlers.join(", ")}`);
+    }
+  }
+  /**
+   * Performs cleanup rollback when initialization fails
+   * Safely cleans up any partially initialized components
+   */
+  async rollbackInitialization() {
+    debugLog.info("App", "Rollback initialization started");
+    try {
+      if (this.googleAnalytics) {
+        debugLog.debug("App", "Cleaning up Google Analytics integration");
+        try {
+          this.googleAnalytics.cleanup();
+        } catch (error) {
+          debugLog.warn("App", "Google Analytics cleanup failed during rollback", { error });
+        }
+        this.googleAnalytics = null;
+      }
+      if (this.sessionHandler) {
+        debugLog.debug("App", "Stopping session handler");
+        try {
+          await this.sessionHandler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Session handler cleanup failed during rollback", { error });
+        }
+      }
+      if (this.pageViewHandler) {
+        debugLog.debug("App", "Stopping page view handler");
+        try {
+          this.pageViewHandler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Page view handler cleanup failed during rollback", { error });
+        }
+      }
+      if (this.clickHandler) {
+        debugLog.debug("App", "Stopping click handler");
+        try {
+          this.clickHandler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Click handler cleanup failed during rollback", { error });
+        }
+      }
+      if (this.scrollHandler) {
+        debugLog.debug("App", "Stopping scroll handler");
+        try {
+          this.scrollHandler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Scroll handler cleanup failed during rollback", { error });
+        }
+      }
+      if (this.performanceHandler) {
+        debugLog.debug("App", "Stopping performance handler");
+        try {
+          this.performanceHandler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Performance handler cleanup failed during rollback", { error });
+        }
+      }
+      if (this.errorHandler) {
+        debugLog.debug("App", "Stopping error handler");
+        try {
+          this.errorHandler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Error handler cleanup failed during rollback", { error });
+        }
+      }
+      if (this.networkHandler) {
+        debugLog.debug("App", "Stopping network handler");
+        try {
+          this.networkHandler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Network handler cleanup failed during rollback", { error });
+        }
+      }
+      if (this.suppressNextScrollTimer) {
+        debugLog.debug("App", "Clearing scroll suppression timer");
+        clearTimeout(this.suppressNextScrollTimer);
+        this.suppressNextScrollTimer = null;
+      }
+      if (this.eventManager) {
+        debugLog.debug("App", "Stopping event manager");
+        try {
+          this.eventManager.stop();
+        } catch (error) {
+          debugLog.warn("App", "Event manager cleanup failed during rollback", { error });
+        }
+      }
+      debugLog.debug("App", "Resetting state properties");
+      await this.set("hasStartSession", false);
+      await this.set("suppressNextScroll", false);
+      await this.set("sessionId", null);
+      debugLog.info("App", "Rollback initialization completed");
+    } catch (error) {
+      debugLog.error("App", "Rollback initialization failed", { error });
+    }
+  }
+  sendCustomEvent(name, metadata) {
+    if (!this.eventManager) {
+      debugLog.warn("App", "Custom event attempted before eventManager initialization", { eventName: name });
       return;
     }
-    const { valid: s, error: n, sanitizedMetadata: a } = Et(e, t);
-    if (s)
-      i.debug("App", "Custom event validated and queued", { eventName: e, hasMetadata: !!a }), this.eventManager.track({
-        type: u.CUSTOM,
+    const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
+    if (valid) {
+      debugLog.debug("App", "Custom event validated and queued", { eventName: name, hasMetadata: !!sanitizedMetadata });
+      this.eventManager.track({
+        type: EventType.CUSTOM,
         custom_event: {
-          name: e,
-          ...a && { metadata: a }
+          name,
+          ...sanitizedMetadata && { metadata: sanitizedMetadata }
         }
       });
-    else {
-      const o = this.get("config")?.mode;
-      if (i.clientError("App", `Custom event validation failed: ${n ?? "unknown error"}`, {
-        eventName: e,
-        validationError: n,
-        hasMetadata: !!t,
-        mode: o
-      }), o === "qa" || o === "debug")
+    } else {
+      const currentMode = this.get("config")?.mode;
+      debugLog.clientError("App", `Custom event validation failed: ${error ?? "unknown error"}`, {
+        eventName: name,
+        validationError: error,
+        hasMetadata: !!metadata,
+        mode: currentMode
+      });
+      if (currentMode === "qa" || currentMode === "debug") {
         throw new Error(
-          `custom event "${e}" validation failed (${n ?? "unknown error"}). Please, review your event data and try again.`
+          `custom event "${name}" validation failed (${error ?? "unknown error"}). Please, review your event data and try again.`
         );
+      }
     }
   }
   /**
@@ -4085,7 +6348,11 @@ class qt extends v {
    * @returns Object with recovery statistics and system status
    */
   getRecoveryStats() {
-    return this.eventManager ? this.eventManager.getRecoveryStats() : (i.warn("App", "Recovery stats requested before eventManager initialization"), null);
+    if (!this.eventManager) {
+      debugLog.warn("App", "Recovery stats requested before eventManager initialization");
+      return null;
+    }
+    return this.eventManager.getRecoveryStats();
   }
   /**
    * Triggers manual system recovery to attempt fixing error states
@@ -4093,250 +6360,450 @@ class qt extends v {
    */
   async attemptSystemRecovery() {
     if (!this.eventManager) {
-      i.warn("App", "System recovery attempted before eventManager initialization");
+      debugLog.warn("App", "System recovery attempted before eventManager initialization");
       return;
     }
-    i.info("App", "Manual system recovery triggered"), await this.eventManager.attemptSystemRecovery();
+    debugLog.info("App", "Manual system recovery triggered");
+    await this.eventManager.attemptSystemRecovery();
   }
   /**
    * Triggers aggressive fingerprint cleanup to free memory
    */
   aggressiveFingerprintCleanup() {
     if (!this.eventManager) {
-      i.warn("App", "Fingerprint cleanup attempted before eventManager initialization");
+      debugLog.warn("App", "Fingerprint cleanup attempted before eventManager initialization");
       return;
     }
-    i.info("App", "Manual fingerprint cleanup triggered"), this.eventManager.aggressiveFingerprintCleanup();
+    debugLog.info("App", "Manual fingerprint cleanup triggered");
+    this.eventManager.aggressiveFingerprintCleanup();
   }
-  destroy() {
+  async destroy() {
     if (!this.isInitialized) {
-      i.warn("App", "Destroy called but app was not initialized");
+      debugLog.warn("App", "Destroy called but app was not initialized");
       return;
     }
-    i.info("App", "App cleanup started"), this.googleAnalytics && this.googleAnalytics.cleanup(), this.sessionHandler && this.sessionHandler.stopTracking(), this.pageViewHandler && this.pageViewHandler.stopTracking(), this.clickHandler && this.clickHandler.stopTracking(), this.scrollHandler && this.scrollHandler.stopTracking(), this.performanceHandler && this.performanceHandler.stopTracking(), this.errorHandler && this.errorHandler.stopTracking(), this.networkHandler && this.networkHandler.stopTracking(), this.suppressNextScrollTimer && (clearTimeout(this.suppressNextScrollTimer), this.suppressNextScrollTimer = null), this.eventManager && this.eventManager.stop(), this.set("hasStartSession", !1), this.set("suppressNextScroll", !1), this.set("sessionId", null), this.isInitialized = !1, i.info("App", "App cleanup completed successfully");
+    debugLog.info("App", "App cleanup started");
+    if (this.googleAnalytics) {
+      this.googleAnalytics.cleanup();
+    }
+    if (this.sessionHandler) {
+      await this.sessionHandler.stopTracking();
+    }
+    if (this.pageViewHandler) {
+      this.pageViewHandler.stopTracking();
+    }
+    if (this.clickHandler) {
+      this.clickHandler.stopTracking();
+    }
+    if (this.scrollHandler) {
+      this.scrollHandler.stopTracking();
+    }
+    if (this.performanceHandler) {
+      this.performanceHandler.stopTracking();
+    }
+    if (this.errorHandler) {
+      this.errorHandler.stopTracking();
+    }
+    if (this.networkHandler) {
+      this.networkHandler.stopTracking();
+    }
+    if (this.suppressNextScrollTimer) {
+      clearTimeout(this.suppressNextScrollTimer);
+      this.suppressNextScrollTimer = null;
+    }
+    if (this.eventManager) {
+      this.eventManager.stop();
+    }
+    await this.set("hasStartSession", false);
+    await this.set("suppressNextScroll", false);
+    await this.set("sessionId", null);
+    this.isInitialized = false;
+    debugLog.info("App", "App cleanup completed successfully");
   }
-  async setState(e) {
-    this.setApiUrl(e.id, e.allowHttp), await this.setConfig(e), this.setUserId(), this.setDevice(), this.setPageUrl();
+  async setState(appConfig) {
+    await this.setApiUrl(appConfig.id, appConfig.allowHttp);
+    await this.setConfig(appConfig);
+    await this.setUserId();
+    await this.setDevice();
+    await this.setPageUrl();
   }
-  setApiUrl(e, t = !1) {
-    const s = new Tt();
-    this.set("apiUrl", s.getUrl(e, t));
+  async setApiUrl(id, allowHttp = false) {
+    const apiManager = new ApiManager();
+    await this.set("apiUrl", apiManager.getUrl(id, allowHttp));
   }
-  async setConfig(e) {
-    const t = new Mt();
+  async setConfig(appConfig) {
+    const configManager = new ConfigManager();
     try {
-      const s = await t.get(this.get("apiUrl"), e);
-      this.set("config", s);
-    } catch (s) {
-      throw i.clientError("App", "CONFIG LOAD FAILED", { error: s }), s;
+      const config = await configManager.get(this.get("apiUrl"), appConfig);
+      await this.set("config", config);
+    } catch (error) {
+      debugLog.clientError("App", "CONFIG LOAD FAILED", { error });
+      throw error;
     }
   }
-  setUserId() {
-    const t = new Lt(this.storageManager).getId();
-    this.set("userId", t);
+  async setUserId() {
+    const userManager = new UserManager(this.storageManager);
+    const userId = userManager.getId();
+    await this.set("userId", userId);
   }
-  setDevice() {
-    const e = Te();
-    this.set("device", e);
+  async setDevice() {
+    const device = getDeviceType();
+    await this.set("device", device);
   }
-  setPageUrl() {
-    const e = ie(window.location.href, this.get("config").sensitiveQueryParams);
-    this.set("pageUrl", e);
+  async setPageUrl() {
+    const initialUrl = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
+    await this.set("pageUrl", initialUrl);
   }
   async setIntegrations() {
-    const e = this.get("config").ipExcluded, t = this.get("config").integrations?.googleAnalytics?.measurementId;
-    !e && t?.trim() && (this.googleAnalytics = new Bt(), await this.googleAnalytics.initialize());
+    const isIPExcluded = this.get("config").ipExcluded;
+    const measurementId = this.get("config").integrations?.googleAnalytics?.measurementId;
+    if (!isIPExcluded && measurementId?.trim()) {
+      this.googleAnalytics = new GoogleAnalyticsIntegration();
+      await this.googleAnalytics.initialize();
+    }
   }
   async initHandlers() {
-    if (!this.eventManager)
+    if (!this.eventManager) {
       throw new Error("EventManager must be initialized before handlers");
-    if (!this.storageManager)
+    }
+    if (!this.storageManager) {
       throw new Error("StorageManager must be initialized before handlers");
-    this.initSessionHandler(), this.initScrollHandler(), this.initPageViewHandler(), this.initClickHandler(), await this.initPerformanceHandler(), this.initErrorHandler(), this.initNetworkHandler();
+    }
+    this.initSessionHandler();
+    this.initScrollHandler();
+    this.initPageViewHandler();
+    this.initClickHandler();
+    await this.initPerformanceHandler();
+    this.initErrorHandler();
+    this.initNetworkHandler();
   }
   initStorage() {
-    this.storageManager = new jt();
+    this.storageManager = new StorageManager();
   }
   setEventManager() {
-    if (!this.storageManager)
+    if (!this.storageManager) {
       throw new Error("StorageManager must be initialized before EventManager");
-    this.eventManager = new _t(this.storageManager, this.googleAnalytics);
+    }
+    this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
   }
   initSessionHandler() {
-    if (!this.storageManager || !this.eventManager)
+    if (!this.storageManager || !this.eventManager) {
       throw new Error("StorageManager and EventManager must be initialized before SessionHandler");
-    this.sessionHandler = new Ft(this.storageManager, this.eventManager), this.sessionHandler.startTracking();
+    }
+    this.sessionHandler = new SessionHandler(this.storageManager, this.eventManager);
+    this.sessionHandler.startTracking();
   }
   initScrollHandler() {
-    if (!this.eventManager)
+    if (!this.eventManager) {
       throw new Error("EventManager must be initialized before ScrollHandler");
-    this.scrollHandler = new $t(this.eventManager), this.scrollHandler.startTracking();
+    }
+    this.scrollHandler = new ScrollHandler(this.eventManager);
+    this.scrollHandler.startTracking();
   }
   initPageViewHandler() {
-    if (!this.eventManager)
+    if (!this.eventManager) {
       throw new Error("EventManager must be initialized before PageViewHandler");
-    const e = () => this.onPageViewTrack();
-    this.pageViewHandler = new zt(this.eventManager, e), this.pageViewHandler.startTracking();
+    }
+    const onPageViewTrack = async () => await this.onPageViewTrack();
+    this.pageViewHandler = new PageViewHandler(this.eventManager, onPageViewTrack);
+    this.pageViewHandler.startTracking();
   }
-  onPageViewTrack() {
-    this.set("suppressNextScroll", !0), this.suppressNextScrollTimer && (clearTimeout(this.suppressNextScrollTimer), this.suppressNextScrollTimer = null), this.suppressNextScrollTimer = window.setTimeout(() => {
-      this.set("suppressNextScroll", !1);
-    }, Ce * it.SUPPRESS_MULTIPLIER);
+  async onPageViewTrack() {
+    await this.set("suppressNextScroll", true);
+    if (this.suppressNextScrollTimer) {
+      clearTimeout(this.suppressNextScrollTimer);
+      this.suppressNextScrollTimer = null;
+    }
+    this.suppressNextScrollTimer = window.setTimeout(async () => {
+      await this.set("suppressNextScroll", false);
+    }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESSION_CONSTANTS.SUPPRESS_MULTIPLIER);
   }
   initClickHandler() {
-    if (!this.eventManager)
+    if (!this.eventManager) {
       throw new Error("EventManager must be initialized before ClickHandler");
-    this.clickHandler = new Vt(this.eventManager), this.clickHandler.startTracking();
+    }
+    this.clickHandler = new ClickHandler(this.eventManager);
+    this.clickHandler.startTracking();
   }
   async initPerformanceHandler() {
-    if (!this.eventManager)
+    if (!this.eventManager) {
       throw new Error("EventManager must be initialized before PerformanceHandler");
-    this.performanceHandler = new Gt(this.eventManager), await this.performanceHandler.startTracking();
+    }
+    this.performanceHandler = new PerformanceHandler(this.eventManager);
+    await this.performanceHandler.startTracking();
   }
   initErrorHandler() {
-    if (!this.eventManager)
+    if (!this.eventManager) {
       throw new Error("EventManager must be initialized before ErrorHandler");
-    this.errorHandler = new Qt(this.eventManager), this.errorHandler.startTracking();
+    }
+    this.errorHandler = new ErrorHandler(this.eventManager);
+    this.errorHandler.startTracking();
   }
   initNetworkHandler() {
-    if (!this.eventManager)
+    if (!this.eventManager) {
       throw new Error("EventManager must be initialized before NetworkHandler");
-    this.networkHandler = new Wt(this.eventManager), this.networkHandler.startTracking();
+    }
+    this.networkHandler = new NetworkHandler(this.eventManager);
+    this.networkHandler.startTracking();
   }
 }
-const Xt = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const app_types = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  DeviceType: E,
-  ErrorType: U,
-  EventType: u,
-  Mode: R,
-  ScrollDirection: B,
-  TagConditionOperator: f,
-  TagConditionType: p,
-  TagLogicalOperator: j
-}, Symbol.toStringTag, { value: "Module" })), Kt = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  DEFAULT_SESSION_TIMEOUT_MS: _
+  DeviceType,
+  ErrorType,
+  EventType,
+  Mode,
+  ScrollDirection,
+  TagConditionOperator,
+  TagConditionType,
+  TagLogicalOperator
 }, Symbol.toStringTag, { value: "Module" }));
-let m = null, I = !1;
-const Yt = async (r) => {
+const app_constants = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  DEFAULT_SESSION_TIMEOUT_MS
+}, Symbol.toStringTag, { value: "Module" }));
+let app = null;
+let isInitializing = false;
+let isDestroying = false;
+const init = async (appConfig) => {
   try {
-    if (i.info("API", "Library initialization started", { id: r.id }), typeof window > "u" || typeof document > "u")
-      throw i.clientError(
+    debugLog.info("API", "Library initialization started", { id: appConfig.id });
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      debugLog.clientError(
         "API",
         "Browser environment required - this library can only be used in a browser environment",
         {
-          hasWindow: typeof window < "u",
-          hasDocument: typeof document < "u"
+          hasWindow: typeof window !== "undefined",
+          hasDocument: typeof document !== "undefined"
         }
-      ), new Error("This library can only be used in a browser environment");
-    if (m) {
-      i.debug("API", "Library already initialized, skipping duplicate initialization", {
-        projectId: r.id
+      );
+      throw new Error("This library can only be used in a browser environment");
+    }
+    if (app) {
+      debugLog.debug("API", "Library already initialized, skipping duplicate initialization", {
+        projectId: appConfig.id
       });
       return;
     }
-    if (I) {
-      i.debug("API", "Concurrent initialization detected, waiting for completion", { projectId: r.id });
-      let s = 0;
-      const n = pe.MAX_CONCURRENT_RETRIES, a = pe.CONCURRENT_RETRY_DELAY_MS;
-      for (; I && s < n; )
-        await new Promise((o) => setTimeout(o, a)), s++;
-      if (m) {
-        i.debug("API", "Concurrent initialization completed successfully", {
-          projectId: r.id,
-          retriesUsed: s
-        });
-        return;
-      }
-      if (I)
-        throw i.error("API", "Initialization timeout - concurrent initialization took too long", {
-          projectId: r.id,
-          retriesUsed: s,
-          maxRetries: n
-        }), new Error("App initialization timeout - concurrent initialization took too long");
-    }
-    I = !0, i.debug("API", "Validating and normalizing configuration", { projectId: r.id });
-    const e = ft(r);
-    i.debug("API", "Creating App instance", { projectId: e.id });
-    const t = new qt();
-    await t.init(e), m = t, i.info("API", "Library initialization completed successfully", {
-      projectId: e.id
-    });
-  } catch (e) {
-    if (m && !m.initialized)
+    if (isInitializing) {
+      debugLog.debug("API", "Concurrent initialization detected, waiting for completion", { projectId: appConfig.id });
+      const maxRetries = INITIALIZATION_CONSTANTS.MAX_CONCURRENT_RETRIES;
+      const retryDelay = INITIALIZATION_CONSTANTS.CONCURRENT_RETRY_DELAY_MS;
+      const globalTimeout = INITIALIZATION_CONSTANTS.INITIALIZATION_TIMEOUT_MS;
+      const retryPromise = (async () => {
+        let retries = 0;
+        while (isInitializing && retries < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          retries++;
+        }
+        return retries;
+      })();
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new InitializationTimeoutError(
+              `Initialization exceeded ${globalTimeout}ms timeout - concurrent initialization took too long`,
+              globalTimeout
+            )
+          );
+        }, globalTimeout);
+      });
       try {
-        m.destroy();
-      } catch (t) {
-        i.warn("API", "Failed to cleanup partially initialized app", { cleanupError: t });
+        const retries = await Promise.race([retryPromise, timeoutPromise]);
+        if (app) {
+          debugLog.debug("API", "Concurrent initialization completed successfully", {
+            projectId: appConfig.id,
+            retriesUsed: retries
+          });
+          return;
+        }
+        if (isInitializing) {
+          debugLog.error("API", "Initialization timeout - concurrent initialization took too long", {
+            projectId: appConfig.id,
+            retriesUsed: retries,
+            maxRetries
+          });
+          throw new Error("App initialization timeout - concurrent initialization took too long");
+        }
+      } catch (error) {
+        if (error instanceof InitializationTimeoutError) {
+          debugLog.error("API", "Initialization global timeout exceeded", {
+            projectId: appConfig.id,
+            timeoutMs: globalTimeout
+          });
+        }
+        throw error;
       }
-    throw m = null, i.error("API", "Initialization failed", { error: e }), e;
+    }
+    isInitializing = true;
+    debugLog.debug("API", "Validating and normalizing configuration", { projectId: appConfig.id });
+    const validatedConfig = validateAndNormalizeConfig(appConfig);
+    debugLog.debug("API", "Creating App instance", { projectId: validatedConfig.id });
+    const instance = new App();
+    await instance.init(validatedConfig);
+    app = instance;
+    debugLog.info("API", "Library initialization completed successfully", {
+      projectId: validatedConfig.id
+    });
+  } catch (error) {
+    if (app && !app.initialized) {
+      try {
+        await app.destroy();
+      } catch (cleanupError) {
+        debugLog.warn("API", "Failed to cleanup partially initialized app", { cleanupError });
+      }
+    }
+    app = null;
+    debugLog.error("API", "Initialization failed", { error });
+    throw error;
   } finally {
-    I = !1;
+    isInitializing = false;
   }
-}, Jt = (r, e) => {
+};
+const event = (name, metadata) => {
   try {
-    if (!m)
-      throw i.clientError("API", "Custom event failed - Library not initialized. Please call TraceLog.init() first", {
-        eventName: r,
-        hasMetadata: !!e
-      }), new Error("App not initialized");
-    i.debug("API", "Sending custom event", {
-      eventName: r,
-      hasMetadata: !!e,
-      metadataKeys: e ? Object.keys(e) : []
-    }), m.sendCustomEvent(r, e);
-  } catch (t) {
-    if (i.error("API", "Event tracking failed", { eventName: r, error: t, hasMetadata: !!e }), t instanceof Error && (t.message === "App not initialized" || t.message.includes("validation failed")))
-      throw t;
+    if (!app) {
+      debugLog.clientError("API", "Custom event failed - Library not initialized. Please call TraceLog.init() first", {
+        eventName: name,
+        hasMetadata: !!metadata
+      });
+      throw new Error("App not initialized");
+    }
+    debugLog.debug("API", "Sending custom event", {
+      eventName: name,
+      hasMetadata: !!metadata,
+      metadataKeys: metadata ? Object.keys(metadata) : []
+    });
+    app.sendCustomEvent(name, metadata);
+  } catch (error) {
+    debugLog.error("API", "Event tracking failed", { eventName: name, error, hasMetadata: !!metadata });
+    if (error instanceof Error && (error.message === "App not initialized" || error.message.includes("validation failed"))) {
+      throw error;
+    }
   }
-}, Zt = () => m !== null, es = () => ({
-  isInitialized: m !== null,
-  isInitializing: I,
-  hasInstance: m !== null
-}), ts = () => {
+};
+const isInitialized = () => {
+  return app !== null;
+};
+const getInitializationStatus = () => {
+  return {
+    isInitialized: app !== null,
+    isInitializing,
+    hasInstance: app !== null
+  };
+};
+const destroy = async () => {
   try {
-    if (i.info("API", "Library cleanup initiated"), !m)
-      throw i.warn("API", "Cleanup called but Library was not initialized"), new Error("App not initialized");
-    m.destroy(), m = null, I = !1, i.info("API", "Library cleanup completed successfully");
-  } catch (r) {
-    i.error("API", "Cleanup failed", { error: r, hadApp: !!m, wasInitializing: I });
+    debugLog.info("API", "Library cleanup initiated");
+    if (isDestroying) {
+      debugLog.warn("API", "Cleanup already in progress, skipping duplicate cleanup");
+      return;
+    }
+    if (!app) {
+      debugLog.warn("API", "Cleanup called but Library was not initialized");
+      throw new Error("App not initialized");
+    }
+    isDestroying = true;
+    try {
+      debugLog.debug("API", "Calling app.destroy()");
+      await app.destroy();
+      debugLog.debug("API", "app.destroy() completed successfully");
+    } catch (destroyError) {
+      debugLog.error("API", "app.destroy() failed, performing forced cleanup", { destroyError });
+      try {
+        debugLog.debug("API", "Forcing app cleanup");
+        if (app) {
+          app = null;
+        }
+        debugLog.debug("API", "Forced cleanup completed");
+      } catch (cleanupError) {
+        debugLog.error("API", "Forced cleanup failed", { cleanupError });
+      }
+      throw destroyError;
+    }
+    debugLog.debug("API", "Nullifying app instance");
+    app = null;
+    debugLog.debug("API", "Resetting initialization flags");
+    isInitializing = false;
+    debugLog.info("API", "Library cleanup completed successfully");
+  } catch (error) {
+    debugLog.error("API", "Cleanup failed", { error, hadApp: !!app, wasInitializing: isInitializing });
+    throw error;
+  } finally {
+    isDestroying = false;
   }
-}, ss = () => {
+};
+const getRecoveryStats = () => {
   try {
-    return m ? m.getRecoveryStats() : (i.warn("API", "Recovery stats requested but Library was not initialized"), null);
-  } catch (r) {
-    return i.error("API", "Failed to get recovery stats", { error: r }), null;
+    if (!app) {
+      debugLog.warn("API", "Recovery stats requested but Library was not initialized");
+      return null;
+    }
+    return app.getRecoveryStats();
+  } catch (error) {
+    debugLog.error("API", "Failed to get recovery stats", { error });
+    return null;
   }
-}, is = async () => {
+};
+const attemptSystemRecovery = async () => {
   try {
-    if (!m)
-      throw i.warn("API", "System recovery attempted but Library was not initialized"), new Error("App not initialized");
-    i.info("API", "Manual system recovery initiated"), await m.attemptSystemRecovery(), i.info("API", "Manual system recovery completed");
-  } catch (r) {
-    throw i.error("API", "System recovery failed", { error: r }), r;
+    if (!app) {
+      debugLog.warn("API", "System recovery attempted but Library was not initialized");
+      throw new Error("App not initialized");
+    }
+    debugLog.info("API", "Manual system recovery initiated");
+    await app.attemptSystemRecovery();
+    debugLog.info("API", "Manual system recovery completed");
+  } catch (error) {
+    debugLog.error("API", "System recovery failed", { error });
+    throw error;
   }
-}, ns = () => {
+};
+const aggressiveFingerprintCleanup = () => {
   try {
-    if (!m)
-      throw i.warn("API", "Fingerprint cleanup attempted but Library was not initialized"), new Error("App not initialized");
-    i.info("API", "Manual fingerprint cleanup initiated"), m.aggressiveFingerprintCleanup(), i.info("API", "Manual fingerprint cleanup completed");
-  } catch (r) {
-    throw i.error("API", "Fingerprint cleanup failed", { error: r }), r;
+    if (!app) {
+      debugLog.warn("API", "Fingerprint cleanup attempted but Library was not initialized");
+      throw new Error("App not initialized");
+    }
+    debugLog.info("API", "Manual fingerprint cleanup initiated");
+    app.aggressiveFingerprintCleanup();
+    debugLog.info("API", "Manual fingerprint cleanup completed");
+  } catch (error) {
+    debugLog.error("API", "Fingerprint cleanup failed", { error });
+    throw error;
   }
-}, rs = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+};
+class TestBridge extends App {
+  isInitializing() {
+    return isInitializing;
+  }
+}
+{
+  if (typeof window !== "undefined") {
+    const injectTestingBridge = () => {
+      window.__traceLogBridge = new TestBridge();
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", injectTestingBridge);
+    } else {
+      injectTestingBridge();
+    }
+  }
+}
+const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  Constants: Kt,
-  Types: Xt,
-  aggressiveFingerprintCleanup: ns,
-  attemptSystemRecovery: is,
-  destroy: ts,
-  event: Jt,
-  getInitializationStatus: es,
-  getRecoveryStats: ss,
-  init: Yt,
-  isInitialized: Zt
+  Constants: app_constants,
+  Types: app_types,
+  aggressiveFingerprintCleanup,
+  attemptSystemRecovery,
+  destroy,
+  event,
+  getInitializationStatus,
+  getRecoveryStats,
+  init,
+  isInitialized
 }, Symbol.toStringTag, { value: "Module" }));
 export {
-  rs as TraceLog
+  api as TraceLog
 };
+//# sourceMappingURL=tracelog.js.map
