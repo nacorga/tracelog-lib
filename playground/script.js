@@ -211,11 +211,7 @@ function setupTraceLogListener() {
     if (namespace === 'EventManager' && message?.includes('Event captured')) {
       const eventType = data?.type || 'UNKNOWN';
       console.log('📥 Capturando evento:', eventType, data);
-
-      // Filter out web_vitals events from visual monitor
-      if (eventType !== 'web_vitals') {
-        addEventToMonitor(eventType);
-      }
+      addEventToMonitor(eventType);
     }
 
     if (namespace === 'EventManager' && message?.includes('Events sent successfully')) {
@@ -245,25 +241,20 @@ function setupTraceLogListener() {
       clearEventsMonitor();
       state.queueCount = 0;
 
-      // Mostrar los eventos recuperados con sus tipos reales (filtrar web_vitals)
+      // Mostrar los eventos recuperados con sus tipos reales
       recoveredEvents.forEach((event, i) => {
         const eventType = event.type || 'UNKNOWN';
-
-        // Filter out web_vitals events
-        if (eventType === 'web_vitals') {
-          return;
-        }
-
         const eventEl = document.createElement('div');
+
         eventEl.className = 'monitor-event';
         eventEl.dataset.eventId = Date.now() + i;
-
         eventEl.innerHTML = `
           <span class="event-type-badge event-type-${eventType}">${eventType}</span>
           <span class="event-status-icon">🔄</span>
         `;
 
         const eventsList = document.getElementById('events-list');
+
         if (eventsList) {
           eventsList.insertBefore(eventEl, eventsList.firstChild);
         }

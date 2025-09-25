@@ -1,44 +1,3 @@
-class BackoffManager {
-  currentDelay;
-  initialDelay;
-  maxDelay;
-  multiplier;
-  attemptCount = 0;
-  name;
-  constructor(config, name = "BackoffManager") {
-    this.initialDelay = config.initialDelay;
-    this.maxDelay = config.maxDelay;
-    this.multiplier = config.multiplier;
-    this.currentDelay = this.initialDelay;
-    this.name = name;
-  }
-  getNextDelay() {
-    const delay = this.currentDelay;
-    this.currentDelay = Math.min(this.currentDelay * this.multiplier, this.maxDelay);
-    this.attemptCount++;
-    return delay;
-  }
-  getCurrentDelay() {
-    return this.currentDelay;
-  }
-  reset() {
-    this.currentDelay = this.initialDelay;
-    this.attemptCount = 0;
-  }
-  getAttemptCount() {
-    return this.attemptCount;
-  }
-  getConfig() {
-    return {
-      initialDelay: this.initialDelay,
-      maxDelay: this.maxDelay,
-      multiplier: this.multiplier
-    };
-  }
-  isAtMaxDelay() {
-    return this.currentDelay >= this.maxDelay;
-  }
-}
 var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
   DeviceType2["Mobile"] = "mobile";
   DeviceType2["Tablet"] = "tablet";
@@ -96,133 +55,47 @@ class StateManager {
   }
 }
 class DebugLogger extends StateManager {
-  /**
-   * Client-facing error - Configuration/usage errors by the client
-   * Console: qa and debug modes | Events: NODE_ENV=dev
-   */
-  clientError(namespace, message, data) {
-    this.logMessage("CLIENT_ERROR", namespace, message, data);
-  }
-  /**
-   * Client-facing warning - Configuration/usage warnings by the client
-   * Console: qa and debug modes | Events: NODE_ENV=dev
-   */
-  clientWarn(namespace, message, data) {
-    this.logMessage("CLIENT_WARN", namespace, message, data);
-  }
-  /**
-   * General operational information
-   * Console: qa and debug modes | Events: NODE_ENV=dev
-   */
-  info(namespace, message, data) {
-    this.logMessage("INFO", namespace, message, data);
-  }
-  /**
-   * Internal library errors
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  error(namespace, message, data) {
-    this.logMessage("ERROR", namespace, message, data);
-  }
-  /**
-   * Internal library warnings
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  warn(namespace, message, data) {
-    this.logMessage("WARN", namespace, message, data);
-  }
-  /**
-   * Strategic debug information
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  debug(namespace, message, data) {
-    this.logMessage("DEBUG", namespace, message, data);
-  }
-  /**
-   * Detailed trace information
-   * Console: debug mode only | Events: NODE_ENV=dev
-   */
-  verbose(namespace, message, data) {
-    this.logMessage("VERBOSE", namespace, message, data);
-  }
-  getCurrentMode() {
-    try {
-      return this.get("config")?.mode;
-    } catch {
-      return void 0;
-    }
-  }
-  shouldShowLog(level) {
-    const mode = this.getCurrentMode();
-    if (["CLIENT_ERROR", "ERROR"].includes(level)) {
-      return true;
-    }
-    if (!mode) {
-      return ["CLIENT_ERROR", "CLIENT_WARN"].includes(level);
-    }
-    switch (mode) {
-      case "qa":
-        return ["INFO", "CLIENT_ERROR", "CLIENT_WARN"].includes(level);
-      case "debug":
-        return true;
-      default:
-        return false;
-    }
-  }
-  formatMessage(namespace, message) {
-    return `[TraceLog:${namespace}] ${message}`;
-  }
-  getConsoleMethod(level) {
-    switch (level) {
-      case "CLIENT_ERROR":
-      case "ERROR":
-        return "error";
-      case "CLIENT_WARN":
-      case "WARN":
-        return "warn";
-      case "INFO":
-      case "DEBUG":
-      case "VERBOSE":
-      default:
-        return "log";
-    }
-  }
-  logMessage(level, namespace, message, data) {
-    if (!this.shouldShowLog(level)) {
-      return;
-    }
-    const formattedMessage = this.formatMessage(namespace, message);
-    const consoleMethod = this.getConsoleMethod(level);
+  clientError = (ns, msg, data) => this.log("CLIENT_ERROR", ns, msg, data);
+  clientWarn = (ns, msg, data) => this.log("CLIENT_WARN", ns, msg, data);
+  info = (ns, msg, data) => this.log("INFO", ns, msg, data);
+  error = (ns, msg, data) => this.log("ERROR", ns, msg, data);
+  warn = (ns, msg, data) => this.log("WARN", ns, msg, data);
+  debug = (ns, msg, data) => this.log("DEBUG", ns, msg, data);
+  verbose = (ns, msg, data) => this.log("VERBOSE", ns, msg, data);
+  log(level, ns, msg, data) {
+    const mode = this.get("config")?.mode;
+    if (!this.shouldShow(level, mode)) return;
+    const formattedMsg = `[TraceLog:${ns}] ${msg}`;
+    const method = this.getMethod(level);
     if (data !== void 0) {
-      console[consoleMethod](formattedMessage, data);
+      console[method](formattedMsg, data);
     } else {
-      console[consoleMethod](formattedMessage);
+      console[method](formattedMsg);
     }
-    {
-      this.dispatchEvent(level, namespace, message, data);
-    }
-  }
-  /**
-   * Dispatches tracelog:log events for E2E testing and development debugging
-   */
-  dispatchEvent(level, namespace, message, data) {
-    if (typeof window === "undefined" || typeof CustomEvent === "undefined") {
-      return;
-    }
-    try {
+    if (typeof window !== "undefined" && true) {
       const event2 = new CustomEvent("tracelog:log", {
         detail: {
           timestamp: (/* @__PURE__ */ new Date()).toISOString(),
           level,
-          namespace,
-          message,
+          namespace: ns,
+          message: msg,
           data
         }
       });
       window.dispatchEvent(event2);
-    } catch {
-      console.log(`[TraceLog:${namespace}] ${message}`, data);
     }
+  }
+  shouldShow(level, mode) {
+    if (["CLIENT_ERROR", "ERROR"].includes(level)) return true;
+    if (!mode) return level === "CLIENT_WARN";
+    if (mode === "qa") return ["INFO", "CLIENT_ERROR", "CLIENT_WARN"].includes(level);
+    if (mode === "debug") return true;
+    return false;
+  }
+  getMethod(level) {
+    if (["CLIENT_ERROR", "ERROR"].includes(level)) return "error";
+    if (["CLIENT_WARN", "WARN"].includes(level)) return "warn";
+    return "log";
   }
 }
 const debugLog = new DebugLogger();
@@ -286,10 +159,16 @@ const getDeviceType = () => {
     return DeviceType.Desktop;
   }
 };
-const DEFAULT_MOTION_THRESHOLD = 2;
+const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
+const DUPLICATE_EVENT_THRESHOLD_MS = 1e3;
+const EVENT_SENT_INTERVAL_MS = 1e4;
+const EVENT_SENT_INTERVAL_TEST_MS = 1e3;
+const DEFAULT_THROTTLE_DELAY_MS = 1e3;
+const SCROLL_DEBOUNCE_TIME_MS = 250;
+const EVENT_EXPIRY_HOURS = 24;
+const MAX_EVENTS_QUEUE_LENGTH = 500;
 const SIGNIFICANT_SCROLL_DELTA = 10;
 const DEFAULT_SAMPLING_RATE = 1;
-const MAX_EVENTS_QUEUE_LENGTH = 500;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
 const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
@@ -302,71 +181,7 @@ const MAX_ARRAY_LENGTH = 100;
 const MAX_OBJECT_DEPTH = 3;
 const PRECISION_TWO_DECIMALS = 2;
 const PRECISION_FOUR_DECIMALS = 4;
-const WEB_VITALS_SAMPLING = 0.75;
-const WEB_VITALS_LONG_TASK_SAMPLING = 0.2;
 const SYNC_XHR_TIMEOUT_MS = 2e3;
-const MAX_FINGERPRINTS = 1e3;
-const FINGERPRINT_CLEANUP_MULTIPLIER = 10;
-const MAX_FINGERPRINTS_HARD_LIMIT = 2e3;
-const FINGERPRINT_CLEANUP_INTERVAL_MS = 6e4;
-const CLICK_COORDINATE_PRECISION = 10;
-const CIRCUIT_BREAKER_MAX_STUCK_TIME_MS = 5 * 60 * 1e3;
-const CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS = 6e4;
-const DEFAULT_SESSION_TIMEOUT_MS = 15 * 60 * 1e3;
-const SESSION_HEARTBEAT_INTERVAL_MS = 3e4;
-const DEFAULT_THROTTLE_DELAY_MS = 1e3;
-const SCROLL_DEBOUNCE_TIME_MS = 250;
-const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
-const DUPLICATE_EVENT_THRESHOLD_MS = 1e3;
-const EVENT_SENT_INTERVAL_MS = 1e4;
-const EVENT_SENT_INTERVAL_TEST_MS = 1e3;
-const MAX_RETRY_ATTEMPTS = 10;
-const EVENT_EXPIRY_HOURS = 24;
-const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;
-const TAB_HEARTBEAT_INTERVAL_MS = 5e3;
-const TAB_ELECTION_TIMEOUT_MS = 2e3;
-const SESSION_RECOVERY_WINDOW_MULTIPLIER = 2;
-const MAX_SESSION_RECOVERY_ATTEMPTS = 3;
-const MAX_SESSION_RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1e3;
-const MIN_SESSION_RECOVERY_WINDOW_MS = 2 * 60 * 1e3;
-const DEFAULT_API_CONFIG = {
-  samplingRate: DEFAULT_SAMPLING_RATE,
-  tags: [],
-  excludedUrlPaths: []
-};
-const DEFAULT_CONFIG = (config) => ({
-  ...DEFAULT_API_CONFIG,
-  ...config,
-  sessionTimeout: DEFAULT_SESSION_TIMEOUT_MS,
-  allowHttp: false
-});
-const BACKOFF_CONFIGS = {
-  /** Circuit breaker backoff configuration for EventManager */
-  CIRCUIT_BREAKER: {
-    initialDelay: 1e3,
-    // 1 second
-    maxDelay: 3e4,
-    // 30 seconds
-    multiplier: 2
-  },
-  /** Retry backoff configuration for SenderManager */
-  RETRY: {
-    initialDelay: 1e3,
-    // 1 second
-    maxDelay: 3e4,
-    // 30 seconds
-    multiplier: 2
-  }
-};
-const validateBackoffSync = () => {
-  const { CIRCUIT_BREAKER, RETRY } = BACKOFF_CONFIGS;
-  if (CIRCUIT_BREAKER.initialDelay !== RETRY.initialDelay || CIRCUIT_BREAKER.maxDelay !== RETRY.maxDelay || CIRCUIT_BREAKER.multiplier !== RETRY.multiplier) {
-    console.warn("TraceLog: Backoff configurations are not synchronized between components");
-  }
-};
-{
-  validateBackoffSync();
-}
 const HTML_DATA_ATTR_PREFIX = "data-tl";
 const INTERACTIVE_SELECTORS = [
   "button",
@@ -402,53 +217,11 @@ const INTERACTIVE_SELECTORS = [
   '[tabindex="0"]'
 ];
 const UTM_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
-const INITIALIZATION_CONSTANTS = {
-  /** Maximum number of retries when waiting for concurrent initialization */
-  MAX_CONCURRENT_RETRIES: 20,
-  /** Delay between retries when waiting for concurrent initialization (ms) */
-  CONCURRENT_RETRY_DELAY_MS: 50,
-  /** Timeout for overall initialization process (ms) */
-  INITIALIZATION_TIMEOUT_MS: 1e4
-};
-const CIRCUIT_BREAKER_CONSTANTS = {
-  /** Maximum number of consecutive failures before opening circuit */
-  MAX_FAILURES: 3,
-  /** Initial backoff delay when circuit opens (ms) */
-  INITIAL_BACKOFF_DELAY_MS: 1e3,
-  /** Maximum backoff delay (ms) */
-  MAX_BACKOFF_DELAY_MS: 3e4,
-  /** Backoff multiplier for exponential backoff */
-  BACKOFF_MULTIPLIER: 2,
-  /** Time-based recovery period for circuit breaker (ms) */
-  RECOVERY_TIME_MS: 3e4
-  // 30 seconds
-};
-const SESSION_SYNC_CONSTANTS = {
-  /** Timeout for session synchronization operations (ms) */
-  SYNC_TIMEOUT_MS: 2e3,
-  /** Maximum retry attempts for session operations */
-  MAX_RETRY_ATTEMPTS: 3
-};
-const SCROLL_SUPPRESSION_CONSTANTS = {
-  /** Multiplier for scroll debounce time when suppressing scroll events */
-  SUPPRESS_MULTIPLIER: 2
-};
-const XSS_PATTERNS = [
-  /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-  /javascript:/gi,
-  /on\w+\s*=/gi,
-  /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
-  /<embed\b[^>]*>/gi,
-  /<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi
-];
-const STORAGE_BASE_KEY = "tl";
-const USER_ID_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:uid` : `${STORAGE_BASE_KEY}:uid`;
-const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
-const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
-const CROSS_TAB_SESSION_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:cross_tab_session` : `${STORAGE_BASE_KEY}:cross_tab_session`;
-const TAB_SPECIFIC_INFO_KEY = (projectId, tabId) => `${STORAGE_BASE_KEY}:${projectId}:tab:${tabId}:info`;
-const SESSION_RECOVERY_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:recovery` : `${STORAGE_BASE_KEY}:recovery`;
-const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
+const INITIALIZATION_MAX_CONCURRENT_RETRIES = 20;
+const INITIALIZATION_CONCURRENT_RETRY_DELAY_MS = 50;
+const INITIALIZATION_TIMEOUT_MS = 1e4;
+const SCROLL_SUPPRESS_MULTIPLIER = 2;
+const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;
 const ALLOWED_API_CONFIG_KEYS = /* @__PURE__ */ new Set([
   "mode",
   "tags",
@@ -472,6 +245,28 @@ const VALIDATION_MESSAGES = {
   // Array validation
   INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings"
 };
+const XSS_PATTERNS = [
+  /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+  /javascript:/gi,
+  /on\w+\s*=/gi,
+  /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
+  /<embed\b[^>]*>/gi,
+  /<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi
+];
+const DEFAULT_API_CONFIG = {
+  samplingRate: DEFAULT_SAMPLING_RATE,
+  tags: [],
+  excludedUrlPaths: []
+};
+const DEFAULT_CONFIG = (config) => ({
+  ...DEFAULT_API_CONFIG,
+  ...config,
+  sessionTimeout: DEFAULT_SESSION_TIMEOUT,
+  allowHttp: false
+});
+const STORAGE_BASE_KEY = "tl";
+const USER_ID_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:uid` : `${STORAGE_BASE_KEY}:uid`;
+const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const getUTMParameters = () => {
   debugLog.debug("UTMParams", "Extracting UTM parameters from URL", {
     url: window.location.href,
@@ -499,10 +294,10 @@ const getUTMParameters = () => {
   return result;
 };
 const generateUUID = () => {
-  const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+  const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c2) => {
     const r = Math.random() * 16 | 0;
-    const v = c === "x" ? r : r & 3 | 8;
-    return v.toString(16);
+    const v2 = c2 === "x" ? r : r & 3 | 8;
+    return v2.toString(16);
   });
   debugLog.verbose("UUIDUtils", "Generated new UUID", { uuid });
   return uuid;
@@ -1285,6 +1080,62 @@ async function fetchWithTimeout(url, options = {}) {
     throw error;
   }
 }
+class SimpleCircuitBreaker {
+  failureCount = 0;
+  isOpen = false;
+  openTime = 0;
+  MAX_FAILURES = 5;
+  RECOVERY_DELAY_MS = 3e4;
+  // 30 seconds
+  /**
+   * Records a failure and opens the circuit if max failures reached
+   */
+  recordFailure() {
+    this.failureCount++;
+    if (this.failureCount >= this.MAX_FAILURES) {
+      this.open();
+    }
+  }
+  /**
+   * Records a success and closes the circuit, resetting failure count
+   */
+  recordSuccess() {
+    this.failureCount = 0;
+    this.close();
+  }
+  /**
+   * Checks if an attempt can be made
+   * Returns true if circuit is closed or recovery delay has elapsed
+   */
+  canAttempt() {
+    if (!this.isOpen) return true;
+    const timeSinceOpen = Date.now() - this.openTime;
+    if (timeSinceOpen >= this.RECOVERY_DELAY_MS) {
+      this.close();
+      return true;
+    }
+    return false;
+  }
+  /**
+   * Gets the current state of the circuit breaker
+   */
+  getState() {
+    return {
+      isOpen: this.isOpen,
+      failureCount: this.failureCount
+    };
+  }
+  open() {
+    this.isOpen = true;
+    this.openTime = Date.now();
+    console.warn("Circuit breaker opened - too many failures");
+  }
+  close() {
+    this.isOpen = false;
+    this.openTime = 0;
+    this.failureCount = 0;
+  }
+}
 class ApiManager {
   getUrl(id, allowHttp = false) {
     if (id.startsWith(SpecialProjectId.Localhost)) {
@@ -1480,14 +1331,18 @@ class ConfigManager {
 class SenderManager extends StateManager {
   storeManager;
   memoryFallbackStorage = /* @__PURE__ */ new Map();
-  retryBackoffManager;
   retryTimeoutId = null;
   retryCount = 0;
   isRetrying = false;
+  // Fixed retry configuration
+  RETRY_DELAY_MS = 5e3;
+  // 5 seconds
+  MAX_RETRIES = 3;
+  REQUEST_TIMEOUT_MS = 1e4;
+  // 10 seconds
   constructor(storeManager) {
     super();
     this.storeManager = storeManager;
-    this.retryBackoffManager = new BackoffManager(BACKOFF_CONFIGS.RETRY, "SenderManager-Retry");
   }
   getQueueStorageKey() {
     const key = `${QUEUE_KEY(this.get("config")?.id)}:${this.get("userId")}`;
@@ -1595,7 +1450,18 @@ class SenderManager extends StateManager {
   async send(body) {
     const { url, payload } = this.prepareRequest(body);
     try {
-      const response = await fetchWithTimeout(url, {
+      const response = await this.sendWithTimeout(url, payload);
+      return response.ok;
+    } catch (error) {
+      debugLog.error("SenderManager", "Send request failed", { error });
+      return false;
+    }
+  }
+  async sendWithTimeout(url, payload) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1603,13 +1469,14 @@ class SenderManager extends StateManager {
         body: payload,
         keepalive: true,
         credentials: "include",
-        timeout: 15e3
-        // 15 segundos timeout para events
+        signal: controller.signal
       });
-      return response.ok;
-    } catch (error) {
-      debugLog.error("SenderManager", "Send request failed", { error });
-      return false;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
   sendQueueSyncInternal(body) {
@@ -1807,7 +1674,6 @@ class SenderManager extends StateManager {
     }
   }
   resetRetryState() {
-    this.retryBackoffManager.reset();
     this.retryCount = 0;
     this.isRetrying = false;
     this.clearRetryTimeout();
@@ -1816,7 +1682,7 @@ class SenderManager extends StateManager {
     if (this.retryTimeoutId !== null || this.isRetrying) {
       return;
     }
-    if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+    if (this.retryCount >= this.MAX_RETRIES) {
       this.clearPersistedEvents();
       this.resetRetryState();
       originalCallbacks?.onFailure?.();
@@ -1838,18 +1704,17 @@ class SenderManager extends StateManager {
         this.clearPersistedEvents();
         this.resetRetryState();
         originalCallbacks?.onSuccess?.();
-      } else if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+      } else if (this.retryCount >= this.MAX_RETRIES) {
         this.clearPersistedEvents();
         this.resetRetryState();
         originalCallbacks?.onFailure?.();
       } else {
         this.scheduleRetry(body, originalCallbacks);
       }
-    }, this.retryBackoffManager.getCurrentDelay());
-    const nextRetryDelay = this.retryBackoffManager.getNextDelay();
+    }, this.RETRY_DELAY_MS);
     debugLog.debug("SenderManager", "Retry scheduled", {
       retryCount: this.retryCount,
-      retryDelay: nextRetryDelay,
+      retryDelay: this.RETRY_DELAY_MS,
       eventsCount: body.events.length
     });
   }
@@ -1874,402 +1739,43 @@ class SenderManager extends StateManager {
     return this.get("circuitBreakerOpen") === true;
   }
 }
-class SamplingManager extends StateManager {
-  shouldSampleEvent(type, webVitals) {
-    const isQaMode = this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug";
-    if (isQaMode) {
-      return true;
-    }
-    if (type === EventType.WEB_VITALS) {
-      return this.isWebVitalEventSampledIn(webVitals?.type);
-    }
-    return this.isSampledIn();
-  }
-  isSampledIn() {
-    const samplingRate = this.get("config").samplingRate ?? DEFAULT_SAMPLING_RATE;
-    if (samplingRate >= 1) {
-      return true;
-    }
-    if (samplingRate <= 0) {
-      return false;
-    }
-    const userHash = this.getHash(this.get("userId"));
-    const userValue = userHash % 100 / 100;
-    const isSampled = userValue < samplingRate;
-    return isSampled;
-  }
-  isWebVitalEventSampledIn(type) {
-    const isLongTask = type === "LONG_TASK";
-    const rate = isLongTask ? WEB_VITALS_LONG_TASK_SAMPLING : WEB_VITALS_SAMPLING;
-    if (rate >= 1) return true;
-    if (rate <= 0) return false;
-    const seed = `${this.get("userId")}|${isLongTask ? "long_task" : "web_vitals"}`;
-    const hash = this.getHash(seed);
-    const value = hash % 100 / 100;
-    return value < rate;
-  }
-  getHash(input) {
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      const char = input.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return Math.abs(hash);
-  }
-}
-class TagsManager extends StateManager {
-  getEventTagsIds(event2, deviceType) {
-    switch (event2.type) {
-      case EventType.PAGE_VIEW: {
-        return this.checkEventTypePageView(event2, deviceType);
-      }
-      case EventType.CLICK: {
-        return this.checkEventTypeClick(event2, deviceType);
-      }
-      default: {
-        return [];
-      }
-    }
-  }
-  checkEventTypePageView(event2, deviceType) {
-    const tags = this.get("config")?.tags?.filter((tag) => tag.triggerType === EventType.PAGE_VIEW) ?? [];
-    if (tags.length === 0) {
-      return [];
-    }
-    const matchedTagIds = [];
-    for (const tag of tags) {
-      const { id, logicalOperator, conditions } = tag;
-      const results = [];
-      for (const condition of conditions) {
-        switch (condition.type) {
-          case TagConditionType.URL_MATCHES: {
-            results.push(this.matchUrlMatches(condition, event2.page_url));
-            break;
-          }
-          case TagConditionType.DEVICE_TYPE: {
-            results.push(this.matchDeviceType(condition, deviceType));
-            break;
-          }
-          case TagConditionType.UTM_SOURCE: {
-            results.push(this.matchUtmCondition(condition, event2.utm?.source));
-            break;
-          }
-          case TagConditionType.UTM_MEDIUM: {
-            results.push(this.matchUtmCondition(condition, event2.utm?.medium));
-            break;
-          }
-          case TagConditionType.UTM_CAMPAIGN: {
-            results.push(this.matchUtmCondition(condition, event2.utm?.campaign));
-            break;
-          }
-        }
-      }
-      let isMatch = false;
-      isMatch = logicalOperator === TagLogicalOperator.AND ? results.every(Boolean) : results.some(Boolean);
-      if (isMatch) {
-        matchedTagIds.push(id);
-      }
-    }
-    return matchedTagIds;
-  }
-  checkEventTypeClick(event2, deviceType) {
-    const tags = this.get("config")?.tags?.filter((tag) => tag.triggerType === EventType.CLICK) ?? [];
-    if (tags.length === 0) {
-      return [];
-    }
-    const matchedTagIds = [];
-    for (const tag of tags) {
-      const { id, logicalOperator, conditions } = tag;
-      const results = [];
-      for (const condition of conditions) {
-        if (!event2.click_data) {
-          results.push(false);
-          continue;
-        }
-        const clickData = event2.click_data;
-        switch (condition.type) {
-          case TagConditionType.ELEMENT_MATCHES: {
-            results.push(this.matchElementSelector(condition, clickData));
-            break;
-          }
-          case TagConditionType.DEVICE_TYPE: {
-            results.push(this.matchDeviceType(condition, deviceType));
-            break;
-          }
-          case TagConditionType.URL_MATCHES: {
-            results.push(this.matchUrlMatches(condition, event2.page_url));
-            break;
-          }
-          case TagConditionType.UTM_SOURCE: {
-            results.push(this.matchUtmCondition(condition, event2.utm?.source));
-            break;
-          }
-          case TagConditionType.UTM_MEDIUM: {
-            results.push(this.matchUtmCondition(condition, event2.utm?.medium));
-            break;
-          }
-          case TagConditionType.UTM_CAMPAIGN: {
-            results.push(this.matchUtmCondition(condition, event2.utm?.campaign));
-            break;
-          }
-        }
-      }
-      let isMatch = false;
-      isMatch = logicalOperator === TagLogicalOperator.AND ? results.every(Boolean) : results.some(Boolean);
-      if (isMatch) {
-        matchedTagIds.push(id);
-      }
-    }
-    return matchedTagIds;
-  }
-  matchUrlMatches(condition, url) {
-    if (condition.type !== TagConditionType.URL_MATCHES) {
-      return false;
-    }
-    const targetValue = condition.value.toLowerCase();
-    const targetUrl = url.toLowerCase();
-    switch (condition.operator) {
-      case TagConditionOperator.EQUALS: {
-        return targetUrl === targetValue;
-      }
-      case TagConditionOperator.CONTAINS: {
-        return targetUrl.includes(targetValue);
-      }
-      case TagConditionOperator.STARTS_WITH: {
-        return targetUrl.startsWith(targetValue);
-      }
-      case TagConditionOperator.ENDS_WITH: {
-        return targetUrl.endsWith(targetValue);
-      }
-      case TagConditionOperator.REGEX: {
-        try {
-          const regex = new RegExp(targetValue, "gi");
-          return regex.test(targetUrl);
-        } catch {
-          return false;
-        }
-      }
-      default: {
-        return false;
-      }
-    }
-  }
-  matchDeviceType(condition, deviceType) {
-    if (condition.type !== TagConditionType.DEVICE_TYPE) {
-      return false;
-    }
-    const targetValue = condition.value.toLowerCase();
-    const targetDevice = deviceType.toLowerCase();
-    switch (condition.operator) {
-      case TagConditionOperator.EQUALS: {
-        return targetDevice === targetValue;
-      }
-      case TagConditionOperator.CONTAINS: {
-        return targetDevice.includes(targetValue);
-      }
-      case TagConditionOperator.STARTS_WITH: {
-        return targetDevice.startsWith(targetValue);
-      }
-      case TagConditionOperator.ENDS_WITH: {
-        return targetDevice.endsWith(targetValue);
-      }
-      case TagConditionOperator.REGEX: {
-        try {
-          const regex = new RegExp(targetValue, "gi");
-          return regex.test(targetDevice);
-        } catch {
-          return false;
-        }
-      }
-      default: {
-        return false;
-      }
-    }
-  }
-  matchElementSelector(condition, clickData) {
-    if (condition.type !== TagConditionType.ELEMENT_MATCHES) {
-      return false;
-    }
-    const elementData = [
-      clickData.id ?? "",
-      clickData.class ?? "",
-      clickData.tag ?? "",
-      clickData.text ?? "",
-      clickData.href ?? "",
-      clickData.title ?? "",
-      clickData.alt ?? "",
-      clickData.role ?? "",
-      clickData.ariaLabel ?? "",
-      ...Object.values(clickData.dataAttributes ?? {})
-    ].join(" ");
-    const targetValue = condition.value.toLowerCase();
-    const targetElementData = elementData.toLowerCase();
-    switch (condition.operator) {
-      case TagConditionOperator.EQUALS: {
-        return this.checkElementFieldEquals(clickData, targetValue);
-      }
-      case TagConditionOperator.CONTAINS: {
-        return targetElementData.includes(targetValue);
-      }
-      case TagConditionOperator.STARTS_WITH: {
-        return targetElementData.startsWith(targetValue);
-      }
-      case TagConditionOperator.ENDS_WITH: {
-        return targetElementData.endsWith(targetValue);
-      }
-      case TagConditionOperator.REGEX: {
-        try {
-          const regex = new RegExp(targetValue, "gi");
-          return regex.test(targetElementData);
-        } catch {
-          return false;
-        }
-      }
-      default: {
-        return false;
-      }
-    }
-  }
-  matchUtmCondition(condition, utmValue) {
-    if (![TagConditionType.UTM_SOURCE, TagConditionType.UTM_MEDIUM, TagConditionType.UTM_CAMPAIGN].includes(
-      condition.type
-    )) {
-      return false;
-    }
-    const value = utmValue ?? "";
-    const targetValue = condition.value.toLowerCase();
-    const targetUtmValue = value.toLowerCase();
-    switch (condition.operator) {
-      case TagConditionOperator.EQUALS: {
-        return targetUtmValue === targetValue;
-      }
-      case TagConditionOperator.CONTAINS: {
-        return targetUtmValue.includes(targetValue);
-      }
-      case TagConditionOperator.STARTS_WITH: {
-        return targetUtmValue.startsWith(targetValue);
-      }
-      case TagConditionOperator.ENDS_WITH: {
-        return targetUtmValue.endsWith(targetValue);
-      }
-      case TagConditionOperator.REGEX: {
-        try {
-          const regex = new RegExp(targetValue, "gi");
-          return regex.test(targetUtmValue);
-        } catch {
-          return false;
-        }
-      }
-      default: {
-        return false;
-      }
-    }
-  }
-  checkElementFieldEquals(clickData, targetValue) {
-    const fields = [
-      clickData.id,
-      clickData.class,
-      clickData.tag,
-      clickData.text,
-      clickData.href,
-      clickData.title,
-      clickData.alt,
-      clickData.role,
-      clickData.ariaLabel
-    ];
-    for (const field of fields) {
-      if (field) {
-        const fieldValue = field.toLowerCase();
-        const target = targetValue.toLowerCase();
-        if (fieldValue === target) {
-          return true;
-        }
-      }
-    }
-    if (clickData.dataAttributes) {
-      for (const dataValue of Object.values(clickData.dataAttributes)) {
-        const fieldValue = dataValue.toLowerCase();
-        const target = targetValue.toLowerCase();
-        if (fieldValue === target) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-}
 class EventManager extends StateManager {
   googleAnalytics;
-  samplingManager;
-  tagsManager;
   dataSender;
+  circuitBreaker = new SimpleCircuitBreaker();
   eventsQueue = [];
   lastEvent = null;
   eventsQueueIntervalId = null;
   intervalActive = false;
-  // Circuit breaker properties
-  failureCount = 0;
-  MAX_FAILURES = CIRCUIT_BREAKER_CONSTANTS.MAX_FAILURES;
-  circuitOpen = false;
-  circuitOpenTime = 0;
-  backoffManager;
-  circuitResetTimeoutId = null;
-  isSending = false;
-  circuitRecoveryAttempts = 0;
-  MAX_RECOVERY_ATTEMPTS = 5;
-  // Event deduplication properties
-  eventFingerprints = /* @__PURE__ */ new Map();
-  lastFingerprintCleanup = Date.now();
-  // Circuit breaker health monitoring
-  circuitBreakerHealthCheckInterval = null;
-  // Enhanced error recovery statistics
-  errorRecoveryStats = {
-    circuitBreakerResets: 0,
-    persistenceFailures: 0,
-    networkTimeouts: 0,
-    lastRecoveryAttempt: 0
-  };
   constructor(storeManager, googleAnalytics = null) {
     super();
     this.googleAnalytics = googleAnalytics;
-    this.samplingManager = new SamplingManager();
-    this.tagsManager = new TagsManager();
     this.dataSender = new SenderManager(storeManager);
-    this.backoffManager = new BackoffManager(BACKOFF_CONFIGS.CIRCUIT_BREAKER, "EventManager-CircuitBreaker");
-    this.set("circuitBreakerOpen", false);
-    this.setupCircuitBreakerHealthCheck();
     debugLog.debug("EventManager", "EventManager initialized", {
       hasGoogleAnalytics: !!googleAnalytics
     });
   }
   /**
-   * Recovers persisted events from localStorage with enhanced error tracking
+   * Recovers persisted events from localStorage
    * Should be called after initialization to recover any events that failed to send
    */
   async recoverPersistedEvents() {
     await this.dataSender.recoverPersistedEvents({
       onSuccess: (eventCount, recoveredEvents) => {
-        this.failureCount = 0;
-        this.backoffManager.reset();
         if (recoveredEvents && recoveredEvents.length > 0) {
-          const eventIds = recoveredEvents.map((e) => e.timestamp + "_" + e.type);
+          const eventIds = recoveredEvents.map((e3) => e3.timestamp + "_" + e3.type);
           this.removeProcessedEvents(eventIds);
-          debugLog.debug("EventManager", "Removed recovered events from in-memory queue", {
+          debugLog.debug("EventManager", "Removed recovered events from queue", {
             removedCount: recoveredEvents.length,
             remainingQueueLength: this.eventsQueue.length
           });
         }
-        debugLog.info("EventManager", "Persisted events recovered successfully", {
-          eventCount: eventCount || 0,
-          recoveryStats: this.errorRecoveryStats
+        debugLog.info("EventManager", "Events recovered successfully", {
+          eventCount: eventCount ?? 0
         });
       },
       onFailure: async () => {
-        this.errorRecoveryStats.persistenceFailures++;
-        debugLog.warn("EventManager", "Failed to recover persisted events", {
-          persistenceFailures: this.errorRecoveryStats.persistenceFailures
-        });
+        debugLog.warn("EventManager", "Failed to recover persisted events");
       }
     });
   }
@@ -2284,44 +1790,16 @@ class EventManager extends StateManager {
     session_end_reason,
     session_start_recovered
   }) {
-    if (this.circuitOpen) {
-      debugLog.debug("EventManager", "Event dropped - circuit breaker is open", { type });
+    if (!this.circuitBreaker.canAttempt()) {
+      debugLog.warn("EventManager", "Event dropped - circuit breaker open");
       return;
     }
-    this.manageFingerprintMemory();
-    if (!this.samplingManager.shouldSampleEvent(type, web_vitals)) {
-      debugLog.debug("EventManager", "Event filtered by sampling", { type, samplingActive: true });
-      return;
-    }
-    const isDuplicatedEvent = this.isDuplicatedEvent({
-      type,
-      page_url,
-      scroll_data,
-      click_data,
-      custom_event,
-      web_vitals,
-      session_end_reason,
-      session_start_recovered
-    });
-    if (isDuplicatedEvent) {
-      const now = Date.now();
-      if (this.eventsQueue && this.eventsQueue.length > 0) {
-        const lastEvent = this.eventsQueue.at(-1);
-        if (lastEvent) {
-          lastEvent.timestamp = now;
-        }
-      }
-      if (this.lastEvent) {
-        this.lastEvent.timestamp = now;
-      }
-      debugLog.debug("EventManager", "Duplicate event detected, timestamp updated", {
-        type,
-        queueLength: this.eventsQueue.length
-      });
+    if (!this.shouldSample()) {
+      debugLog.debug("EventManager", "Event filtered by sampling");
       return;
     }
     const effectivePageUrl = page_url || this.get("pageUrl");
-    const isRouteExcluded = isUrlPathExcluded(effectivePageUrl, this.get("config").excludedUrlPaths);
+    const isRouteExcluded = isUrlPathExcluded(effectivePageUrl, this.get("config")?.excludedUrlPaths ?? []);
     const hasStartSession = this.get("hasStartSession");
     const isSessionEndEvent = type == EventType.SESSION_END;
     if (isRouteExcluded && (!isSessionEndEvent || isSessionEndEvent && !hasStartSession)) {
@@ -2349,14 +1827,26 @@ class EventManager extends StateManager {
       ...session_end_reason && { session_end_reason },
       ...session_start_recovered && { session_start_recovered }
     };
-    if (this.get("config")?.tags?.length) {
-      const matchedTags = this.tagsManager.getEventTagsIds(payload, this.get("device"));
-      if (matchedTags?.length) {
-        payload.tags = this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug" ? matchedTags.map((id) => ({
-          id,
-          key: this.get("config")?.tags?.find((t) => t.id === id)?.key ?? ""
-        })) : matchedTags;
+    if (this.isDuplicate(payload)) {
+      const now = Date.now();
+      if (this.eventsQueue && this.eventsQueue.length > 0) {
+        const lastEvent = this.eventsQueue.at(-1);
+        if (lastEvent) {
+          lastEvent.timestamp = now;
+        }
       }
+      if (this.lastEvent) {
+        this.lastEvent.timestamp = now;
+      }
+      debugLog.debug("EventManager", "Duplicate event detected, timestamp updated", {
+        type,
+        queueLength: this.eventsQueue.length
+      });
+      return;
+    }
+    const projectTags = this.get("config")?.tags;
+    if (projectTags?.length) {
+      payload.tags = projectTags;
     }
     this.lastEvent = payload;
     this.processAndSend(payload);
@@ -2367,28 +1857,10 @@ class EventManager extends StateManager {
       this.eventsQueueIntervalId = null;
       this.intervalActive = false;
     }
-    if (this.circuitResetTimeoutId) {
-      clearTimeout(this.circuitResetTimeoutId);
-      this.circuitResetTimeoutId = null;
-    }
-    if (this.circuitBreakerHealthCheckInterval) {
-      clearInterval(this.circuitBreakerHealthCheckInterval);
-      this.circuitBreakerHealthCheckInterval = null;
-    }
-    this.eventFingerprints.clear();
-    this.lastFingerprintCleanup = Date.now();
-    this.circuitOpen = false;
-    this.circuitOpenTime = 0;
-    this.failureCount = 0;
-    this.backoffManager.reset();
     this.lastEvent = null;
-    this.errorRecoveryStats.circuitBreakerResets = 0;
-    this.errorRecoveryStats.persistenceFailures = 0;
-    this.errorRecoveryStats.networkTimeouts = 0;
-    this.errorRecoveryStats.lastRecoveryAttempt = 0;
-    this.circuitRecoveryAttempts = 0;
+    this.eventsQueue = [];
     this.dataSender.stop();
-    debugLog.debug("EventManager", "EventManager stopped and all intervals cleaned up");
+    debugLog.debug("EventManager", "EventManager stopped");
   }
   processAndSend(payload) {
     if (this.get("config").ipExcluded) {
@@ -2426,7 +1898,7 @@ class EventManager extends StateManager {
     const isTestEnv = this.get("config")?.id === "test" || this.get("config")?.mode === "debug";
     const interval = isTestEnv ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
     this.eventsQueueIntervalId = window.setInterval(() => {
-      if (this.eventsQueue.length > 0 || this.circuitOpen) {
+      if (this.eventsQueue.length > 0) {
         this.sendEventsQueue();
       }
     }, interval);
@@ -2438,7 +1910,7 @@ class EventManager extends StateManager {
     }
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => e.timestamp + "_" + e.type);
+    const eventIds = eventsToSend.map((e3) => e3.timestamp + "_" + e3.type);
     const success = await this.dataSender.sendEventsQueueAsync(body);
     if (success) {
       this.removeProcessedEvents(eventIds);
@@ -2460,7 +1932,7 @@ class EventManager extends StateManager {
     }
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => e.timestamp + "_" + e.type);
+    const eventIds = eventsToSend.map((e3) => e3.timestamp + "_" + e3.type);
     const success = this.dataSender.sendEventsQueueSync(body);
     if (success) {
       this.removeProcessedEvents(eventIds);
@@ -2479,65 +1951,24 @@ class EventManager extends StateManager {
   getQueueLength() {
     return this.eventsQueue.length;
   }
-  /**
-   * Gets current error recovery statistics for monitoring purposes
-   */
-  getRecoveryStats() {
-    return {
-      ...this.errorRecoveryStats,
-      currentFailureCount: this.failureCount,
-      circuitBreakerOpen: this.circuitOpen,
-      fingerprintMapSize: this.eventFingerprints.size
-    };
-  }
   async sendEventsQueue() {
-    if (this.isSending) {
-      debugLog.debug("EventManager", "Send already in progress, skipping");
-      return;
-    }
     if (!this.get("sessionId")) {
-      debugLog.debug("EventManager", "No session ID available, skipping send");
+      debugLog.debug("EventManager", "No session ID, skipping send");
       return;
     }
-    if (this.eventsQueue.length === 0 && !this.circuitOpen) {
+    if (this.eventsQueue.length === 0) {
       return;
     }
-    if (this.circuitOpen) {
-      const timeSinceOpen = Date.now() - this.circuitOpenTime;
-      if (timeSinceOpen >= CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
-        if (this.circuitRecoveryAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
-          debugLog.error("EventManager", "Circuit breaker permanently opened after max recovery attempts", {
-            attempts: this.circuitRecoveryAttempts,
-            maxAttempts: this.MAX_RECOVERY_ATTEMPTS
-          });
-          this.notifyCircuitBreakerPermanentFailure();
-          return;
-        }
-        this.circuitRecoveryAttempts++;
-        const recoverySuccess = await this.handleCircuitBreakerRecovery();
-        if (!recoverySuccess) {
-          this.scheduleCircuitBreakerRetry();
-          return;
-        }
-        this.circuitRecoveryAttempts = 0;
-      } else {
-        debugLog.debug("EventManager", "Circuit breaker is open - skipping event sending", {
-          queueLength: this.eventsQueue.length,
-          failureCount: this.failureCount,
-          timeSinceOpen,
-          recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS
-        });
-        return;
-      }
+    if (!this.circuitBreaker.canAttempt()) {
+      debugLog.debug("EventManager", "Circuit breaker open, skipping send");
+      return;
     }
     const body = this.buildEventsPayload();
-    this.isSending = true;
     const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => e.timestamp + "_" + e.type);
+    const eventIds = eventsToSend.map((e3) => e3.timestamp + "_" + e3.type);
     await this.dataSender.sendEventsQueue(body, {
       onSuccess: () => {
-        this.failureCount = 0;
-        this.backoffManager.reset();
+        this.circuitBreaker.recordSuccess();
         this.removeProcessedEvents(eventIds);
         debugLog.info("EventManager", "Events sent successfully", {
           eventCount: eventsToSend.length,
@@ -2545,21 +1976,13 @@ class EventManager extends StateManager {
         });
       },
       onFailure: async () => {
-        this.failureCount++;
+        this.circuitBreaker.recordFailure();
         debugLog.warn("EventManager", "Events send failed, keeping in queue", {
           eventCount: eventsToSend.length,
-          failureCount: this.failureCount,
-          networkTimeouts: this.errorRecoveryStats.networkTimeouts
+          circuitState: this.circuitBreaker.getState()
         });
-        if (this.failureCount >= Math.floor(this.MAX_FAILURES / 2)) {
-          await this.attemptSystemRecovery();
-        }
-        if (this.failureCount >= this.MAX_FAILURES) {
-          await this.openCircuitBreaker();
-        }
       }
     });
-    this.isSending = false;
   }
   buildEventsPayload() {
     const uniqueEvents = /* @__PURE__ */ new Map();
@@ -2582,7 +2005,7 @@ class EventManager extends StateManager {
       }
     }
     const deduplicatedEvents = [...uniqueEvents.values()];
-    deduplicatedEvents.sort((a, b) => a.timestamp - b.timestamp);
+    deduplicatedEvents.sort((a2, b2) => a2.timestamp - b2.timestamp);
     return {
       user_id: this.get("userId"),
       session_id: this.get("sessionId"),
@@ -2598,229 +2021,50 @@ class EventManager extends StateManager {
       this.intervalActive = false;
     }
   }
-  getEventFingerprint(event2) {
-    const key = `${event2.type}_${event2.page_url}`;
-    if (event2.click_data) {
-      const x = Math.round((event2.click_data.x || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
-      const y = Math.round((event2.click_data.y || 0) / CLICK_COORDINATE_PRECISION) * CLICK_COORDINATE_PRECISION;
-      return `${key}_${x}_${y}_${event2.click_data.tag}_${event2.click_data.id}`;
-    }
-    if (event2.scroll_data) {
-      return `${key}_${event2.scroll_data.depth}_${event2.scroll_data.direction}`;
-    }
-    if (event2.custom_event) {
-      return `${key}_${event2.custom_event.name}`;
-    }
-    if (event2.web_vitals) {
-      return `${key}_${event2.web_vitals.type}`;
-    }
-    if (event2.session_end_reason) {
-      return `${key}_${event2.session_end_reason}`;
-    }
-    if (event2.session_start_recovered !== void 0) {
-      return `${key}_${event2.session_start_recovered}`;
-    }
-    return key;
-  }
-  isDuplicatedEvent(event2) {
-    const fingerprint = this.getEventFingerprint(event2);
-    const lastTime = this.eventFingerprints.get(fingerprint) ?? 0;
-    const now = Date.now();
-    if (now - lastTime < DUPLICATE_EVENT_THRESHOLD_MS) {
-      return true;
-    }
-    this.eventFingerprints.set(fingerprint, now);
-    this.cleanupOldFingerprints();
-    return false;
+  /**
+   * Simple sampling check using global sampling rate
+   */
+  shouldSample() {
+    const samplingRate = this.get("config")?.samplingRate ?? 1;
+    return Math.random() < samplingRate;
   }
   /**
-   * Manages fingerprint memory with proactive and reactive cleanup strategies
+   * Checks if event is duplicate of last event
    */
-  manageFingerprintMemory() {
-    const now = Date.now();
-    const shouldCleanup = this.eventFingerprints.size > MAX_FINGERPRINTS || now - this.lastFingerprintCleanup > FINGERPRINT_CLEANUP_INTERVAL_MS || this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT;
-    if (!shouldCleanup) {
-      return;
+  isDuplicate(newEvent) {
+    if (!this.lastEvent) return false;
+    const timeDiff = Date.now() - this.lastEvent.timestamp;
+    if (timeDiff > DUPLICATE_EVENT_THRESHOLD_MS) return false;
+    if (this.lastEvent.type !== newEvent.type) return false;
+    if (this.lastEvent.page_url !== newEvent.page_url) return false;
+    if (newEvent.click_data && this.lastEvent.click_data) {
+      return this.areClicksSimilar(newEvent.click_data, this.lastEvent.click_data);
     }
-    if (this.eventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
-      this.aggressiveFingerprintCleanup();
-    } else {
-      this.cleanupOldFingerprints();
+    if (newEvent.scroll_data && this.lastEvent.scroll_data) {
+      return this.areScrollsSimilar(newEvent.scroll_data, this.lastEvent.scroll_data);
     }
-    this.lastFingerprintCleanup = now;
+    if (newEvent.custom_event && this.lastEvent.custom_event) {
+      return newEvent.custom_event.name === this.lastEvent.custom_event.name;
+    }
+    if (newEvent.web_vitals && this.lastEvent.web_vitals) {
+      return newEvent.web_vitals.type === this.lastEvent.web_vitals.type;
+    }
+    return true;
   }
   /**
-   * Performs aggressive cleanup when hard limit is exceeded
-   * Enhanced with recovery statistics tracking
+   * Checks if two clicks are similar within tolerance
    */
-  aggressiveFingerprintCleanup() {
-    const entries = Array.from(this.eventFingerprints.entries());
-    const initialSize = entries.length;
-    entries.sort((a, b) => a[1] - b[1]);
-    const toRemove = Math.floor(entries.length * 0.5);
-    for (let i = 0; i < toRemove; i++) {
-      this.eventFingerprints.delete(entries[i][0]);
-    }
-    debugLog.warn("EventManager", "Aggressive fingerprint cleanup performed", {
-      removed: toRemove,
-      remaining: this.eventFingerprints.size,
-      initialSize,
-      trigger: "recovery_system",
-      hardLimit: MAX_FINGERPRINTS_HARD_LIMIT,
-      recoveryStats: this.errorRecoveryStats
-    });
+  areClicksSimilar(click1, click2) {
+    const TOLERANCE = 5;
+    const xDiff = Math.abs((click1.x || 0) - (click2.x || 0));
+    const yDiff = Math.abs((click1.y || 0) - (click2.y || 0));
+    return xDiff < TOLERANCE && yDiff < TOLERANCE;
   }
   /**
-   * Cleans up old fingerprints to prevent memory leaks
+   * Checks if two scrolls are similar
    */
-  cleanupOldFingerprints() {
-    if (this.eventFingerprints.size <= MAX_FINGERPRINTS) {
-      return;
-    }
-    const now = Date.now();
-    const cleanupThreshold = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
-    const keysToDelete = [];
-    for (const [key, timestamp] of this.eventFingerprints) {
-      if (now - timestamp > cleanupThreshold) {
-        keysToDelete.push(key);
-      }
-    }
-    for (const key of keysToDelete) {
-      this.eventFingerprints.delete(key);
-    }
-    debugLog.debug("EventManager", "Cleaned up old event fingerprints", {
-      totalFingerprints: this.eventFingerprints.size + keysToDelete.length,
-      cleanedCount: keysToDelete.length,
-      remainingCount: this.eventFingerprints.size,
-      cleanupThreshold
-    });
-  }
-  /**
-   * Sets up circuit breaker health monitoring to detect and recover from stuck states
-   */
-  setupCircuitBreakerHealthCheck() {
-    this.circuitBreakerHealthCheckInterval = window.setInterval(async () => {
-      if (this.circuitOpen) {
-        const stuckTime = Date.now() - this.circuitOpenTime;
-        if (stuckTime > CIRCUIT_BREAKER_MAX_STUCK_TIME_MS) {
-          debugLog.warn("EventManager", "Circuit breaker appears stuck, forcing reset", {
-            stuckTime,
-            maxStuckTime: CIRCUIT_BREAKER_MAX_STUCK_TIME_MS,
-            failureCount: this.failureCount
-          });
-          await this.resetCircuitBreaker();
-          this.failureCount = 0;
-          this.errorRecoveryStats.circuitBreakerResets++;
-          await this.attemptSystemRecovery();
-        }
-      }
-    }, CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS);
-  }
-  /**
-   * Opens the circuit breaker with time-based recovery and event persistence
-   */
-  async openCircuitBreaker() {
-    this.circuitOpen = true;
-    this.circuitOpenTime = Date.now();
-    await this.set("circuitBreakerOpen", true);
-    const eventsCount = this.eventsQueue.length;
-    if (eventsCount > 0) {
-      const body = this.buildEventsPayload();
-      const persistSuccess = await this.dataSender.persistEventsForRecovery(body);
-      if (persistSuccess) {
-        debugLog.info("EventManager", "Events persisted before circuit breaker opened", {
-          eventsCount
-        });
-      } else {
-        debugLog.error("EventManager", "Failed to persist events before circuit breaker opened");
-      }
-    }
-    this.eventsQueue = [];
-    debugLog.warn("EventManager", "Circuit breaker opened with time-based recovery", {
-      maxFailures: this.MAX_FAILURES,
-      eventsCount,
-      failureCount: this.failureCount,
-      recoveryTime: CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS,
-      openTime: this.circuitOpenTime
-    });
-    this.backoffManager.getNextDelay();
-  }
-  /**
-   * Handles circuit breaker recovery attempt
-   * Returns true if recovery was successful, false otherwise
-   */
-  async handleCircuitBreakerRecovery() {
-    await this.resetCircuitBreaker();
-    this.isSending = true;
-    let recoverySuccess = false;
-    try {
-      await this.dataSender.recoverPersistedEvents({
-        onSuccess: () => {
-          recoverySuccess = true;
-          this.failureCount = 0;
-          this.backoffManager.reset();
-          debugLog.info("EventManager", "Circuit breaker recovery successful");
-        },
-        onFailure: () => {
-          recoverySuccess = false;
-          debugLog.warn("EventManager", "Circuit breaker recovery failed");
-        }
-      });
-    } catch (error) {
-      recoverySuccess = false;
-      debugLog.error("EventManager", "Circuit breaker recovery error", { error });
-    } finally {
-      this.isSending = false;
-    }
-    return recoverySuccess;
-  }
-  /**
-   * Schedules circuit breaker retry with progressive backoff
-   */
-  scheduleCircuitBreakerRetry() {
-    const nextRetryDelay = this.backoffManager.getNextDelay();
-    this.circuitOpen = true;
-    this.circuitOpenTime = Date.now();
-    debugLog.warn("EventManager", "Circuit breaker retry scheduled", {
-      nextRetryDelay,
-      failureCount: this.failureCount
-    });
-  }
-  /**
-   * Resets the circuit breaker and attempts to restore persisted events
-   */
-  async resetCircuitBreaker() {
-    this.circuitOpen = false;
-    this.circuitOpenTime = 0;
-    this.failureCount = 0;
-    this.circuitResetTimeoutId = null;
-    await this.set("circuitBreakerOpen", false);
-    this.dataSender.stop();
-    debugLog.info("EventManager", "Circuit breaker reset completed", {
-      currentQueueLength: this.eventsQueue.length,
-      backoffDelay: this.backoffManager.getCurrentDelay()
-    });
-  }
-  /**
-   * Notifies system and users that circuit breaker has permanently failed
-   */
-  notifyCircuitBreakerPermanentFailure() {
-    debugLog.error("EventManager", "CIRCUIT BREAKER PERMANENTLY OPEN - MANUAL INTERVENTION REQUIRED", {
-      attempts: this.circuitRecoveryAttempts,
-      timestamp: Date.now(),
-      failureCount: this.failureCount
-    });
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("tracelog:circuit-breaker-failure", {
-          detail: {
-            attempts: this.circuitRecoveryAttempts,
-            timestamp: Date.now(),
-            failureCount: this.failureCount
-          }
-        })
-      );
-    }
+  areScrollsSimilar(scroll1, scroll2) {
+    return scroll1.depth === scroll2.depth && scroll1.direction === scroll2.direction;
   }
   removeProcessedEvents(eventIds) {
     const eventIdSet = new Set(eventIds);
@@ -2828,40 +2072,6 @@ class EventManager extends StateManager {
       const eventId = event2.timestamp + "_" + event2.type;
       return !eventIdSet.has(eventId);
     });
-  }
-  /**
-   * Determines if system recovery should be attempted based on timing constraints
-   */
-  shouldAttemptRecovery() {
-    const now = Date.now();
-    const timeSinceLastRecovery = now - this.errorRecoveryStats.lastRecoveryAttempt;
-    return timeSinceLastRecovery > 6e4;
-  }
-  /**
-   * Attempts comprehensive system recovery from various error states
-   */
-  async attemptSystemRecovery() {
-    if (!this.shouldAttemptRecovery()) {
-      return;
-    }
-    this.errorRecoveryStats.lastRecoveryAttempt = Date.now();
-    debugLog.info("EventManager", "Attempting system recovery", {
-      stats: this.errorRecoveryStats
-    });
-    try {
-      if (this.circuitOpen) {
-        const stuckTime = Date.now() - this.circuitOpenTime;
-        if (stuckTime > 2 * CIRCUIT_BREAKER_CONSTANTS.RECOVERY_TIME_MS) {
-          await this.resetCircuitBreaker();
-          this.errorRecoveryStats.circuitBreakerResets++;
-        }
-      }
-      await this.recoverPersistedEvents();
-      this.aggressiveFingerprintCleanup();
-      debugLog.info("EventManager", "System recovery completed successfully");
-    } catch (error) {
-      debugLog.error("EventManager", "System recovery failed", { error });
-    }
   }
 }
 class UserManager extends StateManager {
@@ -2880,2162 +2090,270 @@ class UserManager extends StateManager {
     return newUserId;
   }
 }
-class ActivityListenerManager {
-  onActivity;
-  options = { passive: true };
-  constructor(onActivity) {
-    this.onActivity = onActivity;
-  }
-  setup() {
-    try {
-      window.addEventListener("scroll", this.onActivity, this.options);
-      window.addEventListener("resize", this.onActivity, this.options);
-      window.addEventListener("focus", this.onActivity, this.options);
-    } catch (error) {
-      debugLog.error("ActivityListenerManager", "Failed to setup activity listeners", { error });
-      throw error;
-    }
-  }
-  cleanup() {
-    try {
-      window.removeEventListener("scroll", this.onActivity);
-      window.removeEventListener("resize", this.onActivity);
-      window.removeEventListener("focus", this.onActivity);
-    } catch (error) {
-      debugLog.warn("ActivityListenerManager", "Error during activity listeners cleanup", { error });
-    }
-  }
-}
-class TouchListenerManager {
-  onActivity;
-  options = { passive: true };
-  motionThreshold;
-  constructor(onActivity, motionThreshold) {
-    this.onActivity = onActivity;
-    this.motionThreshold = motionThreshold;
-  }
-  setup() {
-    try {
-      window.addEventListener("touchstart", this.onActivity, this.options);
-      window.addEventListener("touchmove", this.onActivity, this.options);
-      window.addEventListener("touchend", this.onActivity, this.options);
-      window.addEventListener("orientationchange", this.onActivity, this.options);
-      const hasDeviceMotion = "DeviceMotionEvent" in window;
-      if (hasDeviceMotion) {
-        window.addEventListener("devicemotion", this.handleDeviceMotion, this.options);
-      }
-    } catch (error) {
-      debugLog.error("TouchListenerManager", "Failed to setup touch listeners", { error });
-      throw error;
-    }
-  }
-  cleanup() {
-    try {
-      window.removeEventListener("touchstart", this.onActivity);
-      window.removeEventListener("touchmove", this.onActivity);
-      window.removeEventListener("touchend", this.onActivity);
-      window.removeEventListener("orientationchange", this.onActivity);
-      if ("DeviceMotionEvent" in window) {
-        window.removeEventListener("devicemotion", this.handleDeviceMotion);
-      }
-    } catch (error) {
-      debugLog.warn("TouchListenerManager", "Error during touch listeners cleanup", { error });
-    }
-  }
-  handleDeviceMotion = (event2) => {
-    try {
-      const acceleration = event2.acceleration;
-      if (acceleration) {
-        const totalAcceleration = Math.abs(acceleration.x ?? 0) + Math.abs(acceleration.y ?? 0) + Math.abs(acceleration.z ?? 0);
-        if (totalAcceleration > this.motionThreshold) {
-          this.onActivity();
-        }
-      }
-    } catch (error) {
-      debugLog.warn("TouchListenerManager", "Error handling device motion event", { error });
-    }
-  };
-}
-class MouseListenerManager {
-  onActivity;
-  options = { passive: true };
-  constructor(onActivity) {
-    this.onActivity = onActivity;
-  }
-  setup() {
-    try {
-      window.addEventListener("mousemove", this.onActivity, this.options);
-      window.addEventListener("mousedown", this.onActivity, this.options);
-      window.addEventListener("wheel", this.onActivity, this.options);
-    } catch (error) {
-      debugLog.error("MouseListenerManager", "Failed to setup mouse listeners", { error });
-      throw error;
-    }
-  }
-  cleanup() {
-    try {
-      window.removeEventListener("mousemove", this.onActivity);
-      window.removeEventListener("mousedown", this.onActivity);
-      window.removeEventListener("wheel", this.onActivity);
-    } catch (error) {
-      debugLog.warn("MouseListenerManager", "Error during mouse listeners cleanup", { error });
-    }
-  }
-}
-class KeyboardListenerManager {
-  onActivity;
-  options = { passive: true };
-  constructor(onActivity) {
-    this.onActivity = onActivity;
-  }
-  setup() {
-    try {
-      window.addEventListener("keydown", this.onActivity, this.options);
-      window.addEventListener("keypress", this.onActivity, this.options);
-    } catch (error) {
-      debugLog.error("KeyboardListenerManager", "Failed to setup keyboard listeners", { error });
-      throw error;
-    }
-  }
-  cleanup() {
-    try {
-      window.removeEventListener("keydown", this.onActivity);
-      window.removeEventListener("keypress", this.onActivity);
-    } catch (error) {
-      debugLog.warn("KeyboardListenerManager", "Error during keyboard listeners cleanup", { error });
-    }
-  }
-}
-class VisibilityListenerManager {
-  onActivity;
-  onVisibilityChange;
-  onNetworkRestored;
-  isMobile;
-  options = { passive: true };
-  constructor(onActivity, onVisibilityChange, isMobile, onNetworkRestored) {
-    this.onActivity = onActivity;
-    this.onVisibilityChange = onVisibilityChange;
-    this.onNetworkRestored = onNetworkRestored;
-    this.isMobile = isMobile;
-  }
-  setup() {
-    try {
-      const hasVisibilityAPI = "visibilityState" in document;
-      if (hasVisibilityAPI) {
-        document.addEventListener("visibilitychange", this.onVisibilityChange, this.options);
-      }
-      window.addEventListener("blur", this.onVisibilityChange, this.options);
-      window.addEventListener("focus", this.onActivity, this.options);
-      const hasNetworkAPI = "onLine" in navigator;
-      if (hasNetworkAPI) {
-        window.addEventListener("online", this.handleOnline, this.options);
-        window.addEventListener("offline", this.onVisibilityChange, this.options);
-      }
-      if (this.isMobile) {
-        this.setupMobileEvents();
-      }
-    } catch (error) {
-      debugLog.error("VisibilityListenerManager", "Failed to setup visibility listeners", { error });
-      throw error;
-    }
-  }
-  cleanup() {
-    try {
-      if ("visibilityState" in document) {
-        document.removeEventListener("visibilitychange", this.onVisibilityChange);
-      }
-      window.removeEventListener("blur", this.onVisibilityChange);
-      window.removeEventListener("focus", this.onActivity);
-      if ("onLine" in navigator) {
-        window.removeEventListener("online", this.handleOnline);
-        window.removeEventListener("offline", this.onVisibilityChange);
-      }
-      if (this.isMobile) {
-        this.cleanupMobileEvents();
-      }
-    } catch (error) {
-      debugLog.warn("VisibilityListenerManager", "Error during visibility listeners cleanup", { error });
-    }
-  }
-  setupMobileEvents() {
-    try {
-      document.addEventListener("pause", this.onVisibilityChange, this.options);
-      document.addEventListener("resume", this.onActivity, this.options);
-      const hasOrientationAPI = "orientation" in screen;
-      if (hasOrientationAPI) {
-        screen.orientation.addEventListener("change", this.onActivity, this.options);
-      }
-      window.addEventListener("pageshow", this.onActivity, this.options);
-      window.addEventListener("pagehide", this.onActivity, this.options);
-    } catch (error) {
-      debugLog.warn("VisibilityListenerManager", "Failed to setup mobile listeners", { error });
-    }
-  }
-  cleanupMobileEvents() {
-    try {
-      document.removeEventListener("pause", this.onVisibilityChange);
-      document.removeEventListener("resume", this.onActivity);
-      if ("orientation" in screen) {
-        screen.orientation.removeEventListener("change", this.onActivity);
-      }
-      window.removeEventListener("pageshow", this.onActivity);
-      window.removeEventListener("pagehide", this.onActivity);
-    } catch (error) {
-      debugLog.warn("VisibilityListenerManager", "Error during mobile listeners cleanup", { error });
-    }
-  }
-  handleOnline = () => {
-    this.onActivity();
-    this.onNetworkRestored?.();
-  };
-}
-class UnloadListenerManager {
-  onInactivity;
-  options = { passive: true };
-  constructor(onInactivity) {
-    this.onInactivity = onInactivity;
-  }
-  setup() {
-    try {
-      window.addEventListener("beforeunload", this.onInactivity, this.options);
-      window.addEventListener("pagehide", this.onInactivity, this.options);
-    } catch (error) {
-      debugLog.error("UnloadListenerManager", "Failed to setup unload listeners", { error });
-      throw error;
-    }
-  }
-  cleanup() {
-    try {
-      window.removeEventListener("beforeunload", this.onInactivity);
-      window.removeEventListener("pagehide", this.onInactivity);
-    } catch (error) {
-      debugLog.warn("UnloadListenerManager", "Error during unload listeners cleanup", { error });
-    }
-  }
-}
-class SessionRecoveryManager extends StateManager {
-  config;
+class SessionManager extends StateManager {
   storageManager;
   eventManager;
-  projectId;
-  debugMode;
-  constructor(storageManager, projectId, eventManager, config) {
-    super();
-    this.storageManager = storageManager;
-    this.eventManager = eventManager ?? null;
-    this.projectId = projectId;
-    this.debugMode = (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false;
-    this.config = {
-      recoveryWindowMs: this.calculateRecoveryWindow(),
-      maxRecoveryAttempts: MAX_SESSION_RECOVERY_ATTEMPTS,
-      contextPreservation: true,
-      ...config
-    };
-  }
-  /**
-   * Attempt to recover a session
-   */
-  attemptSessionRecovery(currentSessionId) {
-    if (this.debugMode) {
-      debugLog.debug("SessionRecovery", "Attempting session recovery");
-    }
-    const recoveryAttempts = this.getStoredRecoveryAttempts();
-    const lastAttempt = this.getLastRecoveryAttempt();
-    if (!this.canAttemptRecovery(lastAttempt)) {
-      if (this.debugMode) {
-        debugLog.debug(
-          "SessionRecovery",
-          "Session recovery not possible - outside recovery window or max attempts reached"
-        );
-      }
-      return {
-        recovered: false
-      };
-    }
-    const lastSessionContext = lastAttempt?.context;
-    if (!lastSessionContext) {
-      if (this.debugMode) {
-        debugLog.debug("SessionRecovery", "No session context available for recovery");
-      }
-      return {
-        recovered: false
-      };
-    }
-    const now = Date.now();
-    const timeSinceLastActivity = now - lastSessionContext.lastActivity;
-    if (timeSinceLastActivity > this.config.recoveryWindowMs) {
-      if (this.debugMode) {
-        debugLog.debug("SessionRecovery", "Session recovery failed - outside recovery window");
-      }
-      return {
-        recovered: false
-      };
-    }
-    const recoveredSessionId = lastSessionContext.sessionId;
-    const attemptNumber = (lastAttempt?.attempt ?? 0) + 1;
-    const recoveryAttempt = {
-      sessionId: currentSessionId ?? recoveredSessionId,
-      timestamp: now,
-      attempt: attemptNumber,
-      context: {
-        ...lastSessionContext,
-        recoveryAttempts: attemptNumber,
-        lastActivity: now
-      }
-    };
-    recoveryAttempts.push(recoveryAttempt);
-    this.storeRecoveryAttempts(recoveryAttempts);
-    if (this.debugMode) {
-      debugLog.debug("SessionRecovery", `Session recovery successful: recovery of session ${recoveredSessionId}`);
-    }
-    return {
-      recovered: true,
-      recoveredSessionId,
-      context: recoveryAttempt.context
-    };
-  }
-  /**
-   * Calculate the recovery window with bounds checking
-   */
-  calculateRecoveryWindow() {
-    const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
-    const calculatedRecoveryWindow = sessionTimeout * SESSION_RECOVERY_WINDOW_MULTIPLIER;
-    const boundedRecoveryWindow = Math.max(
-      Math.min(calculatedRecoveryWindow, MAX_SESSION_RECOVERY_WINDOW_MS),
-      MIN_SESSION_RECOVERY_WINDOW_MS
-    );
-    if (this.debugMode) {
-      if (calculatedRecoveryWindow > MAX_SESSION_RECOVERY_WINDOW_MS) {
-        debugLog.warn(
-          "SessionRecovery",
-          `Recovery window capped at ${MAX_SESSION_RECOVERY_WINDOW_MS}ms (24h). Calculated: ${calculatedRecoveryWindow}ms`
-        );
-      } else if (calculatedRecoveryWindow < MIN_SESSION_RECOVERY_WINDOW_MS) {
-        debugLog.warn(
-          "SessionRecovery",
-          `Recovery window increased to minimum ${MIN_SESSION_RECOVERY_WINDOW_MS}ms (2min). Calculated: ${calculatedRecoveryWindow}ms`
-        );
-      }
-    }
-    return boundedRecoveryWindow;
-  }
-  /**
-   * Check if session recovery can be attempted
-   */
-  canAttemptRecovery(lastAttempt) {
-    if (!lastAttempt) {
-      return true;
-    }
-    const now = Date.now();
-    const timeSinceLastActivity = now - lastAttempt.context.lastActivity;
-    if (timeSinceLastActivity > this.config.recoveryWindowMs) {
-      return false;
-    }
-    if (lastAttempt.attempt >= this.config.maxRecoveryAttempts) {
-      return false;
-    }
-    return true;
-  }
-  /**
-   * Store session context for potential recovery
-   */
-  storeSessionContextForRecovery(sessionContext) {
-    try {
-      const recoveryAttempts = this.getStoredRecoveryAttempts();
-      const recoveryAttempt = {
-        sessionId: sessionContext.sessionId,
-        timestamp: Date.now(),
-        attempt: 0,
-        context: sessionContext
-      };
-      recoveryAttempts.push(recoveryAttempt);
-      const maxStoredRecoveryAttempts = 5;
-      if (recoveryAttempts.length > maxStoredRecoveryAttempts) {
-        recoveryAttempts.splice(0, recoveryAttempts.length - maxStoredRecoveryAttempts);
-      }
-      this.storeRecoveryAttempts(recoveryAttempts);
-      if (this.debugMode) {
-        debugLog.debug("SessionRecovery", `Stored session context for recovery: ${sessionContext.sessionId}`);
-      }
-    } catch (error) {
-      if (this.debugMode) {
-        debugLog.warn("SessionRecovery", "Failed to store session context for recovery", { error });
-      }
-    }
-  }
-  /**
-   * Get stored recovery attempts
-   */
-  getStoredRecoveryAttempts() {
-    try {
-      const stored = this.storageManager.getItem(SESSION_RECOVERY_KEY(this.projectId));
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      if (this.debugMode) {
-        const stored = this.storageManager.getItem(SESSION_RECOVERY_KEY(this.projectId));
-        debugLog.warn(
-          "SessionRecovery",
-          `Failed to parse stored recovery attempts for projectId ${this.projectId}. Data: ${stored}`,
-          { error }
-        );
-      }
-      return [];
-    }
-  }
-  /**
-   * Store recovery attempts
-   */
-  storeRecoveryAttempts(attempts) {
-    try {
-      this.storageManager.setItem(SESSION_RECOVERY_KEY(this.projectId), JSON.stringify(attempts));
-    } catch (error) {
-      if (this.debugMode) {
-        debugLog.warn("SessionRecovery", "Failed to store recovery attempts", { error });
-      }
-    }
-  }
-  /**
-   * Get the last recovery attempt
-   */
-  getLastRecoveryAttempt() {
-    const attempts = this.getStoredRecoveryAttempts();
-    return attempts.length > 0 ? attempts[attempts.length - 1] : null;
-  }
-  /**
-   * Clean up old recovery attempts
-   */
-  cleanupOldRecoveryAttempts() {
-    const attempts = this.getStoredRecoveryAttempts();
-    const now = Date.now();
-    const validAttempts = attempts.filter((attempt) => now - attempt.timestamp <= this.config.recoveryWindowMs);
-    if (validAttempts.length !== attempts.length) {
-      this.storeRecoveryAttempts(validAttempts);
-      if (this.debugMode) {
-        debugLog.debug("SessionRecovery", `Cleaned up ${attempts.length - validAttempts.length} old recovery attempts`);
-      }
-    }
-  }
-  /**
-   * Check if there's a recoverable session.
-   * Returns false when no recovery attempts are stored.
-   */
-  hasRecoverableSession() {
-    const lastAttempt = this.getLastRecoveryAttempt();
-    if (!lastAttempt) {
-      return false;
-    }
-    return this.canAttemptRecovery(lastAttempt);
-  }
-  /**
-   * Get recovery window in milliseconds
-   */
-  getRecoveryWindowMs() {
-    return this.config.recoveryWindowMs;
-  }
-  /**
-   * Get max recovery attempts
-   */
-  getMaxRecoveryAttempts() {
-    return this.config.maxRecoveryAttempts;
-  }
-  /**
-   * Clear all stored recovery data
-   */
-  clearRecoveryData() {
-    this.storageManager.removeItem(SESSION_RECOVERY_KEY(this.projectId));
-    if (this.debugMode) {
-      debugLog.debug("SessionRecovery", "Cleared all recovery data");
-    }
-  }
-}
-class SessionManager extends StateManager {
-  config;
-  eventManager = null;
-  storageManager = null;
-  listenerManagers = [];
-  deviceCapabilities;
-  onActivity;
-  onInactivity;
-  // Recovery manager
-  recoveryManager = null;
-  isSessionActive = false;
-  lastActivityTime = 0;
-  inactivityTimer = null;
-  sessionStartTime = 0;
-  throttleTimeout = null;
-  // Track visibility change timeout for proper cleanup
+  sessionTimeoutId = null;
+  broadcastChannel = null;
+  activityListeners = null;
   visibilityChangeTimeout = null;
-  // Session End Management
-  pendingSessionEnd = false;
-  sessionEndPromise = null;
-  sessionEndLock = Promise.resolve({
-    success: true,
-    reason: "manual_stop",
-    timestamp: Date.now(),
-    eventsFlushed: 0,
-    method: "async"
-  });
-  cleanupHandlers = [];
-  sessionEndConfig;
-  sessionEndReason = null;
-  sessionEndPriority = {
-    page_unload: 4,
-    manual_stop: 3,
-    orphaned_cleanup: 2,
-    inactivity: 1,
-    tab_closed: 0
-  };
-  sessionEndStats = {
-    totalSessionEnds: 0,
-    successfulEnds: 0,
-    failedEnds: 0,
-    duplicatePrevented: 0,
-    reasonCounts: {
-      inactivity: 0,
-      page_unload: 0,
-      manual_stop: 0,
-      orphaned_cleanup: 0,
-      tab_closed: 0
-    }
-  };
-  // Session health monitoring
-  sessionHealth = {
-    recoveryAttempts: 0,
-    sessionTimeouts: 0,
-    crossTabConflicts: 0,
-    lastHealthCheck: Date.now()
-  };
-  constructor(onActivity, onInactivity, eventManager, storageManager, sessionEndConfig) {
+  constructor(storageManager, eventManager) {
     super();
-    this.config = {
-      throttleDelay: DEFAULT_THROTTLE_DELAY_MS,
-      visibilityTimeout: DEFAULT_VISIBILITY_TIMEOUT_MS,
-      motionThreshold: DEFAULT_MOTION_THRESHOLD,
-      timeout: this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS
-    };
-    this.sessionEndConfig = {
-      enablePageUnloadHandlers: true,
-      syncTimeoutMs: 1e3,
-      maxRetries: 2,
-      debugMode: false,
-      ...sessionEndConfig
-    };
-    this.onActivity = onActivity;
-    this.onInactivity = onInactivity;
-    this.eventManager = eventManager ?? null;
-    this.storageManager = storageManager ?? null;
-    this.deviceCapabilities = this.detectDeviceCapabilities();
-    this.initializeRecoveryManager();
-    this.initializeListenerManagers();
-    this.setupAllListeners();
-    if (this.sessionEndConfig.enablePageUnloadHandlers) {
-      this.setupPageUnloadHandlers();
-    }
-    debugLog.debug("SessionManager", "SessionManager initialized", {
-      sessionTimeout: this.config.timeout,
-      deviceCapabilities: this.deviceCapabilities,
-      unloadHandlersEnabled: this.sessionEndConfig.enablePageUnloadHandlers
-    });
-  }
-  /**
-   * Initialize recovery manager
-   */
-  initializeRecoveryManager() {
-    if (!this.storageManager) return;
-    const projectId = this.get("config")?.id;
-    if (!projectId) return;
-    try {
-      this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager ?? void 0);
-      debugLog.debug("SessionManager", "Recovery manager initialized", { projectId });
-    } catch (error) {
-      debugLog.error("SessionManager", "Failed to initialize recovery manager", { error, projectId });
-    }
-  }
-  /**
-   * Store session context for recovery
-   */
-  storeSessionContextForRecovery() {
-    if (!this.recoveryManager) return;
-    const sessionId = this.get("sessionId");
-    if (!sessionId) return;
-    const sessionContext = {
-      sessionId,
-      startTime: this.sessionStartTime,
-      lastActivity: this.lastActivityTime,
-      tabCount: 1,
-      // This will be updated by cross-tab manager
-      recoveryAttempts: 0,
-      metadata: {
-        userAgent: navigator.userAgent,
-        pageUrl: this.get("pageUrl")
-      }
-    };
-    this.recoveryManager.storeSessionContextForRecovery(sessionContext);
-  }
-  startSession() {
-    const now = Date.now();
-    let sessionId = "";
-    let wasRecovered = false;
-    if (this.recoveryManager?.hasRecoverableSession()) {
-      const recoveryResult = this.recoveryManager.attemptSessionRecovery();
-      if (recoveryResult.recovered && recoveryResult.recoveredSessionId) {
-        sessionId = recoveryResult.recoveredSessionId;
-        wasRecovered = true;
-        this.trackSessionHealth("recovery");
-        if (recoveryResult.context) {
-          this.sessionStartTime = recoveryResult.context.startTime;
-          this.lastActivityTime = now;
-        } else {
-          this.sessionStartTime = now;
-          this.lastActivityTime = now;
-        }
-        debugLog.info("SessionManager", "Session successfully recovered", {
-          sessionId,
-          recoveryAttempts: this.sessionHealth.recoveryAttempts
-        });
-      }
-    }
-    if (!wasRecovered) {
-      sessionId = generateUUID();
-      this.sessionStartTime = now;
-      this.lastActivityTime = now;
-      debugLog.info("SessionManager", "New session started", { sessionId });
-    }
-    this.isSessionActive = true;
-    this.resetInactivityTimer();
-    this.storeSessionContextForRecovery();
-    return { sessionId, recovered: wasRecovered };
-  }
-  endSession() {
-    if (this.sessionStartTime === 0) {
-      return 0;
-    }
-    const durationMs = Date.now() - this.sessionStartTime;
-    this.sessionStartTime = 0;
-    this.isSessionActive = false;
-    if (this.inactivityTimer) {
-      clearTimeout(this.inactivityTimer);
-      this.inactivityTimer = null;
-    }
-    return durationMs;
-  }
-  destroy() {
-    this.clearTimers();
-    this.cleanupAllListeners();
-    this.resetState();
-    this.cleanupHandlers.forEach((cleanup) => cleanup());
-    this.cleanupHandlers = [];
-    this.pendingSessionEnd = false;
-    this.sessionEndPromise = null;
-    this.sessionEndLock = Promise.resolve({
-      success: true,
-      reason: "manual_stop",
-      timestamp: Date.now(),
-      eventsFlushed: 0,
-      method: "async"
-    });
-    if (this.recoveryManager) {
-      this.recoveryManager.cleanupOldRecoveryAttempts();
-      this.recoveryManager = null;
-    }
-  }
-  detectDeviceCapabilities() {
-    const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    const hasMouse = window.matchMedia("(pointer: fine)").matches;
-    const hasKeyboard = !window.matchMedia("(pointer: coarse)").matches;
-    const isMobile = getDeviceType() === DeviceType.Mobile;
-    return { hasTouch, hasMouse, hasKeyboard, isMobile };
-  }
-  initializeListenerManagers() {
-    this.listenerManagers.push(new ActivityListenerManager(this.handleActivity));
-    if (this.deviceCapabilities.hasTouch) {
-      this.listenerManagers.push(new TouchListenerManager(this.handleActivity, this.config.motionThreshold));
-    }
-    if (this.deviceCapabilities.hasMouse) {
-      this.listenerManagers.push(new MouseListenerManager(this.handleActivity));
-    }
-    if (this.deviceCapabilities.hasKeyboard) {
-      this.listenerManagers.push(new KeyboardListenerManager(this.handleActivity));
-    }
-    this.listenerManagers.push(
-      new VisibilityListenerManager(
-        this.handleActivity,
-        this.handleVisibilityChange,
-        this.deviceCapabilities.isMobile,
-        this.handleNetworkRestored
-      )
-    );
-    this.listenerManagers.push(new UnloadListenerManager(this.handleInactivity));
-  }
-  setupAllListeners() {
-    this.listenerManagers.forEach((manager) => manager.setup());
-  }
-  cleanupAllListeners() {
-    this.listenerManagers.forEach((manager) => manager.cleanup());
-  }
-  clearTimers() {
-    if (this.inactivityTimer) {
-      clearTimeout(this.inactivityTimer);
-      this.inactivityTimer = null;
-    }
-    if (this.throttleTimeout) {
-      clearTimeout(this.throttleTimeout);
-      this.throttleTimeout = null;
-    }
-  }
-  resetState() {
-    this.isSessionActive = false;
-    this.lastActivityTime = 0;
-    this.sessionStartTime = 0;
-  }
-  handleActivity = () => {
-    const now = Date.now();
-    if (now - this.lastActivityTime < this.config.throttleDelay) {
-      return;
-    }
-    this.lastActivityTime = now;
-    if (this.isSessionActive) {
-      this.onActivity();
-      this.resetInactivityTimer();
-    } else {
-      if (this.throttleTimeout) {
-        clearTimeout(this.throttleTimeout);
-        this.throttleTimeout = null;
-      }
-      this.throttleTimeout = window.setTimeout(() => {
-        this.onActivity();
-        this.throttleTimeout = null;
-      }, 100);
-    }
-  };
-  handleInactivity = () => {
-    this.trackSessionHealth("timeout");
-    this.onInactivity();
-  };
-  handleNetworkRestored = async () => {
-    debugLog.info("SessionManager", "Network connection restored, attempting to recover persisted events");
-    if (this.eventManager) {
-      try {
-        await this.eventManager.recoverPersistedEvents();
-      } catch (error) {
-        debugLog.error("SessionManager", "Failed to recover events after network restoration", { error });
-      }
-    }
-  };
-  handleVisibilityChange = () => {
-    if (document.hidden) {
-      if (this.isSessionActive) {
-        if (this.inactivityTimer) {
-          clearTimeout(this.inactivityTimer);
-          this.inactivityTimer = null;
-        }
-        this.inactivityTimer = window.setTimeout(this.handleInactivity, this.config.visibilityTimeout);
-      }
-    } else {
-      this.handleActivity();
-    }
-  };
-  resetInactivityTimer = () => {
-    if (this.inactivityTimer) {
-      clearTimeout(this.inactivityTimer);
-      this.inactivityTimer = null;
-    }
-    if (this.isSessionActive) {
-      this.inactivityTimer = window.setTimeout(() => {
-        this.handleInactivity();
-      }, this.config.timeout);
-    }
-  };
-  clearInactivityTimer() {
-    if (this.inactivityTimer) {
-      clearTimeout(this.inactivityTimer);
-      this.inactivityTimer = null;
-    }
-  }
-  shouldProceedWithSessionEnd(reason) {
-    return !this.sessionEndReason || this.sessionEndPriority[reason] > this.sessionEndPriority[this.sessionEndReason];
-  }
-  async waitForCompletion() {
-    if (this.sessionEndPromise) {
-      return await this.sessionEndPromise;
-    }
-    return {
-      success: false,
-      reason: "inactivity",
-      timestamp: Date.now(),
-      eventsFlushed: 0,
-      method: "async"
-    };
-  }
-  createSessionEndTimeout() {
-    return new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new Error("Session end timeout"));
-      }, this.sessionEndConfig.syncTimeoutMs || 5e3);
-    });
-  }
-  async endSessionManaged(reason) {
-    return this.sessionEndLock = this.sessionEndLock.then(async () => {
-      this.sessionEndStats.totalSessionEnds++;
-      this.sessionEndStats.reasonCounts[reason]++;
-      if (this.pendingSessionEnd) {
-        this.sessionEndStats.duplicatePrevented++;
-        debugLog.debug("SessionManager", "Session end already pending, waiting for completion", { reason });
-        return this.waitForCompletion();
-      }
-      if (!this.shouldProceedWithSessionEnd(reason)) {
-        if (this.sessionEndConfig.debugMode) {
-          debugLog.debug(
-            "SessionManager",
-            `Session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`
-          );
-        }
-        return {
-          success: false,
-          reason,
-          timestamp: Date.now(),
-          eventsFlushed: 0,
-          method: "async"
-        };
-      }
-      this.sessionEndReason = reason;
-      this.pendingSessionEnd = true;
-      this.sessionEndPromise = Promise.race([
-        this.performSessionEnd(reason, "async"),
-        this.createSessionEndTimeout()
-      ]);
-      try {
-        const result = await this.sessionEndPromise;
-        return result;
-      } finally {
-        this.pendingSessionEnd = false;
-        this.sessionEndPromise = null;
-        this.sessionEndReason = null;
-      }
-    }).catch((error) => {
-      this.pendingSessionEnd = false;
-      this.sessionEndPromise = null;
-      this.sessionEndReason = null;
-      debugLog.error("SessionManager", "Session end lock failed, recovering", { error, reason });
-      return {
-        success: false,
-        reason,
-        timestamp: Date.now(),
-        eventsFlushed: 0,
-        method: "async"
-      };
-    });
-  }
-  endSessionSafely(reason, options) {
-    const shouldUseSync = options?.forceSync ?? (options?.allowSync && ["page_unload", "tab_closed"].includes(reason));
-    if (shouldUseSync) {
-      return this.endSessionManagedSync(reason);
-    }
-    return this.endSessionManaged(reason);
-  }
-  isPendingSessionEnd() {
-    return this.pendingSessionEnd;
-  }
-  /**
-   * Track session health events for monitoring and diagnostics
-   */
-  trackSessionHealth(event2) {
-    const now = Date.now();
-    switch (event2) {
-      case "recovery":
-        this.sessionHealth.recoveryAttempts++;
-        break;
-      case "timeout":
-        this.sessionHealth.sessionTimeouts++;
-        break;
-      case "conflict":
-        this.sessionHealth.crossTabConflicts++;
-        break;
-    }
-    this.sessionHealth.lastHealthCheck = now;
-    if (this.sessionHealth.recoveryAttempts > 3 && this.eventManager) {
-      this.eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: {
-          name: "session_health_degraded",
-          metadata: {
-            ...this.sessionHealth,
-            event_trigger: event2
-          }
-        }
-      });
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.warn(
-          "SessionManager",
-          `Session health degraded: ${this.sessionHealth.recoveryAttempts} recovery attempts`
-        );
-      }
-    }
-    if (this.sessionEndConfig.debugMode) {
-      debugLog.debug("SessionManager", `Session health event tracked: ${event2}`);
-    }
-  }
-  async performSessionEnd(reason, method) {
-    const timestamp = Date.now();
-    let eventsFlushed = 0;
-    try {
-      debugLog.info("SessionManager", "Starting session end", { method, reason, timestamp });
-      if (this.eventManager) {
-        this.eventManager.track({
-          type: EventType.SESSION_END,
-          session_end_reason: reason
-        });
-        eventsFlushed = this.eventManager.getQueueLength();
-        const flushResult = await this.eventManager.flushImmediately();
-        await this.cleanupSessionAsync();
-        const result2 = {
-          success: flushResult,
-          reason,
-          timestamp,
-          eventsFlushed,
-          method
-        };
-        if (flushResult) {
-          this.sessionEndStats.successfulEnds++;
-        } else {
-          this.sessionEndStats.failedEnds++;
-        }
-        return result2;
-      }
-      await this.cleanupSessionAsync();
-      const result = {
-        success: true,
-        reason,
-        timestamp,
-        eventsFlushed: 0,
-        method
-      };
-      this.sessionEndStats.successfulEnds++;
-      return result;
-    } catch (error) {
-      this.sessionEndStats.failedEnds++;
-      debugLog.error("SessionManager", "Session end failed", { error, reason, method });
-      await this.cleanupSessionAsync();
-      return {
-        success: false,
-        reason,
-        timestamp,
-        eventsFlushed,
-        method
-      };
-    }
-  }
-  cleanupSession() {
-    this.endSession();
-    this.clearTimers();
-    this.set("sessionId", null).catch((error) => {
-      debugLog.error("SessionManager", "Failed to clear sessionId", { error });
-    });
-    this.set("hasStartSession", false).catch((error) => {
-      debugLog.error("SessionManager", "Failed to clear hasStartSession", { error });
-    });
-  }
-  async cleanupSessionAsync() {
-    this.endSession();
-    this.clearTimers();
-    await this.set("sessionId", null);
-    await this.set("hasStartSession", false);
-  }
-  endSessionManagedSync(reason) {
-    this.sessionEndStats.totalSessionEnds++;
-    this.sessionEndStats.reasonCounts[reason]++;
-    if (this.pendingSessionEnd) {
-      this.sessionEndStats.duplicatePrevented++;
-      debugLog.warn("SessionManager", "Sync session end called while async end pending", { reason });
-    }
-    if (!this.shouldProceedWithSessionEnd(reason)) {
-      if (this.sessionEndConfig.debugMode) {
-        debugLog.debug(
-          "SessionManager",
-          `Sync session end skipped due to lower priority. Current: ${this.sessionEndReason}, Requested: ${reason}`
-        );
-      }
-      return {
-        success: false,
-        reason,
-        timestamp: Date.now(),
-        eventsFlushed: 0,
-        method: "sync"
-      };
-    }
-    this.sessionEndReason = reason;
-    this.pendingSessionEnd = true;
-    try {
-      return this.performSessionEndSync(reason);
-    } finally {
-      this.pendingSessionEnd = false;
-      this.sessionEndPromise = null;
-      this.sessionEndReason = null;
-    }
-  }
-  performSessionEndSync(reason) {
-    const timestamp = Date.now();
-    let eventsFlushed = 0;
-    try {
-      if (this.eventManager) {
-        this.eventManager.track({
-          type: EventType.SESSION_END,
-          session_end_reason: reason
-        });
-        eventsFlushed = this.eventManager.getQueueLength();
-        const success = this.eventManager.flushImmediatelySync();
-        this.cleanupSession();
-        const result2 = {
-          success,
-          reason,
-          timestamp,
-          eventsFlushed,
-          method: "sync"
-        };
-        if (success) {
-          this.sessionEndStats.successfulEnds++;
-        } else {
-          this.sessionEndStats.failedEnds++;
-        }
-        return result2;
-      }
-      this.cleanupSession();
-      const result = {
-        success: true,
-        reason,
-        timestamp,
-        eventsFlushed: 0,
-        method: "sync"
-      };
-      this.sessionEndStats.successfulEnds++;
-      return result;
-    } catch (error) {
-      this.sessionEndStats.failedEnds++;
-      this.cleanupSession();
-      debugLog.error("SessionManager", "Sync session end failed", { error, reason });
-      return {
-        success: false,
-        reason,
-        timestamp,
-        eventsFlushed,
-        method: "sync"
-      };
-    }
-  }
-  setupPageUnloadHandlers() {
-    let unloadHandled = false;
-    const handlePageUnload = () => {
-      if (unloadHandled || !this.get("sessionId")) {
-        return;
-      }
-      unloadHandled = true;
-      this.clearInactivityTimer();
-      this.endSessionSafely("page_unload", { forceSync: true });
-    };
-    const beforeUnloadHandler = () => {
-      handlePageUnload();
-    };
-    const pageHideHandler = (event2) => {
-      if (!event2.persisted) {
-        handlePageUnload();
-      }
-    };
-    const visibilityChangeHandler = () => {
-      if (document.visibilityState === "hidden" && this.get("sessionId") && !unloadHandled) {
-        this.visibilityChangeTimeout = window.setTimeout(() => {
-          if (document.visibilityState === "hidden" && this.get("sessionId") && !unloadHandled) {
-            handlePageUnload();
-          }
-          this.visibilityChangeTimeout = null;
-        }, 1e3);
-      }
-    };
-    window.addEventListener("beforeunload", beforeUnloadHandler);
-    window.addEventListener("pagehide", pageHideHandler);
-    document.addEventListener("visibilitychange", visibilityChangeHandler);
-    this.cleanupHandlers.push(
-      () => window.removeEventListener("beforeunload", beforeUnloadHandler),
-      () => window.removeEventListener("pagehide", pageHideHandler),
-      () => document.removeEventListener("visibilitychange", visibilityChangeHandler),
-      () => {
-        if (this.visibilityChangeTimeout) {
-          clearTimeout(this.visibilityChangeTimeout);
-          this.visibilityChangeTimeout = null;
-        }
-      }
-    );
-  }
-}
-class CrossTabSessionManager extends StateManager {
-  constructor(storageManager, projectId, config, callbacks) {
-    super();
-    this.callbacks = callbacks;
     this.storageManager = storageManager;
-    this.projectId = projectId;
-    this.tabId = generateUUID();
-    this.config = {
-      tabHeartbeatIntervalMs: TAB_HEARTBEAT_INTERVAL_MS,
-      tabElectionTimeoutMs: TAB_ELECTION_TIMEOUT_MS,
-      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false,
-      ...config
-    };
-    this.tabInfo = {
-      id: this.tabId,
-      lastHeartbeat: Date.now(),
-      isLeader: false,
-      sessionId: "",
-      startTime: Date.now()
-    };
-    this.broadcastChannel = this.initializeBroadcastChannel();
-    this.initialize();
-  }
-  config;
-  storageManager;
-  broadcastChannel;
-  tabId;
-  tabInfo;
-  projectId;
-  leaderTabId = null;
-  isTabLeader = false;
-  heartbeatInterval = null;
-  electionTimeout = null;
-  cleanupTimeout = null;
-  sessionEnded = false;
-  // Additional timeout tracking for proper cleanup
-  fallbackLeadershipTimeout = null;
-  electionDelayTimeout = null;
-  tabInfoCleanupTimeout = null;
-  closingAnnouncementTimeout = null;
-  leaderHealthCheckInterval = null;
-  lastHeartbeatSent = 0;
-  /**
-   * Initialize BroadcastChannel if supported
-   */
-  initializeBroadcastChannel() {
-    if (!this.isBroadcastChannelSupported()) {
-      return null;
-    }
-    try {
-      const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME(this.projectId));
-      this.setupBroadcastListeners(channel);
-      return channel;
-    } catch (error) {
-      if (this.config.debugMode) {
-        debugLog.warn("CrossTabSession", "Failed to initialize BroadcastChannel", { error });
-      }
-      return null;
-    }
+    this.eventManager = eventManager;
   }
   /**
-   * Initialize the cross-tab session manager
+   * Inicializa cross-tab sync simple
    */
-  initialize() {
-    if (!this.broadcastChannel) {
-      this.becomeLeader();
+  initCrossTabSync() {
+    if (typeof BroadcastChannel === "undefined") {
+      debugLog.warn("SessionManager", "BroadcastChannel not supported");
       return;
     }
-    const existingSession = this.getStoredSessionContext();
-    if (existingSession) {
-      this.tryJoinExistingSession(existingSession);
-    } else {
-      this.startLeaderElection();
-    }
-    this.startHeartbeat();
-    if (this.broadcastChannel) {
-      this.setupLeadershipFallback();
-    }
+    this.broadcastChannel = new BroadcastChannel("tracelog_session");
+    this.broadcastChannel.onmessage = (event2) => {
+      const { sessionId, timestamp } = event2.data;
+      if (sessionId && timestamp) {
+        const currentSessionId = this.get("sessionId");
+        if (!currentSessionId || timestamp > Date.now() - 1e3) {
+          this.set("sessionId", sessionId);
+          this.storageManager.setItem("sessionId", sessionId);
+          this.storageManager.setItem("lastActivity", timestamp.toString());
+          debugLog.debug("SessionManager", "Session synced from another tab", {
+            sessionId
+          });
+        }
+      }
+    };
   }
   /**
-   * Check if this tab should be the session leader
+   * Comparte sesión actual con otras tabs
    */
-  tryJoinExistingSession(sessionContext) {
-    if (this.config.debugMode) {
-      debugLog.debug("CrossTabSession", `Attempting to join existing session: ${sessionContext.sessionId}`);
-    }
-    this.tabInfo.sessionId = sessionContext.sessionId;
-    this.requestLeadershipStatus();
-    sessionContext.tabCount += 1;
-    sessionContext.lastActivity = Date.now();
-    this.storeSessionContext(sessionContext);
-    if (this.callbacks?.onTabActivity) {
-      this.callbacks.onTabActivity();
-    }
-  }
-  /**
-   * Request leadership status from other tabs
-   */
-  requestLeadershipStatus() {
+  shareSession(sessionId) {
     if (!this.broadcastChannel) return;
-    if (this.electionTimeout) {
-      clearTimeout(this.electionTimeout);
-      this.electionTimeout = null;
-    }
-    const message = {
-      type: "election_request",
-      tabId: this.tabId,
-      sessionId: this.tabInfo.sessionId,
-      timestamp: Date.now()
-    };
-    this.broadcastChannel.postMessage(message);
-    const randomDelay = Math.floor(Math.random() * 500);
-    this.electionTimeout = window.setTimeout(() => {
-      if (!this.isTabLeader) {
-        this.becomeLeader();
-      }
-    }, this.config.tabElectionTimeoutMs + randomDelay);
-  }
-  /**
-   * Start leader election process with debouncing to prevent excessive elections
-   */
-  startLeaderElection() {
-    if (this.electionTimeout) {
-      if (this.config.debugMode) {
-        debugLog.debug("CrossTabSession", "Leader election already in progress, skipping");
-      }
-      return;
-    }
-    if (this.config.debugMode) {
-      debugLog.debug("CrossTabSession", "Starting leader election");
-    }
-    const randomDelay = Math.floor(Math.random() * 50) + 10;
-    this.electionTimeout = window.setTimeout(() => {
-      this.electionTimeout = null;
-      this.requestLeadershipStatus();
-    }, randomDelay);
-  }
-  /**
-   * Become the session leader
-   */
-  becomeLeader() {
-    if (this.isTabLeader) {
-      return;
-    }
-    this.isTabLeader = true;
-    this.tabInfo.isLeader = true;
-    this.leaderTabId = this.tabId;
-    if (this.config.debugMode) {
-      debugLog.debug("CrossTabSession", `Tab ${this.tabId} became session leader`);
-    }
-    if (this.electionTimeout) {
-      clearTimeout(this.electionTimeout);
-      this.electionTimeout = null;
-    }
-    if (!this.tabInfo.sessionId) {
-      const sessionId = generateUUID();
-      this.tabInfo.sessionId = sessionId;
-      const sessionContext = {
-        sessionId,
-        startTime: Date.now(),
-        lastActivity: Date.now(),
-        tabCount: 1,
-        recoveryAttempts: 0
-      };
-      this.storeSessionContext(sessionContext);
-      if (this.callbacks?.onSessionStart) {
-        this.callbacks.onSessionStart(sessionId);
-      }
-      this.announceSessionStart(sessionId);
-    } else {
-      const sessionContext = this.getStoredSessionContext();
-      if (sessionContext) {
-        sessionContext.lastActivity = Date.now();
-        this.storeSessionContext(sessionContext);
-      }
-    }
-    this.storeTabInfo();
-    this.announceLeadership();
-  }
-  /**
-   * Announce session start to other tabs
-   */
-  announceSessionStart(sessionId) {
-    if (!this.broadcastChannel) return;
-    const message = {
-      type: "session_start",
-      tabId: this.tabId,
+    this.broadcastChannel.postMessage({
       sessionId,
       timestamp: Date.now()
-    };
-    this.broadcastChannel.postMessage(message);
-  }
-  /**
-   * Announce leadership to other tabs
-   */
-  announceLeadership() {
-    if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
-    const message = {
-      type: "election_response",
-      tabId: this.tabId,
-      sessionId: this.tabInfo.sessionId,
-      timestamp: Date.now(),
-      data: { isLeader: true }
-    };
-    this.broadcastChannel.postMessage(message);
-  }
-  /**
-   * Clean up health check interval to prevent memory leaks
-   */
-  cleanupHealthCheckInterval() {
-    if (this.leaderHealthCheckInterval) {
-      clearInterval(this.leaderHealthCheckInterval);
-      this.leaderHealthCheckInterval = null;
-      debugLog.debug("CrossTabSession", "Health check interval cleaned up");
-    }
-  }
-  /**
-   * Setup fallback mechanism to ensure a leader is always elected
-   */
-  setupLeadershipFallback() {
-    const fallbackDelay = this.config.tabElectionTimeoutMs + 1500;
-    this.fallbackLeadershipTimeout = window.setTimeout(() => {
-      if (!this.isTabLeader && !this.leaderTabId) {
-        if (this.tabInfo.sessionId) {
-          if (this.config.debugMode) {
-            debugLog.warn(
-              "CrossTabSession",
-              `No leader detected after ${fallbackDelay}ms, forcing leadership for tab ${this.tabId}`
-            );
-          }
-          this.becomeLeader();
-        } else {
-          if (this.config.debugMode) {
-            debugLog.warn(
-              "CrossTabSession",
-              `No session or leader detected after ${fallbackDelay}ms, starting new session for tab ${this.tabId}`
-            );
-          }
-          this.becomeLeader();
-        }
-      }
-      this.fallbackLeadershipTimeout = null;
-    }, fallbackDelay);
-    this.leaderHealthCheckInterval = window.setInterval(() => {
-      if (!this.sessionEnded && this.leaderTabId && !this.isTabLeader) {
-        const sessionContext = this.getStoredSessionContext();
-        if (sessionContext) {
-          const timeSinceLastActivity = Date.now() - sessionContext.lastActivity;
-          const maxInactiveTime = this.config.tabHeartbeatIntervalMs * 3;
-          if (timeSinceLastActivity > maxInactiveTime) {
-            if (this.config.debugMode) {
-              debugLog.warn(
-                "CrossTabSession",
-                `Leader tab appears inactive (${timeSinceLastActivity}ms), attempting to become leader`
-              );
-            }
-            this.leaderTabId = null;
-            this.startLeaderElection();
-          }
-        }
-      }
-    }, this.config.tabHeartbeatIntervalMs * 2);
-    const originalEndSession = this.endSession.bind(this);
-    this.endSession = (reason) => {
-      this.cleanupHealthCheckInterval();
-      if (this.fallbackLeadershipTimeout) {
-        clearTimeout(this.fallbackLeadershipTimeout);
-        this.fallbackLeadershipTimeout = null;
-      }
-      originalEndSession(reason);
-    };
-  }
-  /**
-   * Setup BroadcastChannel event listeners
-   */
-  setupBroadcastListeners(channel) {
-    channel.addEventListener("message", (event2) => {
-      const message = event2.data;
-      if (message.tabId === this.tabId) {
-        return;
-      }
-      this.handleCrossTabMessage(message);
     });
   }
   /**
-   * Handle cross-tab messages
+   * Limpia cross-tab sync
    */
-  handleCrossTabMessage(message) {
-    if (this.config.debugMode) {
-      debugLog.debug("CrossTabSession", `Received cross-tab message: ${message.type} from ${message.tabId}`);
-    }
-    switch (message.type) {
-      case "heartbeat":
-        this.handleHeartbeatMessage(message);
-        break;
-      case "session_start":
-        this.handleSessionStartMessage(message);
-        break;
-      case "session_end":
-        this.handleSessionEndMessage(message);
-        break;
-      case "tab_closing":
-        this.handleTabClosingMessage(message);
-        break;
-      case "election_request":
-        this.handleElectionRequest(message);
-        break;
-      case "election_response":
-        this.handleElectionResponse(message);
-        break;
-    }
-  }
-  /**
-   * Handle heartbeat message from another tab
-   */
-  handleHeartbeatMessage(message) {
-    if (message.sessionId === this.tabInfo.sessionId) {
-      const sessionContext = this.getStoredSessionContext();
-      if (sessionContext) {
-        sessionContext.lastActivity = Date.now();
-        this.storeSessionContext(sessionContext);
-        if (this.callbacks?.onTabActivity) {
-          this.callbacks.onTabActivity();
-        }
-      }
-    }
-  }
-  /**
-   * Handle session start message from another tab
-   */
-  handleSessionStartMessage(message) {
-    if (!message.sessionId) return;
-    if (!this.tabInfo.sessionId) {
-      this.tabInfo.sessionId = message.sessionId;
-      this.storeTabInfo();
-      const sessionContext = this.getStoredSessionContext();
-      if (sessionContext) {
-        sessionContext.tabCount += 1;
-        this.storeSessionContext(sessionContext);
-      }
-    }
-  }
-  /**
-   * Handle session end message from another tab
-   */
-  handleSessionEndMessage(message) {
-    if (this.isTabLeader) {
-      if (this.config.debugMode) {
-        debugLog.debug("CrossTabSession", `Ignoring session end message from ${message.tabId} (this tab is leader)`);
-      }
-      return;
-    }
-    if (!this.leaderTabId || message.tabId !== this.leaderTabId) {
-      if (this.config.debugMode) {
-        const extra = this.leaderTabId ? `; leader is ${this.leaderTabId}` : "";
-        debugLog.debug("CrossTabSession", `Ignoring session end message from ${message.tabId}${extra}`);
-      }
-      return;
-    }
-    this.tabInfo.sessionId = "";
-    this.storeTabInfo();
-    this.leaderTabId = null;
-    const sessionContext = this.getStoredSessionContext();
-    if (!sessionContext) {
-      if (this.broadcastChannel) {
-        this.startLeaderElection();
-      } else {
-        this.becomeLeader();
-      }
-    }
-  }
-  /**
-   * Handle tab closing message from another tab
-   */
-  handleTabClosingMessage(message) {
-    const sessionContext = this.getStoredSessionContext();
-    if (sessionContext && message.sessionId === sessionContext.sessionId) {
-      const oldCount = sessionContext.tabCount;
-      sessionContext.tabCount = Math.max(1, sessionContext.tabCount - 1);
-      sessionContext.lastActivity = Date.now();
-      this.storeSessionContext(sessionContext);
-      if (this.config.debugMode) {
-        debugLog.debug(
-          "CrossTabSession",
-          `Tab count updated from ${oldCount} to ${sessionContext.tabCount} after tab ${message.tabId} closed`
-        );
-      }
-      const wasLeader = message.data?.isLeader ?? message.tabId === this.leaderTabId;
-      if (wasLeader && !this.isTabLeader) {
-        if (this.config.debugMode) {
-          debugLog.debug("CrossTabSession", `Leader tab ${message.tabId} closed, starting leader election`);
-        }
-        this.leaderTabId = null;
-        this.electionDelayTimeout = window.setTimeout(() => {
-          this.startLeaderElection();
-          this.electionDelayTimeout = null;
-        }, 200);
-      }
-    }
-  }
-  /**
-   * Handle election request from another tab
-   */
-  handleElectionRequest(_message) {
-    if (this.isTabLeader) {
-      const response = {
-        type: "election_response",
-        tabId: this.tabId,
-        sessionId: this.tabInfo.sessionId,
-        timestamp: Date.now(),
-        data: { isLeader: true }
-      };
-      if (this.broadcastChannel) {
-        this.broadcastChannel.postMessage(response);
-      }
-    }
-  }
-  /**
-   * Handle election response from another tab
-   */
-  handleElectionResponse(message) {
-    if (message.data?.isLeader) {
-      if (!this.isTabLeader) {
-        this.isTabLeader = false;
-        this.tabInfo.isLeader = false;
-        this.leaderTabId = message.tabId;
-        if (this.config.debugMode) {
-          debugLog.debug("CrossTabSession", `Acknowledging tab ${message.tabId} as leader`);
-        }
-        if (this.electionTimeout) {
-          clearTimeout(this.electionTimeout);
-          this.electionTimeout = null;
-        }
-        if (message.sessionId) {
-          this.tabInfo.sessionId = message.sessionId;
-          this.storeTabInfo();
-        }
-      } else if (this.config.debugMode) {
-        debugLog.warn(
-          "CrossTabSession",
-          `Received leadership claim from ${message.tabId} but this tab is already leader`
-        );
-        if (this.callbacks?.onCrossTabConflict) {
-          this.callbacks.onCrossTabConflict();
-        }
-      }
-    }
-  }
-  /**
-   * Start heartbeat to keep session active
-   */
-  startHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-    }
-    this.heartbeatInterval = window.setInterval(() => {
-      this.sendHeartbeat();
-      this.updateTabInfo();
-    }, this.config.tabHeartbeatIntervalMs);
-  }
-  /**
-   * Send heartbeat to other tabs with rate limiting to prevent flooding
-   */
-  sendHeartbeat() {
-    if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
-    const now = Date.now();
-    const lastHeartbeat = this.lastHeartbeatSent ?? 0;
-    const minHeartbeatInterval = this.config.tabHeartbeatIntervalMs * 0.8;
-    if (!this.isTabLeader && now - lastHeartbeat < minHeartbeatInterval) {
-      return;
-    }
-    const message = {
-      type: "heartbeat",
-      tabId: this.tabId,
-      sessionId: this.tabInfo.sessionId,
-      timestamp: now
-    };
-    this.broadcastChannel.postMessage(message);
-    this.lastHeartbeatSent = now;
-  }
-  /**
-   * Update tab info with current timestamp
-   */
-  updateTabInfo() {
-    this.tabInfo.lastHeartbeat = Date.now();
-    this.storeTabInfo();
-  }
-  /**
-   * End session and notify other tabs
-   */
-  endSession(reason) {
-    if (this.sessionEnded) {
-      return;
-    }
-    this.sessionEnded = true;
-    if (this.config.debugMode) {
-      debugLog.debug(
-        "CrossTabSession",
-        `Ending cross-tab session: ${reason} (tab: ${this.tabId}, isLeader: ${this.isTabLeader})`
-      );
-    }
-    this.announceTabClosing();
-    if (this.isTabLeader && reason !== "manual_stop") {
-      this.announceSessionEnd(reason);
-    }
-    this.tabInfoCleanupTimeout = window.setTimeout(() => {
-      this.clearTabInfo();
-      this.tabInfoCleanupTimeout = null;
-    }, 150);
-  }
-  /**
-   * Announce tab is closing to other tabs
-   */
-  announceTabClosing() {
-    if (!this.broadcastChannel || !this.tabInfo.sessionId) return;
-    const message = {
-      type: "tab_closing",
-      tabId: this.tabId,
-      sessionId: this.tabInfo.sessionId,
-      timestamp: Date.now(),
-      data: { isLeader: this.isTabLeader }
-    };
-    this.broadcastChannel.postMessage(message);
-    this.closingAnnouncementTimeout = window.setTimeout(() => {
-      if (this.config.debugMode) {
-        debugLog.debug("CrossTabSession", `Tab ${this.tabId} closing announcement sent`);
-      }
-      this.closingAnnouncementTimeout = null;
-    }, 100);
-  }
-  /**
-   * Announce session end to other tabs
-   */
-  announceSessionEnd(reason) {
-    if (!this.broadcastChannel) return;
-    const message = {
-      type: "session_end",
-      tabId: this.tabId,
-      sessionId: this.tabInfo.sessionId,
-      timestamp: Date.now(),
-      data: { reason }
-    };
-    this.broadcastChannel.postMessage(message);
-  }
-  /**
-   * Get current session ID
-   */
-  getSessionId() {
-    return this.tabInfo.sessionId;
-  }
-  /**
-   * Get current tab ID
-   */
-  getTabId() {
-    return this.tabId;
-  }
-  /**
-   * Check if this tab is the session leader
-   */
-  isLeader() {
-    return this.isTabLeader;
-  }
-  /**
-   * Get current session context from storage
-   */
-  getStoredSessionContext() {
-    try {
-      const stored = this.storageManager.getItem(CROSS_TAB_SESSION_KEY(this.projectId));
-      return stored ? JSON.parse(stored) : null;
-    } catch (error) {
-      if (this.config.debugMode) {
-        debugLog.warn("CrossTabSession", "Failed to parse stored session context", { error });
-      }
-      return null;
-    }
-  }
-  /**
-   * Store session context to localStorage
-   */
-  storeSessionContext(context) {
-    try {
-      this.storageManager.setItem(CROSS_TAB_SESSION_KEY(this.projectId), JSON.stringify(context));
-    } catch (error) {
-      if (this.config.debugMode) {
-        debugLog.warn("CrossTabSession", "Failed to store session context", { error });
-      }
-    }
-  }
-  /**
-   * Clear stored session context
-   */
-  clearStoredSessionContext() {
-    this.storageManager.removeItem(CROSS_TAB_SESSION_KEY(this.projectId));
-  }
-  /**
-   * Store tab info to localStorage
-   */
-  storeTabInfo() {
-    try {
-      this.storageManager.setItem(TAB_SPECIFIC_INFO_KEY(this.projectId, this.tabId), JSON.stringify(this.tabInfo));
-    } catch (error) {
-      if (this.config.debugMode) {
-        debugLog.warn("CrossTabSession", "Failed to store tab info", { error });
-      }
-    }
-  }
-  /**
-   * Clear tab info from localStorage
-   */
-  clearTabInfo() {
-    this.storageManager.removeItem(TAB_SPECIFIC_INFO_KEY(this.projectId, this.tabId));
-  }
-  /**
-   * Check if BroadcastChannel is supported
-   */
-  isBroadcastChannelSupported() {
-    return typeof window !== "undefined" && "BroadcastChannel" in window;
-  }
-  /**
-   * Get session timeout considering cross-tab activity
-   */
-  getEffectiveSessionTimeout() {
-    const sessionContext = this.getStoredSessionContext();
-    if (!sessionContext) {
-      return this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
-    }
-    const now = Date.now();
-    const timeSinceLastActivity = now - sessionContext.lastActivity;
-    const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
-    return Math.max(0, sessionTimeout - timeSinceLastActivity);
-  }
-  /**
-   * Update session activity from any tab
-   */
-  updateSessionActivity() {
-    const sessionContext = this.getStoredSessionContext();
-    if (sessionContext) {
-      sessionContext.lastActivity = Date.now();
-      this.storeSessionContext(sessionContext);
-    }
-    this.sendHeartbeat();
-  }
-  /**
-   * Cleanup resources
-   */
-  destroy() {
-    this.cleanupHealthCheckInterval();
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-    if (this.electionTimeout) {
-      clearTimeout(this.electionTimeout);
-      this.electionTimeout = null;
-    }
-    if (this.cleanupTimeout) {
-      clearTimeout(this.cleanupTimeout);
-      this.cleanupTimeout = null;
-    }
-    if (this.fallbackLeadershipTimeout) {
-      clearTimeout(this.fallbackLeadershipTimeout);
-      this.fallbackLeadershipTimeout = null;
-    }
-    if (this.electionDelayTimeout) {
-      clearTimeout(this.electionDelayTimeout);
-      this.electionDelayTimeout = null;
-    }
-    if (this.tabInfoCleanupTimeout) {
-      clearTimeout(this.tabInfoCleanupTimeout);
-      this.tabInfoCleanupTimeout = null;
-    }
-    if (this.closingAnnouncementTimeout) {
-      clearTimeout(this.closingAnnouncementTimeout);
-      this.closingAnnouncementTimeout = null;
-    }
-    this.endSession("manual_stop");
+  cleanupCrossTabSync() {
     if (this.broadcastChannel) {
       this.broadcastChannel.close();
       this.broadcastChannel = null;
     }
-    debugLog.debug("CrossTabSession", "CrossTabSessionManager destroyed");
+  }
+  /**
+   * Recupera sesión desde localStorage si existe
+   */
+  recoverSession() {
+    const storedSessionId = this.storageManager.getItem("sessionId");
+    const lastActivity = this.storageManager.getItem("lastActivity");
+    if (!storedSessionId || !lastActivity) {
+      return null;
+    }
+    const lastActivityTime = parseInt(lastActivity, 10);
+    const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
+    if (Date.now() - lastActivityTime > sessionTimeout) {
+      debugLog.debug("SessionManager", "Stored session expired");
+      return null;
+    }
+    debugLog.info("SessionManager", "Session recovered from storage", {
+      sessionId: storedSessionId,
+      lastActivity: lastActivityTime
+    });
+    return storedSessionId;
+  }
+  /**
+   * Persiste sesión en localStorage
+   */
+  persistSession(sessionId) {
+    this.storageManager.setItem("sessionId", sessionId);
+    this.storageManager.setItem("lastActivity", Date.now().toString());
+  }
+  /**
+   * Inicia tracking de sesión
+   */
+  async startTracking() {
+    const recoveredSessionId = this.recoverSession();
+    let sessionId;
+    let isRecovered = false;
+    if (recoveredSessionId) {
+      sessionId = recoveredSessionId;
+      isRecovered = true;
+    } else {
+      sessionId = this.generateSessionId();
+    }
+    await this.set("sessionId", sessionId);
+    this.persistSession(sessionId);
+    this.eventManager.track({
+      type: EventType.SESSION_START,
+      ...isRecovered && { session_start_recovered: true }
+    });
+    this.initCrossTabSync();
+    this.shareSession(sessionId);
+    this.setupSessionTimeout();
+    this.setupActivityListeners();
+    this.setupVisibilityListener();
+    this.setupUnloadListener();
+    debugLog.info("SessionManager", "Session tracking started", {
+      sessionId,
+      recovered: isRecovered
+    });
+  }
+  /**
+   * Genera ID de sesión único
+   */
+  generateSessionId() {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+  /**
+   * Configura timeout de sesión
+   */
+  setupSessionTimeout() {
+    this.clearSessionTimeout();
+    const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
+    this.sessionTimeoutId = setTimeout(() => {
+      this.endSession("inactivity");
+    }, sessionTimeout);
+  }
+  /**
+   * Reinicia timeout de sesión
+   */
+  resetSessionTimeout() {
+    this.setupSessionTimeout();
+    const sessionId = this.get("sessionId");
+    if (sessionId) {
+      this.persistSession(sessionId);
+    }
+  }
+  /**
+   * Limpia timeout de sesión
+   */
+  clearSessionTimeout() {
+    if (this.sessionTimeoutId) {
+      clearTimeout(this.sessionTimeoutId);
+      this.sessionTimeoutId = null;
+    }
+  }
+  /**
+   * Configura listeners de actividad del usuario
+   */
+  setupActivityListeners() {
+    const resetTimeout = () => this.resetSessionTimeout();
+    document.addEventListener("click", resetTimeout);
+    document.addEventListener("keydown", resetTimeout);
+    document.addEventListener("scroll", resetTimeout);
+    this.activityListeners = {
+      click: resetTimeout,
+      keydown: resetTimeout,
+      scroll: resetTimeout
+    };
+  }
+  /**
+   * Limpia listeners de actividad
+   */
+  cleanupActivityListeners() {
+    if (this.activityListeners) {
+      document.removeEventListener("click", this.activityListeners.click);
+      document.removeEventListener("keydown", this.activityListeners.keydown);
+      document.removeEventListener("scroll", this.activityListeners.scroll);
+      this.activityListeners = null;
+    }
+  }
+  /**
+   * Configura listener de visibilidad
+   */
+  setupVisibilityListener() {
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        this.clearSessionTimeout();
+      } else {
+        const sessionId = this.get("sessionId");
+        if (sessionId) {
+          this.setupSessionTimeout();
+        }
+      }
+    });
+  }
+  /**
+   * Configura listener de unload
+   */
+  setupUnloadListener() {
+    window.addEventListener("beforeunload", () => {
+      this.eventManager.flushImmediatelySync();
+    });
+  }
+  /**
+   * Finaliza sesión
+   */
+  endSession(reason) {
+    const sessionId = this.get("sessionId");
+    if (!sessionId) return;
+    debugLog.info("SessionManager", "Ending session", { sessionId, reason });
+    this.eventManager.track({
+      type: EventType.SESSION_END,
+      session_end_reason: reason
+    });
+    this.clearSessionTimeout();
+    this.cleanupActivityListeners();
+    this.cleanupCrossTabSync();
+    this.storageManager.removeItem("sessionId");
+    this.storageManager.removeItem("lastActivity");
+    this.set("sessionId", null);
+  }
+  /**
+   * Detiene tracking de sesión
+   */
+  async stopTracking() {
+    this.endSession("manual_stop");
+  }
+  /**
+   * Limpia recursos
+   */
+  destroy() {
+    this.clearSessionTimeout();
+    this.cleanupActivityListeners();
+    this.cleanupCrossTabSync();
+    if (this.visibilityChangeTimeout) {
+      clearTimeout(this.visibilityChangeTimeout);
+      this.visibilityChangeTimeout = null;
+    }
   }
 }
 class SessionHandler extends StateManager {
   eventManager;
   storageManager;
-  sessionStorageKey;
   sessionManager = null;
-  recoveryManager = null;
-  _crossTabSessionManager = null;
-  heartbeatInterval = null;
-  _isInitializingCrossTab = false;
-  _crossTabInitLock = null;
-  get crossTabSessionManager() {
-    if (this._crossTabSessionManager) {
-      return Promise.resolve(this._crossTabSessionManager);
-    }
-    if (this._crossTabInitLock) {
-      return this._crossTabInitLock;
-    }
-    if (!this.shouldUseCrossTabs()) {
-      return Promise.resolve(null);
-    }
-    this._crossTabInitLock = this.initializeCrossTabWithLock();
-    return this._crossTabInitLock;
-  }
-  async initializeCrossTabWithLock() {
-    if (this._crossTabSessionManager) {
-      this._crossTabInitLock = null;
-      return this._crossTabSessionManager;
-    }
-    if (this._isInitializingCrossTab) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      this._crossTabInitLock = null;
-      return this._crossTabSessionManager;
-    }
-    this._isInitializingCrossTab = true;
-    try {
-      const projectId = this.get("config")?.id;
-      if (!projectId) {
-        throw new Error("ProjectId not available for cross-tab initialization");
-      }
-      this.initializeCrossTabSessionManager(projectId);
-      return this._crossTabSessionManager;
-    } catch (error) {
-      debugLog.error("SessionHandler", "Failed to initialize cross-tab session manager", {
-        error: error instanceof Error ? error.message : "Unknown error"
-      });
-      return null;
-    } finally {
-      this._isInitializingCrossTab = false;
-      this._crossTabInitLock = null;
-    }
-  }
-  shouldUseCrossTabs() {
-    return typeof BroadcastChannel !== "undefined" && typeof navigator !== "undefined" && "serviceWorker" in navigator;
-  }
   constructor(storageManager, eventManager) {
     super();
     this.eventManager = eventManager;
     this.storageManager = storageManager;
-    this.sessionStorageKey = SESSION_STORAGE_KEY(this.get("config")?.id);
-    const projectId = this.get("config")?.id;
-    if (projectId) {
-      this.initializeSessionRecoveryManager(projectId);
-    } else {
-      debugLog.warn("SessionHandler", "ProjectId not available, recovery manager will be initialized later");
-    }
   }
-  startTracking() {
+  async startTracking() {
     if (this.sessionManager) {
       debugLog.debug("SessionHandler", "Session tracking already active");
       return;
     }
     debugLog.debug("SessionHandler", "Starting session tracking");
-    this.ensureRecoveryManagerInitialized();
-    this.checkOrphanedSessions();
-    const onActivity = async () => {
-      const crossTab = await this.crossTabSessionManager;
-      if (crossTab) {
-        crossTab.updateSessionActivity();
-      }
-      if (this.get("sessionId")) {
-        return;
-      }
-      try {
-        const sessionResult = await this.createOrJoinSession();
-        await this.set("sessionId", sessionResult.sessionId);
-        const crossTabActive = !!await this.crossTabSessionManager;
-        debugLog.info("SessionHandler", "🏁 Session started", {
-          sessionId: sessionResult.sessionId,
-          recovered: sessionResult.recovered,
-          crossTabActive
-        });
-        this.trackSession(EventType.SESSION_START, sessionResult.recovered);
-        this.persistSession(sessionResult.sessionId);
-        this.startHeartbeat();
-      } catch (error) {
-        debugLog.error(
-          "SessionHandler",
-          `Session creation failed: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-        await this.forceCleanupSession();
-      }
-    };
-    const onInactivity = async () => {
-      if (!this.get("sessionId")) {
-        return;
-      }
-      const crossTab = await this.crossTabSessionManager;
-      if (crossTab && crossTab.getEffectiveSessionTimeout() > 0) {
-        if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-          debugLog.debug("SessionHandler", "Session kept alive by cross-tab activity");
-        }
-        return;
-      }
-      this.sessionManager.endSessionManaged("inactivity").then(async (result) => {
-        debugLog.info("SessionHandler", "🛑 Session ended by inactivity", {
-          sessionId: this.get("sessionId"),
-          reason: result.reason,
-          success: result.success,
-          eventsFlushed: result.eventsFlushed
-        });
-        const crossTabManager = await this.crossTabSessionManager;
-        if (crossTabManager) {
-          crossTabManager.endSession("inactivity");
-        }
-        this.clearPersistedSession();
-        this.stopHeartbeat();
-      }).catch(async (error) => {
-        debugLog.error(
-          "SessionHandler",
-          `Session end failed: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-        await this.forceCleanupSession();
-      });
-    };
-    const sessionEndConfig = {
-      enablePageUnloadHandlers: true,
-      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false,
-      syncTimeoutMs: SESSION_SYNC_CONSTANTS.SYNC_TIMEOUT_MS,
-      maxRetries: SESSION_SYNC_CONSTANTS.MAX_RETRY_ATTEMPTS
-    };
-    this.sessionManager = new SessionManager(
-      onActivity,
-      onInactivity,
-      this.eventManager,
-      this.storageManager,
-      sessionEndConfig
-    );
-    debugLog.debug("SessionHandler", "Session manager initialized");
-    this.startInitialSession();
+    this.sessionManager = new SessionManager(this.storageManager, this.eventManager);
+    await this.sessionManager.startTracking();
+    debugLog.debug("SessionHandler", "Session tracking started");
   }
   async stopTracking() {
     debugLog.info("SessionHandler", "Stopping session tracking");
     if (this.sessionManager) {
-      if (this.get("sessionId")) {
-        try {
-          this.sessionManager.endSessionSafely("manual_stop", { forceSync: true });
-          this.clearPersistedSession();
-          this.stopHeartbeat();
-        } catch (error) {
-          debugLog.error(
-            "SessionHandler",
-            `Manual session stop failed: ${error instanceof Error ? error.message : "Unknown error"}`
-          );
-          await this.forceCleanupSession();
-        }
-      }
+      await this.sessionManager.stopTracking();
       this.sessionManager.destroy();
       this.sessionManager = null;
     }
-    if (this._crossTabSessionManager) {
-      this._crossTabSessionManager.destroy();
-      this._crossTabSessionManager = null;
-    }
-    this._isInitializingCrossTab = false;
-    this._crossTabInitLock = null;
-    if (this.recoveryManager) {
-      this.recoveryManager.cleanupOldRecoveryAttempts();
-      this.recoveryManager = null;
-    }
   }
-  initializeSessionRecoveryManager(projectId) {
-    this.recoveryManager = new SessionRecoveryManager(this.storageManager, projectId, this.eventManager);
-    debugLog.debug("SessionHandler", "Session recovery manager initialized", { projectId });
-  }
-  initializeCrossTabSessionManager(projectId) {
-    const config = {
-      debugMode: (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") ?? false
-    };
-    const onSessionStart = async (sessionId) => {
-      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-        debugLog.debug("SessionHandler", `Cross-tab session started: ${sessionId}`);
-      }
-      await this.set("sessionId", sessionId);
-      this.trackSession(EventType.SESSION_START, false);
-      this.persistSession(sessionId);
-      this.startHeartbeat();
-    };
-    const onSessionEnd = (reason) => {
-      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-        debugLog.debug("SessionHandler", `Cross-tab session ended: ${reason}`);
-      }
-      this.clearPersistedSession();
-      this.trackSession(EventType.SESSION_END, false, reason);
-    };
-    const onTabActivity = () => {
-      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-        debugLog.debug("SessionHandler", "Cross-tab activity detected");
-      }
-    };
-    const onCrossTabConflict = () => {
-      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-        debugLog.warn("SessionHandler", "Cross-tab conflict detected");
-      }
-      if (this.sessionManager) {
-        this.sessionManager.trackSessionHealth("conflict");
-      }
-    };
-    const callbacks = {
-      onSessionStart,
-      onSessionEnd,
-      onTabActivity,
-      onCrossTabConflict
-    };
-    this._crossTabSessionManager = new CrossTabSessionManager(this.storageManager, projectId, config, callbacks);
-    debugLog.debug("SessionHandler", "Cross-tab session manager initialized", { projectId });
-  }
-  ensureRecoveryManagerInitialized() {
-    if (!this.recoveryManager) {
-      const projectId = this.get("config")?.id;
-      if (projectId) {
-        this.initializeSessionRecoveryManager(projectId);
-      } else {
-        debugLog.error("SessionHandler", "Cannot initialize recovery manager without projectId");
-      }
-    }
-  }
-  async createOrJoinSession() {
-    const crossTab = await this.crossTabSessionManager;
-    if (crossTab) {
-      const existingSessionId = crossTab.getSessionId();
-      if (existingSessionId) {
-        return { sessionId: existingSessionId, recovered: false };
-      }
-      const sessionResult2 = this.sessionManager.startSession();
-      return { sessionId: sessionResult2.sessionId, recovered: sessionResult2.recovered ?? false };
-    }
-    const sessionResult = this.sessionManager.startSession();
-    return { sessionId: sessionResult.sessionId, recovered: sessionResult.recovered ?? false };
-  }
-  async forceCleanupSession() {
-    await this.set("sessionId", null);
-    this.clearPersistedSession();
-    this.stopHeartbeat();
-    const crossTab = await this.crossTabSessionManager;
-    if (crossTab) {
-      try {
-        crossTab.endSession("orphaned_cleanup");
-      } catch (error) {
-        if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-          debugLog.warn(
-            "SessionHandler",
-            `Cross-tab cleanup failed during force cleanup: ${error instanceof Error ? error.message : "Unknown error"}`
-          );
-        }
-      }
-    }
-    try {
-      this.trackSession(EventType.SESSION_END, false, "orphaned_cleanup");
-    } catch (error) {
-      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-        debugLog.warn(
-          "SessionHandler",
-          `Session tracking failed during force cleanup: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-      }
-    }
-    if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-      debugLog.debug("SessionHandler", "Forced session cleanup completed");
-    }
-  }
-  trackSession(eventType, sessionStartRecovered = false, sessionEndReason) {
-    this.eventManager.track({
-      type: eventType,
-      ...eventType === EventType.SESSION_START && sessionStartRecovered && { session_start_recovered: sessionStartRecovered },
-      ...eventType === EventType.SESSION_END && { session_end_reason: sessionEndReason ?? "orphaned_cleanup" }
-    });
-  }
-  async startInitialSession() {
-    if (this.get("sessionId")) {
-      debugLog.debug("SessionHandler", "Session already exists, skipping initial session creation");
-      return;
-    }
-    debugLog.debug("SessionHandler", "Starting initial session");
-    const crossTab = await this.crossTabSessionManager;
-    if (crossTab) {
-      const existingSessionId = crossTab.getSessionId();
-      if (existingSessionId) {
-        await this.set("sessionId", existingSessionId);
-        this.trackSession(EventType.SESSION_START, false);
-        this.persistSession(existingSessionId);
-        this.startHeartbeat();
-        debugLog.info("SessionHandler", "🏁 Session started (joined cross-tab session)", {
-          sessionId: existingSessionId
-        });
-        return;
-      }
-      debugLog.debug("SessionHandler", "No existing cross-tab session, waiting for activity");
-      return;
-    }
-    debugLog.debug("SessionHandler", "Starting regular session (no cross-tab)");
-    const sessionResult = this.sessionManager.startSession();
-    await this.set("sessionId", sessionResult.sessionId);
-    this.trackSession(EventType.SESSION_START, sessionResult.recovered);
-    this.persistSession(sessionResult.sessionId);
-    this.startHeartbeat();
-  }
-  checkOrphanedSessions() {
-    const storedSessionData = this.storageManager.getItem(this.sessionStorageKey);
-    if (storedSessionData) {
-      try {
-        const session = JSON.parse(storedSessionData);
-        const now = Date.now();
-        const timeSinceLastHeartbeat = now - session.lastHeartbeat;
-        const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT_MS;
-        if (timeSinceLastHeartbeat > sessionTimeout) {
-          const canRecover = this.recoveryManager?.hasRecoverableSession() ?? false;
-          if (canRecover && this.recoveryManager) {
-            const sessionContext = {
-              sessionId: session.sessionId,
-              startTime: session.startTime,
-              lastActivity: session.lastHeartbeat,
-              tabCount: 1,
-              recoveryAttempts: 0,
-              metadata: {
-                userAgent: navigator.userAgent,
-                pageUrl: this.get("pageUrl")
-              }
-            };
-            this.recoveryManager.storeSessionContextForRecovery(sessionContext);
-            if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-              debugLog.debug("SessionHandler", `Orphaned session stored for recovery: ${session.sessionId}`);
-            }
-          }
-          this.trackSession(EventType.SESSION_END);
-          this.clearPersistedSession();
-          if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-            debugLog.debug(
-              "SessionHandler",
-              `Orphaned session ended: ${session.sessionId}, recovery available: ${canRecover}`
-            );
-          }
-        }
-      } catch {
-        this.clearPersistedSession();
-      }
-    }
-  }
-  persistSession(sessionId) {
-    const sessionData = {
-      sessionId,
-      startTime: Date.now(),
-      lastHeartbeat: Date.now()
-    };
-    this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(sessionData));
-  }
-  clearPersistedSession() {
-    this.storageManager.removeItem(this.sessionStorageKey);
-  }
-  startHeartbeat() {
-    this.stopHeartbeat();
-    this.heartbeatInterval = setInterval(() => {
-      const storedSessionData = this.storageManager.getItem(this.sessionStorageKey);
-      if (storedSessionData) {
-        try {
-          const session = JSON.parse(storedSessionData);
-          session.lastHeartbeat = Date.now();
-          this.storageManager.setItem(this.sessionStorageKey, JSON.stringify(session));
-        } catch {
-          this.clearPersistedSession();
-        }
-      }
-    }, SESSION_HEARTBEAT_INTERVAL_MS);
-  }
-  stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
+  destroy() {
+    if (this.sessionManager) {
+      this.sessionManager.destroy();
+      this.sessionManager = null;
     }
   }
 }
@@ -5212,11 +2530,11 @@ class ClickHandler extends StateManager {
   }
   calculateClickCoordinates(event2, element) {
     const rect = element.getBoundingClientRect();
-    const x = event2.clientX;
-    const y = event2.clientY;
-    const relativeX = rect.width > 0 ? Math.max(0, Math.min(1, Number(((x - rect.left) / rect.width).toFixed(3)))) : 0;
-    const relativeY = rect.height > 0 ? Math.max(0, Math.min(1, Number(((y - rect.top) / rect.height).toFixed(3)))) : 0;
-    return { x, y, relativeX, relativeY };
+    const x2 = event2.clientX;
+    const y2 = event2.clientY;
+    const relativeX = rect.width > 0 ? Math.max(0, Math.min(1, Number(((x2 - rect.left) / rect.width).toFixed(3)))) : 0;
+    const relativeY = rect.height > 0 ? Math.max(0, Math.min(1, Number(((y2 - rect.top) / rect.height).toFixed(3)))) : 0;
+    return { x: x2, y: y2, relativeX, relativeY };
   }
   extractTrackingData(trackingElement) {
     const name = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
@@ -5231,7 +2549,7 @@ class ClickHandler extends StateManager {
     };
   }
   generateClickData(clickedElement, relevantElement, coordinates) {
-    const { x, y, relativeX, relativeY } = coordinates;
+    const { x: x2, y: y2, relativeX, relativeY } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
     const attributes = this.extractElementAttributes(relevantElement);
     const href = relevantElement.getAttribute("href");
@@ -5241,8 +2559,8 @@ class ClickHandler extends StateManager {
     const ariaLabel = relevantElement.getAttribute("aria-label");
     const className = typeof relevantElement.className === "string" ? relevantElement.className : String(relevantElement.className);
     return {
-      x,
-      y,
+      x: x2,
+      y: y2,
       relativeX,
       relativeY,
       tag: relevantElement.tagName.toLowerCase(),
@@ -5776,7 +3094,7 @@ class PerformanceHandler extends StateManager {
   }
   async initWebVitals() {
     try {
-      const { onLCP, onCLS, onFCP, onTTFB, onINP } = await import("./web-vitals-Dz7_abrn.mjs");
+      const { onLCP, onCLS, onFCP, onTTFB, onINP } = await Promise.resolve().then(() => webVitals);
       const report = (type) => (metric) => {
         const value = Number(metric.value.toFixed(PRECISION_TWO_DECIMALS));
         this.sendVital({ type, value });
@@ -5901,197 +3219,75 @@ class ErrorHandler extends StateManager {
   eventManager;
   piiPatterns = [
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+    // Email
     /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
+    // Phone US
     /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
+    // Credit card
     /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g
+    // IBAN
   ];
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
   }
   startTracking() {
-    debugLog.debug("ErrorHandler", "Starting error tracking");
-    this.setupErrorListener();
-    this.setupUnhandledRejectionListener();
+    window.addEventListener("error", this.handleError);
+    window.addEventListener("unhandledrejection", this.handleRejection);
+    debugLog.debug("ErrorHandler", "Error tracking started");
   }
   stopTracking() {
-    debugLog.debug("ErrorHandler", "Stopping error tracking");
     window.removeEventListener("error", this.handleError);
-    window.removeEventListener("unhandledrejection", this.handleUnhandledRejection);
-  }
-  setupErrorListener() {
-    window.addEventListener("error", this.handleError);
-  }
-  setupUnhandledRejectionListener() {
-    window.addEventListener("unhandledrejection", this.handleUnhandledRejection);
+    window.removeEventListener("unhandledrejection", this.handleRejection);
+    debugLog.debug("ErrorHandler", "Error tracking stopped");
   }
   handleError = (event2) => {
     const config = this.get("config");
-    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
-      debugLog.debug("ErrorHandler", `Error not sampled, skipping (errorSampling: ${config?.errorSampling})`, {
-        errorSampling: config?.errorSampling
-      });
+    const samplingRate = config?.errorSampling ?? 0.1;
+    if (Math.random() >= samplingRate) {
       return;
     }
-    debugLog.warn(
-      "ErrorHandler",
-      `JavaScript error captured: ${event2.message} (filename: ${event2.filename}, lineno: ${event2.lineno})`,
-      {
-        message: event2.message,
-        filename: event2.filename,
-        lineno: event2.lineno
-      }
-    );
+    debugLog.warn("ErrorHandler", "JS error captured", {
+      message: event2.message,
+      filename: event2.filename,
+      line: event2.lineno
+    });
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
-        message: this.sanitizeText(event2.message || "Unknown error")
+        message: this.sanitize(event2.message || "Unknown error")
       }
     });
   };
-  handleUnhandledRejection = (event2) => {
+  handleRejection = (event2) => {
     const config = this.get("config");
-    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
-      debugLog.debug("ErrorHandler", "Promise rejection not sampled, skipping", {
-        errorSampling: config?.errorSampling
-      });
+    const samplingRate = config?.errorSampling ?? 0.1;
+    if (Math.random() >= samplingRate) {
       return;
     }
-    debugLog.warn("ErrorHandler", `Unhandled promise rejection captured (reason: ${typeof event2.reason})`, {
-      reason: typeof event2.reason
-    });
-    let reason = "Unknown rejection";
-    if (event2.reason) {
-      if (typeof event2.reason === "string") {
-        reason = event2.reason;
-      } else if (event2.reason instanceof Error) {
-        reason = event2.reason.message || event2.reason.toString();
-      } else {
-        reason = String(event2.reason);
-      }
-    }
+    const message = this.extractRejectionMessage(event2.reason);
+    debugLog.warn("ErrorHandler", "Promise rejection captured", { message });
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.PROMISE_REJECTION,
-        message: this.sanitizeText(reason)
+        message: this.sanitize(message)
       }
     });
   };
-  sanitizeText(text) {
+  extractRejectionMessage(reason) {
+    if (!reason) return "Unknown rejection";
+    if (typeof reason === "string") return reason;
+    if (reason instanceof Error) return reason.message || reason.toString();
+    return String(reason);
+  }
+  sanitize(text) {
     let sanitized = text;
     for (const pattern of this.piiPatterns) {
       sanitized = sanitized.replace(pattern, "[REDACTED]");
     }
     return sanitized;
-  }
-  shouldSample(rate) {
-    return Math.random() < rate;
-  }
-}
-class NetworkHandler extends StateManager {
-  eventManager;
-  originalXHROpen;
-  originalXHRSend;
-  constructor(eventManager) {
-    super();
-    this.eventManager = eventManager;
-    this.originalXHROpen = XMLHttpRequest.prototype.open;
-    this.originalXHRSend = XMLHttpRequest.prototype.send;
-  }
-  startTracking() {
-    debugLog.debug("NetworkHandler", "Starting network error tracking");
-    this.interceptXHR();
-  }
-  stopTracking() {
-    debugLog.debug("NetworkHandler", "Stopping network error tracking");
-    XMLHttpRequest.prototype.open = this.originalXHROpen;
-    XMLHttpRequest.prototype.send = this.originalXHRSend;
-  }
-  interceptXHR() {
-    const trackNetworkError = this.trackNetworkError.bind(this);
-    const normalizeUrlForTracking = this.normalizeUrlForTracking.bind(this);
-    const originalXHROpen = this.originalXHROpen;
-    const originalXHRSend = this.originalXHRSend;
-    XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
-      const asyncMode = async ?? true;
-      const extendedThis = this;
-      extendedThis._tracelogStartTime = Date.now();
-      extendedThis._tracelogMethod = method.toUpperCase();
-      extendedThis._tracelogUrl = url.toString();
-      return originalXHROpen.call(this, method, url, asyncMode, user, password);
-    };
-    XMLHttpRequest.prototype.send = function(body) {
-      const xhr = this;
-      const startTime = xhr._tracelogStartTime ?? Date.now();
-      const method = xhr._tracelogMethod ?? "GET";
-      const url = xhr._tracelogUrl ?? "";
-      const originalOnReadyStateChange = xhr.onreadystatechange;
-      xhr.onreadystatechange = (ev) => {
-        if (xhr.readyState === XMLHttpRequest.DONE) {
-          const duration = Date.now() - startTime;
-          const isCollectEndpoint = url.includes("/collect") || url.includes("/config");
-          if ((xhr.status === 0 || xhr.status >= 400) && !isCollectEndpoint) {
-            const statusText = xhr.statusText || "Request Failed";
-            debugLog.debug("NetworkHandler", "XHR error detected", {
-              method,
-              url: normalizeUrlForTracking(url),
-              status: xhr.status,
-              statusText
-            });
-            trackNetworkError(method, normalizeUrlForTracking(url), xhr.status, statusText, duration);
-          }
-        }
-        if (originalOnReadyStateChange) {
-          return originalOnReadyStateChange.call(xhr, ev);
-        }
-      };
-      return originalXHRSend.call(this, body);
-    };
-  }
-  trackNetworkError(method, url, status, statusText, duration) {
-    const config = this.get("config");
-    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
-      debugLog.debug(
-        "NetworkHandler",
-        `Network error not sampled, skipping (errorSampling: ${config?.errorSampling}, method: ${method}, url: ${url})`,
-        {
-          errorSampling: config?.errorSampling,
-          method,
-          url
-        }
-      );
-      return;
-    }
-    debugLog.warn(
-      "NetworkHandler",
-      `Network error tracked: ${method} ${url} (status: ${status}, statusText: ${statusText}, duration: ${duration}ms)`,
-      { method, url, status, statusText, duration }
-    );
-    this.eventManager.track({
-      type: EventType.ERROR,
-      error_data: {
-        type: ErrorType.NETWORK_ERROR,
-        message: statusText,
-        method,
-        url,
-        status,
-        statusText,
-        duration
-      }
-    });
-  }
-  normalizeUrlForTracking(url) {
-    try {
-      const config = this.get("config");
-      return normalizeUrl(url, config?.sensitiveQueryParams);
-    } catch {
-      return url;
-    }
-  }
-  shouldSample(rate) {
-    return Math.random() < rate;
   }
 }
 class App extends StateManager {
@@ -6105,222 +3301,55 @@ class App extends StateManager {
   scrollHandler;
   performanceHandler;
   errorHandler;
-  networkHandler;
   suppressNextScrollTimer = null;
-  /**
-   * Returns the initialization status of the app
-   * @returns true if the app is fully initialized, false otherwise
-   */
   get initialized() {
     return this.isInitialized;
   }
   async init(appConfig) {
     if (this.isInitialized) {
-      debugLog.debug("App", "App already initialized, skipping re-initialization", { projectId: appConfig.id });
+      debugLog.debug("App", "Already initialized", { projectId: appConfig.id });
       return;
     }
-    debugLog.info("App", "App initialization started", { projectId: appConfig.id });
+    debugLog.info("App", "Initialization started", { projectId: appConfig.id });
+    if (!appConfig.id?.trim()) {
+      throw new Error("Project ID is required");
+    }
+    this.storageManager = new StorageManager();
     try {
-      debugLog.debug("App", "Initializing storage manager");
-      this.initStorage();
-      this.validateStorageManager();
-      debugLog.debug("App", "Setting application state");
       await this.setState(appConfig);
-      this.validateState();
-      debugLog.debug("App", "Setting integrations");
-      await this.setIntegrations();
-      debugLog.debug("App", "Initializing event manager");
-      this.setEventManager();
-      this.validateEventManager();
-      debugLog.debug("App", "Initializing handlers");
-      await this.initHandlers();
-      this.validateHandlersInitialized();
-      debugLog.debug("App", "Recovering persisted events");
-      await this.eventManager.recoverPersistedEvents();
-      this.isInitialized = true;
-      debugLog.info("App", "App initialization completed successfully", {
-        projectId: appConfig.id
-      });
     } catch (error) {
-      this.isInitialized = false;
-      debugLog.error("App", "App initialization failed, performing rollback", { projectId: appConfig.id, error });
-      await this.rollbackInitialization();
+      debugLog.error("App", "State setup failed", { error });
       throw error;
     }
-  }
-  /**
-   * Validates that StorageManager was properly initialized
-   * @throws {Error} If StorageManager is not initialized
-   */
-  validateStorageManager() {
-    if (!this.storageManager) {
-      debugLog.error("App", "StorageManager validation failed - not initialized");
-      throw new Error("StorageManager initialization failed");
-    }
-  }
-  /**
-   * Validates that required state properties are set
-   * @throws {Error} If required state is missing
-   */
-  validateState() {
-    const missingState = [];
-    if (!this.get("apiUrl")) {
-      missingState.push("apiUrl");
-    }
-    if (!this.get("config")) {
-      missingState.push("config");
-    }
-    if (!this.get("userId")) {
-      missingState.push("userId");
-    }
-    if (!this.get("device")) {
-      missingState.push("device");
-    }
-    if (!this.get("pageUrl")) {
-      missingState.push("pageUrl");
-    }
-    if (missingState.length > 0) {
-      debugLog.error("App", "State validation failed - missing required properties", { missingState });
-      throw new Error(`State initialization failed - missing: ${missingState.join(", ")}`);
-    }
-  }
-  /**
-   * Validates that EventManager was properly initialized
-   * @throws {Error} If EventManager is not initialized
-   */
-  validateEventManager() {
-    if (!this.eventManager) {
-      debugLog.error("App", "EventManager validation failed - not initialized");
-      throw new Error("EventManager initialization failed");
-    }
-  }
-  /**
-   * Validates that all required handlers are initialized
-   * @throws {Error} If any required handler is missing
-   */
-  validateHandlersInitialized() {
-    const requiredHandlers = [
-      { name: "sessionHandler", handler: this.sessionHandler },
-      { name: "scrollHandler", handler: this.scrollHandler },
-      { name: "pageViewHandler", handler: this.pageViewHandler },
-      { name: "clickHandler", handler: this.clickHandler },
-      { name: "performanceHandler", handler: this.performanceHandler },
-      { name: "errorHandler", handler: this.errorHandler },
-      { name: "networkHandler", handler: this.networkHandler }
-    ];
-    const missingHandlers = [];
-    for (const { name, handler } of requiredHandlers) {
-      if (!handler) {
-        missingHandlers.push(name);
-      }
-    }
-    if (missingHandlers.length > 0) {
-      debugLog.error("App", "Handlers validation failed - missing required handlers", { missingHandlers });
-      throw new Error(`Handlers initialization failed - missing: ${missingHandlers.join(", ")}`);
-    }
-  }
-  /**
-   * Performs cleanup rollback when initialization fails
-   * Safely cleans up any partially initialized components
-   */
-  async rollbackInitialization() {
-    debugLog.info("App", "Rollback initialization started");
     try {
-      if (this.googleAnalytics) {
-        debugLog.debug("App", "Cleaning up Google Analytics integration");
-        try {
-          this.googleAnalytics.cleanup();
-        } catch (error) {
-          debugLog.warn("App", "Google Analytics cleanup failed during rollback", { error });
-        }
-        this.googleAnalytics = null;
-      }
-      if (this.sessionHandler) {
-        debugLog.debug("App", "Stopping session handler");
-        try {
-          await this.sessionHandler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Session handler cleanup failed during rollback", { error });
-        }
-      }
-      if (this.pageViewHandler) {
-        debugLog.debug("App", "Stopping page view handler");
-        try {
-          this.pageViewHandler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Page view handler cleanup failed during rollback", { error });
-        }
-      }
-      if (this.clickHandler) {
-        debugLog.debug("App", "Stopping click handler");
-        try {
-          this.clickHandler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Click handler cleanup failed during rollback", { error });
-        }
-      }
-      if (this.scrollHandler) {
-        debugLog.debug("App", "Stopping scroll handler");
-        try {
-          this.scrollHandler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Scroll handler cleanup failed during rollback", { error });
-        }
-      }
-      if (this.performanceHandler) {
-        debugLog.debug("App", "Stopping performance handler");
-        try {
-          this.performanceHandler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Performance handler cleanup failed during rollback", { error });
-        }
-      }
-      if (this.errorHandler) {
-        debugLog.debug("App", "Stopping error handler");
-        try {
-          this.errorHandler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Error handler cleanup failed during rollback", { error });
-        }
-      }
-      if (this.networkHandler) {
-        debugLog.debug("App", "Stopping network handler");
-        try {
-          this.networkHandler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Network handler cleanup failed during rollback", { error });
-        }
-      }
-      if (this.suppressNextScrollTimer) {
-        debugLog.debug("App", "Clearing scroll suppression timer");
-        clearTimeout(this.suppressNextScrollTimer);
-        this.suppressNextScrollTimer = null;
-      }
-      if (this.eventManager) {
-        debugLog.debug("App", "Stopping event manager");
-        try {
-          this.eventManager.stop();
-        } catch (error) {
-          debugLog.warn("App", "Event manager cleanup failed during rollback", { error });
-        }
-      }
-      debugLog.debug("App", "Resetting state properties");
-      await this.set("hasStartSession", false);
-      await this.set("suppressNextScroll", false);
-      await this.set("sessionId", null);
-      debugLog.info("App", "Rollback initialization completed");
+      await this.setupIntegrations();
     } catch (error) {
-      debugLog.error("App", "Rollback initialization failed", { error });
+      debugLog.warn("App", "Integration setup failed, continuing without", { error });
+      this.googleAnalytics = null;
     }
+    this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
+    try {
+      await this.initHandlers();
+    } catch (error) {
+      debugLog.error("App", "Handlers initialization failed", { error });
+      throw error;
+    }
+    try {
+      await this.eventManager.recoverPersistedEvents();
+    } catch (error) {
+      debugLog.warn("App", "Event recovery failed, continuing", { error });
+    }
+    this.isInitialized = true;
+    debugLog.info("App", "Initialization completed", { projectId: appConfig.id });
   }
   sendCustomEvent(name, metadata) {
     if (!this.eventManager) {
-      debugLog.warn("App", "Custom event attempted before eventManager initialization", { eventName: name });
+      debugLog.warn("App", "Custom event before initialization", { name });
       return;
     }
     const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
     if (valid) {
-      debugLog.debug("App", "Custom event validated and queued", { eventName: name, hasMetadata: !!sanitizedMetadata });
+      debugLog.debug("App", "Custom event tracked", { name, hasMetadata: !!sanitizedMetadata });
       this.eventManager.track({
         type: EventType.CUSTOM,
         custom_event: {
@@ -6329,97 +3358,65 @@ class App extends StateManager {
         }
       });
     } else {
-      const currentMode = this.get("config")?.mode;
-      debugLog.clientError("App", `Custom event validation failed: ${error ?? "unknown error"}`, {
-        eventName: name,
-        validationError: error,
-        hasMetadata: !!metadata,
-        mode: currentMode
+      const mode = this.get("config")?.mode;
+      debugLog.clientError("App", `Custom event validation failed: ${error}`, {
+        name,
+        error,
+        mode
       });
-      if (currentMode === "qa" || currentMode === "debug") {
-        throw new Error(
-          `custom event "${name}" validation failed (${error ?? "unknown error"}). Please, review your event data and try again.`
-        );
+      if (mode === "qa" || mode === "debug") {
+        throw new Error(`Custom event "${name}" validation failed: ${error}`);
       }
     }
   }
-  /**
-   * Gets current error recovery statistics for monitoring purposes
-   * @returns Object with recovery statistics and system status
-   */
-  getRecoveryStats() {
-    if (!this.eventManager) {
-      debugLog.warn("App", "Recovery stats requested before eventManager initialization");
-      return null;
-    }
-    return this.eventManager.getRecoveryStats();
-  }
-  /**
-   * Triggers manual system recovery to attempt fixing error states
-   * @returns Promise that resolves when recovery attempt is complete
-   */
-  async attemptSystemRecovery() {
-    if (!this.eventManager) {
-      debugLog.warn("App", "System recovery attempted before eventManager initialization");
-      return;
-    }
-    debugLog.info("App", "Manual system recovery triggered");
-    await this.eventManager.attemptSystemRecovery();
-  }
-  /**
-   * Triggers aggressive fingerprint cleanup to free memory
-   */
-  aggressiveFingerprintCleanup() {
-    if (!this.eventManager) {
-      debugLog.warn("App", "Fingerprint cleanup attempted before eventManager initialization");
-      return;
-    }
-    debugLog.info("App", "Manual fingerprint cleanup triggered");
-    this.eventManager.aggressiveFingerprintCleanup();
-  }
   async destroy() {
     if (!this.isInitialized) {
-      debugLog.warn("App", "Destroy called but app was not initialized");
+      debugLog.warn("App", "Destroy called but not initialized");
       return;
     }
-    debugLog.info("App", "App cleanup started");
+    debugLog.info("App", "Cleanup started");
     if (this.googleAnalytics) {
-      this.googleAnalytics.cleanup();
+      try {
+        this.googleAnalytics.cleanup();
+      } catch (error) {
+        debugLog.warn("App", "Analytics cleanup failed", { error });
+      }
     }
-    if (this.sessionHandler) {
-      await this.sessionHandler.stopTracking();
-    }
-    if (this.pageViewHandler) {
-      this.pageViewHandler.stopTracking();
-    }
-    if (this.clickHandler) {
-      this.clickHandler.stopTracking();
-    }
-    if (this.scrollHandler) {
-      this.scrollHandler.stopTracking();
-    }
-    if (this.performanceHandler) {
-      this.performanceHandler.stopTracking();
-    }
-    if (this.errorHandler) {
-      this.errorHandler.stopTracking();
-    }
-    if (this.networkHandler) {
-      this.networkHandler.stopTracking();
+    const handlers = [
+      this.sessionHandler,
+      this.pageViewHandler,
+      this.clickHandler,
+      this.scrollHandler,
+      this.performanceHandler,
+      this.errorHandler
+    ];
+    for (const handler of handlers) {
+      if (handler) {
+        try {
+          await handler.stopTracking();
+        } catch (error) {
+          debugLog.warn("App", "Handler cleanup failed", { error });
+        }
+      }
     }
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
     }
     if (this.eventManager) {
-      this.eventManager.stop();
+      try {
+        this.eventManager.stop();
+      } catch (error) {
+        debugLog.warn("App", "EventManager cleanup failed", { error });
+      }
     }
     await this.set("hasStartSession", false);
     await this.set("suppressNextScroll", false);
     await this.set("sessionId", null);
     this.isInitialized = false;
-    debugLog.info("App", "App cleanup completed successfully");
+    debugLog.info("App", "Cleanup completed");
   }
+  // --- Private Setup Methods ---
   async setState(appConfig) {
     await this.setApiUrl(appConfig.id, appConfig.allowHttp);
     await this.setConfig(appConfig);
@@ -6433,118 +3430,73 @@ class App extends StateManager {
   }
   async setConfig(appConfig) {
     const configManager = new ConfigManager();
-    try {
-      const config = await configManager.get(this.get("apiUrl"), appConfig);
-      await this.set("config", config);
-    } catch (error) {
-      debugLog.clientError("App", "CONFIG LOAD FAILED", { error });
-      throw error;
-    }
+    const config = await configManager.get(this.get("apiUrl"), appConfig);
+    await this.set("config", config);
   }
   async setUserId() {
     const userManager = new UserManager(this.storageManager);
-    const userId = userManager.getId();
-    await this.set("userId", userId);
+    await this.set("userId", userManager.getId());
   }
   async setDevice() {
-    const device = getDeviceType();
-    await this.set("device", device);
+    await this.set("device", getDeviceType());
   }
   async setPageUrl() {
-    const initialUrl = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
-    await this.set("pageUrl", initialUrl);
+    const url = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
+    await this.set("pageUrl", url);
   }
-  async setIntegrations() {
-    const isIPExcluded = this.get("config").ipExcluded;
-    const measurementId = this.get("config").integrations?.googleAnalytics?.measurementId;
+  async setupIntegrations() {
+    const config = this.get("config");
+    const isIPExcluded = config.ipExcluded;
+    const measurementId = config.integrations?.googleAnalytics?.measurementId;
     if (!isIPExcluded && measurementId?.trim()) {
       this.googleAnalytics = new GoogleAnalyticsIntegration();
       await this.googleAnalytics.initialize();
     }
   }
+  // --- Private Handler Initialization ---
   async initHandlers() {
-    if (!this.eventManager) {
-      throw new Error("EventManager must be initialized before handlers");
-    }
-    if (!this.storageManager) {
-      throw new Error("StorageManager must be initialized before handlers");
+    if (!this.eventManager || !this.storageManager) {
+      throw new Error("EventManager and StorageManager must be initialized first");
     }
     this.initSessionHandler();
-    this.initScrollHandler();
     this.initPageViewHandler();
     this.initClickHandler();
+    this.initScrollHandler();
     await this.initPerformanceHandler();
     this.initErrorHandler();
-    this.initNetworkHandler();
-  }
-  initStorage() {
-    this.storageManager = new StorageManager();
-  }
-  setEventManager() {
-    if (!this.storageManager) {
-      throw new Error("StorageManager must be initialized before EventManager");
-    }
-    this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
   }
   initSessionHandler() {
-    if (!this.storageManager || !this.eventManager) {
-      throw new Error("StorageManager and EventManager must be initialized before SessionHandler");
-    }
     this.sessionHandler = new SessionHandler(this.storageManager, this.eventManager);
     this.sessionHandler.startTracking();
   }
-  initScrollHandler() {
-    if (!this.eventManager) {
-      throw new Error("EventManager must be initialized before ScrollHandler");
-    }
-    this.scrollHandler = new ScrollHandler(this.eventManager);
-    this.scrollHandler.startTracking();
-  }
   initPageViewHandler() {
-    if (!this.eventManager) {
-      throw new Error("EventManager must be initialized before PageViewHandler");
-    }
-    const onPageViewTrack = async () => await this.onPageViewTrack();
-    this.pageViewHandler = new PageViewHandler(this.eventManager, onPageViewTrack);
+    const onPageView = async () => {
+      await this.set("suppressNextScroll", true);
+      if (this.suppressNextScrollTimer) {
+        clearTimeout(this.suppressNextScrollTimer);
+      }
+      this.suppressNextScrollTimer = window.setTimeout(async () => {
+        await this.set("suppressNextScroll", false);
+      }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESS_MULTIPLIER);
+    };
+    this.pageViewHandler = new PageViewHandler(this.eventManager, onPageView);
     this.pageViewHandler.startTracking();
   }
-  async onPageViewTrack() {
-    await this.set("suppressNextScroll", true);
-    if (this.suppressNextScrollTimer) {
-      clearTimeout(this.suppressNextScrollTimer);
-      this.suppressNextScrollTimer = null;
-    }
-    this.suppressNextScrollTimer = window.setTimeout(async () => {
-      await this.set("suppressNextScroll", false);
-    }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESSION_CONSTANTS.SUPPRESS_MULTIPLIER);
-  }
   initClickHandler() {
-    if (!this.eventManager) {
-      throw new Error("EventManager must be initialized before ClickHandler");
-    }
     this.clickHandler = new ClickHandler(this.eventManager);
     this.clickHandler.startTracking();
   }
+  initScrollHandler() {
+    this.scrollHandler = new ScrollHandler(this.eventManager);
+    this.scrollHandler.startTracking();
+  }
   async initPerformanceHandler() {
-    if (!this.eventManager) {
-      throw new Error("EventManager must be initialized before PerformanceHandler");
-    }
     this.performanceHandler = new PerformanceHandler(this.eventManager);
     await this.performanceHandler.startTracking();
   }
   initErrorHandler() {
-    if (!this.eventManager) {
-      throw new Error("EventManager must be initialized before ErrorHandler");
-    }
     this.errorHandler = new ErrorHandler(this.eventManager);
     this.errorHandler.startTracking();
-  }
-  initNetworkHandler() {
-    if (!this.eventManager) {
-      throw new Error("EventManager must be initialized before NetworkHandler");
-    }
-    this.networkHandler = new NetworkHandler(this.eventManager);
-    this.networkHandler.startTracking();
   }
 }
 const app_types = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -6560,7 +3512,7 @@ const app_types = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePro
 }, Symbol.toStringTag, { value: "Module" }));
 const app_constants = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  DEFAULT_SESSION_TIMEOUT_MS
+  DEFAULT_SESSION_TIMEOUT
 }, Symbol.toStringTag, { value: "Module" }));
 let app = null;
 let isInitializing = false;
@@ -6587,9 +3539,9 @@ const init = async (appConfig) => {
     }
     if (isInitializing) {
       debugLog.debug("API", "Concurrent initialization detected, waiting for completion", { projectId: appConfig.id });
-      const maxRetries = INITIALIZATION_CONSTANTS.MAX_CONCURRENT_RETRIES;
-      const retryDelay = INITIALIZATION_CONSTANTS.CONCURRENT_RETRY_DELAY_MS;
-      const globalTimeout = INITIALIZATION_CONSTANTS.INITIALIZATION_TIMEOUT_MS;
+      const maxRetries = INITIALIZATION_MAX_CONCURRENT_RETRIES;
+      const retryDelay = INITIALIZATION_CONCURRENT_RETRY_DELAY_MS;
+      const globalTimeout = INITIALIZATION_TIMEOUT_MS;
       const retryPromise = (async () => {
         let retries = 0;
         while (isInitializing && retries < maxRetries) {
@@ -6598,7 +3550,7 @@ const init = async (appConfig) => {
         }
         return retries;
       })();
-      const timeoutPromise = new Promise((_, reject) => {
+      const timeoutPromise = new Promise((_2, reject) => {
         setTimeout(() => {
           reject(
             new InitializationTimeoutError(
@@ -6734,44 +3686,24 @@ const destroy = async () => {
   }
 };
 const getRecoveryStats = () => {
-  try {
-    if (!app) {
-      debugLog.warn("API", "Recovery stats requested but Library was not initialized");
-      return null;
-    }
-    return app.getRecoveryStats();
-  } catch (error) {
-    debugLog.error("API", "Failed to get recovery stats", { error });
-    return null;
-  }
+  debugLog.warn(
+    "API",
+    "getRecoveryStats() is deprecated in v2.0 and will be removed in v3.0 - the v2 refactor simplified error recovery"
+  );
+  return null;
 };
 const attemptSystemRecovery = async () => {
-  try {
-    if (!app) {
-      debugLog.warn("API", "System recovery attempted but Library was not initialized");
-      throw new Error("App not initialized");
-    }
-    debugLog.info("API", "Manual system recovery initiated");
-    await app.attemptSystemRecovery();
-    debugLog.info("API", "Manual system recovery completed");
-  } catch (error) {
-    debugLog.error("API", "System recovery failed", { error });
-    throw error;
-  }
+  debugLog.warn(
+    "API",
+    "attemptSystemRecovery() is deprecated in v2.0 and will be removed in v3.0 - v2 uses automatic degradation"
+  );
+  return Promise.resolve();
 };
 const aggressiveFingerprintCleanup = () => {
-  try {
-    if (!app) {
-      debugLog.warn("API", "Fingerprint cleanup attempted but Library was not initialized");
-      throw new Error("App not initialized");
-    }
-    debugLog.info("API", "Manual fingerprint cleanup initiated");
-    app.aggressiveFingerprintCleanup();
-    debugLog.info("API", "Manual fingerprint cleanup completed");
-  } catch (error) {
-    debugLog.error("API", "Fingerprint cleanup failed", { error });
-    throw error;
-  }
+  debugLog.warn(
+    "API",
+    "aggressiveFingerprintCleanup() is deprecated in v2.0 and will be removed in v3.0 - v2 simplified deduplication"
+  );
 };
 class TestBridge extends App {
   isInitializing() {
@@ -6802,6 +3734,206 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   getRecoveryStats,
   init,
   isInitialized
+}, Symbol.toStringTag, { value: "Module" }));
+var e, o = -1, a = function(e3) {
+  addEventListener("pageshow", function(n) {
+    n.persisted && (o = n.timeStamp, e3(n));
+  }, true);
+}, c = function() {
+  var e3 = self.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+  if (e3 && e3.responseStart > 0 && e3.responseStart < performance.now()) return e3;
+}, u = function() {
+  var e3 = c();
+  return e3 && e3.activationStart || 0;
+}, f = function(e3, n) {
+  var t = c(), r = "navigate";
+  o >= 0 ? r = "back-forward-cache" : t && (document.prerendering || u() > 0 ? r = "prerender" : document.wasDiscarded ? r = "restore" : t.type && (r = t.type.replace(/_/g, "-")));
+  return { name: e3, value: void 0 === n ? -1 : n, rating: "good", delta: 0, entries: [], id: "v4-".concat(Date.now(), "-").concat(Math.floor(8999999999999 * Math.random()) + 1e12), navigationType: r };
+}, s = function(e3, n, t) {
+  try {
+    if (PerformanceObserver.supportedEntryTypes.includes(e3)) {
+      var r = new PerformanceObserver(function(e4) {
+        Promise.resolve().then(function() {
+          n(e4.getEntries());
+        });
+      });
+      return r.observe(Object.assign({ type: e3, buffered: true }, t || {})), r;
+    }
+  } catch (e4) {
+  }
+}, d = function(e3, n, t, r) {
+  var i, o2;
+  return function(a2) {
+    n.value >= 0 && (a2 || r) && ((o2 = n.value - (i || 0)) || void 0 === i) && (i = n.value, n.delta = o2, n.rating = function(e4, n2) {
+      return e4 > n2[1] ? "poor" : e4 > n2[0] ? "needs-improvement" : "good";
+    }(n.value, t), e3(n));
+  };
+}, l = function(e3) {
+  requestAnimationFrame(function() {
+    return requestAnimationFrame(function() {
+      return e3();
+    });
+  });
+}, p = function(e3) {
+  document.addEventListener("visibilitychange", function() {
+    "hidden" === document.visibilityState && e3();
+  });
+}, v = function(e3) {
+  var n = false;
+  return function() {
+    n || (e3(), n = true);
+  };
+}, m = -1, h = function() {
+  return "hidden" !== document.visibilityState || document.prerendering ? 1 / 0 : 0;
+}, g = function(e3) {
+  "hidden" === document.visibilityState && m > -1 && (m = "visibilitychange" === e3.type ? e3.timeStamp : 0, T());
+}, y = function() {
+  addEventListener("visibilitychange", g, true), addEventListener("prerenderingchange", g, true);
+}, T = function() {
+  removeEventListener("visibilitychange", g, true), removeEventListener("prerenderingchange", g, true);
+}, E = function() {
+  return m < 0 && (m = h(), y(), a(function() {
+    setTimeout(function() {
+      m = h(), y();
+    }, 0);
+  })), { get firstHiddenTime() {
+    return m;
+  } };
+}, C = function(e3) {
+  document.prerendering ? addEventListener("prerenderingchange", function() {
+    return e3();
+  }, true) : e3();
+}, b = [1800, 3e3], S = function(e3, n) {
+  n = n || {}, C(function() {
+    var t, r = E(), i = f("FCP"), o2 = s("paint", function(e4) {
+      e4.forEach(function(e5) {
+        "first-contentful-paint" === e5.name && (o2.disconnect(), e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries.push(e5), t(true)));
+      });
+    });
+    o2 && (t = d(e3, i, b, n.reportAllChanges), a(function(r2) {
+      i = f("FCP"), t = d(e3, i, b, n.reportAllChanges), l(function() {
+        i.value = performance.now() - r2.timeStamp, t(true);
+      });
+    }));
+  });
+}, L = [0.1, 0.25], w = function(e3, n) {
+  n = n || {}, S(v(function() {
+    var t, r = f("CLS", 0), i = 0, o2 = [], c2 = function(e4) {
+      e4.forEach(function(e5) {
+        if (!e5.hadRecentInput) {
+          var n2 = o2[0], t2 = o2[o2.length - 1];
+          i && e5.startTime - t2.startTime < 1e3 && e5.startTime - n2.startTime < 5e3 ? (i += e5.value, o2.push(e5)) : (i = e5.value, o2 = [e5]);
+        }
+      }), i > r.value && (r.value = i, r.entries = o2, t());
+    }, u2 = s("layout-shift", c2);
+    u2 && (t = d(e3, r, L, n.reportAllChanges), p(function() {
+      c2(u2.takeRecords()), t(true);
+    }), a(function() {
+      i = 0, r = f("CLS", 0), t = d(e3, r, L, n.reportAllChanges), l(function() {
+        return t();
+      });
+    }), setTimeout(t, 0));
+  }));
+}, A = 0, I = 1 / 0, P = 0, M = function(e3) {
+  e3.forEach(function(e4) {
+    e4.interactionId && (I = Math.min(I, e4.interactionId), P = Math.max(P, e4.interactionId), A = P ? (P - I) / 7 + 1 : 0);
+  });
+}, k = function() {
+  return e ? A : performance.interactionCount || 0;
+}, F = function() {
+  "interactionCount" in performance || e || (e = s("event", M, { type: "event", buffered: true, durationThreshold: 0 }));
+}, D = [], x = /* @__PURE__ */ new Map(), R = 0, B = function() {
+  var e3 = Math.min(D.length - 1, Math.floor((k() - R) / 50));
+  return D[e3];
+}, H = [], q = function(e3) {
+  if (H.forEach(function(n2) {
+    return n2(e3);
+  }), e3.interactionId || "first-input" === e3.entryType) {
+    var n = D[D.length - 1], t = x.get(e3.interactionId);
+    if (t || D.length < 10 || e3.duration > n.latency) {
+      if (t) e3.duration > t.latency ? (t.entries = [e3], t.latency = e3.duration) : e3.duration === t.latency && e3.startTime === t.entries[0].startTime && t.entries.push(e3);
+      else {
+        var r = { id: e3.interactionId, latency: e3.duration, entries: [e3] };
+        x.set(r.id, r), D.push(r);
+      }
+      D.sort(function(e4, n2) {
+        return n2.latency - e4.latency;
+      }), D.length > 10 && D.splice(10).forEach(function(e4) {
+        return x.delete(e4.id);
+      });
+    }
+  }
+}, O = function(e3) {
+  var n = self.requestIdleCallback || self.setTimeout, t = -1;
+  return e3 = v(e3), "hidden" === document.visibilityState ? e3() : (t = n(e3), p(e3)), t;
+}, N = [200, 500], j = function(e3, n) {
+  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (n = n || {}, C(function() {
+    var t;
+    F();
+    var r, i = f("INP"), o2 = function(e4) {
+      O(function() {
+        e4.forEach(q);
+        var n2 = B();
+        n2 && n2.latency !== i.value && (i.value = n2.latency, i.entries = n2.entries, r());
+      });
+    }, c2 = s("event", o2, { durationThreshold: null !== (t = n.durationThreshold) && void 0 !== t ? t : 40 });
+    r = d(e3, i, N, n.reportAllChanges), c2 && (c2.observe({ type: "first-input", buffered: true }), p(function() {
+      o2(c2.takeRecords()), r(true);
+    }), a(function() {
+      R = k(), D.length = 0, x.clear(), i = f("INP"), r = d(e3, i, N, n.reportAllChanges);
+    }));
+  }));
+}, _ = [2500, 4e3], z = {}, G = function(e3, n) {
+  n = n || {}, C(function() {
+    var t, r = E(), i = f("LCP"), o2 = function(e4) {
+      n.reportAllChanges || (e4 = e4.slice(-1)), e4.forEach(function(e5) {
+        e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries = [e5], t());
+      });
+    }, c2 = s("largest-contentful-paint", o2);
+    if (c2) {
+      t = d(e3, i, _, n.reportAllChanges);
+      var m2 = v(function() {
+        z[i.id] || (o2(c2.takeRecords()), c2.disconnect(), z[i.id] = true, t(true));
+      });
+      ["keydown", "click"].forEach(function(e4) {
+        addEventListener(e4, function() {
+          return O(m2);
+        }, { once: true, capture: true });
+      }), p(m2), a(function(r2) {
+        i = f("LCP"), t = d(e3, i, _, n.reportAllChanges), l(function() {
+          i.value = performance.now() - r2.timeStamp, z[i.id] = true, t(true);
+        });
+      });
+    }
+  });
+}, J = [800, 1800], K = function e2(n) {
+  document.prerendering ? C(function() {
+    return e2(n);
+  }) : "complete" !== document.readyState ? addEventListener("load", function() {
+    return e2(n);
+  }, true) : setTimeout(n, 0);
+}, Q = function(e3, n) {
+  n = n || {};
+  var t = f("TTFB"), r = d(e3, t, J, n.reportAllChanges);
+  K(function() {
+    var i = c();
+    i && (t.value = Math.max(i.responseStart - u(), 0), t.entries = [i], r(true), a(function() {
+      t = f("TTFB", 0), (r = d(e3, t, J, n.reportAllChanges))(true);
+    }));
+  });
+};
+const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  CLSThresholds: L,
+  FCPThresholds: b,
+  INPThresholds: N,
+  LCPThresholds: _,
+  TTFBThresholds: J,
+  onCLS: w,
+  onFCP: S,
+  onINP: j,
+  onLCP: G,
+  onTTFB: Q
 }, Symbol.toStringTag, { value: "Module" }));
 export {
   api as TraceLog
