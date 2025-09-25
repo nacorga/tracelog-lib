@@ -192,7 +192,7 @@ beforeEach(() => {
         return this.params.entries();
       }
 
-      size: number = 0;
+      size = 0;
 
       getAll(key: string): string[] {
         return this.params.has(key) ? [this.params.get(key)!] : [];
