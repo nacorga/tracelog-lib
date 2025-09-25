@@ -6,6 +6,15 @@ let stateVersion = 0;
 const updateQueue: Array<() => void> = [];
 let isUpdating = false;
 
+export function resetGlobalState(): void {
+  Object.keys(globalState).forEach((key) => {
+    delete globalState[key as keyof State];
+  });
+  stateVersion = 0;
+  updateQueue.length = 0;
+  isUpdating = false;
+}
+
 export abstract class StateManager {
   protected get<T extends keyof State>(key: T): State[T] {
     return globalState[key];

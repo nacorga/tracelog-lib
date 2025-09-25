@@ -22,7 +22,7 @@ describe('Type Guards Utils', () => {
       const obj = {
         name: 'John',
         age: 30,
-        active: true
+        active: true,
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(true);
     });
@@ -30,7 +30,7 @@ describe('Type Guards Utils', () => {
     test('should return true for object with string arrays', () => {
       const obj = {
         tags: ['tag1', 'tag2'],
-        categories: ['cat1']
+        categories: ['cat1'],
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(true);
     });
@@ -39,7 +39,7 @@ describe('Type Guards Utils', () => {
       const obj = {
         name: 'John',
         optional: null,
-        other: undefined
+        other: undefined,
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(true);
     });
@@ -47,21 +47,21 @@ describe('Type Guards Utils', () => {
     test('should return false for object with nested objects', () => {
       const obj = {
         name: 'John',
-        address: { city: 'NYC' }
+        address: { city: 'NYC' },
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(false);
     });
 
     test('should return false for object with number arrays', () => {
       const obj = {
-        numbers: [1, 2, 3]
+        numbers: [1, 2, 3],
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(false);
     });
 
     test('should return false for object with mixed type arrays', () => {
       const obj = {
-        mixed: ['string', 123]
+        mixed: ['string', 123],
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(false);
     });
@@ -69,7 +69,7 @@ describe('Type Guards Utils', () => {
     test('should return false for object with functions', () => {
       const obj = {
         name: 'John',
-        fn: () => {}
+        fn: () => {},
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(false);
     });

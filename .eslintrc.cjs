@@ -37,7 +37,9 @@ module.exports = {
     '*.config.mjs',
     '.eslintrc.cjs',
     'playwright.config.ts',
-    'vite.config.ts',
+    'vite.config.mjs',
+    'vitest.config.ts',
+    'vitest.integration.config.ts',
     'scripts/**/*',
   ],
 };

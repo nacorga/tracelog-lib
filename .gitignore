@@ -13,3 +13,4 @@
 /.llm
 /.playwright-mcp
 src_backup_*
+/.archive

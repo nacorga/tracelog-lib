@@ -1,1 +1,1 @@
-export { DEFAULT_SESSION_TIMEOUT_MS } from './constants';
+export { DEFAULT_SESSION_TIMEOUT } from './constants';

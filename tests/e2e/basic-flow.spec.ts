@@ -28,7 +28,7 @@ test.describe('Flow Validation', () => {
       });
 
       expect(initEvent.namespace).toBe('App');
-      expect(initEvent.message).toContain('initialization');
+      expect(initEvent.message).toContain('Initialization completed');
       expect(initEvent.timestamp).toBeDefined();
 
       // Test interactions with basic mouse events

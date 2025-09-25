@@ -10,11 +10,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src_v2/**/*.ts'],
+      include: ['src/**/*.ts'],
       exclude: [
-        'src_v2/**/*.types.ts',
-        'src_v2/constants/**',
-        'src_v2/types/**',
+        'src/**/*.types.ts',
+        'src/constants/**',
+        'src/types/**',
       ],
       thresholds: {
         lines: 80,
@@ -26,7 +26,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src_v2'),
+      '@': resolve(__dirname, './src'),
     },
   },
 });

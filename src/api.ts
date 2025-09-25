@@ -3,7 +3,11 @@ import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
 import { debugLog } from './utils/logging';
 import { validateAndNormalizeConfig } from './utils/validations';
-import { INITIALIZATION_CONSTANTS } from './constants';
+import {
+  INITIALIZATION_MAX_CONCURRENT_RETRIES,
+  INITIALIZATION_CONCURRENT_RETRY_DELAY_MS,
+  INITIALIZATION_TIMEOUT_MS,
+} from './constants';
 import './types/window.types';
 import { TraceLogTestBridge } from './types/window.types';
 import { InitializationTimeoutError } from './types/validation-error.types';
@@ -51,9 +55,9 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     if (isInitializing) {
       debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
 
-      const maxRetries = INITIALIZATION_CONSTANTS.MAX_CONCURRENT_RETRIES;
-      const retryDelay = INITIALIZATION_CONSTANTS.CONCURRENT_RETRY_DELAY_MS;
-      const globalTimeout = INITIALIZATION_CONSTANTS.INITIALIZATION_TIMEOUT_MS;
+      const maxRetries = INITIALIZATION_MAX_CONCURRENT_RETRIES;
+      const retryDelay = INITIALIZATION_CONCURRENT_RETRY_DELAY_MS;
+      const globalTimeout = INITIALIZATION_TIMEOUT_MS;
 
       const retryPromise = (async (): Promise<number> => {
         let retries = 0;
@@ -265,14 +269,12 @@ export const destroy = async (): Promise<void> => {
 };
 
 /**
- * Gets current error recovery statistics for monitoring purposes.
- * @returns Object with recovery statistics and system status, or null if not initialized
+ * @deprecated This method is deprecated in v2.0 and will be removed in v3.0.
+ * The v2 refactor simplified error recovery - this method now returns null.
+ * For error monitoring, use standard error handlers or custom events instead.
+ * @returns null
  * @example
- * const stats = getRecoveryStats();
- * if (stats) {
- *   console.log('Circuit breaker resets:', stats.circuitBreakerResets);
- *   console.log('Network timeouts:', stats.networkTimeouts);
- * }
+ * const stats = getRecoveryStats(); // Returns null in v2
  */
 export const getRecoveryStats = (): {
   circuitBreakerResets: number;
@@ -283,64 +285,41 @@ export const getRecoveryStats = (): {
   circuitBreakerOpen: boolean;
   fingerprintMapSize: number;
 } | null => {
-  try {
-    if (!app) {
-      debugLog.warn('API', 'Recovery stats requested but Library was not initialized');
-      return null;
-    }
-
-    return app.getRecoveryStats();
-  } catch (error) {
-    debugLog.error('API', 'Failed to get recovery stats', { error });
-    return null;
-  }
+  debugLog.warn(
+    'API',
+    'getRecoveryStats() is deprecated in v2.0 and will be removed in v3.0 - the v2 refactor simplified error recovery',
+  );
+  return null;
 };
 
 /**
- * Triggers manual system recovery to attempt fixing error states.
- * This can help recover from stuck circuit breakers, failed event persistence, or other error conditions.
- * @returns Promise that resolves when recovery attempt is complete
+ * @deprecated This method is deprecated in v2.0 and will be removed in v3.0.
+ * The v2 refactor uses automatic degradation instead of manual recovery.
+ * System recovery happens automatically - manual intervention is no longer needed.
+ * @returns Promise that resolves immediately
  * @example
- * await attemptSystemRecovery();
- * console.log('Recovery attempt completed');
+ * await attemptSystemRecovery(); // No-op in v2
  */
 export const attemptSystemRecovery = async (): Promise<void> => {
-  try {
-    if (!app) {
-      debugLog.warn('API', 'System recovery attempted but Library was not initialized');
-      throw new Error('App not initialized');
-    }
-
-    debugLog.info('API', 'Manual system recovery initiated');
-    await app.attemptSystemRecovery();
-    debugLog.info('API', 'Manual system recovery completed');
-  } catch (error) {
-    debugLog.error('API', 'System recovery failed', { error });
-    throw error;
-  }
+  debugLog.warn(
+    'API',
+    'attemptSystemRecovery() is deprecated in v2.0 and will be removed in v3.0 - v2 uses automatic degradation',
+  );
+  return Promise.resolve();
 };
 
 /**
- * Triggers aggressive fingerprint cleanup to free memory.
- * This removes old event fingerprints to prevent memory leaks in long-running sessions.
+ * @deprecated This method is deprecated in v2.0 and will be removed in v3.0.
+ * The v2 refactor simplified deduplication (last event comparison) - fingerprint cleanup is no longer needed.
+ * Memory management is now automatic and more efficient.
  * @example
- * aggressiveFingerprintCleanup();
- * console.log('Fingerprint cleanup completed');
+ * aggressiveFingerprintCleanup(); // No-op in v2
  */
 export const aggressiveFingerprintCleanup = (): void => {
-  try {
-    if (!app) {
-      debugLog.warn('API', 'Fingerprint cleanup attempted but Library was not initialized');
-      throw new Error('App not initialized');
-    }
-
-    debugLog.info('API', 'Manual fingerprint cleanup initiated');
-    app.aggressiveFingerprintCleanup();
-    debugLog.info('API', 'Manual fingerprint cleanup completed');
-  } catch (error) {
-    debugLog.error('API', 'Fingerprint cleanup failed', { error });
-    throw error;
-  }
+  debugLog.warn(
+    'API',
+    'aggressiveFingerprintCleanup() is deprecated in v2.0 and will be removed in v3.0 - v2 simplified deduplication',
+  );
 };
 
 class TestBridge extends App implements TraceLogTestBridge {

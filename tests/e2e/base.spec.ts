@@ -22,7 +22,7 @@ test.describe('Base Functionality', () => {
       // Wait for initialization event
       const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, { timeout: 3000 });
       expect(initEvent.namespace).toBe('App');
-      expect(initEvent.message).toContain('initialization');
+      expect(initEvent.message).toContain('Initialization completed');
 
       // Get all captured events
       const allEvents = eventCapture.getEvents();

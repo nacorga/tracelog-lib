@@ -1,6 +1,6 @@
 {
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "vite.config.ts", "tests"],
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["node_modules", "vite.config.mjs", "vitest.config.ts", "vitest.integration.config.ts"],
   "compilerOptions": {
     "lib": ["dom", "es2022"],
     "module": "commonjs",
@@ -11,6 +11,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist",
-    "declaration": true
+    "declaration": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
 }

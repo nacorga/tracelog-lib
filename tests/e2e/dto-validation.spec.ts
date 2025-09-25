@@ -12,18 +12,23 @@ test.describe('DTO Structure Validation - EventData', () => {
         if (postData) {
           try {
             capturedPayload = JSON.parse(postData);
-          } catch (e) {
+          } catch {
             // Ignore parse errors
           }
         }
+        route.fulfill({ status: 200, body: '{}' });
+      } else {
+        // Let GET requests (HTML, CSS, JS) through
+        route.continue();
       }
-      route.fulfill({ status: 200, body: '{}' });
     });
 
     // Navigate to test page
     await page.goto('http://localhost:3000');
+    await page.waitForLoadState('domcontentloaded');
 
-    // Trigger some events
+    // Wait for button to be available and trigger some events
+    await page.waitForSelector('button');
     await page.click('button');
     await page.waitForTimeout(2000);
 
@@ -49,7 +54,7 @@ test.describe('DTO Structure Validation - EventData', () => {
     }
   });
 
-  test('EventData optional fields structure', async ({ page }) => {
+  test('EventData optional fields structure', async ({ page: _page }) => {
     const expectedOptionalFields = [
       'referrer',
       'from_page_url',
@@ -62,7 +67,7 @@ test.describe('DTO Structure Validation - EventData', () => {
       'session_end_reason',
       'error_data',
       'utm',
-      'tags'
+      'tags',
     ];
 
     // This test documents the expected optional fields
@@ -82,12 +87,15 @@ test.describe('DTO Structure Validation - Payload', () => {
         if (postData) {
           try {
             capturedPayload = JSON.parse(postData);
-          } catch (e) {
+          } catch {
             // Ignore
           }
         }
+        route.fulfill({ status: 200, body: '{}' });
+      } else {
+        // Let GET requests (HTML, CSS, JS) through
+        route.continue();
       }
-      route.fulfill({ status: 200, body: '{}' });
     });
 
     await page.goto('http://localhost:3000');

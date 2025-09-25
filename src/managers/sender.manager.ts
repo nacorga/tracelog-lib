@@ -1,6 +1,6 @@
-import { QUEUE_KEY, BACKOFF_CONFIGS, EVENT_EXPIRY_HOURS, SYNC_XHR_TIMEOUT_MS, MAX_RETRY_ATTEMPTS } from '../constants';
+import { QUEUE_KEY, EVENT_EXPIRY_HOURS, SYNC_XHR_TIMEOUT_MS } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId } from '../types';
-import { debugLog, BackoffManager, fetchWithTimeout } from '../utils';
+import { debugLog } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -29,17 +29,19 @@ interface MemoryFallbackData {
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly memoryFallbackStorage = new Map<string, MemoryFallbackData>();
-  private readonly retryBackoffManager: BackoffManager;
 
   private retryTimeoutId: number | null = null;
   private retryCount = 0;
   private isRetrying = false;
 
+  // Fixed retry configuration
+  private readonly RETRY_DELAY_MS = 5000; // 5 seconds
+  private readonly MAX_RETRIES = 3;
+  private readonly REQUEST_TIMEOUT_MS = 10000; // 10 seconds
+
   constructor(storeManager: StorageManager) {
     super();
-
     this.storeManager = storeManager;
-    this.retryBackoffManager = new BackoffManager(BACKOFF_CONFIGS.RETRY, 'SenderManager-Retry');
   }
 
   getQueueStorageKey(): string {
@@ -53,10 +55,8 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    // Persist events before sending with fallback system
     const persistResult = await this.persistWithFallback(body);
     if (!persistResult.success) {
-      // Try to send immediately as last resort
       const immediateSuccess = await this.sendImmediate(body);
       if (!immediateSuccess) {
         return false;
@@ -82,7 +82,6 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    // Note: Do NOT persist here - sync sends are fire-and-forget (beforeunload)
     const success = this.sendQueueSyncInternal(body);
 
     if (success) {
@@ -99,7 +98,6 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    // Persist events before sending with fallback system
     const persistResult = await this.persistWithFallback(body);
 
     if (!persistResult.success) {
@@ -109,7 +107,6 @@ export class SenderManager extends StateManager {
         eventCount: body.events.length,
       });
 
-      // Try to send immediately as last resort
       const immediateSuccess = await this.sendImmediate(body);
 
       if (!immediateSuccess) {
@@ -180,7 +177,20 @@ export class SenderManager extends StateManager {
     const { url, payload } = this.prepareRequest(body);
 
     try {
-      const response = await fetchWithTimeout(url, {
+      const response = await this.sendWithTimeout(url, payload);
+      return response.ok;
+    } catch (error) {
+      debugLog.error('SenderManager', 'Send request failed', { error });
+      return false;
+    }
+  }
+
+  private async sendWithTimeout(url: string, payload: string): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -188,13 +198,16 @@ export class SenderManager extends StateManager {
         body: payload,
         keepalive: true,
         credentials: 'include',
-        timeout: 15000, // 15 segundos timeout para events
+        signal: controller.signal,
       });
 
-      return response.ok;
-    } catch (error) {
-      debugLog.error('SenderManager', 'Send request failed', { error });
-      return false;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return response;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -300,7 +313,6 @@ export class SenderManager extends StateManager {
 
   private isDataRecent(data: PersistedQueueData): boolean {
     const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
-
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
 
@@ -437,7 +449,6 @@ export class SenderManager extends StateManager {
   }
 
   private resetRetryState(): void {
-    this.retryBackoffManager.reset();
     this.retryCount = 0;
     this.isRetrying = false;
     this.clearRetryTimeout();
@@ -448,7 +459,7 @@ export class SenderManager extends StateManager {
       return;
     }
 
-    if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+    if (this.retryCount >= this.MAX_RETRIES) {
       this.clearPersistedEvents();
       this.resetRetryState();
       originalCallbacks?.onFailure?.();
@@ -476,20 +487,18 @@ export class SenderManager extends StateManager {
         this.clearPersistedEvents();
         this.resetRetryState();
         originalCallbacks?.onSuccess?.();
-      } else if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+      } else if (this.retryCount >= this.MAX_RETRIES) {
         this.clearPersistedEvents();
         this.resetRetryState();
         originalCallbacks?.onFailure?.();
       } else {
         this.scheduleRetry(body, originalCallbacks);
       }
-    }, this.retryBackoffManager.getCurrentDelay());
-
-    const nextRetryDelay = this.retryBackoffManager.getNextDelay();
+    }, this.RETRY_DELAY_MS);
 
     debugLog.debug('SenderManager', 'Retry scheduled', {
       retryCount: this.retryCount,
-      retryDelay: nextRetryDelay,
+      retryDelay: this.RETRY_DELAY_MS,
       eventsCount: body.events.length,
     });
   }

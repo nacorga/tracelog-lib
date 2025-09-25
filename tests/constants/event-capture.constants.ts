@@ -10,7 +10,7 @@ export const COMMON_FILTERS: CommonEventFilters = {
   /** Filter for application initialization events */
   INITIALIZATION: {
     namespace: 'App',
-    messageContains: 'initialization',
+    messageContains: 'Initialization completed',
   },
 
   /** Filter for session start events */
@@ -119,7 +119,7 @@ export const EVENT_CAPTURE_DEFAULTS = {
  */
 export const EVENT_NAMESPACES = {
   /** Main application namespace */
-  APP: 'App',
+  APP: 'API',
   /** Event management namespace */
   EVENT_MANAGER: 'EventManager',
   /** Session management namespace */
