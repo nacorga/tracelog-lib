@@ -44,9 +44,7 @@ export class ScrollHandler extends StateManager {
     debugLog.debug('ScrollHandler', 'Stopping scroll tracking', { containersCount: this.containers.length });
 
     for (const container of this.containers) {
-      if (container.debounceTimer) {
-        clearTimeout(container.debounceTimer);
-      }
+      this.clearContainerTimer(container);
 
       if (container.element instanceof Window) {
         window.removeEventListener('scroll', container.listener);
@@ -59,27 +57,23 @@ export class ScrollHandler extends StateManager {
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
+    const elementType = element === window ? 'window' : (element as HTMLElement).tagName?.toLowerCase();
+
     // Skip setup for non-scrollable elements
     if (element !== window && !this.isElementScrollable(element as HTMLElement)) {
+      debugLog.debug('ScrollHandler', 'Skipping non-scrollable element', { elementType });
       return;
     }
 
-    const container: ScrollContainer = {
-      element,
-      lastScrollPos: this.getScrollTop(element),
-      debounceTimer: null,
-      listener: () => {},
-    };
+    debugLog.debug('ScrollHandler', 'Setting up scroll container', { elementType });
 
-    const handleScroll = async (): Promise<void> => {
+    const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {
-        await this.set('suppressNextScroll', false);
+        this.set('suppressNextScroll', false);
         return;
       }
 
-      if (container.debounceTimer) {
-        clearTimeout(container.debounceTimer);
-      }
+      this.clearContainerTimer(container);
 
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
@@ -95,7 +89,13 @@ export class ScrollHandler extends StateManager {
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
 
-    container.listener = handleScroll;
+    const container: ScrollContainer = {
+      element,
+      lastScrollPos: this.getScrollTop(element),
+      debounceTimer: null,
+      listener: handleScroll,
+    };
+
     this.containers.push(container);
 
     if (element instanceof Window) {
@@ -105,28 +105,49 @@ export class ScrollHandler extends StateManager {
     }
   }
 
+  private isWindowScrollable(): boolean {
+    return document.documentElement.scrollHeight > window.innerHeight;
+  }
+
+  private clearContainerTimer(container: ScrollContainer): void {
+    if (container.debounceTimer !== null) {
+      clearTimeout(container.debounceTimer);
+      container.debounceTimer = null;
+    }
+  }
+
+  private getScrollDirection(current: number, previous: number): ScrollDirection {
+    return current > previous ? ScrollDirection.DOWN : ScrollDirection.UP;
+  }
+
+  private calculateScrollDepth(scrollTop: number, scrollHeight: number, viewportHeight: number): number {
+    if (scrollHeight <= viewportHeight) {
+      return 0;
+    }
+
+    const maxScrollTop = scrollHeight - viewportHeight;
+    return Math.min(100, Math.max(0, Math.floor((scrollTop / maxScrollTop) * 100)));
+  }
+
   private calculateScrollData(container: ScrollContainer): ScrollData | null {
     const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
-    const viewportHeight = this.getViewportHeight(element);
-    const scrollHeight = this.getScrollHeight(element);
 
-    // Check if the page is actually scrollable at runtime
-    if (element === window && scrollHeight <= viewportHeight) {
-      return null;
-    }
-
-    const direction = scrollTop > lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
-    const depth =
-      scrollHeight > viewportHeight
-        ? Math.min(100, Math.max(0, Math.floor((scrollTop / (scrollHeight - viewportHeight)) * 100)))
-        : 0;
-
-    // Only update if scroll position changed significantly
+    // Early return: check significant movement first (cheapest check)
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
       return null;
     }
+
+    // Early return: check if window is scrollable
+    if (element === window && !this.isWindowScrollable()) {
+      return null;
+    }
+
+    const viewportHeight = this.getViewportHeight(element);
+    const scrollHeight = this.getScrollHeight(element);
+    const direction = this.getScrollDirection(scrollTop, lastScrollPos);
+    const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
 
     container.lastScrollPos = scrollTop;
 

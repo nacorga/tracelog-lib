@@ -2,7 +2,7 @@ import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType, NavigationId, VitalSample } from '../types';
 import { LONG_TASK_THROTTLE_MS } from '../constants';
-import { PRECISION_FOUR_DECIMALS, PRECISION_TWO_DECIMALS } from '../constants';
+import { PRECISION_TWO_DECIMALS } from '../constants';
 import { debugLog } from '../utils/logging';
 
 type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
@@ -24,7 +24,6 @@ export class PerformanceHandler extends StateManager {
 
     await this.initWebVitals();
     this.observeLongTasks();
-    this.reportTTFB();
   }
 
   stopTracking(): void {
@@ -73,10 +72,19 @@ export class PerformanceHandler extends StateManager {
 
     // CLS (layout-shift)
     let clsValue = 0;
+    let currentNavId = this.getNavigationId();
 
     this.safeObserve(
       'layout-shift',
       (list) => {
+        const navId = this.getNavigationId();
+
+        // Reset CLS on navigation change
+        if (navId !== currentNavId) {
+          clsValue = 0;
+          currentNavId = navId;
+        }
+
         const entries = list.getEntries() as LayoutShiftEntry[];
 
         for (const entry of entries) {
@@ -88,7 +96,7 @@ export class PerformanceHandler extends StateManager {
           clsValue += value;
         }
 
-        this.sendVital({ type: 'CLS', value: Number(clsValue.toFixed(PRECISION_FOUR_DECIMALS)) });
+        this.sendVital({ type: 'CLS', value: Number(clsValue.toFixed(PRECISION_TWO_DECIMALS)) });
       },
       { type: 'layout-shift', buffered: true },
     );
@@ -143,6 +151,8 @@ export class PerformanceHandler extends StateManager {
       onFCP(report('FCP'));
       onTTFB(report('TTFB'));
       onINP(report('INP'));
+
+      debugLog.debug('PerformanceHandler', 'Web-vitals library loaded successfully');
     } catch (error) {
       debugLog.warn('PerformanceHandler', 'Failed to load web-vitals library, using fallback', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -201,20 +211,22 @@ export class PerformanceHandler extends StateManager {
 
   private sendVital(sample: VitalSample): void {
     const navId = this.getNavigationId();
-    const key = `${sample.type}`;
 
+    // Check for duplicates if we have a navigation ID
     if (navId) {
-      if (!this.reportedByNav.has(navId)) {
-        this.reportedByNav.set(navId, new Set());
-      }
+      const reportedForNav = this.reportedByNav.get(navId);
+      const isDuplicate = reportedForNav?.has(sample.type);
 
-      const sent = this.reportedByNav.get(navId)!;
-
-      if (sent.has(key)) {
+      if (isDuplicate) {
         return;
       }
 
-      sent.add(key);
+      // Initialize or update reported vitals for this navigation
+      if (!reportedForNav) {
+        this.reportedByNav.set(navId, new Set([sample.type]));
+      } else {
+        reportedForNav.add(sample.type);
+      }
     }
 
     this.trackWebVital(sample.type, sample.value);
@@ -243,7 +255,10 @@ export class PerformanceHandler extends StateManager {
         return null;
       }
 
-      return `${Math.round(nav.startTime)}_${window.location.pathname}`;
+      // Use more precise timestamp and add random component to prevent collisions
+      const timestamp = nav.startTime || performance.now();
+      const random = Math.random().toString(36).substr(2, 5);
+      return `${timestamp.toFixed(2)}_${window.location.pathname}_${random}`;
     } catch (error) {
       debugLog.warn('PerformanceHandler', 'Failed to get navigation ID', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -252,40 +267,56 @@ export class PerformanceHandler extends StateManager {
     }
   }
 
+  private isObserverSupported(type: string): boolean {
+    if (typeof PerformanceObserver === 'undefined') return false;
+    const supported = PerformanceObserver.supportedEntryTypes;
+    return !supported || supported.includes(type);
+  }
+
   private safeObserve(
     type: string,
     cb: PerformanceObserverCallback,
     options?: PerformanceObserverInit,
     once = false,
-  ): void {
+  ): boolean {
     try {
-      if (typeof PerformanceObserver === 'undefined') return;
-      const supported = PerformanceObserver.supportedEntryTypes;
-
-      if (supported && !supported.includes(type)) return;
+      if (!this.isObserverSupported(type)) {
+        debugLog.debug('PerformanceHandler', 'Observer type not supported', { type });
+        return false;
+      }
 
       const obs = new PerformanceObserver((list, observer) => {
-        cb(list, observer);
+        try {
+          cb(list, observer);
+        } catch (callbackError) {
+          debugLog.warn('PerformanceHandler', 'Observer callback failed', {
+            type,
+            error: callbackError instanceof Error ? callbackError.message : 'Unknown error',
+          });
+        }
 
         if (once) {
           try {
             observer.disconnect();
           } catch {
-            // Intentionally ignored
+            // Disconnect errors are safe to ignore
           }
         }
       });
 
-      obs.observe((options ?? { type, buffered: true }) as PerformanceObserverInit);
+      obs.observe(options ?? { type, buffered: true });
 
       if (!once) {
         this.observers.push(obs);
       }
+
+      return true;
     } catch (error) {
       debugLog.warn('PerformanceHandler', 'Failed to create performance observer', {
         type,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      return false;
     }
   }
 }

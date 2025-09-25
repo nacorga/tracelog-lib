@@ -95,27 +95,18 @@ export class ClickHandler extends StateManager {
   private getRelevantClickElement(element: HTMLElement): HTMLElement {
     for (const selector of INTERACTIVE_SELECTORS) {
       try {
+        // First check if the element itself matches
         if (element.matches(selector)) {
           return element;
         }
-      } catch (error) {
-        debugLog.warn('ClickHandler', 'Invalid selector in interactive elements check', {
-          selector,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-        continue;
-      }
-    }
 
-    for (const selector of INTERACTIVE_SELECTORS) {
-      try {
+        // If not, search for matching ancestors
         const parent = element.closest(selector) as HTMLElement;
-
         if (parent) {
           return parent;
         }
       } catch (error) {
-        debugLog.warn('ClickHandler', 'Invalid selector in parent element search', {
+        debugLog.warn('ClickHandler', 'Invalid selector in element search', {
           selector,
           error: error instanceof Error ? error.message : 'Unknown error',
         });
@@ -126,12 +117,16 @@ export class ClickHandler extends StateManager {
     return element;
   }
 
+  private clamp(value: number): number {
+    return Math.max(0, Math.min(1, Number(value.toFixed(3))));
+  }
+
   private calculateClickCoordinates(event: MouseEvent, element: HTMLElement): ClickCoordinates {
     const rect = element.getBoundingClientRect();
     const x = event.clientX;
     const y = event.clientY;
-    const relativeX = rect.width > 0 ? Math.max(0, Math.min(1, Number(((x - rect.left) / rect.width).toFixed(3)))) : 0;
-    const relativeY = rect.height > 0 ? Math.max(0, Math.min(1, Number(((y - rect.top) / rect.height).toFixed(3)))) : 0;
+    const relativeX = rect.width > 0 ? this.clamp((x - rect.left) / rect.width) : 0;
+    const relativeY = rect.height > 0 ? this.clamp((y - rect.top) / rect.height) : 0;
 
     return { x, y, relativeX, relativeY };
   }
@@ -159,13 +154,6 @@ export class ClickHandler extends StateManager {
     const { x, y, relativeX, relativeY } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
     const attributes = this.extractElementAttributes(relevantElement);
-    const href = relevantElement.getAttribute('href');
-    const title = relevantElement.getAttribute('title');
-    const alt = relevantElement.getAttribute('alt');
-    const role = relevantElement.getAttribute('role');
-    const ariaLabel = relevantElement.getAttribute('aria-label');
-    const className =
-      typeof relevantElement.className === 'string' ? relevantElement.className : String(relevantElement.className);
 
     return {
       x,
@@ -174,56 +162,53 @@ export class ClickHandler extends StateManager {
       relativeY,
       tag: relevantElement.tagName.toLowerCase(),
       ...(relevantElement.id && { id: relevantElement.id }),
-      ...(relevantElement.className && { class: className }),
+      ...(relevantElement.className && { class: relevantElement.className }),
       ...(text && { text }),
-      ...(href && { href }),
-      ...(title && { title }),
-      ...(alt && { alt }),
-      ...(role && { role }),
-      ...(ariaLabel && { ariaLabel }),
+      ...(attributes.href && { href: attributes.href }),
+      ...(attributes.title && { title: attributes.title }),
+      ...(attributes.alt && { alt: attributes.alt }),
+      ...(attributes.role && { role: attributes.role }),
+      ...(attributes['aria-label'] && { ariaLabel: attributes['aria-label'] }),
       ...(Object.keys(attributes).length > 0 && { dataAttributes: attributes }),
     };
   }
 
   private getRelevantText(clickedElement: HTMLElement, relevantElement: HTMLElement): string {
-    const LARGE_CONTAINER_TAGS = ['main', 'section', 'article', 'body', 'html', 'header', 'footer', 'aside', 'nav'];
     const clickedText = clickedElement.textContent?.trim() ?? '';
     const relevantText = relevantElement.textContent?.trim() ?? '';
 
+    // No text available
     if (!clickedText && !relevantText) {
       return '';
     }
 
-    // Strategy 1: If clicked element has reasonable text, use it
+    // Prefer clicked element text if it's reasonable length
     if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
       return clickedText;
     }
 
-    // Strategy 2: For large containers with excessive text, avoid using container text
-    const isLargeContainer = LARGE_CONTAINER_TAGS.includes(relevantElement.tagName.toLowerCase());
-    const hasExcessiveText = relevantText.length > MAX_TEXT_LENGTH * 2; // 510 chars
-
-    if (isLargeContainer && hasExcessiveText) {
-      // Use clicked element text if available and reasonable, otherwise empty
-      return clickedText && clickedText.length <= MAX_TEXT_LENGTH ? clickedText : '';
-    }
-
-    // Strategy 3: Use relevant text but truncate if needed
+    // Use relevant element text if it fits
     if (relevantText.length <= MAX_TEXT_LENGTH) {
       return relevantText;
     }
 
-    // Strategy 4: If clicked text is much shorter than relevant text, prefer clicked text
-    if (clickedText && clickedText.length < relevantText.length * 0.1) {
-      return clickedText.length <= MAX_TEXT_LENGTH ? clickedText : clickedText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
-    }
-
-    // Fallback: truncate relevant text to exactly MAX_TEXT_LENGTH including ellipsis
+    // Truncate relevant text if too long
     return relevantText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
   }
 
   private extractElementAttributes(element: HTMLElement): Record<string, string> {
-    const commonAttributes = ['id', 'class', 'data-testid', 'aria-label', 'title', 'href', 'type', 'name'];
+    const commonAttributes = [
+      'id',
+      'class',
+      'data-testid',
+      'aria-label',
+      'title',
+      'href',
+      'type',
+      'name',
+      'alt',
+      'role',
+    ];
     const result: Record<string, string> = {};
 
     for (const attributeName of commonAttributes) {
