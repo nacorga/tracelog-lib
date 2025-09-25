@@ -89,7 +89,7 @@ export class ErrorHandler extends StateManager {
     if (typeof reason === 'string') return reason;
 
     if (reason instanceof Error) {
-      return reason.stack || reason.message || reason.toString();
+      return reason.stack ?? reason.message ?? reason.toString();
     }
 
     // Handle objects with message property

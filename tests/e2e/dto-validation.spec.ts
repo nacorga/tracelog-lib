@@ -1,17 +1,43 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { traceLogTest } from '../fixtures/tracelog-fixtures';
 
-test.describe('DTO Structure Validation - EventData', () => {
-  test('EventData structure must be preserved', async ({ page }) => {
-    let capturedPayload: any;
+interface BaseEventsQueueDto {
+  user_id: string;
+  session_id: string;
+  device: 'mobile' | 'tablet' | 'desktop';
+  events: EventData[];
+}
+
+interface EventData {
+  type: string;
+  page_url: string;
+  timestamp: number;
+  referrer?: string;
+  from_page_url?: string;
+  scroll_data?: unknown;
+  click_data?: unknown;
+  custom_event?: unknown;
+  web_vitals?: unknown;
+  page_view?: unknown;
+  session_start_recovered?: unknown;
+  session_end_reason?: unknown;
+  error_data?: unknown;
+  utm?: unknown;
+  tags?: unknown;
+}
+
+traceLogTest.describe('DTO Structure Validation - EventData', () => {
+  traceLogTest('EventData structure must be preserved', async ({ traceLogPage }) => {
+    let capturedPayload: BaseEventsQueueDto | null = null;
 
     // Intercept network requests
-    await page.route('**/*', (route) => {
+    await traceLogPage.page.route('**/*', (route) => {
       const request = route.request();
       if (request.method() === 'POST') {
         const postData = request.postData();
         if (postData) {
           try {
-            capturedPayload = JSON.parse(postData);
+            capturedPayload = JSON.parse(postData) as BaseEventsQueueDto;
           } catch {
             // Ignore parse errors
           }
@@ -23,27 +49,28 @@ test.describe('DTO Structure Validation - EventData', () => {
       }
     });
 
-    // Navigate to test page
-    await page.goto('http://localhost:3000');
-    await page.waitForLoadState('domcontentloaded');
+    // Initialize TraceLog and trigger some events
+    await traceLogPage.initializeTraceLog({ id: 'skip' });
 
-    // Wait for button to be available and trigger some events
-    await page.waitForSelector('button');
-    await page.click('button');
-    await page.waitForTimeout(2000);
+    // Use playground elements to trigger events
+    await traceLogPage.clickElement('[data-testid="add-cart-1"]');
+    await traceLogPage.clickElement('[data-testid="cta-ver-productos"]');
+    await traceLogPage.page.waitForTimeout(2000);
 
     // Validate payload structure if captured
     if (capturedPayload) {
+      const payload = capturedPayload as BaseEventsQueueDto;
+
       // Check BaseEventsQueueDto structure
-      expect(capturedPayload).toHaveProperty('user_id');
-      expect(capturedPayload).toHaveProperty('session_id');
-      expect(capturedPayload).toHaveProperty('device');
-      expect(capturedPayload).toHaveProperty('events');
-      expect(Array.isArray(capturedPayload.events)).toBe(true);
+      expect(payload).toHaveProperty('user_id');
+      expect(payload).toHaveProperty('session_id');
+      expect(payload).toHaveProperty('device');
+      expect(payload).toHaveProperty('events');
+      expect(Array.isArray(payload.events)).toBe(true);
 
       // Check EventData structure in first event if exists
-      if (capturedPayload.events.length > 0) {
-        const event = capturedPayload.events[0];
+      if (payload.events && payload.events.length > 0) {
+        const event = payload.events[0];
 
         // Required fields
         expect(event).toHaveProperty('type');
@@ -52,9 +79,11 @@ test.describe('DTO Structure Validation - EventData', () => {
         expect(typeof event.timestamp).toBe('number');
       }
     }
+
+    await expect(traceLogPage).toHaveNoTraceLogErrors();
   });
 
-  test('EventData optional fields structure', async ({ page: _page }) => {
+  traceLogTest('EventData optional fields structure', async () => {
     const expectedOptionalFields = [
       'referrer',
       'from_page_url',
@@ -76,17 +105,17 @@ test.describe('DTO Structure Validation - EventData', () => {
   });
 });
 
-test.describe('DTO Structure Validation - Payload', () => {
-  test('BaseEventsQueueDto must have correct structure', async ({ page }) => {
-    let capturedPayload: any;
+traceLogTest.describe('DTO Structure Validation - Payload', () => {
+  traceLogTest('BaseEventsQueueDto must have correct structure', async ({ traceLogPage }) => {
+    let capturedPayload: BaseEventsQueueDto | null = null;
 
-    await page.route('**/*', (route) => {
+    await traceLogPage.page.route('**/*', (route) => {
       const request = route.request();
       if (request.method() === 'POST') {
         const postData = request.postData();
         if (postData) {
           try {
-            capturedPayload = JSON.parse(postData);
+            capturedPayload = JSON.parse(postData) as BaseEventsQueueDto;
           } catch {
             // Ignore
           }
@@ -98,21 +127,24 @@ test.describe('DTO Structure Validation - Payload', () => {
       }
     });
 
-    await page.goto('http://localhost:3000');
-    await page.waitForTimeout(1000);
+    await traceLogPage.initializeTraceLog({ id: 'skip' });
+    await traceLogPage.page.waitForTimeout(1000);
 
     if (capturedPayload) {
-      expect(capturedPayload).toHaveProperty('user_id');
-      expect(typeof capturedPayload.user_id).toBe('string');
+      const payload = capturedPayload as BaseEventsQueueDto;
+      expect(payload).toHaveProperty('user_id');
+      expect(typeof payload.user_id).toBe('string');
 
-      expect(capturedPayload).toHaveProperty('session_id');
-      expect(typeof capturedPayload.session_id).toBe('string');
+      expect(payload).toHaveProperty('session_id');
+      expect(typeof payload.session_id).toBe('string');
 
-      expect(capturedPayload).toHaveProperty('device');
-      expect(['mobile', 'tablet', 'desktop'].includes(capturedPayload.device)).toBe(true);
+      expect(payload).toHaveProperty('device');
+      expect(['mobile', 'tablet', 'desktop'].includes(payload.device)).toBe(true);
 
-      expect(capturedPayload).toHaveProperty('events');
-      expect(Array.isArray(capturedPayload.events)).toBe(true);
+      expect(payload).toHaveProperty('events');
+      expect(Array.isArray(payload.events)).toBe(true);
     }
+
+    await expect(traceLogPage).toHaveNoTraceLogErrors();
   });
 });

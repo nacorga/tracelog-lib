@@ -26,7 +26,7 @@ import { Config, TraceLogTestBridge } from '../../src/types';
 export async function getAppInstance(page: Page): Promise<TraceLogTestBridge | null> {
   try {
     return await page.evaluate(() => {
-      return (window as typeof window & { __traceLogBridge?: TraceLogTestBridge }).__traceLogBridge ?? null;
+      return window.__traceLogBridge ?? null;
     });
   } catch (error) {
     throw new Error(
@@ -254,7 +254,7 @@ export async function navigateAndWaitForReady(page: Page, options: NavigationOpt
 export async function initializeTraceLog(page: Page, config: Config = DEFAULT_CONFIG): Promise<InitializationResult> {
   try {
     return await page.evaluate(async (config: Config) => {
-      const bridge = (window as typeof window & { __traceLogBridge?: TraceLogTestBridge }).__traceLogBridge;
+      const bridge = window.__traceLogBridge;
 
       if (!bridge) {
         return {

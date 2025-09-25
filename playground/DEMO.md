@@ -1,61 +1,77 @@
-# TraceLog Playground - Testing con API Real
+# TraceLog Playground - Demo Interactivo
 
-Demo playground que se conecta directamente a la API de TraceLog para testing y desarrollo.
+Playground interactivo para probar y demostrar las funcionalidades de TraceLog en tiempo real.
 
-## Características
+## 🎯 Propósito
 
-1. **Conexión API Real** - Se conecta a `localhost:3002` (tracelog-middleware)
-2. **Monitor Minimalista** - Visualización simple de eventos capturados
-3. **Testing Realista** - Simula escenarios reales sin mocks
+- **Desarrollo**: Testing rápido de features durante desarrollo
+- **Demo**: Mostrar capacidades de TraceLog a stakeholders
+- **Debugging**: Visualizar eventos y comportamientos en tiempo real
+- **E2E Tests**: Base para tests automatizados con Playwright
 
-## Inicio Rápido
-
-### 1. Levantar API Local
-
-```bash
-# En tracelog-middleware
-npm run start:dev
-# API corriendo en http://localhost:3002
-```
-
-### 2. Levantar Playground
+## 🚀 Inicio Rápido
 
 ```bash
-# En tracelog-lib
+# Inicia playground con build automático y servidor
 npm run playground:dev
-# Playground en http://localhost:3001
+
+# Solo el servidor (requiere build manual previo)
+npm run serve
+
+# Solo build sin servidor
+npm run playground:setup
 ```
 
-### 3. Abrir Browser
+**URL**: http://localhost:3000
 
-Abre http://localhost:3001
+### Modos Disponibles
 
-## Configuración
+- **Demo Normal**: Visualización completa con monitor
+- **E2E Test**: Auto-detección, monitor oculto, eventos automáticos
+- **QA Mode**: Debugging extendido con logs detallados
 
-### TraceLog Init
+## ⚙️ Configuración
+
+### Inicialización por Defecto
 
 ```javascript
+// Auto-inicialización en modo demo (envía eventos a API local)
 await TraceLog.init({
-  id: 'localhost:3002',
+  id: 'localhost:3002',  // API local (si disponible)
+});
+
+// Modo E2E/Testing (sin HTTP calls - usa SpecialProjectId.Skip)
+await TraceLog.init({
+  id: 'skip', // No envía eventos, solo simula
 });
 ```
 
-**Qué hace esto:**
-- **API URL Base**: Detecta `localhost:` prefix → genera `http://localhost:3002`
-- **Config URL**: `http://localhost:3002/config`
-- **Events URL**: `http://localhost:3002/collect`
-- **Modo Debug**: Activado automáticamente
-- **Headers**: Incluye `X-TraceLog-Project: localhost:3002`
+### Detección Automática
 
-> **Nota técnica**: Los IDs que empiezan con `localhost:` NO usan `getApiUrl()` (que construiría URLs como `https://id.domain.com`). En su lugar, se convierten directamente a `http://localhost:PORT`.
+El playground detecta automáticamente:
 
-### Allowed Origins
+- **E2E Mode**: Playwright, HeadlessChrome, URL param `?e2e=true`
+- **Test Mode**: URL param `?mode=test`
+- **Scenarios**: URL param `?scenario=basic|navigation|ecommerce`
+- **Project ID**: URL param `?project-id=custom-id` (default: 'playground-test-project')
 
-El puerto `3002` está en la lista de orígenes permitidos:
-- `http://localhost:3002`
-- `http://127.0.0.1:3002`
+### Bridge API Consistency
 
-## Monitor de Eventos
+Usa `__traceLogBridge` consistentemente:
+```javascript
+// Helper unificado
+function getTraceLogInstance() {
+  return window.__traceLogBridge || window.TraceLog;
+}
+
+// Envío de eventos
+function sendTraceLogEvent(name, data) {
+  const traceLog = getTraceLogInstance();
+  return traceLog?.sendCustomEvent(name, data);
+}
+```
+
+## 📊 Monitor de Eventos
 
 ### Vista del Monitor
 
@@ -86,97 +102,135 @@ El puerto `3002` está en la lista de orígenes permitidos:
 - `SCROLL` - Cyan (scroll)
 - `CUSTOM` - Púrpura (eventos custom)
 - `SESSION_START` - Amarillo (inicio sesión)
-- `SESSION_END` - Naranja (fin sesión)
 - `WEB_VITALS` - Rosa (métricas)
 - `ERROR` - Rojo (errores)
 
-## Flujo de Testing
+## 🛍️ Simulación E-commerce
 
-### 1. Testing Normal (API funcionando)
+### Funcionalidades Disponibles
 
-1. Interactúa con la página (clicks, scroll, navegación)
-2. Observa eventos en el monitor
-3. Verifica en consola del browser:
-   ```
-   tracelog:log { namespace: 'EventManager', message: 'Event captured', data: {...} }
-   ```
-4. Verifica que eventos llegan a tu API
+- **Navegación SPA**: `inicio` → `productos` → `nosotros` → `contacto`
+- **Add to Cart**: Botones con tracking de productos
+- **Form Submit**: Formulario de contacto con validación
+- **Custom Events**: Eventos de negocio específicos
 
-### 2. Testing con Fallos (API caída)
-
-1. **Detén la API** (Ctrl+C en terminal de middleware)
-2. Interactúa con la página
-3. Observa en monitor:
-   - Estado cambia a `❌`
-   - Eventos quedan en cola con `⏳`
-   - Cola aumenta: `Cola: 5`
-4. **Reinicia la API**
-5. Observa recuperación automática:
-   - Eventos se reenvían
-   - Estado vuelve a `▶️`
-   - Cola se vacía: `Cola: 0`
-
-### 3. Testing de Reintentos
-
-1. Configura API para retornar errores 500
-2. Interactúa con la página
-3. Observa en consola:
-   ```
-   SenderManager: Failed to send events
-   SenderManager: Retry scheduled (delay: 2000ms)
-   ```
-4. Monitor muestra `🔄` durante reintentos
-
-## Eventos Disponibles
-
-### Automáticos
-
-- **Page View** - Cambio de ruta (navegación SPA)
-- **Click** - Clicks en elementos interactivos
-- **Scroll** - Scroll en la página
-- **Session Start** - Inicio de sesión
-- **Web Vitals** - Métricas de rendimiento
-
-### Personalizados
+### Eventos Generados
 
 ```javascript
-// Agregar al carrito
-TraceLog.event('add_to_cart', {
-  product_id: '1',
-  product_name: 'Laptop Pro M2',
-  timestamp: Date.now(),
-});
+// Navegación automática
+{ type: 'PAGE_VIEW', page_url: '#productos' }
 
-// Submit formulario contacto
-TraceLog.event('contact_form_submit', {
-  name: 'Juan',
-  email: 'juan@email.com',
-  message: 'Hola...',
+// Interacción con productos
+{
+  type: 'CUSTOM',
+  custom_event: {
+    name: 'add_to_cart',
+    metadata: { product_id: '1', product_name: 'Laptop Pro M2' }
+  }
+}
+
+// Formulario de contacto
+{
+  type: 'CUSTOM',
+  custom_event: {
+    name: 'contact_form_submit',
+    metadata: { name: 'Juan', email: 'juan@email.com' }
+  }
+}
+```
+
+## 🧪 Testing y Debugging
+
+### Funciones Globales Disponibles
+
+```javascript
+// Helpers de testing (disponibles en window.testHelpers)
+window.testHelpers.sendCustomEvent('test_event', { key: 'value' });
+```
+
+### Bridge Testing Methods
+
+Cuando `NODE_ENV=dev`, el `__traceLogBridge` incluye:
+
+```javascript
+const bridge = window.__traceLogBridge;
+
+// Información de estado
+bridge.getAppInstance()        // App instance con initialized flag
+bridge.getSessionData()        // session info
+bridge.getQueueLength()        // eventos pendientes
+
+// Testing helpers
+bridge.sendCustomEvent(name, data)  // enviar evento custom
+bridge.setSessionTimeout(ms)        // configurar timeout
+bridge.isTabLeader?.()              // liderazgo de tab
+```
+
+### Console Integration
+
+```javascript
+// Escuchar eventos de TraceLog
+window.addEventListener('tracelog:log', (event) => {
+  const { namespace, message, data } = event.detail;
+  console.log(`[${namespace}] ${message}`, data);
 });
 ```
 
-## Testing de Recuperación
+## 🎬 Flujo de Testing
 
-### Funciones de Testing Disponibles
+### 1. Testing Manual
 
-Abre la consola del browser y ejecuta:
+1. Abre playground en http://localhost:3000
+2. Interactúa con elementos (clicks, navegación, forms)
+3. Observa eventos en monitor en tiempo real
+4. Verifica logs en console del browser
 
-```javascript
-// Ver estadísticas de recuperación
-window.testRecoveryStats();
-// Output: Circuit Breaker Resets, Failures, Timeouts, etc.
+### 2. Testing Automático (E2E)
 
-// Forzar recuperación manual del sistema
-window.triggerSystemRecovery();
+```bash
+# Ejecuta tests E2E que usan el playground
+npm run test:e2e
 
-// Limpiar fingerprints (prevención memory leaks)
-window.triggerFingerprintCleanup();
-
-// Test completo de pérdida de eventos (Fix #2)
-await window.testEventLossPrevention();
+# Solo un test específico
+npm run test:e2e -- --grep "should initialize successfully"
 ```
 
-## Arquitectura del Playground
+Los tests automáticamente:
+- Detectan modo E2E (ocultan monitor)
+- Usan `__traceLogBridge` para acceso consistente
+- Utilizan fixtures de traceLogTest
+- Aplican custom matchers como toHaveNoTraceLogErrors()
+
+### 3. Testing de Escenarios
+
+```javascript
+// URL params para testing específico
+http://localhost:3000?scenario=basic        // Click básico
+http://localhost:3000?scenario=navigation   // Navegación entre páginas
+http://localhost:3000?scenario=ecommerce    // Add to cart
+```
+
+## ✨ Ventajas del Playground
+
+### Desarrollo
+✅ **Hot Reload** - Cambios instantáneos con `npm run playground:dev`
+✅ **Bridge Consistency** - Usa `__traceLogBridge` como los tests
+✅ **Visual Feedback** - Monitor en tiempo real de eventos
+✅ **Multiple Scenarios** - Testing automático de diferentes casos
+
+### Testing
+✅ **E2E Ready** - Base para tests de Playwright
+✅ **Cross-browser** - Funciona en Chrome, Firefox, Safari
+✅ **Auto-detection** - Modo E2E sin configuración manual
+✅ **Clean State** - Cada reload inicia limpio
+
+### Debugging
+✅ **Console Integration** - Eventos `tracelog:log` disponibles
+✅ **Queue Visibility** - Monitor de cola de eventos
+✅ **Error Tracking** - Captura y muestra errores
+✅ **Session Management** - Visualización de estado de sesión
+
+## 🏗️ Arquitectura del Playground
 
 ```
 ┌──────────────┐
@@ -184,62 +238,63 @@ await window.testEventLossPrevention();
 │  (localhost) │
 └──────┬───────┘
        │
-       │ id: 'localhost:3002'
+       │ __traceLogBridge API
        ↓
 ┌──────────────────────────────────┐
 │      TraceLog Client             │
-│  • ConfigManager                 │
 │  • EventManager                  │
-│  • SenderManager                 │
+│  • SessionHandler                │
+│  • PerformanceHandler            │
 └──────┬───────────────────────────┘
        │
-       │ GET  /config
-       │ POST /collect
+       │ Events: tracelog:log
        ↓
 ┌──────────────────────────────────┐
-│   API (tracelog-middleware)      │
-│   http://localhost:3002          │
-│                                  │
-│  • Project validation            │
-│  • Event filtering               │
-│  • Session management            │
+│   Playground Monitor             │
+│   • Visual event queue           │
+│   • Real-time status             │
+│   • Error visualization          │
 └──────────────────────────────────┘
 ```
 
-## Ventajas de Testing con API Real
+## 🔧 Troubleshooting
 
-✅ **Sin Mocks** - Comportamiento 100% real
-✅ **Testing Completo** - Valida toda la cadena (client → middleware → backend)
-✅ **Debugging Real** - Logs reales de producción
-✅ **Configuración Dinámica** - Config desde API (samplingRate, tags, etc.)
-✅ **Simulación Realista** - Controla fallos desde la API real
+### Playground no carga
+```bash
+# Rebuild y reinicia
+npm run playground:setup
+npm run serve
 
-## Troubleshooting
+# O todo junto
+npm run playground:dev
+```
 
-### Error: "Origin not allowed"
+### Events no aparecen en monitor
+- **E2E Mode**: Monitor oculto por diseño
+- **JS Errors**: Revisa console del browser
+- **Bridge Missing**: Verifica que `NODE_ENV=dev` en build
+- **Project ID**: Si usas 'skip', los eventos no se envían (solo se simulan)
 
-**Causa**: Puerto no está en ALLOWED_ORIGINS
+### Bridge no disponible
+```javascript
+// Debug en console
+console.log(window.__traceLogBridge);  // debe existir
+console.log(window.TraceLog);          // fallback
+```
 
-**Solución**: Verifica que `http://localhost:3002` esté en `/src/managers/config.manager.ts` línea 8-18
+### Tests E2E fallan
+1. Verifica que playground esté en puerto 3000
+2. Build debe ser `NODE_ENV=dev` para tener bridge
+3. Los tests usan fixtures de `traceLogTest` y custom matchers
+4. Usa `SpecialProjectId.Skip` ('skip') para tests sin HTTP calls
 
-### Error: "Config URL is not valid"
+## 📚 Recursos Relacionados
 
-**Causa**: ID de proyecto incorrecto
-
-**Solución**: Usa formato `localhost:PORT` (ej: `localhost:3002`)
-
-### Eventos no llegan a la API
-
-1. Verifica que la API esté corriendo: `curl http://localhost:3002/config`
-2. Revisa CORS en la API
-3. Verifica logs en consola del browser
-4. Verifica Network tab (requests a `/config` y `/collect`)
-
-### Cola crece infinitamente
-
-**Causa**: API retornando errores persistentes
-
-**Solución**:
-1. Verifica logs de la API
-2. Verifica formato de response (debe ser JSON)
-3. Ejecuta `window.triggerSystemRecovery()` para reset manual
+- **Tests E2E**: `tests/E2E_TESTING_GUIDE.md` - Guía de testing framework
+- **Fixtures**: `tests/fixtures/tracelog-fixtures.ts` - TraceLogTestPage class
+- **Matchers**: `tests/matchers/tracelog-matchers.ts` - Custom assertions
+- **Código fuente**: `playground/script.js` - Lógica del playground
+- **Build config**: `vite.config.ts` - Configuración de build
+- **Test bridge**: `src/types/window.types.ts` - Definición del bridge
+- **Event types**: `src/types/event.types.ts` - Tipos de eventos
+- **API types**: `src/types/api.types.ts` - SpecialProjectId enum

@@ -1,201 +1,99 @@
 # E2E Testing Guide
 
-## 🎯 Core Requirements
+## 🎯 Framework de Testing TraceLog
 
-- **Project IDs**: Always use `SpecialProjectId` from `src/types/api.types.ts` for testing (special ids that automatically enable debug mode and full logging).
-  - Use `SpecialProjectId.Skip` (value: `'skip'`) to skip ALL HTTP calls. Uses local config, no network requests.
-  - Use `'localhost:PORT'` format (e.g., `'localhost:3000'`) to make HTTP calls to local server. Converts to `http://localhost:PORT/config`.
-  - Using `SpecialProjectId.Skip` by default on `initializeTraceLog` method.
-- **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`.
-- **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile.
-- **Testing Bridge**: Auto-injected `window.__traceLogBridge` when `NODE_ENV=dev`.
+Testing end-to-end usando Playwright con fixtures personalizados, builders fluidos y matchers específicos.
 
-## 📝 Basic Test Structure
+### Stack Tecnológico
+- **Playwright** + **TypeScript** con type safety estricto
+- **Testing Bridge**: `__traceLogBridge` para acceso consistente
+- **Framework mejorado**: Fixtures, Page Objects, Builders, Matchers
 
-```ts
-import { test, expect } from '@playwright/test';
-import { TestUtils } from '../utils';
+## 🔧 Comandos Principales
 
-test('should validate behavior', async ({ page }) => {
-  const monitor = TestUtils.createConsoleMonitor(page);
+```bash
+# Tests
+npm run test:e2e                 # Todos los tests E2E
+npm run test:e2e -- --headed     # Modo visual
+npm run test:e2e -- --grep "X"   # Tests específicos
 
-  try {
-    await TestUtils.navigateAndWaitForReady(page, '/');
-    const initResult = await TestUtils.initializeTraceLog(page);
+# Calidad
+npm run check                    # Verificar todo (tipos + lint + format)
+npm run fix                      # Corregir automáticamente
+npm run type-check:watch         # Verificación continua
+```
 
-    expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
-    expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
+## 🧪 Patrones de Testing
 
-    // Test-specific logic here
+### Patrón Simple (Fixture)
 
-  } finally {
-    monitor.cleanup(); // ALWAYS required
-  }
+```typescript
+import { traceLogTest } from '../fixtures/tracelog-fixtures';
+import { TRACELOG_CONFIGS } from '../config/test-config';
+
+traceLogTest('basic test', async ({ traceLogPage }) => {
+  await traceLogPage.initializeTraceLog(TRACELOG_CONFIGS.MINIMAL);
+  await traceLogPage.clickElement('[data-testid="button"]');
+
+  await expect(traceLogPage).toHaveNoTraceLogErrors();
 });
 ```
 
-## 📁 File Organization
+### Patrón Avanzado (Builder DSL)
 
-```
-tests/
-├── constants/[domain].constants.ts   # Test data constants
-├── utils/[domain].utils.ts           # Helper functions
-├── types/[domain].types.ts           # TypeScript types
-└── e2e/[domain]/test-name.spec.ts    # Test files
-```
+```typescript
+import { TraceLogTestBuilder } from '../builders/test-scenario-builder';
 
-**Domains**: initialization, session-management, event-tracking, performance-tracking, error-tracking, user-management
-
-## 🛠️ Essential Patterns
-
-### Initialization
-```ts
-const config = { id: 'test' }; // Auto debug mode + full logging
-const initResult = await TestUtils.initializeTraceLog(page, config);
-expect(initResult.success).toBe(true);
-```
-
-### Event Tracking
-```ts
-await TestUtils.trackCustomEvent(page, { name: 'test_event', metadata: { key: 'value' } });
-const events = await TestUtils.getTrackedEvents(page);
-const event = events.find((e: any) => e.type === 'CUSTOM');
-expect(event.custom_event.name).toBe('test_event');
-```
-
-### Session Management
-```ts
-await TestUtils.triggerUserActivity(page);
-await TestUtils.waitForSessionStart(page);
-const session = await TestUtils.getSessionData(page);
-expect((session as any).isActive).toBe(true);
-```
-
-### Event Capture
-```ts
-import { EventCapture, COMMON_FILTERS } from '../utils';
-
-const eventCapture = new EventCapture();
-try {
-  await eventCapture.startCapture(page);
-  await TestUtils.initializeTraceLog(page);
-
-  const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, 3000);
-  expect(initEvent.namespace).toBe('App');
-} finally {
-  await eventCapture.stopCapture();
-}
-```
-
-### Available Filters
-```ts
-COMMON_FILTERS.INITIALIZATION   // App initialization events
-COMMON_FILTERS.SESSION_START    // Session start events
-COMMON_FILTERS.CUSTOM_EVENT     // Custom event tracking
-COMMON_FILTERS.ERROR            // Error events
-```
-
-## 🔧 Environment Setup
-
-### Test Config Behavior
-
-#### Debug Logging
-
-**Output Method:**
-- `NODE_ENV=dev`: Events to `window`
-- Other: Browser console
-
-**Filtering:** Same mode-based filtering for both outputs.
-
-#### SpecialProjectId Usage
-
-Both force `debug` mode automatically:
-
-- `Skip` (value: `'skip'`): No HTTP calls, uses local config only
-- `localhost:PORT`: HTTP calls to local server (e.g., `'localhost:3000'` → `http://localhost:3000/config`)
-
-```ts
-// ✅ Correct - Skip mode (no HTTP)
-await TraceLog.init({ id: SpecialProjectId.Skip });
-await TraceLog.init({ id: 'skip' });
-
-// ✅ Correct - Localhost mode (with HTTP)
-await TraceLog.init({ id: 'localhost:3000' });
-await TraceLog.init({ id: 'localhost:5173' });
-
-// ❌ Wrong - invalid formats
-await TraceLog.init({ id: 'localhost' }); // Missing port
-await TraceLog.init({ id: 'localhost:' }); // Missing port number
-await TraceLog.init({ id: 'test-id', mode: 'debug' }); // Mode not configurable
-```
-
-#### Event Capture in Tests
-
-```ts
-// Listen for debug log events in E2E tests
-window.addEventListener('tracelog:log', (event) => {
-  // Event structure same as EventLogDispatch type
+traceLogTest('complex flow', async ({ traceLogPage }) => {
+  await TraceLogTestBuilder
+    .create(traceLogPage)
+    .withConfig(TRACELOG_CONFIGS.STANDARD)
+    .expectInitialization()
+    .startEventCapture()
+    .simulateUserJourney('purchase_intent')
+    .expectEvents(['CLICK', 'SCROLL'])
+    .expectNoErrors()
+    .run();
 });
 ```
 
-### Network Simulation
-```ts
-// Block network requests
-await page.route('**/api/**', route => route.abort('failed'));
+## 🔑 APIs Esenciales
 
-// Mock responses
-await page.route('**/config', route => route.fulfill({
-  status: 200,
-  body: JSON.stringify({ sampling: 0.5 })
-}));
+```typescript
+// TraceLogTestPage (fixture automático)
+await traceLogPage.initializeTraceLog(config);
+await traceLogPage.clickElement(selector);
+await traceLogPage.sendCustomEvent(name, data);
+const events = await traceLogPage.getTrackedEvents();
+
+// Matchers personalizados
+await expect(traceLogPage).toHaveNoTraceLogErrors();
+await expect(events).toHaveEvent('CLICK');
+await expect(events).toHaveCustomEvent('user_action');
+
+// Configuraciones predefinidas
+TRACELOG_CONFIGS.MINIMAL        // Tests básicos
+TRACELOG_CONFIGS.STANDARD       // Tests generales
+TRACELOG_CONFIGS.FULL_FEATURED  // Tests completos
 ```
 
 ## ⚡ Best Practices
 
-### Timing
-```ts
-// GOOD: Wait for conditions
-await page.waitForFunction(() => window.__traceLogBridge?.isInitialized());
+### ✅ Hacer
+- Usar `traceLogTest` fixture (setup/cleanup automático)
+- Usar configuraciones predefinidas (`TRACELOG_CONFIGS.*`)
+- Usar matchers personalizados (`toHaveNoTraceLogErrors`, `toHaveEvent`)
+- Builder DSL para escenarios complejos
 
-// BAD: Arbitrary timeouts
-await page.waitForTimeout(1000); // Flaky
-```
+### ❌ Evitar
+- Hardcoded timeouts: `await page.waitForTimeout(2000)`
+- Configuraciones inline: `{ id: 'hardcoded', sessionTimeout: 900000 }`
+- Direct Bridge access: `window.__traceLogBridge.getSessionData()`
 
-### Error Testing
-```ts
-// Trigger JavaScript error
-await page.evaluate(() => {
-  throw new Error('Test error for error tracking');
-});
-
-// Wait for error capture
-const errorEvent = await eventCapture.waitForEvent(COMMON_FILTERS.ERROR, 3000);
-```
-
-### Data Isolation
-```ts
-test.beforeEach(async ({ page }) => {
-  await page.evaluate(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-    window.__traceLogBridge?.destroy();
-  });
-});
-```
-
-## 🚫 Critical Don'ts
-
-- DON'T skip console monitoring cleanup
-- DON'T hardcode timeouts or test data
-- DON'T access `TraceLog._app` directly
-- DON'T test single browser only
-- DON'T use real PII in tests
-- DON'T assume timing - use proper waits
-
-## ✅ Quality Gates
+## 🔍 Debug
 
 ```bash
-npm run test:e2e        # 100% pass rate
-npm run check           # No lint/format errors
-npm run build:browser   # Must succeed
+npm run test:e2e -- --headed    # Visual mode
+npm run test:e2e -- --debug     # DevTools
+npm run test:e2e -- --trace on  # Generate traces
 ```

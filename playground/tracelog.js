@@ -180,7 +180,6 @@ const MAX_STRING_LENGTH = 1e3;
 const MAX_ARRAY_LENGTH = 100;
 const MAX_OBJECT_DEPTH = 3;
 const PRECISION_TWO_DECIMALS = 2;
-const PRECISION_FOUR_DECIMALS = 4;
 const SYNC_XHR_TIMEOUT_MS = 2e3;
 const HTML_DATA_ATTR_PREFIX = "data-tl";
 const INTERACTIVE_SELECTORS = [
@@ -2327,34 +2326,65 @@ class SessionHandler extends StateManager {
   eventManager;
   storageManager;
   sessionManager = null;
+  destroyed = false;
   constructor(storageManager, eventManager) {
     super();
     this.eventManager = eventManager;
     this.storageManager = storageManager;
   }
   async startTracking() {
-    if (this.sessionManager) {
+    if (this.isActive()) {
       debugLog.debug("SessionHandler", "Session tracking already active");
       return;
     }
+    if (this.destroyed) {
+      debugLog.warn("SessionHandler", "Cannot start tracking on destroyed handler");
+      return;
+    }
     debugLog.debug("SessionHandler", "Starting session tracking");
-    this.sessionManager = new SessionManager(this.storageManager, this.eventManager);
-    await this.sessionManager.startTracking();
-    debugLog.debug("SessionHandler", "Session tracking started");
+    try {
+      this.sessionManager = new SessionManager(this.storageManager, this.eventManager);
+      await this.sessionManager.startTracking();
+      debugLog.debug("SessionHandler", "Session tracking started successfully");
+    } catch (error) {
+      if (this.sessionManager) {
+        try {
+          this.sessionManager.destroy();
+        } catch {
+        }
+        this.sessionManager = null;
+      }
+      debugLog.error("SessionHandler", "Failed to start session tracking", {
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+      throw error;
+    }
   }
-  async stopTracking() {
-    debugLog.info("SessionHandler", "Stopping session tracking");
+  isActive() {
+    return this.sessionManager !== null && !this.destroyed;
+  }
+  async cleanupSessionManager() {
     if (this.sessionManager) {
       await this.sessionManager.stopTracking();
       this.sessionManager.destroy();
       this.sessionManager = null;
     }
   }
+  async stopTracking() {
+    debugLog.debug("SessionHandler", "Stopping session tracking");
+    await this.cleanupSessionManager();
+  }
   destroy() {
+    if (this.destroyed) {
+      debugLog.debug("SessionHandler", "Already destroyed, skipping");
+      return;
+    }
     if (this.sessionManager) {
       this.sessionManager.destroy();
       this.sessionManager = null;
     }
+    this.destroyed = true;
+    debugLog.debug("SessionHandler", "Session handler destroyed");
   }
 }
 class PageViewHandler extends StateManager {
@@ -2370,7 +2400,6 @@ class PageViewHandler extends StateManager {
   startTracking() {
     debugLog.debug("PageViewHandler", "Starting page view tracking");
     this.trackInitialPageView();
-    this.trackCurrentPage();
     window.addEventListener("popstate", this.trackCurrentPage);
     window.addEventListener("hashchange", this.trackCurrentPage);
     this.patchHistory("pushState");
@@ -2388,12 +2417,12 @@ class PageViewHandler extends StateManager {
     }
   }
   patchHistory(method) {
-    if (method === "pushState" && !this.originalPushState) {
-      this.originalPushState = window.history.pushState;
-    } else if (method === "replaceState" && !this.originalReplaceState) {
-      this.originalReplaceState = window.history.replaceState;
-    }
     const original = window.history[method];
+    if (method === "pushState" && !this.originalPushState) {
+      this.originalPushState = original;
+    } else if (method === "replaceState" && !this.originalReplaceState) {
+      this.originalReplaceState = original;
+    }
     window.history[method] = (...args) => {
       original.apply(window.history, args);
       this.trackCurrentPage();
@@ -2406,33 +2435,41 @@ class PageViewHandler extends StateManager {
       const fromUrl = this.get("pageUrl");
       debugLog.debug("PageViewHandler", "Page navigation detected", { from: fromUrl, to: normalizedUrl });
       await this.set("pageUrl", normalizedUrl);
+      const pageViewData = this.extractPageViewData();
       this.eventManager.track({
         type: EventType.PAGE_VIEW,
         page_url: this.get("pageUrl"),
         from_page_url: fromUrl,
-        ...this.extractPageViewData() && { page_view: this.extractPageViewData() }
+        ...pageViewData && { page_view: pageViewData }
       });
       this.onTrack();
     }
   };
   trackInitialPageView() {
+    const normalizedUrl = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
+    const pageViewData = this.extractPageViewData();
     this.eventManager.track({
       type: EventType.PAGE_VIEW,
-      page_url: this.get("pageUrl"),
-      ...this.extractPageViewData() && { page_view: this.extractPageViewData() }
+      page_url: normalizedUrl,
+      ...pageViewData && { page_view: pageViewData }
     });
     this.onTrack();
   }
   extractPageViewData() {
-    const location = window.location;
+    const { pathname, search, hash } = window.location;
+    const { referrer } = document;
+    const { title } = document;
+    if (!referrer && !title && !pathname && !search && !hash) {
+      return void 0;
+    }
     const data = {
-      ...document.referrer && { referrer: document.referrer },
-      ...document.title && { title: document.title },
-      ...location.pathname && { pathname: location.pathname },
-      ...location.search && { search: location.search },
-      ...location.hash && { hash: location.hash }
+      ...referrer && { referrer },
+      ...title && { title },
+      ...pathname && { pathname },
+      ...search && { search },
+      ...hash && { hash }
     };
-    return Object.values(data).some((value) => !!value) ? data : void 0;
+    return data;
   }
 }
 class ClickHandler extends StateManager {
@@ -2504,22 +2541,12 @@ class ClickHandler extends StateManager {
         if (element.matches(selector)) {
           return element;
         }
-      } catch (error) {
-        debugLog.warn("ClickHandler", "Invalid selector in interactive elements check", {
-          selector,
-          error: error instanceof Error ? error.message : "Unknown error"
-        });
-        continue;
-      }
-    }
-    for (const selector of INTERACTIVE_SELECTORS) {
-      try {
         const parent = element.closest(selector);
         if (parent) {
           return parent;
         }
       } catch (error) {
-        debugLog.warn("ClickHandler", "Invalid selector in parent element search", {
+        debugLog.warn("ClickHandler", "Invalid selector in element search", {
           selector,
           error: error instanceof Error ? error.message : "Unknown error"
         });
@@ -2528,12 +2555,15 @@ class ClickHandler extends StateManager {
     }
     return element;
   }
+  clamp(value) {
+    return Math.max(0, Math.min(1, Number(value.toFixed(3))));
+  }
   calculateClickCoordinates(event2, element) {
     const rect = element.getBoundingClientRect();
     const x2 = event2.clientX;
     const y2 = event2.clientY;
-    const relativeX = rect.width > 0 ? Math.max(0, Math.min(1, Number(((x2 - rect.left) / rect.width).toFixed(3)))) : 0;
-    const relativeY = rect.height > 0 ? Math.max(0, Math.min(1, Number(((y2 - rect.top) / rect.height).toFixed(3)))) : 0;
+    const relativeX = rect.width > 0 ? this.clamp((x2 - rect.left) / rect.width) : 0;
+    const relativeY = rect.height > 0 ? this.clamp((y2 - rect.top) / rect.height) : 0;
     return { x: x2, y: y2, relativeX, relativeY };
   }
   extractTrackingData(trackingElement) {
@@ -2552,12 +2582,6 @@ class ClickHandler extends StateManager {
     const { x: x2, y: y2, relativeX, relativeY } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
     const attributes = this.extractElementAttributes(relevantElement);
-    const href = relevantElement.getAttribute("href");
-    const title = relevantElement.getAttribute("title");
-    const alt = relevantElement.getAttribute("alt");
-    const role = relevantElement.getAttribute("role");
-    const ariaLabel = relevantElement.getAttribute("aria-label");
-    const className = typeof relevantElement.className === "string" ? relevantElement.className : String(relevantElement.className);
     return {
       x: x2,
       y: y2,
@@ -2565,18 +2589,17 @@ class ClickHandler extends StateManager {
       relativeY,
       tag: relevantElement.tagName.toLowerCase(),
       ...relevantElement.id && { id: relevantElement.id },
-      ...relevantElement.className && { class: className },
+      ...relevantElement.className && { class: relevantElement.className },
       ...text && { text },
-      ...href && { href },
-      ...title && { title },
-      ...alt && { alt },
-      ...role && { role },
-      ...ariaLabel && { ariaLabel },
+      ...attributes.href && { href: attributes.href },
+      ...attributes.title && { title: attributes.title },
+      ...attributes.alt && { alt: attributes.alt },
+      ...attributes.role && { role: attributes.role },
+      ...attributes["aria-label"] && { ariaLabel: attributes["aria-label"] },
       ...Object.keys(attributes).length > 0 && { dataAttributes: attributes }
     };
   }
   getRelevantText(clickedElement, relevantElement) {
-    const LARGE_CONTAINER_TAGS = ["main", "section", "article", "body", "html", "header", "footer", "aside", "nav"];
     const clickedText = clickedElement.textContent?.trim() ?? "";
     const relevantText = relevantElement.textContent?.trim() ?? "";
     if (!clickedText && !relevantText) {
@@ -2585,21 +2608,24 @@ class ClickHandler extends StateManager {
     if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
       return clickedText;
     }
-    const isLargeContainer = LARGE_CONTAINER_TAGS.includes(relevantElement.tagName.toLowerCase());
-    const hasExcessiveText = relevantText.length > MAX_TEXT_LENGTH * 2;
-    if (isLargeContainer && hasExcessiveText) {
-      return clickedText && clickedText.length <= MAX_TEXT_LENGTH ? clickedText : "";
-    }
     if (relevantText.length <= MAX_TEXT_LENGTH) {
       return relevantText;
-    }
-    if (clickedText && clickedText.length < relevantText.length * 0.1) {
-      return clickedText.length <= MAX_TEXT_LENGTH ? clickedText : clickedText.slice(0, MAX_TEXT_LENGTH - 3) + "...";
     }
     return relevantText.slice(0, MAX_TEXT_LENGTH - 3) + "...";
   }
   extractElementAttributes(element) {
-    const commonAttributes = ["id", "class", "data-testid", "aria-label", "title", "href", "type", "name"];
+    const commonAttributes = [
+      "id",
+      "class",
+      "data-testid",
+      "aria-label",
+      "title",
+      "href",
+      "type",
+      "name",
+      "alt",
+      "role"
+    ];
     const result = {};
     for (const attributeName of commonAttributes) {
       const value = element.getAttribute(attributeName);
@@ -2638,9 +2664,7 @@ class ScrollHandler extends StateManager {
   stopTracking() {
     debugLog.debug("ScrollHandler", "Stopping scroll tracking", { containersCount: this.containers.length });
     for (const container of this.containers) {
-      if (container.debounceTimer) {
-        clearTimeout(container.debounceTimer);
-      }
+      this.clearContainerTimer(container);
       if (container.element instanceof Window) {
         window.removeEventListener("scroll", container.listener);
       } else {
@@ -2650,24 +2674,18 @@ class ScrollHandler extends StateManager {
     this.containers.length = 0;
   }
   setupScrollContainer(element) {
+    const elementType = element === window ? "window" : element.tagName?.toLowerCase();
     if (element !== window && !this.isElementScrollable(element)) {
+      debugLog.debug("ScrollHandler", "Skipping non-scrollable element", { elementType });
       return;
     }
-    const container = {
-      element,
-      lastScrollPos: this.getScrollTop(element),
-      debounceTimer: null,
-      listener: () => {
-      }
-    };
-    const handleScroll = async () => {
+    debugLog.debug("ScrollHandler", "Setting up scroll container", { elementType });
+    const handleScroll = () => {
       if (this.get("suppressNextScroll")) {
-        await this.set("suppressNextScroll", false);
+        this.set("suppressNextScroll", false);
         return;
       }
-      if (container.debounceTimer) {
-        clearTimeout(container.debounceTimer);
-      }
+      this.clearContainerTimer(container);
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
         if (scrollData) {
@@ -2679,7 +2697,12 @@ class ScrollHandler extends StateManager {
         container.debounceTimer = null;
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
-    container.listener = handleScroll;
+    const container = {
+      element,
+      lastScrollPos: this.getScrollTop(element),
+      debounceTimer: null,
+      listener: handleScroll
+    };
     this.containers.push(container);
     if (element instanceof Window) {
       window.addEventListener("scroll", handleScroll, { passive: true });
@@ -2687,20 +2710,39 @@ class ScrollHandler extends StateManager {
       element.addEventListener("scroll", handleScroll, { passive: true });
     }
   }
+  isWindowScrollable() {
+    return document.documentElement.scrollHeight > window.innerHeight;
+  }
+  clearContainerTimer(container) {
+    if (container.debounceTimer !== null) {
+      clearTimeout(container.debounceTimer);
+      container.debounceTimer = null;
+    }
+  }
+  getScrollDirection(current, previous) {
+    return current > previous ? ScrollDirection.DOWN : ScrollDirection.UP;
+  }
+  calculateScrollDepth(scrollTop, scrollHeight, viewportHeight) {
+    if (scrollHeight <= viewportHeight) {
+      return 0;
+    }
+    const maxScrollTop = scrollHeight - viewportHeight;
+    return Math.min(100, Math.max(0, Math.floor(scrollTop / maxScrollTop * 100)));
+  }
   calculateScrollData(container) {
     const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
-    const viewportHeight = this.getViewportHeight(element);
-    const scrollHeight = this.getScrollHeight(element);
-    if (element === window && scrollHeight <= viewportHeight) {
-      return null;
-    }
-    const direction = scrollTop > lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
-    const depth = scrollHeight > viewportHeight ? Math.min(100, Math.max(0, Math.floor(scrollTop / (scrollHeight - viewportHeight) * 100))) : 0;
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
       return null;
     }
+    if (element === window && !this.isWindowScrollable()) {
+      return null;
+    }
+    const viewportHeight = this.getViewportHeight(element);
+    const scrollHeight = this.getScrollHeight(element);
+    const direction = this.getScrollDirection(scrollTop, lastScrollPos);
+    const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
     container.lastScrollPos = scrollTop;
     return { depth, direction };
   }
@@ -3012,7 +3054,6 @@ class PerformanceHandler extends StateManager {
     debugLog.debug("PerformanceHandler", "Starting performance tracking");
     await this.initWebVitals();
     this.observeLongTasks();
-    this.reportTTFB();
   }
   stopTracking() {
     debugLog.debug("PerformanceHandler", "Stopping performance tracking", { observersCount: this.observers.length });
@@ -3049,9 +3090,15 @@ class PerformanceHandler extends StateManager {
       true
     );
     let clsValue = 0;
+    let currentNavId = this.getNavigationId();
     this.safeObserve(
       "layout-shift",
       (list) => {
+        const navId = this.getNavigationId();
+        if (navId !== currentNavId) {
+          clsValue = 0;
+          currentNavId = navId;
+        }
         const entries = list.getEntries();
         for (const entry of entries) {
           if (entry.hadRecentInput === true) {
@@ -3060,7 +3107,7 @@ class PerformanceHandler extends StateManager {
           const value = typeof entry.value === "number" ? entry.value : 0;
           clsValue += value;
         }
-        this.sendVital({ type: "CLS", value: Number(clsValue.toFixed(PRECISION_FOUR_DECIMALS)) });
+        this.sendVital({ type: "CLS", value: Number(clsValue.toFixed(PRECISION_TWO_DECIMALS)) });
       },
       { type: "layout-shift", buffered: true }
     );
@@ -3104,6 +3151,7 @@ class PerformanceHandler extends StateManager {
       onFCP(report("FCP"));
       onTTFB(report("TTFB"));
       onINP(report("INP"));
+      debugLog.debug("PerformanceHandler", "Web-vitals library loaded successfully");
     } catch (error) {
       debugLog.warn("PerformanceHandler", "Failed to load web-vitals library, using fallback", {
         error: error instanceof Error ? error.message : "Unknown error"
@@ -3149,16 +3197,17 @@ class PerformanceHandler extends StateManager {
   }
   sendVital(sample) {
     const navId = this.getNavigationId();
-    const key = `${sample.type}`;
     if (navId) {
-      if (!this.reportedByNav.has(navId)) {
-        this.reportedByNav.set(navId, /* @__PURE__ */ new Set());
-      }
-      const sent = this.reportedByNav.get(navId);
-      if (sent.has(key)) {
+      const reportedForNav = this.reportedByNav.get(navId);
+      const isDuplicate = reportedForNav?.has(sample.type);
+      if (isDuplicate) {
         return;
       }
-      sent.add(key);
+      if (!reportedForNav) {
+        this.reportedByNav.set(navId, /* @__PURE__ */ new Set([sample.type]));
+      } else {
+        reportedForNav.add(sample.type);
+      }
     }
     this.trackWebVital(sample.type, sample.value);
   }
@@ -3181,7 +3230,9 @@ class PerformanceHandler extends StateManager {
       if (!nav) {
         return null;
       }
-      return `${Math.round(nav.startTime)}_${window.location.pathname}`;
+      const timestamp = nav.startTime || performance.now();
+      const random = Math.random().toString(36).substr(2, 5);
+      return `${timestamp.toFixed(2)}_${window.location.pathname}_${random}`;
     } catch (error) {
       debugLog.warn("PerformanceHandler", "Failed to get navigation ID", {
         error: error instanceof Error ? error.message : "Unknown error"
@@ -3189,13 +3240,26 @@ class PerformanceHandler extends StateManager {
       return null;
     }
   }
+  isObserverSupported(type) {
+    if (typeof PerformanceObserver === "undefined") return false;
+    const supported = PerformanceObserver.supportedEntryTypes;
+    return !supported || supported.includes(type);
+  }
   safeObserve(type, cb, options, once = false) {
     try {
-      if (typeof PerformanceObserver === "undefined") return;
-      const supported = PerformanceObserver.supportedEntryTypes;
-      if (supported && !supported.includes(type)) return;
+      if (!this.isObserverSupported(type)) {
+        debugLog.debug("PerformanceHandler", "Observer type not supported", { type });
+        return false;
+      }
       const obs = new PerformanceObserver((list, observer) => {
-        cb(list, observer);
+        try {
+          cb(list, observer);
+        } catch (callbackError) {
+          debugLog.warn("PerformanceHandler", "Observer callback failed", {
+            type,
+            error: callbackError instanceof Error ? callbackError.message : "Unknown error"
+          });
+        }
         if (once) {
           try {
             observer.disconnect();
@@ -3207,26 +3271,29 @@ class PerformanceHandler extends StateManager {
       if (!once) {
         this.observers.push(obs);
       }
+      return true;
     } catch (error) {
       debugLog.warn("PerformanceHandler", "Failed to create performance observer", {
         type,
         error: error instanceof Error ? error.message : "Unknown error"
       });
+      return false;
     }
   }
 }
 class ErrorHandler extends StateManager {
   eventManager;
-  piiPatterns = [
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+  static PII_PATTERNS = [
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
     // Email
     /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
     // Phone US
     /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
     // Credit card
-    /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g
+    /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi
     // IBAN
   ];
+  static MAX_ERROR_MESSAGE_LENGTH = 500;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -3241,10 +3308,13 @@ class ErrorHandler extends StateManager {
     window.removeEventListener("unhandledrejection", this.handleRejection);
     debugLog.debug("ErrorHandler", "Error tracking stopped");
   }
-  handleError = (event2) => {
+  shouldSample() {
     const config = this.get("config");
     const samplingRate = config?.errorSampling ?? 0.1;
-    if (Math.random() >= samplingRate) {
+    return Math.random() < samplingRate;
+  }
+  handleError = (event2) => {
+    if (!this.shouldSample()) {
       return;
     }
     debugLog.warn("ErrorHandler", "JS error captured", {
@@ -3256,14 +3326,15 @@ class ErrorHandler extends StateManager {
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
-        message: this.sanitize(event2.message || "Unknown error")
+        message: this.sanitize(event2.message || "Unknown error"),
+        ...event2.filename && { url: event2.filename },
+        ...event2.lineno && { line: event2.lineno },
+        ...event2.colno && { column: event2.colno }
       }
     });
   };
   handleRejection = (event2) => {
-    const config = this.get("config");
-    const samplingRate = config?.errorSampling ?? 0.1;
-    if (Math.random() >= samplingRate) {
+    if (!this.shouldSample()) {
       return;
     }
     const message = this.extractRejectionMessage(event2.reason);
@@ -3279,13 +3350,23 @@ class ErrorHandler extends StateManager {
   extractRejectionMessage(reason) {
     if (!reason) return "Unknown rejection";
     if (typeof reason === "string") return reason;
-    if (reason instanceof Error) return reason.message || reason.toString();
-    return String(reason);
+    if (reason instanceof Error) {
+      return reason.stack ?? reason.message ?? reason.toString();
+    }
+    if (typeof reason === "object" && "message" in reason) {
+      return String(reason.message);
+    }
+    try {
+      return JSON.stringify(reason);
+    } catch {
+      return String(reason);
+    }
   }
   sanitize(text) {
-    let sanitized = text;
-    for (const pattern of this.piiPatterns) {
-      sanitized = sanitized.replace(pattern, "[REDACTED]");
+    let sanitized = text.length > ErrorHandler.MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, ErrorHandler.MAX_ERROR_MESSAGE_LENGTH) + "..." : text;
+    for (const pattern of ErrorHandler.PII_PATTERNS) {
+      const regex = new RegExp(pattern.source, pattern.flags);
+      sanitized = sanitized.replace(regex, "[REDACTED]");
     }
     return sanitized;
   }
@@ -3706,8 +3787,53 @@ const aggressiveFingerprintCleanup = () => {
   );
 };
 class TestBridge extends App {
+  _forceInitLock = false;
+  _forceInitFailure = false;
   isInitializing() {
     return isInitializing;
+  }
+  sendCustomEvent(name, data) {
+    super.sendCustomEvent(name, data);
+  }
+  getSessionData() {
+    return {
+      id: this.get("sessionId"),
+      isActive: !!this.get("sessionId"),
+      startTime: Date.now(),
+      lastActivity: Date.now(),
+      timeout: this.get("config")?.sessionTimeout ?? 15 * 60 * 1e3
+    };
+  }
+  setSessionTimeout(timeout) {
+    const config = this.get("config");
+    if (config) {
+      config.sessionTimeout = timeout;
+      this.set("config", config);
+    }
+  }
+  isTabLeader() {
+    return true;
+  }
+  getQueueLength() {
+    return this.eventManager?.getQueueLength() ?? 0;
+  }
+  forceInitLock(enabled = true) {
+    this._forceInitLock = enabled;
+    if (enabled) {
+      globalThis.isInitializing = true;
+    } else {
+      globalThis.isInitializing = false;
+    }
+  }
+  forceInitFailure(enabled = true) {
+    this._forceInitFailure = enabled;
+  }
+  // Override init to check for test flags
+  async init(config) {
+    if (this._forceInitFailure) {
+      throw new Error("Forced initialization failure for testing");
+    }
+    return super.init(config);
   }
 }
 {
@@ -3720,6 +3846,7 @@ class TestBridge extends App {
     } else {
       injectTestingBridge();
     }
+    window.__createFreshTraceLogBridge = injectTestingBridge;
   }
 }
 const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({

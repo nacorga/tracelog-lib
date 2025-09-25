@@ -3,24 +3,24 @@ import { beforeEach, vi, afterEach } from 'vitest';
 // Setup DOM mocks for jsdom environment
 beforeEach(() => {
   // Mock localStorage
-  const localStorageMock = (() => {
+  const localStorageMock = ((): Storage => {
     let store: Record<string, string> = {};
 
     return {
-      getItem: (key: string) => store[key] || null,
-      setItem: (key: string, value: string) => {
+      getItem: (key: string): string | null => store[key] || null,
+      setItem: (key: string, value: string): void => {
         store[key] = value.toString();
       },
-      removeItem: (key: string) => {
+      removeItem: (key: string): void => {
         delete store[key];
       },
-      clear: () => {
+      clear: (): void => {
         store = {};
       },
-      get length() {
+      get length(): number {
         return Object.keys(store).length;
       },
-      key: (index: number) => {
+      key: (index: number): string | null => {
         const keys = Object.keys(store);
         return keys[index] || null;
       },
@@ -76,7 +76,7 @@ beforeEach(() => {
 
   // Mock URL constructor
   if (!global.URL) {
-    global.URL = class MockURL {
+    global.URL = class MockURL implements Partial<URL> {
       href: string;
       protocol: string;
       host: string;
@@ -84,8 +84,13 @@ beforeEach(() => {
       pathname: string;
       search: string;
       hash: string;
+      origin: string;
+      port: string;
+      username: string;
+      password: string;
+      searchParams: URLSearchParams;
 
-      constructor(url: string) {
+      constructor(url: string, _base?: string | URL) {
         this.href = url;
         const match = url.match(/^(https?:)\/\/([^/#?]+)([^?#]*)(\?[^#]*)?(#.*)?$/);
         if (match) {
@@ -103,29 +108,44 @@ beforeEach(() => {
           this.search = '';
           this.hash = '';
         }
+        this.origin = `${this.protocol}//${this.host}`;
+        this.port = '';
+        this.username = '';
+        this.password = '';
+        this.searchParams = new URLSearchParams(this.search);
       }
-    } as any;
+
+      toString(): string {
+        return this.href;
+      }
+
+      toJSON(): string {
+        return this.href;
+      }
+    } as unknown as typeof URL;
   }
 
   // Mock URLSearchParams
   if (!global.URLSearchParams) {
-    global.URLSearchParams = class MockURLSearchParams {
+    global.URLSearchParams = class MockURLSearchParams implements Partial<URLSearchParams> {
       private readonly params: Map<string, string> = new Map();
 
-      constructor(search?: string) {
-        if (search) {
-          const cleanSearch = search.startsWith('?') ? search.slice(1) : search;
-          cleanSearch.split('&').forEach((param) => {
-            const [key, value] = param.split('=');
-            if (key) {
-              this.params.set(decodeURIComponent(key), decodeURIComponent(value || ''));
-            }
-          });
+      constructor(init?: string | string[][] | Record<string, string> | URLSearchParams) {
+        if (typeof init === 'string') {
+          const cleanSearch = init.startsWith('?') ? init.slice(1) : init;
+          if (cleanSearch) {
+            cleanSearch.split('&').forEach((param) => {
+              const [key, value] = param.split('=');
+              if (key) {
+                this.params.set(decodeURIComponent(key), decodeURIComponent(value || ''));
+              }
+            });
+          }
         }
       }
 
       get(key: string): string | null {
-        return this.params.get(key) || null;
+        return this.params.get(key) ?? null;
       }
 
       set(key: string, value: string): void {
@@ -136,10 +156,52 @@ beforeEach(() => {
         return this.params.has(key);
       }
 
-      entries(): IterableIterator<[string, string]> {
+      append(key: string, value: string): void {
+        this.params.set(key, value);
+      }
+
+      delete(key: string): void {
+        this.params.delete(key);
+      }
+
+      forEach(callback: (value: string, key: string, parent: URLSearchParams) => void): void {
+        this.params.forEach((value, key) => callback(value, key, this as unknown as URLSearchParams));
+      }
+
+      entries(): any {
         return this.params.entries();
       }
-    } as any;
+
+      keys(): any {
+        return this.params.keys();
+      }
+
+      values(): any {
+        return this.params.values();
+      }
+
+      toString(): string {
+        const pairs: string[] = [];
+        this.params.forEach((value, key) => {
+          pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+        });
+        return pairs.join('&');
+      }
+
+      [Symbol.iterator](): any {
+        return this.params.entries();
+      }
+
+      size: number = 0;
+
+      getAll(key: string): string[] {
+        return this.params.has(key) ? [this.params.get(key)!] : [];
+      }
+
+      sort(): void {
+        // No-op for this mock
+      }
+    } as unknown as typeof URLSearchParams;
   }
 
   // Clear all mocks between tests

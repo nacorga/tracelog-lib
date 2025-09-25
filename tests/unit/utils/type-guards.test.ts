@@ -69,19 +69,19 @@ describe('Type Guards Utils', () => {
     test('should return false for object with functions', () => {
       const obj = {
         name: 'John',
-        fn: () => {},
+        fn: (): void => {},
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(false);
     });
 
     test('should return false for null', () => {
-      expect(isOnlyPrimitiveFields(null as any)).toBe(false);
+      expect(isOnlyPrimitiveFields(null as unknown as Record<string, unknown>)).toBe(false);
     });
 
     test('should return false for non-object types', () => {
-      expect(isOnlyPrimitiveFields('string' as any)).toBe(false);
-      expect(isOnlyPrimitiveFields(123 as any)).toBe(false);
-      expect(isOnlyPrimitiveFields(true as any)).toBe(false);
+      expect(isOnlyPrimitiveFields('string' as unknown as Record<string, unknown>)).toBe(false);
+      expect(isOnlyPrimitiveFields(123 as unknown as Record<string, unknown>)).toBe(false);
+      expect(isOnlyPrimitiveFields(true as unknown as Record<string, unknown>)).toBe(false);
     });
 
     test('should return true for empty object', () => {

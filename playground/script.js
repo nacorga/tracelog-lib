@@ -1,15 +1,56 @@
 // ============================================================================
-// STATE MANAGEMENT
+// STATE MANAGEMENT & TEST MODE DETECTION
 // ============================================================================
+
+// Auto-detect E2E test mode and parse URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const isE2ETest = navigator.userAgent.includes('HeadlessChrome') ||
+                 navigator.userAgent.includes('Playwright') ||
+                 urlParams.get('e2e') === 'true';
+
+// Remove floating monitor in E2E test mode
+if (isE2ETest) {
+  const removeMonitor = () => document.getElementById('floating-monitor')?.remove();
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', removeMonitor);
+  } else {
+    removeMonitor();
+  }
+}
+
+const TEST_MODE = {
+  enabled: urlParams.get('mode') === 'test' || isE2ETest,
+  scenario: urlParams.get('scenario') || 'basic',
+  autoInit: urlParams.get('auto-init') === 'true' || isE2ETest,
+  hideUI: urlParams.get('hide-ui') === 'true',
+  projectId: urlParams.get('project-id') || (isE2ETest ? 'e2e-test-project' : 'playground-test-project')
+};
 
 const state = {
   currentPage: 'inicio',
   cartCount: 0,
   queueCount: 0,
   events: [],
+  testMode: TEST_MODE,
 };
 
-// No mock server - using real API at localhost:3002
+// ============================================================================
+// TRACELOG HELPERS
+// ============================================================================
+
+// Helper function to access TraceLog consistently through __traceLogBridge
+function getTraceLogInstance() {
+  return window.__traceLogBridge || window.TraceLog;
+}
+
+// Helper function to send custom events
+function sendTraceLogEvent(eventName, eventData) {
+  const traceLog = getTraceLogInstance();
+  if (traceLog?.sendCustomEvent) {
+    return traceLog.sendCustomEvent(eventName, eventData);
+  }
+}
 
 // ============================================================================
 // SPA ROUTING
@@ -90,13 +131,11 @@ function setupCartInteractions() {
       document.getElementById('cart-count').textContent = state.cartCount;
 
       // Send custom event
-      if (window.TraceLog) {
-        TraceLog.event('add_to_cart', {
-          product_id: productId,
-          product_name: productName,
-          timestamp: Date.now(),
-        });
-      }
+      sendTraceLogEvent('add_to_cart', {
+        product_id: productId,
+        product_name: productName,
+        timestamp: Date.now(),
+      });
 
       // Visual feedback
       e.currentTarget.textContent = 'Añadido ✓';
@@ -119,9 +158,7 @@ function setupContactForm() {
     };
 
     // Send custom event
-    if (window.TraceLog) {
-      TraceLog.event('contact_form_submit', formData);
-    }
+    sendTraceLogEvent('contact_form_submit', formData);
 
     // Visual feedback
     alert('Gracias por contactarnos. Te responderemos pronto.');
@@ -149,6 +186,9 @@ function updateQueueStatus(icon) {
 }
 
 function addEventToMonitor(eventType, status = '⏳') {
+  // Skip monitor updates during E2E tests
+  if (isE2ETest) return null;
+
   const eventsList = document.getElementById('events-list');
   if (!eventsList) return;
 
@@ -292,176 +332,108 @@ function setupTraceLogListener() {
 // INITIALIZATION
 // ============================================================================
 
+// ============================================================================
+// TEST MODE SETUP
+// ============================================================================
+
+function setupTestMode() {
+  if (!state.testMode.enabled) return;
+
+  console.log('🧪 Test mode enabled:', state.testMode);
+
+  // Remove floating monitor during E2E tests to prevent click interception
+  if (isE2ETest || state.testMode.hideUI) {
+    const monitor = document.getElementById('floating-monitor');
+    if (monitor) monitor.remove();
+  }
+
+  // Add test data attributes to key elements
+  document.body.setAttribute('data-testid', 'playground-body');
+  document.body.setAttribute('data-test-mode', 'true');
+  document.body.setAttribute('data-test-scenario', state.testMode.scenario);
+
+  // Add test indicator
+  if (!state.testMode.hideUI) {
+    const indicator = document.createElement('div');
+    indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:#ff6b35;color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:bold;z-index:10000;';
+    indicator.textContent = `TEST MODE: ${state.testMode.scenario.toUpperCase()}`;
+    indicator.setAttribute('data-testid', 'test-mode-indicator');
+    document.body.appendChild(indicator);
+  }
+
+  // Test helpers for E2E compatibility
+  window.testHelpers = {
+    sendCustomEvent: (name, data) => sendTraceLogEvent(name, data)
+  };
+}
+
+function triggerTestScenario(scenario = state.testMode.scenario) {
+  console.log('🎬 Triggering test scenario:', scenario);
+
+  const actions = {
+    basic: () => document.querySelector('.btn-primary')?.click(),
+    navigation: () => {
+      setTimeout(() => navigateToPage('productos'), 100);
+      setTimeout(() => navigateToPage('nosotros'), 500);
+    },
+    ecommerce: () => document.querySelector('.btn-add-cart')?.click(),
+  };
+
+  const action = actions[scenario];
+  if (action) {
+    setTimeout(action, 100);
+  }
+}
+
+function waitForTraceLogReady(timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    const traceLog = getTraceLogInstance();
+    if (traceLog) {
+      resolve(traceLog);
+      return;
+    }
+
+    const startTime = Date.now();
+    const checkInterval = setInterval(() => {
+      const traceLog = getTraceLogInstance();
+      if (traceLog) {
+        clearInterval(checkInterval);
+        resolve(traceLog);
+      } else if (Date.now() - startTime > timeout) {
+        clearInterval(checkInterval);
+        reject(new Error('TraceLog not ready within timeout'));
+      }
+    }, 50);
+  });
+}
+
 async function initializeApp() {
+  setupTestMode();
   setupNavigation();
   setupCartInteractions();
   setupContactForm();
   setupFloatingMonitor();
   setupTraceLogListener();
 
+  // Initialize TraceLog
   try {
-    await TraceLog.init({
-      id: 'localhost:3002',
-    });
+    await waitForTraceLogReady();
+    const projectId = (state.testMode.enabled && state.testMode.autoInit)
+      ? state.testMode.projectId
+      : 'localhost:3002';
+
+    await TraceLog.init({ id: projectId });
     updateQueueStatus('▶️');
+
+    if (state.testMode.enabled && state.testMode.autoInit) {
+      console.log('🧪 TraceLog auto-initialized for testing');
+      setTimeout(() => triggerTestScenario(), 500);
+    }
   } catch (error) {
     console.error('TraceLog init error:', error);
     updateQueueStatus('❌');
   }
 }
-
-// ============================================================================
-// FIX #2 DEMONSTRATION - Event Loss Prevention Test
-// ============================================================================
-
-/**
- * Test function to demonstrate Fix #2: Events are not lost when send fails
- * This test simulates server failures and verifies events remain in queue
- */
-window.testEventLossPrevention = async function() {
-  console.log('🧪 Starting Fix #2 Test: Event Loss Prevention');
-  
-  // Step 1: Enable server failures
-  const originalServerState = state.isServerFailing;
-  state.isServerFailing = true;
-  console.log('✅ Server failures enabled');
-  
-  // Step 2: Generate test events
-  const testEvents = [
-    { type: 'click', element: 'test-button-1' },
-    { type: 'click', element: 'test-button-2' },
-    { type: 'custom', name: 'test-event' }
-  ];
-  
-  console.log('📝 Generating test events...');
-  
-  // Generate events
-  testEvents.forEach((event, index) => {
-    if (event.type === 'click') {
-      TraceLog.event('click', {
-        element_id: event.element,
-        test_sequence: index + 1
-      });
-    } else if (event.type === 'custom') {
-      TraceLog.event('custom', {
-        event_name: event.name,
-        test_sequence: index + 1
-      });
-    }
-  });
-  
-  console.log(`✅ Generated ${testEvents.length} test events`);
-  
-  // Step 3: Try to flush (should fail due to server failures)
-  console.log('🚨 Attempting flush with server failures...');
-  const flushResult = await TraceLog.flush();
-  
-  if (!flushResult) {
-    console.log('✅ Expected: Flush failed due to server failures');
-  } else {
-    console.log('⚠️ Unexpected: Flush succeeded despite server failures');
-  }
-  
-  // Step 4: Check if events are still in queue
-  // Note: We can't directly access the queue, but we can observe behavior
-  console.log('🔍 Events should remain in queue for retry...');
-  
-  // Step 5: Restore server and try again
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  state.isServerFailing = false;
-  console.log('✅ Server restored');
-  
-  console.log('🔄 Attempting flush with server restored...');
-  const secondFlushResult = await TraceLog.flush();
-  
-  if (secondFlushResult) {
-    console.log('✅ Success: Events were preserved and sent after server restoration');
-  } else {
-    console.log('❌ Error: Events may have been lost');
-  }
-  
-  // Restore original server state
-  state.isServerFailing = originalServerState;
-  
-  console.log('🎯 Fix #2 Test completed!');
-  console.log('📋 Summary: Events are preserved in queue when send fails and sent when server recovers');
-  
-  return {
-    testPassed: secondFlushResult,
-    eventsGenerated: testEvents.length,
-    serverFailureHandled: !flushResult,
-    recoverySuccessful: secondFlushResult
-  };
-};
-
-// ============================================================================
-// ENHANCED ERROR RECOVERY TESTING
-// ============================================================================
-
-function testRecoveryStats() {
-  if (window.TraceLog) {
-    const stats = window.TraceLog.getRecoveryStats?.();
-    if (stats) {
-      console.group('🔄 Enhanced Error Recovery Stats');
-      console.log('Circuit Breaker Resets:', stats.circuitBreakerResets);
-      console.log('Persistence Failures:', stats.persistenceFailures);
-      console.log('Network Timeouts:', stats.networkTimeouts);
-      console.log('Last Recovery Attempt:', new Date(stats.lastRecoveryAttempt).toLocaleString());
-      console.log('Current Failure Count:', stats.currentFailureCount);
-      console.log('Circuit Breaker Open:', stats.circuitBreakerOpen);
-      console.log('Fingerprint Map Size:', stats.fingerprintMapSize);
-      console.groupEnd();
-      
-      updateConsoleLog(`📊 Recovery Stats: CB Resets: ${stats.circuitBreakerResets}, Failures: ${stats.persistenceFailures}, Timeouts: ${stats.networkTimeouts}`);
-    } else {
-      console.warn('getRecoveryStats method not available');
-    }
-  } else {
-    console.warn('TraceLog not initialized');
-  }
-}
-
-function triggerSystemRecovery() {
-  if (window.TraceLog && window.TraceLog.attemptSystemRecovery) {
-    console.log('🚑 Triggering system recovery...');
-    window.TraceLog.attemptSystemRecovery();
-    updateConsoleLog('🚑 System recovery triggered manually');
-    
-    // Show updated stats after recovery
-    setTimeout(() => testRecoveryStats(), 1000);
-  } else {
-    console.warn('System recovery method not available');
-  }
-}
-
-function triggerFingerprintCleanup() {
-  if (window.TraceLog && window.TraceLog.aggressiveFingerprintCleanup) {
-    console.log('🧹 Triggering aggressive fingerprint cleanup...');
-    window.TraceLog.aggressiveFingerprintCleanup();
-    updateConsoleLog('🧹 Aggressive fingerprint cleanup executed');
-  } else {
-    console.warn('Fingerprint cleanup method not available');
-  }
-}
-
-// Make functions globally available
-window.testRecoveryStats = testRecoveryStats;
-window.triggerSystemRecovery = triggerSystemRecovery;
-window.triggerFingerprintCleanup = triggerFingerprintCleanup;
-
-// Add test button to console if it exists
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    if (window.TraceLog && typeof window.testEventLossPrevention === 'function') {
-      console.log('🧪 Fix #2 Test available: Run window.testEventLossPrevention() to test event loss prevention');
-    }
-    
-    console.log('🔄 Enhanced Error Recovery Tests available:');
-    console.log('  • window.testRecoveryStats() - Show current recovery statistics');
-    console.log('  • window.triggerSystemRecovery() - Trigger manual system recovery');
-    console.log('  • window.triggerFingerprintCleanup() - Trigger fingerprint cleanup');
-  }, 2000);
-});
 
 // Start app when DOM is ready
 if (document.readyState === 'loading') {

@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { EventManager } from '@/managers/event.manager';
 import { StorageManager } from '@/managers/storage.manager';
 import { StateManager } from '@/managers/state.manager';
-import { EventType } from '@/types';
+import { EventType, Config, Mode } from '@/types';
 
 // Mock dependencies
 vi.mock('@/managers/sender.manager', () => ({
@@ -30,23 +30,23 @@ describe('EventManager - Sampling', () => {
     vi.clearAllMocks();
   });
 
-  const createEventManager = async (samplingRate: number) => {
+  const createEventManager = async (samplingRate: number): Promise<EventManager> => {
     mockStorage = {
       getItem: vi.fn(),
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
-    } as any;
+    } as unknown as StorageManager;
 
     // Create a temporary StateManager to set up global state
     const tempStateManager = new (class extends StateManager {
-      async setConfig(config: any) {
+      async setConfig(config: Config): Promise<void> {
         await this.set('config', config);
       }
-      async setPageUrl(url: string) {
+      async setPageUrl(url: string): Promise<void> {
         await this.set('pageUrl', url);
       }
-      async setSessionId(id: string) {
+      async setSessionId(id: string): Promise<void> {
         await this.set('sessionId', id);
       }
     })();
@@ -54,7 +54,7 @@ describe('EventManager - Sampling', () => {
     // Set up global state
     await tempStateManager.setConfig({
       excludedUrlPaths: [],
-      mode: 'production',
+      mode: Mode.QA,
       samplingRate,
       ipExcluded: false,
       id: 'test-project',
@@ -137,17 +137,17 @@ describe('EventManager - Sampling', () => {
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
-    } as any;
+    } as unknown as StorageManager;
 
     // Create a temporary StateManager to set up global state
     const tempStateManager = new (class extends StateManager {
-      async setConfig(config: any) {
+      async setConfig(config: Config): Promise<void> {
         await this.set('config', config);
       }
-      async setPageUrl(url: string) {
+      async setPageUrl(url: string): Promise<void> {
         await this.set('pageUrl', url);
       }
-      async setSessionId(id: string) {
+      async setSessionId(id: string): Promise<void> {
         await this.set('sessionId', id);
       }
     })();
@@ -155,7 +155,7 @@ describe('EventManager - Sampling', () => {
     // Set up global state without samplingRate
     await tempStateManager.setConfig({
       excludedUrlPaths: [],
-      mode: 'production',
+      mode: Mode.QA,
       ipExcluded: false,
       id: 'test-project',
     });

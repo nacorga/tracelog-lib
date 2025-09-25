@@ -718,3 +718,8 @@ body {
     font-size: 14px;
   }
 }
+
+/* Hide floating monitor during E2E tests to prevent click interception */
+[data-test-mode="true"] .floating-monitor {
+  display: none !important;
+}

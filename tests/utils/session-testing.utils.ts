@@ -142,7 +142,7 @@ export class SessionLifecycle {
   static async waitForSessionStart(page: Page, timeout: number = TIMEOUTS.MEDIUM): Promise<SessionData | null> {
     const result = await page.waitForFunction(
       () => {
-        const bridge = (window as { __traceLogBridge?: { getSessionData: () => SessionData } }).__traceLogBridge;
+        const bridge = window.__traceLogBridge;
         if (!bridge?.getSessionData) {
           return null;
         }
@@ -154,17 +154,19 @@ export class SessionLifecycle {
       { timeout },
     );
 
-    return await result.jsonValue();
+    const data = (await result.jsonValue()) as Record<string, unknown> | null;
+    return data as SessionData | null;
   }
 
   /**
    * Retrieves current session data
    */
   static async getSessionData(page: Page): Promise<SessionData | null> {
-    return await page.evaluate(() => {
-      const bridge = (window as { __traceLogBridge?: { getSessionData: () => SessionData } }).__traceLogBridge;
+    const data = await page.evaluate(() => {
+      const bridge = window.__traceLogBridge;
       return bridge?.getSessionData() ?? null;
     });
+    return data as SessionData | null;
   }
 
   /**
@@ -174,7 +176,7 @@ export class SessionLifecycle {
     try {
       await page.waitForFunction(
         () => {
-          const bridge = (window as { __traceLogBridge?: { getSessionData: () => SessionData } }).__traceLogBridge;
+          const bridge = window.__traceLogBridge;
           if (!bridge?.getSessionData) {
             return false;
           }
@@ -225,7 +227,7 @@ export class SessionLifecycle {
     // Wait for TraceLog to reinitialize
     await page.waitForFunction(
       () => {
-        return !!(window as { __traceLogBridge?: unknown }).__traceLogBridge;
+        return !!window.__traceLogBridge;
       },
       {},
       { timeout: TIMEOUTS.MEDIUM },
@@ -258,8 +260,7 @@ export class SessionTimeout {
    */
   static async setCustomTimeout(page: Page, timeoutMs: number): Promise<void> {
     await page.evaluate((timeout) => {
-      const bridge = (window as { __traceLogBridge?: { setSessionTimeout: (timeout: number) => void } })
-        .__traceLogBridge;
+      const bridge = window.__traceLogBridge;
       if (bridge?.setSessionTimeout) {
         bridge.setSessionTimeout(timeout);
       }
@@ -365,11 +366,7 @@ export class CrossTabTesting {
       await page.goto(url);
 
       // Wait for TraceLog to be available
-      await page.waitForFunction(
-        () => !!(window as { __traceLogBridge?: unknown }).__traceLogBridge,
-        {},
-        { timeout: TIMEOUTS.MEDIUM },
-      );
+      await page.waitForFunction(() => !!window.__traceLogBridge, {}, { timeout: TIMEOUTS.MEDIUM });
 
       tabs.push(page);
     }
@@ -429,7 +426,7 @@ export class CrossTabTesting {
     const leaderResults = await Promise.all(
       tabs.map(async (tab, index) => {
         const isLeader = await tab.evaluate(() => {
-          const bridge = (window as { __traceLogBridge?: { isTabLeader: () => boolean } }).__traceLogBridge;
+          const bridge = window.__traceLogBridge;
           return bridge?.isTabLeader?.() ?? false;
         });
         return { index, isLeader };
@@ -552,11 +549,7 @@ export class SessionStorage {
     await page.reload({ waitUntil: 'domcontentloaded' });
 
     // Wait for TraceLog to reinitialize
-    await page.waitForFunction(
-      () => !!(window as { __traceLogBridge?: unknown }).__traceLogBridge,
-      {},
-      { timeout: TIMEOUTS.MEDIUM },
-    );
+    await page.waitForFunction(() => !!window.__traceLogBridge, {}, { timeout: TIMEOUTS.MEDIUM });
 
     const restoredSession = await SessionLifecycle.getSessionData(page);
 

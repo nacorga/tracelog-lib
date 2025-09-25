@@ -323,8 +323,63 @@ export const aggressiveFingerprintCleanup = (): void => {
 };
 
 class TestBridge extends App implements TraceLogTestBridge {
+  private _forceInitLock = false;
+  private _forceInitFailure = false;
+
   isInitializing(): boolean {
     return isInitializing;
+  }
+
+  sendCustomEvent(name: string, data?: Record<string, unknown>): void {
+    super.sendCustomEvent(name, data);
+  }
+
+  getSessionData(): Record<string, unknown> | null {
+    return {
+      id: this.get('sessionId') as string,
+      isActive: !!this.get('sessionId'),
+      startTime: Date.now(),
+      lastActivity: Date.now(),
+      timeout: this.get('config')?.sessionTimeout ?? 15 * 60 * 1000,
+    };
+  }
+
+  setSessionTimeout(timeout: number): void {
+    const config = this.get('config');
+    if (config) {
+      config.sessionTimeout = timeout;
+      this.set('config', config);
+    }
+  }
+
+  isTabLeader?(): boolean {
+    return true; // For testing purposes, always consider current tab as leader
+  }
+
+  getQueueLength(): number {
+    return this.eventManager?.getQueueLength() ?? 0;
+  }
+
+  forceInitLock(enabled = true): void {
+    this._forceInitLock = enabled;
+    if (enabled) {
+      // Force a deadlock scenario by setting isInitializing to true
+      (globalThis as unknown as { isInitializing: boolean }).isInitializing = true;
+    } else {
+      (globalThis as unknown as { isInitializing: boolean }).isInitializing = false;
+    }
+  }
+
+  forceInitFailure(enabled = true): void {
+    this._forceInitFailure = enabled;
+  }
+
+  // Override init to check for test flags
+  async init(config: AppConfig): Promise<void> {
+    if (this._forceInitFailure) {
+      throw new Error('Forced initialization failure for testing');
+    }
+    return super.init(config);
   }
 }
 
@@ -332,6 +387,7 @@ class TestBridge extends App implements TraceLogTestBridge {
 if (process.env.NODE_ENV === 'dev') {
   if (typeof window !== 'undefined') {
     const injectTestingBridge = (): void => {
+      // Create a fresh instance for each injection to avoid cross-test contamination
       window.__traceLogBridge = new TestBridge();
     };
 
@@ -341,5 +397,9 @@ if (process.env.NODE_ENV === 'dev') {
     } else {
       injectTestingBridge();
     }
+
+    // Also expose a method to create fresh instances for tests
+    (window as unknown as { __createFreshTraceLogBridge?: () => void }).__createFreshTraceLogBridge =
+      injectTestingBridge;
   }
 }

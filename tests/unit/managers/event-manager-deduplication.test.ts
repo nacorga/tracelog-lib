@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { EventManager } from '@/managers/event.manager';
 import { StorageManager } from '@/managers/storage.manager';
 import { StateManager } from '@/managers/state.manager';
-import { EventType } from '@/types';
+import { EventType, Config, ScrollDirection, Mode } from '@/types';
 
 // Mock dependencies
 vi.mock('@/managers/sender.manager', () => ({
@@ -33,17 +33,17 @@ describe('EventManager - Deduplication', () => {
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
-    } as any;
+    } as unknown as StorageManager;
 
     // Create a temporary StateManager to set up global state
     const tempStateManager = new (class extends StateManager {
-      async setConfig(config: any) {
+      async setConfig(config: Config): Promise<void> {
         await this.set('config', config);
       }
-      async setPageUrl(url: string) {
+      async setPageUrl(url: string): Promise<void> {
         await this.set('pageUrl', url);
       }
-      async setSessionId(id: string) {
+      async setSessionId(id: string): Promise<void> {
         await this.set('sessionId', id);
       }
     })();
@@ -51,7 +51,7 @@ describe('EventManager - Deduplication', () => {
     // Set up global state
     await tempStateManager.setConfig({
       excludedUrlPaths: [],
-      mode: 'production',
+      mode: Mode.QA,
       ipExcluded: false,
       id: 'test-project',
     });
@@ -71,7 +71,7 @@ describe('EventManager - Deduplication', () => {
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: 'down' as any },
+      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
     });
 
     expect(eventManager.getQueueLength()).toBe(2);
@@ -144,13 +144,13 @@ describe('EventManager - Deduplication', () => {
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: 'down' as any },
+      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
     });
 
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: 'down' as any },
+      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
     });
 
     expect(eventManager.getQueueLength()).toBe(1);
@@ -160,13 +160,13 @@ describe('EventManager - Deduplication', () => {
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: 'down' as any },
+      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
     });
 
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 75, direction: 'down' as any },
+      scroll_data: { depth: 75, direction: ScrollDirection.DOWN },
     });
 
     expect(eventManager.getQueueLength()).toBe(2);

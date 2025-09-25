@@ -15,22 +15,22 @@
                 <span class="brand-text">TechShop</span>
             </div>
             <ul class="nav-menu">
-                <li><a href="#inicio" class="nav-link active" data-page="inicio">Inicio</a></li>
-                <li><a href="#productos" class="nav-link" data-page="productos">Productos</a></li>
-                <li><a href="#nosotros" class="nav-link" data-page="nosotros">Nosotros</a></li>
-                <li><a href="#contacto" class="nav-link" data-page="contacto">Contacto</a></li>
+                <li><a href="#inicio" class="nav-link active" data-page="inicio" data-testid="nav-inicio">Inicio</a></li>
+                <li><a href="#productos" class="nav-link" data-page="productos" data-testid="nav-productos">Productos</a></li>
+                <li><a href="#nosotros" class="nav-link" data-page="nosotros" data-testid="nav-nosotros">Nosotros</a></li>
+                <li><a href="#contacto" class="nav-link" data-page="contacto" data-testid="nav-contacto">Contacto</a></li>
             </ul>
             <div class="nav-cart">
-                <button class="cart-btn">
+                <button class="cart-btn" data-testid="cart-button">
                     <span>🛒</span>
-                    <span class="cart-count" id="cart-count">0</span>
+                    <span class="cart-count" id="cart-count" data-testid="cart-count">0</span>
                 </button>
             </div>
         </div>
     </nav>
 
     <!-- Page: Inicio -->
-    <div id="page-inicio" class="page active">
+    <div id="page-inicio" class="page active" data-testid="page-inicio">
         <!-- Hero Section -->
         <section class="hero">
             <div class="hero-container">
@@ -38,8 +38,8 @@
                     <h1 class="hero-title">La mejor tecnología al mejor precio</h1>
                     <p class="hero-subtitle">Descubre nuestros productos premium seleccionados para ti</p>
                     <div class="hero-buttons">
-                        <button class="btn btn-primary" data-action="cta-ver-productos">Ver Productos</button>
-                        <button class="btn btn-secondary" data-action="cta-contacto" data-tl-name="Test HTML event" data-tl-value="VALUE XX">Contáctanos</button>
+                        <button class="btn btn-primary" data-action="cta-ver-productos" data-testid="cta-ver-productos">Ver Productos</button>
+                        <button class="btn btn-secondary" data-action="cta-contacto" data-testid="cta-contacto" data-tl-name="Test HTML event" data-tl-value="VALUE XX">Contáctanos</button>
                     </div>
                 </div>
                 <div class="hero-image">
@@ -81,19 +81,19 @@
                         <div class="product-image">💻</div>
                         <h3 class="product-name">Laptop Pro M2</h3>
                         <p class="product-price">$1,299</p>
-                        <button class="btn btn-add-cart" data-product-id="1" data-product-name="Laptop Pro M2">Añadir al Carrito</button>
+                        <button class="btn btn-add-cart" data-product-id="1" data-product-name="Laptop Pro M2" data-testid="add-cart-1">Añadir al Carrito</button>
                     </div>
                     <div class="product-card" data-product="smartphone-x">
                         <div class="product-image">📱</div>
                         <h3 class="product-name">Smartphone X</h3>
                         <p class="product-price">$899</p>
-                        <button class="btn btn-add-cart" data-product-id="2" data-product-name="Smartphone X">Añadir al Carrito</button>
+                        <button class="btn btn-add-cart" data-product-id="2" data-product-name="Smartphone X" data-testid="add-cart-2">Añadir al Carrito</button>
                     </div>
                     <div class="product-card" data-product="smartwatch-ultra">
                         <div class="product-image">⌚</div>
                         <h3 class="product-name">Smartwatch Ultra</h3>
                         <p class="product-price">$499</p>
-                        <button class="btn btn-add-cart" data-product-id="3" data-product-name="Smartwatch Ultra">Añadir al Carrito</button>
+                        <button class="btn btn-add-cart" data-product-id="3" data-product-name="Smartwatch Ultra" data-testid="add-cart-3">Añadir al Carrito</button>
                     </div>
                 </div>
             </div>
@@ -101,7 +101,7 @@
     </div>
 
     <!-- Page: Productos -->
-    <div id="page-productos" class="page">
+    <div id="page-productos" class="page" data-testid="page-productos">
         <section class="page-header">
             <div class="container">
                 <h1>Nuestros Productos</h1>
@@ -159,7 +159,7 @@
     </div>
 
     <!-- Page: Nosotros -->
-    <div id="page-nosotros" class="page">
+    <div id="page-nosotros" class="page" data-testid="page-nosotros">
         <section class="page-header">
             <div class="container">
                 <h1>Sobre Nosotros</h1>
@@ -198,7 +198,7 @@
     </div>
 
     <!-- Page: Contacto -->
-    <div id="page-contacto" class="page">
+    <div id="page-contacto" class="page" data-testid="page-contacto">
         <section class="page-header">
             <div class="container">
                 <h1>Contáctanos</h1>
@@ -234,20 +234,20 @@
                     </div>
                     <div class="contact-form-container">
                         <h2>Envíanos un Mensaje</h2>
-                        <form id="contact-form" class="contact-form">
+                        <form id="contact-form" class="contact-form" data-testid="contact-form">
                             <div class="form-group">
                                 <label for="name">Nombre</label>
-                                <input type="text" id="name" name="name" required>
+                                <input type="text" id="name" name="name" data-testid="form-name" required>
                             </div>
                             <div class="form-group">
                                 <label for="email">Email</label>
-                                <input type="email" id="email" name="email" required>
+                                <input type="email" id="email" name="email" data-testid="form-email" required>
                             </div>
                             <div class="form-group">
                                 <label for="message">Mensaje</label>
-                                <textarea id="message" name="message" rows="5" required></textarea>
+                                <textarea id="message" name="message" rows="5" data-testid="form-message" required></textarea>
                             </div>
-                            <button type="submit" class="btn btn-primary">Enviar Mensaje</button>
+                            <button type="submit" class="btn btn-primary" data-testid="form-submit">Enviar Mensaje</button>
                         </form>
                     </div>
                 </div>
@@ -256,16 +256,16 @@
     </div>
 
     <!-- Floating Monitor -->
-    <div id="floating-monitor" class="floating-monitor">
+    <div id="floating-monitor" class="floating-monitor" data-testid="tracelog-monitor">
         <div class="monitor-header">
             <span class="monitor-title">TraceLog Monitor</span>
-            <button id="clear-events" class="monitor-clear">Limpiar</button>
+            <button id="clear-events" class="monitor-clear" data-testid="clear-events">Limpiar</button>
         </div>
         <div class="monitor-queue">
-            <span>Cola: <span id="queue-count">0</span></span>
-            <span id="queue-status">⏸</span>
+            <span>Cola: <span id="queue-count" data-testid="queue-count">0</span></span>
+            <span id="queue-status" data-testid="queue-status">⏸</span>
         </div>
-        <div id="events-list" class="monitor-events"></div>
+        <div id="events-list" class="monitor-events" data-testid="events-list"></div>
     </div>
 
     <!-- Footer -->
@@ -274,6 +274,7 @@
             <p>&copy; 2024 TechShop. Todos los derechos reservados.</p>
         </div>
     </footer>
+
 
     <!-- TraceLog Library -->
     <script type="module">
