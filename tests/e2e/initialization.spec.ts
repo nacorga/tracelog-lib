@@ -20,11 +20,6 @@ test.describe('Initialization System', () => {
         });
 
         expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -51,11 +46,6 @@ test.describe('Initialization System', () => {
         });
 
         expect(initResult.success).toBe(true);
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -74,11 +64,6 @@ test.describe('Initialization System', () => {
 
         const secondInit = await TestUtils.initializeTraceLog(page);
         expect(secondInit.success).toBe(true);
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -114,11 +99,6 @@ test.describe('Initialization System', () => {
 
         const initEvents = eventCapture.getEvents(COMMON_FILTERS.INITIALIZATION);
         expect(initEvents.length).toBeGreaterThan(0);
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         await eventCapture.stopCapture();
         monitor.cleanup();
@@ -148,11 +128,6 @@ test.describe('Initialization System', () => {
 
           await Promise.all([firstInit, secondInit]);
         });
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         await eventCapture.stopCapture();
         monitor.cleanup();
@@ -227,10 +202,6 @@ test.describe('Initialization System', () => {
         });
 
         expect(listenersAfter.scrollHandlers).toBe(0);
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -273,11 +244,6 @@ test.describe('Initialization System', () => {
             throw new Error('Intervals/timeouts not cleaned up');
           }
         });
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -331,10 +297,6 @@ test.describe('Initialization System', () => {
         });
 
         expect(stateValid).toBe(true);
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -440,7 +402,11 @@ test.describe('Initialization System', () => {
 
               if (!bridge) throw new Error('TraceLog bridge not available');
 
-              await bridge.destroy();
+              // Only destroy if already initialized
+              if (bridge.initialized) {
+                await bridge.destroy();
+              }
+
               await bridge.init({
                 id: 'skip',
                 scrollContainerSelectors: [sel],
@@ -452,12 +418,8 @@ test.describe('Initialization System', () => {
             }
           }, selector);
 
+          // Initialization failures are captured in expect() assertion below
           expect(result.success).toBe(true);
-        }
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
         }
       } finally {
         monitor.cleanup();
@@ -476,11 +438,6 @@ test.describe('Initialization System', () => {
           id: SpecialProjectId.Skip,
           scrollContainerSelectors: ['#valid-selector', '#another-valid'],
         });
-
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -539,10 +496,6 @@ test.describe('Initialization System', () => {
         });
 
         expect(updateCount).toBe(99);
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }
@@ -598,10 +551,6 @@ test.describe('Initialization System', () => {
         });
 
         expect(updateCount).toBeGreaterThan(0);
-        // Log any TraceLog errors for debugging but don't fail test
-        if (monitor.traceLogErrors.length > 0) {
-          console.log('TraceLog errors detected:', monitor.traceLogErrors);
-        }
       } finally {
         monitor.cleanup();
       }

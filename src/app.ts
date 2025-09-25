@@ -75,12 +75,7 @@ export class App extends StateManager {
     this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
 
     // Initialize handlers
-    try {
-      await this.initHandlers();
-    } catch (error) {
-      debugLog.error('App', 'Handlers initialization failed', { error });
-      throw error;
-    }
+    await this.initHandlers();
 
     // Recover persisted events
     try {
@@ -143,7 +138,7 @@ export class App extends StateManager {
       }
     }
 
-    // Stop handlers
+    // Stop handlers in parallel
     const handlers = [
       this.sessionHandler,
       this.pageViewHandler,
@@ -151,17 +146,19 @@ export class App extends StateManager {
       this.scrollHandler,
       this.performanceHandler,
       this.errorHandler,
-    ];
+    ].filter(Boolean);
 
-    for (const handler of handlers) {
-      if (handler) {
-        try {
-          await handler.stopTracking();
-        } catch (error) {
-          debugLog.warn('App', 'Handler cleanup failed', { error });
-        }
+    const cleanupResults = await Promise.allSettled(handlers.map((handler) => handler.stopTracking()));
+
+    // Log any failed cleanups
+    cleanupResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        debugLog.warn('App', 'Handler cleanup failed', {
+          handlerIndex: index,
+          error: result.reason,
+        });
       }
-    }
+    });
 
     // Clear timers
     if (this.suppressNextScrollTimer) {
@@ -224,10 +221,14 @@ export class App extends StateManager {
 
   private async setupIntegrations(): Promise<void> {
     const config = this.get('config');
-    const isIPExcluded = config.ipExcluded;
-    const measurementId = config.integrations?.googleAnalytics?.measurementId;
 
-    if (!isIPExcluded && measurementId?.trim()) {
+    // Only proceed if integrations are configured and IP is not excluded
+    if (config.ipExcluded || !config.integrations) {
+      return;
+    }
+
+    const measurementId = config.integrations.googleAnalytics?.measurementId;
+    if (measurementId?.trim()) {
       this.googleAnalytics = new GoogleAnalyticsIntegration();
       await this.googleAnalytics.initialize();
     }

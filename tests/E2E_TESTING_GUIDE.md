@@ -1,31 +1,31 @@
 # E2E Testing Guide
 
-## 🎯 Framework de Testing TraceLog
+## 🎯 TraceLog Testing Framework
 
-Testing end-to-end usando Playwright con fixtures personalizados, builders fluidos y matchers específicos.
+End-to-end testing using Playwright with custom fixtures, fluent builders, and specific matchers.
 
-### Stack Tecnológico
-- **Playwright** + **TypeScript** con type safety estricto
-- **Testing Bridge**: `__traceLogBridge` para acceso consistente
-- **Framework mejorado**: Fixtures, Page Objects, Builders, Matchers
+### Technology Stack
+- **Playwright** + **TypeScript** with strict type safety
+- **Testing Bridge**: `__traceLogBridge` for consistent access
+- **Enhanced Framework**: Fixtures, Page Objects, Builders, Matchers
 
-## 🔧 Comandos Principales
+## 🔧 Main Commands
 
 ```bash
 # Tests
-npm run test:e2e                 # Todos los tests E2E
-npm run test:e2e -- --headed     # Modo visual
-npm run test:e2e -- --grep "X"   # Tests específicos
+npm run test:e2e                 # All E2E tests
+npm run test:e2e -- --headed     # Visual mode
+npm run test:e2e -- --grep "X"   # Specific tests
 
-# Calidad
-npm run check                    # Verificar todo (tipos + lint + format)
-npm run fix                      # Corregir automáticamente
-npm run type-check:watch         # Verificación continua
+# Quality
+npm run check                    # Check everything (types + lint + format)
+npm run fix                      # Auto-fix
+npm run type-check:watch         # Continuous checking
 ```
 
-## 🧪 Patrones de Testing
+## 🧪 Testing Patterns
 
-### Patrón Simple (Fixture)
+### Simple Pattern (Fixture)
 
 ```typescript
 import { traceLogTest } from '../fixtures/tracelog-fixtures';
@@ -39,7 +39,7 @@ traceLogTest('basic test', async ({ traceLogPage }) => {
 });
 ```
 
-### Patrón Avanzado (Builder DSL)
+### Advanced Pattern (Builder DSL)
 
 ```typescript
 import { TraceLogTestBuilder } from '../builders/test-scenario-builder';
@@ -57,7 +57,7 @@ traceLogTest('complex flow', async ({ traceLogPage }) => {
 });
 ```
 
-## 🔑 APIs Esenciales
+## 🔑 Essential APIs
 
 ```typescript
 // TraceLogTestPage (fixture automático)
@@ -66,28 +66,29 @@ await traceLogPage.clickElement(selector);
 await traceLogPage.sendCustomEvent(name, data);
 const events = await traceLogPage.getTrackedEvents();
 
-// Matchers personalizados
+// Custom matchers
 await expect(traceLogPage).toHaveNoTraceLogErrors();
 await expect(events).toHaveEvent('CLICK');
 await expect(events).toHaveCustomEvent('user_action');
 
-// Configuraciones predefinidas
-TRACELOG_CONFIGS.MINIMAL        // Tests básicos
-TRACELOG_CONFIGS.STANDARD       // Tests generales
-TRACELOG_CONFIGS.FULL_FEATURED  // Tests completos
+// Predefined configurations
+TRACELOG_CONFIGS.MINIMAL        // Basic tests
+TRACELOG_CONFIGS.STANDARD       // General tests
+TRACELOG_CONFIGS.FULL_FEATURED  // Complete tests
 ```
 
 ## ⚡ Best Practices
 
-### ✅ Hacer
+### ✅ Use
 - Usar `traceLogTest` fixture (setup/cleanup automático)
-- Usar configuraciones predefinidas (`TRACELOG_CONFIGS.*`)
-- Usar matchers personalizados (`toHaveNoTraceLogErrors`, `toHaveEvent`)
-- Builder DSL para escenarios complejos
+- Use predefined configurations (`TRACELOG_CONFIGS.*`)
+- Use custom matchers (`toHaveNoTraceLogErrors`, `toHaveEvent`)
+- Builder DSL for complex scenarios
+- Adapt `__traceLogBridge` as needed
 
-### ❌ Evitar
+### ❌ Avoid
 - Hardcoded timeouts: `await page.waitForTimeout(2000)`
-- Configuraciones inline: `{ id: 'hardcoded', sessionTimeout: 900000 }`
+- Inline configurations: `{ id: 'hardcoded', sessionTimeout: 900000 }`
 - Direct Bridge access: `window.__traceLogBridge.getSessionData()`
 
 ## 🔍 Debug
@@ -97,3 +98,58 @@ npm run test:e2e -- --headed    # Visual mode
 npm run test:e2e -- --debug     # DevTools
 npm run test:e2e -- --trace on  # Generate traces
 ```
+
+
+## ⭐ Acceptance criteria
+- 100% pass rating
+- NO types errors (use `npm run type-check` script to verify)
+- NO lint errors (use `npm run lint` script to verify)
+
+
+## 🛡️ Library Error Detection
+
+### Automated Monitoring
+
+Tests automatically detect issues in TraceLog library:
+
+```bash
+npm run test:e2e                 # Runtime error detection
+npm run ci:health-check          # System health validation
+node scripts/test-anomaly-report.js  # Anomaly analysis
+```
+
+### Error Categories
+
+#### Console Errors
+```typescript
+// Automatic console monitoring
+await expect(traceLogPage).toHaveNoTraceLogErrors();
+await expect(consoleMonitor).not.toHaveMessage(/\[TraceLog:ERROR\]/);
+```
+
+#### Memory Leaks
+```typescript
+// Performance monitoring
+await expect(performanceMonitor).toHaveNoMemoryLeaks();
+await expect(performanceMonitor).toHaveNoExcessiveEventQueuing();
+```
+
+#### Security Issues
+```typescript
+// Data sanitization validation
+await expect(events).toHaveSanitizedData();
+await expect(events).not.toContainScript();
+```
+
+#### Runtime Anomalies
+```typescript
+// Bridge availability and functionality
+await expect(traceLogPage.isBridgeAvailable()).toBe(true);
+await expect(sessionData).toBeValidSessionData();
+```
+
+### Reports Generated
+
+- `test-reports/anomaly-report.json` - Performance and behavior anomalies
+- `test-results/failed-tests.json` - Test failures with library issues
+- `playwright-report/` - Detailed execution reports with screenshots

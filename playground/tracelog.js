@@ -3409,12 +3409,7 @@ class App extends StateManager {
       this.googleAnalytics = null;
     }
     this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
-    try {
-      await this.initHandlers();
-    } catch (error) {
-      debugLog.error("App", "Handlers initialization failed", { error });
-      throw error;
-    }
+    await this.initHandlers();
     try {
       await this.eventManager.recoverPersistedEvents();
     } catch (error) {
@@ -3470,16 +3465,16 @@ class App extends StateManager {
       this.scrollHandler,
       this.performanceHandler,
       this.errorHandler
-    ];
-    for (const handler of handlers) {
-      if (handler) {
-        try {
-          await handler.stopTracking();
-        } catch (error) {
-          debugLog.warn("App", "Handler cleanup failed", { error });
-        }
+    ].filter(Boolean);
+    const cleanupResults = await Promise.allSettled(handlers.map((handler) => handler.stopTracking()));
+    cleanupResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        debugLog.warn("App", "Handler cleanup failed", {
+          handlerIndex: index,
+          error: result.reason
+        });
       }
-    }
+    });
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
@@ -3527,9 +3522,11 @@ class App extends StateManager {
   }
   async setupIntegrations() {
     const config = this.get("config");
-    const isIPExcluded = config.ipExcluded;
-    const measurementId = config.integrations?.googleAnalytics?.measurementId;
-    if (!isIPExcluded && measurementId?.trim()) {
+    if (config.ipExcluded || !config.integrations) {
+      return;
+    }
+    const measurementId = config.integrations.googleAnalytics?.measurementId;
+    if (measurementId?.trim()) {
       this.googleAnalytics = new GoogleAnalyticsIntegration();
       await this.googleAnalytics.initialize();
     }
@@ -3710,19 +3707,18 @@ const event = (name, metadata) => {
     app.sendCustomEvent(name, metadata);
   } catch (error) {
     debugLog.error("API", "Event tracking failed", { eventName: name, error, hasMetadata: !!metadata });
-    if (error instanceof Error && (error.message === "App not initialized" || error.message.includes("validation failed"))) {
-      throw error;
-    }
+    throw error;
   }
 };
 const isInitialized = () => {
   return app !== null;
 };
 const getInitializationStatus = () => {
+  const initialized = app !== null;
   return {
-    isInitialized: app !== null,
+    isInitialized: initialized,
     isInitializing,
-    hasInstance: app !== null
+    hasInstance: initialized
   };
 };
 const destroy = async () => {
@@ -3766,33 +3762,16 @@ const destroy = async () => {
     isDestroying = false;
   }
 };
-const getRecoveryStats = () => {
-  debugLog.warn(
-    "API",
-    "getRecoveryStats() is deprecated in v2.0 and will be removed in v3.0 - the v2 refactor simplified error recovery"
-  );
-  return null;
-};
-const attemptSystemRecovery = async () => {
-  debugLog.warn(
-    "API",
-    "attemptSystemRecovery() is deprecated in v2.0 and will be removed in v3.0 - v2 uses automatic degradation"
-  );
-  return Promise.resolve();
-};
-const aggressiveFingerprintCleanup = () => {
-  debugLog.warn(
-    "API",
-    "aggressiveFingerprintCleanup() is deprecated in v2.0 and will be removed in v3.0 - v2 simplified deduplication"
-  );
-};
 class TestBridge extends App {
-  _forceInitLock = false;
   _forceInitFailure = false;
+  _isDestroying = false;
   isInitializing() {
     return isInitializing;
   }
   sendCustomEvent(name, data) {
+    if (!this.initialized) {
+      throw new Error("App not initialized");
+    }
     super.sendCustomEvent(name, data);
   }
   getSessionData() {
@@ -3818,15 +3797,61 @@ class TestBridge extends App {
     return this.eventManager?.getQueueLength() ?? 0;
   }
   forceInitLock(enabled = true) {
-    this._forceInitLock = enabled;
     if (enabled) {
-      globalThis.isInitializing = true;
+      isInitializing = true;
     } else {
-      globalThis.isInitializing = false;
+      isInitializing = false;
     }
   }
   forceInitFailure(enabled = true) {
     this._forceInitFailure = enabled;
+  }
+  // Public getter method for tests to access state
+  get(key) {
+    return super.get(key);
+  }
+  // Manager and handler getter methods for testing
+  getStorageManager() {
+    return this.storageManager || null;
+  }
+  getEventManager() {
+    return this.eventManager || null;
+  }
+  getSessionHandler() {
+    return this.sessionHandler || null;
+  }
+  getPageViewHandler() {
+    return this.pageViewHandler || null;
+  }
+  getClickHandler() {
+    return this.clickHandler || null;
+  }
+  getScrollHandler() {
+    return this.scrollHandler || null;
+  }
+  getPerformanceHandler() {
+    return this.performanceHandler || null;
+  }
+  getErrorHandler() {
+    return this.errorHandler || null;
+  }
+  getGoogleAnalytics() {
+    return this.googleAnalytics || null;
+  }
+  // Override destroy to check initialization and handle properly
+  async destroy() {
+    if (!this.initialized) {
+      throw new Error("App not initialized");
+    }
+    if (this._isDestroying) {
+      throw new Error("Destroy already in progress");
+    }
+    this._isDestroying = true;
+    try {
+      await super.destroy();
+    } finally {
+      this._isDestroying = false;
+    }
   }
   // Override init to check for test flags
   async init(config) {
@@ -3853,12 +3878,9 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   __proto__: null,
   Constants: app_constants,
   Types: app_types,
-  aggressiveFingerprintCleanup,
-  attemptSystemRecovery,
   destroy,
   event,
   getInitializationStatus,
-  getRecoveryStats,
   init,
   isInitialized
 }, Symbol.toStringTag, { value: "Module" }));

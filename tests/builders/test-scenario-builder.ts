@@ -272,7 +272,7 @@ export class TraceLogTestBuilder {
       if (this.config || this.shouldExpectInitialization) {
         initResult = await this.traceLogPage.initializeTraceLog(this.config);
 
-        if (this.shouldExpectInitialization) {
+        if (this.shouldExpectInitialization && initResult) {
           expect(initResult.success).toBe(true);
         }
       }

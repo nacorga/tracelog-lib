@@ -1,6 +1,22 @@
 import { expect } from '@playwright/test';
-import type { EventLogDispatch, InitializationResult } from '../types';
 import { TraceLogTestPage } from '../fixtures/tracelog-fixtures';
+
+// Local type definitions
+interface EventLogDispatch {
+  type: string;
+  name?: string;
+  message?: string;
+  namespace?: string;
+  data?: any;
+  custom_event?: {
+    name: string;
+  };
+}
+
+interface InitializationResult {
+  success: boolean;
+  error?: string;
+}
 
 /**
  * Custom matchers for TraceLog-specific assertions

@@ -52,6 +52,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
       return;
     }
 
+    // Set flag before concurrent check to prevent race condition
     if (isInitializing) {
       debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
 
@@ -180,13 +181,7 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
     app.sendCustomEvent(name, metadata);
   } catch (error) {
     debugLog.error('API', 'Event tracking failed', { eventName: name, error, hasMetadata: !!metadata });
-
-    if (
-      error instanceof Error &&
-      (error.message === 'App not initialized' || error.message.includes('validation failed'))
-    ) {
-      throw error;
-    }
+    throw error;
   }
 };
 
@@ -207,10 +202,11 @@ export const getInitializationStatus = (): {
   isInitializing: boolean;
   hasInstance: boolean;
 } => {
+  const initialized = app !== null;
   return {
-    isInitialized: app !== null,
+    isInitialized: initialized,
     isInitializing: isInitializing,
-    hasInstance: app !== null,
+    hasInstance: initialized,
   };
 };
 
@@ -268,69 +264,18 @@ export const destroy = async (): Promise<void> => {
   }
 };
 
-/**
- * @deprecated This method is deprecated in v2.0 and will be removed in v3.0.
- * The v2 refactor simplified error recovery - this method now returns null.
- * For error monitoring, use standard error handlers or custom events instead.
- * @returns null
- * @example
- * const stats = getRecoveryStats(); // Returns null in v2
- */
-export const getRecoveryStats = (): {
-  circuitBreakerResets: number;
-  persistenceFailures: number;
-  networkTimeouts: number;
-  lastRecoveryAttempt: number;
-  currentFailureCount: number;
-  circuitBreakerOpen: boolean;
-  fingerprintMapSize: number;
-} | null => {
-  debugLog.warn(
-    'API',
-    'getRecoveryStats() is deprecated in v2.0 and will be removed in v3.0 - the v2 refactor simplified error recovery',
-  );
-  return null;
-};
-
-/**
- * @deprecated This method is deprecated in v2.0 and will be removed in v3.0.
- * The v2 refactor uses automatic degradation instead of manual recovery.
- * System recovery happens automatically - manual intervention is no longer needed.
- * @returns Promise that resolves immediately
- * @example
- * await attemptSystemRecovery(); // No-op in v2
- */
-export const attemptSystemRecovery = async (): Promise<void> => {
-  debugLog.warn(
-    'API',
-    'attemptSystemRecovery() is deprecated in v2.0 and will be removed in v3.0 - v2 uses automatic degradation',
-  );
-  return Promise.resolve();
-};
-
-/**
- * @deprecated This method is deprecated in v2.0 and will be removed in v3.0.
- * The v2 refactor simplified deduplication (last event comparison) - fingerprint cleanup is no longer needed.
- * Memory management is now automatic and more efficient.
- * @example
- * aggressiveFingerprintCleanup(); // No-op in v2
- */
-export const aggressiveFingerprintCleanup = (): void => {
-  debugLog.warn(
-    'API',
-    'aggressiveFingerprintCleanup() is deprecated in v2.0 and will be removed in v3.0 - v2 simplified deduplication',
-  );
-};
-
 class TestBridge extends App implements TraceLogTestBridge {
-  private _forceInitLock = false;
   private _forceInitFailure = false;
+  private _isDestroying = false;
 
   isInitializing(): boolean {
     return isInitializing;
   }
 
   sendCustomEvent(name: string, data?: Record<string, unknown>): void {
+    if (!this.initialized) {
+      throw new Error('App not initialized');
+    }
     super.sendCustomEvent(name, data);
   }
 
@@ -361,17 +306,76 @@ class TestBridge extends App implements TraceLogTestBridge {
   }
 
   forceInitLock(enabled = true): void {
-    this._forceInitLock = enabled;
+    // Test scenarios handled through internal state instead of global manipulation
     if (enabled) {
-      // Force a deadlock scenario by setting isInitializing to true
-      (globalThis as unknown as { isInitializing: boolean }).isInitializing = true;
+      isInitializing = true;
     } else {
-      (globalThis as unknown as { isInitializing: boolean }).isInitializing = false;
+      isInitializing = false;
     }
   }
 
   forceInitFailure(enabled = true): void {
     this._forceInitFailure = enabled;
+  }
+
+  // Public getter method for tests to access state
+  get<T extends keyof import('./types').State>(key: T): import('./types').State[T] {
+    return super.get(key);
+  }
+
+  // Manager and handler getter methods for testing
+  getStorageManager() {
+    return this.storageManager || null;
+  }
+
+  getEventManager() {
+    return this.eventManager || null;
+  }
+
+  getSessionHandler() {
+    return this.sessionHandler || null;
+  }
+
+  getPageViewHandler() {
+    return this.pageViewHandler || null;
+  }
+
+  getClickHandler() {
+    return this.clickHandler || null;
+  }
+
+  getScrollHandler() {
+    return this.scrollHandler || null;
+  }
+
+  getPerformanceHandler() {
+    return this.performanceHandler || null;
+  }
+
+  getErrorHandler() {
+    return this.errorHandler || null;
+  }
+
+  getGoogleAnalytics() {
+    return this.googleAnalytics || null;
+  }
+
+  // Override destroy to check initialization and handle properly
+  async destroy(): Promise<void> {
+    if (!this.initialized) {
+      throw new Error('App not initialized');
+    }
+
+    if (this._isDestroying) {
+      throw new Error('Destroy already in progress');
+    }
+
+    this._isDestroying = true;
+    try {
+      await super.destroy();
+    } finally {
+      this._isDestroying = false;
+    }
   }
 
   // Override init to check for test flags

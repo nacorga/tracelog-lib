@@ -163,6 +163,18 @@ export const TRACELOG_CONFIGS: Record<string, Partial<Config>> = {
     errorSampling: 1,
   },
 
+  // Configuration with Google Analytics integration
+  WITH_GA: {
+    id: SpecialProjectId.Skip,
+    sessionTimeout: 900000, // 15 minutes
+    integrations: {
+      googleAnalytics: {
+        measurementId: 'GA-TEST-123456',
+      },
+    },
+    errorSampling: 1,
+  },
+
   // Configuration for integration testing
   INTEGRATION: {
     id: SpecialProjectId.Skip,

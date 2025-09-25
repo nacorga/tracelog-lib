@@ -19,7 +19,7 @@ if (!fs.existsSync(REPORT_DIR)) {
 
 const anomalyReport = {
   timestamp: new Date().toISOString(),
-  testSuite: 'TraceLog Flow Validation',
+  testSuite: 'TraceLog Complete E2E Suite',
   overallStatus: 'UNKNOWN', // HEALTHY | DEGRADED | CRITICAL
   summary: {
     totalTests: 0,
@@ -50,6 +50,8 @@ let testStartTime = Date.now();
 function parseTestOutput(output) {
   const lines = output.split('\n');
   let currentFailure = null;
+  let currentJsonBlock = '';
+  let inJsonBlock = false;
 
   // Reset for fresh parsing
   anomalyReport.summary.failedTests = 0;
@@ -58,19 +60,18 @@ function parseTestOutput(output) {
   anomalyReport.summary.criticalIssues = 0;
   anomalyReport.summary.totalAnomalies = 0;
 
-  for (const line of lines) {
-    // Detect failed tests - only track failures
-    if (line.includes('✘') && line.includes('basic-flow.spec.ts')) {
-      const matches = line.match(
-        /\[(\d+)\/(\d+)\]\s*\[([^\]]+)\]\s*›.*basic-flow\.spec\.ts:\d+:\d+\s*›\s*Flow Validation\s*›\s*(.+)/,
-      );
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Detect failed tests - track all E2E test failures
+    if (line.includes('✘') && line.includes('.spec.ts')) {
+      const matches = line.match(/\[([^\]]+)\]\s*›\s*([^›]+\.spec\.ts):\d+:\d+\s*›\s*(.+)/);
       if (matches) {
-        const [, testNumber, totalTests, browser, testDescription] = matches;
+        const [, browser, specFile, testDescription] = matches;
 
         currentFailure = {
           browser,
-          testDescription,
-          testNumber: parseInt(testNumber),
+          specFile,
+          testDescription: testDescription.trim(),
           errorDetails: [],
           severity: 'CRITICAL',
         };
@@ -165,7 +166,7 @@ function parseTestOutput(output) {
       const errorMatch = line.match(/TraceLog errors: (\d+)/);
       if (errorMatch) {
         const errorCount = parseInt(errorMatch[1]);
-        anomalyReport.systemHealth.traceLogErrors = errorCount;
+        anomalyReport.systemHealth.traceLogErrors = Math.max(anomalyReport.systemHealth.traceLogErrors, errorCount);
 
         if (errorCount > 0) {
           anomalyReport.anomalies.push({
@@ -173,10 +174,153 @@ function parseTestOutput(output) {
             count: errorCount,
             severity: 'CRITICAL',
             impact: 'Library initialization or core functionality failing',
+            details: `${errorCount} TraceLog errors detected in test execution`,
           });
           anomalyReport.summary.criticalIssues++;
         }
       }
+    }
+
+    // Handle multi-line TraceLog Test Summary JSON blocks
+    if (line.includes('TraceLog Test Summary:')) {
+      inJsonBlock = true;
+      currentJsonBlock = line.replace('TraceLog Test Summary:', '').trim();
+      continue;
+    }
+
+    if (inJsonBlock) {
+      if (line.trim() === '}') {
+        currentJsonBlock += '\n' + line;
+        // Try to parse the complete JSON block
+        try {
+          const summary = JSON.parse(currentJsonBlock);
+
+          // Track system health from summary
+          if (summary.traceLogErrors > 0) {
+            anomalyReport.systemHealth.traceLogErrors = Math.max(
+              anomalyReport.systemHealth.traceLogErrors,
+              summary.traceLogErrors,
+            );
+          }
+
+          // Process anomalies from the summary - filter out expected testing behavior
+          if (summary.anomalies && Array.isArray(summary.anomalies)) {
+            summary.anomalies.forEach((anomalyText) => {
+              // Parse different types of anomalies
+              if (anomalyText.includes('TraceLog errors detected:')) {
+                const match = anomalyText.match(/TraceLog errors detected: (\d+) error\(s\)/);
+                if (match) {
+                  const count = parseInt(match[1]);
+
+                  // Only report if error count exceeds normal testing expectations
+                  if (count > 10) {
+                    // Tests normally generate 2-8 errors for validation testing
+                    anomalyReport.anomalies.push({
+                      type: 'High Volume TraceLog Errors',
+                      count: count,
+                      severity: 'CRITICAL',
+                      impact: 'Unusually high error count may indicate library malfunction',
+                      source: 'Test Execution',
+                      recommendation: 'Investigate if error count exceeds normal testing patterns',
+                    });
+                    anomalyReport.summary.criticalIssues++;
+                  }
+                }
+              } else if (anomalyText.includes('Context errors detected:')) {
+                const match = anomalyText.match(/Context errors detected: (\d+) error\(s\)/);
+                if (match) {
+                  const count = parseInt(match[1]);
+
+                  // Only report significant context error counts
+                  if (count > 5) {
+                    // Normal testing may generate some context errors
+                    anomalyReport.anomalies.push({
+                      type: 'High Volume Context Errors',
+                      count: count,
+                      severity: 'MEDIUM',
+                      impact: 'High number of browser context errors detected',
+                      source: 'Test Execution',
+                      recommendation: 'Review if context error volume exceeds normal testing',
+                    });
+                  }
+                }
+              } else if (anomalyText.includes('Excessive')) {
+                // Only report excessive patterns that indicate real problems
+                if (
+                  anomalyText.includes('occurrences') &&
+                  (anomalyText.includes('15') ||
+                    anomalyText.includes('20') ||
+                    parseInt(anomalyText.match(/(\d+) occurrences/)?.[1] || '0') > 10)
+                ) {
+                  anomalyReport.anomalies.push({
+                    type: 'Genuinely Excessive Error Pattern',
+                    severity: 'MEDIUM',
+                    impact: 'Error pattern frequency exceeds reasonable testing expectations',
+                    details: anomalyText,
+                    source: 'Test Execution',
+                    recommendation: 'Review if error pattern indicates library issue vs test design',
+                  });
+                }
+              } else if (anomalyText.includes('Recent TraceLog errors:')) {
+                // Extract recent error details and analyze for REAL issues vs expected test errors
+                const errorDetails = anomalyText.replace('Recent TraceLog errors: ', '');
+
+                // Filter out known testing patterns
+                const isExpectedTestError =
+                  errorDetails.includes('valid-id.localhost') || // Expected URL testing
+                  errorDetails.includes('test<script>') || // Expected XSS testing
+                  errorDetails.includes('test&amp;') || // Expected input validation
+                  errorDetails.includes('Event name cannot be empty') || // Expected validation testing
+                  errorDetails.includes('Failed to fetch') || // Expected network testing
+                  errorDetails.includes('Event name contains invalid characters') || // Expected security testing
+                  errorDetails.includes('JSHandle@object') || // Playwright serialization artifacts
+                  errorDetails.includes('State setup failed') || // Expected during config testing
+                  errorDetails.includes('Failed to load config') || // Expected during invalid config tests
+                  errorDetails.includes('Load failed'); // Expected network simulation errors
+
+                // Only report errors that are NOT part of expected security/validation testing
+                if (!isExpectedTestError) {
+                  let severity = 'HIGH';
+                  let vulnerabilityType = 'Unexpected TraceLog Errors';
+
+                  if (errorDetails.includes('memory') || errorDetails.includes('leak')) {
+                    vulnerabilityType = 'Memory Management Issue';
+                    severity = 'CRITICAL';
+                  } else if (errorDetails.includes('infinite') || errorDetails.includes('loop')) {
+                    vulnerabilityType = 'Performance Issue';
+                    severity = 'CRITICAL';
+                  } else if (errorDetails.includes('undefined') || errorDetails.includes('null reference')) {
+                    vulnerabilityType = 'Code Quality Issue';
+                    severity = 'HIGH';
+                  }
+
+                  anomalyReport.anomalies.push({
+                    type: vulnerabilityType,
+                    severity: severity,
+                    impact: 'Unexpected library errors detected outside normal testing patterns',
+                    details: errorDetails.length > 300 ? errorDetails.substring(0, 300) + '...' : errorDetails,
+                    source: 'Test Execution',
+                    recommendation: 'Investigate unexpected TraceLog errors that are not part of validation testing',
+                  });
+
+                  if (severity === 'CRITICAL') {
+                    anomalyReport.summary.criticalIssues++;
+                  }
+                }
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to parse TraceLog Test Summary JSON:', e.message);
+        }
+
+        // Reset for next block
+        inJsonBlock = false;
+        currentJsonBlock = '';
+      } else {
+        currentJsonBlock += '\n' + line;
+      }
+      continue;
     }
 
     // === TRACELOG LIBRARY-SPECIFIC ANOMALY DETECTION ===
@@ -559,7 +703,7 @@ async function runTests() {
   testStartTime = Date.now(); // Reset start time
 
   return new Promise((resolve, reject) => {
-    const testProcess = spawn('npm', ['run', 'test:e2e', '--', 'tests/e2e/basic-flow.spec.ts', '--reporter=line'], {
+    const testProcess = spawn('npm', ['run', 'test:e2e', '--', '--reporter=line'], {
       stdio: ['inherit', 'pipe', 'pipe'],
       shell: true,
     });

@@ -1,54 +1,54 @@
-# TraceLog Playground - Demo Interactivo
+# TraceLog Playground - Interactive Demo
 
-Playground interactivo para probar y demostrar las funcionalidades de TraceLog en tiempo real.
+Interactive playground to test and demonstrate TraceLog functionalities in real-time.
 
-## 🎯 Propósito
+## 🎯 Purpose
 
-- **Desarrollo**: Testing rápido de features durante desarrollo
-- **Demo**: Mostrar capacidades de TraceLog a stakeholders
-- **Debugging**: Visualizar eventos y comportamientos en tiempo real
-- **E2E Tests**: Base para tests automatizados con Playwright
+- **Development**: Quick testing of features during development
+- **Demo**: Showcase TraceLog capabilities to stakeholders
+- **Debugging**: Visualize events and behaviors in real-time
+- **E2E Tests**: Foundation for automated tests with Playwright
 
-## 🚀 Inicio Rápido
+## 🚀 Quick Start
 
 ```bash
-# Inicia playground con build automático y servidor
+# Start playground with automatic build and server
 npm run playground:dev
 
-# Solo el servidor (requiere build manual previo)
+# Server only (requires manual build first)
 npm run serve
 
-# Solo build sin servidor
+# Build only without server
 npm run playground:setup
 ```
 
 **URL**: http://localhost:3000
 
-### Modos Disponibles
+### Available Modes
 
-- **Demo Normal**: Visualización completa con monitor
-- **E2E Test**: Auto-detección, monitor oculto, eventos automáticos
-- **QA Mode**: Debugging extendido con logs detallados
+- **Normal Demo**: Full visualization with monitor
+- **E2E Test**: Auto-detection, hidden monitor, automatic events
+- **QA Mode**: Extended debugging with detailed logs
 
-## ⚙️ Configuración
+## ⚙️ Configuration
 
-### Inicialización por Defecto
+### Default Initialization
 
 ```javascript
-// Auto-inicialización en modo demo (envía eventos a API local)
+// Auto-initialization in demo mode (sends events to local API)
 await TraceLog.init({
-  id: 'localhost:3002',  // API local (si disponible)
+  id: 'localhost:3002',  // Local API (if available)
 });
 
-// Modo E2E/Testing (sin HTTP calls - usa SpecialProjectId.Skip)
+// E2E/Testing mode (no HTTP calls - uses SpecialProjectId.Skip)
 await TraceLog.init({
-  id: 'skip', // No envía eventos, solo simula
+  id: 'skip', // Doesn't send events, only simulates
 });
 ```
 
-### Detección Automática
+### Automatic Detection
 
-El playground detecta automáticamente:
+The playground automatically detects:
 
 - **E2E Mode**: Playwright, HeadlessChrome, URL param `?e2e=true`
 - **Test Mode**: URL param `?mode=test`
@@ -59,21 +59,21 @@ El playground detecta automáticamente:
 
 Usa `__traceLogBridge` consistentemente:
 ```javascript
-// Helper unificado
+// Unified helper
 function getTraceLogInstance() {
   return window.__traceLogBridge || window.TraceLog;
 }
 
-// Envío de eventos
+// Event sending
 function sendTraceLogEvent(name, data) {
   const traceLog = getTraceLogInstance();
   return traceLog?.sendCustomEvent(name, data);
 }
 ```
 
-## 📊 Monitor de Eventos
+## 📊 Event Monitor
 
-### Vista del Monitor
+### Monitor View
 
 ```
 ┌─────────────────────────────────┐
@@ -87,40 +87,40 @@ function sendTraceLogEvent(name, data) {
 └─────────────────────────────────┘
 ```
 
-### Estados del Monitor
+### Monitor States
 
-- **▶️** - Cola procesándose normalmente
-- **✓** - Evento enviado correctamente
-- **⏳** - Evento en cola pendiente
-- **🔄** - Reintentando envío
-- **❌** - Error al enviar
+- **▶️** - Queue processing normally
+- **✓** - Event sent successfully
+- **⏳** - Event pending in queue
+- **🔄** - Retrying send
+- **❌** - Send error
 
-### Badges de Eventos
+### Event Badges
 
-- `PAGE_VIEW` - Azul (navegación)
-- `CLICK` - Verde (interacción)
+- `PAGE_VIEW` - Blue (navigation)
+- `CLICK` - Green (interaction)
 - `SCROLL` - Cyan (scroll)
-- `CUSTOM` - Púrpura (eventos custom)
-- `SESSION_START` - Amarillo (inicio sesión)
-- `WEB_VITALS` - Rosa (métricas)
-- `ERROR` - Rojo (errores)
+- `CUSTOM` - Purple (custom events)
+- `SESSION_START` - Yellow (session start)
+- `WEB_VITALS` - Pink (metrics)
+- `ERROR` - Red (errors)
 
-## 🛍️ Simulación E-commerce
+## 🛍️ E-commerce Simulation
 
-### Funcionalidades Disponibles
+### Available Features
 
-- **Navegación SPA**: `inicio` → `productos` → `nosotros` → `contacto`
-- **Add to Cart**: Botones con tracking de productos
-- **Form Submit**: Formulario de contacto con validación
-- **Custom Events**: Eventos de negocio específicos
+- **SPA Navigation**: `home` → `products` → `about` → `contact`
+- **Add to Cart**: Buttons with product tracking
+- **Form Submit**: Contact form with validation
+- **Custom Events**: Business-specific events
 
-### Eventos Generados
+### Generated Events
 
 ```javascript
-// Navegación automática
-{ type: 'PAGE_VIEW', page_url: '#productos' }
+// Automatic navigation
+{ type: 'PAGE_VIEW', page_url: '#products' }
 
-// Interacción con productos
+// Product interaction
 {
   type: 'CUSTOM',
   custom_event: {
@@ -129,19 +129,19 @@ function sendTraceLogEvent(name, data) {
   }
 }
 
-// Formulario de contacto
+// Contact form
 {
   type: 'CUSTOM',
   custom_event: {
     name: 'contact_form_submit',
-    metadata: { name: 'Juan', email: 'juan@email.com' }
+    metadata: { name: 'John', email: 'john@email.com' }
   }
 }
 ```
 
-## 🧪 Testing y Debugging
+## 🧪 Testing and Debugging
 
-### Funciones Globales Disponibles
+### Available Global Functions
 
 ```javascript
 // Helpers de testing (disponibles en window.testHelpers)
@@ -150,87 +150,87 @@ window.testHelpers.sendCustomEvent('test_event', { key: 'value' });
 
 ### Bridge Testing Methods
 
-Cuando `NODE_ENV=dev`, el `__traceLogBridge` incluye:
+When `NODE_ENV=dev`, the `__traceLogBridge` includes:
 
 ```javascript
 const bridge = window.__traceLogBridge;
 
-// Información de estado
-bridge.getAppInstance()        // App instance con initialized flag
+// State information
+bridge.getAppInstance()        // App instance with initialized flag
 bridge.getSessionData()        // session info
-bridge.getQueueLength()        // eventos pendientes
+bridge.getQueueLength()        // pending events
 
 // Testing helpers
-bridge.sendCustomEvent(name, data)  // enviar evento custom
-bridge.setSessionTimeout(ms)        // configurar timeout
-bridge.isTabLeader?.()              // liderazgo de tab
+bridge.sendCustomEvent(name, data)  // send custom event
+bridge.setSessionTimeout(ms)        // configure timeout
+bridge.isTabLeader?.()              // tab leadership
 ```
 
 ### Console Integration
 
 ```javascript
-// Escuchar eventos de TraceLog
+// Listen to TraceLog events
 window.addEventListener('tracelog:log', (event) => {
   const { namespace, message, data } = event.detail;
   console.log(`[${namespace}] ${message}`, data);
 });
 ```
 
-## 🎬 Flujo de Testing
+## 🎬 Testing Flow
 
-### 1. Testing Manual
+### 1. Manual Testing
 
-1. Abre playground en http://localhost:3000
-2. Interactúa con elementos (clicks, navegación, forms)
-3. Observa eventos en monitor en tiempo real
-4. Verifica logs en console del browser
+1. Open playground at http://localhost:3000
+2. Interact with elements (clicks, navigation, forms)
+3. Observe events in real-time monitor
+4. Verify logs in browser console
 
-### 2. Testing Automático (E2E)
+### 2. Automated Testing (E2E)
 
 ```bash
-# Ejecuta tests E2E que usan el playground
+# Run E2E tests that use the playground
 npm run test:e2e
 
-# Solo un test específico
+# Only a specific test
 npm run test:e2e -- --grep "should initialize successfully"
 ```
 
-Los tests automáticamente:
-- Detectan modo E2E (ocultan monitor)
-- Usan `__traceLogBridge` para acceso consistente
-- Utilizan fixtures de traceLogTest
-- Aplican custom matchers como toHaveNoTraceLogErrors()
+Tests automatically:
+- Detect E2E mode (hide monitor)
+- Use `__traceLogBridge` for consistent access
+- Utilize traceLogTest fixtures
+- Apply custom matchers like toHaveNoTraceLogErrors()
 
-### 3. Testing de Escenarios
+### 3. Scenario Testing
 
 ```javascript
-// URL params para testing específico
-http://localhost:3000?scenario=basic        // Click básico
-http://localhost:3000?scenario=navigation   // Navegación entre páginas
+// URL params for specific testing
+http://localhost:3000?scenario=basic        // Basic click
+http://localhost:3000?scenario=navigation   // Page navigation
 http://localhost:3000?scenario=ecommerce    // Add to cart
 ```
 
-## ✨ Ventajas del Playground
+## ✨ Playground Advantages
 
-### Desarrollo
-✅ **Hot Reload** - Cambios instantáneos con `npm run playground:dev`
-✅ **Bridge Consistency** - Usa `__traceLogBridge` como los tests
-✅ **Visual Feedback** - Monitor en tiempo real de eventos
-✅ **Multiple Scenarios** - Testing automático de diferentes casos
+### Development
+✅ **Hot Reload** - Instant changes with `npm run playground:dev`
+✅ **Bridge Consistency** - Uses `__traceLogBridge` like tests
+✅ **Visual Feedback** - Real-time event monitor
+✅ **Multiple Scenarios** - Automated testing of different cases
 
 ### Testing
-✅ **E2E Ready** - Base para tests de Playwright
-✅ **Cross-browser** - Funciona en Chrome, Firefox, Safari
-✅ **Auto-detection** - Modo E2E sin configuración manual
-✅ **Clean State** - Cada reload inicia limpio
+✅ **E2E Ready** - Foundation for Playwright tests
+✅ **Cross-browser** - Works on Chrome, Firefox, Safari
+✅ **Auto-detection** - E2E mode without manual configuration
+✅ **Clean State** - Each reload starts clean
 
 ### Debugging
-✅ **Console Integration** - Eventos `tracelog:log` disponibles
-✅ **Queue Visibility** - Monitor de cola de eventos
-✅ **Error Tracking** - Captura y muestra errores
-✅ **Session Management** - Visualización de estado de sesión
+✅ **Console Integration** - `tracelog:log` events available
+✅ **Queue Visibility** - Event queue monitor
+✅ **Error Tracking** - Captures and displays errors
+✅ **Session Management** - Session state visualization
 
-## 🏗️ Arquitectura del Playground
+## 🏗️ Playground Architecture
 
 ```
 ┌──────────────┐
@@ -259,42 +259,42 @@ http://localhost:3000?scenario=ecommerce    // Add to cart
 
 ## 🔧 Troubleshooting
 
-### Playground no carga
+### Playground won't load
 ```bash
-# Rebuild y reinicia
+# Rebuild and restart
 npm run playground:setup
 npm run serve
 
-# O todo junto
+# Or all together
 npm run playground:dev
 ```
 
-### Events no aparecen en monitor
-- **E2E Mode**: Monitor oculto por diseño
-- **JS Errors**: Revisa console del browser
-- **Bridge Missing**: Verifica que `NODE_ENV=dev` en build
-- **Project ID**: Si usas 'skip', los eventos no se envían (solo se simulan)
+### Events don't appear in monitor
+- **E2E Mode**: Monitor hidden by design
+- **JS Errors**: Check browser console
+- **Bridge Missing**: Verify that `NODE_ENV=dev` in build
+- **Project ID**: If using 'skip', events aren't sent (only simulated)
 
-### Bridge no disponible
+### Bridge not available
 ```javascript
-// Debug en console
-console.log(window.__traceLogBridge);  // debe existir
+// Debug in console
+console.log(window.__traceLogBridge);  // should exist
 console.log(window.TraceLog);          // fallback
 ```
 
-### Tests E2E fallan
-1. Verifica que playground esté en puerto 3000
-2. Build debe ser `NODE_ENV=dev` para tener bridge
-3. Los tests usan fixtures de `traceLogTest` y custom matchers
-4. Usa `SpecialProjectId.Skip` ('skip') para tests sin HTTP calls
+### E2E tests fail
+1. Verify playground is on port 3000
+2. Build must be `NODE_ENV=dev` to have bridge
+3. Tests use `traceLogTest` fixtures and custom matchers
+4. Use `SpecialProjectId.Skip` ('skip') for tests without HTTP calls
 
-## 📚 Recursos Relacionados
+## 📚 Related Resources
 
-- **Tests E2E**: `tests/E2E_TESTING_GUIDE.md` - Guía de testing framework
+- **E2E Tests**: `tests/E2E_TESTING_GUIDE.md` - Testing framework guide
 - **Fixtures**: `tests/fixtures/tracelog-fixtures.ts` - TraceLogTestPage class
 - **Matchers**: `tests/matchers/tracelog-matchers.ts` - Custom assertions
-- **Código fuente**: `playground/script.js` - Lógica del playground
-- **Build config**: `vite.config.ts` - Configuración de build
-- **Test bridge**: `src/types/window.types.ts` - Definición del bridge
-- **Event types**: `src/types/event.types.ts` - Tipos de eventos
+- **Source code**: `playground/script.js` - Playground logic
+- **Build config**: `vite.config.ts` - Build configuration
+- **Test bridge**: `src/types/window.types.ts` - Bridge definition
+- **Event types**: `src/types/event.types.ts` - Event types
 - **API types**: `src/types/api.types.ts` - SpecialProjectId enum

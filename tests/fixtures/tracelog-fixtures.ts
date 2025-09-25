@@ -1,10 +1,15 @@
 import { test as base, Page, expect } from '@playwright/test';
 import { TestUtils } from '../utils';
-import { ConsoleMonitor, InitializationResult } from '../types';
 import { Config, SpecialProjectId } from '../../src/types';
-import { TIMEOUTS } from '../constants';
 import { EventCapture } from 'tests/utils/event-capture.utils';
+import { ConsoleMonitor, InitializationResult } from '../types/common.types';
+import { EventLogDispatch } from '../types/event-capture.types';
 import '../matchers/tracelog-matchers';
+
+// Timeout constants
+const TIMEOUTS = {
+  INITIALIZATION: 10000,
+};
 
 /**
  * TraceLog Test Page - High-level abstraction for TraceLog testing
@@ -88,7 +93,7 @@ export class TraceLogTestPage {
   /**
    * Get tracked events (convenience method)
    */
-  async getTrackedEvents() {
+  async getTrackedEvents(): Promise<EventLogDispatch[]> {
     // This is a placeholder - actual implementation depends on EventCapture
     if (!this.eventCapture) {
       throw new Error('Event capture not started. Call startEventCapture() first.');
@@ -110,8 +115,8 @@ export class TraceLogTestPage {
     this.ensureSetup();
 
     await this.page.evaluate(() => {
-      if ((window as any).__createFreshTraceLogBridge) {
-        (window as any).__createFreshTraceLogBridge();
+      if (window.__createFreshTraceLogBridge) {
+        window.__createFreshTraceLogBridge();
       }
     });
   }
@@ -143,8 +148,96 @@ export class TraceLogTestPage {
   /**
    * Send custom event through bridge
    */
-  async sendCustomEvent(name: string, data?: Record<string, unknown>): Promise<void> {
-    return this.executeBridgeMethod('sendCustomEvent', name, data);
+  async sendCustomEvent(name: string, data?: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+    try {
+      this.ensureSetup();
+
+      const result = await this.page.evaluate(
+        ({ name, data }) => {
+          try {
+            const bridge = window.__traceLogBridge;
+            if (!bridge) {
+              throw new Error('TraceLog bridge not available');
+            }
+
+            bridge.sendCustomEvent(name, data);
+            return { success: true, error: null };
+          } catch (error) {
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        },
+        { name, data },
+      );
+
+      return result.success ? { success: true } : { success: false, error: result.error || 'Unknown error' };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Check if TraceLog is initialized
+   */
+  async isInitialized(): Promise<boolean> {
+    this.ensureSetup();
+
+    return this.page.evaluate(() => {
+      const bridge = window.__traceLogBridge;
+      return bridge?.initialized === true;
+    });
+  }
+
+  /**
+   * Get initialization status with detailed info
+   */
+  async getInitializationStatus(): Promise<{
+    isInitialized: boolean;
+    isInitializing: boolean;
+    hasInstance: boolean;
+  }> {
+    this.ensureSetup();
+
+    return this.page.evaluate(() => {
+      const bridge = window.__traceLogBridge;
+
+      return {
+        isInitialized: bridge?.initialized === true,
+        isInitializing: typeof bridge?.isInitializing === 'function' ? bridge.isInitializing() === true : false,
+        hasInstance: !!bridge,
+      };
+    });
+  }
+
+  /**
+   * Get configuration from TraceLog
+   */
+  async getConfig(): Promise<any> {
+    this.ensureSetup();
+
+    return this.page.evaluate(() => {
+      const bridge = window.__traceLogBridge;
+      return bridge?.get?.('config');
+    });
+  }
+
+  /**
+   * Destroy TraceLog instance
+   */
+  async destroy(): Promise<void> {
+    this.ensureSetup();
+
+    await this.page.evaluate(async () => {
+      const bridge = window.__traceLogBridge;
+      if (bridge && typeof bridge.destroy === 'function') {
+        await bridge.destroy();
+      }
+    });
   }
 
   /**
@@ -216,7 +309,14 @@ export class TraceLogTestPage {
     eventsCaptured?: number;
   } {
     const summary = this.monitor.getSummary();
-    const result = {
+    const result: {
+      consoleMessages: number;
+      traceLogErrors: number;
+      traceLogWarnings: number;
+      debugLogs: number;
+      anomalies: string[];
+      eventsCaptured?: number;
+    } = {
       consoleMessages: summary.total,
       traceLogErrors: this.monitor.traceLogErrors.length,
       traceLogWarnings: this.monitor.traceLogWarnings.length,
@@ -225,7 +325,7 @@ export class TraceLogTestPage {
     };
 
     if (this.eventCapture) {
-      (result as any).eventsCaptured = this.eventCapture.getEvents().length;
+      result.eventsCaptured = this.eventCapture.getEvents().length;
     }
 
     return result;
@@ -298,16 +398,6 @@ export const traceLogTest = base.extend<TraceLogTestFixtures>({
       await traceLogPage.setup();
       await use(traceLogPage);
     } finally {
-      // Log summary for debugging if test failed
-      try {
-        const summary = traceLogPage.getTestSummary();
-        if (summary.traceLogErrors > 0 || summary.anomalies.length > 0) {
-          console.log('TraceLog Test Summary:', JSON.stringify(summary, null, 2));
-        }
-      } catch (error) {
-        console.warn('Failed to generate test summary:', error);
-      }
-
       await traceLogPage.cleanup();
     }
   },
