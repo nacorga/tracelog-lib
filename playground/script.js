@@ -420,7 +420,7 @@ async function initializeApp() {
     await waitForTraceLogReady();
     const projectId = (state.testMode.enabled && state.testMode.autoInit)
       ? state.testMode.projectId
-      : 'localhost:3002';
+      : 'skip';
 
     await TraceLog.init({ id: projectId });
     updateQueueStatus('▶️');

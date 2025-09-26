@@ -6,52 +6,53 @@ var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
   return DeviceType2;
 })(DeviceType || {});
 const globalState = {};
-let stateVersion = 0;
-const updateQueue = [];
-let isUpdating = false;
 class StateManager {
+  /**
+   * Gets a value from the global state
+   */
   get(key) {
     return globalState[key];
   }
-  async set(key, value) {
-    return new Promise((resolve) => {
-      const update = () => {
-        const oldValue = globalState[key];
-        const oldVersion = stateVersion;
-        globalState[key] = value;
-        stateVersion++;
-        if (key === "sessionId" || key === "config" || key === "hasStartSession") {
-          debugLog.debug("StateManager", "Critical state updated", {
-            key,
-            oldValue: key === "config" ? !!oldValue : oldValue,
-            newValue: key === "config" ? !!value : value,
-            version: stateVersion,
-            previousVersion: oldVersion
-          });
-        }
-        resolve();
-        this.processNextUpdate();
-      };
-      updateQueue.push(update);
-      this.processNextUpdate();
-    });
-  }
-  processNextUpdate() {
-    if (isUpdating || updateQueue.length === 0) {
-      return;
-    }
-    isUpdating = true;
-    const update = updateQueue.shift();
-    if (update) {
-      update();
-    }
-    isUpdating = false;
-    if (updateQueue.length > 0) {
-      this.processNextUpdate();
+  /**
+   * Sets a value in the global state
+   */
+  set(key, value) {
+    const oldValue = globalState[key];
+    globalState[key] = value;
+    if (this.isCriticalStateKey(key) && this.shouldLog(oldValue, value)) {
+      debugLog.debug("StateManager", "State updated", {
+        key,
+        oldValue: this.formatLogValue(key, oldValue),
+        newValue: this.formatLogValue(key, value)
+      });
     }
   }
-  getStateVersion() {
-    return stateVersion;
+  /**
+   * Gets the entire state object (for debugging purposes)
+   */
+  getState() {
+    return { ...globalState };
+  }
+  /**
+   * Checks if a state key is considered critical for logging
+   */
+  isCriticalStateKey(key) {
+    return key === "sessionId" || key === "config" || key === "hasStartSession";
+  }
+  /**
+   * Determines if a state change should be logged
+   */
+  shouldLog(oldValue, newValue) {
+    return oldValue !== newValue;
+  }
+  /**
+   * Formats values for logging (avoiding large object dumps)
+   */
+  formatLogValue(key, value) {
+    if (key === "config") {
+      return value ? "(configured)" : "(not configured)";
+    }
+    return value;
   }
 }
 class DebugLogger extends StateManager {
@@ -167,6 +168,9 @@ const DEFAULT_THROTTLE_DELAY_MS = 1e3;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
 const EVENT_EXPIRY_HOURS = 24;
 const MAX_EVENTS_QUEUE_LENGTH = 500;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 5e3;
+const REQUEST_TIMEOUT_MS = 1e4;
 const SIGNIFICANT_SCROLL_DELTA = 10;
 const DEFAULT_SAMPLING_RATE = 1;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
@@ -1079,247 +1083,163 @@ async function fetchWithTimeout(url, options = {}) {
     throw error;
   }
 }
-class SimpleCircuitBreaker {
-  failureCount = 0;
-  isOpen = false;
-  openTime = 0;
-  MAX_FAILURES = 5;
-  RECOVERY_DELAY_MS = 3e4;
-  // 30 seconds
-  /**
-   * Records a failure and opens the circuit if max failures reached
-   */
-  recordFailure() {
-    this.failureCount++;
-    if (this.failureCount >= this.MAX_FAILURES) {
-      this.open();
-    }
-  }
-  /**
-   * Records a success and closes the circuit, resetting failure count
-   */
-  recordSuccess() {
-    this.failureCount = 0;
-    this.close();
-  }
-  /**
-   * Checks if an attempt can be made
-   * Returns true if circuit is closed or recovery delay has elapsed
-   */
-  canAttempt() {
-    if (!this.isOpen) return true;
-    const timeSinceOpen = Date.now() - this.openTime;
-    if (timeSinceOpen >= this.RECOVERY_DELAY_MS) {
-      this.close();
-      return true;
-    }
-    return false;
-  }
-  /**
-   * Gets the current state of the circuit breaker
-   */
-  getState() {
-    return {
-      isOpen: this.isOpen,
-      failureCount: this.failureCount
-    };
-  }
-  open() {
-    this.isOpen = true;
-    this.openTime = Date.now();
-    console.warn("Circuit breaker opened - too many failures");
-  }
-  close() {
-    this.isOpen = false;
-    this.openTime = 0;
-    this.failureCount = 0;
-  }
-}
-class ApiManager {
-  getUrl(id, allowHttp = false) {
+function getApiUrlForProject(id, allowHttp = false) {
+  debugLog.debug("ApiManager", "Generating API URL", { projectId: id, allowHttp });
+  try {
     if (id.startsWith(SpecialProjectId.Localhost)) {
       const url2 = `http://${id}`;
       if (!isValidUrl(url2, true)) {
-        throw new Error("Invalid URL");
+        throw new Error(`Invalid localhost URL format: ${id}`);
       }
+      debugLog.debug("ApiManager", "Generated localhost URL", { url: url2 });
       return url2;
     }
     const url = getApiUrl(id, allowHttp);
     if (!isValidUrl(url, allowHttp)) {
-      throw new Error("Invalid URL");
+      throw new Error(`Generated API URL failed validation: ${url}`);
     }
+    debugLog.debug("ApiManager", "Generated API URL", { url });
     return url;
+  } catch (error) {
+    debugLog.error("ApiManager", "API URL generation failed", {
+      projectId: id,
+      allowHttp,
+      error: error instanceof Error ? error.message : error
+    });
+    throw error;
   }
 }
 class ConfigManager {
-  // Allowed origins for local development and production
-  ALLOWED_ORIGINS = [
-    // Development origins
-    "http://localhost:3000",
-    "http://localhost:3002",
-    "http://localhost:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3002",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8080"
-  ];
-  ALLOWED_ORIGIN_PATTERNS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
+  static LOCALHOST_PATTERN = /^localhost:\d{1,5}$/;
+  static PRODUCTION_DOMAINS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
+  /**
+   * Gets complete configuration by merging default, API, and app configurations.
+   *
+   * @param apiUrl - Base URL for the configuration API
+   * @param appConfig - Client-side configuration from init()
+   * @returns Promise<Config> - Merged configuration object
+   */
   async get(apiUrl, appConfig) {
     if (appConfig.id === SpecialProjectId.Skip) {
-      debugLog.debug("ConfigManager", "Using special project id: skip");
-      return this.getDefaultConfig(appConfig);
+      debugLog.debug("ConfigManager", "Using skip mode - no network calls");
+      return this.createDefaultConfig(appConfig);
     }
-    debugLog.debug("ConfigManager", "Loading config from API", { apiUrl, projectId: appConfig.id });
-    const isLocalhostMode = appConfig.id.startsWith(SpecialProjectId.Localhost);
-    const config = await this.load(apiUrl, appConfig, isLocalhostMode);
-    debugLog.info("ConfigManager", "Config loaded successfully", {
+    debugLog.debug("ConfigManager", "Loading configuration", {
+      apiUrl,
+      projectId: appConfig.id
+    });
+    const config = await this.loadFromApi(apiUrl, appConfig);
+    debugLog.info("ConfigManager", "Configuration loaded", {
       projectId: appConfig.id,
       mode: config.mode,
-      hasExcludedPaths: !!config.excludedUrlPaths?.length,
-      hasGlobalMetadata: !!config.globalMetadata
+      hasTags: !!config.tags?.length,
+      hasExclusions: !!config.excludedUrlPaths?.length
     });
     return config;
   }
-  async load(apiUrl, appConfig, useLocalhost) {
+  /**
+   * Loads configuration from API and merges with app config.
+   */
+  async loadFromApi(apiUrl, appConfig) {
     try {
-      let configUrl;
-      const headers = { "Content-Type": "application/json" };
-      if (useLocalhost) {
-        this.validateLocalhostId(appConfig.id);
-        const origin = this.extractOriginFromProjectId(appConfig.id);
-        configUrl = `${origin}/config`;
-        if (!isValidUrl(configUrl, true)) {
-          debugLog.clientError("ConfigManager", "Invalid config URL constructed", { configUrl });
-          throw new Error("Config URL is not valid or not allowed");
-        }
-        if (!this.isAllowedOrigin(origin, appConfig.id)) {
-          debugLog.clientError("ConfigManager", "Untrusted origin detected", {
-            origin,
-            projectId: appConfig.id
-          });
-          throw new Error(
-            `Security: Origin '${origin}' is not allowed to load configuration. Please use an authorized domain.`
-          );
-        }
-        headers["X-TraceLog-Project"] = appConfig.id;
-        debugLog.debug("ConfigManager", "Using local server with validated origin", {
-          origin,
-          projectId: appConfig.id
-        });
-      } else {
-        configUrl = this.getUrl(apiUrl);
-      }
-      if (!configUrl) {
-        throw new Error("Config URL is not valid or not allowed");
-      }
+      const configUrl = this.buildConfigUrl(apiUrl, appConfig);
+      const headers = this.buildHeaders(appConfig);
       const response = await fetchWithTimeout(configUrl, {
         method: "GET",
         headers,
-        timeout: 1e4
-        // 10 segundos timeout
+        timeout: REQUEST_TIMEOUT_MS
       });
       if (!response.ok) {
-        const error = `HTTP ${response.status}: ${response.statusText}`;
-        debugLog.error("ConfigManager", "Config API request failed", {
-          status: response.status,
-          statusText: response.statusText,
-          configUrl
-        });
-        throw new Error(error);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      const contentType = response.headers.get("content-type");
-      if (!contentType?.includes("application/json")) {
-        debugLog.clientError("ConfigManager", "Invalid response content-type", {
-          contentType,
-          configUrl
-        });
-        throw new Error(`Security: Invalid response content-type. Expected application/json, got ${contentType}`);
-      }
-      const rawData = await response.json();
-      if (rawData === void 0 || rawData === null || typeof rawData !== "object" || Array.isArray(rawData)) {
-        debugLog.error("ConfigManager", "Invalid config API response format", {
-          responseType: typeof rawData,
-          isArray: Array.isArray(rawData)
-        });
-        throw new Error("Invalid config API response: expected object");
-      }
-      const safeApiConfig = sanitizeApiConfig(rawData);
-      const apiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
-      const mergedConfig = { ...apiConfig, ...appConfig };
-      const urlParameters = new URLSearchParams(window.location.search);
-      const isQaMode = urlParameters.get("qaMode") === "true";
-      if (isQaMode && !mergedConfig.mode) {
-        mergedConfig.mode = Mode.QA;
-        debugLog.info("ConfigManager", "QA mode enabled via URL parameter");
-      }
-      const errorSampling = Object.values(Mode).includes(mergedConfig.mode) ? 1 : mergedConfig.errorSampling ?? 0.1;
-      const finalConfig = { ...mergedConfig, errorSampling };
-      return finalConfig;
+      const rawData = await this.parseJsonResponse(response);
+      return this.mergeConfigurations(rawData, appConfig);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      debugLog.error("ConfigManager", "Failed to load config", { error: errorMessage, apiUrl });
-      throw new Error(`Failed to load config: ${errorMessage}`);
+      debugLog.error("ConfigManager", "Failed to load configuration", {
+        error: errorMessage,
+        apiUrl,
+        projectId: appConfig.id
+      });
+      throw new Error(`Configuration load failed: ${errorMessage}`);
     }
-  }
-  getUrl(apiUrl) {
-    const urlParameters = new URLSearchParams(window.location.search);
-    const isQaMode = urlParameters.get("qaMode") === "true";
-    let configUrl = `${apiUrl}/config`;
-    if (isQaMode) {
-      configUrl += "?qaMode=true";
-    }
-    if (!isValidUrl(configUrl)) {
-      debugLog.clientError("ConfigManager", "Invalid config URL provided", { configUrl });
-      throw new Error("Config URL is not valid or not allowed");
-    }
-    return configUrl;
   }
   /**
-   * Validates if an origin is allowed to load configuration
-   * @param origin - The origin to validate (e.g., 'http://localhost:3000')
-   * @param projectId - The project ID for logging purposes
-   * @returns True if the origin is allowed, false otherwise
+   * Builds the configuration URL based on project type and QA mode.
    */
-  isAllowedOrigin(origin, projectId) {
-    if (this.ALLOWED_ORIGINS.includes(origin)) {
-      debugLog.debug("ConfigManager", "Origin validated via exact match", { origin, projectId });
-      return true;
+  buildConfigUrl(apiUrl, appConfig) {
+    const isLocalhost = appConfig.id.startsWith(SpecialProjectId.Localhost);
+    if (isLocalhost) {
+      this.validateLocalhostProjectId(appConfig.id);
+      return `http://${appConfig.id}/config`;
     }
-    const matchesPattern = this.ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
-    if (matchesPattern) {
-      debugLog.debug("ConfigManager", "Origin validated via pattern match", { origin, projectId });
-      return true;
-    }
-    debugLog.clientError("ConfigManager", "Origin validation failed", {
-      origin,
-      projectId,
-      allowedOrigins: this.ALLOWED_ORIGINS
-    });
-    return false;
+    const baseUrl = `${apiUrl}/config`;
+    const isQaMode = this.isQaModeEnabled();
+    return isQaMode ? `${baseUrl}?qaMode=true` : baseUrl;
   }
-  extractOriginFromProjectId(id) {
-    return `http://${id}`;
+  /**
+   * Builds request headers based on project configuration.
+   */
+  buildHeaders(appConfig) {
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    if (appConfig.id.startsWith(SpecialProjectId.Localhost)) {
+      headers["X-TraceLog-Project"] = appConfig.id;
+    }
+    return headers;
   }
-  validateLocalhostId(id) {
-    const pattern = /^localhost:\d{1,5}$/;
-    if (!pattern.test(id)) {
-      debugLog.clientError("ConfigManager", "Invalid localhost project ID format", {
-        projectId: id,
-        expectedFormat: "localhost:PORT"
-      });
-      throw new Error(`Invalid localhost format. Expected 'localhost:PORT', got '${id}'`);
+  /**
+   * Parses and validates JSON response from config API.
+   */
+  async parseJsonResponse(response) {
+    const contentType = response.headers.get("content-type");
+    if (!contentType?.includes("application/json")) {
+      throw new Error("Invalid response content-type, expected JSON");
     }
-    const portString = id.split(":")[1];
-    if (!portString) {
-      throw new Error(`Invalid localhost format. Port is required, got '${id}'`);
+    const rawData = await response.json();
+    if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) {
+      throw new Error("Invalid response format, expected object");
     }
-    const port = parseInt(portString, 10);
-    if (isNaN(port) || port < 1 || port > 65535) {
-      throw new Error(`Invalid port number. Port must be between 1 and 65535, got ${portString}`);
+    return rawData;
+  }
+  /**
+   * Validates localhost project ID format and port range.
+   */
+  validateLocalhostProjectId(projectId) {
+    if (!ConfigManager.LOCALHOST_PATTERN.test(projectId)) {
+      throw new Error(`Invalid localhost format. Expected 'localhost:PORT', got '${projectId}'`);
+    }
+    const port = parseInt(projectId.split(":")[1], 10);
+    if (port < 1 || port > 65535) {
+      throw new Error(`Port must be between 1 and 65535, got ${port}`);
     }
   }
-  getDefaultConfig(appConfig) {
+  /**
+   * Checks if QA mode is enabled via URL parameter.
+   */
+  isQaModeEnabled() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("qaMode") === "true";
+  }
+  /**
+   * Merges API configuration with app configuration and applies mode-specific settings.
+   */
+  mergeConfigurations(rawApiConfig, appConfig) {
+    const safeApiConfig = sanitizeApiConfig(rawApiConfig);
+    const apiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
+    const mergedConfig = { ...apiConfig, ...appConfig };
+    if (this.isQaModeEnabled() && !mergedConfig.mode) {
+      mergedConfig.mode = Mode.QA;
+      debugLog.info("ConfigManager", "QA mode enabled via URL parameter");
+    }
+    const errorSampling = Object.values(Mode).includes(mergedConfig.mode) ? 1 : mergedConfig.errorSampling ?? 0.1;
+    return { ...mergedConfig, errorSampling };
+  }
+  /**
+   * Creates default configuration for skip mode and fallback scenarios.
+   */
+  createDefaultConfig(appConfig) {
     return DEFAULT_CONFIG({
       ...appConfig,
       errorSampling: 1,
@@ -1329,46 +1249,22 @@ class ConfigManager {
 }
 class SenderManager extends StateManager {
   storeManager;
-  memoryFallbackStorage = /* @__PURE__ */ new Map();
   retryTimeoutId = null;
   retryCount = 0;
   isRetrying = false;
-  // Fixed retry configuration
-  RETRY_DELAY_MS = 5e3;
-  // 5 seconds
-  MAX_RETRIES = 3;
-  REQUEST_TIMEOUT_MS = 1e4;
-  // 10 seconds
   constructor(storeManager) {
     super();
     this.storeManager = storeManager;
   }
   getQueueStorageKey() {
-    const key = `${QUEUE_KEY(this.get("config")?.id)}:${this.get("userId")}`;
-    return key;
+    const projectId = this.get("config")?.id || "default";
+    const userId = this.get("userId") || "anonymous";
+    return `${QUEUE_KEY(projectId)}:${userId}`;
   }
-  async sendEventsQueueAsync(body) {
-    if (this.shouldSkipSend()) {
-      this.logQueue(body);
-      return true;
-    }
-    const persistResult = await this.persistWithFallback(body);
-    if (!persistResult.success) {
-      const immediateSuccess = await this.sendImmediate(body);
-      if (!immediateSuccess) {
-        return false;
-      }
-      return true;
-    }
-    const success = await this.send(body);
-    if (success) {
-      this.clearPersistedEvents();
-      this.resetRetryState();
-    } else {
-      this.scheduleRetry(body);
-    }
-    return success;
-  }
+  /**
+   * Send events synchronously using sendBeacon or XHR fallback
+   * Used primarily for page unload scenarios
+   */
   sendEventsQueueSync(body) {
     if (this.shouldSkipSend()) {
       this.logQueue(body);
@@ -1381,37 +1277,35 @@ class SenderManager extends StateManager {
     }
     return success;
   }
+  /**
+   * Send events asynchronously with persistence and retry logic
+   * Main method for sending events during normal operation
+   */
   async sendEventsQueue(body, callbacks) {
     if (this.shouldSkipSend()) {
       this.logQueue(body);
+      callbacks?.onSuccess?.(0);
       return true;
     }
-    const persistResult = await this.persistWithFallback(body);
-    if (!persistResult.success) {
-      debugLog.error("SenderManager", "All persistence methods failed", {
-        primaryError: persistResult.primaryError,
-        fallbackError: persistResult.fallbackError,
-        eventCount: body.events.length
-      });
-      const immediateSuccess = await this.sendImmediate(body);
-      if (!immediateSuccess) {
-        callbacks?.onFailure?.();
-        return false;
-      }
-      callbacks?.onSuccess?.();
-      return true;
+    const persisted = this.persistEvents(body);
+    if (!persisted) {
+      debugLog.warn("SenderManager", "Failed to persist events, attempting immediate send");
     }
     const success = await this.send(body);
     if (success) {
       this.clearPersistedEvents();
       this.resetRetryState();
-      callbacks?.onSuccess?.();
+      callbacks?.onSuccess?.(body.events.length);
     } else {
       this.scheduleRetry(body, callbacks);
       callbacks?.onFailure?.();
     }
     return success;
   }
+  /**
+   * Recover and send previously persisted events
+   * Called during initialization to handle events from previous session
+   */
   async recoverPersistedEvents(callbacks) {
     try {
       const persistedData = this.getPersistedData();
@@ -1419,46 +1313,66 @@ class SenderManager extends StateManager {
         this.clearPersistedEvents();
         return;
       }
-      debugLog.info("SenderManager", "Persisted events recovered", {
-        eventsCount: persistedData.events.length,
-        sessionId: persistedData.sessionId,
-        events: persistedData.events
+      debugLog.info("SenderManager", "Recovering persisted events", {
+        count: persistedData.events.length,
+        sessionId: persistedData.sessionId
       });
       const body = this.createRecoveryBody(persistedData);
       const success = await this.send(body);
       if (success) {
         this.clearPersistedEvents();
         this.resetRetryState();
-        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events);
+        callbacks?.onSuccess?.(persistedData.events.length);
       } else {
         this.scheduleRetry(body, callbacks);
         callbacks?.onFailure?.();
       }
     } catch (error) {
       debugLog.error("SenderManager", "Failed to recover persisted events", { error });
+      this.clearPersistedEvents();
     }
   }
-  async persistEventsForRecovery(body) {
-    const result = await this.persistWithFallback(body);
-    return result.success;
+  /**
+   * Persist events for recovery in case of failure
+   */
+  persistEventsForRecovery(body) {
+    return this.persistEvents(body);
   }
+  /**
+   * Legacy method for backward compatibility
+   * @deprecated Use sendEventsQueue instead
+   */
+  async sendEventsQueueAsync(body) {
+    return this.sendEventsQueue(body);
+  }
+  /**
+   * Stop the sender manager and clean up resources
+   */
   stop() {
     this.clearRetryTimeout();
     this.resetRetryState();
+    this.clearPersistedEvents();
   }
   async send(body) {
     const { url, payload } = this.prepareRequest(body);
     try {
       const response = await this.sendWithTimeout(url, payload);
+      debugLog.debug("SenderManager", "Send completed", { status: response.status, events: body.events.length });
       return response.ok;
     } catch (error) {
-      debugLog.error("SenderManager", "Send request failed", { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      debugLog.error("SenderManager", "Send request failed", {
+        error: errorMessage,
+        events: body.events.length,
+        url: url.replace(/\/\/[^/]+/, "//[DOMAIN]")
+        // Hide domain for privacy
+      });
       return false;
     }
   }
   async sendWithTimeout(url, payload) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -1471,7 +1385,7 @@ class SenderManager extends StateManager {
         signal: controller.signal
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       return response;
     } finally {
@@ -1491,20 +1405,22 @@ class SenderManager extends StateManager {
     try {
       xhr.open("POST", url, false);
       xhr.setRequestHeader("Content-Type", "application/json");
-      xhr.setRequestHeader("Origin", window.location.origin);
-      xhr.setRequestHeader("Referer", window.location.href);
       xhr.withCredentials = true;
       xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);
-      return xhr.status >= 200 && xhr.status < 300;
+      const success = xhr.status >= 200 && xhr.status < 300;
+      if (!success) {
+        debugLog.warn("SenderManager", "Sync XHR failed", {
+          status: xhr.status,
+          statusText: xhr.statusText || "Unknown error"
+        });
+      }
+      return success;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const isCorsError = errorMessage.includes("CORS") || errorMessage.includes("NotSameOrigin") || errorMessage.includes("blocked");
-      debugLog.warn("SenderManager", "Sync XHR failed", {
+      debugLog.warn("SenderManager", "Sync XHR error", {
         error: errorMessage,
-        isCorsError,
-        status: xhr.status ?? "unknown",
-        url: url.replace(/\/\/[^/]+/, "//[DOMAIN]")
+        status: xhr.status || "unknown"
       });
       return false;
     }
@@ -1524,43 +1440,21 @@ class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      debugLog.warn("SenderManager", "Failed to get persisted data from localStorage", { error });
-    }
-    try {
-      const sessionKey = this.getQueueStorageKey() + "_session_fallback";
-      const sessionDataString = sessionStorage.getItem(sessionKey);
-      if (sessionDataString) {
-        debugLog.info("SenderManager", "Recovering data from sessionStorage fallback");
-        return JSON.parse(sessionDataString);
-      }
-    } catch (error) {
-      debugLog.warn("SenderManager", "Failed to get persisted data from sessionStorage", { error });
-    }
-    try {
-      const sessionId = this.get("sessionId");
-      if (sessionId && this.memoryFallbackStorage.has(sessionId)) {
-        const memoryData = this.memoryFallbackStorage.get(sessionId);
-        if (memoryData) {
-          debugLog.info("SenderManager", "Recovering data from memory fallback");
-          return {
-            userId: memoryData.data.user_id,
-            sessionId: memoryData.data.session_id,
-            device: memoryData.data.device,
-            events: memoryData.data.events,
-            timestamp: memoryData.timestamp,
-            fallbackMode: true,
-            ...memoryData.data.global_metadata && { global_metadata: memoryData.data.global_metadata }
-          };
-        }
-      }
-    } catch (error) {
-      debugLog.warn("SenderManager", "Failed to get persisted data from memory fallback", { error });
+      debugLog.warn("SenderManager", "Failed to parse persisted data", { error });
+      this.clearPersistedEvents();
     }
     return null;
   }
   isDataRecent(data) {
+    if (!data.timestamp || typeof data.timestamp !== "number") {
+      return false;
+    }
     const ageInHours = (Date.now() - data.timestamp) / (1e3 * 60 * 60);
-    return ageInHours < EVENT_EXPIRY_HOURS;
+    const isRecent = ageInHours < EVENT_EXPIRY_HOURS;
+    if (!isRecent) {
+      debugLog.debug("SenderManager", "Persisted data expired", { ageInHours });
+    }
+    return isRecent;
   }
   createRecoveryBody(data) {
     return {
@@ -1572,75 +1466,12 @@ class SenderManager extends StateManager {
     };
   }
   logQueue(queue) {
-    debugLog.info("SenderManager", ` ⏩ Queue snapshot`, queue);
+    debugLog.info("SenderManager", "Skipping send (debug mode)", {
+      events: queue.events.length,
+      sessionId: queue.session_id
+    });
   }
-  async persistWithFallback(body) {
-    try {
-      const primarySuccess = this.persistFailedEvents(body);
-      if (primarySuccess) {
-        return { success: true };
-      }
-    } catch (primaryError) {
-      debugLog.warn("SenderManager", "Primary persistence failed", { primaryError });
-    }
-    try {
-      const fallbackSuccess = this.persistToSessionStorage(body);
-      if (fallbackSuccess) {
-        debugLog.info("SenderManager", "Using sessionStorage fallback for persistence");
-        return { success: true };
-      }
-    } catch (fallbackError) {
-      debugLog.warn("SenderManager", "Fallback persistence failed", { fallbackError });
-    }
-    try {
-      this.memoryFallbackStorage.set(body.session_id, {
-        data: body,
-        timestamp: Date.now(),
-        retryCount: 0
-      });
-      debugLog.warn("SenderManager", "Using memory fallback for persistence (data will be lost on page reload)");
-      return { success: true };
-    } catch {
-      return {
-        success: false,
-        primaryError: "localStorage failed",
-        fallbackError: "All persistence methods failed"
-      };
-    }
-  }
-  persistToSessionStorage(body) {
-    try {
-      const storageKey = this.getQueueStorageKey() + "_session_fallback";
-      const persistedData = {
-        userId: body.user_id,
-        sessionId: body.session_id,
-        device: body.device,
-        events: body.events,
-        timestamp: Date.now(),
-        fallbackMode: true,
-        ...body.global_metadata && { global_metadata: body.global_metadata }
-      };
-      sessionStorage.setItem(storageKey, JSON.stringify(persistedData));
-      return !!sessionStorage.getItem(storageKey);
-    } catch (error) {
-      debugLog.error("SenderManager", "SessionStorage persistence failed", { error });
-      return false;
-    }
-  }
-  async sendImmediate(body) {
-    debugLog.warn("SenderManager", "Attempting immediate send as last resort");
-    try {
-      const success = await this.send(body);
-      if (success) {
-        debugLog.info("SenderManager", "Immediate send successful, events saved");
-      }
-      return success;
-    } catch (error) {
-      debugLog.error("SenderManager", "Immediate send failed", { error });
-      return false;
-    }
-  }
-  persistFailedEvents(body) {
+  persistEvents(body) {
     try {
       const persistedData = {
         userId: body.user_id,
@@ -1654,22 +1485,15 @@ class SenderManager extends StateManager {
       this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      debugLog.error("SenderManager", "Failed to persist events", { error });
+      debugLog.warn("SenderManager", "Failed to persist events", { error });
       return false;
     }
   }
   clearPersistedEvents() {
-    this.storeManager.removeItem(this.getQueueStorageKey());
     try {
-      const sessionKey = this.getQueueStorageKey() + "_session_fallback";
-      sessionStorage.removeItem(sessionKey);
+      this.storeManager.removeItem(this.getQueueStorageKey());
     } catch (error) {
-      debugLog.warn("SenderManager", "Failed to clear sessionStorage fallback", { error });
-    }
-    const sessionId = this.get("sessionId");
-    if (sessionId && this.memoryFallbackStorage.has(sessionId)) {
-      this.memoryFallbackStorage.delete(sessionId);
-      debugLog.debug("SenderManager", "Cleared memory fallback storage", { sessionId });
+      debugLog.warn("SenderManager", "Failed to clear persisted events", { error });
     }
   }
   resetRetryState() {
@@ -1681,15 +1505,18 @@ class SenderManager extends StateManager {
     if (this.retryTimeoutId !== null || this.isRetrying) {
       return;
     }
-    if (this.retryCount >= this.MAX_RETRIES) {
+    if (this.retryCount >= MAX_RETRIES) {
+      debugLog.warn("SenderManager", "Max retries reached, giving up", { retryCount: this.retryCount });
       this.clearPersistedEvents();
       this.resetRetryState();
       originalCallbacks?.onFailure?.();
       return;
     }
     if (this.isCircuitBreakerOpen()) {
+      debugLog.info("SenderManager", "Circuit breaker open, skipping retry");
       return;
     }
+    const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount);
     this.retryTimeoutId = window.setTimeout(async () => {
       this.retryTimeoutId = null;
       if (this.isCircuitBreakerOpen() || this.isRetrying) {
@@ -1697,24 +1524,28 @@ class SenderManager extends StateManager {
       }
       this.retryCount++;
       this.isRetrying = true;
-      const success = await this.send(body);
-      this.isRetrying = false;
-      if (success) {
-        this.clearPersistedEvents();
-        this.resetRetryState();
-        originalCallbacks?.onSuccess?.();
-      } else if (this.retryCount >= this.MAX_RETRIES) {
-        this.clearPersistedEvents();
-        this.resetRetryState();
-        originalCallbacks?.onFailure?.();
-      } else {
-        this.scheduleRetry(body, originalCallbacks);
+      debugLog.debug("SenderManager", "Retrying send", { attempt: this.retryCount });
+      try {
+        const success = await this.send(body);
+        if (success) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onSuccess?.(body.events.length);
+        } else if (this.retryCount >= MAX_RETRIES) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onFailure?.();
+        } else {
+          this.scheduleRetry(body, originalCallbacks);
+        }
+      } finally {
+        this.isRetrying = false;
       }
-    }, this.RETRY_DELAY_MS);
+    }, retryDelay);
     debugLog.debug("SenderManager", "Retry scheduled", {
-      retryCount: this.retryCount,
-      retryDelay: this.RETRY_DELAY_MS,
-      eventsCount: body.events.length
+      attempt: this.retryCount + 1,
+      delay: retryDelay,
+      events: body.events.length
     });
   }
   shouldSkipSend() {
@@ -1723,10 +1554,7 @@ class SenderManager extends StateManager {
     return id === SpecialProjectId.Skip;
   }
   isSendBeaconAvailable() {
-    if (typeof navigator.sendBeacon !== "function") {
-      return false;
-    }
-    return true;
+    return typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function";
   }
   clearRetryTimeout() {
     if (this.retryTimeoutId !== null) {
@@ -1741,11 +1569,10 @@ class SenderManager extends StateManager {
 class EventManager extends StateManager {
   googleAnalytics;
   dataSender;
-  circuitBreaker = new SimpleCircuitBreaker();
   eventsQueue = [];
-  lastEvent = null;
-  eventsQueueIntervalId = null;
-  intervalActive = false;
+  lastEventFingerprint = null;
+  lastEventTime = 0;
+  sendIntervalId = null;
   constructor(storeManager, googleAnalytics = null) {
     super();
     this.googleAnalytics = googleAnalytics;
@@ -1778,6 +1605,9 @@ class EventManager extends StateManager {
       }
     });
   }
+  /**
+   * Track user events with automatic deduplication and queueing
+   */
   track({
     type,
     page_url,
@@ -1789,83 +1619,225 @@ class EventManager extends StateManager {
     session_end_reason,
     session_start_recovered
   }) {
-    if (!this.circuitBreaker.canAttempt()) {
-      debugLog.warn("EventManager", "Event dropped - circuit breaker open");
+    if (!type) {
+      debugLog.warn("EventManager", "Event type is required");
       return;
     }
     if (!this.shouldSample()) {
       debugLog.debug("EventManager", "Event filtered by sampling");
       return;
     }
-    const effectivePageUrl = page_url || this.get("pageUrl");
-    const isRouteExcluded = isUrlPathExcluded(effectivePageUrl, this.get("config")?.excludedUrlPaths ?? []);
-    const hasStartSession = this.get("hasStartSession");
-    const isSessionEndEvent = type == EventType.SESSION_END;
-    if (isRouteExcluded && (!isSessionEndEvent || isSessionEndEvent && !hasStartSession)) {
-      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
-        debugLog.debug("EventManager", `Event ${type} on excluded route: ${page_url}`);
-      }
+    const currentPageUrl = page_url || this.get("pageUrl");
+    const payload = this.buildEventPayload({
+      type,
+      page_url: currentPageUrl,
+      from_page_url,
+      scroll_data,
+      click_data,
+      custom_event,
+      web_vitals,
+      session_end_reason,
+      session_start_recovered
+    });
+    if (this.isEventExcluded(payload)) {
       return;
     }
-    const isSessionStartEvent = type === EventType.SESSION_START;
-    if (isSessionStartEvent) {
+    if (this.isDuplicateEvent(payload)) {
+      debugLog.debug("EventManager", "Duplicate event filtered", { type });
+      return;
+    }
+    this.addToQueue(payload);
+  }
+  stop() {
+    if (this.sendIntervalId) {
+      clearInterval(this.sendIntervalId);
+      this.sendIntervalId = null;
+    }
+    this.eventsQueue = [];
+    this.lastEventFingerprint = null;
+    this.lastEventTime = 0;
+    this.dataSender.stop();
+    debugLog.debug("EventManager", "EventManager stopped");
+  }
+  /**
+   * Flush all queued events immediately (async)
+   */
+  async flushImmediately() {
+    return this.flushEvents(false);
+  }
+  /**
+   * Flush all queued events immediately (sync)
+   */
+  flushImmediatelySync() {
+    return this.flushEvents(true);
+  }
+  /**
+   * Queue management and sending intervals
+   */
+  getQueueLength() {
+    return this.eventsQueue.length;
+  }
+  clearSendInterval() {
+    if (this.sendIntervalId) {
+      clearInterval(this.sendIntervalId);
+      this.sendIntervalId = null;
+    }
+  }
+  /**
+   * Shared flush implementation for both sync and async modes
+   */
+  flushEvents(isSync) {
+    if (this.eventsQueue.length === 0) {
+      return isSync ? true : Promise.resolve(true);
+    }
+    const body = this.buildEventsPayload();
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e3) => `${e3.timestamp}_${e3.type}`);
+    if (isSync) {
+      const success = this.dataSender.sendEventsQueueSync(body);
+      if (success) {
+        this.removeProcessedEvents(eventIds);
+        this.clearSendInterval();
+        debugLog.info("EventManager", "Sync flush successful", {
+          eventCount: eventsToSend.length
+        });
+      }
+      return success;
+    } else {
+      return this.dataSender.sendEventsQueue(body, {
+        onSuccess: () => {
+          this.removeProcessedEvents(eventIds);
+          this.clearSendInterval();
+          debugLog.info("EventManager", "Async flush successful", {
+            eventCount: eventsToSend.length
+          });
+        },
+        onFailure: () => {
+          debugLog.warn("EventManager", "Async flush failed", {
+            eventCount: eventsToSend.length
+          });
+        }
+      });
+    }
+  }
+  /**
+   * Send queued events to the API
+   */
+  async sendEventsQueue() {
+    if (!this.get("sessionId") || this.eventsQueue.length === 0) {
+      return;
+    }
+    const body = this.buildEventsPayload();
+    const eventsToSend = [...this.eventsQueue];
+    const eventIds = eventsToSend.map((e3) => `${e3.timestamp}_${e3.type}`);
+    await this.dataSender.sendEventsQueue(body, {
+      onSuccess: () => {
+        this.removeProcessedEvents(eventIds);
+        debugLog.info("EventManager", "Events sent successfully", {
+          eventCount: eventsToSend.length,
+          remainingQueueLength: this.eventsQueue.length
+        });
+      },
+      onFailure: async () => {
+        debugLog.warn("EventManager", "Events send failed, keeping in queue", {
+          eventCount: eventsToSend.length
+        });
+      }
+    });
+  }
+  /**
+   * Build the payload for sending events to the API
+   * Includes basic deduplication and sorting
+   */
+  buildEventsPayload() {
+    const eventMap = /* @__PURE__ */ new Map();
+    for (const event2 of this.eventsQueue) {
+      const signature = this.createEventSignature(event2);
+      eventMap.set(signature, event2);
+    }
+    const events = Array.from(eventMap.values()).sort((a2, b2) => a2.timestamp - b2.timestamp);
+    return {
+      user_id: this.get("userId"),
+      session_id: this.get("sessionId"),
+      device: this.get("device"),
+      events,
+      ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata }
+    };
+  }
+  /**
+   * Helper methods for event processing
+   */
+  buildEventPayload(data) {
+    const isSessionStart = data.type === EventType.SESSION_START;
+    const currentPageUrl = data.page_url ?? this.get("pageUrl");
+    if (isSessionStart) {
       this.set("hasStartSession", true);
     }
-    const utmParams = isSessionStartEvent ? getUTMParameters() : void 0;
     const payload = {
-      type,
-      page_url: isRouteExcluded ? "excluded" : effectivePageUrl,
+      type: data.type,
+      page_url: currentPageUrl,
       timestamp: Date.now(),
-      ...isSessionStartEvent && { referrer: document.referrer || "Direct" },
-      ...from_page_url && !isRouteExcluded ? { from_page_url } : {},
-      ...scroll_data && { scroll_data },
-      ...click_data && { click_data },
-      ...custom_event && { custom_event },
-      ...utmParams && { utm: utmParams },
-      ...web_vitals && { web_vitals },
-      ...session_end_reason && { session_end_reason },
-      ...session_start_recovered && { session_start_recovered }
+      ...isSessionStart && { referrer: document.referrer || "Direct" },
+      ...data.from_page_url && { from_page_url: data.from_page_url },
+      ...data.scroll_data && { scroll_data: data.scroll_data },
+      ...data.click_data && { click_data: data.click_data },
+      ...data.custom_event && { custom_event: data.custom_event },
+      ...data.web_vitals && { web_vitals: data.web_vitals },
+      ...data.session_end_reason && { session_end_reason: data.session_end_reason },
+      ...data.session_start_recovered && { session_start_recovered: data.session_start_recovered },
+      ...isSessionStart && getUTMParameters() && { utm: getUTMParameters() }
     };
-    if (this.isDuplicate(payload)) {
-      const now = Date.now();
-      if (this.eventsQueue && this.eventsQueue.length > 0) {
-        const lastEvent = this.eventsQueue.at(-1);
-        if (lastEvent) {
-          lastEvent.timestamp = now;
-        }
-      }
-      if (this.lastEvent) {
-        this.lastEvent.timestamp = now;
-      }
-      debugLog.debug("EventManager", "Duplicate event detected, timestamp updated", {
-        type,
-        queueLength: this.eventsQueue.length
-      });
-      return;
-    }
     const projectTags = this.get("config")?.tags;
     if (projectTags?.length) {
       payload.tags = projectTags;
     }
-    this.lastEvent = payload;
-    this.processAndSend(payload);
+    return payload;
   }
-  stop() {
-    if (this.eventsQueueIntervalId) {
-      clearInterval(this.eventsQueueIntervalId);
-      this.eventsQueueIntervalId = null;
-      this.intervalActive = false;
+  isEventExcluded(event2) {
+    const isRouteExcluded = isUrlPathExcluded(event2.page_url, this.get("config")?.excludedUrlPaths ?? []);
+    const hasStartSession = this.get("hasStartSession");
+    const isSessionEndEvent = event2.type === EventType.SESSION_END;
+    if (isRouteExcluded && (!isSessionEndEvent || isSessionEndEvent && !hasStartSession)) {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.debug("EventManager", `Event ${event2.type} excluded for route: ${event2.page_url}`);
+      }
+      return true;
     }
-    this.lastEvent = null;
-    this.eventsQueue = [];
-    this.dataSender.stop();
-    debugLog.debug("EventManager", "EventManager stopped");
+    return this.get("config")?.ipExcluded === true;
   }
-  processAndSend(payload) {
-    if (this.get("config").ipExcluded) {
-      return;
+  isDuplicateEvent(event2) {
+    const now = Date.now();
+    const fingerprint = this.createEventFingerprint(event2);
+    if (this.lastEventFingerprint === fingerprint && now - this.lastEventTime < DUPLICATE_EVENT_THRESHOLD_MS) {
+      return true;
     }
-    this.eventsQueue.push(payload);
+    this.lastEventFingerprint = fingerprint;
+    this.lastEventTime = now;
+    return false;
+  }
+  createEventFingerprint(event2) {
+    let fingerprint = `${event2.type}_${event2.page_url}`;
+    if (event2.click_data) {
+      const x2 = Math.round((event2.click_data.x || 0) / 10) * 10;
+      const y2 = Math.round((event2.click_data.y || 0) / 10) * 10;
+      fingerprint += `_click_${x2}_${y2}`;
+    }
+    if (event2.scroll_data) {
+      fingerprint += `_scroll_${event2.scroll_data.depth}_${event2.scroll_data.direction}`;
+    }
+    if (event2.custom_event) {
+      fingerprint += `_custom_${event2.custom_event.name}`;
+    }
+    if (event2.web_vitals) {
+      fingerprint += `_vitals_${event2.web_vitals.type}`;
+    }
+    return fingerprint;
+  }
+  createEventSignature(event2) {
+    return this.createEventFingerprint(event2) + `_${event2.timestamp}`;
+  }
+  addToQueue(event2) {
+    this.eventsQueue.push(event2);
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
       const removedEvent = this.eventsQueue.shift();
       debugLog.warn("EventManager", "Event queue overflow, oldest event removed", {
@@ -1874,218 +1846,59 @@ class EventManager extends StateManager {
         removedEventType: removedEvent?.type
       });
     }
-    debugLog.info("EventManager", `📥 Event captured: ${payload.type}`, payload);
-    if (!this.eventsQueueIntervalId) {
-      this.initEventsQueueInterval();
+    debugLog.info("EventManager", `📥 Event captured: ${event2.type}`, event2);
+    if (!this.sendIntervalId) {
+      this.startSendInterval();
     }
-    if (this.googleAnalytics && payload.type === EventType.CUSTOM) {
-      const customEvent = payload.custom_event;
-      this.trackGoogleAnalyticsEvent(customEvent);
-    }
+    this.handleGoogleAnalyticsIntegration(event2);
   }
-  trackGoogleAnalyticsEvent(customEvent) {
-    if (this.get("config").mode === "qa" || this.get("config").mode === "debug") {
-      debugLog.debug("EventManager", `Google Analytics event: ${JSON.stringify(customEvent)}`);
-    } else if (this.googleAnalytics) {
-      this.googleAnalytics.trackEvent(customEvent.name, customEvent.metadata ?? {});
-    }
-  }
-  initEventsQueueInterval() {
-    if (this.eventsQueueIntervalId || this.intervalActive) {
-      return;
-    }
+  startSendInterval() {
     const isTestEnv = this.get("config")?.id === "test" || this.get("config")?.mode === "debug";
     const interval = isTestEnv ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
-    this.eventsQueueIntervalId = window.setInterval(() => {
+    this.sendIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
         this.sendEventsQueue();
       }
     }, interval);
-    this.intervalActive = true;
   }
-  async flushImmediately() {
-    if (this.eventsQueue.length === 0) {
-      return true;
-    }
-    const body = this.buildEventsPayload();
-    const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e3) => e3.timestamp + "_" + e3.type);
-    const success = await this.dataSender.sendEventsQueueAsync(body);
-    if (success) {
-      this.removeProcessedEvents(eventIds);
-      this.clearQueueInterval();
-      debugLog.info("EventManager", "Flush immediately successful", {
-        eventCount: eventsToSend.length,
-        remainingQueueLength: this.eventsQueue.length
-      });
-    } else {
-      debugLog.warn("EventManager", "Flush immediately failed, keeping events in queue", {
-        eventCount: eventsToSend.length
-      });
-    }
-    return success;
-  }
-  flushImmediatelySync() {
-    if (this.eventsQueue.length === 0) {
-      return true;
-    }
-    const body = this.buildEventsPayload();
-    const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e3) => e3.timestamp + "_" + e3.type);
-    const success = this.dataSender.sendEventsQueueSync(body);
-    if (success) {
-      this.removeProcessedEvents(eventIds);
-      this.clearQueueInterval();
-      debugLog.info("EventManager", "Flush immediately sync successful", {
-        eventCount: eventsToSend.length,
-        remainingQueueLength: this.eventsQueue.length
-      });
-    } else {
-      debugLog.warn("EventManager", "Flush immediately sync failed, keeping events in queue", {
-        eventCount: eventsToSend.length
-      });
-    }
-    return success;
-  }
-  getQueueLength() {
-    return this.eventsQueue.length;
-  }
-  async sendEventsQueue() {
-    if (!this.get("sessionId")) {
-      debugLog.debug("EventManager", "No session ID, skipping send");
-      return;
-    }
-    if (this.eventsQueue.length === 0) {
-      return;
-    }
-    if (!this.circuitBreaker.canAttempt()) {
-      debugLog.debug("EventManager", "Circuit breaker open, skipping send");
-      return;
-    }
-    const body = this.buildEventsPayload();
-    const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e3) => e3.timestamp + "_" + e3.type);
-    await this.dataSender.sendEventsQueue(body, {
-      onSuccess: () => {
-        this.circuitBreaker.recordSuccess();
-        this.removeProcessedEvents(eventIds);
-        debugLog.info("EventManager", "Events sent successfully", {
-          eventCount: eventsToSend.length,
-          remainingQueueLength: this.eventsQueue.length
-        });
-      },
-      onFailure: async () => {
-        this.circuitBreaker.recordFailure();
-        debugLog.warn("EventManager", "Events send failed, keeping in queue", {
-          eventCount: eventsToSend.length,
-          circuitState: this.circuitBreaker.getState()
-        });
-      }
-    });
-  }
-  buildEventsPayload() {
-    const uniqueEvents = /* @__PURE__ */ new Map();
-    for (const event2 of this.eventsQueue) {
-      let key = `${event2.type}_${event2.page_url}`;
-      if (event2.click_data) {
-        key += `_${event2.click_data.x}_${event2.click_data.y}`;
-      }
-      if (event2.scroll_data) {
-        key += `_${event2.scroll_data.depth}_${event2.scroll_data.direction}`;
-      }
-      if (event2.custom_event) {
-        key += `_${event2.custom_event.name}`;
-      }
-      if (event2.web_vitals) {
-        key += `_${event2.web_vitals.type}`;
-      }
-      if (!uniqueEvents.has(key)) {
-        uniqueEvents.set(key, event2);
+  handleGoogleAnalyticsIntegration(event2) {
+    if (this.googleAnalytics && event2.type === EventType.CUSTOM && event2.custom_event) {
+      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+        debugLog.debug("EventManager", `Google Analytics event: ${JSON.stringify(event2.custom_event)}`);
+      } else {
+        this.googleAnalytics.trackEvent(event2.custom_event.name, event2.custom_event.metadata ?? {});
       }
     }
-    const deduplicatedEvents = [...uniqueEvents.values()];
-    deduplicatedEvents.sort((a2, b2) => a2.timestamp - b2.timestamp);
-    return {
-      user_id: this.get("userId"),
-      session_id: this.get("sessionId"),
-      device: this.get("device"),
-      events: deduplicatedEvents,
-      ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata }
-    };
   }
-  clearQueueInterval() {
-    if (this.eventsQueueIntervalId) {
-      clearInterval(this.eventsQueueIntervalId);
-      this.eventsQueueIntervalId = null;
-      this.intervalActive = false;
-    }
-  }
-  /**
-   * Simple sampling check using global sampling rate
-   */
   shouldSample() {
     const samplingRate = this.get("config")?.samplingRate ?? 1;
     return Math.random() < samplingRate;
   }
-  /**
-   * Checks if event is duplicate of last event
-   */
-  isDuplicate(newEvent) {
-    if (!this.lastEvent) return false;
-    const timeDiff = Date.now() - this.lastEvent.timestamp;
-    if (timeDiff > DUPLICATE_EVENT_THRESHOLD_MS) return false;
-    if (this.lastEvent.type !== newEvent.type) return false;
-    if (this.lastEvent.page_url !== newEvent.page_url) return false;
-    if (newEvent.click_data && this.lastEvent.click_data) {
-      return this.areClicksSimilar(newEvent.click_data, this.lastEvent.click_data);
-    }
-    if (newEvent.scroll_data && this.lastEvent.scroll_data) {
-      return this.areScrollsSimilar(newEvent.scroll_data, this.lastEvent.scroll_data);
-    }
-    if (newEvent.custom_event && this.lastEvent.custom_event) {
-      return newEvent.custom_event.name === this.lastEvent.custom_event.name;
-    }
-    if (newEvent.web_vitals && this.lastEvent.web_vitals) {
-      return newEvent.web_vitals.type === this.lastEvent.web_vitals.type;
-    }
-    return true;
-  }
-  /**
-   * Checks if two clicks are similar within tolerance
-   */
-  areClicksSimilar(click1, click2) {
-    const TOLERANCE = 5;
-    const xDiff = Math.abs((click1.x || 0) - (click2.x || 0));
-    const yDiff = Math.abs((click1.y || 0) - (click2.y || 0));
-    return xDiff < TOLERANCE && yDiff < TOLERANCE;
-  }
-  /**
-   * Checks if two scrolls are similar
-   */
-  areScrollsSimilar(scroll1, scroll2) {
-    return scroll1.depth === scroll2.depth && scroll1.direction === scroll2.direction;
-  }
   removeProcessedEvents(eventIds) {
     const eventIdSet = new Set(eventIds);
     this.eventsQueue = this.eventsQueue.filter((event2) => {
-      const eventId = event2.timestamp + "_" + event2.type;
+      const eventId = `${event2.timestamp}_${event2.type}`;
       return !eventIdSet.has(eventId);
     });
   }
 }
-class UserManager extends StateManager {
-  storageManager;
-  constructor(storageManager) {
-    super();
-    this.storageManager = storageManager;
-  }
-  getId() {
-    const storedUserId = this.storageManager.getItem(USER_ID_KEY(this.get("config")?.id));
+class UserManager {
+  /**
+   * Gets or creates a unique user ID for the given project.
+   * The user ID is persisted in localStorage and reused across sessions.
+   *
+   * @param storageManager - Storage manager instance
+   * @param projectId - Project identifier for namespacing
+   * @returns Persistent unique user ID
+   */
+  static getId(storageManager, projectId) {
+    const storageKey = USER_ID_KEY(projectId ?? "");
+    const storedUserId = storageManager.getItem(storageKey);
     if (storedUserId) {
       return storedUserId;
     }
     const newUserId = generateUUID();
-    this.storageManager.setItem(USER_ID_KEY(this.get("config")?.id), newUserId);
+    storageManager.setItem(storageKey, newUserId);
     return newUserId;
   }
 }
@@ -2094,15 +1907,14 @@ class SessionManager extends StateManager {
   eventManager;
   sessionTimeoutId = null;
   broadcastChannel = null;
-  activityListeners = null;
-  visibilityChangeTimeout = null;
+  activityHandler = null;
   constructor(storageManager, eventManager) {
     super();
     this.storageManager = storageManager;
     this.eventManager = eventManager;
   }
   /**
-   * Inicializa cross-tab sync simple
+   * Initialize cross-tab synchronization
    */
   initCrossTabSync() {
     if (typeof BroadcastChannel === "undefined") {
@@ -2112,31 +1924,25 @@ class SessionManager extends StateManager {
     this.broadcastChannel = new BroadcastChannel("tracelog_session");
     this.broadcastChannel.onmessage = (event2) => {
       const { sessionId, timestamp } = event2.data;
-      if (sessionId && timestamp) {
-        const currentSessionId = this.get("sessionId");
-        if (!currentSessionId || timestamp > Date.now() - 1e3) {
-          this.set("sessionId", sessionId);
-          this.storageManager.setItem("sessionId", sessionId);
-          this.storageManager.setItem("lastActivity", timestamp.toString());
-          debugLog.debug("SessionManager", "Session synced from another tab", {
-            sessionId
-          });
-        }
+      if (sessionId && timestamp && timestamp > Date.now() - 5e3) {
+        this.set("sessionId", sessionId);
+        this.storageManager.setItem("sessionId", sessionId);
+        this.storageManager.setItem("lastActivity", timestamp.toString());
+        debugLog.debug("SessionManager", "Session synced from another tab", { sessionId });
       }
     };
   }
   /**
-   * Comparte sesión actual con otras tabs
+   * Share session with other tabs
    */
   shareSession(sessionId) {
-    if (!this.broadcastChannel) return;
-    this.broadcastChannel.postMessage({
+    this.broadcastChannel?.postMessage({
       sessionId,
       timestamp: Date.now()
     });
   }
   /**
-   * Limpia cross-tab sync
+   * Cleanup cross-tab sync
    */
   cleanupCrossTabSync() {
     if (this.broadcastChannel) {
@@ -2145,7 +1951,7 @@ class SessionManager extends StateManager {
     }
   }
   /**
-   * Recupera sesión desde localStorage si existe
+   * Recover session from localStorage if it exists and hasn't expired
    */
   recoverSession() {
     const storedSessionId = this.storageManager.getItem("sessionId");
@@ -2159,33 +1965,24 @@ class SessionManager extends StateManager {
       debugLog.debug("SessionManager", "Stored session expired");
       return null;
     }
-    debugLog.info("SessionManager", "Session recovered from storage", {
-      sessionId: storedSessionId,
-      lastActivity: lastActivityTime
-    });
+    debugLog.info("SessionManager", "Session recovered from storage", { sessionId: storedSessionId });
     return storedSessionId;
   }
   /**
-   * Persiste sesión en localStorage
+   * Persist session data to localStorage
    */
   persistSession(sessionId) {
     this.storageManager.setItem("sessionId", sessionId);
     this.storageManager.setItem("lastActivity", Date.now().toString());
   }
   /**
-   * Inicia tracking de sesión
+   * Start session tracking
    */
   async startTracking() {
     const recoveredSessionId = this.recoverSession();
-    let sessionId;
-    let isRecovered = false;
-    if (recoveredSessionId) {
-      sessionId = recoveredSessionId;
-      isRecovered = true;
-    } else {
-      sessionId = this.generateSessionId();
-    }
-    await this.set("sessionId", sessionId);
+    const sessionId = recoveredSessionId ?? this.generateSessionId();
+    const isRecovered = Boolean(recoveredSessionId);
+    this.set("sessionId", sessionId);
     this.persistSession(sessionId);
     this.eventManager.track({
       type: EventType.SESSION_START,
@@ -2195,21 +1992,17 @@ class SessionManager extends StateManager {
     this.shareSession(sessionId);
     this.setupSessionTimeout();
     this.setupActivityListeners();
-    this.setupVisibilityListener();
-    this.setupUnloadListener();
-    debugLog.info("SessionManager", "Session tracking started", {
-      sessionId,
-      recovered: isRecovered
-    });
+    this.setupLifecycleListeners();
+    debugLog.info("SessionManager", "Session tracking started", { sessionId, recovered: isRecovered });
   }
   /**
-   * Genera ID de sesión único
+   * Generate unique session ID
    */
   generateSessionId() {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
   /**
-   * Configura timeout de sesión
+   * Setup session timeout
    */
   setupSessionTimeout() {
     this.clearSessionTimeout();
@@ -2219,7 +2012,7 @@ class SessionManager extends StateManager {
     }, sessionTimeout);
   }
   /**
-   * Reinicia timeout de sesión
+   * Reset session timeout and update activity
    */
   resetSessionTimeout() {
     this.setupSessionTimeout();
@@ -2229,7 +2022,7 @@ class SessionManager extends StateManager {
     }
   }
   /**
-   * Limpia timeout de sesión
+   * Clear session timeout
    */
   clearSessionTimeout() {
     if (this.sessionTimeoutId) {
@@ -2238,34 +2031,29 @@ class SessionManager extends StateManager {
     }
   }
   /**
-   * Configura listeners de actividad del usuario
+   * Setup activity listeners to track user engagement
    */
   setupActivityListeners() {
-    const resetTimeout = () => this.resetSessionTimeout();
-    document.addEventListener("click", resetTimeout);
-    document.addEventListener("keydown", resetTimeout);
-    document.addEventListener("scroll", resetTimeout);
-    this.activityListeners = {
-      click: resetTimeout,
-      keydown: resetTimeout,
-      scroll: resetTimeout
-    };
+    this.activityHandler = () => this.resetSessionTimeout();
+    document.addEventListener("click", this.activityHandler, { passive: true });
+    document.addEventListener("keydown", this.activityHandler, { passive: true });
+    document.addEventListener("scroll", this.activityHandler, { passive: true });
   }
   /**
-   * Limpia listeners de actividad
+   * Clean up activity listeners
    */
   cleanupActivityListeners() {
-    if (this.activityListeners) {
-      document.removeEventListener("click", this.activityListeners.click);
-      document.removeEventListener("keydown", this.activityListeners.keydown);
-      document.removeEventListener("scroll", this.activityListeners.scroll);
-      this.activityListeners = null;
+    if (this.activityHandler) {
+      document.removeEventListener("click", this.activityHandler);
+      document.removeEventListener("keydown", this.activityHandler);
+      document.removeEventListener("scroll", this.activityHandler);
+      this.activityHandler = null;
     }
   }
   /**
-   * Configura listener de visibilidad
+   * Setup page lifecycle listeners (visibility and unload)
    */
-  setupVisibilityListener() {
+  setupLifecycleListeners() {
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         this.clearSessionTimeout();
@@ -2276,17 +2064,12 @@ class SessionManager extends StateManager {
         }
       }
     });
-  }
-  /**
-   * Configura listener de unload
-   */
-  setupUnloadListener() {
     window.addEventListener("beforeunload", () => {
       this.eventManager.flushImmediatelySync();
     });
   }
   /**
-   * Finaliza sesión
+   * End current session
    */
   endSession(reason) {
     const sessionId = this.get("sessionId");
@@ -2304,22 +2087,18 @@ class SessionManager extends StateManager {
     this.set("sessionId", null);
   }
   /**
-   * Detiene tracking de sesión
+   * Stop session tracking
    */
   async stopTracking() {
     this.endSession("manual_stop");
   }
   /**
-   * Limpia recursos
+   * Clean up all resources
    */
   destroy() {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
-    if (this.visibilityChangeTimeout) {
-      clearTimeout(this.visibilityChangeTimeout);
-      this.visibilityChangeTimeout = null;
-    }
   }
 }
 class SessionHandler extends StateManager {
@@ -2434,7 +2213,7 @@ class PageViewHandler extends StateManager {
     if (this.get("pageUrl") !== normalizedUrl) {
       const fromUrl = this.get("pageUrl");
       debugLog.debug("PageViewHandler", "Page navigation detected", { from: fromUrl, to: normalizedUrl });
-      await this.set("pageUrl", normalizedUrl);
+      this.set("pageUrl", normalizedUrl);
       const pageViewData = this.extractPageViewData();
       this.eventManager.track({
         type: EventType.PAGE_VIEW,
@@ -2923,118 +2702,97 @@ class GoogleAnalyticsIntegration extends StateManager {
   }
 }
 class StorageManager {
-  storage = null;
+  storage;
   fallbackStorage = /* @__PURE__ */ new Map();
-  storageAvailable = false;
   constructor() {
-    this.storage = this.init();
-    this.storageAvailable = this.storage !== null;
-    if (!this.storageAvailable) {
+    this.storage = this.initializeStorage();
+    if (!this.storage) {
       debugLog.warn("StorageManager", "localStorage not available, using memory fallback");
     }
   }
+  /**
+   * Retrieves an item from storage
+   */
   getItem(key) {
-    if (!this.storageAvailable) {
-      return this.fallbackStorage.get(key) ?? null;
-    }
     try {
       if (this.storage) {
         return this.storage.getItem(key);
       }
       return this.fallbackStorage.get(key) ?? null;
     } catch (error) {
-      debugLog.warn("StorageManager", "Storage getItem failed, using memory fallback", { key, error });
-      this.storageAvailable = false;
+      debugLog.warn("StorageManager", "Failed to get item, using fallback", { key, error });
       return this.fallbackStorage.get(key) ?? null;
     }
   }
+  /**
+   * Stores an item in storage
+   */
   setItem(key, value) {
-    if (!this.storageAvailable) {
-      this.fallbackStorage.set(key, value);
-      return;
-    }
     try {
       if (this.storage) {
         this.storage.setItem(key, value);
-      } else {
-        this.fallbackStorage.set(key, value);
+        return;
       }
     } catch (error) {
-      const shouldRetry = this.handleStorageError(error, key, "set");
-      if (shouldRetry) {
-        try {
-          this.storage?.setItem(key, value);
-          return;
-        } catch (retryError) {
-          debugLog.warn("StorageManager", "Storage retry failed, using memory fallback", { key, retryError });
-        }
-      }
-      debugLog.warn("StorageManager", "Storage setItem failed, using memory fallback", { key, error });
-      this.storageAvailable = false;
-      this.fallbackStorage.set(key, value);
+      debugLog.warn("StorageManager", "Failed to set item, using fallback", { key, error });
     }
+    this.fallbackStorage.set(key, value);
   }
+  /**
+   * Removes an item from storage
+   */
   removeItem(key) {
-    if (!this.storageAvailable) {
-      this.fallbackStorage.delete(key);
-      return;
-    }
     try {
       if (this.storage) {
         this.storage.removeItem(key);
-        return;
       }
-      this.fallbackStorage.delete(key);
     } catch (error) {
-      debugLog.warn("StorageManager", "Storage removeItem failed, using memory fallback", { key, error });
-      this.storageAvailable = false;
-      this.fallbackStorage.delete(key);
+      debugLog.warn("StorageManager", "Failed to remove item", { key, error });
     }
+    this.fallbackStorage.delete(key);
   }
-  performStorageCleanup() {
+  /**
+   * Clears all TracLog-related items from storage
+   */
+  clear() {
+    if (!this.storage) {
+      this.fallbackStorage.clear();
+      return;
+    }
     try {
-      const keysToClean = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
+      const keysToRemove = [];
+      for (let i = 0; i < this.storage.length; i++) {
+        const key = this.storage.key(i);
         if (key?.startsWith("tracelog_")) {
-          try {
-            const data = JSON.parse(localStorage.getItem(key) ?? "{}");
-            const age = Date.now() - (data.timestamp ?? 0);
-            if (age > 24 * 60 * 60 * 1e3) {
-              keysToClean.push(key);
-            }
-          } catch {
-            keysToClean.push(key);
-          }
+          keysToRemove.push(key);
         }
       }
-      keysToClean.forEach((key) => localStorage.removeItem(key));
-      debugLog.info("StorageManager", "Storage cleanup completed", {
-        keysRemoved: keysToClean.length
-      });
-      return keysToClean.length > 0;
+      keysToRemove.forEach((key) => this.storage.removeItem(key));
+      this.fallbackStorage.clear();
+      debugLog.debug("StorageManager", "Cleared storage", { itemsRemoved: keysToRemove.length });
     } catch (error) {
-      debugLog.error("StorageManager", "Storage cleanup failed", { error });
-      return false;
+      debugLog.error("StorageManager", "Failed to clear storage", { error });
+      this.fallbackStorage.clear();
     }
   }
-  handleStorageError(error, key, operation) {
-    if (error.name === "QuotaExceededError") {
-      debugLog.warn("StorageManager", "Storage quota exceeded, attempting cleanup", { key, operation });
-      const cleanupSuccess = this.performStorageCleanup();
-      if (cleanupSuccess && operation === "set") {
-        debugLog.info("StorageManager", "Retrying storage operation after cleanup", { key });
-        return true;
-      }
-    }
-    return false;
+  /**
+   * Checks if storage is available
+   */
+  isAvailable() {
+    return this.storage !== null;
   }
-  init() {
+  /**
+   * Initialize localStorage with feature detection
+   */
+  initializeStorage() {
+    if (typeof window === "undefined") {
+      return null;
+    }
     try {
-      const test = "__storage_test__";
-      const storage = window["localStorage"];
-      storage.setItem(test, test);
-      storage.removeItem(test);
+      const storage = window.localStorage;
+      const testKey = "__tracelog_test__";
+      storage.setItem(testKey, "test");
+      storage.removeItem(testKey);
       return storage;
     } catch {
       return null;
@@ -3486,39 +3244,39 @@ class App extends StateManager {
         debugLog.warn("App", "EventManager cleanup failed", { error });
       }
     }
-    await this.set("hasStartSession", false);
-    await this.set("suppressNextScroll", false);
-    await this.set("sessionId", null);
+    this.set("hasStartSession", false);
+    this.set("suppressNextScroll", false);
+    this.set("sessionId", null);
     this.isInitialized = false;
     debugLog.info("App", "Cleanup completed");
   }
   // --- Private Setup Methods ---
   async setState(appConfig) {
-    await this.setApiUrl(appConfig.id, appConfig.allowHttp);
+    this.setApiUrl(appConfig.id, appConfig.allowHttp);
     await this.setConfig(appConfig);
-    await this.setUserId();
-    await this.setDevice();
-    await this.setPageUrl();
+    this.setUserId();
+    this.setDevice();
+    this.setPageUrl();
   }
-  async setApiUrl(id, allowHttp = false) {
-    const apiManager = new ApiManager();
-    await this.set("apiUrl", apiManager.getUrl(id, allowHttp));
+  setApiUrl(id, allowHttp = false) {
+    const apiUrl = getApiUrlForProject(id, allowHttp);
+    this.set("apiUrl", apiUrl);
   }
   async setConfig(appConfig) {
     const configManager = new ConfigManager();
     const config = await configManager.get(this.get("apiUrl"), appConfig);
-    await this.set("config", config);
+    this.set("config", config);
   }
-  async setUserId() {
-    const userManager = new UserManager(this.storageManager);
-    await this.set("userId", userManager.getId());
+  setUserId() {
+    const userId = UserManager.getId(this.storageManager, this.get("config")?.id);
+    this.set("userId", userId);
   }
-  async setDevice() {
-    await this.set("device", getDeviceType());
+  setDevice() {
+    this.set("device", getDeviceType());
   }
-  async setPageUrl() {
+  setPageUrl() {
     const url = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
-    await this.set("pageUrl", url);
+    this.set("pageUrl", url);
   }
   async setupIntegrations() {
     const config = this.get("config");
@@ -3549,12 +3307,12 @@ class App extends StateManager {
   }
   initPageViewHandler() {
     const onPageView = async () => {
-      await this.set("suppressNextScroll", true);
+      this.set("suppressNextScroll", true);
       if (this.suppressNextScrollTimer) {
         clearTimeout(this.suppressNextScrollTimer);
       }
       this.suppressNextScrollTimer = window.setTimeout(async () => {
-        await this.set("suppressNextScroll", false);
+        this.set("suppressNextScroll", false);
       }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESS_MULTIPLIER);
     };
     this.pageViewHandler = new PageViewHandler(this.eventManager, onPageView);

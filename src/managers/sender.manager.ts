@@ -1,81 +1,42 @@
-import { QUEUE_KEY, EVENT_EXPIRY_HOURS, SYNC_XHR_TIMEOUT_MS } from '../constants';
+import {
+  QUEUE_KEY,
+  EVENT_EXPIRY_HOURS,
+  SYNC_XHR_TIMEOUT_MS,
+  MAX_RETRIES,
+  RETRY_DELAY_MS,
+  REQUEST_TIMEOUT_MS,
+} from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId } from '../types';
 import { debugLog } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
 interface SendCallbacks {
-  onSuccess?: (eventCount?: number, events?: EventData[]) => void;
+  onSuccess?: (eventCount?: number, events?: any[]) => void;
   onFailure?: () => void;
-}
-
-interface EventData {
-  timestamp: number;
-  type: string;
-}
-
-interface PersistenceResult {
-  success: boolean;
-  primaryError?: string;
-  fallbackError?: string;
-}
-
-interface MemoryFallbackData {
-  data: BaseEventsQueueDto;
-  timestamp: number;
-  retryCount: number;
 }
 
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
-  private readonly memoryFallbackStorage = new Map<string, MemoryFallbackData>();
-
   private retryTimeoutId: number | null = null;
   private retryCount = 0;
   private isRetrying = false;
-
-  // Fixed retry configuration
-  private readonly RETRY_DELAY_MS = 5000; // 5 seconds
-  private readonly MAX_RETRIES = 3;
-  private readonly REQUEST_TIMEOUT_MS = 10000; // 10 seconds
 
   constructor(storeManager: StorageManager) {
     super();
     this.storeManager = storeManager;
   }
 
-  getQueueStorageKey(): string {
-    const key = `${QUEUE_KEY(this.get('config')?.id)}:${this.get('userId')}`;
-    return key;
+  private getQueueStorageKey(): string {
+    const projectId = this.get('config')?.id || 'default';
+    const userId = this.get('userId') || 'anonymous';
+    return `${QUEUE_KEY(projectId)}:${userId}`;
   }
 
-  async sendEventsQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
-    if (this.shouldSkipSend()) {
-      this.logQueue(body);
-      return true;
-    }
-
-    const persistResult = await this.persistWithFallback(body);
-    if (!persistResult.success) {
-      const immediateSuccess = await this.sendImmediate(body);
-      if (!immediateSuccess) {
-        return false;
-      }
-      return true;
-    }
-
-    const success = await this.send(body);
-
-    if (success) {
-      this.clearPersistedEvents();
-      this.resetRetryState();
-    } else {
-      this.scheduleRetry(body);
-    }
-
-    return success;
-  }
-
+  /**
+   * Send events synchronously using sendBeacon or XHR fallback
+   * Used primarily for page unload scenarios
+   */
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
     if (this.shouldSkipSend()) {
       this.logQueue(body);
@@ -92,38 +53,30 @@ export class SenderManager extends StateManager {
     return success;
   }
 
+  /**
+   * Send events asynchronously with persistence and retry logic
+   * Main method for sending events during normal operation
+   */
   async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
     if (this.shouldSkipSend()) {
       this.logQueue(body);
+      callbacks?.onSuccess?.(0);
       return true;
     }
 
-    const persistResult = await this.persistWithFallback(body);
-
-    if (!persistResult.success) {
-      debugLog.error('SenderManager', 'All persistence methods failed', {
-        primaryError: persistResult.primaryError,
-        fallbackError: persistResult.fallbackError,
-        eventCount: body.events.length,
-      });
-
-      const immediateSuccess = await this.sendImmediate(body);
-
-      if (!immediateSuccess) {
-        callbacks?.onFailure?.();
-        return false;
-      }
-
-      callbacks?.onSuccess?.();
-      return true;
+    // First, try to persist events for recovery
+    const persisted = this.persistEvents(body);
+    if (!persisted) {
+      debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
     }
 
+    // Attempt to send events
     const success = await this.send(body);
 
     if (success) {
       this.clearPersistedEvents();
       this.resetRetryState();
-      callbacks?.onSuccess?.();
+      callbacks?.onSuccess?.(body.events.length);
     } else {
       this.scheduleRetry(body, callbacks);
       callbacks?.onFailure?.();
@@ -132,6 +85,10 @@ export class SenderManager extends StateManager {
     return success;
   }
 
+  /**
+   * Recover and send previously persisted events
+   * Called during initialization to handle events from previous session
+   */
   async recoverPersistedEvents(callbacks?: SendCallbacks): Promise<void> {
     try {
       const persistedData = this.getPersistedData();
@@ -141,10 +98,9 @@ export class SenderManager extends StateManager {
         return;
       }
 
-      debugLog.info('SenderManager', 'Persisted events recovered', {
-        eventsCount: persistedData.events.length,
+      debugLog.info('SenderManager', 'Recovering persisted events', {
+        count: persistedData.events.length,
         sessionId: persistedData.sessionId,
-        events: persistedData.events,
       });
 
       const body = this.createRecoveryBody(persistedData);
@@ -153,24 +109,40 @@ export class SenderManager extends StateManager {
       if (success) {
         this.clearPersistedEvents();
         this.resetRetryState();
-        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events);
+        callbacks?.onSuccess?.(persistedData.events.length);
       } else {
         this.scheduleRetry(body, callbacks);
         callbacks?.onFailure?.();
       }
     } catch (error) {
       debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
+      this.clearPersistedEvents(); // Clean up corrupted data
     }
   }
 
-  async persistEventsForRecovery(body: BaseEventsQueueDto): Promise<boolean> {
-    const result = await this.persistWithFallback(body);
-    return result.success;
+  /**
+   * Persist events for recovery in case of failure
+   */
+  persistEventsForRecovery(body: BaseEventsQueueDto): boolean {
+    return this.persistEvents(body);
   }
 
+  /**
+   * Legacy method for backward compatibility
+   * @deprecated Use sendEventsQueue instead
+   */
+  async sendEventsQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
+    return this.sendEventsQueue(body);
+  }
+
+  /**
+   * Stop the sender manager and clean up resources
+   */
   stop(): void {
     this.clearRetryTimeout();
     this.resetRetryState();
+    // Clear any persisted events on shutdown to prevent stale data
+    this.clearPersistedEvents();
   }
 
   private async send(body: BaseEventsQueueDto): Promise<boolean> {
@@ -178,16 +150,22 @@ export class SenderManager extends StateManager {
 
     try {
       const response = await this.sendWithTimeout(url, payload);
+      debugLog.debug('SenderManager', 'Send completed', { status: response.status, events: body.events.length });
       return response.ok;
     } catch (error) {
-      debugLog.error('SenderManager', 'Send request failed', { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      debugLog.error('SenderManager', 'Send request failed', {
+        error: errorMessage,
+        events: body.events.length,
+        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'), // Hide domain for privacy
+      });
       return false;
     }
   }
 
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(url, {
@@ -202,7 +180,7 @@ export class SenderManager extends StateManager {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       return response;
@@ -228,25 +206,26 @@ export class SenderManager extends StateManager {
     try {
       xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('Origin', window.location.origin);
-      xhr.setRequestHeader('Referer', window.location.href);
       xhr.withCredentials = true;
       xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);
 
-      return xhr.status >= 200 && xhr.status < 300;
+      const success = xhr.status >= 200 && xhr.status < 300;
+
+      if (!success) {
+        debugLog.warn('SenderManager', 'Sync XHR failed', {
+          status: xhr.status,
+          statusText: xhr.statusText || 'Unknown error',
+        });
+      }
+
+      return success;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const isCorsError =
-        errorMessage.includes('CORS') || errorMessage.includes('NotSameOrigin') || errorMessage.includes('blocked');
-
-      debugLog.warn('SenderManager', 'Sync XHR failed', {
+      debugLog.warn('SenderManager', 'Sync XHR error', {
         error: errorMessage,
-        isCorsError,
-        status: xhr.status ?? 'unknown',
-        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+        status: xhr.status || 'unknown',
       });
-
       return false;
     }
   }
@@ -261,7 +240,6 @@ export class SenderManager extends StateManager {
   }
 
   private getPersistedData(): PersistedQueueData | null {
-    // 1. Try to recover from localStorage principal
     try {
       const storageKey = this.getQueueStorageKey();
       const persistedDataString = this.storeManager.getItem(storageKey);
@@ -270,50 +248,27 @@ export class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      debugLog.warn('SenderManager', 'Failed to get persisted data from localStorage', { error });
-    }
-
-    // 2. Try to recover from sessionStorage fallback
-    try {
-      const sessionKey = this.getQueueStorageKey() + '_session_fallback';
-      const sessionDataString = sessionStorage.getItem(sessionKey);
-
-      if (sessionDataString) {
-        debugLog.info('SenderManager', 'Recovering data from sessionStorage fallback');
-        return JSON.parse(sessionDataString);
-      }
-    } catch (error) {
-      debugLog.warn('SenderManager', 'Failed to get persisted data from sessionStorage', { error });
-    }
-
-    // 3. Try to recover from memory fallback
-    try {
-      const sessionId = this.get('sessionId');
-      if (sessionId && this.memoryFallbackStorage.has(sessionId)) {
-        const memoryData = this.memoryFallbackStorage.get(sessionId);
-        if (memoryData) {
-          debugLog.info('SenderManager', 'Recovering data from memory fallback');
-          return {
-            userId: memoryData.data.user_id,
-            sessionId: memoryData.data.session_id,
-            device: memoryData.data.device,
-            events: memoryData.data.events,
-            timestamp: memoryData.timestamp,
-            fallbackMode: true,
-            ...(memoryData.data.global_metadata && { global_metadata: memoryData.data.global_metadata }),
-          };
-        }
-      }
-    } catch (error) {
-      debugLog.warn('SenderManager', 'Failed to get persisted data from memory fallback', { error });
+      debugLog.warn('SenderManager', 'Failed to parse persisted data', { error });
+      // Clean up corrupted data
+      this.clearPersistedEvents();
     }
 
     return null;
   }
 
   private isDataRecent(data: PersistedQueueData): boolean {
+    if (!data.timestamp || typeof data.timestamp !== 'number') {
+      return false;
+    }
+
     const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
-    return ageInHours < EVENT_EXPIRY_HOURS;
+    const isRecent = ageInHours < EVENT_EXPIRY_HOURS;
+
+    if (!isRecent) {
+      debugLog.debug('SenderManager', 'Persisted data expired', { ageInHours });
+    }
+
+    return isRecent;
   }
 
   private createRecoveryBody(data: PersistedQueueData): BaseEventsQueueDto {
@@ -327,87 +282,13 @@ export class SenderManager extends StateManager {
   }
 
   private logQueue(queue: BaseEventsQueueDto): void {
-    debugLog.info('SenderManager', ` ⏩ Queue snapshot`, queue);
+    debugLog.info('SenderManager', 'Skipping send (debug mode)', {
+      events: queue.events.length,
+      sessionId: queue.session_id,
+    });
   }
 
-  private async persistWithFallback(body: BaseEventsQueueDto): Promise<PersistenceResult> {
-    // 1. Persistence in localStorage principal
-    try {
-      const primarySuccess = this.persistFailedEvents(body);
-      if (primarySuccess) {
-        return { success: true };
-      }
-    } catch (primaryError) {
-      debugLog.warn('SenderManager', 'Primary persistence failed', { primaryError });
-    }
-
-    // 2. Persistence in sessionStorage as fallback
-    try {
-      const fallbackSuccess = this.persistToSessionStorage(body);
-      if (fallbackSuccess) {
-        debugLog.info('SenderManager', 'Using sessionStorage fallback for persistence');
-        return { success: true };
-      }
-    } catch (fallbackError) {
-      debugLog.warn('SenderManager', 'Fallback persistence failed', { fallbackError });
-    }
-
-    // 3. Persistence in memory as last resort
-    try {
-      this.memoryFallbackStorage.set(body.session_id, {
-        data: body,
-        timestamp: Date.now(),
-        retryCount: 0,
-      });
-
-      debugLog.warn('SenderManager', 'Using memory fallback for persistence (data will be lost on page reload)');
-      return { success: true };
-    } catch {
-      return {
-        success: false,
-        primaryError: 'localStorage failed',
-        fallbackError: 'All persistence methods failed',
-      };
-    }
-  }
-
-  private persistToSessionStorage(body: BaseEventsQueueDto): boolean {
-    try {
-      const storageKey = this.getQueueStorageKey() + '_session_fallback';
-      const persistedData: PersistedQueueData = {
-        userId: body.user_id,
-        sessionId: body.session_id,
-        device: body.device,
-        events: body.events,
-        timestamp: Date.now(),
-        fallbackMode: true,
-        ...(body.global_metadata && { global_metadata: body.global_metadata }),
-      };
-
-      sessionStorage.setItem(storageKey, JSON.stringify(persistedData));
-      return !!sessionStorage.getItem(storageKey);
-    } catch (error) {
-      debugLog.error('SenderManager', 'SessionStorage persistence failed', { error });
-      return false;
-    }
-  }
-
-  private async sendImmediate(body: BaseEventsQueueDto): Promise<boolean> {
-    debugLog.warn('SenderManager', 'Attempting immediate send as last resort');
-
-    try {
-      const success = await this.send(body);
-      if (success) {
-        debugLog.info('SenderManager', 'Immediate send successful, events saved');
-      }
-      return success;
-    } catch (error) {
-      debugLog.error('SenderManager', 'Immediate send failed', { error });
-      return false;
-    }
-  }
-
-  private persistFailedEvents(body: BaseEventsQueueDto): boolean {
+  private persistEvents(body: BaseEventsQueueDto): boolean {
     try {
       const persistedData: PersistedQueueData = {
         userId: body.user_id,
@@ -423,28 +304,16 @@ export class SenderManager extends StateManager {
 
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      debugLog.error('SenderManager', 'Failed to persist events', { error });
+      debugLog.warn('SenderManager', 'Failed to persist events', { error });
       return false;
     }
   }
 
   private clearPersistedEvents(): void {
-    // Clear localStorage principal
-    this.storeManager.removeItem(this.getQueueStorageKey());
-
-    // Clear sessionStorage fallback
     try {
-      const sessionKey = this.getQueueStorageKey() + '_session_fallback';
-      sessionStorage.removeItem(sessionKey);
+      this.storeManager.removeItem(this.getQueueStorageKey());
     } catch (error) {
-      debugLog.warn('SenderManager', 'Failed to clear sessionStorage fallback', { error });
-    }
-
-    // Clear memory fallback
-    const sessionId = this.get('sessionId');
-    if (sessionId && this.memoryFallbackStorage.has(sessionId)) {
-      this.memoryFallbackStorage.delete(sessionId);
-      debugLog.debug('SenderManager', 'Cleared memory fallback storage', { sessionId });
+      debugLog.warn('SenderManager', 'Failed to clear persisted events', { error });
     }
   }
 
@@ -459,7 +328,8 @@ export class SenderManager extends StateManager {
       return;
     }
 
-    if (this.retryCount >= this.MAX_RETRIES) {
+    if (this.retryCount >= MAX_RETRIES) {
+      debugLog.warn('SenderManager', 'Max retries reached, giving up', { retryCount: this.retryCount });
       this.clearPersistedEvents();
       this.resetRetryState();
       originalCallbacks?.onFailure?.();
@@ -467,8 +337,11 @@ export class SenderManager extends StateManager {
     }
 
     if (this.isCircuitBreakerOpen()) {
+      debugLog.info('SenderManager', 'Circuit breaker open, skipping retry');
       return;
     }
+
+    const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount); // Exponential backoff
 
     this.retryTimeoutId = window.setTimeout(async () => {
       this.retryTimeoutId = null;
@@ -480,26 +353,31 @@ export class SenderManager extends StateManager {
       this.retryCount++;
       this.isRetrying = true;
 
-      const success = await this.send(body);
-      this.isRetrying = false;
+      debugLog.debug('SenderManager', 'Retrying send', { attempt: this.retryCount });
 
-      if (success) {
-        this.clearPersistedEvents();
-        this.resetRetryState();
-        originalCallbacks?.onSuccess?.();
-      } else if (this.retryCount >= this.MAX_RETRIES) {
-        this.clearPersistedEvents();
-        this.resetRetryState();
-        originalCallbacks?.onFailure?.();
-      } else {
-        this.scheduleRetry(body, originalCallbacks);
+      try {
+        const success = await this.send(body);
+
+        if (success) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onSuccess?.(body.events.length);
+        } else if (this.retryCount >= MAX_RETRIES) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onFailure?.();
+        } else {
+          this.scheduleRetry(body, originalCallbacks);
+        }
+      } finally {
+        this.isRetrying = false;
       }
-    }, this.RETRY_DELAY_MS);
+    }, retryDelay);
 
     debugLog.debug('SenderManager', 'Retry scheduled', {
-      retryCount: this.retryCount,
-      retryDelay: this.RETRY_DELAY_MS,
-      eventsCount: body.events.length,
+      attempt: this.retryCount + 1,
+      delay: retryDelay,
+      events: body.events.length,
     });
   }
 
@@ -511,11 +389,7 @@ export class SenderManager extends StateManager {
   }
 
   private isSendBeaconAvailable(): boolean {
-    if (typeof navigator.sendBeacon !== 'function') {
-      return false;
-    }
-
-    return true;
+    return typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function';
   }
 
   private clearRetryTimeout(): void {

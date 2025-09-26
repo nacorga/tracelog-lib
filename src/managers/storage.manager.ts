@@ -1,142 +1,120 @@
-import { debugLog } from '../utils/logging';
+import { debugLog } from '../utils/logging/debug-logger.utils';
 
+/**
+ * Manages localStorage with automatic fallback to in-memory storage.
+ * Provides a consistent interface for storing session data, configuration,
+ * and analytics metadata across browser environments.
+ */
 export class StorageManager {
-  private readonly storage: globalThis.Storage | null = null;
+  private readonly storage: Storage | null;
   private readonly fallbackStorage = new Map<string, string>();
-  private storageAvailable = false;
 
   constructor() {
-    this.storage = this.init();
-    this.storageAvailable = this.storage !== null;
+    this.storage = this.initializeStorage();
 
-    if (!this.storageAvailable) {
+    if (!this.storage) {
       debugLog.warn('StorageManager', 'localStorage not available, using memory fallback');
     }
   }
 
+  /**
+   * Retrieves an item from storage
+   */
   getItem(key: string): string | null {
-    if (!this.storageAvailable) {
-      return this.fallbackStorage.get(key) ?? null;
-    }
-
     try {
       if (this.storage) {
         return this.storage.getItem(key);
       }
-
       return this.fallbackStorage.get(key) ?? null;
     } catch (error) {
-      debugLog.warn('StorageManager', 'Storage getItem failed, using memory fallback', { key, error });
-      this.storageAvailable = false;
+      debugLog.warn('StorageManager', 'Failed to get item, using fallback', { key, error });
       return this.fallbackStorage.get(key) ?? null;
     }
   }
 
+  /**
+   * Stores an item in storage
+   */
   setItem(key: string, value: string): void {
-    if (!this.storageAvailable) {
-      this.fallbackStorage.set(key, value);
-      return;
-    }
-
     try {
       if (this.storage) {
         this.storage.setItem(key, value);
-      } else {
-        this.fallbackStorage.set(key, value);
+        return;
       }
     } catch (error) {
-      const shouldRetry = this.handleStorageError(error as Error, key, 'set');
-
-      if (shouldRetry) {
-        try {
-          this.storage?.setItem(key, value);
-          return;
-        } catch (retryError) {
-          debugLog.warn('StorageManager', 'Storage retry failed, using memory fallback', { key, retryError });
-        }
-      }
-
-      debugLog.warn('StorageManager', 'Storage setItem failed, using memory fallback', { key, error });
-      this.storageAvailable = false;
-      this.fallbackStorage.set(key, value);
+      debugLog.warn('StorageManager', 'Failed to set item, using fallback', { key, error });
     }
+
+    // Always update fallback for consistency
+    this.fallbackStorage.set(key, value);
   }
 
+  /**
+   * Removes an item from storage
+   */
   removeItem(key: string): void {
-    if (!this.storageAvailable) {
-      this.fallbackStorage.delete(key);
+    try {
+      if (this.storage) {
+        this.storage.removeItem(key);
+      }
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Failed to remove item', { key, error });
+    }
+
+    // Always clean fallback
+    this.fallbackStorage.delete(key);
+  }
+
+  /**
+   * Clears all TracLog-related items from storage
+   */
+  clear(): void {
+    if (!this.storage) {
+      this.fallbackStorage.clear();
       return;
     }
 
     try {
-      if (this.storage) {
-        this.storage.removeItem(key);
-        return;
-      }
+      const keysToRemove: string[] = [];
 
-      this.fallbackStorage.delete(key);
-    } catch (error) {
-      debugLog.warn('StorageManager', 'Storage removeItem failed, using memory fallback', { key, error });
-      this.storageAvailable = false;
-      this.fallbackStorage.delete(key);
-    }
-  }
-
-  private performStorageCleanup(): boolean {
-    try {
-      const keysToClean: string[] = [];
-
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
+      for (let i = 0; i < this.storage.length; i++) {
+        const key = this.storage.key(i);
         if (key?.startsWith('tracelog_')) {
-          try {
-            const data = JSON.parse(localStorage.getItem(key) ?? '{}');
-            const age = Date.now() - (data.timestamp ?? 0);
-
-            if (age > 24 * 60 * 60 * 1000) {
-              keysToClean.push(key);
-            }
-          } catch {
-            keysToClean.push(key);
-          }
+          keysToRemove.push(key);
         }
       }
 
-      keysToClean.forEach((key) => localStorage.removeItem(key));
+      keysToRemove.forEach((key) => this.storage!.removeItem(key));
+      this.fallbackStorage.clear();
 
-      debugLog.info('StorageManager', 'Storage cleanup completed', {
-        keysRemoved: keysToClean.length,
-      });
-
-      return keysToClean.length > 0;
+      debugLog.debug('StorageManager', 'Cleared storage', { itemsRemoved: keysToRemove.length });
     } catch (error) {
-      debugLog.error('StorageManager', 'Storage cleanup failed', { error });
-      return false;
+      debugLog.error('StorageManager', 'Failed to clear storage', { error });
+      this.fallbackStorage.clear();
     }
   }
 
-  private handleStorageError(error: Error, key: string, operation: 'get' | 'set'): boolean {
-    if (error.name === 'QuotaExceededError') {
-      debugLog.warn('StorageManager', 'Storage quota exceeded, attempting cleanup', { key, operation });
-
-      const cleanupSuccess = this.performStorageCleanup();
-
-      if (cleanupSuccess && operation === 'set') {
-        debugLog.info('StorageManager', 'Retrying storage operation after cleanup', { key });
-        return true;
-      }
-    }
-
-    return false;
+  /**
+   * Checks if storage is available
+   */
+  isAvailable(): boolean {
+    return this.storage !== null;
   }
 
-  private init(): globalThis.Storage | null {
+  /**
+   * Initialize localStorage with feature detection
+   */
+  private initializeStorage(): Storage | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
     try {
-      const test = '__storage_test__';
-      const storage = window['localStorage'];
+      const storage = window.localStorage;
+      const testKey = '__tracelog_test__';
 
-      storage.setItem(test, test);
-      storage.removeItem(test);
+      storage.setItem(testKey, 'test');
+      storage.removeItem(testKey);
 
       return storage;
     } catch {

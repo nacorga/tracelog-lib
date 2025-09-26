@@ -1,236 +1,186 @@
-import { DEFAULT_API_CONFIG, DEFAULT_CONFIG } from '../constants';
+import { DEFAULT_API_CONFIG, DEFAULT_CONFIG, REQUEST_TIMEOUT_MS } from '../constants';
 import { ApiConfig, AppConfig, Config, Mode, SpecialProjectId } from '../types';
-import { isValidUrl, sanitizeApiConfig, fetchWithTimeout } from '../utils';
+import { sanitizeApiConfig, fetchWithTimeout } from '../utils';
 import { debugLog } from '../utils/logging';
 
+/**
+ * Configuration manager responsible for loading and merging application configuration.
+ *
+ * Handles three configuration sources:
+ * 1. Default configuration (fallback values)
+ * 2. API configuration (server-side settings)
+ * 3. App configuration (client initialization settings)
+ *
+ * Supports special project IDs for development and testing:
+ * - 'skip': Bypasses all network calls, uses defaults
+ * - 'localhost:PORT': Loads config from local development server
+ */
 export class ConfigManager {
-  // Allowed origins for local development and production
-  private readonly ALLOWED_ORIGINS = [
-    // Development origins
-    'http://localhost:3000',
-    'http://localhost:3002',
-    'http://localhost:5173',
-    'http://localhost:8080',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3002',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:8080',
-  ];
+  private static readonly LOCALHOST_PATTERN = /^localhost:\d{1,5}$/;
+  private static readonly PRODUCTION_DOMAINS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
 
-  private readonly ALLOWED_ORIGIN_PATTERNS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
-
+  /**
+   * Gets complete configuration by merging default, API, and app configurations.
+   *
+   * @param apiUrl - Base URL for the configuration API
+   * @param appConfig - Client-side configuration from init()
+   * @returns Promise<Config> - Merged configuration object
+   */
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
+    // Handle skip mode - no network calls
     if (appConfig.id === SpecialProjectId.Skip) {
-      debugLog.debug('ConfigManager', 'Using special project id: skip');
-
-      return this.getDefaultConfig(appConfig);
+      debugLog.debug('ConfigManager', 'Using skip mode - no network calls');
+      return this.createDefaultConfig(appConfig);
     }
 
-    debugLog.debug('ConfigManager', 'Loading config from API', { apiUrl, projectId: appConfig.id });
+    debugLog.debug('ConfigManager', 'Loading configuration', {
+      apiUrl,
+      projectId: appConfig.id,
+    });
 
-    const isLocalhostMode = appConfig.id.startsWith(SpecialProjectId.Localhost);
-    const config = await this.load(apiUrl, appConfig, isLocalhostMode);
+    const config = await this.loadFromApi(apiUrl, appConfig);
 
-    debugLog.info('ConfigManager', 'Config loaded successfully', {
+    debugLog.info('ConfigManager', 'Configuration loaded', {
       projectId: appConfig.id,
       mode: config.mode,
-      hasExcludedPaths: !!config.excludedUrlPaths?.length,
-      hasGlobalMetadata: !!config.globalMetadata,
+      hasTags: !!config.tags?.length,
+      hasExclusions: !!config.excludedUrlPaths?.length,
     });
 
     return config;
   }
 
-  private async load(apiUrl: string, appConfig: AppConfig, useLocalhost?: boolean): Promise<Config> {
+  /**
+   * Loads configuration from API and merges with app config.
+   */
+  private async loadFromApi(apiUrl: string, appConfig: AppConfig): Promise<Config> {
     try {
-      let configUrl: string;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-      if (useLocalhost) {
-        this.validateLocalhostId(appConfig.id);
-
-        const origin = this.extractOriginFromProjectId(appConfig.id);
-        configUrl = `${origin}/config`;
-
-        if (!isValidUrl(configUrl, true)) {
-          debugLog.clientError('ConfigManager', 'Invalid config URL constructed', { configUrl });
-          throw new Error('Config URL is not valid or not allowed');
-        }
-
-        if (!this.isAllowedOrigin(origin, appConfig.id)) {
-          debugLog.clientError('ConfigManager', 'Untrusted origin detected', {
-            origin,
-            projectId: appConfig.id,
-          });
-
-          throw new Error(
-            `Security: Origin '${origin}' is not allowed to load configuration. Please use an authorized domain.`,
-          );
-        }
-
-        headers['X-TraceLog-Project'] = appConfig.id;
-
-        debugLog.debug('ConfigManager', 'Using local server with validated origin', {
-          origin,
-          projectId: appConfig.id,
-        });
-      } else {
-        configUrl = this.getUrl(apiUrl);
-      }
-
-      if (!configUrl) {
-        throw new Error('Config URL is not valid or not allowed');
-      }
+      const configUrl = this.buildConfigUrl(apiUrl, appConfig);
+      const headers = this.buildHeaders(appConfig);
 
       const response = await fetchWithTimeout(configUrl, {
         method: 'GET',
         headers,
-        timeout: 10000, // 10 segundos timeout
+        timeout: REQUEST_TIMEOUT_MS,
       });
 
       if (!response.ok) {
-        const error = `HTTP ${response.status}: ${response.statusText}`;
-
-        debugLog.error('ConfigManager', 'Config API request failed', {
-          status: response.status,
-          statusText: response.statusText,
-          configUrl,
-        });
-
-        throw new Error(error);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      // Validate response content-type for security
-      const contentType = response.headers.get('content-type');
-
-      if (!contentType?.includes('application/json')) {
-        debugLog.clientError('ConfigManager', 'Invalid response content-type', {
-          contentType,
-          configUrl,
-        });
-
-        throw new Error(`Security: Invalid response content-type. Expected application/json, got ${contentType}`);
-      }
-
-      const rawData = await response.json();
-
-      if (rawData === undefined || rawData === null || typeof rawData !== 'object' || Array.isArray(rawData)) {
-        debugLog.error('ConfigManager', 'Invalid config API response format', {
-          responseType: typeof rawData,
-          isArray: Array.isArray(rawData),
-        });
-
-        throw new Error('Invalid config API response: expected object');
-      }
-
-      const safeApiConfig = sanitizeApiConfig(rawData);
-      const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
-      const mergedConfig: Config = { ...apiConfig, ...appConfig };
-
-      // Check if qaMode=true is in URL and automatically set mode to 'qa'
-      const urlParameters = new URLSearchParams(window.location.search);
-      const isQaMode = urlParameters.get('qaMode') === 'true';
-
-      if (isQaMode && !mergedConfig.mode) {
-        mergedConfig.mode = Mode.QA;
-        debugLog.info('ConfigManager', 'QA mode enabled via URL parameter');
-      }
-
-      const errorSampling = Object.values(Mode).includes(mergedConfig.mode as Mode)
-        ? 1
-        : (mergedConfig.errorSampling ?? 0.1);
-
-      const finalConfig: Config = { ...mergedConfig, errorSampling };
-
-      return finalConfig;
+      const rawData = await this.parseJsonResponse(response);
+      return this.mergeConfigurations(rawData, appConfig);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      debugLog.error('ConfigManager', 'Failed to load config', { error: errorMessage, apiUrl });
-      throw new Error(`Failed to load config: ${errorMessage}`);
+      debugLog.error('ConfigManager', 'Failed to load configuration', {
+        error: errorMessage,
+        apiUrl,
+        projectId: appConfig.id,
+      });
+      throw new Error(`Configuration load failed: ${errorMessage}`);
     }
-  }
-
-  private getUrl(apiUrl: string): string {
-    const urlParameters = new URLSearchParams(window.location.search);
-    const isQaMode = urlParameters.get('qaMode') === 'true';
-
-    let configUrl = `${apiUrl}/config`;
-
-    if (isQaMode) {
-      configUrl += '?qaMode=true';
-    }
-
-    if (!isValidUrl(configUrl)) {
-      debugLog.clientError('ConfigManager', 'Invalid config URL provided', { configUrl });
-      throw new Error('Config URL is not valid or not allowed');
-    }
-
-    return configUrl;
   }
 
   /**
-   * Validates if an origin is allowed to load configuration
-   * @param origin - The origin to validate (e.g., 'http://localhost:3000')
-   * @param projectId - The project ID for logging purposes
-   * @returns True if the origin is allowed, false otherwise
+   * Builds the configuration URL based on project type and QA mode.
    */
-  private isAllowedOrigin(origin: string, projectId: string): boolean {
-    // Check exact match in allowed origins list
-    if (this.ALLOWED_ORIGINS.includes(origin)) {
-      debugLog.debug('ConfigManager', 'Origin validated via exact match', { origin, projectId });
+  private buildConfigUrl(apiUrl: string, appConfig: AppConfig): string {
+    const isLocalhost = appConfig.id.startsWith(SpecialProjectId.Localhost);
 
-      return true;
+    if (isLocalhost) {
+      this.validateLocalhostProjectId(appConfig.id);
+      return `http://${appConfig.id}/config`;
     }
 
-    // Check pattern match for production domains
-    const matchesPattern = this.ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+    const baseUrl = `${apiUrl}/config`;
+    const isQaMode = this.isQaModeEnabled();
 
-    if (matchesPattern) {
-      debugLog.debug('ConfigManager', 'Origin validated via pattern match', { origin, projectId });
-
-      return true;
-    }
-
-    // Origin not allowed
-    debugLog.clientError('ConfigManager', 'Origin validation failed', {
-      origin,
-      projectId,
-      allowedOrigins: this.ALLOWED_ORIGINS,
-    });
-
-    return false;
+    return isQaMode ? `${baseUrl}?qaMode=true` : baseUrl;
   }
 
-  private extractOriginFromProjectId(id: string): string {
-    return `http://${id}`;
+  /**
+   * Builds request headers based on project configuration.
+   */
+  private buildHeaders(appConfig: AppConfig): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (appConfig.id.startsWith(SpecialProjectId.Localhost)) {
+      headers['X-TraceLog-Project'] = appConfig.id;
+    }
+
+    return headers;
   }
 
-  private validateLocalhostId(id: string): void {
-    const pattern = /^localhost:\d{1,5}$/;
+  /**
+   * Parses and validates JSON response from config API.
+   */
+  private async parseJsonResponse(response: Response): Promise<Record<string, unknown>> {
+    const contentType = response.headers.get('content-type');
 
-    if (!pattern.test(id)) {
-      debugLog.clientError('ConfigManager', 'Invalid localhost project ID format', {
-        projectId: id,
-        expectedFormat: 'localhost:PORT',
-      });
-
-      throw new Error(`Invalid localhost format. Expected 'localhost:PORT', got '${id}'`);
+    if (!contentType?.includes('application/json')) {
+      throw new Error('Invalid response content-type, expected JSON');
     }
 
-    const portString = id.split(':')[1];
+    const rawData = await response.json();
 
-    if (!portString) {
-      throw new Error(`Invalid localhost format. Port is required, got '${id}'`);
+    if (!rawData || typeof rawData !== 'object' || Array.isArray(rawData)) {
+      throw new Error('Invalid response format, expected object');
     }
 
-    const port = parseInt(portString, 10);
+    return rawData;
+  }
 
-    if (isNaN(port) || port < 1 || port > 65535) {
-      throw new Error(`Invalid port number. Port must be between 1 and 65535, got ${portString}`);
+  /**
+   * Validates localhost project ID format and port range.
+   */
+  private validateLocalhostProjectId(projectId: string): void {
+    if (!ConfigManager.LOCALHOST_PATTERN.test(projectId)) {
+      throw new Error(`Invalid localhost format. Expected 'localhost:PORT', got '${projectId}'`);
+    }
+
+    const port = parseInt(projectId.split(':')[1], 10);
+
+    if (port < 1 || port > 65535) {
+      throw new Error(`Port must be between 1 and 65535, got ${port}`);
     }
   }
 
-  private getDefaultConfig(appConfig: AppConfig): Config {
+  /**
+   * Checks if QA mode is enabled via URL parameter.
+   */
+  private isQaModeEnabled(): boolean {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('qaMode') === 'true';
+  }
+
+  /**
+   * Merges API configuration with app configuration and applies mode-specific settings.
+   */
+  private mergeConfigurations(rawApiConfig: Record<string, unknown>, appConfig: AppConfig): Config {
+    const safeApiConfig = sanitizeApiConfig(rawApiConfig);
+    const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
+    const mergedConfig: Config = { ...apiConfig, ...appConfig };
+
+    // Apply QA mode if enabled via URL parameter
+    if (this.isQaModeEnabled() && !mergedConfig.mode) {
+      mergedConfig.mode = Mode.QA;
+      debugLog.info('ConfigManager', 'QA mode enabled via URL parameter');
+    }
+
+    // Set error sampling based on mode
+    const errorSampling = Object.values(Mode).includes(mergedConfig.mode as Mode)
+      ? 1 // Full sampling for debug/qa modes
+      : (mergedConfig.errorSampling ?? 0.1); // Default sampling for production
+
+    return { ...mergedConfig, errorSampling };
+  }
+
+  /**
+   * Creates default configuration for skip mode and fallback scenarios.
+   */
+  private createDefaultConfig(appConfig: AppConfig): Config {
     return DEFAULT_CONFIG({
       ...appConfig,
       errorSampling: 1,

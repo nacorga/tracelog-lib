@@ -69,7 +69,7 @@ export class PageViewHandler extends StateManager {
 
       debugLog.debug('PageViewHandler', 'Page navigation detected', { from: fromUrl, to: normalizedUrl });
 
-      await this.set('pageUrl', normalizedUrl);
+      this.set('pageUrl', normalizedUrl);
 
       const pageViewData = this.extractPageViewData();
       this.eventManager.track({

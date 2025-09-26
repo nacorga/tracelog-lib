@@ -1,4 +1,4 @@
-import { ApiManager } from './managers/api.manager';
+import { getApiUrlForProject } from './managers/api.manager';
 import { ConfigManager } from './managers/config.manager';
 import { EventManager } from './managers/event.manager';
 import { AppConfig } from './types/config.types';
@@ -176,9 +176,9 @@ export class App extends StateManager {
     }
 
     // Reset state
-    await this.set('hasStartSession', false);
-    await this.set('suppressNextScroll', false);
-    await this.set('sessionId', null);
+    this.set('hasStartSession', false);
+    this.set('suppressNextScroll', false);
+    this.set('sessionId', null);
 
     this.isInitialized = false;
     debugLog.info('App', 'Cleanup completed');
@@ -187,36 +187,36 @@ export class App extends StateManager {
   // --- Private Setup Methods ---
 
   private async setState(appConfig: AppConfig): Promise<void> {
-    await this.setApiUrl(appConfig.id, appConfig.allowHttp);
+    this.setApiUrl(appConfig.id, appConfig.allowHttp);
     await this.setConfig(appConfig);
-    await this.setUserId();
-    await this.setDevice();
-    await this.setPageUrl();
+    this.setUserId();
+    this.setDevice();
+    this.setPageUrl();
   }
 
-  private async setApiUrl(id: string, allowHttp = false): Promise<void> {
-    const apiManager = new ApiManager();
-    await this.set('apiUrl', apiManager.getUrl(id, allowHttp));
+  private setApiUrl(id: string, allowHttp = false): void {
+    const apiUrl = getApiUrlForProject(id, allowHttp);
+    this.set('apiUrl', apiUrl);
   }
 
   private async setConfig(appConfig: AppConfig): Promise<void> {
     const configManager = new ConfigManager();
     const config = await configManager.get(this.get('apiUrl'), appConfig);
-    await this.set('config', config);
+    this.set('config', config);
   }
 
-  private async setUserId(): Promise<void> {
-    const userManager = new UserManager(this.storageManager);
-    await this.set('userId', userManager.getId());
+  private setUserId(): void {
+    const userId = UserManager.getId(this.storageManager, this.get('config')?.id);
+    this.set('userId', userId);
   }
 
-  private async setDevice(): Promise<void> {
-    await this.set('device', getDeviceType());
+  private setDevice(): void {
+    this.set('device', getDeviceType());
   }
 
-  private async setPageUrl(): Promise<void> {
+  private setPageUrl(): void {
     const url = normalizeUrl(window.location.href, this.get('config').sensitiveQueryParams);
-    await this.set('pageUrl', url);
+    this.set('pageUrl', url);
   }
 
   private async setupIntegrations(): Promise<void> {
@@ -256,14 +256,14 @@ export class App extends StateManager {
 
   private initPageViewHandler(): void {
     const onPageView = async (): Promise<void> => {
-      await this.set('suppressNextScroll', true);
+      this.set('suppressNextScroll', true);
 
       if (this.suppressNextScrollTimer) {
         clearTimeout(this.suppressNextScrollTimer);
       }
 
       this.suppressNextScrollTimer = window.setTimeout(async () => {
-        await this.set('suppressNextScroll', false);
+        this.set('suppressNextScroll', false);
       }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESS_MULTIPLIER);
     };
 

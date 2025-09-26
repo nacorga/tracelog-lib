@@ -1,73 +1,80 @@
 import { State } from '../types';
 import { debugLog } from '../utils/logging';
 
+/**
+ * Global state store shared across all TraceLog components
+ */
 const globalState: State = {} as State;
-let stateVersion = 0;
-const updateQueue: Array<() => void> = [];
-let isUpdating = false;
 
+/**
+ * Resets the global state to its initial empty state.
+ * Used primarily for testing and cleanup scenarios.
+ */
 export function resetGlobalState(): void {
   Object.keys(globalState).forEach((key) => {
     delete globalState[key as keyof State];
   });
-  stateVersion = 0;
-  updateQueue.length = 0;
-  isUpdating = false;
 }
 
+/**
+ * Abstract base class providing state management capabilities to TraceLog components.
+ *
+ * All managers and handlers extend this class to access and modify the shared global state.
+ * State operations are synchronous and thread-safe within the single-threaded browser environment.
+ */
 export abstract class StateManager {
+  /**
+   * Gets a value from the global state
+   */
   protected get<T extends keyof State>(key: T): State[T] {
     return globalState[key];
   }
 
-  protected async set<T extends keyof State>(key: T, value: State[T]): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const update = (): void => {
-        const oldValue = globalState[key];
-        const oldVersion = stateVersion;
+  /**
+   * Sets a value in the global state
+   */
+  protected set<T extends keyof State>(key: T, value: State[T]): void {
+    const oldValue = globalState[key];
+    globalState[key] = value;
 
-        globalState[key] = value;
-        stateVersion++;
-
-        if (key === 'sessionId' || key === 'config' || key === 'hasStartSession') {
-          debugLog.debug('StateManager', 'Critical state updated', {
-            key,
-            oldValue: key === 'config' ? !!oldValue : oldValue,
-            newValue: key === 'config' ? !!value : value,
-            version: stateVersion,
-            previousVersion: oldVersion,
-          });
-        }
-
-        resolve();
-        this.processNextUpdate();
-      };
-
-      updateQueue.push(update);
-      this.processNextUpdate();
-    });
-  }
-
-  private processNextUpdate(): void {
-    if (isUpdating || updateQueue.length === 0) {
-      return;
-    }
-
-    isUpdating = true;
-    const update = updateQueue.shift();
-
-    if (update) {
-      update();
-    }
-
-    isUpdating = false;
-
-    if (updateQueue.length > 0) {
-      this.processNextUpdate();
+    // Log critical state changes for debugging
+    if (this.isCriticalStateKey(key) && this.shouldLog(oldValue, value)) {
+      debugLog.debug('StateManager', 'State updated', {
+        key,
+        oldValue: this.formatLogValue(key, oldValue),
+        newValue: this.formatLogValue(key, value),
+      });
     }
   }
 
-  protected getStateVersion(): number {
-    return stateVersion;
+  /**
+   * Gets the entire state object (for debugging purposes)
+   */
+  protected getState(): Readonly<State> {
+    return { ...globalState };
+  }
+
+  /**
+   * Checks if a state key is considered critical for logging
+   */
+  private isCriticalStateKey(key: keyof State): boolean {
+    return key === 'sessionId' || key === 'config' || key === 'hasStartSession';
+  }
+
+  /**
+   * Determines if a state change should be logged
+   */
+  private shouldLog<T extends keyof State>(oldValue: State[T], newValue: State[T]): boolean {
+    return oldValue !== newValue;
+  }
+
+  /**
+   * Formats values for logging (avoiding large object dumps)
+   */
+  private formatLogValue<T extends keyof State>(key: T, value: State[T]): State[T] | string {
+    if (key === 'config') {
+      return value ? '(configured)' : '(not configured)';
+    }
+    return value;
   }
 }

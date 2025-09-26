@@ -6,19 +6,12 @@ import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { EventManager } from './event.manager';
 
-interface ActivityListeners {
-  click: () => void;
-  keydown: () => void;
-  scroll: () => void;
-}
-
 export class SessionManager extends StateManager {
   private readonly storageManager: StorageManager;
   private readonly eventManager: EventManager;
   private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
-  private activityListeners: ActivityListeners | null = null;
-  private visibilityChangeTimeout: number | null = null;
+  private activityHandler: (() => void) | null = null;
 
   constructor(storageManager: StorageManager, eventManager: EventManager) {
     super();
@@ -27,7 +20,7 @@ export class SessionManager extends StateManager {
   }
 
   /**
-   * Inicializa cross-tab sync simple
+   * Initialize cross-tab synchronization
    */
   private initCrossTabSync(): void {
     if (typeof BroadcastChannel === 'undefined') {
@@ -37,41 +30,31 @@ export class SessionManager extends StateManager {
 
     this.broadcastChannel = new BroadcastChannel('tracelog_session');
 
-    // Escuchar cambios de sesión de otras tabs
     this.broadcastChannel.onmessage = (event): void => {
       const { sessionId, timestamp } = event.data;
 
-      if (sessionId && timestamp) {
-        const currentSessionId = this.get('sessionId');
+      if (sessionId && timestamp && timestamp > Date.now() - 5000) {
+        this.set('sessionId', sessionId);
+        this.storageManager.setItem('sessionId', sessionId);
+        this.storageManager.setItem('lastActivity', timestamp.toString());
 
-        // Solo actualizar si es una sesión más reciente
-        if (!currentSessionId || timestamp > Date.now() - 1000) {
-          this.set('sessionId', sessionId);
-          this.storageManager.setItem('sessionId', sessionId);
-          this.storageManager.setItem('lastActivity', timestamp.toString());
-
-          debugLog.debug('SessionManager', 'Session synced from another tab', {
-            sessionId,
-          });
-        }
+        debugLog.debug('SessionManager', 'Session synced from another tab', { sessionId });
       }
     };
   }
 
   /**
-   * Comparte sesión actual con otras tabs
+   * Share session with other tabs
    */
   private shareSession(sessionId: string): void {
-    if (!this.broadcastChannel) return;
-
-    this.broadcastChannel.postMessage({
+    this.broadcastChannel?.postMessage({
       sessionId,
       timestamp: Date.now(),
     });
   }
 
   /**
-   * Limpia cross-tab sync
+   * Cleanup cross-tab sync
    */
   private cleanupCrossTabSync(): void {
     if (this.broadcastChannel) {
@@ -81,7 +64,7 @@ export class SessionManager extends StateManager {
   }
 
   /**
-   * Recupera sesión desde localStorage si existe
+   * Recover session from localStorage if it exists and hasn't expired
    */
   private recoverSession(): string | null {
     const storedSessionId = this.storageManager.getItem('sessionId');
@@ -94,22 +77,17 @@ export class SessionManager extends StateManager {
     const lastActivityTime = parseInt(lastActivity, 10);
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
 
-    // Verificar si sesión expiró
     if (Date.now() - lastActivityTime > sessionTimeout) {
       debugLog.debug('SessionManager', 'Stored session expired');
       return null;
     }
 
-    debugLog.info('SessionManager', 'Session recovered from storage', {
-      sessionId: storedSessionId,
-      lastActivity: lastActivityTime,
-    });
-
+    debugLog.info('SessionManager', 'Session recovered from storage', { sessionId: storedSessionId });
     return storedSessionId;
   }
 
   /**
-   * Persiste sesión en localStorage
+   * Persist session data to localStorage
    */
   private persistSession(sessionId: string): void {
     this.storageManager.setItem('sessionId', sessionId);
@@ -117,61 +95,41 @@ export class SessionManager extends StateManager {
   }
 
   /**
-   * Inicia tracking de sesión
+   * Start session tracking
    */
   async startTracking(): Promise<void> {
-    // Intentar recuperar sesión existente
     const recoveredSessionId = this.recoverSession();
+    const sessionId = recoveredSessionId ?? this.generateSessionId();
+    const isRecovered = Boolean(recoveredSessionId);
 
-    let sessionId: string;
-    let isRecovered = false;
-
-    if (recoveredSessionId) {
-      sessionId = recoveredSessionId;
-      isRecovered = true;
-    } else {
-      sessionId = this.generateSessionId();
-    }
-
-    // Guardar en state y storage
-    await this.set('sessionId', sessionId);
+    this.set('sessionId', sessionId);
     this.persistSession(sessionId);
 
-    // Track session start
+    // Track session start event
     this.eventManager.track({
       type: EventType.SESSION_START,
       ...(isRecovered && { session_start_recovered: true }),
     });
 
-    // Iniciar cross-tab sync
+    // Initialize components
     this.initCrossTabSync();
     this.shareSession(sessionId);
-
-    // Configurar timeout
     this.setupSessionTimeout();
-
-    // Listeners de actividad
     this.setupActivityListeners();
+    this.setupLifecycleListeners();
 
-    // Visibility y unload listeners
-    this.setupVisibilityListener();
-    this.setupUnloadListener();
-
-    debugLog.info('SessionManager', 'Session tracking started', {
-      sessionId,
-      recovered: isRecovered,
-    });
+    debugLog.info('SessionManager', 'Session tracking started', { sessionId, recovered: isRecovered });
   }
 
   /**
-   * Genera ID de sesión único
+   * Generate unique session ID
    */
   private generateSessionId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
-   * Configura timeout de sesión
+   * Setup session timeout
    */
   private setupSessionTimeout(): void {
     this.clearSessionTimeout();
@@ -184,18 +142,18 @@ export class SessionManager extends StateManager {
   }
 
   /**
-   * Reinicia timeout de sesión
+   * Reset session timeout and update activity
    */
   private resetSessionTimeout(): void {
     this.setupSessionTimeout();
-    const sessionId = this.get('sessionId');
+    const sessionId = this.get('sessionId') as string;
     if (sessionId) {
-      this.persistSession(sessionId as string);
+      this.persistSession(sessionId);
     }
   }
 
   /**
-   * Limpia timeout de sesión
+   * Clear session timeout
    */
   private clearSessionTimeout(): void {
     if (this.sessionTimeoutId) {
@@ -205,66 +163,53 @@ export class SessionManager extends StateManager {
   }
 
   /**
-   * Configura listeners de actividad del usuario
+   * Setup activity listeners to track user engagement
    */
   private setupActivityListeners(): void {
-    const resetTimeout = (): void => this.resetSessionTimeout();
+    this.activityHandler = (): void => this.resetSessionTimeout();
 
-    document.addEventListener('click', resetTimeout);
-    document.addEventListener('keydown', resetTimeout);
-    document.addEventListener('scroll', resetTimeout);
-
-    // Guardar para cleanup
-    this.activityListeners = {
-      click: resetTimeout,
-      keydown: resetTimeout,
-      scroll: resetTimeout,
-    };
+    document.addEventListener('click', this.activityHandler, { passive: true });
+    document.addEventListener('keydown', this.activityHandler, { passive: true });
+    document.addEventListener('scroll', this.activityHandler, { passive: true });
   }
 
   /**
-   * Limpia listeners de actividad
+   * Clean up activity listeners
    */
   private cleanupActivityListeners(): void {
-    if (this.activityListeners) {
-      document.removeEventListener('click', this.activityListeners.click);
-      document.removeEventListener('keydown', this.activityListeners.keydown);
-      document.removeEventListener('scroll', this.activityListeners.scroll);
-      this.activityListeners = null;
+    if (this.activityHandler) {
+      document.removeEventListener('click', this.activityHandler);
+      document.removeEventListener('keydown', this.activityHandler);
+      document.removeEventListener('scroll', this.activityHandler);
+      this.activityHandler = null;
     }
   }
 
   /**
-   * Configura listener de visibilidad
+   * Setup page lifecycle listeners (visibility and unload)
    */
-  private setupVisibilityListener(): void {
+  private setupLifecycleListeners(): void {
+    // Handle tab visibility changes
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        // Pausar timeout cuando tab está oculto
         this.clearSessionTimeout();
       } else {
-        // Reanudar timeout cuando tab vuelve a estar visible
         const sessionId = this.get('sessionId');
         if (sessionId) {
           this.setupSessionTimeout();
         }
       }
     });
-  }
 
-  /**
-   * Configura listener de unload
-   */
-  private setupUnloadListener(): void {
+    // Handle page unload
     window.addEventListener('beforeunload', () => {
-      // NO enviar session_end aquí, solo flush eventos
-      // Session end se envía solo en timeout o destroy manual
+      // Flush events on unload but don't end session here
       this.eventManager.flushImmediatelySync();
     });
   }
 
   /**
-   * Finaliza sesión
+   * End current session
    */
   private endSession(reason: SessionEndReason): void {
     const sessionId = this.get('sessionId');
@@ -273,43 +218,36 @@ export class SessionManager extends StateManager {
 
     debugLog.info('SessionManager', 'Ending session', { sessionId, reason });
 
-    // Track session end
+    // Track session end event
     this.eventManager.track({
       type: EventType.SESSION_END,
       session_end_reason: reason,
     });
 
-    // Limpiar
+    // Clean up resources
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
 
-    // Limpiar storage
+    // Clear storage and state
     this.storageManager.removeItem('sessionId');
     this.storageManager.removeItem('lastActivity');
-
-    // Limpiar state
     this.set('sessionId', null);
   }
 
   /**
-   * Detiene tracking de sesión
+   * Stop session tracking
    */
   async stopTracking(): Promise<void> {
     this.endSession('manual_stop');
   }
 
   /**
-   * Limpia recursos
+   * Clean up all resources
    */
   destroy(): void {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
-
-    if (this.visibilityChangeTimeout) {
-      clearTimeout(this.visibilityChangeTimeout);
-      this.visibilityChangeTimeout = null;
-    }
   }
 }
