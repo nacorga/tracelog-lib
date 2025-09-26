@@ -72,12 +72,6 @@ export interface CrossTabTestResult {
   tabCount: number;
   /** Session coordination success */
   coordinationSuccess: boolean;
-  /** Leader election results */
-  leaderElection: {
-    leaderId: string;
-    leaderTabIndex: number;
-    electionTime: number;
-  };
   /** Session synchronization results */
   synchronization: {
     allTabsSynced: boolean;
@@ -402,44 +396,13 @@ export class CrossTabTesting {
     // All tabs should share the same session ID
     const coordinationSuccess = sessionIds.every((id) => id === sessionIds[0] && id !== null);
 
-    // Test leader election
-    const leaderElection = await this.testLeaderElection(tabs);
-
     // Test synchronization
     const synchronization = await this.testSynchronization(tabs);
 
     return {
       tabCount: tabs.length,
       coordinationSuccess,
-      leaderElection,
       synchronization,
-    };
-  }
-
-  /**
-   * Tests tab leader election
-   */
-  static async testLeaderElection(tabs: Page[]): Promise<CrossTabTestResult['leaderElection']> {
-    const startTime = Date.now();
-
-    // Check which tab becomes the leader
-    const leaderResults = await Promise.all(
-      tabs.map(async (tab, index) => {
-        const isLeader = await tab.evaluate(() => {
-          const bridge = window.__traceLogBridge;
-          return bridge?.isTabLeader?.() ?? false;
-        });
-        return { index, isLeader };
-      }),
-    );
-
-    const leader = leaderResults.find((result) => result.isLeader);
-    const electionTime = Date.now() - startTime;
-
-    return {
-      leaderId: leader ? `tab-${leader.index}` : 'none',
-      leaderTabIndex: leader?.index ?? -1,
-      electionTime,
     };
   }
 
@@ -617,7 +580,6 @@ export const SessionUtils = {
   // Cross-tab utilities
   createMultipleTabs: CrossTabTesting.createMultipleTabs,
   testCrossTabCoordination: CrossTabTesting.testCrossTabCoordination,
-  testLeaderElection: CrossTabTesting.testLeaderElection,
   testSynchronization: CrossTabTesting.testSynchronization,
   testTabClosureBehavior: CrossTabTesting.testTabClosureBehavior,
 

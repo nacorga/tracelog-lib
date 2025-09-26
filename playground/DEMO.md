@@ -163,7 +163,6 @@ bridge.getQueueLength()        // pending events
 // Testing helpers
 bridge.sendCustomEvent(name, data)  // send custom event
 bridge.setSessionTimeout(ms)        // configure timeout
-bridge.isTabLeader?.()              // tab leadership
 ```
 
 ### Console Integration

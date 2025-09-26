@@ -3,14 +3,8 @@ import { MetadataType } from './types/common.types';
 import { AppConfig } from './types/config.types';
 import { debugLog } from './utils/logging';
 import { validateAndNormalizeConfig } from './utils/validations';
-import {
-  INITIALIZATION_MAX_CONCURRENT_RETRIES,
-  INITIALIZATION_CONCURRENT_RETRY_DELAY_MS,
-  INITIALIZATION_TIMEOUT_MS,
-} from './constants';
+import { TestBridge } from './test-bridge';
 import './types/window.types';
-import { TraceLogTestBridge } from './types/window.types';
-import { InitializationTimeoutError } from './types/validation-error.types';
 
 export * as Types from './app.types';
 export * as Constants from './app.constants';
@@ -23,115 +17,42 @@ let isDestroying = false;
  * Initializes the tracelog app with the provided configuration.
  * If already initialized, this function returns early without error.
  * @param appConfig - The configuration object for the app
- * @throws {Error} If initialization is currently in progress
+ * @throws {Error} If initialization fails or environment is invalid
  * @example
  * await init({ id: 'my-project-id' });
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
+  // Browser environment check
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    throw new Error('This library can only be used in a browser environment');
+  }
+
+  // Already initialized - safe to return
+  if (app) {
+    debugLog.debug('API', 'Library already initialized, skipping duplicate initialization');
+    return;
+  }
+
+  // Prevent concurrent initialization
+  if (isInitializing) {
+    debugLog.warn('API', 'Initialization already in progress');
+    throw new Error('Initialization already in progress');
+  }
+
+  isInitializing = true;
+
   try {
-    debugLog.info('API', 'Library initialization started', { id: appConfig.id });
+    debugLog.info('API', 'Initializing TraceLog', { projectId: appConfig.id });
 
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      debugLog.clientError(
-        'API',
-        'Browser environment required - this library can only be used in a browser environment',
-        {
-          hasWindow: typeof window !== 'undefined',
-          hasDocument: typeof document !== 'undefined',
-        },
-      );
-
-      throw new Error('This library can only be used in a browser environment');
-    }
-
-    if (app) {
-      debugLog.debug('API', 'Library already initialized, skipping duplicate initialization', {
-        projectId: appConfig.id,
-      });
-
-      return;
-    }
-
-    // Set flag before concurrent check to prevent race condition
-    if (isInitializing) {
-      debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
-
-      const maxRetries = INITIALIZATION_MAX_CONCURRENT_RETRIES;
-      const retryDelay = INITIALIZATION_CONCURRENT_RETRY_DELAY_MS;
-      const globalTimeout = INITIALIZATION_TIMEOUT_MS;
-
-      const retryPromise = (async (): Promise<number> => {
-        let retries = 0;
-
-        while (isInitializing && retries < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          retries++;
-        }
-
-        return retries;
-      })();
-
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(
-            new InitializationTimeoutError(
-              `Initialization exceeded ${globalTimeout}ms timeout - concurrent initialization took too long`,
-              globalTimeout,
-            ),
-          );
-        }, globalTimeout);
-      });
-
-      try {
-        const retries = await Promise.race([retryPromise, timeoutPromise]);
-
-        if (app) {
-          debugLog.debug('API', 'Concurrent initialization completed successfully', {
-            projectId: appConfig.id,
-            retriesUsed: retries,
-          });
-
-          return;
-        }
-
-        if (isInitializing) {
-          debugLog.error('API', 'Initialization timeout - concurrent initialization took too long', {
-            projectId: appConfig.id,
-            retriesUsed: retries,
-            maxRetries,
-          });
-
-          throw new Error('App initialization timeout - concurrent initialization took too long');
-        }
-      } catch (error) {
-        if (error instanceof InitializationTimeoutError) {
-          debugLog.error('API', 'Initialization global timeout exceeded', {
-            projectId: appConfig.id,
-            timeoutMs: globalTimeout,
-          });
-        }
-
-        throw error;
-      }
-    }
-
-    isInitializing = true;
-
-    debugLog.debug('API', 'Validating and normalizing configuration', { projectId: appConfig.id });
     const validatedConfig = validateAndNormalizeConfig(appConfig);
-
-    debugLog.debug('API', 'Creating App instance', { projectId: validatedConfig.id });
     const instance = new App();
 
     await instance.init(validatedConfig);
-
     app = instance;
 
-    debugLog.info('API', 'Library initialization completed successfully', {
-      projectId: validatedConfig.id,
-    });
+    debugLog.info('API', 'TraceLog initialized successfully', { projectId: validatedConfig.id });
   } catch (error) {
-    // Ensure complete cleanup on initialization failure
+    // Cleanup on failure
     if (app && !app.initialized) {
       try {
         await app.destroy();
@@ -139,11 +60,8 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
         debugLog.warn('API', 'Failed to cleanup partially initialized app', { cleanupError });
       }
     }
-
     app = null;
-
     debugLog.error('API', 'Initialization failed', { error });
-
     throw error;
   } finally {
     isInitializing = false;
@@ -164,23 +82,14 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
  * This function should be called after the app has been initialized using the `init` function.
  */
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
-  try {
-    if (!app) {
-      debugLog.clientError('API', 'Custom event failed - Library not initialized. Please call TraceLog.init() first', {
-        eventName: name,
-        hasMetadata: !!metadata,
-      });
-      throw new Error('App not initialized');
-    }
+  if (!app) {
+    throw new Error('TraceLog not initialized. Please call init() first.');
+  }
 
-    debugLog.debug('API', 'Sending custom event', {
-      eventName: name,
-      hasMetadata: !!metadata,
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-    });
+  try {
     app.sendCustomEvent(name, metadata);
   } catch (error) {
-    debugLog.error('API', 'Event tracking failed', { eventName: name, error, hasMetadata: !!metadata });
+    debugLog.error('API', 'Failed to send custom event', { eventName: name, error });
     throw error;
   }
 };
@@ -194,216 +103,48 @@ export const isInitialized = (): boolean => {
 };
 
 /**
- * Gets the current initialization status for debugging purposes.
- * @returns Object with detailed initialization state
- */
-export const getInitializationStatus = (): {
-  isInitialized: boolean;
-  isInitializing: boolean;
-  hasInstance: boolean;
-} => {
-  const initialized = app !== null;
-  return {
-    isInitialized: initialized,
-    isInitializing: isInitializing,
-    hasInstance: initialized,
-  };
-};
-
-/**
  * Destroys the current app instance and cleans up resources.
+ * @throws {Error} If not initialized or already destroying
  */
 export const destroy = async (): Promise<void> => {
+  // Check if app was never initialized
+  if (!app) {
+    throw new Error('App not initialized');
+  }
+
+  // Prevent concurrent destroy operations
+  if (isDestroying) {
+    throw new Error('Destroy operation already in progress');
+  }
+
+  isDestroying = true;
+
   try {
-    debugLog.info('API', 'Library cleanup initiated');
-
-    if (isDestroying) {
-      debugLog.warn('API', 'Cleanup already in progress, skipping duplicate cleanup');
-      return;
-    }
-
-    if (!app) {
-      debugLog.warn('API', 'Cleanup called but Library was not initialized');
-      throw new Error('App not initialized');
-    }
-
-    isDestroying = true;
-
-    try {
-      debugLog.debug('API', 'Calling app.destroy()');
-      await app.destroy();
-      debugLog.debug('API', 'app.destroy() completed successfully');
-    } catch (destroyError) {
-      debugLog.error('API', 'app.destroy() failed, performing forced cleanup', { destroyError });
-
-      try {
-        debugLog.debug('API', 'Forcing app cleanup');
-        if (app) {
-          app = null;
-        }
-        debugLog.debug('API', 'Forced cleanup completed');
-      } catch (cleanupError) {
-        debugLog.error('API', 'Forced cleanup failed', { cleanupError });
-      }
-
-      throw destroyError;
-    }
-
-    debugLog.debug('API', 'Nullifying app instance');
+    debugLog.info('API', 'Destroying TraceLog instance');
+    await app.destroy();
     app = null;
-
-    debugLog.debug('API', 'Resetting initialization flags');
     isInitializing = false;
-
-    debugLog.info('API', 'Library cleanup completed successfully');
+    debugLog.info('API', 'TraceLog destroyed successfully');
   } catch (error) {
-    debugLog.error('API', 'Cleanup failed', { error, hadApp: !!app, wasInitializing: isInitializing });
+    // Force cleanup even if destroy fails
+    app = null;
+    isInitializing = false;
+    debugLog.error('API', 'Error during destroy, forced cleanup', { error });
     throw error;
   } finally {
     isDestroying = false;
   }
 };
 
-class TestBridge extends App implements TraceLogTestBridge {
-  private _forceInitFailure = false;
-  private _isDestroying = false;
+// Auto-inject testing bridge in development environments
+if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined') {
+  const injectTestingBridge = (): void => {
+    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
+  };
 
-  isInitializing(): boolean {
-    return isInitializing;
-  }
-
-  sendCustomEvent(name: string, data?: Record<string, unknown>): void {
-    if (!this.initialized) {
-      throw new Error('App not initialized');
-    }
-    super.sendCustomEvent(name, data);
-  }
-
-  getSessionData(): Record<string, unknown> | null {
-    return {
-      id: this.get('sessionId') as string,
-      isActive: !!this.get('sessionId'),
-      startTime: Date.now(),
-      lastActivity: Date.now(),
-      timeout: this.get('config')?.sessionTimeout ?? 15 * 60 * 1000,
-    };
-  }
-
-  setSessionTimeout(timeout: number): void {
-    const config = this.get('config');
-    if (config) {
-      config.sessionTimeout = timeout;
-      this.set('config', config);
-    }
-  }
-
-  isTabLeader?(): boolean {
-    return true; // For testing purposes, always consider current tab as leader
-  }
-
-  getQueueLength(): number {
-    return this.eventManager?.getQueueLength() ?? 0;
-  }
-
-  forceInitLock(enabled = true): void {
-    // Test scenarios handled through internal state instead of global manipulation
-    if (enabled) {
-      isInitializing = true;
-    } else {
-      isInitializing = false;
-    }
-  }
-
-  forceInitFailure(enabled = true): void {
-    this._forceInitFailure = enabled;
-  }
-
-  // Public getter method for tests to access state
-  get<T extends keyof import('./types').State>(key: T): import('./types').State[T] {
-    return super.get(key);
-  }
-
-  // Manager and handler getter methods for testing
-  getStorageManager() {
-    return this.storageManager || null;
-  }
-
-  getEventManager() {
-    return this.eventManager || null;
-  }
-
-  getSessionHandler() {
-    return this.sessionHandler || null;
-  }
-
-  getPageViewHandler() {
-    return this.pageViewHandler || null;
-  }
-
-  getClickHandler() {
-    return this.clickHandler || null;
-  }
-
-  getScrollHandler() {
-    return this.scrollHandler || null;
-  }
-
-  getPerformanceHandler() {
-    return this.performanceHandler || null;
-  }
-
-  getErrorHandler() {
-    return this.errorHandler || null;
-  }
-
-  getGoogleAnalytics() {
-    return this.googleAnalytics || null;
-  }
-
-  // Override destroy to check initialization and handle properly
-  async destroy(): Promise<void> {
-    if (!this.initialized) {
-      throw new Error('App not initialized');
-    }
-
-    if (this._isDestroying) {
-      throw new Error('Destroy already in progress');
-    }
-
-    this._isDestroying = true;
-    try {
-      await super.destroy();
-    } finally {
-      this._isDestroying = false;
-    }
-  }
-
-  // Override init to check for test flags
-  async init(config: AppConfig): Promise<void> {
-    if (this._forceInitFailure) {
-      throw new Error('Forced initialization failure for testing');
-    }
-    return super.init(config);
-  }
-}
-
-// Auto-inject testing bridge only in development/testing environments
-if (process.env.NODE_ENV === 'dev') {
-  if (typeof window !== 'undefined') {
-    const injectTestingBridge = (): void => {
-      // Create a fresh instance for each injection to avoid cross-test contamination
-      window.__traceLogBridge = new TestBridge();
-    };
-
-    // Inject immediately if DOM is ready, otherwise wait
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', injectTestingBridge);
-    } else {
-      injectTestingBridge();
-    }
-
-    // Also expose a method to create fresh instances for tests
-    (window as unknown as { __createFreshTraceLogBridge?: () => void }).__createFreshTraceLogBridge =
-      injectTestingBridge;
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectTestingBridge);
+  } else {
+    injectTestingBridge();
   }
 }

@@ -220,9 +220,6 @@ const INTERACTIVE_SELECTORS = [
   '[tabindex="0"]'
 ];
 const UTM_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
-const INITIALIZATION_MAX_CONCURRENT_RETRIES = 20;
-const INITIALIZATION_CONCURRENT_RETRY_DELAY_MS = 50;
-const INITIALIZATION_TIMEOUT_MS = 1e4;
 const SCROLL_SUPPRESS_MULTIPLIER = 2;
 const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;
 const ALLOWED_API_CONFIG_KEYS = /* @__PURE__ */ new Set([
@@ -399,12 +396,6 @@ class SamplingRateValidationError extends TraceLogValidationError {
 class IntegrationValidationError extends TraceLogValidationError {
   constructor(message, layer = "config") {
     super(message, "INTEGRATION_INVALID", layer);
-  }
-}
-class InitializationTimeoutError extends TraceLogValidationError {
-  constructor(message, timeoutMs, layer = "runtime") {
-    super(message, "INITIALIZATION_TIMEOUT", layer);
-    this.timeoutMs = timeoutMs;
   }
 }
 const validateAppConfig = (config) => {
@@ -2554,76 +2545,35 @@ class ScrollHandler extends StateManager {
 }
 class GoogleAnalyticsIntegration extends StateManager {
   isInitialized = false;
-  constructor() {
-    super();
-  }
   async initialize() {
     if (this.isInitialized) {
       return;
     }
     const measurementId = this.get("config").integrations?.googleAnalytics?.measurementId;
-    if (!measurementId?.trim()) {
-      debugLog.clientWarn("GoogleAnalytics", "Google Analytics integration disabled - measurementId not configured", {
-        hasIntegrations: !!this.get("config").integrations,
-        hasGoogleAnalytics: !!this.get("config").integrations?.googleAnalytics
-      });
-      return;
-    }
     const userId = this.get("userId");
-    if (!userId?.trim()) {
-      debugLog.warn("GoogleAnalytics", "Google Analytics initialization delayed - userId not available", {
-        measurementId: measurementId.substring(0, 8) + "..."
-      });
+    if (!measurementId?.trim() || !userId?.trim()) {
       return;
     }
     try {
       if (this.isScriptAlreadyLoaded()) {
-        debugLog.info("GoogleAnalytics", "Google Analytics script already loaded", { measurementId });
         this.isInitialized = true;
         return;
       }
       await this.loadScript(measurementId);
       this.configureGtag(measurementId, userId);
       this.isInitialized = true;
-      debugLog.info("GoogleAnalytics", "Google Analytics integration initialized successfully", {
-        measurementId,
-        userId
-      });
     } catch (error) {
-      debugLog.error("GoogleAnalytics", "Google Analytics initialization failed", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        measurementId,
-        userId
-      });
+      console.error("[TraceLog:GoogleAnalytics] Initialization failed:", error);
     }
   }
   trackEvent(eventName, metadata) {
-    if (!eventName?.trim()) {
-      debugLog.clientWarn("GoogleAnalytics", "Event tracking skipped - invalid event name provided", {
-        eventName,
-        hasMetadata: !!metadata && Object.keys(metadata).length > 0
-      });
-      return;
-    }
-    if (!this.isInitialized) {
-      return;
-    }
-    if (typeof window.gtag !== "function") {
-      debugLog.warn("GoogleAnalytics", "Event tracking failed - gtag function not available", {
-        eventName,
-        hasGtag: typeof window.gtag,
-        hasDataLayer: Array.isArray(window.dataLayer)
-      });
+    if (!eventName?.trim() || !this.isInitialized || typeof window.gtag !== "function") {
       return;
     }
     try {
       window.gtag("event", eventName, metadata);
     } catch (error) {
-      debugLog.error("GoogleAnalytics", "Event tracking failed", {
-        eventName,
-        error: error instanceof Error ? error.message : "Unknown error",
-        metadataKeys: Object.keys(metadata || {})
-      });
+      console.error("[TraceLog:GoogleAnalytics] Event tracking failed:", error);
     }
   }
   cleanup() {
@@ -2632,73 +2582,36 @@ class GoogleAnalyticsIntegration extends StateManager {
     if (script) {
       script.remove();
     }
-    debugLog.info("GoogleAnalytics", "Google Analytics integration cleanup completed");
   }
   isScriptAlreadyLoaded() {
-    const tracelogScript = document.getElementById("tracelog-ga-script");
-    if (tracelogScript) {
+    if (document.getElementById("tracelog-ga-script")) {
       return true;
     }
     const existingGAScript = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
-    if (existingGAScript) {
-      debugLog.clientWarn("GoogleAnalytics", "Google Analytics script already loaded from external source", {
-        scriptSrc: existingGAScript.getAttribute("src"),
-        hasGtag: typeof window.gtag === "function"
-      });
-      return true;
-    }
-    return false;
+    return !!existingGAScript;
   }
   async loadScript(measurementId) {
     return new Promise((resolve, reject) => {
-      try {
-        const script = document.createElement("script");
-        script.id = "tracelog-ga-script";
-        script.async = true;
-        script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-        script.onload = () => {
-          resolve();
-        };
-        script.onerror = () => {
-          const error = new Error("Failed to load Google Analytics script");
-          debugLog.error("GoogleAnalytics", "Google Analytics script load failed", {
-            measurementId,
-            error: error.message,
-            scriptSrc: script.src
-          });
-          reject(error);
-        };
-        document.head.appendChild(script);
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error : new Error(String(error));
-        debugLog.error("GoogleAnalytics", "Error creating Google Analytics script", {
-          measurementId,
-          error: errorMsg.message
-        });
-        reject(errorMsg);
-      }
+      const script = document.createElement("script");
+      script.id = "tracelog-ga-script";
+      script.async = true;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load Google Analytics script"));
+      document.head.appendChild(script);
     });
   }
   configureGtag(measurementId, userId) {
-    try {
-      const gaScriptConfig = document.createElement("script");
-      gaScriptConfig.innerHTML = `
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', '${measurementId}', {
-          'user_id': '${userId}'
-        });
-      `;
-      document.head.appendChild(gaScriptConfig);
-    } catch (error) {
-      debugLog.error("GoogleAnalytics", "Failed to configure Google Analytics", {
-        measurementId,
-        userId,
-        error: error instanceof Error ? error.message : "Unknown error"
+    const gaScriptConfig = document.createElement("script");
+    gaScriptConfig.innerHTML = `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '${measurementId}', {
+        'user_id': '${userId}'
       });
-      throw error;
-    }
+    `;
+    document.head.appendChild(gaScriptConfig);
   }
 }
 class StorageManager {
@@ -3131,208 +3044,230 @@ class ErrorHandler extends StateManager {
 }
 class App extends StateManager {
   isInitialized = false;
-  googleAnalytics = null;
-  storageManager;
-  eventManager;
-  sessionHandler;
-  pageViewHandler;
-  clickHandler;
-  scrollHandler;
-  performanceHandler;
-  errorHandler;
   suppressNextScrollTimer = null;
+  managers = {};
+  handlers = {};
+  integrations = {};
   get initialized() {
     return this.isInitialized;
   }
   async init(appConfig) {
     if (this.isInitialized) {
-      debugLog.debug("App", "Already initialized", { projectId: appConfig.id });
       return;
     }
-    debugLog.info("App", "Initialization started", { projectId: appConfig.id });
     if (!appConfig.id?.trim()) {
       throw new Error("Project ID is required");
     }
-    this.storageManager = new StorageManager();
     try {
-      await this.setState(appConfig);
-    } catch (error) {
-      debugLog.error("App", "State setup failed", { error });
-      throw error;
-    }
-    try {
+      this.managers.storage = new StorageManager();
+      await this.setupState(appConfig);
       await this.setupIntegrations();
+      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics);
+      this.initializeHandlers();
+      await this.managers.event.recoverPersistedEvents().catch(() => {
+      });
+      this.isInitialized = true;
+      debugLog.info("App", "Initialization completed");
     } catch (error) {
-      debugLog.warn("App", "Integration setup failed, continuing without", { error });
-      this.googleAnalytics = null;
+      throw new Error(`TraceLog initialization failed: ${error}`);
     }
-    this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
-    await this.initHandlers();
-    try {
-      await this.eventManager.recoverPersistedEvents();
-    } catch (error) {
-      debugLog.warn("App", "Event recovery failed, continuing", { error });
-    }
-    this.isInitialized = true;
-    debugLog.info("App", "Initialization completed", { projectId: appConfig.id });
   }
   sendCustomEvent(name, metadata) {
-    if (!this.eventManager) {
-      debugLog.warn("App", "Custom event before initialization", { name });
+    if (!this.managers.event) {
       return;
     }
     const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
-    if (valid) {
-      debugLog.debug("App", "Custom event tracked", { name, hasMetadata: !!sanitizedMetadata });
-      this.eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: {
-          name,
-          ...sanitizedMetadata && { metadata: sanitizedMetadata }
-        }
-      });
-    } else {
-      const mode = this.get("config")?.mode;
-      debugLog.clientError("App", `Custom event validation failed: ${error}`, {
-        name,
-        error,
-        mode
-      });
-      if (mode === "qa" || mode === "debug") {
+    if (!valid) {
+      const config = this.get("config");
+      if (config?.mode === "qa" || config?.mode === "debug") {
         throw new Error(`Custom event "${name}" validation failed: ${error}`);
       }
+      return;
     }
+    this.managers.event.track({
+      type: EventType.CUSTOM,
+      custom_event: {
+        name,
+        ...sanitizedMetadata && { metadata: sanitizedMetadata }
+      }
+    });
   }
   async destroy() {
     if (!this.isInitialized) {
-      debugLog.warn("App", "Destroy called but not initialized");
       return;
     }
-    debugLog.info("App", "Cleanup started");
-    if (this.googleAnalytics) {
+    this.integrations.googleAnalytics?.cleanup();
+    const handlerCleanups = Object.values(this.handlers).filter(Boolean).map(async (handler) => {
       try {
-        this.googleAnalytics.cleanup();
-      } catch (error) {
-        debugLog.warn("App", "Analytics cleanup failed", { error });
-      }
-    }
-    const handlers = [
-      this.sessionHandler,
-      this.pageViewHandler,
-      this.clickHandler,
-      this.scrollHandler,
-      this.performanceHandler,
-      this.errorHandler
-    ].filter(Boolean);
-    const cleanupResults = await Promise.allSettled(handlers.map((handler) => handler.stopTracking()));
-    cleanupResults.forEach((result, index) => {
-      if (result.status === "rejected") {
-        debugLog.warn("App", "Handler cleanup failed", {
-          handlerIndex: index,
-          error: result.reason
-        });
+        await handler.stopTracking();
+      } catch {
       }
     });
+    await Promise.allSettled(handlerCleanups);
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
     }
-    if (this.eventManager) {
-      try {
-        this.eventManager.stop();
-      } catch (error) {
-        debugLog.warn("App", "EventManager cleanup failed", { error });
-      }
-    }
+    this.managers.event?.stop();
     this.set("hasStartSession", false);
     this.set("suppressNextScroll", false);
     this.set("sessionId", null);
     this.isInitialized = false;
-    debugLog.info("App", "Cleanup completed");
+    this.handlers = {};
   }
   // --- Private Setup Methods ---
-  async setState(appConfig) {
-    this.setApiUrl(appConfig.id, appConfig.allowHttp);
-    await this.setConfig(appConfig);
-    this.setUserId();
-    this.setDevice();
-    this.setPageUrl();
-  }
-  setApiUrl(id, allowHttp = false) {
-    const apiUrl = getApiUrlForProject(id, allowHttp);
+  async setupState(appConfig) {
+    const apiUrl = getApiUrlForProject(appConfig.id, appConfig.allowHttp);
     this.set("apiUrl", apiUrl);
-  }
-  async setConfig(appConfig) {
     const configManager = new ConfigManager();
-    const config = await configManager.get(this.get("apiUrl"), appConfig);
+    const config = await configManager.get(apiUrl, appConfig);
     this.set("config", config);
-  }
-  setUserId() {
-    const userId = UserManager.getId(this.storageManager, this.get("config")?.id);
+    const userId = UserManager.getId(this.managers.storage, config.id);
     this.set("userId", userId);
-  }
-  setDevice() {
     this.set("device", getDeviceType());
-  }
-  setPageUrl() {
-    const url = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
-    this.set("pageUrl", url);
+    const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
+    this.set("pageUrl", pageUrl);
   }
   async setupIntegrations() {
     const config = this.get("config");
-    if (config.ipExcluded || !config.integrations) {
-      return;
-    }
-    const measurementId = config.integrations.googleAnalytics?.measurementId;
-    if (measurementId?.trim()) {
-      this.googleAnalytics = new GoogleAnalyticsIntegration();
-      await this.googleAnalytics.initialize();
+    const measurementId = config.integrations?.googleAnalytics?.measurementId;
+    if (!config.ipExcluded && measurementId?.trim()) {
+      try {
+        this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
+        await this.integrations.googleAnalytics.initialize();
+      } catch {
+        this.integrations.googleAnalytics = void 0;
+      }
     }
   }
   // --- Private Handler Initialization ---
-  async initHandlers() {
-    if (!this.eventManager || !this.storageManager) {
-      throw new Error("EventManager and StorageManager must be initialized first");
-    }
-    this.initSessionHandler();
-    this.initPageViewHandler();
-    this.initClickHandler();
-    this.initScrollHandler();
-    await this.initPerformanceHandler();
-    this.initErrorHandler();
-  }
-  initSessionHandler() {
-    this.sessionHandler = new SessionHandler(this.storageManager, this.eventManager);
-    this.sessionHandler.startTracking();
-  }
-  initPageViewHandler() {
-    const onPageView = async () => {
+  initializeHandlers() {
+    this.handlers.session = new SessionHandler(
+      this.managers.storage,
+      this.managers.event
+    );
+    this.handlers.session.startTracking();
+    const onPageView = () => {
       this.set("suppressNextScroll", true);
       if (this.suppressNextScrollTimer) {
         clearTimeout(this.suppressNextScrollTimer);
       }
-      this.suppressNextScrollTimer = window.setTimeout(async () => {
+      this.suppressNextScrollTimer = window.setTimeout(() => {
         this.set("suppressNextScroll", false);
       }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESS_MULTIPLIER);
     };
-    this.pageViewHandler = new PageViewHandler(this.eventManager, onPageView);
-    this.pageViewHandler.startTracking();
+    this.handlers.pageView = new PageViewHandler(this.managers.event, onPageView);
+    this.handlers.pageView.startTracking();
+    this.handlers.click = new ClickHandler(this.managers.event);
+    this.handlers.click.startTracking();
+    this.handlers.scroll = new ScrollHandler(this.managers.event);
+    this.handlers.scroll.startTracking();
+    this.handlers.performance = new PerformanceHandler(this.managers.event);
+    this.handlers.performance.startTracking().catch(() => {
+    });
+    this.handlers.error = new ErrorHandler(this.managers.event);
+    this.handlers.error.startTracking();
   }
-  initClickHandler() {
-    this.clickHandler = new ClickHandler(this.eventManager);
-    this.clickHandler.startTracking();
+}
+class TestBridge extends App {
+  _isInitializing;
+  _isDestroying = false;
+  constructor(isInitializing2, isDestroying2) {
+    super();
+    this._isInitializing = isInitializing2;
+    this._isDestroying = isDestroying2;
   }
-  initScrollHandler() {
-    this.scrollHandler = new ScrollHandler(this.eventManager);
-    this.scrollHandler.startTracking();
+  isInitializing() {
+    return this._isInitializing;
   }
-  async initPerformanceHandler() {
-    this.performanceHandler = new PerformanceHandler(this.eventManager);
-    await this.performanceHandler.startTracking();
+  sendCustomEvent(name, data) {
+    this.ensureInitialized();
+    super.sendCustomEvent(name, data);
   }
-  initErrorHandler() {
-    this.errorHandler = new ErrorHandler(this.eventManager);
-    this.errorHandler.startTracking();
+  getSessionData() {
+    return {
+      id: this.get("sessionId"),
+      isActive: !!this.get("sessionId"),
+      timeout: this.get("config")?.sessionTimeout ?? 15 * 60 * 1e3
+    };
+  }
+  setSessionTimeout(timeout) {
+    const config = this.get("config");
+    if (config) {
+      config.sessionTimeout = timeout;
+      this.set("config", config);
+    }
+  }
+  getQueueLength() {
+    return this.managers.event?.getQueueLength() ?? 0;
+  }
+  forceInitLock(enabled = true) {
+    this._isInitializing = enabled;
+  }
+  get(key) {
+    return super.get(key);
+  }
+  // Manager accessors
+  getStorageManager() {
+    return this.safeAccess(this.managers?.storage);
+  }
+  getEventManager() {
+    return this.safeAccess(this.managers?.event);
+  }
+  // Handler accessors
+  getSessionHandler() {
+    return this.safeAccess(this.handlers?.session);
+  }
+  getPageViewHandler() {
+    return this.safeAccess(this.handlers?.pageView);
+  }
+  getClickHandler() {
+    return this.safeAccess(this.handlers?.click);
+  }
+  getScrollHandler() {
+    return this.safeAccess(this.handlers?.scroll);
+  }
+  getPerformanceHandler() {
+    return this.safeAccess(this.handlers?.performance);
+  }
+  getErrorHandler() {
+    return this.safeAccess(this.handlers?.error);
+  }
+  // Integration accessors
+  getGoogleAnalytics() {
+    return this.safeAccess(this.integrations?.googleAnalytics);
+  }
+  async destroy() {
+    this.ensureInitialized();
+    this.ensureNotDestroying();
+    this._isDestroying = true;
+    try {
+      await super.destroy();
+    } finally {
+      this._isDestroying = false;
+    }
+  }
+  /**
+   * Helper to safely access managers/handlers and convert undefined to null
+   */
+  safeAccess(value) {
+    return value ?? null;
+  }
+  /**
+   * Ensures the app is initialized, throws if not
+   */
+  ensureInitialized() {
+    if (!this.initialized) {
+      throw new Error("App not initialized");
+    }
+  }
+  /**
+   * Ensures destroy operation is not in progress, throws if it is
+   */
+  ensureNotDestroying() {
+    if (this._isDestroying) {
+      throw new Error("Destroy operation already in progress");
+    }
   }
 }
 const app_types = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -3354,85 +3289,25 @@ let app = null;
 let isInitializing = false;
 let isDestroying = false;
 const init = async (appConfig) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    throw new Error("This library can only be used in a browser environment");
+  }
+  if (app) {
+    debugLog.debug("API", "Library already initialized, skipping duplicate initialization");
+    return;
+  }
+  if (isInitializing) {
+    debugLog.warn("API", "Initialization already in progress");
+    throw new Error("Initialization already in progress");
+  }
+  isInitializing = true;
   try {
-    debugLog.info("API", "Library initialization started", { id: appConfig.id });
-    if (typeof window === "undefined" || typeof document === "undefined") {
-      debugLog.clientError(
-        "API",
-        "Browser environment required - this library can only be used in a browser environment",
-        {
-          hasWindow: typeof window !== "undefined",
-          hasDocument: typeof document !== "undefined"
-        }
-      );
-      throw new Error("This library can only be used in a browser environment");
-    }
-    if (app) {
-      debugLog.debug("API", "Library already initialized, skipping duplicate initialization", {
-        projectId: appConfig.id
-      });
-      return;
-    }
-    if (isInitializing) {
-      debugLog.debug("API", "Concurrent initialization detected, waiting for completion", { projectId: appConfig.id });
-      const maxRetries = INITIALIZATION_MAX_CONCURRENT_RETRIES;
-      const retryDelay = INITIALIZATION_CONCURRENT_RETRY_DELAY_MS;
-      const globalTimeout = INITIALIZATION_TIMEOUT_MS;
-      const retryPromise = (async () => {
-        let retries = 0;
-        while (isInitializing && retries < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          retries++;
-        }
-        return retries;
-      })();
-      const timeoutPromise = new Promise((_2, reject) => {
-        setTimeout(() => {
-          reject(
-            new InitializationTimeoutError(
-              `Initialization exceeded ${globalTimeout}ms timeout - concurrent initialization took too long`,
-              globalTimeout
-            )
-          );
-        }, globalTimeout);
-      });
-      try {
-        const retries = await Promise.race([retryPromise, timeoutPromise]);
-        if (app) {
-          debugLog.debug("API", "Concurrent initialization completed successfully", {
-            projectId: appConfig.id,
-            retriesUsed: retries
-          });
-          return;
-        }
-        if (isInitializing) {
-          debugLog.error("API", "Initialization timeout - concurrent initialization took too long", {
-            projectId: appConfig.id,
-            retriesUsed: retries,
-            maxRetries
-          });
-          throw new Error("App initialization timeout - concurrent initialization took too long");
-        }
-      } catch (error) {
-        if (error instanceof InitializationTimeoutError) {
-          debugLog.error("API", "Initialization global timeout exceeded", {
-            projectId: appConfig.id,
-            timeoutMs: globalTimeout
-          });
-        }
-        throw error;
-      }
-    }
-    isInitializing = true;
-    debugLog.debug("API", "Validating and normalizing configuration", { projectId: appConfig.id });
+    debugLog.info("API", "Initializing TraceLog", { projectId: appConfig.id });
     const validatedConfig = validateAndNormalizeConfig(appConfig);
-    debugLog.debug("API", "Creating App instance", { projectId: validatedConfig.id });
     const instance = new App();
     await instance.init(validatedConfig);
     app = instance;
-    debugLog.info("API", "Library initialization completed successfully", {
-      projectId: validatedConfig.id
-    });
+    debugLog.info("API", "TraceLog initialized successfully", { projectId: validatedConfig.id });
   } catch (error) {
     if (app && !app.initialized) {
       try {
@@ -3449,187 +3324,50 @@ const init = async (appConfig) => {
   }
 };
 const event = (name, metadata) => {
+  if (!app) {
+    throw new Error("TraceLog not initialized. Please call init() first.");
+  }
   try {
-    if (!app) {
-      debugLog.clientError("API", "Custom event failed - Library not initialized. Please call TraceLog.init() first", {
-        eventName: name,
-        hasMetadata: !!metadata
-      });
-      throw new Error("App not initialized");
-    }
-    debugLog.debug("API", "Sending custom event", {
-      eventName: name,
-      hasMetadata: !!metadata,
-      metadataKeys: metadata ? Object.keys(metadata) : []
-    });
     app.sendCustomEvent(name, metadata);
   } catch (error) {
-    debugLog.error("API", "Event tracking failed", { eventName: name, error, hasMetadata: !!metadata });
+    debugLog.error("API", "Failed to send custom event", { eventName: name, error });
     throw error;
   }
 };
 const isInitialized = () => {
   return app !== null;
 };
-const getInitializationStatus = () => {
-  const initialized = app !== null;
-  return {
-    isInitialized: initialized,
-    isInitializing,
-    hasInstance: initialized
-  };
-};
 const destroy = async () => {
+  if (!app) {
+    throw new Error("App not initialized");
+  }
+  if (isDestroying) {
+    throw new Error("Destroy operation already in progress");
+  }
+  isDestroying = true;
   try {
-    debugLog.info("API", "Library cleanup initiated");
-    if (isDestroying) {
-      debugLog.warn("API", "Cleanup already in progress, skipping duplicate cleanup");
-      return;
-    }
-    if (!app) {
-      debugLog.warn("API", "Cleanup called but Library was not initialized");
-      throw new Error("App not initialized");
-    }
-    isDestroying = true;
-    try {
-      debugLog.debug("API", "Calling app.destroy()");
-      await app.destroy();
-      debugLog.debug("API", "app.destroy() completed successfully");
-    } catch (destroyError) {
-      debugLog.error("API", "app.destroy() failed, performing forced cleanup", { destroyError });
-      try {
-        debugLog.debug("API", "Forcing app cleanup");
-        if (app) {
-          app = null;
-        }
-        debugLog.debug("API", "Forced cleanup completed");
-      } catch (cleanupError) {
-        debugLog.error("API", "Forced cleanup failed", { cleanupError });
-      }
-      throw destroyError;
-    }
-    debugLog.debug("API", "Nullifying app instance");
+    debugLog.info("API", "Destroying TraceLog instance");
+    await app.destroy();
     app = null;
-    debugLog.debug("API", "Resetting initialization flags");
     isInitializing = false;
-    debugLog.info("API", "Library cleanup completed successfully");
+    debugLog.info("API", "TraceLog destroyed successfully");
   } catch (error) {
-    debugLog.error("API", "Cleanup failed", { error, hadApp: !!app, wasInitializing: isInitializing });
+    app = null;
+    isInitializing = false;
+    debugLog.error("API", "Error during destroy, forced cleanup", { error });
     throw error;
   } finally {
     isDestroying = false;
   }
 };
-class TestBridge extends App {
-  _forceInitFailure = false;
-  _isDestroying = false;
-  isInitializing() {
-    return isInitializing;
-  }
-  sendCustomEvent(name, data) {
-    if (!this.initialized) {
-      throw new Error("App not initialized");
-    }
-    super.sendCustomEvent(name, data);
-  }
-  getSessionData() {
-    return {
-      id: this.get("sessionId"),
-      isActive: !!this.get("sessionId"),
-      startTime: Date.now(),
-      lastActivity: Date.now(),
-      timeout: this.get("config")?.sessionTimeout ?? 15 * 60 * 1e3
-    };
-  }
-  setSessionTimeout(timeout) {
-    const config = this.get("config");
-    if (config) {
-      config.sessionTimeout = timeout;
-      this.set("config", config);
-    }
-  }
-  isTabLeader() {
-    return true;
-  }
-  getQueueLength() {
-    return this.eventManager?.getQueueLength() ?? 0;
-  }
-  forceInitLock(enabled = true) {
-    if (enabled) {
-      isInitializing = true;
-    } else {
-      isInitializing = false;
-    }
-  }
-  forceInitFailure(enabled = true) {
-    this._forceInitFailure = enabled;
-  }
-  // Public getter method for tests to access state
-  get(key) {
-    return super.get(key);
-  }
-  // Manager and handler getter methods for testing
-  getStorageManager() {
-    return this.storageManager || null;
-  }
-  getEventManager() {
-    return this.eventManager || null;
-  }
-  getSessionHandler() {
-    return this.sessionHandler || null;
-  }
-  getPageViewHandler() {
-    return this.pageViewHandler || null;
-  }
-  getClickHandler() {
-    return this.clickHandler || null;
-  }
-  getScrollHandler() {
-    return this.scrollHandler || null;
-  }
-  getPerformanceHandler() {
-    return this.performanceHandler || null;
-  }
-  getErrorHandler() {
-    return this.errorHandler || null;
-  }
-  getGoogleAnalytics() {
-    return this.googleAnalytics || null;
-  }
-  // Override destroy to check initialization and handle properly
-  async destroy() {
-    if (!this.initialized) {
-      throw new Error("App not initialized");
-    }
-    if (this._isDestroying) {
-      throw new Error("Destroy already in progress");
-    }
-    this._isDestroying = true;
-    try {
-      await super.destroy();
-    } finally {
-      this._isDestroying = false;
-    }
-  }
-  // Override init to check for test flags
-  async init(config) {
-    if (this._forceInitFailure) {
-      throw new Error("Forced initialization failure for testing");
-    }
-    return super.init(config);
-  }
-}
-{
-  if (typeof window !== "undefined") {
-    const injectTestingBridge = () => {
-      window.__traceLogBridge = new TestBridge();
-    };
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", injectTestingBridge);
-    } else {
-      injectTestingBridge();
-    }
-    window.__createFreshTraceLogBridge = injectTestingBridge;
+if (typeof window !== "undefined") {
+  const injectTestingBridge = () => {
+    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", injectTestingBridge);
+  } else {
+    injectTestingBridge();
   }
 }
 const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -3638,7 +3376,6 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   Types: app_types,
   destroy,
   event,
-  getInitializationStatus,
   init,
   isInitialized
 }, Symbol.toStringTag, { value: "Module" }));

@@ -180,14 +180,12 @@ export class TraceLogTestBuilder {
   /**
    * Force bridge simulation methods
    */
-  forceBridgeState(state: 'initLock' | 'initFailure', enabled = true): TraceLogTestBuilder {
+  forceBridgeState(state: 'initLock', enabled = true): TraceLogTestBuilder {
     this.customActions.push(async () => {
       await this.traceLogPage.createFreshBridge();
 
       if (state === 'initLock') {
         await this.traceLogPage.executeBridgeMethod('forceInitLock', enabled);
-      } else if (state === 'initFailure') {
-        await this.traceLogPage.executeBridgeMethod('forceInitFailure', enabled);
       }
     });
     return this;

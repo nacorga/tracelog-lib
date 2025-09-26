@@ -194,10 +194,8 @@ test.describe('Initialization System', () => {
         const listenersAfter = await page.evaluate(() => {
           const bridge = window.__traceLogBridge;
           return {
-            scrollHandlers:
-              (bridge as unknown as { scrollHandler?: { containers?: unknown[] } }).scrollHandler?.containers?.length ??
-              0,
-            clickHandlers: !!(bridge as unknown as { clickHandler?: unknown }).clickHandler,
+            scrollHandlers: bridge?.getScrollHandler()?.containers?.length ?? 0,
+            clickHandlers: !!bridge?.getClickHandler(),
           };
         });
 
@@ -221,16 +219,9 @@ test.describe('Initialization System', () => {
 
         await page.evaluate(async () => {
           const bridge = window.__traceLogBridge;
-          const eventManager = (
-            bridge as unknown as {
-              eventManager: {
-                stop: () => void;
-                eventsQueueIntervalId?: unknown;
-                circuitResetTimeoutId?: unknown;
-                circuitBreakerHealthCheckInterval?: unknown;
-              };
-            }
-          ).eventManager;
+          const eventManager = bridge?.getEventManager();
+
+          if (!eventManager) throw new Error('Event manager not available');
 
           eventManager.stop();
 
@@ -265,7 +256,7 @@ test.describe('Initialization System', () => {
 
         const hasStorageManager = await page.evaluate(() => {
           const bridge = window.__traceLogBridge;
-          return !!(bridge as unknown as { storageManager?: unknown }).storageManager;
+          return !!bridge?.getStorageManager();
         });
 
         expect(hasStorageManager).toBe(true);
@@ -315,69 +306,17 @@ test.describe('Initialization System', () => {
           const bridge = window.__traceLogBridge;
 
           return {
-            sessionHandler: !!(bridge as unknown as { sessionHandler?: unknown }).sessionHandler,
-            scrollHandler: !!(bridge as unknown as { scrollHandler?: unknown }).scrollHandler,
-            pageViewHandler: !!(bridge as unknown as { pageViewHandler?: unknown }).pageViewHandler,
-            clickHandler: !!(bridge as unknown as { clickHandler?: unknown }).clickHandler,
-            performanceHandler: !!(bridge as unknown as { performanceHandler?: unknown }).performanceHandler,
-            errorHandler: !!(bridge as unknown as { errorHandler?: unknown }).errorHandler,
+            sessionHandler: !!bridge?.getSessionHandler(),
+            scrollHandler: !!bridge?.getScrollHandler(),
+            pageViewHandler: !!bridge?.getPageViewHandler(),
+            clickHandler: !!bridge?.getClickHandler(),
+            performanceHandler: !!bridge?.getPerformanceHandler(),
+            errorHandler: !!bridge?.getErrorHandler(),
             // networkHandler removed in v2
           };
         });
 
         expect(Object.values(handlersValid).every((v) => v === true)).toBe(true);
-      } finally {
-        monitor.cleanup();
-      }
-    });
-
-    test('should rollback on initialization failure', async ({ page }) => {
-      const monitor = TestUtils.createConsoleMonitor(page);
-
-      try {
-        await page.goto('/?e2e=true');
-        await page.waitForLoadState('networkidle');
-        await page.waitForFunction(() => !!window.__traceLogBridge, { timeout: 5000 });
-
-        const result = await page.evaluate(async () => {
-          try {
-            // Create fresh bridge instance for this test to avoid interference
-            if ((window as unknown as { __createFreshTraceLogBridge?: () => void }).__createFreshTraceLogBridge) {
-              (window as unknown as { __createFreshTraceLogBridge: () => void }).__createFreshTraceLogBridge();
-            }
-
-            const bridge = window.__traceLogBridge;
-
-            if (!bridge) throw new Error('TraceLog bridge not available');
-
-            bridge.forceInitFailure(true);
-            await bridge.init({ id: null as unknown as string });
-            return { success: true };
-          } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : String(error) };
-          }
-        });
-
-        expect(result.success).toBe(false);
-
-        const stateAfterFailure = await page.evaluate(() => {
-          const bridge = window.__traceLogBridge;
-          if (!bridge) {
-            return {
-              sessionId: null,
-              hasStartSession: false,
-              suppressNextScroll: false,
-            };
-          }
-          return {
-            sessionId: (bridge as unknown as { get: (key: string) => unknown }).get('sessionId'),
-            hasStartSession: (bridge as unknown as { get: (key: string) => unknown }).get('hasStartSession'),
-            suppressNextScroll: (bridge as unknown as { get: (key: string) => unknown }).get('suppressNextScroll'),
-          };
-        });
-
-        expect(stateAfterFailure.sessionId).toBeFalsy();
-        expect(stateAfterFailure.hasStartSession).toBeFalsy();
       } finally {
         monitor.cleanup();
       }

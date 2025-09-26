@@ -123,57 +123,6 @@ traceLogTest.describe('App Complete Lifecycle', () => {
       await expect(traceLogPage).toHaveNoTraceLogErrors();
     });
 
-    traceLogTest('should handle initialization failures with rollback', async ({ traceLogPage }) => {
-      await traceLogPage.setup();
-
-      // Create fresh bridge to avoid interference
-      await traceLogPage.page.evaluate(() => {
-        if (window.__createFreshTraceLogBridge) {
-          window.__createFreshTraceLogBridge();
-        }
-      });
-
-      const result = await traceLogPage.page.evaluate(async () => {
-        const bridge = window.__traceLogBridge;
-        if (!bridge) return { success: false, error: 'No bridge' };
-
-        // Force initialization failure
-        bridge.forceInitFailure(true);
-
-        try {
-          await bridge.init({ id: 'skip' });
-          return { success: true, error: null };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-          };
-        } finally {
-          bridge.forceInitFailure(false);
-        }
-      });
-
-      expect(result.success).toBe(false);
-
-      // Verify rollback - state should be clean
-      const stateAfterFailure = await traceLogPage.page.evaluate(() => {
-        const bridge = window.__traceLogBridge;
-        return {
-          initialized: bridge?.initialized || false,
-          isInitializing: bridge?.isInitializing() || false,
-          sessionId: bridge?.get('sessionId'),
-          hasStartSession: bridge?.get('hasStartSession'),
-          suppressNextScroll: bridge?.get('suppressNextScroll'),
-        };
-      });
-
-      expect(stateAfterFailure.initialized).toBe(false);
-      expect(stateAfterFailure.isInitializing).toBe(false);
-      expect(stateAfterFailure.sessionId).toBeFalsy();
-      expect(stateAfterFailure.hasStartSession).toBeFalsy(); // May be false or undefined after failed init
-      expect(stateAfterFailure.suppressNextScroll).toBeFalsy(); // May be false or undefined after failed init
-    });
-
     traceLogTest('should recover persisted events after initialization', async ({ traceLogPage }) => {
       await traceLogPage.setup();
       await traceLogPage.initializeTraceLog(TRACELOG_CONFIGS.MINIMAL);
@@ -360,26 +309,6 @@ traceLogTest.describe('App Complete Lifecycle', () => {
       // The test uses MINIMAL + { sessionTimeout: 1000 } but library might apply defaults
       expect(sessionAfterTimeout.sessionTimeout).toBeGreaterThan(0);
       // Session ID might be renewed or cleared based on implementation
-
-      await expect(traceLogPage).toHaveNoTraceLogErrors();
-    });
-
-    traceLogTest('should coordinate cross-tab session management', async ({ traceLogPage }) => {
-      await traceLogPage.setup();
-      await traceLogPage.initializeTraceLog(TRACELOG_CONFIGS.MINIMAL);
-
-      // Check if tab leadership is established
-      const tabLeadershipData = await traceLogPage.page.evaluate(() => {
-        const bridge = window.__traceLogBridge;
-        return {
-          isTabLeader: bridge?.isTabLeader ? bridge.isTabLeader() : null,
-          sessionId: bridge?.get('sessionId'),
-        };
-      });
-
-      // In test environment, should consider current tab as leader
-      expect(tabLeadershipData.isTabLeader).toBe(true);
-      expect(tabLeadershipData.sessionId).toBeTruthy();
 
       await expect(traceLogPage).toHaveNoTraceLogErrors();
     });
