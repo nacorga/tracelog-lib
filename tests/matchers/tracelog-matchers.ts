@@ -10,7 +10,10 @@ interface EventLogDispatch {
   data?: any;
   custom_event?: {
     name: string;
+    metadata?: Record<string, any>;
   };
+  timestamp?: number;
+  session_id?: string;
 }
 
 interface InitializationResult {
@@ -54,6 +57,12 @@ declare global {
       // Custom event matchers
       toHaveCustomEvent(eventName: string): R;
       toHaveCustomEventWithProperties(eventName: string, properties: Record<string, any>): R;
+
+      // Realistic E2E Testing Matchers (based on guide requirements)
+      toHaveEventSequence(expectedSequence: any[]): R;
+      toHaveChronologicalOrder(): R;
+      toHaveValidEventData(): R;
+      toHaveCorrectSessionFlow(): R;
     }
   }
 }
@@ -66,11 +75,14 @@ expect.extend({
    * Check if events array contains specific event type
    */
   toHaveEvent(received: EventLogDispatch[], eventType: string) {
-    const matchingEvents = received.filter(
-      (event) =>
-        event.message?.toUpperCase().includes(eventType.toUpperCase()) ||
-        event.namespace?.toUpperCase().includes(eventType.toUpperCase()),
-    );
+    const matchingEvents = received.filter((event) => {
+      // Handle both debug logs and actual TraceLog events
+      const eventTypeMatch = event.type === eventType;
+      const namespaceMatch = event.namespace?.toUpperCase().includes(eventType.toUpperCase());
+      const messageMatch = event.message?.toUpperCase().includes(eventType.toUpperCase());
+
+      return eventTypeMatch || namespaceMatch || messageMatch;
+    });
 
     const pass = matchingEvents.length > 0;
 
@@ -78,7 +90,7 @@ expect.extend({
       message: () =>
         pass
           ? `Expected events not to contain type "${eventType}"`
-          : `Expected events to contain type "${eventType}". Available events: ${received.map((e) => `${e.namespace}:${e.message}`).join(', ')}`,
+          : `Expected events to contain type "${eventType}". Available events: ${received.map((e) => e.type || `${e.namespace}:${e.message}`).join(', ')}`,
       pass,
     };
   },
@@ -426,6 +438,203 @@ expect.extend({
 });
 
 /**
+ * Realistic E2E Testing Matchers - Event Sequence and Data Validation
+ */
+expect.extend({
+  /**
+   * Validate events occur in specific sequence with expected data
+   * Supports flexible matching for dynamic content
+   */
+  toHaveEventSequence(received: EventLogDispatch[], expectedSequence: any[]) {
+    if (received.length < expectedSequence.length) {
+      return {
+        message: () =>
+          `Expected at least ${expectedSequence.length} events but received ${received.length}. Events: ${received.map((e) => e.type || e.message || 'unknown').join(' → ')}`,
+        pass: false,
+      };
+    }
+
+    const failures: string[] = [];
+
+    for (let i = 0; i < expectedSequence.length; i++) {
+      const actualEvent = received[i];
+      const expectedEvent = expectedSequence[i];
+
+      // Check event type
+      if (expectedEvent.type && actualEvent.type !== expectedEvent.type) {
+        failures.push(`Event ${i}: expected type "${expectedEvent.type}", got "${actualEvent.type}"`);
+      }
+
+      // Check custom event name for CUSTOM events
+      if (expectedEvent.custom_event?.name) {
+        if (!actualEvent.custom_event?.name || actualEvent.custom_event.name !== expectedEvent.custom_event.name) {
+          failures.push(
+            `Event ${i}: expected custom event "${expectedEvent.custom_event.name}", got "${actualEvent.custom_event?.name || 'none'}"`,
+          );
+        }
+      }
+
+      // Check data fields with flexible matching
+      if (expectedEvent.data) {
+        for (const [key, expectedValue] of Object.entries(expectedEvent.data)) {
+          const actualValue = actualEvent.data?.[key];
+
+          // Support CONTAINS matching for strings
+          if (
+            typeof expectedValue === 'string' &&
+            expectedValue.startsWith('CONTAINS(') &&
+            expectedValue.endsWith(')')
+          ) {
+            const searchTerm = expectedValue.slice(9, -1);
+            if (!actualValue || typeof actualValue !== 'string' || !actualValue.includes(searchTerm)) {
+              failures.push(`Event ${i}: expected data.${key} to contain "${searchTerm}", got "${actualValue}"`);
+            }
+          } else if (actualValue !== expectedValue) {
+            failures.push(`Event ${i}: expected data.${key} to be "${expectedValue}", got "${actualValue}"`);
+          }
+        }
+      }
+    }
+
+    const pass = failures.length === 0;
+
+    return {
+      message: () =>
+        pass
+          ? `Expected events not to match sequence`
+          : `Event sequence validation failed:\n${failures.join('\n')}\n\nActual sequence: ${received
+              .slice(0, expectedSequence.length)
+              .map((e, i) => `${i}. ${e.type || e.message || 'unknown'}`)
+              .join(' → ')}`,
+      pass,
+    };
+  },
+
+  /**
+   * Ensure timestamps increase monotonically (chronological order)
+   */
+  toHaveChronologicalOrder(received: EventLogDispatch[]) {
+    const failures: string[] = [];
+
+    for (let i = 1; i < received.length; i++) {
+      const currentEvent = received[i];
+      const previousEvent = received[i - 1];
+
+      if (!currentEvent.timestamp) {
+        failures.push(`Event ${i} missing timestamp`);
+        continue;
+      }
+
+      if (!previousEvent.timestamp) {
+        failures.push(`Event ${i - 1} missing timestamp`);
+        continue;
+      }
+
+      if (currentEvent.timestamp < previousEvent.timestamp) {
+        failures.push(
+          `Events out of chronological order at index ${i}: ${previousEvent.timestamp} > ${currentEvent.timestamp}`,
+        );
+      }
+    }
+
+    const pass = failures.length === 0;
+
+    return {
+      message: () =>
+        pass
+          ? `Expected events not to be in chronological order`
+          : `Chronological order validation failed:\n${failures.join('\n')}`,
+      pass,
+    };
+  },
+
+  /**
+   * Validate all events have required fields based on their type
+   */
+  toHaveValidEventData(received: EventLogDispatch[]) {
+    const failures: string[] = [];
+
+    received.forEach((event, index) => {
+      // All events must have type and timestamp
+      if (!event.type) {
+        failures.push(`Event ${index}: missing required field 'type'`);
+      }
+
+      if (!event.timestamp) {
+        failures.push(`Event ${index}: missing required field 'timestamp'`);
+      }
+
+      // Type-specific validations
+      switch (event.type) {
+        case 'CUSTOM':
+          if (!event.custom_event?.name) {
+            failures.push(`Event ${index}: CUSTOM event missing custom_event.name`);
+          }
+          break;
+
+        case 'PAGE_VIEW':
+          if (!event.data?.page_url) {
+            failures.push(`Event ${index}: PAGE_VIEW event missing data.page_url`);
+          }
+          break;
+
+        case 'CLICK':
+          if (!event.data) {
+            failures.push(`Event ${index}: CLICK event missing data`);
+          }
+          break;
+      }
+    });
+
+    const pass = failures.length === 0;
+
+    return {
+      message: () =>
+        pass ? `Expected events to have invalid data` : `Event data validation failed:\n${failures.join('\n')}`,
+      pass,
+    };
+  },
+
+  /**
+   * Validate session consistency across all events
+   */
+  toHaveCorrectSessionFlow(received: EventLogDispatch[]) {
+    const failures: string[] = [];
+
+    if (received.length === 0) {
+      return {
+        message: () => `Expected at least one event for session flow validation`,
+        pass: false,
+      };
+    }
+
+    // Check for SESSION_START event at beginning
+    const firstEvent = received[0];
+    if (firstEvent.type !== 'SESSION_START') {
+      failures.push(`Expected first event to be SESSION_START, got ${firstEvent.type}`);
+    }
+
+    // Validate session ID consistency
+    const sessionIds = new Set(received.map((e) => e.session_id).filter(Boolean));
+    if (sessionIds.size > 1) {
+      failures.push(`Inconsistent session IDs found: ${Array.from(sessionIds).join(', ')}`);
+    }
+
+    if (sessionIds.size === 0) {
+      failures.push(`No session IDs found in events`);
+    }
+
+    const pass = failures.length === 0;
+
+    return {
+      message: () =>
+        pass ? `Expected session flow to be incorrect` : `Session flow validation failed:\n${failures.join('\n')}`,
+      pass,
+    };
+  },
+});
+
+/**
  * Utility function to get matcher usage examples
  */
 export function getMatcherExamples(): Record<string, string> {
@@ -452,6 +661,16 @@ export function getMatcherExamples(): Record<string, string> {
     'Custom event matchers': `
       await expect(eventCapture.getEvents()).toHaveCustomEvent('user_action');
       await expect(eventCapture.getEvents()).toHaveCustomEventWithProperties('purchase', { productId: '123' });
+    `,
+    'Realistic E2E matchers': `
+      await expect(events).toHaveEventSequence([
+        { type: 'SESSION_START' },
+        { type: 'PAGE_VIEW', data: { page_url: 'CONTAINS(inicio)' }},
+        { type: 'CUSTOM', custom_event: { name: 'add_to_cart' }}
+      ]);
+      await expect(events).toHaveChronologicalOrder();
+      await expect(events).toHaveValidEventData();
+      await expect(events).toHaveCorrectSessionFlow();
     `,
   };
 }

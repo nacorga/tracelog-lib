@@ -110,9 +110,10 @@ describe('Basic Integration Tests', () => {
       let eventFired = false;
       let eventData = null;
 
-      window.addEventListener('custom-event', (event: CustomEvent) => {
+      window.addEventListener('custom-event', (event: Event) => {
+        const customEvent = event as CustomEvent;
         eventFired = true;
-        eventData = event.detail;
+        eventData = customEvent.detail;
       });
 
       const customEvent = new CustomEvent('custom-event', {

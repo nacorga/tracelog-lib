@@ -355,7 +355,7 @@ function setupTestMode() {
   // Add test indicator
   if (!state.testMode.hideUI) {
     const indicator = document.createElement('div');
-    indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:#ff6b35;color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:bold;z-index:10000;';
+    indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:#ff6b35;color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:bold;z-index:10000;pointer-events:none;';
     indicator.textContent = `TEST MODE: ${state.testMode.scenario.toUpperCase()}`;
     indicator.setAttribute('data-testid', 'test-mode-indicator');
     document.body.appendChild(indicator);

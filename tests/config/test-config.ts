@@ -190,6 +190,211 @@ export const TRACELOG_CONFIGS: Record<string, Partial<Config>> = {
     },
     errorSampling: 1,
   },
+  // TechShop-specific configurations for realistic E2E testing
+  TECHSHOP_BASIC: {
+    id: SpecialProjectId.Skip,
+    sessionTimeout: 1800000, // 30 minutes
+    globalMetadata: {
+      site: 'TechShop',
+      testSuite: 'realistic-e2e',
+      version: 'playground',
+    },
+    errorSampling: 1,
+  },
+
+  TECHSHOP_MOBILE: {
+    id: SpecialProjectId.Skip,
+    sessionTimeout: 1800000, // 30 minutes
+    globalMetadata: {
+      site: 'TechShop',
+      testSuite: 'realistic-e2e',
+      device: 'mobile',
+      viewport: 'small',
+      version: 'playground',
+    },
+    errorSampling: 1,
+  },
+
+  TECHSHOP_FORMS: {
+    id: SpecialProjectId.Skip,
+    sessionTimeout: 600000, // 10 minutes (shorter for form-focused tests)
+    globalMetadata: {
+      site: 'TechShop',
+      testSuite: 'realistic-e2e',
+      focus: 'forms',
+      version: 'playground',
+    },
+    errorSampling: 1,
+  },
+} as const;
+
+/**
+ * TechShop Test Data - Based on playground implementation
+ */
+export const TECHSHOP_DATA = {
+  PRODUCTS: [
+    { id: '1', name: 'Laptop Pro M2', price: '$1,299', testId: 'add-cart-1' },
+    { id: '2', name: 'Smartphone X', price: '$899', testId: 'add-cart-2' },
+    { id: '3', name: 'Smartwatch Ultra', price: '$499', testId: 'add-cart-3' },
+  ],
+
+  PAGES: [
+    { name: 'inicio', hash: '#inicio', testId: 'nav-inicio' },
+    { name: 'productos', hash: '#productos', testId: 'nav-productos' },
+    { name: 'nosotros', hash: '#nosotros', testId: 'nav-nosotros' },
+    { name: 'contacto', hash: '#contacto', testId: 'nav-contacto' },
+  ],
+
+  FORM_DATA: {
+    valid: {
+      name: 'Test User',
+      email: 'test@email.com',
+      message: 'This is a test message for the contact form validation.',
+    },
+    invalid: {
+      name: '',
+      email: 'invalid-email',
+      message: '',
+    },
+    partial: {
+      name: 'Partial User',
+      email: 'partial@email.com',
+      message: '', // Missing message
+    },
+    special_chars: {
+      name: 'José María',
+      email: 'test@dominio.es',
+      message: 'Mensaje con ñ y acentos especiales.',
+    },
+    long_content: {
+      name: 'Very Long Name Test User',
+      email: 'test@email.com',
+      message:
+        'This is a very long message that contains multiple sentences to test how the form handles lengthy content. It should be properly validated and processed by the TraceLog system without any issues.',
+    },
+  },
+
+  // Expected event sequences for different flows
+  EXPECTED_SEQUENCES: {
+    PURCHASE_FLOW: [
+      'SESSION_START',
+      'PAGE_VIEW', // home page
+      'CLICK', // "Ver Productos" CTA
+      'PAGE_VIEW', // products page
+      'CLICK', // add to cart
+      'CUSTOM', // add_to_cart event
+    ],
+    NAVIGATION_FLOW: [
+      'SESSION_START',
+      'PAGE_VIEW', // home page
+      'CLICK', // navigation click
+      'PAGE_VIEW', // new page
+      'CLICK', // another navigation
+      'PAGE_VIEW', // another page
+    ],
+    CONTACT_FLOW: [
+      'SESSION_START',
+      'PAGE_VIEW', // home page
+      'CLICK', // navigate to contact
+      'PAGE_VIEW', // contact page
+      'CLICK', // form field
+      'CLICK', // another form field
+      'CLICK', // submit button
+      'CUSTOM', // contact_form_submit event
+    ],
+  },
+} as const;
+
+/**
+ * TechShop helper functions for safe data access
+ */
+export const TECHSHOP_HELPERS = {
+  getProduct(id: string) {
+    const product = TECHSHOP_DATA.PRODUCTS.find((p) => p.id === id);
+    if (!product) {
+      throw new Error(`Product with id "${id}" not found in TechShop test data`);
+    }
+    return product;
+  },
+
+  getPage(name: string) {
+    const page = TECHSHOP_DATA.PAGES.find((p) => p.name === name);
+    if (!page) {
+      throw new Error(`Page "${name}" not found in TechShop test data`);
+    }
+    return page;
+  },
+
+  isValidProductId(id: string): boolean {
+    return TECHSHOP_DATA.PRODUCTS.some((p) => p.id === id);
+  },
+
+  isValidPageName(name: string): boolean {
+    return TECHSHOP_DATA.PAGES.some((p) => p.name === name);
+  },
+
+  getExpectedAddToCartEvent(productId: string) {
+    const product = this.getProduct(productId);
+    return {
+      type: 'CUSTOM',
+      custom_event: {
+        name: 'add_to_cart',
+        metadata: {
+          product_id: productId,
+          product_name: product.name,
+          timestamp: 'ANY_NUMBER', // Will be matched flexibly in tests
+        },
+      },
+    };
+  },
+
+  getExpectedContactFormEvent(formData: typeof TECHSHOP_DATA.FORM_DATA.valid) {
+    return {
+      type: 'CUSTOM',
+      custom_event: {
+        name: 'contact_form_submit',
+        metadata: {
+          ...formData,
+          timestamp: 'ANY_NUMBER', // Will be matched flexibly in tests
+        },
+      },
+    };
+  },
+} as const;
+
+/**
+ * Extended TechShop selectors for realistic E2E testing
+ */
+export const TECHSHOP_SELECTORS = {
+  // Navigation elements
+  NAVIGATION: {
+    HOME: '[data-testid="nav-inicio"]',
+    PRODUCTS: '[data-testid="nav-productos"]',
+    ABOUT: '[data-testid="nav-nosotros"]',
+    CONTACT: '[data-testid="nav-contacto"]',
+  },
+
+  // Product-related selectors
+  PRODUCTS: {
+    CTA_BUTTON: '[data-testid="cta-ver-productos"]',
+    ADD_TO_CART: (id: string) => `[data-testid="add-cart-${id}"]`,
+    CART_COUNTER: '[data-testid="cart-count"]',
+    PRODUCT_GRID: '.products-grid',
+  },
+
+  // Form selectors
+  CONTACT_FORM: {
+    NAME: '[data-testid="form-name"]',
+    EMAIL: '[data-testid="form-email"]',
+    MESSAGE: '[data-testid="form-message"]',
+    SUBMIT: '[data-testid="form-submit"]',
+  },
+
+  // CTA elements
+  CTAS: {
+    VIEW_PRODUCTS: '[data-testid="cta-ver-productos"]',
+    CONTACT_US: '[data-testid="cta-contacto"]',
+  },
 } as const;
 
 /**
@@ -415,6 +620,10 @@ export default {
   PATTERNS,
   EXPECTED_MESSAGES,
   FEATURE_FLAGS,
+  // TechShop-specific exports
+  TECHSHOP_DATA,
+  TECHSHOP_HELPERS,
+  TECHSHOP_SELECTORS,
   getCurrentEnvironmentConfig,
   getTimeout,
   getBrowserConfigs,

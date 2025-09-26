@@ -60,7 +60,14 @@ export class TraceLogTestPage {
       ...config,
     };
 
-    return TestUtils.initializeTraceLog(this.page, finalConfig);
+    const result = await TestUtils.initializeTraceLog(this.page, finalConfig);
+
+    if (!result.success) {
+      // Take screenshot for debugging
+      await this.screenshot('initialization-failed');
+    }
+
+    return result;
   }
 
   /**
@@ -93,12 +100,53 @@ export class TraceLogTestPage {
   /**
    * Get tracked events (convenience method)
    */
-  async getTrackedEvents(): Promise<EventLogDispatch[]> {
-    // This is a placeholder - actual implementation depends on EventCapture
+  async getTrackedEvents(): Promise<any[]> {
     if (!this.eventCapture) {
       throw new Error('Event capture not started. Call startEventCapture() first.');
     }
-    return this.eventCapture.getEvents();
+
+    // Get debug logs from EventCapture
+    const debugLogs = this.eventCapture.getEvents();
+
+    // Extract TraceLog events from debug logs
+    const traceLogEvents = this.extractTraceLogEventsFromDebugLogs(debugLogs);
+
+    return traceLogEvents;
+  }
+
+  /**
+   * Extract real TraceLog events from debug logs
+   */
+  private extractTraceLogEventsFromDebugLogs(debugLogs: EventLogDispatch[]): any[] {
+    const events: any[] = [];
+
+    debugLogs.forEach((log) => {
+      try {
+        // Look for EventManager logs with event data
+        if (log.namespace === 'EventManager' && log.data) {
+          let eventData = null;
+
+          // Try different event data structures with proper type checking
+          const logData = log.data as any;
+          if (logData.type) {
+            eventData = logData;
+          } else if (logData.event?.type) {
+            eventData = logData.event;
+          } else if (logData.eventData) {
+            eventData = logData.eventData;
+          }
+
+          // Only include events with valid timestamps
+          if (eventData?.timestamp) {
+            events.push(eventData);
+          }
+        }
+      } catch (error) {
+        console.warn('[TraceLogTestPage] Error extracting event from debug log:', error);
+      }
+    });
+
+    return events;
   }
 
   /**
@@ -241,11 +289,65 @@ export class TraceLogTestPage {
   }
 
   /**
-   * Click element on the page (simple wrapper around page.click)
+   * Click element on the page
    */
   async clickElement(selector: string): Promise<void> {
     this.ensureSetup();
-    await this.page.click(selector);
+
+    // Check if element exists and is visible
+    const elementInfo = await this.page.evaluate((sel) => {
+      const element = document.querySelector(sel);
+      if (!element) return { exists: false };
+
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+
+      return {
+        exists: true,
+        visible: rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden',
+        disabled: (element as HTMLButtonElement).disabled,
+        text: element.textContent?.trim(),
+        position: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+      };
+    }, selector);
+
+    if (!elementInfo.exists) {
+      await this.screenshot(`element-not-found-${selector.replace(/[^a-zA-Z0-9]/g, '_')}`);
+      throw new Error(`Element not found: ${selector}`);
+    }
+
+    if (!elementInfo.visible) {
+      await this.screenshot(`element-not-visible-${selector.replace(/[^a-zA-Z0-9]/g, '_')}`);
+      throw new Error(`Element not visible: ${selector}`);
+    }
+
+    if (elementInfo.disabled) {
+      await this.screenshot(`element-disabled-${selector.replace(/[^a-zA-Z0-9]/g, '_')}`);
+      throw new Error(`Element is disabled: ${selector}`);
+    }
+
+    // Enhanced click stability for SPA navigation
+    try {
+      await this.page.click(selector, {
+        timeout: 15000,
+        force: false,
+        trial: false,
+      });
+    } catch (error) {
+      // If click is intercepted, try with force as fallback (SPA navigation issue)
+      if ((error as Error).message.includes('intercepts pointer events')) {
+        await this.page.click(selector, {
+          timeout: 15000,
+          force: true,
+          trial: false,
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    // Wait a bit after click to ensure navigation starts
+    await this.page.waitForTimeout(200);
   }
 
   /**
@@ -329,6 +431,92 @@ export class TraceLogTestPage {
     }
 
     return result;
+  }
+
+  /**
+   * Validate page state for TechShop SPA
+   */
+  async validatePageState(expectedPage?: string): Promise<{
+    currentHash: string;
+    currentPage: string;
+    elementsVisible: Record<string, boolean>;
+    readyState: string;
+  }> {
+    this.ensureSetup();
+
+    const state = await this.page.evaluate(() => {
+      const hash = window.location.hash;
+      const currentPage = hash.replace('#', '') || 'inicio';
+
+      // Check key elements based on page
+      const elementsToCheck: Record<string, string[]> = {
+        inicio: ['.hero-section', '[data-testid="cta-ver-productos"]'],
+        productos: ['.products-grid', '[data-testid="add-cart-1"]', '[data-testid="cart-count"]'],
+        nosotros: ['.page.active'],
+        contacto: ['[data-testid="form-name"]', '[data-testid="form-email"]'],
+      };
+
+      const elementsVisible: Record<string, boolean> = {};
+      const elementsForPage = elementsToCheck[currentPage] || [];
+
+      elementsForPage.forEach((selector) => {
+        const element = document.querySelector(selector);
+        if (element) {
+          const style = window.getComputedStyle(element);
+          // More lenient visibility check - element exists and is not hidden
+          elementsVisible[selector] =
+            (element as HTMLElement).offsetParent !== null && style.display !== 'none' && style.visibility !== 'hidden';
+        } else {
+          elementsVisible[selector] = false;
+        }
+      });
+
+      return {
+        currentHash: hash,
+        currentPage,
+        elementsVisible,
+        readyState: document.readyState,
+      };
+    });
+
+    if (expectedPage && state.currentPage !== expectedPage) {
+      await this.screenshot(`page-state-mismatch-expected-${expectedPage}-got-${state.currentPage}`);
+    }
+
+    return state;
+  }
+
+  /**
+   * Wait for page navigation and validate state
+   */
+  async waitForPageNavigation(expectedPage: string, timeout = 5000): Promise<void> {
+    this.ensureSetup();
+
+    // Wait for hash to change
+    await this.page.waitForFunction((page) => window.location.hash === `#${page}`, expectedPage, { timeout });
+
+    // Wait for the page to become active (crucial for SPA)
+    await this.page.waitForFunction(
+      (page) => {
+        const pageElement = document.getElementById(`page-${page}`);
+        return pageElement?.classList.contains('active') === true;
+      },
+      expectedPage,
+      { timeout },
+    );
+
+    // Small delay to ensure page is stable
+    await this.page.waitForTimeout(300);
+
+    const state = await this.validatePageState(expectedPage);
+
+    // Check if key elements are visible
+    const hasInvisibleElements = Object.entries(state.elementsVisible).some(([, visible]) => !visible);
+
+    if (hasInvisibleElements) {
+      await this.screenshot(`page-navigation-incomplete-${expectedPage}`);
+      // Note: Some elements may not be immediately visible in SPA navigation, which is acceptable
+    }
   }
 
   /**

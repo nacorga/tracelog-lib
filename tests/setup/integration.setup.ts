@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi, beforeEach, afterEach } from 'vitest';
 
 // Mock headers for integration tests
 const mockHeaders = new Map([
@@ -45,7 +45,7 @@ beforeEach(() => {
   }));
 
   // Mock Response constructor with proper headers
-  global.Response = vi.fn().mockImplementation((body, options = {}) => {
+  (global as any).Response = vi.fn().mockImplementation((body, options = {}) => {
     const responseHeaders = new global.Headers({
       'content-type': 'application/json',
       ...options.headers,
@@ -61,7 +61,7 @@ beforeEach(() => {
       blob: vi.fn().mockResolvedValue(new Blob([body || ''])),
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
     };
-  });
+  }) as any;
 
   // Reset window properties
   delete (window as any).__traceLogBridge;
