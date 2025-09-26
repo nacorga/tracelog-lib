@@ -3,14 +3,43 @@ import { resolve } from 'path';
 
 export default defineConfig({
   test: {
+    name: 'integration',
     globals: true,
     environment: 'jsdom',
     include: ['tests/integration/**/*.test.ts'],
-    testTimeout: 10000,
+    exclude: ['node_modules/**', 'dist/**'],
+    testTimeout: 30000, // 30 seconds for integration tests
+    hookTimeout: 10000,
+    teardownTimeout: 10000,
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        maxThreads: 4,
+        minThreads: 1,
+      },
+    },
+    coverage: {
+      enabled: true,
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      reportsDirectory: './coverage-integration',
+      include: ['src/**/*.ts'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/**/*.spec.ts',
+        'tests/**/*',
+        'playground/**/*',
+        'dist/**/*',
+        'scripts/**/*',
+      ],
+    },
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src_v2'),
+      '@': resolve(__dirname, './src'),
     },
+  },
+  esbuild: {
+    target: 'es2020',
   },
 });

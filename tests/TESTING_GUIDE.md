@@ -1,180 +1,8 @@
-# TraceLog Library
+# Testing Guide
 
-**JavaScript library for web analytics and real-time event tracking**
+## 🎯 TraceLog Testing Framework
 
-## 🎯 Purpose
-
-Event tracking library that automatically captures user interactions (clicks, scrolls, navigation, web performance) and supports custom events. Features cross-tab session management, session recovery, Google Analytics integration, and event sampling.
-
-## 🏗️ Architecture
-
-```
-src/
-├── api.ts                 # Public API (init, event, destroy)
-├── app.ts                 # Main orchestrator class managing handlers and state
-├── handlers/              # Event capture handlers
-│   ├── click.handler.ts   # Click tracking
-│   ├── scroll.handler.ts  # Scroll tracking
-│   ├── session.handler.ts # Session management
-│   └── performance.handler.ts # Web vitals capture
-├── managers/              # Core business logic and state management
-│   ├── event.manager.ts   # Event queue and dispatching
-│   ├── session.manager.ts # Session lifecycle management
-│   ├── storage.manager.ts # localStorage abstraction
-│   └── state.manager.ts   # Global shared state management
-├── integrations/          # Third-party integrations
-├── utils/                 # Utility functions and validation helpers
-└── types/                 # TypeScript type definitions
-```
-
-**Main flow**: `init()` → Configure → Activate handlers → EventManager queues → Send events
-
-## 🛠️ Tech Stack
-
-- **TypeScript 5.7** - Strong typing and latest features
-- **Vite** - Fast build tool and bundler
-- **web-vitals 4.2** - Only runtime dependency for performance metrics
-- **Playwright** - End-to-end testing framework
-- **ESLint + Prettier** - Code linting and formatting
-
-
-## 📝 Code Conventions
-
-### Lint \& Format
-
-```bash
-npm run check      # Lint and format verification
-npm run fix        # Auto-fix linting and formatting issues
-```
-
-
-### Naming
-
-- Classes: `PascalCase` (e.g., `EventManager`)
-- Files: `kebab-case.type.ts` (e.g., `session.manager.ts`)
-- Public methods: `camelCase`
-- Private methods: `camelCase` prefixed with `private`
-- Constants: `UPPER_SNAKE_CASE`
-
-
-### Patterns
-
-- Managers extend `StateManager` for global state access
-- Handlers are classes capturing specific DOM events
-- Types declared in separate `.types.ts` files
-- Utils contain pure functions grouped by domain
-
-
-## 🚀 Common Commands
-
-```bash
-# Build commands
-npm run build           # TypeScript build (both ESM and CJS)
-npm run build:browser   # Browser-specific build using Vite
-npm run build:all       # Complete build (ESM + CJS)
-npm run build-ugly      # Minified build using UglifyJS
-
-# Development
-npm run serve:test      # Start local test server (default port 3000)
-npm run test:e2e        # Run Playwright end-to-end tests
-
-# Quality assurance
-npm run lint            # Run ESLint
-npm run format          # Run Prettier formatting
-npm run check           # Run lint and format verification
-npm run fix             # Auto-fix lint and format issues
-```
-
-
-## 🔍 Critical Paths
-
-### 1. Initialization
-
-`api.init()` → `App.init()` → `setState()` → `initHandlers()` → event listeners active
-
-### 2. Event Tracking
-
-DOM event occurs → Handler captures → `EventManager.track()` queues event → `SenderManager` sends events
-
-### 3. Session Management
-
-User activity tracked → `SessionManager` syncs across tabs → recovers session on failure
-
-### 4. Data Sending
-
-Events batched → Validated → Sent via `sendEventsQueue()` → Retries if failure detected
-
-## ⚠️ WHAT NOT TO DO
-
-### 🚫 Dependencies \& Build
-
-- DON’T add dependencies unless absolutely necessary; only `web-vitals` is allowed
-- DON’T break ESM/CJS dual compatibility; keep `exports` consistent in `package.json`
-- DON’T change `dist/` folder structure
-- DON’T commit without passing `npm run check`
-
-
-### 🚫 Security
-
-- DON’T store sensitive information in `localStorage`
-- DON’T send Personally Identifiable Information (PII) without proper sanitization (`sanitize.utils.ts`)
-- DON’T execute dynamic or unvalidated code
-- DON’T expose internal-only APIs in the browser build
-
-
-### 🚫 Performance
-
-- DON’T cause memory leaks; always call `cleanup()` in handlers
-- DON’T block the main thread; use passive event listeners
-- DON’T send high-frequency events without throttling
-- DON’T allow the event queue to grow infinitely (use `MAX_EVENTS_QUEUE_LENGTH` limit)
-
-
-### 🚫 State \& Sessions
-
-- DON’T mutate `globalState` directly; always use `StateManager.set()`
-- DON’T instantiate multiple `App` instances concurrently
-- DON’T call `init()` unless `typeof window !== 'undefined'`
-- DON’T ignore session recovery failures to prevent data loss
-
-
-## 🎯 Common Tasks
-
-### Development
-
-```bash
-# Local development setup
-npm run serve:test      # Terminal 1: start test server
-npm run test:e2e        # Terminal 2: run e2e tests
-
-# Pre-commit checks
-npm run check           # Lint and format validation
-npm run build:all       # Ensure build success
-```
-
-
-### Debug
-
-```typescript
-await TraceLog.init({
-  id: 'your-project-id'
-});
-```
-
-
-### Adding New Features
-
-```typescript
-// Steps to add new functionality
-
-// 1. Create a new handler class under handlers/
-// 2. Register the handler in App.initHandlers()
-// 3. Add new types to the types/ directory
-// 4. Add validation helpers if needed in utils/validations/
-// 5. Write end-to-end tests under tests/
-```
-
-## Testing Guide
+Comprehensive testing strategy using unit tests, integration tests, and end-to-end testing with Playwright. Custom fixtures, fluent builders, and specific matchers for TraceLog library validation.
 
 ### Technology Stack
 - **Unit/Integration**: **Jest** + **TypeScript** with strict type safety
@@ -182,7 +10,7 @@ await TraceLog.init({
 - **Testing Bridge**: `__traceLogBridge` for consistent access
 - **Enhanced Framework**: Fixtures, Page Objects, Builders, Matchers
 
-### 🔧 Main Commands
+## 🔧 Main Commands
 
 ```bash
 # Unit Tests
@@ -209,18 +37,18 @@ npm run fix                      # Auto-fix
 npm run type-check:watch         # Continuous checking
 ```
 
-### ❗ Test Failure Triage
+## ❗ Test Failure Triage
 
 If tests fail to run or fail unexpectedly, determine whether the failure stems from the test configuration/setup or from a defect in the TraceLog library.
 
 - If it is a test configuration/setup issue, fix the test environment or mocks first.
 - If it is a library defect, the issue must be corrected in the library before continuing with the tests.
 
-### 🧪 Testing Patterns
+## 🧪 Testing Patterns
 
-#### Unit Tests
+### Unit Tests
 
-##### Simple Pattern
+#### Simple Pattern
 ```typescript
 import { EventManager } from '../src/managers/event.manager';
 import { MOCK_CONFIGS } from './mocks/config.mock';
@@ -244,7 +72,7 @@ describe('EventManager', () => {
 });
 ```
 
-##### Mock Pattern
+#### Mock Pattern
 ```typescript
 import { SessionManager } from '../src/managers/session.manager';
 import { mockLocalStorage, mockTimestamp } from './mocks/browser.mock';
@@ -269,9 +97,9 @@ describe('SessionManager', () => {
 });
 ```
 
-#### Integration Tests
+### Integration Tests
 
-##### API Integration Pattern
+#### API Integration Pattern
 ```typescript
 import { App } from '../src/app';
 import { mockFetch, mockBridge } from './mocks/integration.mock';
@@ -301,7 +129,7 @@ describe('App Integration', () => {
 });
 ```
 
-##### Cross-Component Integration
+#### Cross-Component Integration
 ```typescript
 import { App } from '../src/app';
 import { EventManager } from '../src/managers/event.manager';
@@ -327,9 +155,9 @@ describe('Component Integration', () => {
 });
 ```
 
-#### E2E Tests
+### E2E Tests
 
-##### Simple Pattern (Fixture)
+#### Simple Pattern (Fixture)
 ```typescript
 import { traceLogTest } from '../fixtures/tracelog-fixtures';
 import { TRACELOG_CONFIGS } from '../config/test-config';
@@ -342,7 +170,7 @@ traceLogTest('basic test', async ({ traceLogPage }) => {
 });
 ```
 
-##### Advanced Pattern (Builder DSL)
+#### Advanced Pattern (Builder DSL)
 ```typescript
 import { TraceLogTestBuilder } from '../builders/test-scenario-builder';
 
@@ -359,9 +187,9 @@ traceLogTest('complex flow', async ({ traceLogPage }) => {
 });
 ```
 
-### 🔑 Essential APIs
+## 🔑 Essential APIs
 
-#### Unit Test Utilities
+### Unit Test Utilities
 ```typescript
 // Mock helpers
 import { mockBrowserAPIs, restoreBrowserAPIs } from './mocks/browser.mock';
@@ -373,7 +201,7 @@ expect(session).toBeValidSession();
 expect(eventQueue).toHaveLength(3);
 ```
 
-#### Integration Test Utilities
+### Integration Test Utilities
 ```typescript
 // Test app setup
 import { createTestApp, cleanupTestApp } from './helpers/app.helper';
@@ -384,7 +212,7 @@ expect(fetch).toHaveBeenCalledTimes(2);
 expect(mockAPI.getLastRequest()).toMatchSnapshot();
 ```
 
-#### E2E Test APIs
+### E2E Test APIs
 ```typescript
 // TraceLogTestPage (automatic fixture)
 await traceLogPage.initializeTraceLog(config);
@@ -403,37 +231,37 @@ TRACELOG_CONFIGS.STANDARD       // General tests
 TRACELOG_CONFIGS.FULL_FEATURED  // Complete tests
 ```
 
-### ⚡ Best Practices
+## ⚡ Best Practices
 
-#### ✅ Common Practices
+### ✅ Common Practices
 - Use TypeScript strict mode across all test types
 - Implement proper setup/teardown in `beforeEach`/`afterEach`
 - Use descriptive test names that explain behavior
 - Group related tests using `describe` blocks
 - Mock external dependencies consistently
 
-#### ✅ Unit Tests
+### ✅ Unit Tests
 - Test single units in isolation
 - Mock all external dependencies
 - Use data builders for complex test objects
 - Test edge cases and error conditions
 - Keep tests fast (< 100ms per test)
 
-#### ✅ Integration Tests
+### ✅ Integration Tests
 - Test component interactions
 - Use real implementations where practical
 - Mock external services (APIs, localStorage)
 - Verify data flow between components
 - Test configuration variations
 
-#### ✅ E2E Tests
+### ✅ E2E Tests
 - Use `traceLogTest` fixture (automatic setup/cleanup)
 - Use predefined configurations (`TRACELOG_CONFIGS.*`)
 - Use custom matchers (`toHaveNoTraceLogErrors`, `toHaveEvent`)
 - Builder DSL for complex scenarios
 - Adapt `__traceLogBridge` as needed
 
-#### ❌ Avoid
+### ❌ Avoid
 - Hardcoded timeouts: `await page.waitForTimeout(2000)` (E2E only)
 - Inline configurations: `{ id: 'hardcoded', sessionTimeout: 900000 }`
 - Direct Bridge access: `window.__traceLogBridge.getSessionData()` (E2E only)
@@ -441,43 +269,43 @@ TRACELOG_CONFIGS.FULL_FEATURED  // Complete tests
 - Flaky tests that pass/fail inconsistently
 - Shared mutable state between tests
 
-### 🔍 Debug
+## 🔍 Debug
 
-#### Unit/Integration Tests
+### Unit/Integration Tests
 ```bash
 npm run test:unit -- --verbose     # Detailed output
 npm run test:unit -- --watch       # Watch mode
 npm run test -- --testNamePattern="SessionManager"  # Specific tests
 ```
 
-#### E2E Tests
+### E2E Tests
 ```bash
 npm run test:e2e -- --headed    # Visual mode
 npm run test:e2e -- --debug     # DevTools
 npm run test:e2e -- --trace on  # Generate traces
 ```
 
-#### Coverage Reports
+### Coverage Reports
 ```bash
 npm run test:coverage           # Complete coverage report
 open coverage/lcov-report/index.html  # View coverage in browser
 ```
 
-### ⭐ Acceptance Criteria
+## ⭐ Acceptance Criteria
 
-#### All Test Types
+### All Test Types
 - 100% pass rating
 - NO type errors (use `npm run type-check` script to verify)
 - NO lint errors (use `npm run lint` script to verify)
 
-#### Coverage Requirements
+### Coverage Requirements
 - **Unit Tests**: 90%+ line coverage for core logic
 - **Integration Tests**: Critical paths covered
 - **E2E Tests**: User journeys and error scenarios
 
-### 🛡️ Library Error Detection
+## 🛡️ Library Error Detection
 
-#### Automated Monitoring
+### Automated Monitoring
 
 Tests automatically detect issues in TraceLog library:
 
@@ -489,37 +317,37 @@ npm run ci:health-check          # System health validation
 node scripts/test-anomaly-report.js  # Anomaly analysis
 ```
 
-#### Error Categories
+### Error Categories
 
-##### Logic Errors (Unit)
+#### Logic Errors (Unit)
 ```typescript
 // State management validation
 expect(sessionManager.getState()).toBeValidState();
 expect(eventManager.validateEvent(event)).toBe(true);
 ```
 
-##### Integration Errors
+#### Integration Errors
 ```typescript
 // Component communication validation
 expect(eventManager.queue).toHaveLength(2);
 expect(sessionManager.isActive()).toBe(true);
 ```
 
-##### Runtime Errors (E2E)
+#### Runtime Errors (E2E)
 ```typescript
 // Automatic console monitoring
 await expect(traceLogPage).toHaveNoTraceLogErrors();
 await expect(consoleMonitor).not.toHaveMessage(/\[TraceLog:ERROR\]/);
 ```
 
-##### Memory Leaks (E2E)
+#### Memory Leaks (E2E)
 ```typescript
 // Performance monitoring
 await expect(performanceMonitor).toHaveNoMemoryLeaks();
 await expect(performanceMonitor).toHaveNoExcessiveEventQueuing();
 ```
 
-##### Security Issues (All Types)
+#### Security Issues (All Types)
 ```typescript
 // Data sanitization validation
 expect(sanitizeMetadata(userInput)).not.toContainScript();
@@ -527,7 +355,7 @@ await expect(events).toHaveSanitizedData();
 await expect(events).not.toContainScript();
 ```
 
-#### Reports Generated
+### Reports Generated
 
 - `coverage/` - Code coverage reports (unit/integration)
 - `test-reports/anomaly-report.json` - Performance and behavior anomalies (E2E)
