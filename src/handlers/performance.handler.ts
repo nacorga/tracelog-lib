@@ -1,6 +1,6 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { EventType, WebVitalType, NavigationId, VitalSample } from '../types';
+import { EventType, WebVitalType, VitalSample } from '../types';
 import { LONG_TASK_THROTTLE_MS } from '../constants';
 import { PRECISION_TWO_DECIMALS } from '../constants';
 import { debugLog } from '../utils/logging';
@@ -9,7 +9,7 @@ type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: bo
 
 export class PerformanceHandler extends StateManager {
   private readonly eventManager: EventManager;
-  private readonly reportedByNav: Map<NavigationId, Set<string>> = new Map();
+  private readonly reportedByNav: Map<string, Set<string>> = new Map();
 
   private readonly observers: PerformanceObserver[] = [];
   private lastLongTaskSentAt = 0;

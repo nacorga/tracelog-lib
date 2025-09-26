@@ -3,6 +3,11 @@ import { SessionEndReason } from './session.types';
 
 export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
 
+export interface VitalSample {
+  type: WebVitalType;
+  value: number;
+}
+
 export enum EventType {
   PAGE_VIEW = 'page_view',
   CLICK = 'click',
@@ -47,12 +52,7 @@ export interface ClickData {
   dataAttributes?: Record<string, string>;
 }
 
-export interface ClickCoordinates {
-  x: number;
-  y: number;
-  relativeX: number;
-  relativeY: number;
-}
+export type ClickCoordinates = Pick<ClickData, 'x' | 'y' | 'relativeX' | 'relativeY'>;
 
 export interface ClickTrackingElementData {
   element: HTMLElement;

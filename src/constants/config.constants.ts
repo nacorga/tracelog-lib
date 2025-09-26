@@ -10,7 +10,6 @@ import { ApiConfig } from '../types';
 // ============================================================================
 
 export const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-export const SESSION_HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
 export const DUPLICATE_EVENT_THRESHOLD_MS = 1000; // 1 second
 export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds (production)
 export const EVENT_SENT_INTERVAL_TEST_MS = 1000; // 1 second (testing)
@@ -23,9 +22,6 @@ export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 24;
 export const EVENT_PERSISTENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-// Session end coordination
-export const SESSION_END_PRIORITY_DELAY_MS = 100;
 
 // ============================================================================
 // LIMITS & RETRIES
@@ -77,10 +73,6 @@ export const SYNC_XHR_TIMEOUT_MS = 2000; // 2 seconds
 export const MAX_FINGERPRINTS = 1000; // Maximum fingerprints stored before cleanup
 export const FINGERPRINT_CLEANUP_MULTIPLIER = 10; // Cleanup fingerprints older than 10x threshold
 export const MAX_FINGERPRINTS_HARD_LIMIT = 2000; // Hard limit for aggressive cleanup
-export const FINGERPRINT_CLEANUP_INTERVAL_MS = 60000; // Cleanup interval (1 minute)
-
-// Click coordinate precision
-export const CLICK_COORDINATE_PRECISION = 10; // Round click coordinates to nearest 10px
 
 // ============================================================================
 // BROWSER & HTML
@@ -127,19 +119,6 @@ export const INTERACTIVE_SELECTORS = [
 export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 
 // ============================================================================
-// CIRCUIT BREAKER
-// ============================================================================
-
-export const CIRCUIT_BREAKER_MAX_FAILURES = 3;
-export const CIRCUIT_BREAKER_RECOVERY_TIME = 30000; // 30 seconds
-export const CIRCUIT_BREAKER_MAX_STUCK_TIME_MS = 5 * 60 * 1000; // 5 minutes
-export const CIRCUIT_BREAKER_HEALTH_CHECK_INTERVAL_MS = 60000; // Check every minute
-
-// Backoff configuration
-export const CIRCUIT_BREAKER_INITIAL_BACKOFF_DELAY_MS = 1000; // 1 second
-export const CIRCUIT_BREAKER_MAX_BACKOFF_DELAY_MS = 30000; // 30 seconds
-export const CIRCUIT_BREAKER_BACKOFF_MULTIPLIER = 2;
-
 // ============================================================================
 // INITIALIZATION
 // ============================================================================

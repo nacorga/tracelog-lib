@@ -10,5 +10,4 @@ export interface State {
   pageUrl: string;
   hasStartSession: boolean;
   suppressNextScroll: boolean;
-  circuitBreakerOpen: boolean;
 }

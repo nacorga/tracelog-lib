@@ -336,17 +336,12 @@ export class SenderManager extends StateManager {
       return;
     }
 
-    if (this.isCircuitBreakerOpen()) {
-      debugLog.info('SenderManager', 'Circuit breaker open, skipping retry');
-      return;
-    }
-
     const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount); // Exponential backoff
 
     this.retryTimeoutId = window.setTimeout(async () => {
       this.retryTimeoutId = null;
 
-      if (this.isCircuitBreakerOpen() || this.isRetrying) {
+      if (this.isRetrying) {
         return;
       }
 
@@ -397,9 +392,5 @@ export class SenderManager extends StateManager {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
-  }
-
-  private isCircuitBreakerOpen(): boolean {
-    return this.get('circuitBreakerOpen') === true;
   }
 }
