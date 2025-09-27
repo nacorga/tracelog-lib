@@ -294,13 +294,14 @@ const getUTMParameters = () => {
   return result;
 };
 const generateUUID = () => {
-  const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c2) => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c2) => {
     const r = Math.random() * 16 | 0;
     const v2 = c2 === "x" ? r : r & 3 | 8;
     return v2.toString(16);
   });
-  debugLog.verbose("UUIDUtils", "Generated new UUID", { uuid });
-  return uuid;
 };
 var SpecialProjectId = /* @__PURE__ */ ((SpecialProjectId2) => {
   SpecialProjectId2["Skip"] = "skip";
@@ -1503,14 +1504,10 @@ class SenderManager extends StateManager {
       originalCallbacks?.onFailure?.();
       return;
     }
-    if (this.isCircuitBreakerOpen()) {
-      debugLog.info("SenderManager", "Circuit breaker open, skipping retry");
-      return;
-    }
     const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount);
     this.retryTimeoutId = window.setTimeout(async () => {
       this.retryTimeoutId = null;
-      if (this.isCircuitBreakerOpen() || this.isRetrying) {
+      if (this.isRetrying) {
         return;
       }
       this.retryCount++;
@@ -1552,9 +1549,6 @@ class SenderManager extends StateManager {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
-  }
-  isCircuitBreakerOpen() {
-    return this.get("circuitBreakerOpen") === true;
   }
 }
 class EventManager extends StateManager {
@@ -1614,13 +1608,15 @@ class EventManager extends StateManager {
       debugLog.warn("EventManager", "Event type is required");
       return;
     }
+    const eventType = type;
+    const isSessionStart = eventType === EventType.SESSION_START;
     if (!this.shouldSample()) {
       debugLog.debug("EventManager", "Event filtered by sampling");
       return;
     }
     const currentPageUrl = page_url || this.get("pageUrl");
     const payload = this.buildEventPayload({
-      type,
+      type: eventType,
       page_url: currentPageUrl,
       from_page_url,
       scroll_data,
@@ -1632,6 +1628,9 @@ class EventManager extends StateManager {
     });
     if (this.isEventExcluded(payload)) {
       return;
+    }
+    if (isSessionStart) {
+      this.set("hasStartSession", true);
     }
     if (this.isDuplicateEvent(payload)) {
       debugLog.debug("EventManager", "Duplicate event filtered", { type });
@@ -1761,9 +1760,6 @@ class EventManager extends StateManager {
   buildEventPayload(data) {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get("pageUrl");
-    if (isSessionStart) {
-      this.set("hasStartSession", true);
-    }
     const payload = {
       type: data.type,
       page_url: currentPageUrl,
@@ -1785,16 +1781,18 @@ class EventManager extends StateManager {
     return payload;
   }
   isEventExcluded(event2) {
-    const isRouteExcluded = isUrlPathExcluded(event2.page_url, this.get("config")?.excludedUrlPaths ?? []);
+    const config = this.get("config");
+    const isRouteExcluded = isUrlPathExcluded(event2.page_url, config?.excludedUrlPaths ?? []);
     const hasStartSession = this.get("hasStartSession");
     const isSessionEndEvent = event2.type === EventType.SESSION_END;
-    if (isRouteExcluded && (!isSessionEndEvent || isSessionEndEvent && !hasStartSession)) {
-      if (this.get("config")?.mode === "qa" || this.get("config")?.mode === "debug") {
+    const isSessionStartEvent = event2.type === EventType.SESSION_START;
+    if (isRouteExcluded && !isSessionStartEvent && !(isSessionEndEvent && hasStartSession)) {
+      if (config?.mode === "qa" || config?.mode === "debug") {
         debugLog.debug("EventManager", `Event ${event2.type} excluded for route: ${event2.page_url}`);
       }
       return true;
     }
-    return this.get("config")?.ipExcluded === true;
+    return config?.ipExcluded === true;
   }
   isDuplicateEvent(event2) {
     const now = Date.now();
@@ -3146,7 +3144,11 @@ class App extends StateManager {
       this.managers.storage,
       this.managers.event
     );
-    this.handlers.session.startTracking();
+    this.handlers.session.startTracking().catch((error) => {
+      debugLog.error("App", "Session handler failed to start", {
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    });
     const onPageView = () => {
       this.set("suppressNextScroll", true);
       if (this.suppressNextScrollTimer) {

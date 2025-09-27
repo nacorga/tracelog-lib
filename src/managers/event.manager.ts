@@ -88,6 +88,9 @@ export class EventManager extends StateManager {
       return;
     }
 
+    const eventType = type as EventType;
+    const isSessionStart = eventType === EventType.SESSION_START;
+
     // Skip if sampling filter rejects event
     if (!this.shouldSample()) {
       debugLog.debug('EventManager', 'Event filtered by sampling');
@@ -97,7 +100,7 @@ export class EventManager extends StateManager {
     // Build event payload
     const currentPageUrl = (page_url as string) || this.get('pageUrl');
     const payload = this.buildEventPayload({
-      type: type as EventType,
+      type: eventType,
       page_url: currentPageUrl,
       from_page_url,
       scroll_data,
@@ -111,6 +114,10 @@ export class EventManager extends StateManager {
     // Check URL exclusions
     if (this.isEventExcluded(payload)) {
       return;
+    }
+
+    if (isSessionStart) {
+      this.set('hasStartSession', true);
     }
 
     // Check for duplicates
@@ -271,11 +278,6 @@ export class EventManager extends StateManager {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
 
-    // Update session state
-    if (isSessionStart) {
-      this.set('hasStartSession', true);
-    }
-
     const payload: EventData = {
       type: data.type as EventType,
       page_url: currentPageUrl,
@@ -301,19 +303,20 @@ export class EventManager extends StateManager {
   }
 
   private isEventExcluded(event: EventData): boolean {
-    const isRouteExcluded = isUrlPathExcluded(event.page_url, this.get('config')?.excludedUrlPaths ?? []);
+    const config = this.get('config');
+    const isRouteExcluded = isUrlPathExcluded(event.page_url, config?.excludedUrlPaths ?? []);
     const hasStartSession = this.get('hasStartSession');
     const isSessionEndEvent = event.type === EventType.SESSION_END;
+    const isSessionStartEvent = event.type === EventType.SESSION_START;
 
-    // Allow session end events even on excluded routes if session was started
-    if (isRouteExcluded && (!isSessionEndEvent || (isSessionEndEvent && !hasStartSession))) {
-      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+    if (isRouteExcluded && !isSessionStartEvent && !(isSessionEndEvent && hasStartSession)) {
+      if (config?.mode === 'qa' || config?.mode === 'debug') {
         debugLog.debug('EventManager', `Event ${event.type} excluded for route: ${event.page_url}`);
       }
       return true;
     }
 
-    return this.get('config')?.ipExcluded === true;
+    return config?.ipExcluded === true;
   }
 
   private isDuplicateEvent(event: EventData): boolean {

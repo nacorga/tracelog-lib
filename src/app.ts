@@ -191,7 +191,11 @@ export class App extends StateManager {
       this.managers.event as EventManager,
     );
 
-    this.handlers.session.startTracking();
+    this.handlers.session.startTracking().catch((error) => {
+      debugLog.error('App', 'Session handler failed to start', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
 
     // Page view tracking with scroll suppression
     const onPageView = (): void => {
