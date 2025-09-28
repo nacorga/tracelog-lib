@@ -20,15 +20,11 @@ export class PerformanceHandler extends StateManager {
   }
 
   async startTracking(): Promise<void> {
-    debugLog.debug('PerformanceHandler', 'Starting performance tracking');
-
     await this.initWebVitals();
     this.observeLongTasks();
   }
 
   stopTracking(): void {
-    debugLog.debug('PerformanceHandler', 'Stopping performance tracking', { observersCount: this.observers.length });
-
     this.observers.forEach((obs, index) => {
       try {
         obs.disconnect();
@@ -42,11 +38,6 @@ export class PerformanceHandler extends StateManager {
 
     this.observers.length = 0;
     this.reportedByNav.clear();
-
-    debugLog.debug('PerformanceHandler', 'Performance tracking cleanup completed', {
-      remainingObservers: this.observers.length,
-      clearedNavReports: true,
-    });
   }
 
   private observeWebVitalsFallback(): void {
@@ -151,8 +142,6 @@ export class PerformanceHandler extends StateManager {
       onFCP(report('FCP'));
       onTTFB(report('TTFB'));
       onINP(report('INP'));
-
-      debugLog.debug('PerformanceHandler', 'Web-vitals library loaded successfully');
     } catch (error) {
       debugLog.warn('PerformanceHandler', 'Failed to load web-vitals library, using fallback', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -166,7 +155,6 @@ export class PerformanceHandler extends StateManager {
       const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
 
       if (!nav) {
-        debugLog.debug('PerformanceHandler', 'Navigation timing not available for TTFB');
         return;
       }
 
@@ -179,8 +167,6 @@ export class PerformanceHandler extends StateManager {
       // We still report it as it's a valid measurement
       if (typeof ttfb === 'number' && Number.isFinite(ttfb)) {
         this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
-      } else {
-        debugLog.debug('PerformanceHandler', 'TTFB value is not a valid number', { ttfb });
       }
     } catch (error) {
       debugLog.warn('PerformanceHandler', 'Failed to report TTFB', {
@@ -281,7 +267,6 @@ export class PerformanceHandler extends StateManager {
   ): boolean {
     try {
       if (!this.isObserverSupported(type)) {
-        debugLog.debug('PerformanceHandler', 'Observer type not supported', { type });
         return false;
       }
 

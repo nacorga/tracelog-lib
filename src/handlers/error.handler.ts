@@ -27,13 +27,11 @@ export class ErrorHandler extends StateManager {
   startTracking(): void {
     window.addEventListener('error', this.handleError);
     window.addEventListener('unhandledrejection', this.handleRejection);
-    debugLog.debug('ErrorHandler', 'Error tracking started');
   }
 
   stopTracking(): void {
     window.removeEventListener('error', this.handleError);
     window.removeEventListener('unhandledrejection', this.handleRejection);
-    debugLog.debug('ErrorHandler', 'Error tracking stopped');
   }
 
   private shouldSample(): boolean {

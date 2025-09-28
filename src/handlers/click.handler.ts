@@ -17,11 +17,8 @@ export class ClickHandler extends StateManager {
 
   startTracking(): void {
     if (this.clickHandler) {
-      debugLog.debug('ClickHandler', 'Click tracking already active');
       return;
     }
-
-    debugLog.debug('ClickHandler', 'Starting click tracking');
 
     this.clickHandler = (event: Event): void => {
       const mouseEvent = event as MouseEvent;
@@ -37,12 +34,6 @@ export class ClickHandler extends StateManager {
         debugLog.warn('ClickHandler', 'Click target not found or not an element');
         return;
       }
-
-      debugLog.info('ClickHandler', '🖱️ Click detected on element', {
-        tagName: clickedElement.tagName,
-        className: clickedElement.className || 'none',
-        textContent: clickedElement.textContent?.slice(0, 50) ?? 'empty',
-      });
 
       const trackingElement = this.findTrackingElement(clickedElement);
       const relevantClickElement = this.getRelevantClickElement(clickedElement);

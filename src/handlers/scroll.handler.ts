@@ -42,8 +42,6 @@ export class ScrollHandler extends StateManager {
     const raw = this.get('config').scrollContainerSelectors;
     const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
 
-    debugLog.debug('ScrollHandler', 'Starting scroll tracking', { selectorsCount: selectors.length });
-
     const elements: Array<Window | HTMLElement> = selectors
       .map((sel) => this.safeQuerySelector(sel))
       .filter((element): element is HTMLElement => element instanceof HTMLElement);
@@ -58,8 +56,6 @@ export class ScrollHandler extends StateManager {
   }
 
   stopTracking(): void {
-    debugLog.debug('ScrollHandler', 'Stopping scroll tracking', { containersCount: this.containers.length });
-
     for (const container of this.containers) {
       this.clearContainerTimer(container);
 
@@ -76,15 +72,10 @@ export class ScrollHandler extends StateManager {
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
-    const elementType = element === window ? 'window' : (element as HTMLElement).tagName?.toLowerCase();
-
     // Skip setup for non-scrollable elements
     if (element !== window && !this.isElementScrollable(element as HTMLElement)) {
-      debugLog.debug('ScrollHandler', 'Skipping non-scrollable element', { elementType });
       return;
     }
-
-    debugLog.debug('ScrollHandler', 'Setting up scroll container', { elementType });
 
     const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {

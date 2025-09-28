@@ -40,10 +40,6 @@ export class EventManager extends StateManager {
     this.googleAnalytics = googleAnalytics;
     this.dataSender = new SenderManager(storeManager);
     this.emitter = emitter;
-
-    debugLog.debug('EventManager', 'EventManager initialized', {
-      hasGoogleAnalytics: !!googleAnalytics,
-    });
   }
 
   /**
@@ -56,11 +52,6 @@ export class EventManager extends StateManager {
         if (recoveredEvents && recoveredEvents.length > 0) {
           const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
           this.removeProcessedEvents(eventIds);
-
-          debugLog.debug('EventManager', 'Removed recovered events from queue', {
-            removedCount: recoveredEvents.length,
-            remainingQueueLength: this.eventsQueue.length,
-          });
         }
       },
       onFailure: async () => {
@@ -93,7 +84,6 @@ export class EventManager extends StateManager {
 
     // Skip if sampling filter rejects event
     if (!this.shouldSample()) {
-      debugLog.debug('EventManager', 'Event filtered by sampling');
       return;
     }
 
@@ -135,7 +125,6 @@ export class EventManager extends StateManager {
 
     // Check for duplicates
     if (this.isDuplicateEvent(payload)) {
-      debugLog.debug('EventManager', 'Duplicate event filtered', { type });
       return;
     }
 
@@ -157,8 +146,6 @@ export class EventManager extends StateManager {
 
     // Stop sender
     this.dataSender.stop();
-
-    debugLog.debug('EventManager', 'EventManager stopped');
   }
 
   /**
@@ -322,9 +309,6 @@ export class EventManager extends StateManager {
     const isSessionStartEvent = event.type === EventType.SESSION_START;
 
     if (isRouteExcluded && !isSessionStartEvent && !(isSessionEndEvent && hasStartSession)) {
-      if (config?.mode === 'qa' || config?.mode === 'debug') {
-        debugLog.debug('EventManager', `Event ${event.type} excluded for route: ${event.page_url}`);
-      }
       return true;
     }
 
@@ -378,7 +362,8 @@ export class EventManager extends StateManager {
   private addToQueue(event: EventData): void {
     this.eventsQueue.push(event);
 
-    // Emit event AFTER adding to queue
+    debugLog.info('EventManager', 'Event added to queue', event);
+
     this.emitEvent(event);
 
     // Prevent queue overflow
@@ -411,7 +396,7 @@ export class EventManager extends StateManager {
   private handleGoogleAnalyticsIntegration(event: EventData): void {
     if (this.googleAnalytics && event.type === EventType.CUSTOM && event.custom_event) {
       if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
-        debugLog.debug('EventManager', `Google Analytics event: ${JSON.stringify(event.custom_event)}`);
+        // Skip GA tracking in QA/debug modes
       } else {
         this.googleAnalytics.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
       }

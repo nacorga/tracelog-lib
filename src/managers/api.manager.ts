@@ -15,8 +15,6 @@ import { debugLog } from '../utils/logging';
  * @throws Error if URL generation or validation fails
  */
 export function getApiUrlForProject(id: string, allowHttp = false): string {
-  debugLog.debug('ApiManager', 'Generating API URL', { projectId: id, allowHttp });
-
   try {
     // Handle localhost development case
     if (id.startsWith(SpecialProjectId.Localhost)) {
@@ -26,7 +24,6 @@ export function getApiUrlForProject(id: string, allowHttp = false): string {
         throw new Error(`Invalid localhost URL format: ${id}`);
       }
 
-      debugLog.debug('ApiManager', 'Generated localhost URL', { url });
       return url;
     }
 
@@ -37,7 +34,6 @@ export function getApiUrlForProject(id: string, allowHttp = false): string {
       throw new Error(`Generated API URL failed validation: ${url}`);
     }
 
-    debugLog.debug('ApiManager', 'Generated API URL', { url });
     return url;
   } catch (error) {
     debugLog.error('ApiManager', 'API URL generation failed', {

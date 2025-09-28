@@ -146,15 +146,17 @@ export class SenderManager extends StateManager {
 
     try {
       const response = await this.sendWithTimeout(url, payload);
-      debugLog.debug('SenderManager', 'Send completed', { status: response.status, events: body.events.length });
+
       return response.ok;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
       debugLog.error('SenderManager', 'Send request failed', {
         error: errorMessage,
         events: body.events.length,
         url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'), // Hide domain for privacy
       });
+
       return false;
     }
   }
@@ -260,10 +262,6 @@ export class SenderManager extends StateManager {
     const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
     const isRecent = ageInHours < EVENT_EXPIRY_HOURS;
 
-    if (!isRecent) {
-      debugLog.debug('SenderManager', 'Persisted data expired', { ageInHours });
-    }
-
     return isRecent;
   }
 
@@ -336,8 +334,6 @@ export class SenderManager extends StateManager {
 
       this.retryCount++;
       this.isRetrying = true;
-
-      debugLog.debug('SenderManager', 'Retrying send', { attempt: this.retryCount });
 
       try {
         const success = await this.send(body);

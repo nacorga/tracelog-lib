@@ -18,7 +18,6 @@ export class SessionHandler extends StateManager {
 
   async startTracking(): Promise<void> {
     if (this.isActive()) {
-      debugLog.debug('SessionHandler', 'Session tracking already active');
       return;
     }
 
@@ -27,12 +26,9 @@ export class SessionHandler extends StateManager {
       return;
     }
 
-    debugLog.debug('SessionHandler', 'Starting session tracking');
-
     try {
       this.sessionManager = new SessionManager(this.storageManager, this.eventManager);
       await this.sessionManager.startTracking();
-      debugLog.debug('SessionHandler', 'Session tracking started successfully');
     } catch (error) {
       // Cleanup on failure
       if (this.sessionManager) {
@@ -64,13 +60,11 @@ export class SessionHandler extends StateManager {
   }
 
   async stopTracking(): Promise<void> {
-    debugLog.debug('SessionHandler', 'Stopping session tracking');
     await this.cleanupSessionManager();
   }
 
   destroy(): void {
     if (this.destroyed) {
-      debugLog.debug('SessionHandler', 'Already destroyed, skipping');
       return;
     }
 
@@ -81,6 +75,5 @@ export class SessionHandler extends StateManager {
 
     this.destroyed = true;
     this.set('hasStartSession', false);
-    debugLog.debug('SessionHandler', 'Session handler destroyed');
   }
 }
