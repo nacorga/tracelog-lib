@@ -5,8 +5,7 @@ import {
   MAX_STRING_LENGTH,
   XSS_PATTERNS,
 } from '../../constants';
-import { MetadataType } from '../../types/common.types';
-import { ApiConfig } from '../../types/config.types';
+import { MetadataType, ApiConfig } from '../../types';
 import { debugLog } from '../logging';
 
 /**
@@ -249,6 +248,12 @@ export const sanitizeApiConfig = (data: unknown): ApiConfig => {
             debugLog.debug('Sanitize', 'Tags processed', { count: value.length });
           } else {
             debugLog.warn('Sanitize', 'Tags value is not an array', { value, type: typeof value });
+          }
+        } else if (key === 'samplingRate') {
+          const sanitizedValue = sanitizeValue(value);
+
+          if (typeof sanitizedValue === 'number') {
+            safeData.samplingRate = sanitizedValue;
           }
         } else {
           const sanitizedValue = sanitizeValue(value);

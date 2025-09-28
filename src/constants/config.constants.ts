@@ -193,7 +193,7 @@ export const VALIDATION_MESSAGES = {
   INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
 
   // Sampling rate validation
-  INVALID_SAMPLING_RATE: `Sampling rate must be between ${MIN_SAMPLING_RATE} and ${MAX_SAMPLING_RATE}`,
+  INVALID_SAMPLING_RATE: 'Sampling rate must be greater than 0 and less than or equal to 1',
   INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
 
   // Integration validation

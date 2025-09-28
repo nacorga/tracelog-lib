@@ -6,7 +6,7 @@ import { StateManager, resetGlobalState } from '@/managers/state.manager';
 import { Config, Mode } from '@/types';
 import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
 import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
-import { Emitter } from '@/utils';
+import { Emitter, validateConfig } from '@/utils';
 
 /**
  * Test configuration factory
@@ -17,6 +17,7 @@ export const createTestConfig = (overrides: Partial<Config> = {}): Config => ({
   ipExcluded: false,
   id: 'test-project',
   sessionTimeout: DEFAULT_SESSION_TIMEOUT,
+  samplingRate: 1,
   ...overrides,
 });
 
@@ -58,6 +59,12 @@ export const createMockEmitter = (): Emitter =>
 export const setupTestState = async (config: Config = createTestConfig()): Promise<void> => {
   resetGlobalState();
 
+  const { samplingRate } = validateConfig(config);
+  const normalizedConfig = {
+    ...config,
+    samplingRate,
+  };
+
   // Create a temporary StateManager to set up global state
   const tempStateManager = new (class extends StateManager {
     async setConfig(config: Config): Promise<void> {
@@ -71,7 +78,7 @@ export const setupTestState = async (config: Config = createTestConfig()): Promi
     }
   })();
 
-  await tempStateManager.setConfig(config);
+  await tempStateManager.setConfig(normalizedConfig);
   await tempStateManager.setPageUrl('https://example.com');
   await tempStateManager.setSessionId('test-session');
 };

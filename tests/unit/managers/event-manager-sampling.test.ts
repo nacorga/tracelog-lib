@@ -49,20 +49,6 @@ describe('EventManager - Sampling', () => {
     expect(eventManager.getQueueLength()).toBe(100);
   });
 
-  test('should sample no events with rate 0', async () => {
-    const eventManager = await createEventManager(0);
-
-    for (let i = 0; i < 100; i++) {
-      eventManager.track({
-        type: EventType.CLICK,
-        page_url: `https://example.com/${i}`,
-        click_data: { x: i, y: i, relativeX: i, relativeY: i },
-      });
-    }
-
-    expect(eventManager.getQueueLength()).toBe(0);
-  });
-
   test('should sample ~50% events with rate 0.5', async () => {
     const eventManager = await createEventManager(0.5);
 
@@ -104,6 +90,34 @@ describe('EventManager - Sampling', () => {
   test('should use default sampling rate of 1 when not configured', async () => {
     // Use default config without samplingRate to test default behavior
     const eventManager = await createEventManager(1.0); // Default rate
+
+    for (let i = 0; i < 50; i++) {
+      eventManager.track({
+        type: EventType.CLICK,
+        page_url: `https://example.com/${i}`,
+        click_data: { x: i, y: i, relativeX: i, relativeY: i },
+      });
+    }
+
+    expect(eventManager.getQueueLength()).toBe(50);
+  });
+
+  test('should always capture critical session events regardless of sampling rate', async () => {
+    const eventManager = await createEventManager(0.1);
+
+    eventManager.track({
+      type: EventType.SESSION_START,
+    });
+
+    eventManager.track({
+      type: EventType.SESSION_END,
+    });
+
+    expect(eventManager.getQueueLength()).toBe(2);
+  });
+
+  test('should clamp invalid sampling rates to default value', async () => {
+    const { eventManager } = await setupTestEnvironment({ samplingRate: -0.3 });
 
     for (let i = 0; i < 50; i++) {
       eventManager.track({

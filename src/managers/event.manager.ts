@@ -81,11 +81,8 @@ export class EventManager extends StateManager {
 
     const eventType = type as EventType;
     const isSessionStart = eventType === EventType.SESSION_START;
-
-    // Skip if sampling filter rejects event
-    if (!this.shouldSample()) {
-      return;
-    }
+    const isSessionEnd = eventType === EventType.SESSION_END;
+    const isCriticalEvent = isSessionStart || isSessionEnd;
 
     // Build event payload
     const currentPageUrl = (page_url as string) || this.get('pageUrl');
@@ -103,6 +100,11 @@ export class EventManager extends StateManager {
 
     // Check URL exclusions
     if (this.isEventExcluded(payload)) {
+      return;
+    }
+
+    // Skip sampling for critical events, apply for the rest
+    if (!isCriticalEvent && !this.shouldSample()) {
       return;
     }
 

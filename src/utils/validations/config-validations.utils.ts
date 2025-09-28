@@ -1,4 +1,9 @@
-import { MAX_SESSION_TIMEOUT_MS, MIN_SESSION_TIMEOUT_MS, VALIDATION_MESSAGES } from '../../constants';
+import {
+  DEFAULT_SAMPLING_RATE,
+  MAX_SESSION_TIMEOUT_MS,
+  MIN_SESSION_TIMEOUT_MS,
+  VALIDATION_MESSAGES,
+} from '../../constants';
 import { AppConfig, Config, ApiConfig, Mode } from '../../types';
 import {
   ProjectIdValidationError,
@@ -237,14 +242,22 @@ export const validateAndNormalizeConfig = (config: AppConfig): AppConfig => {
  * @param samplingRate - The sampling rate to validate
  * @param errors - Array to push errors to
  */
-const validateSamplingRate = (samplingRate: unknown, errors: string[]): void => {
-  if (samplingRate !== undefined) {
-    if (typeof samplingRate !== 'number') {
-      errors.push('samplingRate must be a number');
-    } else if (samplingRate < 0 || samplingRate > 1) {
-      errors.push('samplingRate must be between 0 and 1');
-    }
+const validateSamplingRate = (samplingRate: unknown, errors: string[]): number | undefined => {
+  if (samplingRate === undefined) {
+    return undefined;
   }
+
+  if (typeof samplingRate !== 'number') {
+    errors.push('samplingRate must be a number');
+    return DEFAULT_SAMPLING_RATE;
+  }
+
+  if (Number.isNaN(samplingRate) || samplingRate <= 0 || samplingRate > 1) {
+    errors.push(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE);
+    return DEFAULT_SAMPLING_RATE;
+  }
+
+  return samplingRate;
 };
 
 /**
@@ -278,7 +291,7 @@ const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], p
  * @param config - The configuration to validate
  * @returns Validation result with errors and warnings
  */
-export const validateConfig = (config: Config): { errors: string[]; warnings: string[] } => {
+export const validateConfig = (config: Config): { errors: string[]; warnings: string[]; samplingRate: number } => {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -310,7 +323,7 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
 
   // No custom API endpoints supported
 
-  validateSamplingRate(config.samplingRate, errors);
+  const validatedSamplingRate = validateSamplingRate(config.samplingRate, errors) ?? DEFAULT_SAMPLING_RATE;
 
   if (config.tags !== undefined && !Array.isArray(config.tags)) {
     errors.push('tags must be an array');
@@ -318,7 +331,7 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
 
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
 
-  return { errors, warnings };
+  return { errors, warnings, samplingRate: validatedSamplingRate };
 };
 
 /**
@@ -326,15 +339,15 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
  * @param config - The configuration to validate
  * @returns Validation result with errors and warnings
  */
-export const validateFinalConfig = (config: Config): { errors: string[]; warnings: string[] } => {
+export const validateFinalConfig = (config: Config): { errors: string[]; warnings: string[]; samplingRate: number } => {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  validateSamplingRate(config.samplingRate, errors);
+  const validatedSamplingRate = validateSamplingRate(config.samplingRate, errors) ?? DEFAULT_SAMPLING_RATE;
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
   // No custom API endpoints supported
 
-  return { errors, warnings };
+  return { errors, warnings, samplingRate: validatedSamplingRate };
 };
 
 /**
