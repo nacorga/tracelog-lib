@@ -1,6 +1,9 @@
 *.tgz
 .npmrc
 .DS_Store
+/.llm
+/.playwright-mcp
+/.archive
 /dist
 /dist_v2
 /node_modules
@@ -9,9 +12,5 @@
 /test-reports
 /playwright-report
 /tests/fixtures/tracelog.js
-/tests/fixtures/tracelog-v2.js
-/.llm
-/.playwright-mcp
-src_backup_*
-/.archive
+/playground/tracelog.js
 /coverage-integration
