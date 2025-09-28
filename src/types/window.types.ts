@@ -1,4 +1,4 @@
-import { TraceLogTestBridge } from '../src/types/test-bridge.types';
+import { TraceLogTestBridge } from './test-bridge.types';
 
 declare global {
   interface Window {

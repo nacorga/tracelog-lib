@@ -3,8 +3,7 @@ import { DEFAULT_SAMPLING_RATE, DEFAULT_SESSION_TIMEOUT } from './config.constan
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
   samplingRate: DEFAULT_SAMPLING_RATE,
-  tags: [],
-  excludedUrlPaths: [],
+  ipExcluded: false,
 };
 
 export const DEFAULT_CONFIG = (config: Config): Config => ({
@@ -12,4 +11,7 @@ export const DEFAULT_CONFIG = (config: Config): Config => ({
   ...config,
   sessionTimeout: DEFAULT_SESSION_TIMEOUT,
   allowHttp: false,
+  tags: config.tags ?? [],
+  excludedUrlPaths: config.excludedUrlPaths ?? [],
+  ipExcluded: config.ipExcluded ?? false,
 });

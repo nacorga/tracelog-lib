@@ -29,14 +29,8 @@ export class ConfigManager {
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
     // Handle skip mode - no network calls
     if (appConfig.id === SpecialProjectId.Skip) {
-      debugLog.debug('ConfigManager', 'Using skip mode - no network calls');
       return this.createDefaultConfig(appConfig);
     }
-
-    debugLog.debug('ConfigManager', 'Loading configuration', {
-      apiUrl,
-      projectId: appConfig.id,
-    });
 
     const config = await this.loadFromApi(apiUrl, appConfig);
 
@@ -161,7 +155,7 @@ export class ConfigManager {
   private mergeConfigurations(rawApiConfig: Record<string, unknown>, appConfig: AppConfig): Config {
     const safeApiConfig = sanitizeApiConfig(rawApiConfig);
     const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
-    const mergedConfig: Config = { ...apiConfig, ...appConfig };
+    const mergedConfig: Config = { ...appConfig, ...apiConfig };
 
     // Apply QA mode if enabled via URL parameter
     if (this.isQaModeEnabled() && !mergedConfig.mode) {
