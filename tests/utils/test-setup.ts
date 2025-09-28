@@ -1,0 +1,132 @@
+import { vi } from 'vitest';
+import { EventManager } from '@/managers/event.manager';
+import { SessionManager } from '@/managers/session.manager';
+import { StorageManager } from '@/managers/storage.manager';
+import { StateManager, resetGlobalState } from '@/managers/state.manager';
+import { Config, Mode } from '@/types';
+import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
+import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
+import { Emitter } from '@/utils';
+
+/**
+ * Test configuration factory
+ */
+export const createTestConfig = (overrides: Partial<Config> = {}): Config => ({
+  excludedUrlPaths: [],
+  mode: Mode.QA,
+  ipExcluded: false,
+  id: 'test-project',
+  sessionTimeout: DEFAULT_SESSION_TIMEOUT,
+  ...overrides,
+});
+
+/**
+ * Mock StorageManager factory
+ */
+export const createMockStorageManager = (): StorageManager =>
+  ({
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  }) as unknown as StorageManager;
+
+/**
+ * Mock GoogleAnalyticsIntegration factory
+ */
+export const createMockGoogleAnalytics = (): GoogleAnalyticsIntegration =>
+  ({
+    initialize: vi.fn().mockResolvedValue(undefined),
+    cleanup: vi.fn(),
+    trackEvent: vi.fn(),
+  }) as unknown as GoogleAnalyticsIntegration;
+
+/**
+ * Mock Emitter factory
+ */
+export const createMockEmitter = (): Emitter =>
+  ({
+    emit: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    removeAllListeners: vi.fn(),
+  }) as unknown as Emitter;
+
+/**
+ * Setup global state for testing
+ */
+export const setupTestState = async (config: Config = createTestConfig()): Promise<void> => {
+  resetGlobalState();
+
+  // Create a temporary StateManager to set up global state
+  const tempStateManager = new (class extends StateManager {
+    async setConfig(config: Config): Promise<void> {
+      await this.set('config', config);
+    }
+    async setPageUrl(url: string): Promise<void> {
+      await this.set('pageUrl', url);
+    }
+    async setSessionId(id: string): Promise<void> {
+      await this.set('sessionId', id);
+    }
+  })();
+
+  await tempStateManager.setConfig(config);
+  await tempStateManager.setPageUrl('https://example.com');
+  await tempStateManager.setSessionId('test-session');
+};
+
+/**
+ * Create EventManager with proper dependencies for testing
+ */
+export const createTestEventManager = (
+  storageManager?: StorageManager,
+  googleAnalytics?: GoogleAnalyticsIntegration | null,
+  emitter?: Emitter | null,
+): EventManager => {
+  return new EventManager(storageManager || createMockStorageManager(), googleAnalytics || null, emitter || null);
+};
+
+/**
+ * Create SessionManager with proper dependencies for testing
+ */
+export const createTestSessionManager = (
+  storageManager?: StorageManager,
+  eventManager?: EventManager,
+): SessionManager => {
+  return new SessionManager(storageManager || createMockStorageManager(), eventManager || createTestEventManager());
+};
+
+/**
+ * Clean up after tests
+ */
+export const cleanupTestState = (): void => {
+  resetGlobalState();
+  vi.clearAllMocks();
+};
+
+/**
+ * Setup common test environment
+ */
+export const setupTestEnvironment = async (
+  config?: Partial<Config>,
+): Promise<{
+  config: Config;
+  storageManager: StorageManager;
+  eventManager: EventManager;
+  sessionManager: SessionManager;
+}> => {
+  const testConfig = createTestConfig(config);
+  await setupTestState(testConfig);
+
+  const storageManager = createMockStorageManager();
+  const eventManager = createTestEventManager(storageManager);
+  const sessionManager = createTestSessionManager(storageManager, eventManager);
+
+  return {
+    config: testConfig,
+    storageManager,
+    eventManager,
+    sessionManager,
+  };
+};

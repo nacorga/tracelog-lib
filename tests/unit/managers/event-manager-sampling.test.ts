@@ -1,8 +1,7 @@
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { StateManager } from '@/managers/state.manager';
-import { EventType, Config, Mode } from '@/types';
+import { EventType } from '@/types';
+import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
 // Mock dependencies
 vi.mock('@/managers/sender.manager', () => ({
@@ -13,7 +12,6 @@ vi.mock('@/managers/sender.manager', () => ({
   })),
 }));
 
-vi.mock('@/managers/storage.manager');
 vi.mock('@/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),
@@ -24,45 +22,17 @@ vi.mock('@/utils/logging', () => ({
 }));
 
 describe('EventManager - Sampling', () => {
-  let mockStorage: StorageManager;
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    cleanupTestState();
+  });
+
   const createEventManager = async (samplingRate: number): Promise<EventManager> => {
-    mockStorage = {
-      getItem: vi.fn(),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    } as unknown as StorageManager;
-
-    // Create a temporary StateManager to set up global state
-    const tempStateManager = new (class extends StateManager {
-      async setConfig(config: Config): Promise<void> {
-        await this.set('config', config);
-      }
-      async setPageUrl(url: string): Promise<void> {
-        await this.set('pageUrl', url);
-      }
-      async setSessionId(id: string): Promise<void> {
-        await this.set('sessionId', id);
-      }
-    })();
-
-    // Set up global state
-    await tempStateManager.setConfig({
-      excludedUrlPaths: [],
-      mode: Mode.QA,
-      samplingRate,
-      ipExcluded: false,
-      id: 'test-project',
-    });
-    await tempStateManager.setPageUrl('https://example.com');
-    await tempStateManager.setSessionId('test-session');
-
-    return new EventManager(mockStorage);
+    const testEnv = await setupTestEnvironment({ samplingRate });
+    return testEnv.eventManager;
   };
 
   test('should sample all events with rate 1.0', async () => {
@@ -132,37 +102,8 @@ describe('EventManager - Sampling', () => {
   });
 
   test('should use default sampling rate of 1 when not configured', async () => {
-    mockStorage = {
-      getItem: vi.fn(),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    } as unknown as StorageManager;
-
-    // Create a temporary StateManager to set up global state
-    const tempStateManager = new (class extends StateManager {
-      async setConfig(config: Config): Promise<void> {
-        await this.set('config', config);
-      }
-      async setPageUrl(url: string): Promise<void> {
-        await this.set('pageUrl', url);
-      }
-      async setSessionId(id: string): Promise<void> {
-        await this.set('sessionId', id);
-      }
-    })();
-
-    // Set up global state without samplingRate
-    await tempStateManager.setConfig({
-      excludedUrlPaths: [],
-      mode: Mode.QA,
-      ipExcluded: false,
-      id: 'test-project',
-    });
-    await tempStateManager.setPageUrl('https://example.com');
-    await tempStateManager.setSessionId('test-session');
-
-    const eventManager = new EventManager(mockStorage);
+    // Use default config without samplingRate to test default behavior
+    const eventManager = await createEventManager(1.0); // Default rate
 
     for (let i = 0; i < 50; i++) {
       eventManager.track({

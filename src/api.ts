@@ -45,19 +45,20 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     const validatedConfig = validateAndNormalizeConfig(appConfig);
     const instance = new App();
 
-    await instance.init(validatedConfig);
-    app = instance;
+    try {
+      await instance.init(validatedConfig);
+      app = instance;
 
-    debugLog.info('API', 'TraceLog initialized successfully', { projectId: validatedConfig.id });
-  } catch (error) {
-    // Cleanup on failure
-    if (app && !app.initialized) {
+      debugLog.info('API', 'TraceLog initialized successfully', { projectId: validatedConfig.id });
+    } catch (error) {
       try {
-        await app.destroy();
+        await instance.destroy(true);
       } catch (cleanupError) {
         debugLog.warn('API', 'Failed to cleanup partially initialized app', { cleanupError });
       }
+      throw error;
     }
+  } catch (error) {
     app = null;
     debugLog.error('API', 'Initialization failed', { error });
     throw error;

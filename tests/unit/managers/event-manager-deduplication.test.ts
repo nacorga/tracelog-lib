@@ -1,8 +1,7 @@
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { StateManager } from '@/managers/state.manager';
-import { EventType, Config, ScrollDirection, Mode } from '@/types';
+import { EventType, ScrollDirection } from '@/types';
+import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
 // Mock dependencies
 vi.mock('@/managers/sender.manager', () => ({
@@ -13,7 +12,6 @@ vi.mock('@/managers/sender.manager', () => ({
   })),
 }));
 
-vi.mock('@/managers/storage.manager');
 vi.mock('@/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),
@@ -25,40 +23,14 @@ vi.mock('@/utils/logging', () => ({
 
 describe('EventManager - Deduplication', () => {
   let eventManager: EventManager;
-  let mockStorage: StorageManager;
 
   beforeEach(async () => {
-    mockStorage = {
-      getItem: vi.fn(),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    } as unknown as StorageManager;
+    const testEnv = await setupTestEnvironment();
+    eventManager = testEnv.eventManager;
+  });
 
-    // Create a temporary StateManager to set up global state
-    const tempStateManager = new (class extends StateManager {
-      async setConfig(config: Config): Promise<void> {
-        await this.set('config', config);
-      }
-      async setPageUrl(url: string): Promise<void> {
-        await this.set('pageUrl', url);
-      }
-      async setSessionId(id: string): Promise<void> {
-        await this.set('sessionId', id);
-      }
-    })();
-
-    // Set up global state
-    await tempStateManager.setConfig({
-      excludedUrlPaths: [],
-      mode: Mode.QA,
-      ipExcluded: false,
-      id: 'test-project',
-    });
-    await tempStateManager.setPageUrl('https://example.com');
-    await tempStateManager.setSessionId('test-session');
-
-    eventManager = new EventManager(mockStorage);
+  afterEach(() => {
+    cleanupTestState();
   });
 
   test('should not deduplicate different event types', () => {

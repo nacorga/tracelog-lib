@@ -1,10 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SessionManager } from '@/managers/session.manager';
 import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { StateManager } from '@/managers/state.manager';
-import { EventType, Config, Mode } from '@/types';
+import { EventType } from '@/types';
 import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
+import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
 // Mock dependencies
 vi.mock('@/utils/logging', () => ({
@@ -16,48 +15,29 @@ vi.mock('@/utils/logging', () => ({
   },
 }));
 
-// Mock EventManager
-const mockEventManager = {
-  track: vi.fn(),
-  flushImmediatelySync: vi.fn(() => true),
-} as unknown as EventManager;
-
 describe('SessionManager - Lifecycle', () => {
   let sessionManager: SessionManager;
-  let mockStorage: StorageManager;
+  let mockEventManager: EventManager;
+  let mockStorage: any;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
 
-    mockStorage = {
-      getItem: vi.fn(),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    } as unknown as StorageManager;
+    const testEnv = await setupTestEnvironment({ sessionTimeout: DEFAULT_SESSION_TIMEOUT });
+    sessionManager = testEnv.sessionManager;
+    mockEventManager = testEnv.eventManager;
+    mockStorage = testEnv.storageManager;
 
-    // Create a temporary StateManager to set up global state
-    const tempStateManager = new (class extends StateManager {
-      async setConfig(config: Config): Promise<void> {
-        await this.set('config', config);
-      }
-    })();
-
-    await tempStateManager.setConfig({
-      excludedUrlPaths: [],
-      mode: Mode.QA,
-      ipExcluded: false,
-      id: 'test-project',
-      sessionTimeout: DEFAULT_SESSION_TIMEOUT,
-    });
-
-    sessionManager = new SessionManager(mockStorage, mockEventManager);
+    // Mock the track and flushImmediatelySync methods
+    vi.spyOn(mockEventManager, 'track');
+    vi.spyOn(mockEventManager, 'flushImmediatelySync').mockReturnValue(true);
   });
 
   afterEach(() => {
     sessionManager.destroy();
     vi.useRealTimers();
+    cleanupTestState();
   });
 
   test('should create new session when no stored session exists', async () => {
@@ -65,21 +45,19 @@ describe('SessionManager - Lifecycle', () => {
 
     await sessionManager.startTracking();
 
-    expect(mockStorage.setItem).toHaveBeenCalledWith('sessionId', expect.any(String));
-    expect(mockStorage.setItem).toHaveBeenCalledWith('lastActivity', expect.any(String));
+    expect(mockStorage.setItem).toHaveBeenCalledWith('tl:test-project:session', expect.any(String));
     expect(mockEventManager.track).toHaveBeenCalledWith({
       type: EventType.SESSION_START,
     });
   });
 
   test('should recover valid stored session', async () => {
-    const storedSessionId = 'stored-session-123';
-    const recentTimestamp = (Date.now() - 5000).toString(); // 5 seconds ago
+    const storedSessionData = JSON.stringify({
+      id: 'stored-session-123',
+      lastActivity: Date.now() - 5000, // 5 seconds ago
+    });
 
-    mockStorage.getItem = vi
-      .fn()
-      .mockReturnValueOnce(storedSessionId) // sessionId
-      .mockReturnValueOnce(recentTimestamp); // lastActivity
+    mockStorage.getItem = vi.fn().mockReturnValueOnce(storedSessionData); // session data
 
     await sessionManager.startTracking();
 
@@ -116,8 +94,7 @@ describe('SessionManager - Lifecycle', () => {
       type: EventType.SESSION_END,
       session_end_reason: 'inactivity',
     });
-    expect(mockStorage.removeItem).toHaveBeenCalledWith('sessionId');
-    expect(mockStorage.removeItem).toHaveBeenCalledWith('lastActivity');
+    expect(mockStorage.removeItem).toHaveBeenCalledWith('tl:test-project:session');
   });
 
   test('should end session manually', async () => {
@@ -207,10 +184,11 @@ describe('SessionManager - Lifecycle', () => {
       await tempSessionManager.startTracking();
 
       const setItemCalls = mockStorage.setItem as any;
-      const sessionIdCall = setItemCalls.mock.calls.find((call: any) => call[0] === 'sessionId');
+      const sessionIdCall = setItemCalls.mock.calls.find((call: any) => call[0] === 'tl:test-project:session');
 
       if (sessionIdCall) {
-        sessionIds.add(sessionIdCall[1]);
+        const sessionData = JSON.parse(sessionIdCall[1]);
+        sessionIds.add(sessionData.id);
       }
 
       tempSessionManager.destroy();

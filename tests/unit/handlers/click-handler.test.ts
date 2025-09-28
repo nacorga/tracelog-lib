@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ClickHandler } from '@/handlers/click.handler';
-import { EventManager } from '@/managers/event.manager';
 import { EventType } from '@/types';
 import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH } from '@/constants';
+import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
 // Mock dependencies
 vi.mock('@/utils/logging', () => ({
@@ -14,16 +14,17 @@ vi.mock('@/utils/logging', () => ({
   },
 }));
 
-const mockEventManager = {
-  track: vi.fn(),
-} as unknown as EventManager;
-
 describe('ClickHandler', () => {
   let clickHandler: ClickHandler;
   let mockElement: HTMLElement;
+  let mockEventManager: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+
+    const testEnv = await setupTestEnvironment();
+    mockEventManager = testEnv.eventManager;
+    vi.spyOn(mockEventManager, 'track');
 
     // Create DOM elements for testing
     document.body.innerHTML = `
@@ -46,6 +47,7 @@ describe('ClickHandler', () => {
   afterEach(() => {
     clickHandler.stopTracking();
     document.body.innerHTML = '';
+    cleanupTestState();
   });
 
   describe('Event Listener Management', () => {

@@ -56,28 +56,23 @@ export class App extends StateManager {
       throw new Error('Project ID is required');
     }
 
-    try {
-      // Initialize core components
-      this.managers.storage = new StorageManager();
-      await this.setupState(appConfig);
+    this.managers.storage = new StorageManager();
 
-      // Setup optional integrations
+    try {
+      await this.setupState(appConfig);
       await this.setupIntegrations();
 
-      // Initialize event system
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
 
-      // Start handlers
       this.initializeHandlers();
 
-      // Recover any persisted events
       await this.managers.event.recoverPersistedEvents().catch(() => {
-        // Silent recovery failure - not critical for v1
+        debugLog.warn('App', 'Failed to recover persisted events');
       });
 
       this.isInitialized = true;
-      debugLog.info('App', 'Initialization completed');
     } catch (error) {
+      await this.destroy(true);
       throw new Error(`TraceLog initialization failed: ${error}`);
     }
   }
@@ -114,40 +109,34 @@ export class App extends StateManager {
     this.emitter.off(event, callback);
   }
 
-  async destroy(): Promise<void> {
-    if (!this.isInitialized) {
+  async destroy(force = false): Promise<void> {
+    if (!this.isInitialized && !force) {
       return;
     }
 
-    // Cleanup integrations
     this.integrations.googleAnalytics?.cleanup();
 
-    // Stop all handlers
     const handlerCleanups = Object.values(this.handlers)
       .filter(Boolean)
       .map(async (handler) => {
         try {
           await handler.stopTracking();
         } catch {
-          // Silent failures
+          debugLog.warn('App', 'Failed to stop tracking');
         }
       });
 
     await Promise.allSettled(handlerCleanups);
 
-    // Clear timers
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
     }
 
-    // Stop event manager
     this.managers.event?.stop();
 
-    // Clear event listeners
     this.emitter.removeAllListeners();
 
-    // Reset critical state
     this.set('hasStartSession', false);
     this.set('suppressNextScroll', false);
     this.set('sessionId', null);
@@ -155,8 +144,6 @@ export class App extends StateManager {
     this.isInitialized = false;
     this.handlers = {};
   }
-
-  // --- Private Setup Methods ---
 
   private async setupState(appConfig: AppConfig): Promise<void> {
     // Set API URL
@@ -193,7 +180,6 @@ export class App extends StateManager {
   }
 
   private initializeHandlers(): void {
-    // Session tracking
     this.handlers.session = new SessionHandler(
       this.managers.storage as StorageManager,
       this.managers.event as EventManager,
@@ -205,7 +191,6 @@ export class App extends StateManager {
       });
     });
 
-    // Page view tracking with scroll suppression
     const onPageView = (): void => {
       this.set('suppressNextScroll', true);
 
@@ -221,16 +206,16 @@ export class App extends StateManager {
     this.handlers.pageView = new PageViewHandler(this.managers.event as EventManager, onPageView);
     this.handlers.pageView.startTracking();
 
-    // User interaction tracking
     this.handlers.click = new ClickHandler(this.managers.event as EventManager);
     this.handlers.click.startTracking();
 
     this.handlers.scroll = new ScrollHandler(this.managers.event as EventManager);
     this.handlers.scroll.startTracking();
 
-    // Performance and error tracking
     this.handlers.performance = new PerformanceHandler(this.managers.event as EventManager);
-    this.handlers.performance.startTracking().catch(() => {}); // Silent failure
+    this.handlers.performance.startTracking().catch(() => {
+      debugLog.warn('App', 'Failed to start performance tracking');
+    });
 
     this.handlers.error = new ErrorHandler(this.managers.event as EventManager);
     this.handlers.error.startTracking();
