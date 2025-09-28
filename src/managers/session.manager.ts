@@ -12,6 +12,9 @@ export class SessionManager extends StateManager {
   private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private activityHandler: (() => void) | null = null;
+  private visibilityChangeHandler: (() => void) | null = null;
+  private beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
+  private isTracking = false;
 
   constructor(storageManager: StorageManager, eventManager: EventManager) {
     super();
@@ -98,27 +101,47 @@ export class SessionManager extends StateManager {
    * Start session tracking
    */
   async startTracking(): Promise<void> {
+    if (this.isTracking) {
+      debugLog.warn('SessionManager', 'Session tracking already active');
+      return;
+    }
+
     const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
     const isRecovered = Boolean(recoveredSessionId);
 
-    this.set('sessionId', sessionId);
-    this.persistSession(sessionId);
+    this.isTracking = true;
 
-    // Track session start event
-    this.eventManager.track({
-      type: EventType.SESSION_START,
-      ...(isRecovered && { session_start_recovered: true }),
-    });
+    try {
+      this.set('sessionId', sessionId);
+      this.persistSession(sessionId);
 
-    // Initialize components
-    this.initCrossTabSync();
-    this.shareSession(sessionId);
-    this.setupSessionTimeout();
-    this.setupActivityListeners();
-    this.setupLifecycleListeners();
+      // Track session start event
+      this.eventManager.track({
+        type: EventType.SESSION_START,
+        ...(isRecovered && { session_start_recovered: true }),
+      });
 
-    debugLog.info('SessionManager', 'Session tracking started', { sessionId, recovered: isRecovered });
+      // Initialize components
+      this.initCrossTabSync();
+      this.shareSession(sessionId);
+      this.setupSessionTimeout();
+      this.setupActivityListeners();
+      this.setupLifecycleListeners();
+
+      debugLog.info('SessionManager', 'Session tracking started', { sessionId, recovered: isRecovered });
+    } catch (error) {
+      this.isTracking = false;
+      this.clearSessionTimeout();
+      this.cleanupActivityListeners();
+      this.cleanupLifecycleListeners();
+      this.cleanupCrossTabSync();
+      this.storageManager.removeItem('sessionId');
+      this.storageManager.removeItem('lastActivity');
+      this.set('sessionId', null);
+
+      throw error;
+    }
   }
 
   /**
@@ -189,8 +212,11 @@ export class SessionManager extends StateManager {
    * Setup page lifecycle listeners (visibility and unload)
    */
   private setupLifecycleListeners(): void {
-    // Handle tab visibility changes
-    document.addEventListener('visibilitychange', () => {
+    if (this.visibilityChangeHandler || this.beforeUnloadHandler) {
+      return;
+    }
+
+    this.visibilityChangeHandler = (): void => {
       if (document.hidden) {
         this.clearSessionTimeout();
       } else {
@@ -199,13 +225,29 @@ export class SessionManager extends StateManager {
           this.setupSessionTimeout();
         }
       }
-    });
+    };
+
+    this.beforeUnloadHandler = (): void => {
+      this.eventManager.flushImmediatelySync();
+    };
+
+    // Handle tab visibility changes
+    document.addEventListener('visibilitychange', this.visibilityChangeHandler);
 
     // Handle page unload
-    window.addEventListener('beforeunload', () => {
-      // Flush events on unload but don't end session here
-      this.eventManager.flushImmediatelySync();
-    });
+    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+  }
+
+  private cleanupLifecycleListeners(): void {
+    if (this.visibilityChangeHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+      this.visibilityChangeHandler = null;
+    }
+
+    if (this.beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      this.beforeUnloadHandler = null;
+    }
   }
 
   /**
@@ -214,7 +256,19 @@ export class SessionManager extends StateManager {
   private endSession(reason: SessionEndReason): void {
     const sessionId = this.get('sessionId');
 
-    if (!sessionId) return;
+    if (!sessionId) {
+      debugLog.warn('SessionManager', 'endSession called without active session', { reason });
+      this.clearSessionTimeout();
+      this.cleanupActivityListeners();
+      this.cleanupCrossTabSync();
+      this.cleanupLifecycleListeners();
+      this.storageManager.removeItem('sessionId');
+      this.storageManager.removeItem('lastActivity');
+      this.set('hasStartSession', false);
+      this.isTracking = false;
+      this.set('sessionId', null);
+      return;
+    }
 
     debugLog.info('SessionManager', 'Ending session', { sessionId, reason });
 
@@ -228,11 +282,14 @@ export class SessionManager extends StateManager {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
+    this.cleanupLifecycleListeners();
 
     // Clear storage and state
     this.storageManager.removeItem('sessionId');
     this.storageManager.removeItem('lastActivity');
     this.set('sessionId', null);
+    this.set('hasStartSession', false);
+    this.isTracking = false;
   }
 
   /**
@@ -249,5 +306,8 @@ export class SessionManager extends StateManager {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
+    this.cleanupLifecycleListeners();
+    this.isTracking = false;
+    this.set('hasStartSession', false);
   }
 }

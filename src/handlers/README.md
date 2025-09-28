@@ -188,7 +188,7 @@ Captures Web Vitals and performance metrics using the `web-vitals` library with 
 
 ## ScrollHandler
 
-Tracks scroll depth and direction across multiple containers with debounced event handling.
+Tracks scroll depth and direction across multiple containers with debounced event handling and built-in guardrails.
 
 **Events Generated**: `scroll`
 
@@ -197,31 +197,26 @@ Tracks scroll depth and direction across multiple containers with debounced even
 - `scroll` events on custom containers via `scrollContainerSelectors`
 
 **Key Features**:
-- **Multi-container Support**: Tracks window + custom scrollable elements
-- **Smart Filtering**: Only scrollable elements with actual overflow content
-- **Debouncing**: 250ms debounce prevents excessive events
-- **Significant Movement**: Only tracks scrolls >10px delta
-- **Performance Optimized**: Early returns avoid expensive DOM calculations
+- **Session Guardrails**: Ignores events once the per-session cap is reached and logs a single warning.
+- **Smart Filtering**: Skips non-scrollable elements and enforces significant movement + debounce.
 
 **Event Data**:
 ```javascript
 {
   type: 'scroll',
   scroll_data: {
-    depth: 45,        // Scroll percentage (0-100)
-    direction: 'down' // 'up' or 'down'
+    depth: 45,
+    direction: 'down'
   }
 }
+
 ```
 
 **Configuration**:
 ```javascript
 await TraceLog.init({
   id: 'project-id',
-  scrollContainerSelectors: [
-    '.main-content',    // CSS selector for scrollable container
-    '#sidebar'          // Multiple containers supported
-  ]
+  scrollContainerSelectors: ['.main-content', '#sidebar'],
 });
 ```
 

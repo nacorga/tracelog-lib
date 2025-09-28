@@ -38,8 +38,11 @@ export class SenderManager extends StateManager {
    * Used primarily for page unload scenarios
    */
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
+    // For skip mode, simulate success immediately (sync version)
     if (this.shouldSkipSend()) {
-      this.logQueue(body);
+      this.clearPersistedEvents();
+      this.resetRetryState();
+
       return true;
     }
 
@@ -58,19 +61,13 @@ export class SenderManager extends StateManager {
    * Main method for sending events during normal operation
    */
   async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
-    if (this.shouldSkipSend()) {
-      this.logQueue(body);
-      callbacks?.onSuccess?.(0);
-      return true;
-    }
-
-    // First, try to persist events for recovery
+    // First, try to persist events for recovery (even in skip mode for consistency)
     const persisted = this.persistEvents(body);
-    if (!persisted) {
+    if (!persisted && !this.shouldSkipSend()) {
       debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
     }
 
-    // Attempt to send events
+    // Attempt to send events (or simulate in skip mode)
     const success = await this.send(body);
 
     if (success) {
@@ -97,11 +94,6 @@ export class SenderManager extends StateManager {
         this.clearPersistedEvents();
         return;
       }
-
-      debugLog.info('SenderManager', 'Recovering persisted events', {
-        count: persistedData.events.length,
-        sessionId: persistedData.sessionId,
-      });
 
       const body = this.createRecoveryBody(persistedData);
       const success = await this.send(body);
@@ -146,6 +138,10 @@ export class SenderManager extends StateManager {
   }
 
   private async send(body: BaseEventsQueueDto): Promise<boolean> {
+    if (this.shouldSkipSend()) {
+      return this.simulateSuccessfulSend();
+    }
+
     const { url, payload } = this.prepareRequest(body);
 
     try {
@@ -281,13 +277,6 @@ export class SenderManager extends StateManager {
     };
   }
 
-  private logQueue(queue: BaseEventsQueueDto): void {
-    debugLog.info('SenderManager', 'Skipping send (debug mode)', {
-      events: queue.events.length,
-      sessionId: queue.session_id,
-    });
-  }
-
   private persistEvents(body: BaseEventsQueueDto): boolean {
     try {
       const persistedData: PersistedQueueData = {
@@ -381,6 +370,19 @@ export class SenderManager extends StateManager {
     const { id } = config || {};
 
     return id === SpecialProjectId.Skip;
+  }
+
+  /**
+   * Simulate a successful send operation for skip mode
+   * Provides realistic timing and behavior without making HTTP requests
+   */
+  private async simulateSuccessfulSend(): Promise<boolean> {
+    // Simulate realistic network delay (100-500ms)
+    const delay = Math.random() * 400 + 100;
+
+    await new Promise((resolve) => setTimeout(resolve, delay));
+
+    return true; // Always successful in skip mode
   }
 
   private isSendBeaconAvailable(): boolean {

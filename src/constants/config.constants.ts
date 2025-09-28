@@ -11,8 +11,7 @@ import { ApiConfig } from '../types';
 
 export const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 export const DUPLICATE_EVENT_THRESHOLD_MS = 1000; // 1 second
-export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds (production)
-export const EVENT_SENT_INTERVAL_TEST_MS = 1000; // 1 second (testing)
+export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds
 
 // Throttling and debouncing
 export const DEFAULT_THROTTLE_DELAY_MS = 1000;
@@ -36,6 +35,9 @@ export const MAX_METADATA_SIZE = 5000;
 // Motion and interaction thresholds
 export const DEFAULT_MOTION_THRESHOLD = 2;
 export const SIGNIFICANT_SCROLL_DELTA = 10;
+export const MIN_SCROLL_DEPTH_CHANGE = 5;
+export const SCROLL_MIN_EVENT_INTERVAL_MS = 500;
+export const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 
 // Sampling and rate limits
 export const DEFAULT_SAMPLING_RATE = 1;

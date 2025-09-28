@@ -4,3 +4,4 @@ export * from './logging';
 export * from './network';
 export * from './security';
 export * from './validations';
+export * from './emitter.utils';

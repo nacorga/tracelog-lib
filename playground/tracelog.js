@@ -163,7 +163,6 @@ const getDeviceType = () => {
 const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
 const DUPLICATE_EVENT_THRESHOLD_MS = 1e3;
 const EVENT_SENT_INTERVAL_MS = 1e4;
-const EVENT_SENT_INTERVAL_TEST_MS = 1e3;
 const DEFAULT_THROTTLE_DELAY_MS = 1e3;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
 const EVENT_EXPIRY_HOURS = 24;
@@ -172,6 +171,9 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5e3;
 const REQUEST_TIMEOUT_MS = 1e4;
 const SIGNIFICANT_SCROLL_DELTA = 10;
+const MIN_SCROLL_DEPTH_CHANGE = 5;
+const SCROLL_MIN_EVENT_INTERVAL_MS = 500;
+const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 const DEFAULT_SAMPLING_RATE = 1;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
@@ -308,6 +310,11 @@ var SpecialProjectId = /* @__PURE__ */ ((SpecialProjectId2) => {
   SpecialProjectId2["Localhost"] = "localhost:";
   return SpecialProjectId2;
 })(SpecialProjectId || {});
+var EmitterEvent = /* @__PURE__ */ ((EmitterEvent2) => {
+  EmitterEvent2["EVENT"] = "event";
+  EmitterEvent2["QUEUE"] = "queue";
+  return EmitterEvent2;
+})(EmitterEvent || {});
 var EventType = /* @__PURE__ */ ((EventType2) => {
   EventType2["PAGE_VIEW"] = "page_view";
   EventType2["CLICK"] = "click";
@@ -1075,6 +1082,33 @@ async function fetchWithTimeout(url, options = {}) {
     throw error;
   }
 }
+class Emitter {
+  listeners = /* @__PURE__ */ new Map();
+  on(event2, callback) {
+    if (!this.listeners.has(event2)) {
+      this.listeners.set(event2, []);
+    }
+    this.listeners.get(event2).push(callback);
+  }
+  off(event2, callback) {
+    const callbacks = this.listeners.get(event2);
+    if (callbacks) {
+      const index = callbacks.indexOf(callback);
+      if (index > -1) {
+        callbacks.splice(index, 1);
+      }
+    }
+  }
+  emit(event2, data) {
+    const callbacks = this.listeners.get(event2);
+    if (callbacks) {
+      callbacks.forEach((callback) => callback(data));
+    }
+  }
+  removeAllListeners() {
+    this.listeners.clear();
+  }
+}
 function getApiUrlForProject(id, allowHttp = false) {
   debugLog.debug("ApiManager", "Generating API URL", { projectId: id, allowHttp });
   try {
@@ -1259,7 +1293,9 @@ class SenderManager extends StateManager {
    */
   sendEventsQueueSync(body) {
     if (this.shouldSkipSend()) {
-      this.logQueue(body);
+      this.logSkipSync(body);
+      this.clearPersistedEvents();
+      this.resetRetryState();
       return true;
     }
     const success = this.sendQueueSyncInternal(body);
@@ -1274,13 +1310,8 @@ class SenderManager extends StateManager {
    * Main method for sending events during normal operation
    */
   async sendEventsQueue(body, callbacks) {
-    if (this.shouldSkipSend()) {
-      this.logQueue(body);
-      callbacks?.onSuccess?.(0);
-      return true;
-    }
     const persisted = this.persistEvents(body);
-    if (!persisted) {
+    if (!persisted && !this.shouldSkipSend()) {
       debugLog.warn("SenderManager", "Failed to persist events, attempting immediate send");
     }
     const success = await this.send(body);
@@ -1346,6 +1377,9 @@ class SenderManager extends StateManager {
     this.clearPersistedEvents();
   }
   async send(body) {
+    if (this.shouldSkipSend()) {
+      return this.simulateSuccessfulSend(body);
+    }
     const { url, payload } = this.prepareRequest(body);
     try {
       const response = await this.sendWithTimeout(url, payload);
@@ -1463,6 +1497,13 @@ class SenderManager extends StateManager {
       sessionId: queue.session_id
     });
   }
+  logSkipSync(queue) {
+    debugLog.info("SenderManager", "Simulated sync send successful", {
+      events: queue.events.length,
+      sessionId: queue.session_id,
+      mode: "skip-sync"
+    });
+  }
   persistEvents(body) {
     try {
       const persistedData = {
@@ -1541,6 +1582,21 @@ class SenderManager extends StateManager {
     const { id } = config || {};
     return id === SpecialProjectId.Skip;
   }
+  /**
+   * Simulate a successful send operation for skip mode
+   * Provides realistic timing and behavior without making HTTP requests
+   */
+  async simulateSuccessfulSend(body) {
+    const delay = Math.random() * 400 + 100;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    debugLog.info("SenderManager", "Simulated send successful", {
+      events: body.events.length,
+      delay: Math.round(delay),
+      sessionId: body.session_id,
+      mode: "skip"
+    });
+    return true;
+  }
   isSendBeaconAvailable() {
     return typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function";
   }
@@ -1554,14 +1610,16 @@ class SenderManager extends StateManager {
 class EventManager extends StateManager {
   googleAnalytics;
   dataSender;
+  emitter;
   eventsQueue = [];
   lastEventFingerprint = null;
   lastEventTime = 0;
   sendIntervalId = null;
-  constructor(storeManager, googleAnalytics = null) {
+  constructor(storeManager, googleAnalytics = null, emitter = null) {
     super();
     this.googleAnalytics = googleAnalytics;
     this.dataSender = new SenderManager(storeManager);
+    this.emitter = emitter;
     debugLog.debug("EventManager", "EventManager initialized", {
       hasGoogleAnalytics: !!googleAnalytics
     });
@@ -1572,7 +1630,7 @@ class EventManager extends StateManager {
    */
   async recoverPersistedEvents() {
     await this.dataSender.recoverPersistedEvents({
-      onSuccess: (eventCount, recoveredEvents) => {
+      onSuccess: (_eventCount, recoveredEvents) => {
         if (recoveredEvents && recoveredEvents.length > 0) {
           const eventIds = recoveredEvents.map((e3) => e3.timestamp + "_" + e3.type);
           this.removeProcessedEvents(eventIds);
@@ -1581,9 +1639,6 @@ class EventManager extends StateManager {
             remainingQueueLength: this.eventsQueue.length
           });
         }
-        debugLog.info("EventManager", "Events recovered successfully", {
-          eventCount: eventCount ?? 0
-        });
       },
       onFailure: async () => {
         debugLog.warn("EventManager", "Failed to recover persisted events");
@@ -1630,6 +1685,17 @@ class EventManager extends StateManager {
       return;
     }
     if (isSessionStart) {
+      const currentSessionId = this.get("sessionId");
+      if (!currentSessionId) {
+        debugLog.warn("EventManager", "Session start event ignored: missing sessionId");
+        return;
+      }
+      if (this.get("hasStartSession")) {
+        debugLog.warn("EventManager", "Duplicate session_start detected", {
+          sessionId: currentSessionId
+        });
+        return;
+      }
       this.set("hasStartSession", true);
     }
     if (this.isDuplicateEvent(payload)) {
@@ -1688,9 +1754,6 @@ class EventManager extends StateManager {
       if (success) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
-        debugLog.info("EventManager", "Sync flush successful", {
-          eventCount: eventsToSend.length
-        });
       }
       return success;
     } else {
@@ -1698,9 +1761,7 @@ class EventManager extends StateManager {
         onSuccess: () => {
           this.removeProcessedEvents(eventIds);
           this.clearSendInterval();
-          debugLog.info("EventManager", "Async flush successful", {
-            eventCount: eventsToSend.length
-          });
+          this.emitEventsQueue(body);
         },
         onFailure: () => {
           debugLog.warn("EventManager", "Async flush failed", {
@@ -1723,10 +1784,7 @@ class EventManager extends StateManager {
     await this.dataSender.sendEventsQueue(body, {
       onSuccess: () => {
         this.removeProcessedEvents(eventIds);
-        debugLog.info("EventManager", "Events sent successfully", {
-          eventCount: eventsToSend.length,
-          remainingQueueLength: this.eventsQueue.length
-        });
+        this.emitEventsQueue(body);
       },
       onFailure: async () => {
         debugLog.warn("EventManager", "Events send failed, keeping in queue", {
@@ -1827,6 +1885,7 @@ class EventManager extends StateManager {
   }
   addToQueue(event2) {
     this.eventsQueue.push(event2);
+    this.emitEvent(event2);
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
       const removedEvent = this.eventsQueue.shift();
       debugLog.warn("EventManager", "Event queue overflow, oldest event removed", {
@@ -1835,20 +1894,17 @@ class EventManager extends StateManager {
         removedEventType: removedEvent?.type
       });
     }
-    debugLog.info("EventManager", `📥 Event captured: ${event2.type}`, event2);
     if (!this.sendIntervalId) {
       this.startSendInterval();
     }
     this.handleGoogleAnalyticsIntegration(event2);
   }
   startSendInterval() {
-    const isTestEnv = this.get("config")?.id === "test" || this.get("config")?.mode === "debug";
-    const interval = isTestEnv ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
     this.sendIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
         this.sendEventsQueue();
       }
-    }, interval);
+    }, EVENT_SENT_INTERVAL_MS);
   }
   handleGoogleAnalyticsIntegration(event2) {
     if (this.googleAnalytics && event2.type === EventType.CUSTOM && event2.custom_event) {
@@ -1869,6 +1925,22 @@ class EventManager extends StateManager {
       const eventId = `${event2.timestamp}_${event2.type}`;
       return !eventIdSet.has(eventId);
     });
+  }
+  /**
+   * Emit event for external listeners
+   */
+  emitEvent(eventData) {
+    if (this.emitter) {
+      this.emitter.emit(EmitterEvent.EVENT, eventData);
+    }
+  }
+  /**
+   * Emit events queue for external listeners
+   */
+  emitEventsQueue(queue) {
+    if (this.emitter) {
+      this.emitter.emit(EmitterEvent.QUEUE, queue);
+    }
   }
 }
 class UserManager {
@@ -1897,6 +1969,9 @@ class SessionManager extends StateManager {
   sessionTimeoutId = null;
   broadcastChannel = null;
   activityHandler = null;
+  visibilityChangeHandler = null;
+  beforeUnloadHandler = null;
+  isTracking = false;
   constructor(storageManager, eventManager) {
     super();
     this.storageManager = storageManager;
@@ -1968,21 +2043,38 @@ class SessionManager extends StateManager {
    * Start session tracking
    */
   async startTracking() {
+    if (this.isTracking) {
+      debugLog.warn("SessionManager", "Session tracking already active");
+      return;
+    }
     const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
     const isRecovered = Boolean(recoveredSessionId);
-    this.set("sessionId", sessionId);
-    this.persistSession(sessionId);
-    this.eventManager.track({
-      type: EventType.SESSION_START,
-      ...isRecovered && { session_start_recovered: true }
-    });
-    this.initCrossTabSync();
-    this.shareSession(sessionId);
-    this.setupSessionTimeout();
-    this.setupActivityListeners();
-    this.setupLifecycleListeners();
-    debugLog.info("SessionManager", "Session tracking started", { sessionId, recovered: isRecovered });
+    this.isTracking = true;
+    try {
+      this.set("sessionId", sessionId);
+      this.persistSession(sessionId);
+      this.eventManager.track({
+        type: EventType.SESSION_START,
+        ...isRecovered && { session_start_recovered: true }
+      });
+      this.initCrossTabSync();
+      this.shareSession(sessionId);
+      this.setupSessionTimeout();
+      this.setupActivityListeners();
+      this.setupLifecycleListeners();
+      debugLog.info("SessionManager", "Session tracking started", { sessionId, recovered: isRecovered });
+    } catch (error) {
+      this.isTracking = false;
+      this.clearSessionTimeout();
+      this.cleanupActivityListeners();
+      this.cleanupLifecycleListeners();
+      this.cleanupCrossTabSync();
+      this.storageManager.removeItem("sessionId");
+      this.storageManager.removeItem("lastActivity");
+      this.set("sessionId", null);
+      throw error;
+    }
   }
   /**
    * Generate unique session ID
@@ -2043,7 +2135,10 @@ class SessionManager extends StateManager {
    * Setup page lifecycle listeners (visibility and unload)
    */
   setupLifecycleListeners() {
-    document.addEventListener("visibilitychange", () => {
+    if (this.visibilityChangeHandler || this.beforeUnloadHandler) {
+      return;
+    }
+    this.visibilityChangeHandler = () => {
       if (document.hidden) {
         this.clearSessionTimeout();
       } else {
@@ -2052,17 +2147,41 @@ class SessionManager extends StateManager {
           this.setupSessionTimeout();
         }
       }
-    });
-    window.addEventListener("beforeunload", () => {
+    };
+    this.beforeUnloadHandler = () => {
       this.eventManager.flushImmediatelySync();
-    });
+    };
+    document.addEventListener("visibilitychange", this.visibilityChangeHandler);
+    window.addEventListener("beforeunload", this.beforeUnloadHandler);
+  }
+  cleanupLifecycleListeners() {
+    if (this.visibilityChangeHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityChangeHandler);
+      this.visibilityChangeHandler = null;
+    }
+    if (this.beforeUnloadHandler) {
+      window.removeEventListener("beforeunload", this.beforeUnloadHandler);
+      this.beforeUnloadHandler = null;
+    }
   }
   /**
    * End current session
    */
   endSession(reason) {
     const sessionId = this.get("sessionId");
-    if (!sessionId) return;
+    if (!sessionId) {
+      debugLog.warn("SessionManager", "endSession called without active session", { reason });
+      this.clearSessionTimeout();
+      this.cleanupActivityListeners();
+      this.cleanupCrossTabSync();
+      this.cleanupLifecycleListeners();
+      this.storageManager.removeItem("sessionId");
+      this.storageManager.removeItem("lastActivity");
+      this.set("hasStartSession", false);
+      this.isTracking = false;
+      this.set("sessionId", null);
+      return;
+    }
     debugLog.info("SessionManager", "Ending session", { sessionId, reason });
     this.eventManager.track({
       type: EventType.SESSION_END,
@@ -2071,9 +2190,12 @@ class SessionManager extends StateManager {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
+    this.cleanupLifecycleListeners();
     this.storageManager.removeItem("sessionId");
     this.storageManager.removeItem("lastActivity");
     this.set("sessionId", null);
+    this.set("hasStartSession", false);
+    this.isTracking = false;
   }
   /**
    * Stop session tracking
@@ -2088,6 +2210,9 @@ class SessionManager extends StateManager {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
+    this.cleanupLifecycleListeners();
+    this.isTracking = false;
+    this.set("hasStartSession", false);
   }
 }
 class SessionHandler extends StateManager {
@@ -2152,6 +2277,7 @@ class SessionHandler extends StateManager {
       this.sessionManager = null;
     }
     this.destroyed = true;
+    this.set("hasStartSession", false);
     debugLog.debug("SessionHandler", "Session handler destroyed");
   }
 }
@@ -2413,11 +2539,18 @@ class ClickHandler extends StateManager {
 class ScrollHandler extends StateManager {
   eventManager;
   containers = [];
+  limitWarningLogged = false;
+  minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
+  minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
+  maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
   }
   startTracking() {
+    this.limitWarningLogged = false;
+    this.applyConfigOverrides();
+    this.set("scrollEventCount", 0);
     const raw = this.get("config").scrollContainerSelectors;
     const selectors = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
     debugLog.debug("ScrollHandler", "Starting scroll tracking", { selectorsCount: selectors.length });
@@ -2440,6 +2573,8 @@ class ScrollHandler extends StateManager {
       }
     }
     this.containers.length = 0;
+    this.set("scrollEventCount", 0);
+    this.limitWarningLogged = false;
   }
   setupScrollContainer(element) {
     const elementType = element === window ? "window" : element.tagName?.toLowerCase();
@@ -2457,17 +2592,23 @@ class ScrollHandler extends StateManager {
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
         if (scrollData) {
-          this.eventManager.track({
-            type: EventType.SCROLL,
-            scroll_data: scrollData
-          });
+          const now = Date.now();
+          this.processScrollEvent(container, scrollData, now);
         }
         container.debounceTimer = null;
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
+    const initialScrollTop = this.getScrollTop(element);
     const container = {
       element,
-      lastScrollPos: this.getScrollTop(element),
+      lastScrollPos: initialScrollTop,
+      lastDepth: this.calculateScrollDepth(
+        initialScrollTop,
+        this.getScrollHeight(element),
+        this.getViewportHeight(element)
+      ),
+      lastDirection: ScrollDirection.DOWN,
+      lastEventTime: 0,
       debounceTimer: null,
       listener: handleScroll
     };
@@ -2477,6 +2618,60 @@ class ScrollHandler extends StateManager {
     } else {
       element.addEventListener("scroll", handleScroll, { passive: true });
     }
+  }
+  processScrollEvent(container, scrollData, timestamp) {
+    if (!this.shouldEmitScrollEvent(container, scrollData, timestamp)) {
+      return;
+    }
+    container.lastEventTime = timestamp;
+    container.lastDepth = scrollData.depth;
+    container.lastDirection = scrollData.direction;
+    const currentCount = this.get("scrollEventCount") ?? 0;
+    this.set("scrollEventCount", currentCount + 1);
+    this.eventManager.track({
+      type: EventType.SCROLL,
+      scroll_data: scrollData
+    });
+  }
+  shouldEmitScrollEvent(container, scrollData, timestamp) {
+    if (this.hasReachedSessionLimit()) {
+      this.logLimitOnce();
+      return false;
+    }
+    if (!this.hasElapsedMinimumInterval(container, timestamp)) {
+      return false;
+    }
+    if (!this.hasSignificantDepthChange(container, scrollData.depth)) {
+      return false;
+    }
+    return true;
+  }
+  hasReachedSessionLimit() {
+    const currentCount = this.get("scrollEventCount") ?? 0;
+    return currentCount >= this.maxEventsPerSession;
+  }
+  hasElapsedMinimumInterval(container, timestamp) {
+    if (container.lastEventTime === 0) {
+      return true;
+    }
+    return timestamp - container.lastEventTime >= this.minIntervalMs;
+  }
+  hasSignificantDepthChange(container, newDepth) {
+    return Math.abs(newDepth - container.lastDepth) >= this.minDepthChange;
+  }
+  logLimitOnce() {
+    if (this.limitWarningLogged) {
+      return;
+    }
+    this.limitWarningLogged = true;
+    debugLog.warn("ScrollHandler", "Max scroll events per session reached", {
+      limit: this.maxEventsPerSession
+    });
+  }
+  applyConfigOverrides() {
+    this.minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
+    this.minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
+    this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
   isWindowScrollable() {
     return document.documentElement.scrollHeight > window.innerHeight;
@@ -2561,7 +2756,9 @@ class GoogleAnalyticsIntegration extends StateManager {
       this.configureGtag(measurementId, userId);
       this.isInitialized = true;
     } catch (error) {
-      console.error("[TraceLog:GoogleAnalytics] Initialization failed:", error);
+      debugLog.error("GoogleAnalyticsIntegration", "Initialization failed", {
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   }
   trackEvent(eventName, metadata) {
@@ -2571,7 +2768,9 @@ class GoogleAnalyticsIntegration extends StateManager {
     try {
       window.gtag("event", eventName, metadata);
     } catch (error) {
-      console.error("[TraceLog:GoogleAnalytics] Event tracking failed:", error);
+      debugLog.error("GoogleAnalyticsIntegration", "Event tracking failed", {
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   }
   cleanup() {
@@ -3043,6 +3242,7 @@ class ErrorHandler extends StateManager {
 class App extends StateManager {
   isInitialized = false;
   suppressNextScrollTimer = null;
+  emitter = new Emitter();
   managers = {};
   handlers = {};
   integrations = {};
@@ -3060,7 +3260,7 @@ class App extends StateManager {
       this.managers.storage = new StorageManager();
       await this.setupState(appConfig);
       await this.setupIntegrations();
-      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics);
+      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
       this.initializeHandlers();
       await this.managers.event.recoverPersistedEvents().catch(() => {
       });
@@ -3090,6 +3290,12 @@ class App extends StateManager {
       }
     });
   }
+  on(event2, callback) {
+    this.emitter.on(event2, callback);
+  }
+  off(event2, callback) {
+    this.emitter.off(event2, callback);
+  }
   async destroy() {
     if (!this.isInitialized) {
       return;
@@ -3107,6 +3313,7 @@ class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
     this.managers.event?.stop();
+    this.emitter.removeAllListeners();
     this.set("hasStartSession", false);
     this.set("suppressNextScroll", false);
     this.set("sessionId", null);
@@ -3138,7 +3345,6 @@ class App extends StateManager {
       }
     }
   }
-  // --- Private Handler Initialization ---
   initializeHandlers() {
     this.handlers.session = new SessionHandler(
       this.managers.storage,
@@ -3336,6 +3542,18 @@ const event = (name, metadata) => {
     throw error;
   }
 };
+const on = (event2, callback) => {
+  if (!app) {
+    throw new Error("TraceLog not initialized. Please call init() first.");
+  }
+  app.on(event2, callback);
+};
+const off = (event2, callback) => {
+  if (!app) {
+    throw new Error("TraceLog not initialized. Please call init() first.");
+  }
+  app.off(event2, callback);
+};
 const isInitialized = () => {
   return app !== null;
 };
@@ -3379,7 +3597,9 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   destroy,
   event,
   init,
-  isInitialized
+  isInitialized,
+  off,
+  on
 }, Symbol.toStringTag, { value: "Module" }));
 var e, o = -1, a = function(e3) {
   addEventListener("pageshow", function(n) {

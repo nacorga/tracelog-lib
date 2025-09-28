@@ -1,22 +1,19 @@
 import { getApiUrlForProject } from './managers/api.manager';
 import { ConfigManager } from './managers/config.manager';
 import { EventManager } from './managers/event.manager';
-import { AppConfig } from './types/config.types';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { isEventValid } from './utils/validations';
-import { EventType } from './types/event.types';
+import { AppConfig, EventType, EmitterCallback, EmitterMap } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { getDeviceType, normalizeUrl } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
-import { debugLog } from './utils/logging';
 
 /**
  * Main application class for TraceLog analytics
@@ -25,6 +22,8 @@ import { debugLog } from './utils/logging';
 export class App extends StateManager {
   private isInitialized = false;
   private suppressNextScrollTimer: number | null = null;
+
+  private readonly emitter = new Emitter();
 
   protected managers: {
     storage?: StorageManager;
@@ -66,7 +65,7 @@ export class App extends StateManager {
       await this.setupIntegrations();
 
       // Initialize event system
-      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics);
+      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
 
       // Start handlers
       this.initializeHandlers();
@@ -107,6 +106,14 @@ export class App extends StateManager {
     });
   }
 
+  on<K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void {
+    this.emitter.on(event, callback);
+  }
+
+  off<K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void {
+    this.emitter.off(event, callback);
+  }
+
   async destroy(): Promise<void> {
     if (!this.isInitialized) {
       return;
@@ -136,6 +143,9 @@ export class App extends StateManager {
 
     // Stop event manager
     this.managers.event?.stop();
+
+    // Clear event listeners
+    this.emitter.removeAllListeners();
 
     // Reset critical state
     this.set('hasStartSession', false);
@@ -177,12 +187,10 @@ export class App extends StateManager {
         this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
         await this.integrations.googleAnalytics.initialize();
       } catch {
-        this.integrations.googleAnalytics = undefined; // Silent failure for v1
+        this.integrations.googleAnalytics = undefined;
       }
     }
   }
-
-  // --- Private Handler Initialization ---
 
   private initializeHandlers(): void {
     // Session tracking

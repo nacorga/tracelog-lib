@@ -80,6 +80,7 @@ export class SessionHandler extends StateManager {
     }
 
     this.destroyed = true;
+    this.set('hasStartSession', false);
     debugLog.debug('SessionHandler', 'Session handler destroyed');
   }
 }

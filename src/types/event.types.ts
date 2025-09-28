@@ -3,11 +3,6 @@ import { SessionEndReason } from './session.types';
 
 export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
 
-export interface VitalSample {
-  type: WebVitalType;
-  value: number;
-}
-
 export enum EventType {
   PAGE_VIEW = 'page_view',
   CLICK = 'click',
@@ -94,6 +89,11 @@ export interface PageViewData {
   pathname?: string;
   search?: string;
   hash?: string;
+}
+
+export interface VitalSample {
+  type: WebVitalType;
+  value: number;
 }
 
 export interface EventData {

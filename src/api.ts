@@ -1,8 +1,6 @@
 import { App } from './app';
-import { MetadataType } from './types/common.types';
-import { AppConfig } from './types/config.types';
-import { debugLog } from './utils/logging';
-import { validateAndNormalizeConfig } from './utils/validations';
+import { MetadataType, AppConfig, EmitterCallback, EmitterMap } from './types';
+import { debugLog, validateAndNormalizeConfig } from './utils';
 import { TestBridge } from './test-bridge';
 import './types/window.types';
 
@@ -92,6 +90,45 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
     debugLog.error('API', 'Failed to send custom event', { eventName: name, error });
     throw error;
   }
+};
+
+/**
+ * Subscribe to events emitted by TraceLog
+ * @param event - Event name to listen to
+ * @param callback - Function to call when event is emitted
+ * @example
+ * // Listen for real-time events
+ * on('realtime', (data) => {
+ *   console.log('Event tracked:', data.type, data.data);
+ * });
+ *
+ * // Listen for sent events
+ * on('sent', (data) => {
+ *   console.log('Events sent:', data.eventCount);
+ * });
+ */
+export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
+  if (!app) {
+    throw new Error('TraceLog not initialized. Please call init() first.');
+  }
+
+  app.on(event, callback);
+};
+
+/**
+ * Unsubscribe from events emitted by TraceLog
+ * @param event - Event name to stop listening to
+ * @param callback - The same function reference that was used in on()
+ * @example
+ * // Remove a specific listener
+ * off('realtime', myCallback);
+ */
+export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
+  if (!app) {
+    throw new Error('TraceLog not initialized. Please call init() first.');
+  }
+
+  app.off(event, callback);
 };
 
 /**

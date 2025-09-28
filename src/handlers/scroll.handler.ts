@@ -1,4 +1,10 @@
-import { SCROLL_DEBOUNCE_TIME_MS, SIGNIFICANT_SCROLL_DELTA } from '../constants';
+import {
+  MAX_SCROLL_EVENTS_PER_SESSION,
+  MIN_SCROLL_DEPTH_CHANGE,
+  SCROLL_DEBOUNCE_TIME_MS,
+  SCROLL_MIN_EVENT_INTERVAL_MS,
+  SIGNIFICANT_SCROLL_DELTA,
+} from '../constants';
 import { EventType, ScrollData, ScrollDirection } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
@@ -7,6 +13,9 @@ import { debugLog } from '../utils/logging';
 interface ScrollContainer {
   element: Window | HTMLElement;
   lastScrollPos: number;
+  lastDepth: number;
+  lastDirection: ScrollDirection;
+  lastEventTime: number;
   debounceTimer: number | null;
   listener: EventListener;
 }
@@ -14,6 +23,10 @@ interface ScrollContainer {
 export class ScrollHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly containers: ScrollContainer[] = [];
+  private limitWarningLogged = false;
+  private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
+  private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
+  private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
 
   constructor(eventManager: EventManager) {
     super();
@@ -22,6 +35,10 @@ export class ScrollHandler extends StateManager {
   }
 
   startTracking(): void {
+    this.limitWarningLogged = false;
+    this.applyConfigOverrides();
+    this.set('scrollEventCount', 0);
+
     const raw = this.get('config').scrollContainerSelectors;
     const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
 
@@ -54,6 +71,8 @@ export class ScrollHandler extends StateManager {
     }
 
     this.containers.length = 0;
+    this.set('scrollEventCount', 0);
+    this.limitWarningLogged = false;
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
@@ -79,19 +98,26 @@ export class ScrollHandler extends StateManager {
         const scrollData = this.calculateScrollData(container);
 
         if (scrollData) {
-          this.eventManager.track({
-            type: EventType.SCROLL,
-            scroll_data: scrollData,
-          });
+          const now = Date.now();
+
+          this.processScrollEvent(container, scrollData, now);
         }
 
         container.debounceTimer = null;
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
 
+    const initialScrollTop = this.getScrollTop(element);
     const container: ScrollContainer = {
       element,
-      lastScrollPos: this.getScrollTop(element),
+      lastScrollPos: initialScrollTop,
+      lastDepth: this.calculateScrollDepth(
+        initialScrollTop,
+        this.getScrollHeight(element),
+        this.getViewportHeight(element),
+      ),
+      lastDirection: ScrollDirection.DOWN,
+      lastEventTime: 0,
       debounceTimer: null,
       listener: handleScroll,
     };
@@ -103,6 +129,74 @@ export class ScrollHandler extends StateManager {
     } else {
       element.addEventListener('scroll', handleScroll, { passive: true });
     }
+  }
+
+  private processScrollEvent(container: ScrollContainer, scrollData: ScrollData, timestamp: number): void {
+    if (!this.shouldEmitScrollEvent(container, scrollData, timestamp)) {
+      return;
+    }
+
+    container.lastEventTime = timestamp;
+    container.lastDepth = scrollData.depth;
+    container.lastDirection = scrollData.direction;
+
+    const currentCount = this.get('scrollEventCount') ?? 0;
+    this.set('scrollEventCount', currentCount + 1);
+
+    this.eventManager.track({
+      type: EventType.SCROLL,
+      scroll_data: scrollData,
+    });
+  }
+
+  private shouldEmitScrollEvent(container: ScrollContainer, scrollData: ScrollData, timestamp: number): boolean {
+    if (this.hasReachedSessionLimit()) {
+      this.logLimitOnce();
+      return false;
+    }
+
+    if (!this.hasElapsedMinimumInterval(container, timestamp)) {
+      return false;
+    }
+
+    if (!this.hasSignificantDepthChange(container, scrollData.depth)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private hasReachedSessionLimit(): boolean {
+    const currentCount = this.get('scrollEventCount') ?? 0;
+    return currentCount >= this.maxEventsPerSession;
+  }
+
+  private hasElapsedMinimumInterval(container: ScrollContainer, timestamp: number): boolean {
+    if (container.lastEventTime === 0) {
+      return true;
+    }
+    return timestamp - container.lastEventTime >= this.minIntervalMs;
+  }
+
+  private hasSignificantDepthChange(container: ScrollContainer, newDepth: number): boolean {
+    return Math.abs(newDepth - container.lastDepth) >= this.minDepthChange;
+  }
+
+  private logLimitOnce(): void {
+    if (this.limitWarningLogged) {
+      return;
+    }
+
+    this.limitWarningLogged = true;
+    debugLog.warn('ScrollHandler', 'Max scroll events per session reached', {
+      limit: this.maxEventsPerSession,
+    });
+  }
+
+  private applyConfigOverrides(): void {
+    this.minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
+    this.minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
+    this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
 
   private isWindowScrollable(): boolean {

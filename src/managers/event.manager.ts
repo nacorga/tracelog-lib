@@ -1,12 +1,10 @@
 import {
   EVENT_SENT_INTERVAL_MS,
-  EVENT_SENT_INTERVAL_TEST_MS,
   MAX_EVENTS_QUEUE_LENGTH,
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants/config.constants';
-import { BaseEventsQueueDto, EventData, EventType } from '../types';
-import { getUTMParameters, isUrlPathExcluded } from '../utils';
-import { debugLog } from '../utils/logging';
+import { BaseEventsQueueDto, EmitterEvent, EventData, EventType } from '../types';
+import { getUTMParameters, isUrlPathExcluded, debugLog, Emitter } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -25,17 +23,23 @@ import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.int
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
   private readonly dataSender: SenderManager;
+  private readonly emitter: Emitter | null;
 
   private eventsQueue: EventData[] = [];
   private lastEventFingerprint: string | null = null;
   private lastEventTime = 0;
   private sendIntervalId: number | null = null;
 
-  constructor(storeManager: StorageManager, googleAnalytics: GoogleAnalyticsIntegration | null = null) {
+  constructor(
+    storeManager: StorageManager,
+    googleAnalytics: GoogleAnalyticsIntegration | null = null,
+    emitter: Emitter | null = null,
+  ) {
     super();
 
     this.googleAnalytics = googleAnalytics;
     this.dataSender = new SenderManager(storeManager);
+    this.emitter = emitter;
 
     debugLog.debug('EventManager', 'EventManager initialized', {
       hasGoogleAnalytics: !!googleAnalytics,
@@ -48,7 +52,7 @@ export class EventManager extends StateManager {
    */
   async recoverPersistedEvents(): Promise<void> {
     await this.dataSender.recoverPersistedEvents({
-      onSuccess: (eventCount, recoveredEvents) => {
+      onSuccess: (_eventCount, recoveredEvents) => {
         if (recoveredEvents && recoveredEvents.length > 0) {
           const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
           this.removeProcessedEvents(eventIds);
@@ -58,10 +62,6 @@ export class EventManager extends StateManager {
             remainingQueueLength: this.eventsQueue.length,
           });
         }
-
-        debugLog.info('EventManager', 'Events recovered successfully', {
-          eventCount: eventCount ?? 0,
-        });
       },
       onFailure: async () => {
         debugLog.warn('EventManager', 'Failed to recover persisted events');
@@ -117,6 +117,19 @@ export class EventManager extends StateManager {
     }
 
     if (isSessionStart) {
+      const currentSessionId = this.get('sessionId');
+      if (!currentSessionId) {
+        debugLog.warn('EventManager', 'Session start event ignored: missing sessionId');
+        return;
+      }
+
+      if (this.get('hasStartSession')) {
+        debugLog.warn('EventManager', 'Duplicate session_start detected', {
+          sessionId: currentSessionId,
+        });
+        return;
+      }
+
       this.set('hasStartSession', true);
     }
 
@@ -194,9 +207,6 @@ export class EventManager extends StateManager {
       if (success) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
-        debugLog.info('EventManager', 'Sync flush successful', {
-          eventCount: eventsToSend.length,
-        });
       }
 
       return success;
@@ -205,9 +215,7 @@ export class EventManager extends StateManager {
         onSuccess: () => {
           this.removeProcessedEvents(eventIds);
           this.clearSendInterval();
-          debugLog.info('EventManager', 'Async flush successful', {
-            eventCount: eventsToSend.length,
-          });
+          this.emitEventsQueue(body);
         },
         onFailure: () => {
           debugLog.warn('EventManager', 'Async flush failed', {
@@ -233,10 +241,7 @@ export class EventManager extends StateManager {
     await this.dataSender.sendEventsQueue(body, {
       onSuccess: () => {
         this.removeProcessedEvents(eventIds);
-        debugLog.info('EventManager', 'Events sent successfully', {
-          eventCount: eventsToSend.length,
-          remainingQueueLength: this.eventsQueue.length,
-        });
+        this.emitEventsQueue(body);
       },
       onFailure: async () => {
         debugLog.warn('EventManager', 'Events send failed, keeping in queue', {
@@ -368,9 +373,13 @@ export class EventManager extends StateManager {
   private addToQueue(event: EventData): void {
     this.eventsQueue.push(event);
 
+    // Emit event AFTER adding to queue
+    this.emitEvent(event);
+
     // Prevent queue overflow
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
       const removedEvent = this.eventsQueue.shift();
+
       debugLog.warn('EventManager', 'Event queue overflow, oldest event removed', {
         maxLength: MAX_EVENTS_QUEUE_LENGTH,
         currentLength: this.eventsQueue.length,
@@ -378,9 +387,6 @@ export class EventManager extends StateManager {
       });
     }
 
-    debugLog.info('EventManager', `📥 Event captured: ${event.type}`, event);
-
-    // Start sending interval if not already active
     if (!this.sendIntervalId) {
       this.startSendInterval();
     }
@@ -390,14 +396,11 @@ export class EventManager extends StateManager {
   }
 
   private startSendInterval(): void {
-    const isTestEnv = this.get('config')?.id === 'test' || this.get('config')?.mode === 'debug';
-    const interval = isTestEnv ? EVENT_SENT_INTERVAL_TEST_MS : EVENT_SENT_INTERVAL_MS;
-
     this.sendIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
         this.sendEventsQueue();
       }
-    }, interval);
+    }, EVENT_SENT_INTERVAL_MS);
   }
 
   private handleGoogleAnalyticsIntegration(event: EventData): void {
@@ -421,5 +424,23 @@ export class EventManager extends StateManager {
       const eventId = `${event.timestamp}_${event.type}`;
       return !eventIdSet.has(eventId);
     });
+  }
+
+  /**
+   * Emit event for external listeners
+   */
+  private emitEvent(eventData: EventData): void {
+    if (this.emitter) {
+      this.emitter.emit(EmitterEvent.EVENT, eventData);
+    }
+  }
+
+  /**
+   * Emit events queue for external listeners
+   */
+  private emitEventsQueue(queue: BaseEventsQueueDto): void {
+    if (this.emitter) {
+      this.emitter.emit(EmitterEvent.QUEUE, queue);
+    }
   }
 }

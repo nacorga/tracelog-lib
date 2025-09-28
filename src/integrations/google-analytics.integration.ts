@@ -1,4 +1,5 @@
 import { MetadataType } from '../types';
+import { debugLog } from '../utils';
 import { StateManager } from '../managers/state.manager';
 
 declare global {
@@ -33,8 +34,9 @@ export class GoogleAnalyticsIntegration extends StateManager {
       this.configureGtag(measurementId, userId);
       this.isInitialized = true;
     } catch (error) {
-      // Silent fail for v1 - integration is optional
-      console.error('[TraceLog:GoogleAnalytics] Initialization failed:', error);
+      debugLog.error('GoogleAnalyticsIntegration', 'Initialization failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -46,8 +48,9 @@ export class GoogleAnalyticsIntegration extends StateManager {
     try {
       window.gtag('event', eventName, metadata);
     } catch (error) {
-      // Silent fail - don't break main tracking
-      console.error('[TraceLog:GoogleAnalytics] Event tracking failed:', error);
+      debugLog.error('GoogleAnalyticsIntegration', 'Event tracking failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 

@@ -24,6 +24,10 @@ export interface TraceLogTestBridge {
   isInitializing(): boolean;
   sendCustomEvent(name: string, data?: Record<string, unknown>): void;
 
+  // Event subscription methods
+  on(event: string, callback: (data: any) => void): void;
+  off(event: string, callback: (data: any) => void): void;
+
   // Session management
   getSessionData(): Record<string, unknown> | null;
   setSessionTimeout(timeout: number): void;

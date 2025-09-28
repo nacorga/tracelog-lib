@@ -24,15 +24,15 @@ const TEST_MODE = {
   scenario: urlParams.get('scenario') || 'basic',
   autoInit: urlParams.get('auto-init') === 'true' || isE2ETest,
   hideUI: urlParams.get('hide-ui') === 'true',
-  projectId: urlParams.get('project-id') || (isE2ETest ? 'e2e-test-project' : 'playground-test-project')
+  projectId: urlParams.get('project-id') || (isE2ETest ? 'e2e-test-project' : 'skip')
 };
 
 const state = {
   currentPage: 'inicio',
   cartCount: 0,
-  queueCount: 0,
-  events: [],
   testMode: TEST_MODE,
+  queueCount: 0,
+  lastSentTime: null,
 };
 
 // ============================================================================
@@ -177,15 +177,41 @@ function setupFloatingMonitor() {
   });
 }
 
-function updateQueueCount(count) {
-  document.getElementById('queue-count').textContent = count;
-}
-
 function updateQueueStatus(icon) {
   document.getElementById('queue-status').textContent = icon;
 }
 
-function addEventToMonitor(eventType, status = '⏳') {
+function updateQueueCount(count) {
+  state.queueCount = count;
+  document.getElementById('queue-count').textContent = count;
+}
+
+function updateLastSent() {
+  state.lastSentTime = Date.now();
+  updateLastSentDisplay();
+}
+
+function updateLastSentDisplay() {
+  const lastSentEl = document.getElementById('last-sent');
+  if (!state.lastSentTime) {
+    lastSentEl.textContent = '-';
+    return;
+  }
+
+  const secondsAgo = Math.floor((Date.now() - state.lastSentTime) / 1000);
+
+  if (secondsAgo < 60) {
+    lastSentEl.textContent = `hace ${secondsAgo}s`;
+  } else {
+    const minutesAgo = Math.floor(secondsAgo / 60);
+    lastSentEl.textContent = `hace ${minutesAgo}m`;
+  }
+}
+
+// Update the "last sent" display every second
+setInterval(updateLastSentDisplay, 1000);
+
+function addEventToMonitor(eventType, status = '⏳', eventData = null) {
   // Skip monitor updates during E2E tests
   if (isE2ETest) return null;
 
@@ -196,33 +222,66 @@ function addEventToMonitor(eventType, status = '⏳') {
   eventEl.className = 'monitor-event';
   eventEl.dataset.eventId = Date.now();
 
+  // Extract additional info from event data
+  let extraInfo = '';
+  if (eventData) {
+    if (eventData.custom_event) {
+      extraInfo = `<span class="event-detail">${eventData.custom_event.name}</span>`;
+    } else if (eventData.click_data) {
+      extraInfo = `<span class="event-detail">x:${eventData.click_data.x}, y:${eventData.click_data.y}</span>`;
+    } else if (eventData.scroll_data) {
+      extraInfo = `<span class="event-detail">${eventData.scroll_data.depth}%</span>`;
+    } else if (eventData.page_url) {
+      const url = new URL(eventData.page_url);
+      extraInfo = `<span class="event-detail">${url.pathname}</span>`;
+    }
+  }
+
+  const timestamp = new Date().toLocaleTimeString();
+
   eventEl.innerHTML = `
-    <span class="event-type-badge event-type-${eventType}">${eventType}</span>
-    <span class="event-status-icon">${status}</span>
+    <div class="event-main">
+      <span class="event-type-badge event-type-${eventType}">${eventType}</span>
+      <span class="event-status-icon">${status}</span>
+    </div>
+    <div class="event-details">
+      <span class="event-timestamp">${timestamp}</span>
+      ${extraInfo}
+    </div>
   `;
 
   eventsList.insertBefore(eventEl, eventsList.firstChild);
 
-  state.events.unshift({ type: eventType, timestamp: Date.now(), id: eventEl.dataset.eventId });
-  state.queueCount++;
-  updateQueueCount(state.queueCount);
-
-  while (eventsList.children.length > 50) {
+  // Mantener un máximo de 100 eventos para evitar problemas de rendimiento
+  while (eventsList.children.length > 100) {
     eventsList.removeChild(eventsList.lastChild);
-    state.events.pop();
   }
 
   return eventEl.dataset.eventId;
 }
 
-function removeEventsFromMonitor(count) {
+// Función eliminada - ya no removemos eventos automáticamente
+
+function updateEventsAsSent(count) {
+  // Skip monitor updates during E2E tests
+  if (isE2ETest) return;
+
   const eventsList = document.getElementById('events-list');
   if (!eventsList) return;
 
-  for (let i = 0; i < count && eventsList.children.length > 0; i++) {
-    eventsList.removeChild(eventsList.firstChild);
-    state.events.shift();
+  // Update the first 'count' events to show they were sent
+  const eventElements = eventsList.querySelectorAll('.monitor-event');
+  for (let i = 0; i < Math.min(count, eventElements.length); i++) {
+    const eventEl = eventElements[i];
+    const statusIcon = eventEl.querySelector('.event-status-icon');
+    if (statusIcon) {
+      statusIcon.textContent = '✅';
+    }
+    // Keep events visible but slightly faded to show they were sent
+    eventEl.style.opacity = '0.8';
   }
+
+  // NO eliminar eventos automáticamente - mantener el historial
 }
 
 function clearEventsMonitor() {
@@ -230,9 +289,9 @@ function clearEventsMonitor() {
   if (eventsList) {
     eventsList.innerHTML = '';
   }
-  state.events = [];
-  state.queueCount = 0;
+  // Reset queue info when clearing
   updateQueueCount(0);
+  updateQueueStatus('⏸');
 }
 
 // ============================================================================
@@ -240,91 +299,25 @@ function clearEventsMonitor() {
 // ============================================================================
 
 function setupTraceLogListener() {
-  window.addEventListener('tracelog:log', (event) => {
-    const { namespace, message, data } = event.detail || {};
+  // Listen for real-time events directly from EventManager.track()
+  TraceLog.on('realtime', (data) => {
+    const { type, data: eventData, queueLength } = data;
 
-    // Debug: log todos los eventos de EventManager
-    if (namespace === 'EventManager') {
-      console.log('[EventManager]', message, data);
-    }
+    console.log('📥 TraceLog Event:', type, eventData);
+    addEventToMonitor(type, '⏳', eventData);
+    updateQueueCount(queueLength || 0);
+    updateQueueStatus('⏳');
+  });
 
-    if (namespace === 'EventManager' && message?.includes('Event captured')) {
-      const eventType = data?.type || 'UNKNOWN';
-      console.log('📥 Capturando evento:', eventType, data);
-      addEventToMonitor(eventType);
-    }
+  // Listen for events sent successfully
+  TraceLog.on('sent', (data) => {
+    const { eventCount, queueLength } = data;
 
-    if (namespace === 'EventManager' && message?.includes('Events sent successfully')) {
-      const eventsCount = data?.eventCount || 1;
-      removeEventsFromMonitor(eventsCount);
-      state.queueCount = Math.max(0, state.queueCount - eventsCount);
-      updateQueueCount(state.queueCount);
-      updateQueueStatus('✓');
-    }
-
-    // Debug: log todos los eventos de SessionManager y SenderManager
-    if (namespace === 'SessionManager' || namespace === 'SenderManager') {
-      console.log(`[${namespace}]`, message, data);
-    }
-
-    if (namespace === 'SessionManager' && message?.includes('Network connection restored')) {
-      console.log('🔌 Red restaurada, recuperando eventos...');
-      updateQueueStatus('🔄');
-    }
-
-    if (namespace === 'SenderManager' && message?.includes('Persisted events recovered')) {
-      const eventsCount = data?.eventsCount || 0;
-      const recoveredEvents = data?.events || [];
-
-      console.log('📦 Eventos recuperados:', { eventsCount, recoveredEvents });
-
-      clearEventsMonitor();
-      state.queueCount = 0;
-
-      // Mostrar los eventos recuperados con sus tipos reales
-      recoveredEvents.forEach((event, i) => {
-        const eventType = event.type || 'UNKNOWN';
-        const eventEl = document.createElement('div');
-
-        eventEl.className = 'monitor-event';
-        eventEl.dataset.eventId = Date.now() + i;
-        eventEl.innerHTML = `
-          <span class="event-type-badge event-type-${eventType}">${eventType}</span>
-          <span class="event-status-icon">🔄</span>
-        `;
-
-        const eventsList = document.getElementById('events-list');
-
-        if (eventsList) {
-          eventsList.insertBefore(eventEl, eventsList.firstChild);
-        }
-
-        state.events.unshift({ type: eventType, timestamp: Date.now(), id: eventEl.dataset.eventId });
-        state.queueCount++;
-      });
-
-      updateQueueCount(state.queueCount);
-      updateQueueStatus('🔄');
-    }
-
-    if (namespace === 'EventManager' && message?.includes('Persisted events recovered successfully')) {
-      const eventCount = data?.eventCount || 0;
-      console.log('✅ Eventos recuperados exitosamente:', eventCount);
-
-      // Remove recovered events from visual list
-      removeEventsFromMonitor(eventCount);
-      state.queueCount = Math.max(0, state.queueCount - eventCount);
-      updateQueueCount(state.queueCount);
-      updateQueueStatus('✓');
-    }
-
-    if (namespace === 'SenderManager' && (message?.includes('Send request failed') || message?.includes('Failed to send'))) {
-      updateQueueStatus('❌');
-    }
-
-    if (namespace === 'SenderManager' && message?.includes('Retry scheduled')) {
-      updateQueueStatus('🔄');
-    }
+    console.log('✅ TraceLog Events Sent:', eventCount);
+    updateEventsAsSent(eventCount);
+    updateQueueCount(queueLength || 0);
+    updateQueueStatus('✓');
+    updateLastSent();
   });
 }
 
@@ -420,7 +413,7 @@ async function initializeApp() {
     await waitForTraceLogReady();
     const projectId = (state.testMode.enabled && state.testMode.autoInit)
       ? state.testMode.projectId
-      : 'skip';
+      : 'skip'; // Always use 'skip' for playground to simulate realistic flow
 
     await TraceLog.init({ id: projectId });
     updateQueueStatus('▶️');
