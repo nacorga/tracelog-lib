@@ -10,5 +10,5 @@ export * from './queue.types';
 export * from './session.types';
 export * from './state.types';
 export * from './tag.types';
+export * from './test-bridge.types';
 export * from './validation-error.types';
-export * from './window.types';

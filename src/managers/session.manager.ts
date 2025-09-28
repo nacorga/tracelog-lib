@@ -1,10 +1,15 @@
-import { DEFAULT_SESSION_TIMEOUT } from '../constants';
+import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
 import { EventType } from '../types';
 import { SessionEndReason } from '../types/session.types';
 import { debugLog } from '../utils/logging';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { EventManager } from './event.manager';
+
+interface StoredSessionData {
+  id: string;
+  lastActivity: number;
+}
 
 export class SessionManager extends StateManager {
   private readonly storageManager: StorageManager;
@@ -31,15 +36,29 @@ export class SessionManager extends StateManager {
       return;
     }
 
-    this.broadcastChannel = new BroadcastChannel('tracelog_session');
+    const projectId = this.getProjectId();
+    this.broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME(projectId));
 
     this.broadcastChannel.onmessage = (event): void => {
-      const { sessionId, timestamp } = event.data;
+      const { action, sessionId, timestamp, projectId: messageProjectId } = event.data ?? {};
 
-      if (sessionId && timestamp && timestamp > Date.now() - 5000) {
+      if (messageProjectId !== projectId) {
+        return;
+      }
+
+      if (action === 'session_end') {
+        debugLog.debug('SessionManager', 'Session end synced from another tab');
+        this.resetSessionState();
+        return;
+      }
+
+      if (sessionId && typeof timestamp === 'number' && timestamp > Date.now() - 5000) {
         this.set('sessionId', sessionId);
-        this.storageManager.setItem('sessionId', sessionId);
-        this.storageManager.setItem('lastActivity', timestamp.toString());
+        this.set('hasStartSession', true);
+        this.persistSession(sessionId, timestamp);
+        if (this.isTracking) {
+          this.setupSessionTimeout();
+        }
 
         debugLog.debug('SessionManager', 'Session synced from another tab', { sessionId });
       }
@@ -51,7 +70,23 @@ export class SessionManager extends StateManager {
    */
   private shareSession(sessionId: string): void {
     this.broadcastChannel?.postMessage({
+      action: 'session_start',
+      projectId: this.getProjectId(),
       sessionId,
+      timestamp: Date.now(),
+    });
+  }
+
+  private broadcastSessionEnd(sessionId: string | null, reason: SessionEndReason): void {
+    if (!sessionId) {
+      return;
+    }
+
+    this.broadcastChannel?.postMessage({
+      action: 'session_end',
+      projectId: this.getProjectId(),
+      sessionId,
+      reason,
       timestamp: Date.now(),
     });
   }
@@ -70,31 +105,70 @@ export class SessionManager extends StateManager {
    * Recover session from localStorage if it exists and hasn't expired
    */
   private recoverSession(): string | null {
-    const storedSessionId = this.storageManager.getItem('sessionId');
-    const lastActivity = this.storageManager.getItem('lastActivity');
+    const storedSession = this.loadStoredSession();
 
-    if (!storedSessionId || !lastActivity) {
+    if (!storedSession) {
       return null;
     }
 
-    const lastActivityTime = parseInt(lastActivity, 10);
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
 
-    if (Date.now() - lastActivityTime > sessionTimeout) {
+    if (Date.now() - storedSession.lastActivity > sessionTimeout) {
       debugLog.debug('SessionManager', 'Stored session expired');
+      this.clearStoredSession();
       return null;
     }
 
-    debugLog.info('SessionManager', 'Session recovered from storage', { sessionId: storedSessionId });
-    return storedSessionId;
+    debugLog.info('SessionManager', 'Session recovered from storage', { sessionId: storedSession.id });
+    return storedSession.id;
   }
 
   /**
    * Persist session data to localStorage
    */
-  private persistSession(sessionId: string): void {
-    this.storageManager.setItem('sessionId', sessionId);
-    this.storageManager.setItem('lastActivity', Date.now().toString());
+  private persistSession(sessionId: string, lastActivity: number = Date.now()): void {
+    this.saveStoredSession({
+      id: sessionId,
+      lastActivity,
+    });
+  }
+
+  private clearStoredSession(): void {
+    const storageKey = this.getSessionStorageKey();
+    this.storageManager.removeItem(storageKey);
+  }
+
+  private loadStoredSession(): StoredSessionData | null {
+    const storageKey = this.getSessionStorageKey();
+    const storedData = this.storageManager.getItem(storageKey);
+
+    if (!storedData) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(storedData) as StoredSessionData;
+      if (!parsed.id || typeof parsed.lastActivity !== 'number') {
+        return null;
+      }
+      return parsed;
+    } catch {
+      this.storageManager.removeItem(storageKey);
+      return null;
+    }
+  }
+
+  private saveStoredSession(session: StoredSessionData): void {
+    const storageKey = this.getSessionStorageKey();
+    this.storageManager.setItem(storageKey, JSON.stringify(session));
+  }
+
+  private getSessionStorageKey(): string {
+    return SESSION_STORAGE_KEY(this.getProjectId());
+  }
+
+  private getProjectId(): string {
+    return this.get('config')?.id ?? '';
   }
 
   /**
@@ -136,8 +210,6 @@ export class SessionManager extends StateManager {
       this.cleanupActivityListeners();
       this.cleanupLifecycleListeners();
       this.cleanupCrossTabSync();
-      this.storageManager.removeItem('sessionId');
-      this.storageManager.removeItem('lastActivity');
       this.set('sessionId', null);
 
       throw error;
@@ -258,35 +330,46 @@ export class SessionManager extends StateManager {
 
     if (!sessionId) {
       debugLog.warn('SessionManager', 'endSession called without active session', { reason });
-      this.clearSessionTimeout();
-      this.cleanupActivityListeners();
-      this.cleanupCrossTabSync();
-      this.cleanupLifecycleListeners();
-      this.storageManager.removeItem('sessionId');
-      this.storageManager.removeItem('lastActivity');
-      this.set('hasStartSession', false);
-      this.isTracking = false;
-      this.set('sessionId', null);
+      this.resetSessionState();
       return;
     }
 
     debugLog.info('SessionManager', 'Ending session', { sessionId, reason });
 
-    // Track session end event
     this.eventManager.track({
       type: EventType.SESSION_END,
       session_end_reason: reason,
     });
 
-    // Clean up resources
+    const finalize = (): void => {
+      this.broadcastSessionEnd(sessionId, reason);
+      this.resetSessionState();
+    };
+
+    const flushResult = this.eventManager.flushImmediatelySync();
+
+    if (flushResult) {
+      finalize();
+      return;
+    }
+
+    this.eventManager
+      .flushImmediately()
+      .then(finalize)
+      .catch((error) => {
+        debugLog.warn('SessionManager', 'Async flush failed during session end', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        finalize();
+      });
+  }
+
+  private resetSessionState(): void {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
-    this.cleanupCrossTabSync();
     this.cleanupLifecycleListeners();
-
-    // Clear storage and state
-    this.storageManager.removeItem('sessionId');
-    this.storageManager.removeItem('lastActivity');
+    this.cleanupCrossTabSync();
+    this.clearStoredSession();
     this.set('sessionId', null);
     this.set('hasStartSession', false);
     this.isTracking = false;

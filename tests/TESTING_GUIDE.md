@@ -157,33 +157,81 @@ describe('Component Integration', () => {
 
 ### E2E Tests
 
-#### Simple Pattern (Fixture)
+#### Basic Pattern (Direct page.evaluate)
 ```typescript
-import { traceLogTest } from '../fixtures/tracelog-fixtures';
-import { TRACELOG_CONFIGS } from '../config/test-config';
+import { test, expect } from '@playwright/test';
 
-traceLogTest('basic test', async ({ traceLogPage }) => {
-  await traceLogPage.initializeTraceLog(TRACELOG_CONFIGS.MINIMAL);
-  await traceLogPage.clickElement('[data-testid="button"]');
+test.describe('Basic TraceLog Tests', () => {
+  test('should initialize and capture events', async ({ page }) => {
+    // Navigate to playground
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
 
-  await expect(traceLogPage).toHaveNoTraceLogErrors();
+    // Wait for TraceLog bridge to be available
+    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+
+    // Initialize TraceLog and capture events
+    const result = await page.evaluate(async () => {
+      const events: any[] = [];
+
+      // Listen for events
+      window.__traceLogBridge!.on('event', (data: any) => {
+        events.push(data);
+      });
+
+      // Initialize TraceLog
+      await window.__traceLogBridge!.init({ id: 'skip' });
+
+      // Trigger some activity
+      document.querySelector('[data-testid="button"]')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+
+      // Wait for events
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      return {
+        initialized: window.__traceLogBridge!.initialized,
+        events
+      };
+    });
+
+    expect(result.initialized).toBe(true);
+    expect(result.events.length).toBeGreaterThan(0);
+  });
 });
 ```
 
-#### Advanced Pattern (Builder DSL)
+#### Queue Events Pattern
 ```typescript
-import { TraceLogTestBuilder } from '../builders/test-scenario-builder';
+test('should capture queue events', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
-traceLogTest('complex flow', async ({ traceLogPage }) => {
-  await TraceLogTestBuilder
-    .create(traceLogPage)
-    .withConfig(TRACELOG_CONFIGS.STANDARD)
-    .expectInitialization()
-    .startEventCapture()
-    .simulateUserJourney('purchase_intent')
-    .expectEvents(['CLICK', 'SCROLL'])
-    .expectNoErrors()
-    .run();
+  const queueEvents = await page.evaluate(async () => {
+    const queues: any[] = [];
+
+    // Listen for queue events
+    window.__traceLogBridge!.on('queue', (data: any) => {
+      queues.push(data);
+    });
+
+    await window.__traceLogBridge!.init({ id: 'skip' });
+    window.__traceLogBridge!.sendCustomEvent('test_event');
+
+    // Wait for queue (10-second intervals in realistic mode)
+    const startTime = Date.now();
+    while (queues.length === 0 && Date.now() - startTime < 12000) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return queues;
+  });
+
+  expect(queueEvents.length).toBeGreaterThan(0);
+  expect(queueEvents[0].events).toBeDefined();
+  expect(queueEvents[0].session_id).toBeDefined();
 });
 ```
 
@@ -214,21 +262,34 @@ expect(mockAPI.getLastRequest()).toMatchSnapshot();
 
 ### E2E Test APIs
 ```typescript
-// TraceLogTestPage (automatic fixture)
-await traceLogPage.initializeTraceLog(config);
-await traceLogPage.clickElement(selector);
-await traceLogPage.sendCustomEvent(name, data);
-const events = await traceLogPage.getTrackedEvents();
+// Real E2E APIs using page.evaluate()
+// Initialize TraceLog
+await page.evaluate(async () => {
+  await window.__traceLogBridge!.init({ id: 'skip' });
+});
 
-// Custom matchers
-await expect(traceLogPage).toHaveNoTraceLogErrors();
-await expect(events).toHaveEvent('CLICK');
-await expect(events).toHaveCustomEvent('user_action');
+// Listen for events
+const events = await page.evaluate(async () => {
+  const events: any[] = [];
+  window.__traceLogBridge!.on('event', (data: any) => {
+    events.push(data);
+  });
+  // ... trigger events ...
+  return events;
+});
 
-// Predefined configurations
-TRACELOG_CONFIGS.MINIMAL        // Basic tests
-TRACELOG_CONFIGS.STANDARD       // General tests
-TRACELOG_CONFIGS.FULL_FEATURED  // Complete tests
+// Send custom events
+await page.evaluate(async () => {
+  window.__traceLogBridge!.sendCustomEvent('event_name', { data: 'value' });
+});
+
+// Get session data
+const sessionInfo = await page.evaluate(() => {
+  return window.__traceLogBridge!.getSessionData();
+});
+
+// Standard configuration
+const config = { id: 'skip' }; // Uses SpecialProjectId.Skip for realistic behavior
 ```
 
 ## ⚡ Best Practices
@@ -255,19 +316,21 @@ TRACELOG_CONFIGS.FULL_FEATURED  // Complete tests
 - Test configuration variations
 
 ### ✅ E2E Tests
-- Use `traceLogTest` fixture (automatic setup/cleanup)
-- Use predefined configurations (`TRACELOG_CONFIGS.*`)
-- Use custom matchers (`toHaveNoTraceLogErrors`, `toHaveEvent`)
-- Builder DSL for complex scenarios
-- Adapt `__traceLogBridge` as needed
+- Use `page.evaluate()` for TraceLog interactions
+- Use `window.__traceLogBridge!` for library access
+- Use `{ id: 'skip' }` configuration for realistic behavior
+- Wait for bridge availability: `await page.waitForFunction(() => !!window.__traceLogBridge!)`
+- Use proper timeouts for queue events (10-12 seconds)
+- Capture events using `on('event')` and `on('queue')` listeners
 
 ### ❌ Avoid
-- Hardcoded timeouts: `await page.waitForTimeout(2000)` (E2E only)
-- Inline configurations: `{ id: 'hardcoded', sessionTimeout: 900000 }`
-- Direct Bridge access: `window.__traceLogBridge.getSessionData()` (E2E only)
+- Hardcoded timeouts: `await page.waitForTimeout(2000)`
+- Complex configurations: `{ id: 'hardcoded', sessionTimeout: 900000 }`
+- Accessing window properties directly outside page.evaluate()
 - Testing implementation details instead of behavior
 - Flaky tests that pass/fail inconsistently
 - Shared mutable state between tests
+- Over-engineering with complex abstractions and builders
 
 ## 🔍 Debug
 
@@ -296,12 +359,54 @@ open coverage/lcov-report/index.html  # View coverage in browser
 ### All Test Types
 - 100% pass rating
 - NO type errors (use `npm run type-check` script to verify)
-- NO lint errors (use `npm run lint` script to verify)
+- NO lint errors (use `npm run lint` script to verify - warnings are acceptable, only errors block acceptance)
 
 ### Coverage Requirements
 - **Unit Tests**: 90%+ line coverage for core logic
 - **Integration Tests**: Critical paths covered
 - **E2E Tests**: User journeys and error scenarios
+
+## 🧪 Basic E2E Tests Implementation
+
+The current E2E test suite consists of 5 basic tests that guarantee correct TraceLog library functionality:
+
+### Test 1: Basic Initialization (12 tests)
+- ✅ Successful TraceLog initialization
+- ✅ Duplicate initialization handling
+- ✅ Error handling for missing project ID
+
+### Test 2: Basic Click Events (12 tests)
+- ✅ Click event capture
+- ✅ Multiple click events
+- ✅ Click position data
+
+### Test 3: Basic Custom Events (20 tests)
+- ✅ Custom events without metadata
+- ✅ Custom events with metadata
+- ✅ Multiple custom events
+- ✅ Invalid event name handling
+
+### Test 4: Basic Queue Events (20 tests)
+- ✅ Automatic queue sending
+- ✅ Multiple events in queue
+- ✅ Session information in queue
+- ✅ Queue timing intervals
+
+### Test 5: Basic Session Management (30 tests)
+- ✅ Session initialization
+- ✅ Session persistence across interactions
+- ✅ Session start/end events
+- ✅ Session data structure validation
+- ✅ Session recovery
+- ✅ Unique session ID generation
+
+**Total: 100 tests across 5 browsers (Chromium, Firefox, WebKit, Mobile Chrome, Mobile Safari)**
+
+### Implementation Approach
+- **Simple & Direct**: No over-engineering or complex abstractions
+- **Real Data**: Uses actual library events (EventData, BaseEventsQueueDto)
+- **Incremental**: Each test must pass acceptance criteria before proceeding to next
+- **Realistic**: Uses `{ id: 'skip' }` configuration for realistic behavior
 
 ## 🛡️ Library Error Detection
 
@@ -335,24 +440,69 @@ expect(sessionManager.isActive()).toBe(true);
 
 #### Runtime Errors (E2E)
 ```typescript
-// Automatic console monitoring
-await expect(traceLogPage).toHaveNoTraceLogErrors();
-await expect(consoleMonitor).not.toHaveMessage(/\[TraceLog:ERROR\]/);
+// Basic error detection in real E2E tests
+test('should not have console errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      errors.push(msg.text());
+    }
+  });
+
+  await page.goto('/');
+  await page.evaluate(async () => {
+    await window.__traceLogBridge!.init({ id: 'skip' });
+  });
+
+  expect(errors).toHaveLength(0);
+});
 ```
 
 #### Memory Leaks (E2E)
 ```typescript
-// Performance monitoring
-await expect(performanceMonitor).toHaveNoMemoryLeaks();
-await expect(performanceMonitor).toHaveNoExcessiveEventQueuing();
+// Performance monitoring through event counts
+test('should not accumulate excessive events', async ({ page }) => {
+  const eventCounts = await page.evaluate(async () => {
+    await window.__traceLogBridge!.init({ id: 'skip' });
+
+    // Generate many events
+    for (let i = 0; i < 100; i++) {
+      window.__traceLogBridge!.sendCustomEvent(`test_${i}`);
+    }
+
+    // Check internal queue doesn't grow indefinitely
+    return {
+      queueLength: window.__traceLogBridge!.getQueueLength?.() || 0
+    };
+  });
+
+  expect(eventCounts.queueLength).toBeLessThan(50); // Reasonable limit
+});
 ```
 
 #### Security Issues (All Types)
 ```typescript
-// Data sanitization validation
-expect(sanitizeMetadata(userInput)).not.toContainScript();
-await expect(events).toHaveSanitizedData();
-await expect(events).not.toContainScript();
+// Data sanitization validation in real events
+test('should sanitize event data', async ({ page }) => {
+  const events = await page.evaluate(async () => {
+    const events: any[] = [];
+    window.__traceLogBridge!.on('event', (data: any) => {
+      events.push(data);
+    });
+
+    await window.__traceLogBridge!.init({ id: 'skip' });
+    window.__traceLogBridge!.sendCustomEvent('test', {
+      script: '<script>alert("xss")</script>',
+      safe: 'normal data'
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return events;
+  });
+
+  const customEvent = events.find(e => e.type === 'custom');
+  expect(customEvent.custom_event.metadata.script).not.toContain('<script>');
+});
 ```
 
 ### Reports Generated

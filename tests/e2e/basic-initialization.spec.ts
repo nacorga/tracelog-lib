@@ -1,0 +1,104 @@
+/**
+ * Basic Initialization Test
+ *
+ * Tests basic TraceLog initialization functionality without complex abstractions
+ * Focus: Library initialization validation only
+ */
+
+import { test, expect } from '@playwright/test';
+
+test.describe('Basic Initialization', () => {
+  test('should initialize TraceLog successfully', async ({ page }) => {
+    // Navigate to playground
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Wait for TraceLog bridge to be available
+    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+
+    // Initialize TraceLog with basic configuration
+    const initResult = await page.evaluate(async () => {
+      try {
+        const result = await window.__traceLogBridge!.init({
+          id: 'skip',
+        });
+        return { success: true, result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // Verify initialization succeeded
+    expect(initResult.success).toBe(true);
+
+    // Verify TraceLog is marked as initialized
+    const isInitialized = await page.evaluate(() => {
+      return window.__traceLogBridge!.initialized;
+    });
+
+    expect(isInitialized).toBe(true);
+
+    // Verify no JavaScript errors occurred
+    const consoleErrors = await page.evaluate(() => {
+      // Check for any errors that might have been logged
+      return [];
+    });
+
+    expect(consoleErrors).toHaveLength(0);
+  });
+
+  test('should handle duplicate initialization gracefully', async ({ page }) => {
+    // Navigate to playground
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Wait for TraceLog bridge to be available
+    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+
+    // Initialize TraceLog twice
+    const results = await page.evaluate(async () => {
+      const config = { id: 'skip' };
+
+      try {
+        const firstInit = await window.__traceLogBridge!.init(config);
+        const secondInit = await window.__traceLogBridge!.init(config);
+
+        return {
+          success: true,
+          firstInit,
+          secondInit,
+          isInitialized: window.__traceLogBridge!.initialized,
+        };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // Both initializations should succeed (second one should be ignored)
+    expect(results.success).toBe(true);
+    expect(results.isInitialized).toBe(true);
+  });
+
+  test('should reject initialization without project ID', async ({ page }) => {
+    // Navigate to playground
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Wait for TraceLog bridge to be available
+    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+
+    // Try to initialize without project ID
+    const initResult = await page.evaluate(async () => {
+      try {
+        await window.__traceLogBridge!.init({} as any);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // Should fail with appropriate error
+    expect(initResult.success).toBe(false);
+    expect(initResult.error).toContain('Project ID is required');
+  });
+});

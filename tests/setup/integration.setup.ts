@@ -64,7 +64,7 @@ beforeEach(() => {
   }) as any;
 
   // Reset window properties
-  delete (window as any).__traceLogBridge;
+  delete window.__traceLogBridge;
 
   // Reset global variables
   if (typeof window !== 'undefined') {
@@ -82,7 +82,7 @@ afterEach(() => {
   document.head.innerHTML = '';
 
   // Clean up global variables
-  delete (window as any).__traceLogBridge;
+  delete window.__traceLogBridge;
   (window as any).TraceLog = undefined;
 });
 

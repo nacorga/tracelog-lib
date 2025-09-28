@@ -256,16 +256,23 @@ export class EventManager extends StateManager {
    * Includes basic deduplication and sorting
    */
   private buildEventsPayload(): BaseEventsQueueDto {
-    // Simple deduplication - keep latest event for each unique signature
     const eventMap = new Map<string, EventData>();
+    const order: string[] = [];
 
     for (const event of this.eventsQueue) {
       const signature = this.createEventSignature(event);
-      eventMap.set(signature, event); // Later events overwrite earlier ones
+
+      if (!eventMap.has(signature)) {
+        order.push(signature);
+      }
+
+      eventMap.set(signature, event);
     }
 
-    // Sort events by timestamp
-    const events = Array.from(eventMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+    const events = order
+      .map((signature) => eventMap.get(signature))
+      .filter((event): event is EventData => Boolean(event))
+      .sort((a, b) => a.timestamp - b.timestamp);
 
     return {
       user_id: this.get('userId'),
@@ -365,9 +372,7 @@ export class EventManager extends StateManager {
   }
 
   private createEventSignature(event: EventData): string {
-    // Create a signature for deduplication in payload building
-    // Similar to fingerprint but with more specificity
-    return this.createEventFingerprint(event) + `_${event.timestamp}`;
+    return this.createEventFingerprint(event);
   }
 
   private addToQueue(event: EventData): void {

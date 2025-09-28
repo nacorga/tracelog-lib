@@ -52,19 +52,3 @@ export interface TraceLogTestBridge {
   getErrorHandler(): ErrorHandler | null;
   getGoogleAnalytics(): GoogleAnalyticsIntegration | null;
 }
-
-declare global {
-  interface Window {
-    /**
-     * Testing bridge for E2E tests
-     * Only available when NODE_ENV=dev
-     */
-    __traceLogBridge?: TraceLogTestBridge;
-
-    /**
-     * Creates a fresh TraceLog bridge instance for testing
-     * Only available when NODE_ENV=dev
-     */
-    __createFreshTraceLogBridge?: () => void;
-  }
-}
