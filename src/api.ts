@@ -2,7 +2,7 @@ import { App } from './app';
 import { MetadataType, AppConfig, EmitterCallback, EmitterMap } from './types';
 import { debugLog, validateAndNormalizeConfig } from './utils';
 import { TestBridge } from './test-bridge';
-import './types/window.types';
+import './types/test-bridge.types';
 
 export * as Types from './app.types';
 export * as Constants from './app.constants';
