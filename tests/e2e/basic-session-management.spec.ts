@@ -5,216 +5,168 @@
  * Focus: Library session validation only
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { SpecialProjectId } from '@/types';
 
-test.describe('Basic Session Management', () => {
-  test('should initialize session on TraceLog init', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+const waitForBridge = async (page: Page) => {
+  await page.waitForFunction(() => Boolean(window.__traceLogBridge), { timeout: 5000 });
+};
 
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+test.describe('Session Management - Excluded URL Scenarios', () => {
+  test('should emit session_end when session closes on excluded page', async ({ page }) => {
+    await page.goto('/?e2e=true');
+    await waitForBridge(page);
 
-    // Initialize TraceLog and check session
-    const sessionData = await page.evaluate(async () => {
-      try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+    const result = await page.evaluate(async (projectId) => {
+      const traceLog = window.__traceLogBridge!;
+      const events: Array<{ type: string; pageUrl: string | undefined }> = [];
 
-        // Get session information
-        const sessionInfo = window.__traceLogBridge!.getSessionData();
-
-        return {
-          success: true,
-          initialized: window.__traceLogBridge!.initialized,
-          sessionInfo,
-        };
-      } catch (error) {
-        return { success: false, error: (error as Error).message };
-      }
-    });
-
-    expect(sessionData.success).toBe(true);
-    expect(sessionData.initialized).toBe(true);
-    expect(sessionData.sessionInfo).toBeDefined();
-    expect(sessionData.sessionInfo!.id).toBeDefined();
-    expect(typeof sessionData.sessionInfo!.id).toBe('string');
-    expect((sessionData.sessionInfo!.id as string).length).toBeGreaterThan(0);
-    expect(sessionData.sessionInfo!.isActive).toBe(true);
-  });
-
-  test('should maintain session across page interactions', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
-
-    // Initialize and capture initial session
-    const sessionResults = await page.evaluate(async () => {
-      await window.__traceLogBridge!.init({ id: 'skip' });
-
-      const initialSession = window.__traceLogBridge!.getSessionData();
-
-      // Simulate user interactions
-      document
-        .querySelector('[data-testid="cta-ver-productos"]')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-      window.__traceLogBridge!.sendCustomEvent('user_interaction', { type: 'click' });
-
-      // Wait a bit for session activity update
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const sessionAfterActivity = window.__traceLogBridge!.getSessionData();
-
-      return {
-        initialSession,
-        sessionAfterActivity,
+      const waitForPageUrl = async (expectedHash: string) => {
+        const timeout = Date.now() + 2000;
+        return new Promise<void>((resolve, reject) => {
+          const poll = () => {
+            const current = traceLog.get('pageUrl') as string | undefined;
+            if (current?.includes(expectedHash)) {
+              resolve();
+              return;
+            }
+            if (Date.now() > timeout) {
+              reject(new Error(`Timed out waiting for pageUrl to include ${expectedHash}`));
+              return;
+            }
+            setTimeout(poll, 50);
+          };
+          poll();
+        });
       };
-    });
 
-    // Session should remain the same but potentially updated activity
-    expect(sessionResults.initialSession!.id).toBe(sessionResults.sessionAfterActivity!.id);
-    expect(sessionResults.sessionAfterActivity!.isActive).toBe(true);
+      traceLog.on('event', (payload: any) => {
+        events.push({ type: payload.type as string, pageUrl: payload.page_url as string | undefined });
+      });
+
+      await traceLog.init({
+        id: projectId,
+        excludedUrlPaths: ['*#/nosotros'],
+      });
+
+      window.location.hash = '#/nosotros';
+      await waitForPageUrl('#/nosotros');
+
+      await traceLog.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      return events;
+    }, SpecialProjectId.Skip);
+
+    const eventTypes = result.map((event) => event.type);
+    expect(eventTypes).toContain('session_start');
+    expect(eventTypes).toContain('session_end');
+
+    const sessionEnd = result.find((event) => event.type === 'session_end');
+    expect(sessionEnd?.pageUrl ?? '').toContain('#/nosotros');
   });
 
-  test('should handle session start/end events', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+  test('should default invalid samplingRate to full capture', async ({ page }) => {
+    await page.goto('/?e2e=true');
+    await waitForBridge(page);
 
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    const { normalizedRate, allSampled } = await page.evaluate(async (projectId) => {
+      const traceLog = window.__traceLogBridge!;
+      const capturedNames: string[] = [];
 
-    // Monitor session-related events
-    const sessionEvents = await page.evaluate(async () => {
-      const events: any[] = [];
-
-      // Listen for all events to capture session events
-      window.__traceLogBridge!.on('event', (data: any) => {
-        if (data.type === 'session_start' || data.type === 'session_end') {
-          events.push(data);
+      traceLog.on('event', (payload: any) => {
+        if (payload.type === 'custom' && payload.custom_event?.name) {
+          capturedNames.push(payload.custom_event.name as string);
         }
       });
 
-      // Initialize TraceLog (should trigger session start)
-      await window.__traceLogBridge!.init({ id: 'skip' });
+      await traceLog.init({
+        id: projectId,
+        samplingRate: 0,
+      });
 
-      // Wait for potential session events
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      const normalizedSampling = traceLog.get('config')?.samplingRate ?? 0;
 
-      return events;
-    });
+      const originalRandom = Math.random;
+      Math.random = () => 0.01;
 
-    // Should have session start event or session-related activity
-    expect(sessionEvents.length).toBeGreaterThanOrEqual(0);
+      try {
+        for (let index = 0; index < 10; index++) {
+          traceLog.sendCustomEvent(`sampled_event_${index}`);
+        }
+      } finally {
+        Math.random = originalRandom;
+      }
 
-    if (sessionEvents.length > 0) {
-      const sessionEvent = sessionEvents[0];
-      expect(sessionEvent.type).toMatch(/session/);
-      expect(sessionEvent.timestamp).toBeDefined();
-    }
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await traceLog.destroy();
+
+      return { normalizedRate: normalizedSampling, allSampled: capturedNames.length >= 10 };
+    }, SpecialProjectId.Skip);
+
+    expect(normalizedRate).toBe(1);
+    expect(allSampled).toBe(true);
   });
 
-  test('should validate session data structure', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+  test('should resume event tracking after leaving an excluded route', async ({ page }) => {
+    await page.goto('/?e2e=true');
+    await waitForBridge(page);
 
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    const result = await page.evaluate(async (projectId) => {
+      const traceLog = window.__traceLogBridge!;
+      const captured: Array<{ name: string | undefined; pageUrl: string | undefined }> = [];
 
-    // Initialize and validate session structure
-    const sessionValidation = await page.evaluate(async () => {
-      await window.__traceLogBridge!.init({ id: 'skip' });
-
-      const sessionData = window.__traceLogBridge!.getSessionData();
-
-      // Validate session data structure
-      const validation = {
-        hasId: 'id' in sessionData! && typeof sessionData!.id === 'string',
-        hasIsActive: 'isActive' in sessionData! && typeof sessionData!.isActive === 'boolean',
-        idNotEmpty: sessionData!.id && (sessionData!.id as string).length > 0,
-        isActiveTrue: sessionData!.isActive === true,
+      const waitForPageUrl = async (expectedHash: string) => {
+        const timeout = Date.now() + 2000;
+        return new Promise<void>((resolve, reject) => {
+          const poll = () => {
+            const current = traceLog.get('pageUrl') as string | undefined;
+            if (current?.includes(expectedHash)) {
+              resolve();
+              return;
+            }
+            if (Date.now() > timeout) {
+              reject(new Error(`Timed out waiting for pageUrl to include ${expectedHash}`));
+              return;
+            }
+            setTimeout(poll, 50);
+          };
+          poll();
+        });
       };
 
-      return {
-        sessionData,
-        validation,
-      };
-    });
+      traceLog.on('event', (payload: any) => {
+        if (payload.type === 'custom') {
+          captured.push({ name: payload.custom_event?.name, pageUrl: payload.page_url });
+        }
+      });
 
-    expect(sessionValidation.validation.hasId).toBe(true);
-    expect(sessionValidation.validation.hasIsActive).toBe(true);
-    expect(sessionValidation.validation.idNotEmpty).toBe(true);
-    expect(sessionValidation.validation.isActiveTrue).toBe(true);
-  });
+      await traceLog.init({
+        id: projectId,
+        samplingRate: 1,
+        excludedUrlPaths: ['*#/nosotros'],
+      });
 
-  test('should handle session recovery gracefully', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+      window.location.hash = '#/nosotros';
+      await waitForPageUrl('#/nosotros');
+      traceLog.sendCustomEvent('event_on_excluded_route');
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+      window.location.hash = '#/inicio';
+      await waitForPageUrl('#/inicio');
+      traceLog.sendCustomEvent('event_on_allowed_route');
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
-    // Initialize and simulate session recovery scenario
-    const recoveryTest = await page.evaluate(async () => {
-      // First initialization
-      await window.__traceLogBridge!.init({ id: 'skip' });
-      const firstSession = window.__traceLogBridge!.getSessionData();
+      await traceLog.destroy();
 
-      // Simulate some activity
-      window.__traceLogBridge!.sendCustomEvent('test_activity');
+      return captured;
+    }, SpecialProjectId.Skip);
 
-      // Wait for activity to be processed
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    const excludedEvent = result.find((event) => event.name === 'event_on_excluded_route');
+    expect(excludedEvent).toBeUndefined();
 
-      const sessionAfterActivity = window.__traceLogBridge!.getSessionData();
-
-      return {
-        firstSession,
-        sessionAfterActivity,
-        recoveryWorked: firstSession!.id === sessionAfterActivity!.id,
-      };
-    });
-
-    expect(recoveryTest.recoveryWorked).toBe(true);
-    expect(recoveryTest.sessionAfterActivity!.isActive).toBe(true);
-  });
-
-  test('should generate unique session IDs', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
-
-    // Test session ID uniqueness (simulate multiple initializations)
-    const uniquenessTest = await page.evaluate(async () => {
-      const sessionIds: string[] = [];
-
-      // First session
-      await window.__traceLogBridge!.init({ id: 'skip' });
-      const session1 = window.__traceLogBridge!.getSessionData();
-      sessionIds.push(session1!.id as string);
-
-      // Session ID should be consistent across calls
-      const session1Again = window.__traceLogBridge!.getSessionData();
-      sessionIds.push(session1Again!.id as string);
-
-      return {
-        sessionIds,
-        areIdentical: sessionIds[0] === sessionIds[1],
-        isValidFormat: /^\d+-[a-z0-9]+$/.test(sessionIds[0]), // Timestamp-random format check
-      };
-    });
-
-    expect(uniquenessTest.areIdentical).toBe(true);
-    expect(uniquenessTest.isValidFormat).toBe(true);
-    expect(uniquenessTest.sessionIds[0].length).toBeGreaterThan(10);
+    const allowedEvent = result.find((event) => event.name === 'event_on_allowed_route');
+    expect(allowedEvent).toBeDefined();
+    expect(allowedEvent?.pageUrl ?? '').toContain('#/inicio');
   });
 });

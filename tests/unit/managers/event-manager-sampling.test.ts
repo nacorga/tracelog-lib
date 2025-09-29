@@ -129,4 +129,21 @@ describe('EventManager - Sampling', () => {
 
     expect(eventManager.getQueueLength()).toBe(50);
   });
+
+  test('should fallback to default sampling when config attempts zero', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.2);
+
+    const { eventManager } = await setupTestEnvironment({ samplingRate: 0 });
+
+    expect(eventManager.getQueueLength()).toBe(0);
+
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'forced_event' },
+    });
+
+    expect(eventManager.getQueueLength()).toBe(1);
+
+    vi.restoreAllMocks();
+  });
 });
