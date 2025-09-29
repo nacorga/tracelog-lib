@@ -1,6 +1,6 @@
 import { DEFAULT_API_CONFIG, DEFAULT_CONFIG, REQUEST_TIMEOUT_MS } from '../constants';
 import { ApiConfig, AppConfig, Config, Mode, SpecialProjectId } from '../types';
-import { sanitizeApiConfig, fetchWithTimeout } from '../utils';
+import { sanitizeApiConfig, fetchWithTimeout, normalizeConfig } from '../utils';
 import { debugLog } from '../utils/logging';
 
 /**
@@ -33,15 +33,16 @@ export class ConfigManager {
     }
 
     const config = await this.loadFromApi(apiUrl, appConfig);
+    const { config: normalizedConfig } = normalizeConfig(config);
 
     debugLog.info('ConfigManager', 'Configuration loaded', {
       projectId: appConfig.id,
-      mode: config.mode,
-      hasTags: !!config.tags?.length,
-      hasExclusions: !!config.excludedUrlPaths?.length,
+      mode: normalizedConfig.mode,
+      hasTags: !!normalizedConfig.tags?.length,
+      hasExclusions: !!normalizedConfig.excludedUrlPaths?.length,
     });
 
-    return config;
+    return normalizedConfig;
   }
 
   /**
@@ -155,30 +156,34 @@ export class ConfigManager {
   private mergeConfigurations(rawApiConfig: Record<string, unknown>, appConfig: AppConfig): Config {
     const safeApiConfig = sanitizeApiConfig(rawApiConfig);
     const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
-    const mergedConfig: Config = { ...appConfig, ...apiConfig };
+    const mergedConfig: Config = DEFAULT_CONFIG({ ...appConfig, ...apiConfig });
+    const { config: normalizedConfig } = normalizeConfig(mergedConfig);
 
     // Apply QA mode if enabled via URL parameter
-    if (this.isQaModeEnabled() && !mergedConfig.mode) {
-      mergedConfig.mode = Mode.QA;
+    if (this.isQaModeEnabled() && !normalizedConfig.mode) {
+      normalizedConfig.mode = Mode.QA;
       debugLog.info('ConfigManager', 'QA mode enabled via URL parameter');
     }
 
     // Set error sampling based on mode
-    const errorSampling = Object.values(Mode).includes(mergedConfig.mode as Mode)
+    const errorSampling = Object.values(Mode).includes(normalizedConfig.mode as Mode)
       ? 1 // Full sampling for debug/qa modes
-      : (mergedConfig.errorSampling ?? 0.1); // Default sampling for production
+      : (normalizedConfig.errorSampling ?? 0.1); // Default sampling for production
 
-    return { ...mergedConfig, errorSampling };
+    return { ...normalizedConfig, errorSampling };
   }
 
   /**
    * Creates default configuration for skip mode and fallback scenarios.
    */
   private createDefaultConfig(appConfig: AppConfig): Config {
-    return DEFAULT_CONFIG({
+    const defaultConfig = DEFAULT_CONFIG({
       ...appConfig,
       errorSampling: 1,
       ...(appConfig.id === SpecialProjectId.Skip && { mode: Mode.DEBUG }),
     });
+
+    const { config } = normalizeConfig(defaultConfig);
+    return config;
   }
 }

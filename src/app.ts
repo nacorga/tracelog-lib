@@ -9,7 +9,7 @@ import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { AppConfig, EventType, EmitterCallback, EmitterMap } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter, normalizeConfig } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -153,15 +153,16 @@ export class App extends StateManager {
     // Get remote configuration
     const configManager = new ConfigManager();
     const config = await configManager.get(apiUrl, appConfig);
-    this.set('config', config);
+    const { config: normalizedConfig } = normalizeConfig(config);
+    this.set('config', normalizedConfig);
 
     // Set user ID
-    const userId = UserManager.getId(this.managers.storage as StorageManager, config.id);
+    const userId = UserManager.getId(this.managers.storage as StorageManager, normalizedConfig.id);
     this.set('userId', userId);
 
     // Set device and page info
     this.set('device', getDeviceType());
-    const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
+    const pageUrl = normalizeUrl(window.location.href, normalizedConfig.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);
   }
 

@@ -6,7 +6,7 @@ import { StateManager, resetGlobalState } from '@/managers/state.manager';
 import { Config, Mode } from '@/types';
 import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
 import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
-import { Emitter, validateConfig } from '@/utils';
+import { Emitter, normalizeConfig } from '@/utils';
 
 /**
  * Test configuration factory
@@ -59,11 +59,7 @@ export const createMockEmitter = (): Emitter =>
 export const setupTestState = async (config: Config = createTestConfig()): Promise<void> => {
   resetGlobalState();
 
-  const { samplingRate } = validateConfig(config);
-  const normalizedConfig = {
-    ...config,
-    samplingRate,
-  };
+  const { config: normalizedConfig } = normalizeConfig(config);
 
   // Create a temporary StateManager to set up global state
   const tempStateManager = new (class extends StateManager {

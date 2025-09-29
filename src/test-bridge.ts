@@ -9,6 +9,7 @@ import { GoogleAnalyticsIntegration } from './integrations/google-analytics.inte
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { State, TraceLogTestBridge } from './types';
+import { normalizeConfig } from './utils';
 
 /**
  * Test bridge for E2E testing
@@ -43,8 +44,8 @@ export class TestBridge extends App implements TraceLogTestBridge {
   setSessionTimeout(timeout: number): void {
     const config = this.get('config');
     if (config) {
-      config.sessionTimeout = timeout;
-      this.set('config', config);
+      const { config: normalizedConfig } = normalizeConfig({ ...config, sessionTimeout: timeout });
+      this.set('config', normalizedConfig);
     }
   }
 

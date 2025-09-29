@@ -334,6 +334,18 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
   return { errors, warnings, samplingRate: validatedSamplingRate };
 };
 
+export const normalizeConfig = (config: Config): { config: Config; errors: string[]; warnings: string[] } => {
+  const { errors, warnings, samplingRate } = validateConfig(config);
+  return {
+    config: {
+      ...config,
+      samplingRate,
+    },
+    errors,
+    warnings,
+  };
+};
+
 /**
  * Validates the final configuration
  * @param config - The configuration to validate
