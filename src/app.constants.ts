@@ -85,3 +85,8 @@ export const ANOMALY_DETECTION = {
   MIN_BASELINE_DAYS: 7,
   MIN_EVENTS_FOR_ANOMALY_DETECTION: 50,
 } as const;
+
+export const SPECIAL_PAGE_URLS = {
+  PAGE_URL_EXCLUDED: 'excluded',
+  PAGE_URL_UNKNOWN: 'unknown',
+} as const;
