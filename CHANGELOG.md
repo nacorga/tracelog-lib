@@ -9,6 +9,22 @@
 
 
 
+
+## [0.2.1] - 2025-09-29
+
+### 🔧 Other Changes
+
+- Update testing framework from Jest to Vitest and improve test patterns ([99a0a21](../../commit/99a0a21421e3ba2f47602d99cb3187af94ca76c4))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.2.0...v0.2.1
+
+
 ## [0.2.0] - 2025-09-29
 
 ### ✨ Features
