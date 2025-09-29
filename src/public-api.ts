@@ -11,10 +11,9 @@ export const tracelog = {
 };
 
 // Types
+export { EventType, DeviceType, Mode, TagConditionType, TagConditionOperator, TagLogicalOperator } from './app.types';
 export type {
-  EventType,
   EventData,
-  DeviceType,
   MetadataType,
   ScrollData,
   ClickData,
@@ -24,14 +23,10 @@ export type {
   PageViewData,
   UTM,
   ApiConfig,
-  Mode,
   BaseEventsQueueDto,
   ExtendedEventsQueueDto,
   TagConfig,
   TagCondition,
-  TagConditionType,
-  TagConditionOperator,
-  TagLogicalOperator,
 } from './app.types';
 
 // Additional types for configuration
