@@ -1,5 +1,32 @@
 import { beforeEach, vi, afterEach } from 'vitest';
 
+// Setup global environment for jsdom compatibility
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
+// Mock globals that might be accessed by dependencies
+if (typeof global.window === 'undefined') {
+  Object.defineProperty(global, 'window', {
+    value: {},
+    writable: true,
+  });
+}
+
+// Mock globals to prevent webidl-conversions errors
+if (typeof global.DOMException === 'undefined') {
+  global.DOMException = class MockDOMException extends Error {
+    constructor(message?: string, name?: string) {
+      super(message);
+      this.name = name ?? 'DOMException';
+    }
+  } as unknown as typeof DOMException;
+}
+
+// Ensure Node.js globals are available
+if (typeof global.process === 'undefined') {
+  global.process = process;
+}
+
 // Setup DOM mocks for jsdom environment
 beforeEach(() => {
   // Mock localStorage
@@ -70,6 +97,22 @@ beforeEach(() => {
 
     Object.defineProperty(window, 'BroadcastChannel', {
       value: BroadcastChannelMock,
+      writable: true,
+    });
+  }
+
+  // Mock Web APIs that might be accessed by dependencies
+  if (!window.crypto) {
+    Object.defineProperty(window, 'crypto', {
+      value: {
+        getRandomValues: (arr: Uint8Array) => {
+          for (let i = 0; i < arr.length; i++) {
+            arr[i] = Math.floor(Math.random() * 256);
+          }
+          return arr;
+        },
+        randomUUID: () => 'mock-uuid-' + Math.random().toString(36).substr(2, 9),
+      },
       writable: true,
     });
   }

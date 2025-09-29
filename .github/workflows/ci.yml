@@ -75,7 +75,7 @@ jobs:
       - name: Run Unit Tests
         run: |
           echo "🔍 Running unit tests..."
-          npm run test:unit:ci
+          npm run test:unit
           echo "✅ Unit tests passed"
 
       - name: Run Integration Tests
@@ -123,9 +123,9 @@ jobs:
 
           echo "✅ Build completed successfully. Browser build: ${size_kb}KB"
 
-      - name: Run E2E Tests
+      - name: Run E2E Tests with Health Analysis
         run: |
-          echo "🔍 Running E2E tests..."
+          echo "🔍 Running E2E tests with health analysis..."
           npm run test:e2e
 
       - name: Upload test results (if tests fail)

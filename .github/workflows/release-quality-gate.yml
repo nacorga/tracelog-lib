@@ -36,7 +36,7 @@ jobs:
       - name: Run Unit Tests
         run: |
           echo "🔍 Running unit tests for release..."
-          npm run test:unit:ci
+          npm run test:unit
 
       - name: Run Integration Tests
         run: |

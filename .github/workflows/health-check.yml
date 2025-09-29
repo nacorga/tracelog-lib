@@ -48,7 +48,7 @@ jobs:
       - name: Run Unit Tests
         run: |
           echo "🔍 Running unit tests for health check..."
-          npm run test:unit:ci
+          npm run test:unit
 
       - name: Run Integration Tests
         run: |
@@ -63,30 +63,13 @@ jobs:
       - name: Build TraceLog library
         run: npm run build:all
 
-      - name: Run TraceLog Health Check
+      - name: Run TraceLog Health Analysis
         id: health-check
         run: |
-          echo "Running TraceLog anomaly detection..."
-          node scripts/test-anomaly-report.js > health-output.txt 2>&1
+          echo "Running comprehensive TraceLog health analysis..."
+          npm run ci:health-check > health-output.txt 2>&1
           echo "exit_code=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
-
-      - name: Parse Health Report
-        id: parse-report
-        run: |
-          if [ -f "test-reports/anomaly-report.json" ]; then
-            STATUS=$(jq -r '.overallStatus' test-reports/anomaly-report.json)
-            ANOMALIES=$(jq -r '.summary.totalAnomalies' test-reports/anomaly-report.json)
-            CRITICAL=$(jq -r '.summary.criticalIssues' test-reports/anomaly-report.json)
-            SUCCESS_RATE=$(jq -r '.summary.successRate' test-reports/anomaly-report.json)
-
-            echo "status=$STATUS" >> $GITHUB_OUTPUT
-            echo "anomalies=$ANOMALIES" >> $GITHUB_OUTPUT
-            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-            echo "success_rate=$SUCCESS_RATE" >> $GITHUB_OUTPUT
-          else
-            echo "status=UNKNOWN" >> $GITHUB_OUTPUT
-          fi
 
       - name: Upload Health Report
         uses: actions/upload-artifact@v4
@@ -100,34 +83,24 @@ jobs:
           retention-days: 30
 
       - name: Comment PR with Health Status
-        if: github.event_name == 'pull_request' && steps.parse-report.outputs.status != 'HEALTHY'
+        if: github.event_name == 'pull_request' && steps.health-check.outputs.exit_code != '0'
         uses: actions/github-script@v7
         with:
           script: |
-            const status = '${{ steps.parse-report.outputs.status }}';
-            const anomalies = '${{ steps.parse-report.outputs.anomalies }}';
-            const critical = '${{ steps.parse-report.outputs.critical }}';
-            const successRate = '${{ steps.parse-report.outputs.success_rate }}';
+            const comment = `## ⚠️ TraceLog Health Check
 
-            const statusIcon = status === 'HEALTHY' ? '✅' : status === 'DEGRADED' ? '⚠️' : '❌';
-
-            const comment = `## ${statusIcon} TraceLog Health Check
-
-            **Status:** ${status}
-            **Success Rate:** ${successRate}
-            **Anomalies Detected:** ${anomalies}
-            **Critical Issues:** ${critical}
+            The health analysis detected issues that require attention.
 
             ### Test Results
             ✅ Unit tests passed
             ✅ Integration tests passed
             ✅ Test coverage generated
+            ⚠️ Health analysis found concerns
 
-            ${critical > 0 ? '🚨 **Critical issues detected!** Please review the health report before merging.' : ''}
-            ${anomalies > 0 ? '⚠️ Some anomalies detected. Consider reviewing before deployment.' : ''}
+            📄 [Download full health report from artifacts](../actions/runs/${{ github.run_id }})
+            📊 [Test coverage included in artifacts](../actions/runs/${{ github.run_id }})
 
-            📄 [Download full report from artifacts](../actions/runs/${{ github.run_id }})
-            📊 [Test coverage included in artifacts](../actions/runs/${{ github.run_id }})`;
+            Please review the health report before merging.`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -136,18 +109,12 @@ jobs:
               body: comment
             });
 
-      - name: Fail on Critical Issues
-        if: steps.parse-report.outputs.critical > 0
+      - name: Fail on Health Issues
+        if: steps.health-check.outputs.exit_code != '0'
         run: |
-          echo "❌ Critical TraceLog issues detected (${{ steps.parse-report.outputs.critical }})"
+          echo "❌ TraceLog health check failed"
           echo "🔍 Check the health report for details"
           exit 1
-
-      - name: Warn on Anomalies
-        if: steps.parse-report.outputs.anomalies > 0 && steps.parse-report.outputs.critical == 0
-        run: |
-          echo "⚠️ TraceLog anomalies detected (${{ steps.parse-report.outputs.anomalies }})"
-          echo "✅ No critical issues, but monitor for degradation"
 
   notify-teams:
     runs-on: ubuntu-latest
