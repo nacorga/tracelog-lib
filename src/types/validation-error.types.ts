@@ -66,3 +66,16 @@ export class IntegrationValidationError extends TraceLogValidationError {
     super(message, 'INTEGRATION_INVALID', layer);
   }
 }
+
+/**
+ * Thrown when initialization exceeds the maximum allowed timeout
+ */
+export class InitializationTimeoutError extends TraceLogValidationError {
+  constructor(
+    message: string,
+    public readonly timeoutMs: number,
+    layer: 'config' | 'app' | 'runtime' = 'runtime',
+  ) {
+    super(message, 'INITIALIZATION_TIMEOUT', layer);
+  }
+}

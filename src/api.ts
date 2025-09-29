@@ -1,113 +1,63 @@
 import { App } from './app';
-import { MetadataType } from './types/common.types';
-import { AppConfig } from './types/config.types';
-import { debugLog } from './utils/logging';
-import { validateAndNormalizeConfig } from './utils/validations';
-import { INITIALIZATION_CONSTANTS } from './constants';
+import { MetadataType, AppConfig, EmitterCallback, EmitterMap } from './types';
+import { debugLog, validateAndNormalizeConfig } from './utils';
+import { TestBridge } from './test-bridge';
 import './types/window.types';
-import { TraceLogTestBridge } from './types/window.types';
-
-export * as Types from './app.types';
-export * as Constants from './app.constants';
 
 let app: App | null = null;
 let isInitializing = false;
+let isDestroying = false;
 
 /**
  * Initializes the tracelog app with the provided configuration.
  * If already initialized, this function returns early without error.
  * @param appConfig - The configuration object for the app
- * @throws {Error} If initialization is currently in progress
+ * @throws {Error} If initialization fails or environment is invalid
  * @example
- * await init({ id: 'my-project-id' });
+ * await tracelog.init({ id: 'my-project-id' });
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
+  // Browser environment check
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    throw new Error('This library can only be used in a browser environment');
+  }
+
+  // Already initialized - safe to return
+  if (app) {
+    debugLog.debug('API', 'Library already initialized, skipping duplicate initialization');
+    return;
+  }
+
+  // Prevent concurrent initialization
+  if (isInitializing) {
+    debugLog.warn('API', 'Initialization already in progress');
+    throw new Error('Initialization already in progress');
+  }
+
+  isInitializing = true;
+
   try {
-    debugLog.info('API', 'Library initialization started', { id: appConfig.id });
+    debugLog.info('API', 'Initializing TraceLog', { projectId: appConfig.id });
 
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      debugLog.clientError(
-        'API',
-        'Browser environment required - this library can only be used in a browser environment',
-        {
-          hasWindow: typeof window !== 'undefined',
-          hasDocument: typeof document !== 'undefined',
-        },
-      );
-
-      throw new Error('This library can only be used in a browser environment');
-    }
-
-    if (app) {
-      debugLog.debug('API', 'Library already initialized, skipping duplicate initialization', {
-        projectId: appConfig.id,
-      });
-
-      return;
-    }
-
-    if (isInitializing) {
-      debugLog.debug('API', 'Concurrent initialization detected, waiting for completion', { projectId: appConfig.id });
-
-      let retries = 0;
-      const maxRetries = INITIALIZATION_CONSTANTS.MAX_CONCURRENT_RETRIES;
-      const retryDelay = INITIALIZATION_CONSTANTS.CONCURRENT_RETRY_DELAY_MS;
-
-      while (isInitializing && retries < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelay));
-        retries++;
-      }
-
-      if (app) {
-        debugLog.debug('API', 'Concurrent initialization completed successfully', {
-          projectId: appConfig.id,
-          retriesUsed: retries,
-        });
-
-        return;
-      }
-
-      if (isInitializing) {
-        debugLog.error('API', 'Initialization timeout - concurrent initialization took too long', {
-          projectId: appConfig.id,
-          retriesUsed: retries,
-          maxRetries,
-        });
-
-        throw new Error('App initialization timeout - concurrent initialization took too long');
-      }
-    }
-
-    isInitializing = true;
-
-    debugLog.debug('API', 'Validating and normalizing configuration', { projectId: appConfig.id });
     const validatedConfig = validateAndNormalizeConfig(appConfig);
-
-    debugLog.debug('API', 'Creating App instance', { projectId: validatedConfig.id });
     const instance = new App();
 
-    await instance.init(validatedConfig);
+    try {
+      await instance.init(validatedConfig);
+      app = instance;
 
-    app = instance;
-
-    debugLog.info('API', 'Library initialization completed successfully', {
-      projectId: validatedConfig.id,
-    });
-  } catch (error) {
-    // Ensure complete cleanup on initialization failure
-    if (app && !app.initialized) {
-      // Clean up partially initialized app instance
+      debugLog.info('API', 'TraceLog initialized successfully', { projectId: validatedConfig.id });
+    } catch (error) {
       try {
-        app.destroy();
+        await instance.destroy(true);
       } catch (cleanupError) {
         debugLog.warn('API', 'Failed to cleanup partially initialized app', { cleanupError });
       }
+      throw error;
     }
-
+  } catch (error) {
     app = null;
-
     debugLog.error('API', 'Initialization failed', { error });
-
     throw error;
   } finally {
     isInitializing = false;
@@ -120,39 +70,63 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
  * @param metadata - Optional metadata to attach to the event.
  * @example
  * // Send a custom event with metadata
- * event('user_signup', { method: 'email', plan: 'premium' });
+ * tracelog.event('user_signup', { method: 'email', plan: 'premium' });
  * @example
  * // Send a custom event without metadata
- * event('user_login');
+ * tracelog.event('user_login');
  * @remarks
- * This function should be called after the app has been initialized using the `init` function.
+ * This function should be called after the app has been initialized using the `tracelog.init` function.
  */
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
-  try {
-    if (!app) {
-      debugLog.clientError('API', 'Custom event failed - Library not initialized. Please call TraceLog.init() first', {
-        eventName: name,
-        hasMetadata: !!metadata,
-      });
-      throw new Error('App not initialized');
-    }
+  if (!app) {
+    throw new Error('TraceLog not initialized. Please call init() first.');
+  }
 
-    debugLog.debug('API', 'Sending custom event', {
-      eventName: name,
-      hasMetadata: !!metadata,
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-    });
+  try {
     app.sendCustomEvent(name, metadata);
   } catch (error) {
-    debugLog.error('API', 'Event tracking failed', { eventName: name, error, hasMetadata: !!metadata });
-
-    if (
-      error instanceof Error &&
-      (error.message === 'App not initialized' || error.message.includes('validation failed'))
-    ) {
-      throw error;
-    }
+    debugLog.error('API', 'Failed to send custom event', { eventName: name, error });
+    throw error;
   }
+};
+
+/**
+ * Subscribe to events emitted by TraceLog
+ * @param event - Event name to listen to
+ * @param callback - Function to call when event is emitted
+ * @example
+ * // Listen for real-time events
+ * tracelog.on('realtime', (data) => {
+ *   console.log('Event tracked:', data.type, data.data);
+ * });
+ *
+ * // Listen for sent events
+ * tracelog.on('sent', (data) => {
+ *   console.log('Events sent:', data.eventCount);
+ * });
+ */
+export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
+  if (!app) {
+    throw new Error('TraceLog not initialized. Please call init() first.');
+  }
+
+  app.on(event, callback);
+};
+
+/**
+ * Unsubscribe from events emitted by TraceLog
+ * @param event - Event name to stop listening to
+ * @param callback - The same function reference that was used in on()
+ * @example
+ * // Remove a specific listener
+ * tracelog.off('realtime', myCallback);
+ */
+export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
+  if (!app) {
+    throw new Error('TraceLog not initialized. Please call init() first.');
+  }
+
+  app.off(event, callback);
 };
 
 /**
@@ -164,61 +138,48 @@ export const isInitialized = (): boolean => {
 };
 
 /**
- * Gets the current initialization status for debugging purposes.
- * @returns Object with detailed initialization state
- */
-export const getInitializationStatus = (): {
-  isInitialized: boolean;
-  isInitializing: boolean;
-  hasInstance: boolean;
-} => {
-  return {
-    isInitialized: app !== null,
-    isInitializing: isInitializing,
-    hasInstance: app !== null,
-  };
-};
-
-/**
  * Destroys the current app instance and cleans up resources.
+ * @throws {Error} If not initialized or already destroying
  */
-export const destroy = (): void => {
+export const destroy = async (): Promise<void> => {
+  // Check if app was never initialized
+  if (!app) {
+    throw new Error('App not initialized');
+  }
+
+  // Prevent concurrent destroy operations
+  if (isDestroying) {
+    throw new Error('Destroy operation already in progress');
+  }
+
+  isDestroying = true;
+
   try {
-    debugLog.info('API', 'Library cleanup initiated');
-
-    if (!app) {
-      debugLog.warn('API', 'Cleanup called but Library was not initialized');
-      throw new Error('App not initialized');
-    }
-
-    app.destroy();
+    debugLog.info('API', 'Destroying TraceLog instance');
+    await app.destroy();
     app = null;
     isInitializing = false;
-    debugLog.info('API', 'Library cleanup completed successfully');
+    debugLog.info('API', 'TraceLog destroyed successfully');
   } catch (error) {
-    debugLog.error('API', 'Cleanup failed', { error, hadApp: !!app, wasInitializing: isInitializing });
+    // Force cleanup even if destroy fails
+    app = null;
+    isInitializing = false;
+    debugLog.error('API', 'Error during destroy, forced cleanup', { error });
+    throw error;
+  } finally {
+    isDestroying = false;
   }
 };
 
-class TestBridge extends App implements TraceLogTestBridge {
-  isInitializing(): boolean {
-    return isInitializing;
-  }
-}
+// Auto-inject testing bridge in development environments
+if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined') {
+  const injectTestingBridge = (): void => {
+    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
+  };
 
-// Auto-inject testing bridge only in development/testing environments
-if (process.env.NODE_ENV === 'dev') {
-  if (typeof window !== 'undefined') {
-    // Wait for DOM to be ready before injecting
-    const injectTestingBridge = (): void => {
-      window.__traceLogBridge = new TestBridge();
-    };
-
-    // Inject immediately if DOM is ready, otherwise wait
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', injectTestingBridge);
-    } else {
-      injectTestingBridge();
-    }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectTestingBridge);
+  } else {
+    injectTestingBridge();
   }
 }

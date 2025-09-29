@@ -1,322 +1,614 @@
-// Global state
-let isInitialized = false;
-let eventCount = 0;
-let realEventCount = 0;
+// ============================================================================
+// STATE MANAGEMENT & TEST MODE DETECTION
+// ============================================================================
 
-// DOM elements
-const statusIndicator = document.getElementById('status-indicator');
-const initBtn = document.getElementById('init-btn');
-const destroyBtn = document.getElementById('destroy-btn');
-const customEventName = document.getElementById('custom-event-name');
-const sendCustomEventBtn = document.getElementById('send-custom-event');
-const logContent = document.getElementById('log-content');
-const clearLogsBtn = document.getElementById('clear-logs');
-const alertsContainer = document.getElementById('alerts-container');
+// Auto-detect E2E test mode and parse URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const isE2ETest = navigator.userAgent.includes('HeadlessChrome') ||
+                 navigator.userAgent.includes('Playwright') ||
+                 urlParams.get('e2e') === 'true';
 
-// Real-time events DOM elements
-const realTimeContent = document.getElementById('real-time-content');
-const realEventCounter = document.getElementById('real-event-counter');
-const clearRealEventsBtn = document.getElementById('clear-real-events');
+// Remove floating monitor in E2E test mode
+if (isE2ETest) {
+  const removeMonitor = () => document.getElementById('floating-monitor')?.remove();
 
-// Mock server setup
-let mockServerEnabled = true;
-const originalFetch = window.fetch;
-
-function setupMockServer() {
-    if (!mockServerEnabled) {
-        window.fetch = originalFetch;
-        return;
-    }
-
-    window.fetch = function(url, options) {
-        // Mock config endpoint
-        if (url.includes('/config')) {
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({
-                    samplingRate: 1,
-                    tags: [],
-                    excludedUrlPaths: [],
-                    ipExcluded: false
-                })
-            });
-        }
-
-        // Mock events endpoint
-        if (url.includes('/collect') && options?.method === 'POST') {
-            // Simulate network delay
-            return new Promise(resolve => {
-                setTimeout(() => {
-                    resolve({
-                        ok: true,
-                        status: 200,
-                        json: () => Promise.resolve({ success: true })
-                    });
-                }, 100 + Math.random() * 200);
-            });
-        }
-
-        // Fallback to original fetch for other requests
-        return originalFetch(url, options);
-    };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', removeMonitor);
+  } else {
+    removeMonitor();
+  }
 }
 
-// Initialize mock server
-setupMockServer();
+const TEST_MODE = {
+  enabled: isE2ETest,
+  autoInit: isE2ETest && urlParams.get('auto-init') !== 'false',
+  hideUI: isE2ETest,
+  projectId: isE2ETest ? 'e2e-test-project' : 'skip'
+};
 
-// Update UI state
-function updateStatus(initialized) {
-    isInitialized = initialized;
+const state = {
+  currentPage: 'inicio',
+  cartCount: 0,
+  testMode: TEST_MODE,
+  queueCount: 0,
+  lastSentTime: null,
+  traceLogListenersAttached: false,
+};
 
-    if (initialized) {
-        statusIndicator.textContent = 'Initialized';
-        statusIndicator.className = 'status-indicator status-initialized';
-        initBtn.disabled = true;
-        destroyBtn.disabled = false;
-        customEventName.disabled = false;
-        sendCustomEventBtn.disabled = false;
-    } else {
-        statusIndicator.textContent = 'Not Initialized';
-        statusIndicator.className = 'status-indicator status-not-initialized';
-        initBtn.disabled = false;
-        destroyBtn.disabled = true;
-        customEventName.disabled = true;
-        sendCustomEventBtn.disabled = true;
-    }
+// ============================================================================
+// TRACELOG HELPERS
+// ============================================================================
+
+// Helper function to access TraceLog consistently through __traceLogBridge
+function getTraceLogInstance() {
+  return window.__traceLogBridge || window.tracelog;
 }
 
-// Show alert
-function showAlert(message, type = 'warning') {
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type}`;
-    alert.textContent = message;
-    alertsContainer.appendChild(alert);
-
-    setTimeout(() => {
-        if (alert.parentNode) {
-            alert.parentNode.removeChild(alert);
-        }
-    }, 5000);
+// Helper function to send custom events
+function sendTraceLogEvent(eventName, eventData) {
+  const traceLog = getTraceLogInstance();
+  if (traceLog?.sendCustomEvent) {
+    return traceLog.sendCustomEvent(eventName, eventData);
+  }
 }
 
-// Log event to console
-function logEvent(eventType, data) {
-    eventCount++;
-    const timestamp = new Date().toLocaleTimeString();
+// ============================================================================
+// SPA ROUTING
+// ============================================================================
 
-    const logEntry = document.createElement('div');
-    logEntry.className = 'log-entry';
-    logEntry.innerHTML = `
-        <div class="log-timestamp">[${timestamp}] Event #${eventCount}</div>
-        <div><strong>Type:</strong> ${eventType}</div>
-        <div><strong>Data:</strong> ${JSON.stringify(data, null, 2)}</div>
-    `;
+function navigateToPage(pageName) {
+  // Update URL hash to trigger TraceLog page_view detection
+  if (window.location.hash !== `#${pageName}`) {
+    window.location.hash = pageName;
+    return; // hashchange event will call this function again
+  }
 
-    logContent.appendChild(logEntry);
-    logContent.scrollTop = logContent.scrollHeight;
+  // Update active page
+  document.querySelectorAll('.page').forEach((page) => {
+    page.classList.remove('active');
+  });
+
+  document.getElementById(`page-${pageName}`)?.classList.add('active');
+
+  // Update nav links
+  document.querySelectorAll('.nav-link').forEach((link) => {
+    link.classList.remove('active');
+  });
+  document.querySelector(`[data-page="${pageName}"]`)?.classList.add('active');
+
+  state.currentPage = pageName;
+  window.scrollTo(0, 0);
 }
 
-// Log real-time event from TraceLog dispatchEvent
-function logRealTimeEvent(eventData) {
-    realEventCount++;
-    const timestamp = new Date().toLocaleTimeString();
-
-    const realEventEntry = document.createElement('div');
-    realEventEntry.className = 'real-event-entry';
-
-    // Extract key information from TraceLog event
-    const level = eventData.level || 'INFO';
-    const namespace = eventData.namespace || 'Unknown';
-    const message = eventData.message || '';
-    const data = eventData.data;
-
-    // Create display content
-    let displayContent = `${level}: ${namespace}`;
-    if (message) {
-        displayContent += `\n${message}`;
-    }
-    if (data) {
-        displayContent += `\n${JSON.stringify(data, null, 2)}`;
-    }
-
-    realEventEntry.innerHTML = `
-        <div class="real-event-type">${level} - ${namespace}</div>
-        <div class="real-event-time">${timestamp}</div>
-        <div class="real-event-data">${message}${data ? '\n' + JSON.stringify(data, null, 2) : ''}</div>
-    `;
-
-    // Insert at the beginning (most recent first)
-    realTimeContent.insertBefore(realEventEntry, realTimeContent.firstChild);
-
-    // Reset scroll to top to show the latest event
-    realTimeContent.scrollTop = 0;
-
-    // Update counter
-    realEventCounter.textContent = realEventCount;
-}
-
-// Setup real-time event listener for TraceLog dispatchEvent
-function setupRealTimeEventListener() {
-    // Listen for TraceLog QA events dispatched by the library
-    window.addEventListener('tracelog:qa', (event) => {
-        if (event.detail) {
-            logRealTimeEvent(event.detail);
-        }
+function setupNavigation() {
+  document.querySelectorAll('.nav-link').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = e.currentTarget.dataset.page;
+      navigateToPage(page);
     });
+  });
+
+  // CTA buttons
+  document.querySelectorAll('[data-action="cta-ver-productos"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      navigateToPage('productos');
+    });
+  });
+
+  document.querySelectorAll('[data-action="cta-contacto"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      navigateToPage('contacto');
+    });
+  });
+
+  // Hash-based routing
+  window.addEventListener('hashchange', () => {
+    const hash = window.location.hash.slice(1) || 'inicio';
+    if (['inicio', 'productos', 'nosotros', 'contacto'].includes(hash)) {
+      navigateToPage(hash);
+    }
+  });
+
+  // Initial route
+  const hash = window.location.hash.slice(1) || 'inicio';
+  if (['inicio', 'productos', 'nosotros', 'contacto'].includes(hash)) {
+    navigateToPage(hash);
+  }
 }
 
-// Get configuration from form
-function getConfig() {
-    const projectId = document.getElementById('project-id').value;
-    const sessionTimeout = parseInt(document.getElementById('session-timeout').value);
-    const globalMetadataText = document.getElementById('global-metadata').value;
-    mockServerEnabled = document.getElementById('mock-server').checked;
+// ============================================================================
+// E-COMMERCE INTERACTIONS
+// ============================================================================
 
-    let globalMetadata = {};
-    if (globalMetadataText.trim()) {
-        try {
-            globalMetadata = JSON.parse(globalMetadataText);
-        } catch (e) {
-            throw new Error('Invalid JSON in Global Metadata field');
-        }
-    }
+function setupCartInteractions() {
+  document.querySelectorAll('.btn-add-cart').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const productId = e.currentTarget.dataset.productId;
+      const productName = e.currentTarget.dataset.productName;
 
-    return {
-        id: projectId,
-        sessionTimeout: sessionTimeout,
-        globalMetadata: globalMetadata,
-        allowHttp: true // Allow HTTP for local testing
+      state.cartCount++;
+      document.getElementById('cart-count').textContent = state.cartCount;
+
+      // Send custom event
+      sendTraceLogEvent('add_to_cart', {
+        product_id: productId,
+        product_name: productName,
+        timestamp: Date.now(),
+      });
+
+      // Visual feedback
+      e.currentTarget.textContent = 'Añadido ✓';
+      setTimeout(() => {
+        e.currentTarget.textContent = 'Añadir al Carrito';
+      }, 1000);
+    });
+  });
+}
+
+function setupContactForm() {
+  const form = document.getElementById('contact-form');
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const formData = {
+      name: document.getElementById('name').value,
+      email: document.getElementById('email').value,
+      message: document.getElementById('message').value,
     };
+
+    // Send custom event
+    sendTraceLogEvent('contact_form_submit', formData);
+
+    // Visual feedback
+    alert('Gracias por contactarnos. Te responderemos pronto.');
+    form.reset();
+  });
 }
 
-// Event handlers
-initBtn.addEventListener('click', async () => {
-    try {
-        setupMockServer();
-        const config = getConfig();
 
-        showAlert('Initializing TraceLog...', 'warning');
+// ============================================================================
+// FLOATING MONITOR
+// ============================================================================
 
-        await TraceLog.init(config);
+function setupFloatingMonitor() {
+  const monitor = document.getElementById('floating-monitor');
+  if (!monitor) return;
 
-        updateStatus(true);
-        showAlert('TraceLog initialized successfully!', 'success');
-        logEvent('INIT', config);
+  const clearButton = document.getElementById('clear-events');
+  if (clearButton) {
+    clearButton.addEventListener('click', () => {
+      clearEventsMonitor();
+    });
+  }
 
-    } catch (error) {
-        showAlert(`Initialization failed: ${error.message}`, 'error');
-        console.error('TraceLog initialization error:', error);
-    }
-});
+  const header = monitor.querySelector('.monitor-header');
+  const events = monitor.querySelector('.monitor-events');
+  if (!header || !events) return;
 
-destroyBtn.addEventListener('click', () => {
-    try {
-        TraceLog.destroy();
-        updateStatus(false);
-        showAlert('TraceLog destroyed successfully!', 'success');
-        logEvent('DESTROY', {});
-    } catch (error) {
-        showAlert(`Destroy failed: ${error.message}`, 'error');
-        console.error('TraceLog destroy error:', error);
-    }
-});
+  ensureLastSentIndicator(monitor);
 
-sendCustomEventBtn.addEventListener('click', () => {
-    const eventName = customEventName.value.trim();
-    if (!eventName) {
-        showAlert('Please enter an event name', 'warning');
-        return;
-    }
+  let isMinimized = false;
+  header.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target instanceof HTMLElement && target.id === 'clear-events') return;
 
-    try {
-        const eventData = {
-            name: eventName,
-            timestamp: Date.now(),
-            source: 'playground'
-        };
+    isMinimized = !isMinimized;
+    events.style.display = isMinimized ? 'none' : 'block';
+    monitor.classList.toggle('minimized', isMinimized);
+  });
+}
 
-        TraceLog.event(eventName, eventData);
-        logEvent('CUSTOM', { name: eventName, data: eventData });
-        showAlert(`Custom event "${eventName}" sent!`, 'success');
+function ensureLastSentIndicator(monitor) {
+  const queueInfo = monitor.querySelector('.monitor-queue-info');
+  if (!queueInfo) return;
 
-        // Clear the input
-        customEventName.value = '';
-    } catch (error) {
-        showAlert(`Failed to send custom event: ${error.message}`, 'error');
-        console.error('Custom event error:', error);
-    }
-});
+  const existingIndicator = monitor.querySelector('#last-sent');
+  if (existingIndicator instanceof HTMLElement) {
+    existingIndicator.textContent = 'nunca';
+    existingIndicator.className = 'last-sent-never';
+    return;
+  }
 
-clearLogsBtn.addEventListener('click', () => {
-    logContent.innerHTML = '';
-    eventCount = 0;
-});
+  const lastSentWrapper = document.createElement('span');
+  lastSentWrapper.id = 'last-sent';
+  lastSentWrapper.textContent = 'nunca';
+  lastSentWrapper.className = 'last-sent-never';
+  queueInfo.appendChild(lastSentWrapper);
+}
 
-// Clear real-time events
-clearRealEventsBtn.addEventListener('click', () => {
-    realTimeContent.innerHTML = '';
-    realEventCount = 0;
-    realEventCounter.textContent = '0';
-});
+function updateQueueStatus(status) {
+  const statusEl = document.getElementById('queue-status');
+  if (!statusEl) return;
+  const statusMap = {
+    'idle': { icon: '⏸', color: '#94a3b8' },
+    'collecting': { icon: '📥', color: '#3b82f6' },
+    'queued': { icon: '⏳', color: '#f59e0b' },
+    'sending': { icon: '📤', color: '#8b5cf6' },
+    'sent': { icon: '✅', color: '#10b981' },
+    'error': { icon: '❌', color: '#ef4444' }
+  };
 
-// Demo element event listeners
-document.getElementById('demo-click').addEventListener('click', () => {
-    if (isInitialized) {
-        logEvent('DEMO_CLICK', { target: 'demo-click-button' });
-    }
-});
+  const config = statusMap[status] || { icon: status, color: '#6b7280' };
+  statusEl.textContent = config.icon;
+  statusEl.style.color = config.color;
+}
 
-document.getElementById('demo-input').addEventListener('input', (e) => {
-    if (isInitialized) {
-        logEvent('DEMO_INPUT', { value: e.target.value, length: e.target.value.length });
-    }
-});
+function updateQueueCount(count) {
+  state.queueCount = count;
+  const queueEl = document.getElementById('queue-count');
+  if (!queueEl) return;
+  queueEl.textContent = count;
 
-// Handle mock server checkbox
-document.getElementById('mock-server').addEventListener('change', (e) => {
-    mockServerEnabled = e.target.checked;
-    setupMockServer();
+  // Visual feedback for queue size
+  queueEl.className = count > 0 ? 'queue-active' : 'queue-empty';
+}
 
-    if (mockServerEnabled) {
-        showAlert('Mock server enabled - API calls will be simulated', 'success');
+function updateLastSent() {
+  state.lastSentTime = Date.now();
+  updateLastSentDisplay();
+}
+
+function updateLastSentDisplay() {
+  const lastSentEl = document.getElementById('last-sent');
+  if (!lastSentEl) return;
+
+  if (!state.lastSentTime) {
+    lastSentEl.textContent = 'nunca';
+    lastSentEl.className = 'last-sent-never';
+    return;
+  }
+
+  const secondsAgo = Math.floor((Date.now() - state.lastSentTime) / 1000);
+  let displayText, className;
+
+  if (secondsAgo < 1) {
+    displayText = 'ahora';
+    className = 'last-sent-now';
+  } else if (secondsAgo < 60) {
+    displayText = `${secondsAgo}s`;
+    className = 'last-sent-recent';
+  } else {
+    const minutesAgo = Math.floor(secondsAgo / 60);
+    displayText = `${minutesAgo}m`;
+    className = 'last-sent-old';
+  }
+
+  lastSentEl.textContent = displayText;
+  lastSentEl.className = className;
+}
+
+// Update the "last sent" display every second
+setInterval(updateLastSentDisplay, 1000);
+
+function addEventToMonitor(eventType, status = 'queued', eventData = null) {
+  // Skip monitor updates during E2E tests
+  if (isE2ETest) return null;
+
+  const eventsList = document.getElementById('events-list');
+  if (!eventsList) return;
+
+  const eventId = `event-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  const eventEl = document.createElement('div');
+  eventEl.className = `monitor-event status-${status}`;
+  eventEl.dataset.eventId = eventId;
+
+  // Extract and format event details
+  let eventDetails = '';
+  let eventPayload = '';
+
+  if (eventData) {
+    if (eventData.custom_event) {
+      eventDetails = eventData.custom_event.name;
+      eventPayload = JSON.stringify(eventData.custom_event.metadata || {}, null, 2);
+    } else if (eventData.click_data) {
+      eventDetails = `${eventData.click_data.element || 'elemento'} (${eventData.click_data.x}, ${eventData.click_data.y})`;
+      eventPayload = JSON.stringify(eventData.click_data, null, 2);
+    } else if (eventData.scroll_data) {
+      eventDetails = `${eventData.scroll_data.depth}% de profundidad`;
+      eventPayload = JSON.stringify(eventData.scroll_data, null, 2);
+    } else if (eventData.page_url) {
+      try {
+        const url = new URL(eventData.page_url);
+        eventDetails = url.pathname + (url.hash || '');
+      } catch {
+        eventDetails = eventData.page_url;
+      }
+      eventPayload = JSON.stringify(eventData, null, 2);
     } else {
-        showAlert('Mock server disabled - real API calls will be made', 'warning');
+      eventPayload = JSON.stringify(eventData, null, 2);
     }
-});
+  }
 
-// Auto-fill some demo metadata
-document.getElementById('global-metadata').value = JSON.stringify({
-    environment: 'playground',
-    version: '1.0.0',
-    user_type: 'developer'
-}, null, 2);
+  const timestamp = new Date().toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 1
+  });
 
-// Add keyboard shortcuts
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-            case 'i':
-                e.preventDefault();
-                if (!isInitialized) initBtn.click();
-                break;
-            case 'd':
-                e.preventDefault();
-                if (isInitialized) destroyBtn.click();
-                break;
-            case 'l':
-                e.preventDefault();
-                clearLogsBtn.click();
-                break;
-        }
+  const statusConfig = {
+    'queued': { icon: '⏳', text: 'En cola', color: '#f59e0b' },
+    'sending': { icon: '📤', text: 'Enviando', color: '#8b5cf6' },
+    'sent': { icon: '✅', text: 'Enviado', color: '#10b981' },
+    'error': { icon: '❌', text: 'Error', color: '#ef4444' }
+  };
+
+  const statusInfo = statusConfig[status] || statusConfig.queued;
+
+  eventEl.innerHTML = `
+    <div class="event-header">
+      <div class="event-type-badge event-type-${eventType.toLowerCase()}">${eventType}</div>
+      <div class="event-status" style="color: ${statusInfo.color}">
+        <span class="event-status-icon">${statusInfo.icon}</span>
+        <span class="event-status-text">${statusInfo.text}</span>
+      </div>
+      <div class="event-timestamp">${timestamp}</div>
+    </div>
+    <div class="event-details">
+      ${eventDetails ? `<div class="event-summary">${eventDetails}</div>` : ''}
+    </div>
+    ${eventPayload ? `<div class="event-payload" style="display: none;"><pre><code>${eventPayload}</code></pre></div>` : ''}
+  `;
+
+  // Add click handler to toggle payload visibility
+  eventEl.addEventListener('click', () => {
+    const payload = eventEl.querySelector('.event-payload');
+    if (payload) {
+      const isVisible = payload.style.display !== 'none';
+      payload.style.display = isVisible ? 'none' : 'block';
+      eventEl.classList.toggle('expanded', !isVisible);
     }
-});
+  });
 
-// Initialize real-time event listener
-setupRealTimeEventListener();
+  eventsList.insertBefore(eventEl, eventsList.firstChild);
 
-// Show keyboard shortcuts info
-showAlert('Keyboard shortcuts: Ctrl/Cmd + I (Init), Ctrl/Cmd + D (Destroy), Ctrl/Cmd + L (Clear logs)', 'success');
+  // Mantener un máximo de 50 eventos para mejor rendimiento
+  while (eventsList.children.length > 50) {
+    eventsList.removeChild(eventsList.lastChild);
+  }
 
-// Initialize UI state
-updateStatus(false);
+  return eventId;
+}
+
+function updateEventStatus(eventId, newStatus, details = '') {
+  // Skip monitor updates during E2E tests
+  if (isE2ETest) return;
+
+  const eventEl = document.querySelector(`[data-event-id="${eventId}"]`);
+  if (!eventEl) return;
+
+  const statusConfig = {
+    'queued': { icon: '⏳', text: 'En cola', color: '#f59e0b' },
+    'sending': { icon: '📤', text: 'Enviando', color: '#8b5cf6' },
+    'sent': { icon: '✅', text: 'Enviado', color: '#10b981' },
+    'error': { icon: '❌', text: 'Error', color: '#ef4444' }
+  };
+
+  const statusInfo = statusConfig[newStatus] || statusConfig.queued;
+
+  // Update status visuals
+  eventEl.className = `monitor-event status-${newStatus}`;
+  const statusIcon = eventEl.querySelector('.event-status-icon');
+  const statusText = eventEl.querySelector('.event-status-text');
+
+  if (statusIcon) statusIcon.textContent = statusInfo.icon;
+  if (statusText) statusText.textContent = statusInfo.text;
+
+  const statusEl = eventEl.querySelector('.event-status');
+  if (statusEl) statusEl.style.color = statusInfo.color;
+
+  // Add details if error
+  if (newStatus === 'error' && details) {
+    let errorDetails = eventEl.querySelector('.event-error-details');
+    if (!errorDetails) {
+      errorDetails = document.createElement('div');
+      errorDetails.className = 'event-error-details';
+      eventEl.querySelector('.event-details').appendChild(errorDetails);
+    }
+    errorDetails.textContent = details;
+  }
+}
+
+function updateEventsAsSent(eventIds) {
+  // Skip monitor updates during E2E tests
+  if (isE2ETest) return;
+
+  if (Array.isArray(eventIds)) {
+    eventIds.forEach(id => updateEventStatus(id, 'sent'));
+  } else {
+    // Legacy: update first N events if passed a count
+    const eventsList = document.getElementById('events-list');
+    if (!eventsList) return;
+
+    const queuedEvents = eventsList.querySelectorAll('.status-queued, .status-sending');
+    const count = Math.min(eventIds || 0, queuedEvents.length);
+
+    for (let i = 0; i < count; i++) {
+      const eventId = queuedEvents[i].dataset.eventId;
+      updateEventStatus(eventId, 'sent');
+    }
+  }
+}
+
+function clearEventsMonitor() {
+  const eventsList = document.getElementById('events-list');
+  if (eventsList) {
+    eventsList.innerHTML = '';
+  }
+  // Reset queue info when clearing
+  updateQueueCount(0);
+  updateQueueStatus('⏸');
+  const lastSentEl = document.getElementById('last-sent');
+  if (lastSentEl) {
+    lastSentEl.textContent = 'nunca';
+    lastSentEl.className = 'last-sent-never';
+  }
+}
+
+// ============================================================================
+// TRACELOG LISTENERS
+// ============================================================================
+
+function setupTraceLogListener(traceLog) {
+  if (!traceLog || state.traceLogListenersAttached) return;
+
+  console.log('🔌 Configurando listeners de TraceLog...');
+
+  // Keep track of events for better queue management
+  const eventQueue = new Map();
+
+  // Event tracking
+  traceLog.on('event', (data) => {
+    const { type, data: eventData, queueLength } = data;
+    console.log('📥 TraceLog Event captureado:', { type, eventData, queueLength });
+
+    // Add to monitor and track
+    const eventId = addEventToMonitor(type, 'queued', eventData);
+    if (eventId) {
+      eventQueue.set(eventId, { type, data: eventData, timestamp: Date.now() });
+    }
+
+    // Update queue count with actual number from library
+    updateQueueCount(queueLength || eventQueue.size);
+    updateQueueStatus('collecting');
+  });
+
+  // Queue events - when events are sent or processed (BaseEventsQueueDto)
+  traceLog.on('queue', (data) => {
+    // data is a BaseEventsQueueDto: { user_id, session_id, device, events, global_metadata? }
+    const eventCount = data.events ? data.events.length : 0;
+    console.log('📤 TraceLog queue procesada:', {
+      eventCount,
+      userId: data.user_id,
+      sessionId: data.session_id,
+      device: data.device,
+      hasGlobalMetadata: !!data.global_metadata
+    });
+
+    // Mark events as sending immediately
+    updateQueueStatus('sending');
+
+    // Mark oldest events as sending
+    const events = Array.from(eventQueue.entries())
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, eventCount);
+
+    events.forEach(([eventId]) => {
+      updateEventStatus(eventId, 'sending');
+    });
+
+    // Mark them as sent and remove from queue immediately
+    events.forEach(([eventId]) => {
+      updateEventStatus(eventId, 'sent');
+      eventQueue.delete(eventId);
+    });
+
+    // Update queue count to 0 after sending
+    updateQueueCount(0);
+    updateQueueStatus('idle');
+    updateLastSent();
+  });
+
+  state.traceLogListenersAttached = true;
+  console.log('✅ TraceLog listeners configurados correctamente');
+}
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+// ============================================================================
+// TEST MODE SETUP
+// ============================================================================
+
+function setupTestMode() {
+  if (!state.testMode.enabled) return;
+
+  console.log('🧪 Test mode enabled:', state.testMode);
+
+  // Remove floating monitor during E2E tests to prevent click interception
+  if (isE2ETest || state.testMode.hideUI) {
+    const monitor = document.getElementById('floating-monitor');
+    if (monitor) monitor.remove();
+  }
+
+  // Add test data attributes to key elements
+  document.body.setAttribute('data-testid', 'playground-body');
+  document.body.setAttribute('data-test-mode', 'true');
+
+  // Add test indicator
+  if (!state.testMode.hideUI) {
+    const indicator = document.createElement('div');
+    indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:#ff6b35;color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:bold;z-index:10000;pointer-events:none;';
+    indicator.textContent = 'TEST MODE: E2E';
+    indicator.setAttribute('data-testid', 'test-mode-indicator');
+    document.body.appendChild(indicator);
+  }
+
+  // Test helpers for E2E compatibility
+  window.testHelpers = {
+    sendCustomEvent: (name, data) => sendTraceLogEvent(name, data)
+  };
+}
+
+
+function waitForTraceLogReady(timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    const traceLog = getTraceLogInstance();
+    if (traceLog) {
+      resolve(traceLog);
+      return;
+    }
+
+    const startTime = Date.now();
+    const checkInterval = setInterval(() => {
+      const traceLog = getTraceLogInstance();
+      if (traceLog) {
+        clearInterval(checkInterval);
+        resolve(traceLog);
+      } else if (Date.now() - startTime > timeout) {
+        clearInterval(checkInterval);
+        reject(new Error('TraceLog not ready within timeout'));
+      }
+    }, 50);
+  });
+}
+
+async function initializeApp() {
+  setupTestMode();
+  setupNavigation();
+  setupCartInteractions();
+  setupContactForm();
+  setupFloatingMonitor();
+
+  // Initialize TraceLog
+  try {
+    const traceLog = await waitForTraceLogReady();
+    setupTraceLogListener(traceLog);
+
+    const shouldAutoInit = state.testMode.enabled ? state.testMode.autoInit : true;
+
+    if (shouldAutoInit) {
+      const projectId = state.testMode.enabled ? state.testMode.projectId : 'skip';
+      await traceLog.init({ id: projectId });
+      updateQueueStatus('▶️');
+
+      if (state.testMode.enabled && state.testMode.autoInit) {
+        console.log('🧪 TraceLog auto-initialized for testing');
+      }
+    } else {
+      updateQueueStatus('idle');
+    }
+  } catch (error) {
+    console.error('TraceLog init error:', error);
+    updateQueueStatus('❌');
+  }
+}
+
+// Start app when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+  initializeApp();
+}

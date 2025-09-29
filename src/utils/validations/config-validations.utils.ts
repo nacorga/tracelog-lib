@@ -1,4 +1,9 @@
-import { MAX_SESSION_TIMEOUT_MS, MIN_SESSION_TIMEOUT_MS, VALIDATION_MESSAGES } from '../../constants';
+import {
+  DEFAULT_SAMPLING_RATE,
+  MAX_SESSION_TIMEOUT_MS,
+  MIN_SESSION_TIMEOUT_MS,
+  VALIDATION_MESSAGES,
+} from '../../constants';
 import { AppConfig, Config, ApiConfig, Mode } from '../../types';
 import {
   ProjectIdValidationError,
@@ -103,6 +108,44 @@ export const validateAppConfig = (config: AppConfig): void => {
 };
 
 /**
+ * Validates CSS selector syntax without executing querySelector (XSS prevention)
+ * @param selector - CSS selector to validate
+ * @returns True if the selector syntax is valid
+ */
+const isValidCssSelectorSyntax = (selector: string): boolean => {
+  // Prevent dangerous characters that could indicate XSS attempts
+  if (selector.includes('<') || selector.includes('>') || /on\w+\s*=/i.test(selector)) {
+    return false;
+  }
+
+  // Safe CSS selector pattern - allows common selector syntax
+  const safePattern = /^[a-zA-Z0-9\-_#.[\]="':, >+~*()]+$/;
+  if (!safePattern.test(selector)) {
+    return false;
+  }
+
+  // Check for balanced parentheses
+  let parenthesesCount = 0;
+  for (const char of selector) {
+    if (char === '(') parenthesesCount++;
+    if (char === ')') parenthesesCount--;
+    if (parenthesesCount < 0) return false;
+  }
+  if (parenthesesCount !== 0) return false;
+
+  // Check for balanced square brackets
+  let bracketsCount = 0;
+  for (const char of selector) {
+    if (char === '[') bracketsCount++;
+    if (char === ']') bracketsCount--;
+    if (bracketsCount < 0) return false;
+  }
+  if (bracketsCount !== 0) return false;
+
+  return true;
+};
+
+/**
  * Validates scroll container selectors
  * @param selectors - CSS selectors to validate
  */
@@ -119,15 +162,14 @@ const validateScrollContainerSelectors = (selectors: string | string[]): void =>
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, 'config');
     }
 
-    // Validate CSS selector syntax but handle invalid selectors gracefully
-    if (typeof document !== 'undefined') {
-      try {
-        document.querySelector(selector);
-      } catch {
-        // Invalid CSS selectors are handled gracefully
-        // they will be ignored by the ScrollHandler and it will fall back to window scrolling
-        debugLog.clientWarn('ConfigValidation', `Invalid CSS selector will be ignored: "${selector}"`);
-      }
+    // Validate CSS selector syntax using regex-based validation (XSS prevention)
+    // This validates syntax WITHOUT executing document.querySelector()
+    if (!isValidCssSelectorSyntax(selector)) {
+      debugLog.clientError('ConfigValidation', 'Invalid or potentially unsafe CSS selector', {
+        selector,
+        reason: 'Failed security validation',
+      });
+      throw new AppConfigValidationError('Invalid or potentially unsafe CSS selector', 'config');
     }
   }
 };
@@ -200,14 +242,22 @@ export const validateAndNormalizeConfig = (config: AppConfig): AppConfig => {
  * @param samplingRate - The sampling rate to validate
  * @param errors - Array to push errors to
  */
-const validateSamplingRate = (samplingRate: unknown, errors: string[]): void => {
-  if (samplingRate !== undefined) {
-    if (typeof samplingRate !== 'number') {
-      errors.push('samplingRate must be a number');
-    } else if (samplingRate < 0 || samplingRate > 1) {
-      errors.push('samplingRate must be between 0 and 1');
-    }
+const validateSamplingRate = (samplingRate: unknown, errors: string[]): number | undefined => {
+  if (samplingRate === undefined) {
+    return undefined;
   }
+
+  if (typeof samplingRate !== 'number') {
+    errors.push('samplingRate must be a number');
+    return DEFAULT_SAMPLING_RATE;
+  }
+
+  if (Number.isNaN(samplingRate) || samplingRate <= 0 || samplingRate > 1) {
+    errors.push(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE);
+    return DEFAULT_SAMPLING_RATE;
+  }
+
+  return samplingRate;
 };
 
 /**
@@ -241,7 +291,7 @@ const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], p
  * @param config - The configuration to validate
  * @returns Validation result with errors and warnings
  */
-export const validateConfig = (config: Config): { errors: string[]; warnings: string[] } => {
+export const validateConfig = (config: Config): { errors: string[]; warnings: string[]; samplingRate: number } => {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -273,7 +323,7 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
 
   // No custom API endpoints supported
 
-  validateSamplingRate(config.samplingRate, errors);
+  const validatedSamplingRate = validateSamplingRate(config.samplingRate, errors) ?? DEFAULT_SAMPLING_RATE;
 
   if (config.tags !== undefined && !Array.isArray(config.tags)) {
     errors.push('tags must be an array');
@@ -281,7 +331,19 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
 
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
 
-  return { errors, warnings };
+  return { errors, warnings, samplingRate: validatedSamplingRate };
+};
+
+export const normalizeConfig = (config: Config): { config: Config; errors: string[]; warnings: string[] } => {
+  const { errors, warnings, samplingRate } = validateConfig(config);
+  return {
+    config: {
+      ...config,
+      samplingRate,
+    },
+    errors,
+    warnings,
+  };
 };
 
 /**
@@ -289,15 +351,15 @@ export const validateConfig = (config: Config): { errors: string[]; warnings: st
  * @param config - The configuration to validate
  * @returns Validation result with errors and warnings
  */
-export const validateFinalConfig = (config: Config): { errors: string[]; warnings: string[] } => {
+export const validateFinalConfig = (config: Config): { errors: string[]; warnings: string[]; samplingRate: number } => {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  validateSamplingRate(config.samplingRate, errors);
+  const validatedSamplingRate = validateSamplingRate(config.samplingRate, errors) ?? DEFAULT_SAMPLING_RATE;
   validateExcludedUrlPaths(config.excludedUrlPaths, errors);
   // No custom API endpoints supported
 
-  return { errors, warnings };
+  return { errors, warnings, samplingRate: validatedSamplingRate };
 };
 
 /**

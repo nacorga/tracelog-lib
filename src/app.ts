@@ -1,339 +1,224 @@
-import { ApiManager } from './managers/api.manager';
+import { getApiUrlForProject } from './managers/api.manager';
 import { ConfigManager } from './managers/config.manager';
 import { EventManager } from './managers/event.manager';
-import { AppConfig } from './types/config.types';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { isEventValid } from './utils/validations';
-import { EventType } from './types/event.types';
+import { AppConfig, EventType, EmitterCallback, EmitterMap } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { getDeviceType, normalizeUrl } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter, normalizeConfig } from './utils';
 import { StorageManager } from './managers/storage.manager';
-import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESSION_CONSTANTS } from './constants';
+import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
-import { NetworkHandler } from './handlers/network.handler';
-import { ProjectIdValidationError } from './types/validation-error.types';
-import { debugLog } from './utils/logging';
 
+/**
+ * Main application class for TraceLog analytics
+ * Orchestrates event tracking, session management, and integrations
+ */
 export class App extends StateManager {
-  protected isInitialized = false;
-  protected googleAnalytics: GoogleAnalyticsIntegration | null = null;
-  protected storageManager!: StorageManager;
-  protected eventManager!: EventManager;
-  protected sessionHandler!: SessionHandler;
-  protected pageViewHandler!: PageViewHandler;
-  protected clickHandler!: ClickHandler;
-  protected scrollHandler!: ScrollHandler;
-  protected performanceHandler!: PerformanceHandler;
-  protected errorHandler!: ErrorHandler;
-  protected networkHandler!: NetworkHandler;
-  protected suppressNextScrollTimer: number | null = null;
+  private isInitialized = false;
+  private suppressNextScrollTimer: number | null = null;
 
-  /**
-   * Returns the initialization status of the app
-   * @returns true if the app is fully initialized, false otherwise
-   */
+  private readonly emitter = new Emitter();
+
+  protected managers: {
+    storage?: StorageManager;
+    event?: EventManager;
+  } = {};
+
+  protected handlers: {
+    session?: SessionHandler;
+    pageView?: PageViewHandler;
+    click?: ClickHandler;
+    scroll?: ScrollHandler;
+    performance?: PerformanceHandler;
+    error?: ErrorHandler;
+  } = {};
+
+  protected integrations: {
+    googleAnalytics?: GoogleAnalyticsIntegration;
+  } = {};
+
   get initialized(): boolean {
     return this.isInitialized;
   }
 
   async init(appConfig: AppConfig): Promise<void> {
     if (this.isInitialized) {
-      debugLog.debug('App', 'App already initialized, skipping re-initialization', { projectId: appConfig.id });
       return;
     }
 
-    debugLog.info('App', 'App initialization started', { projectId: appConfig.id });
+    if (!appConfig.id?.trim()) {
+      throw new Error('Project ID is required');
+    }
 
-    this.validateAppReadiness(appConfig);
+    this.managers.storage = new StorageManager();
 
     try {
-      this.initStorage();
-      await this.setState(appConfig);
-      await this.setIntegrations();
-      this.setEventManager();
-      await this.initHandlers();
+      await this.setupState(appConfig);
+      await this.setupIntegrations();
+
+      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
+
+      this.initializeHandlers();
+
+      await this.managers.event.recoverPersistedEvents().catch(() => {
+        debugLog.warn('App', 'Failed to recover persisted events');
+      });
 
       this.isInitialized = true;
-
-      debugLog.info('App', 'App initialization completed successfully', {
-        projectId: appConfig.id,
-      });
     } catch (error) {
-      this.isInitialized = false;
-
-      debugLog.error('App', 'App initialization failed', { projectId: appConfig.id, error });
-
-      throw error;
-    }
-  }
-
-  /**
-   * Validates that the app is ready to initialize with the provided config
-   * This is a lightweight runtime validation layer that ensures the app receives proper config
-   * @param appConfig - The validated and normalized configuration
-   * @throws {ProjectIdValidationError} If project ID is invalid at runtime
-   */
-  private validateAppReadiness(appConfig: AppConfig): void {
-    // Lightweight validation - config should already be validated and normalized by api.ts
-    if (!appConfig?.id) {
-      debugLog.clientError('App', 'Configuration integrity check failed - missing project ID', {
-        hasConfig: !!appConfig,
-        hasId: !!appConfig?.id,
-      });
-
-      throw new ProjectIdValidationError('Configuration integrity check failed', 'app');
+      await this.destroy(true);
+      throw new Error(`TraceLog initialization failed: ${error}`);
     }
   }
 
   sendCustomEvent(name: string, metadata?: Record<string, unknown>): void {
-    if (!this.eventManager) {
-      debugLog.warn('App', 'Custom event attempted before eventManager initialization', { eventName: name });
+    if (!this.managers.event) {
       return;
     }
 
     const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
 
-    if (valid) {
-      debugLog.debug('App', 'Custom event validated and queued', { eventName: name, hasMetadata: !!sanitizedMetadata });
-
-      this.eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: {
-          name,
-          ...(sanitizedMetadata && { metadata: sanitizedMetadata }),
-        },
-      });
-    } else {
-      const currentMode = this.get('config')?.mode;
-
-      debugLog.clientError('App', `Custom event validation failed: ${error ?? 'unknown error'}`, {
-        eventName: name,
-        validationError: error,
-        hasMetadata: !!metadata,
-        mode: currentMode,
-      });
-
-      if (currentMode === 'qa' || currentMode === 'debug') {
-        throw new Error(
-          `custom event "${name}" validation failed (${error ?? 'unknown error'}). Please, review your event data and try again.`,
-        );
+    if (!valid) {
+      const config = this.get('config');
+      if (config?.mode === 'qa' || config?.mode === 'debug') {
+        throw new Error(`Custom event "${name}" validation failed: ${error}`);
       }
-    }
-  }
-
-  destroy(): void {
-    if (!this.isInitialized) {
-      debugLog.warn('App', 'Destroy called but app was not initialized');
       return;
     }
 
-    debugLog.info('App', 'App cleanup started');
+    this.managers.event.track({
+      type: EventType.CUSTOM,
+      custom_event: {
+        name,
+        ...(sanitizedMetadata && { metadata: sanitizedMetadata }),
+      },
+    });
+  }
 
-    if (this.googleAnalytics) {
-      this.googleAnalytics.cleanup();
+  on<K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void {
+    this.emitter.on(event, callback);
+  }
+
+  off<K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void {
+    this.emitter.off(event, callback);
+  }
+
+  async destroy(force = false): Promise<void> {
+    if (!this.isInitialized && !force) {
+      return;
     }
 
-    if (this.sessionHandler) {
-      this.sessionHandler.stopTracking();
-    }
+    this.integrations.googleAnalytics?.cleanup();
 
-    if (this.pageViewHandler) {
-      this.pageViewHandler.stopTracking();
-    }
+    const handlerCleanups = Object.values(this.handlers)
+      .filter(Boolean)
+      .map(async (handler) => {
+        try {
+          await handler.stopTracking();
+        } catch {
+          debugLog.warn('App', 'Failed to stop tracking');
+        }
+      });
 
-    if (this.clickHandler) {
-      this.clickHandler.stopTracking();
-    }
-
-    if (this.scrollHandler) {
-      this.scrollHandler.stopTracking();
-    }
-
-    if (this.performanceHandler) {
-      this.performanceHandler.stopTracking();
-    }
-
-    if (this.errorHandler) {
-      this.errorHandler.stopTracking();
-    }
-
-    if (this.networkHandler) {
-      this.networkHandler.stopTracking();
-    }
+    await Promise.allSettled(handlerCleanups);
 
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
     }
 
-    if (this.eventManager) {
-      this.eventManager.stop();
-    }
+    this.managers.event?.stop();
+
+    this.emitter.removeAllListeners();
 
     this.set('hasStartSession', false);
     this.set('suppressNextScroll', false);
     this.set('sessionId', null);
 
     this.isInitialized = false;
-    debugLog.info('App', 'App cleanup completed successfully');
+    this.handlers = {};
   }
 
-  private async setState(appConfig: AppConfig): Promise<void> {
-    this.setApiUrl(appConfig.id, appConfig.allowHttp);
-    await this.setConfig(appConfig);
-    this.setUserId();
-    this.setDevice();
-    this.setPageUrl();
-  }
+  private async setupState(appConfig: AppConfig): Promise<void> {
+    // Set API URL
+    const apiUrl = getApiUrlForProject(appConfig.id, appConfig.allowHttp);
+    this.set('apiUrl', apiUrl);
 
-  private setApiUrl(id: string, allowHttp = false): void {
-    const apiManager = new ApiManager();
-    this.set('apiUrl', apiManager.getUrl(id, allowHttp));
-  }
-
-  private async setConfig(appConfig: AppConfig): Promise<void> {
+    // Get remote configuration
     const configManager = new ConfigManager();
-    const config = await configManager.get(this.get('apiUrl'), appConfig);
+    const config = await configManager.get(apiUrl, appConfig);
+    const { config: normalizedConfig } = normalizeConfig(config);
+    this.set('config', normalizedConfig);
 
-    this.set('config', config);
-  }
-
-  private setUserId(): void {
-    const userManager = new UserManager(this.storageManager);
-    const userId = userManager.getId();
-
+    // Set user ID
+    const userId = UserManager.getId(this.managers.storage as StorageManager, normalizedConfig.id);
     this.set('userId', userId);
+
+    // Set device and page info
+    this.set('device', getDeviceType());
+    const pageUrl = normalizeUrl(window.location.href, normalizedConfig.sensitiveQueryParams);
+    this.set('pageUrl', pageUrl);
   }
 
-  private setDevice(): void {
-    const device = getDeviceType();
-    this.set('device', device);
-  }
+  private async setupIntegrations(): Promise<void> {
+    const config = this.get('config');
+    const measurementId = config.integrations?.googleAnalytics?.measurementId;
 
-  private setPageUrl(): void {
-    const initialUrl = normalizeUrl(window.location.href, this.get('config').sensitiveQueryParams);
-    this.set('pageUrl', initialUrl);
-  }
-
-  private async setIntegrations(): Promise<void> {
-    const isIPExcluded = this.get('config').ipExcluded;
-    const measurementId = this.get('config').integrations?.googleAnalytics?.measurementId;
-
-    if (!isIPExcluded && measurementId?.trim()) {
-      this.googleAnalytics = new GoogleAnalyticsIntegration();
-      await this.googleAnalytics.initialize();
+    if (!config.ipExcluded && measurementId?.trim()) {
+      try {
+        this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
+        await this.integrations.googleAnalytics.initialize();
+      } catch {
+        this.integrations.googleAnalytics = undefined;
+      }
     }
   }
 
-  private async initHandlers(): Promise<void> {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before handlers');
-    }
+  private initializeHandlers(): void {
+    this.handlers.session = new SessionHandler(
+      this.managers.storage as StorageManager,
+      this.managers.event as EventManager,
+    );
 
-    if (!this.storageManager) {
-      throw new Error('StorageManager must be initialized before handlers');
-    }
+    this.handlers.session.startTracking().catch((error) => {
+      debugLog.error('App', 'Session handler failed to start', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
 
-    this.initSessionHandler();
+    const onPageView = (): void => {
+      this.set('suppressNextScroll', true);
 
-    this.initPageViewHandler();
+      if (this.suppressNextScrollTimer) {
+        clearTimeout(this.suppressNextScrollTimer);
+      }
 
-    this.initClickHandler();
+      this.suppressNextScrollTimer = window.setTimeout(() => {
+        this.set('suppressNextScroll', false);
+      }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESS_MULTIPLIER);
+    };
 
-    this.initScrollHandler();
+    this.handlers.pageView = new PageViewHandler(this.managers.event as EventManager, onPageView);
+    this.handlers.pageView.startTracking();
 
-    await this.initPerformanceHandler();
+    this.handlers.click = new ClickHandler(this.managers.event as EventManager);
+    this.handlers.click.startTracking();
 
-    this.initErrorHandler();
+    this.handlers.scroll = new ScrollHandler(this.managers.event as EventManager);
+    this.handlers.scroll.startTracking();
 
-    this.initNetworkHandler();
-  }
+    this.handlers.performance = new PerformanceHandler(this.managers.event as EventManager);
+    this.handlers.performance.startTracking().catch(() => {
+      debugLog.warn('App', 'Failed to start performance tracking');
+    });
 
-  private initStorage(): void {
-    this.storageManager = new StorageManager();
-  }
-
-  private setEventManager(): void {
-    if (!this.storageManager) {
-      throw new Error('StorageManager must be initialized before EventManager');
-    }
-    this.eventManager = new EventManager(this.storageManager, this.googleAnalytics);
-  }
-
-  private initSessionHandler(): void {
-    if (!this.storageManager || !this.eventManager) {
-      throw new Error('StorageManager and EventManager must be initialized before SessionHandler');
-    }
-    this.sessionHandler = new SessionHandler(this.storageManager, this.eventManager);
-    this.sessionHandler.startTracking();
-  }
-
-  private initPageViewHandler(): void {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before PageViewHandler');
-    }
-    const onPageViewTrack = (): void => this.onPageViewTrack();
-
-    this.pageViewHandler = new PageViewHandler(this.eventManager, onPageViewTrack);
-    this.pageViewHandler.startTracking();
-  }
-
-  private onPageViewTrack(): void {
-    this.set('suppressNextScroll', true);
-
-    if (this.suppressNextScrollTimer) {
-      clearTimeout(this.suppressNextScrollTimer);
-      this.suppressNextScrollTimer = null;
-    }
-
-    this.suppressNextScrollTimer = window.setTimeout(() => {
-      this.set('suppressNextScroll', false);
-    }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESSION_CONSTANTS.SUPPRESS_MULTIPLIER);
-  }
-
-  private initClickHandler(): void {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before ClickHandler');
-    }
-    this.clickHandler = new ClickHandler(this.eventManager);
-    this.clickHandler.startTracking();
-  }
-
-  private initScrollHandler(): void {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before ScrollHandler');
-    }
-    this.scrollHandler = new ScrollHandler(this.eventManager);
-    this.scrollHandler.startTracking();
-  }
-
-  private async initPerformanceHandler(): Promise<void> {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before PerformanceHandler');
-    }
-    this.performanceHandler = new PerformanceHandler(this.eventManager);
-    await this.performanceHandler.startTracking();
-  }
-
-  private initErrorHandler(): void {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before ErrorHandler');
-    }
-    this.errorHandler = new ErrorHandler(this.eventManager);
-    this.errorHandler.startTracking();
-  }
-
-  private initNetworkHandler(): void {
-    if (!this.eventManager) {
-      throw new Error('EventManager must be initialized before NetworkHandler');
-    }
-    this.networkHandler = new NetworkHandler(this.eventManager);
-    this.networkHandler.startTracking();
+    this.handlers.error = new ErrorHandler(this.managers.event as EventManager);
+    this.handlers.error.startTracking();
   }
 }

@@ -1,7 +1,29 @@
-export * from './types/common.types';
-export * from './types/config.types';
-export * from './types/device.types';
-export * from './types/event.types';
-export * from './types/mode.types';
-export * from './types/queue.types';
-export * from './types/tag.types';
+export {
+  Mode,
+  EventType,
+  DeviceType,
+  ScrollDirection,
+  ErrorType,
+  TagConditionOperator,
+  TagLogicalOperator,
+  TagConditionType,
+} from './types';
+
+export type {
+  ScrollData,
+  ClickData,
+  CustomEventData,
+  MetadataType,
+  WebVitalsData,
+  ErrorData,
+  PageViewData,
+  UTM,
+  EventData,
+  AppConfig,
+  ApiConfig,
+  ExtendedEventsQueueDto,
+  TagConfig,
+  BaseEventsQueueDto,
+  WebVitalType,
+  SessionEndReason,
+} from './types';

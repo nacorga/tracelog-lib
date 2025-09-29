@@ -47,12 +47,7 @@ export interface ClickData {
   dataAttributes?: Record<string, string>;
 }
 
-export interface ClickCoordinates {
-  x: number;
-  y: number;
-  relativeX: number;
-  relativeY: number;
-}
+export type ClickCoordinates = Pick<ClickData, 'x' | 'y' | 'relativeX' | 'relativeY'>;
 
 export interface ClickTrackingElementData {
   element: HTMLElement;
@@ -73,11 +68,9 @@ export interface WebVitalsData {
 export interface ErrorData {
   type: ErrorType;
   message: string;
-  method?: string;
-  url?: string;
-  status?: number;
-  statusText?: string;
-  duration?: number;
+  filename?: string;
+  line?: number;
+  column?: number;
 }
 
 export interface UTM {
@@ -94,6 +87,11 @@ export interface PageViewData {
   pathname?: string;
   search?: string;
   hash?: string;
+}
+
+export interface VitalSample {
+  type: WebVitalType;
+  value: number;
 }
 
 export interface EventData {

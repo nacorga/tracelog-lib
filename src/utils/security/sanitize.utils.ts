@@ -5,8 +5,7 @@ import {
   MAX_STRING_LENGTH,
   XSS_PATTERNS,
 } from '../../constants';
-import { MetadataType } from '../../types/common.types';
-import { ApiConfig } from '../../types/config.types';
+import { MetadataType, ApiConfig } from '../../types';
 import { debugLog } from '../logging';
 
 /**
@@ -250,6 +249,12 @@ export const sanitizeApiConfig = (data: unknown): ApiConfig => {
           } else {
             debugLog.warn('Sanitize', 'Tags value is not an array', { value, type: typeof value });
           }
+        } else if (key === 'samplingRate') {
+          const sanitizedValue = sanitizeValue(value);
+
+          if (typeof sanitizedValue === 'number') {
+            safeData.samplingRate = sanitizedValue;
+          }
         } else {
           const sanitizedValue = sanitizeValue(value);
 
@@ -317,49 +322,5 @@ export const sanitizeMetadata = (metadata: unknown): Record<string, MetadataType
       error: error instanceof Error ? error.message : error,
     });
     throw new Error(`Metadata sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-};
-
-/**
- * Sanitizes URL strings for tracking
- * @param url - The URL to sanitize
- * @returns The sanitized URL
- */
-export const sanitizeUrl = (url: string): string => {
-  debugLog.debug('Sanitize', 'Starting URL sanitization', { urlLength: typeof url === 'string' ? url.length : 0 });
-
-  if (typeof url !== 'string') {
-    debugLog.warn('Sanitize', 'URL is not a string', { url, type: typeof url });
-    return '';
-  }
-
-  try {
-    // Basic URL validation
-    const urlObject = new URL(url);
-
-    // Only allow http/https protocols
-    if (!['http:', 'https:'].includes(urlObject.protocol)) {
-      debugLog.warn('Sanitize', 'URL protocol not allowed', {
-        protocol: urlObject.protocol,
-        allowedProtocols: ['http:', 'https:'],
-      });
-      return '';
-    }
-
-    // Sanitize the URL string
-    const result = sanitizeString(urlObject.href);
-    debugLog.debug('Sanitize', 'URL sanitization completed via URL object', {
-      originalLength: url.length,
-      sanitizedLength: result.length,
-      protocol: urlObject.protocol,
-    });
-
-    return result;
-  } catch {
-    // If URL parsing fails, sanitize as string
-    debugLog.warn('Sanitize', 'URL parsing failed, falling back to string sanitization', {
-      urlPreview: url.slice(0, 100),
-    });
-    return sanitizeString(url);
   }
 };

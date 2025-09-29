@@ -10,4 +10,5 @@ export interface State {
   pageUrl: string;
   hasStartSession: boolean;
   suppressNextScroll: boolean;
+  scrollEventCount?: number;
 }

@@ -1,9 +1,14 @@
 import { EventListenerManager } from './listeners.types';
 import { debugLog } from '../utils/logging';
 
-export class MouseListenerManager implements EventListenerManager {
-  private readonly onActivity: () => void;
-  private readonly options = { passive: true };
+/**
+ * Base class for input listener managers to reduce code duplication
+ */
+abstract class BaseInputListenerManager implements EventListenerManager {
+  protected readonly onActivity: () => void;
+  protected readonly options = { passive: true };
+  protected abstract readonly events: string[];
+  protected abstract readonly logPrefix: string;
 
   constructor(onActivity: () => void) {
     this.onActivity = onActivity;
@@ -11,50 +16,31 @@ export class MouseListenerManager implements EventListenerManager {
 
   setup(): void {
     try {
-      window.addEventListener('mousemove', this.onActivity, this.options);
-      window.addEventListener('mousedown', this.onActivity, this.options);
-      window.addEventListener('wheel', this.onActivity, this.options);
+      this.events.forEach((event) => {
+        window.addEventListener(event, this.onActivity, this.options);
+      });
     } catch (error) {
-      debugLog.error('MouseListenerManager', 'Failed to setup mouse listeners', { error });
-      throw error;
+      debugLog.error(this.logPrefix, `Failed to setup ${this.logPrefix.toLowerCase()} listeners`, { error });
     }
   }
 
   cleanup(): void {
     try {
-      window.removeEventListener('mousemove', this.onActivity);
-      window.removeEventListener('mousedown', this.onActivity);
-      window.removeEventListener('wheel', this.onActivity);
+      this.events.forEach((event) => {
+        window.removeEventListener(event, this.onActivity);
+      });
     } catch (error) {
-      debugLog.warn('MouseListenerManager', 'Error during mouse listeners cleanup', { error });
+      debugLog.warn(this.logPrefix, `Error during ${this.logPrefix.toLowerCase()} listeners cleanup`, { error });
     }
   }
 }
 
-export class KeyboardListenerManager implements EventListenerManager {
-  private readonly onActivity: () => void;
-  private readonly options = { passive: true };
+export class MouseListenerManager extends BaseInputListenerManager {
+  protected readonly events = ['mousemove', 'mousedown', 'wheel'];
+  protected readonly logPrefix = 'MouseListenerManager';
+}
 
-  constructor(onActivity: () => void) {
-    this.onActivity = onActivity;
-  }
-
-  setup(): void {
-    try {
-      window.addEventListener('keydown', this.onActivity, this.options);
-      window.addEventListener('keypress', this.onActivity, this.options);
-    } catch (error) {
-      debugLog.error('KeyboardListenerManager', 'Failed to setup keyboard listeners', { error });
-      throw error;
-    }
-  }
-
-  cleanup(): void {
-    try {
-      window.removeEventListener('keydown', this.onActivity);
-      window.removeEventListener('keypress', this.onActivity);
-    } catch (error) {
-      debugLog.warn('KeyboardListenerManager', 'Error during keyboard listeners cleanup', { error });
-    }
-  }
+export class KeyboardListenerManager extends BaseInputListenerManager {
+  protected readonly events = ['keydown'];
+  protected readonly logPrefix = 'KeyboardListenerManager';
 }
