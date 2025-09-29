@@ -11,6 +11,22 @@
 
 
 
+
+## [0.3.0] - 2025-09-29
+
+### ✨ Features
+
+- Add flag to disable TraceLog initialization and update README ([efa1a1a](../../commit/efa1a1a8fd2172966a92523d23ba8f9e88bd6bd2))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.2.2...v0.3.0
+
+
 ## [0.2.2] - 2025-09-29
 
 ### 🔧 Other Changes
