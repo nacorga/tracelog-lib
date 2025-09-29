@@ -68,11 +68,9 @@ export interface WebVitalsData {
 export interface ErrorData {
   type: ErrorType;
   message: string;
-  method?: string;
-  url?: string;
-  status?: number;
-  statusText?: string;
-  duration?: number;
+  filename?: string;
+  line?: number;
+  column?: number;
 }
 
 export interface UTM {

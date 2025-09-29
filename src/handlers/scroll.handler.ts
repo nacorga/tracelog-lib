@@ -79,7 +79,6 @@ export class ScrollHandler extends StateManager {
 
     const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {
-        this.set('suppressNextScroll', false);
         return;
       }
 

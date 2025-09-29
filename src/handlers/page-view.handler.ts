@@ -23,8 +23,8 @@ export class PageViewHandler extends StateManager {
 
     this.trackInitialPageView();
 
-    window.addEventListener('popstate', this.trackCurrentPage);
-    window.addEventListener('hashchange', this.trackCurrentPage);
+    window.addEventListener('popstate', this.trackCurrentPage, true);
+    window.addEventListener('hashchange', this.trackCurrentPage, true);
 
     this.patchHistory('pushState');
     this.patchHistory('replaceState');
@@ -33,8 +33,8 @@ export class PageViewHandler extends StateManager {
   stopTracking(): void {
     debugLog.debug('PageViewHandler', 'Stopping page view tracking');
 
-    window.removeEventListener('popstate', this.trackCurrentPage);
-    window.removeEventListener('hashchange', this.trackCurrentPage);
+    window.removeEventListener('popstate', this.trackCurrentPage, true);
+    window.removeEventListener('hashchange', this.trackCurrentPage, true);
 
     if (this.originalPushState) {
       window.history.pushState = this.originalPushState;
@@ -64,23 +64,25 @@ export class PageViewHandler extends StateManager {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 
-    if (this.get('pageUrl') !== normalizedUrl) {
-      const fromUrl = this.get('pageUrl');
-
-      debugLog.debug('PageViewHandler', 'Page navigation detected', { from: fromUrl, to: normalizedUrl });
-
-      this.set('pageUrl', normalizedUrl);
-
-      const pageViewData = this.extractPageViewData();
-      this.eventManager.track({
-        type: EventType.PAGE_VIEW,
-        page_url: this.get('pageUrl'),
-        from_page_url: fromUrl,
-        ...(pageViewData && { page_view: pageViewData }),
-      });
-
-      this.onTrack();
+    if (this.get('pageUrl') === normalizedUrl) {
+      return;
     }
+
+    this.onTrack();
+
+    const fromUrl = this.get('pageUrl');
+
+    debugLog.debug('PageViewHandler', 'Page navigation detected', { from: fromUrl, to: normalizedUrl });
+
+    this.set('pageUrl', normalizedUrl);
+
+    const pageViewData = this.extractPageViewData();
+    this.eventManager.track({
+      type: EventType.PAGE_VIEW,
+      page_url: this.get('pageUrl'),
+      from_page_url: fromUrl,
+      ...(pageViewData && { page_view: pageViewData }),
+    });
   };
 
   private trackInitialPageView(): void {

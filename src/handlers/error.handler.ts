@@ -56,7 +56,7 @@ export class ErrorHandler extends StateManager {
       error_data: {
         type: ErrorType.JS_ERROR,
         message: this.sanitize(event.message || 'Unknown error'),
-        ...(event.filename && { url: event.filename }),
+        ...(event.filename && { filename: event.filename }),
         ...(event.lineno && { line: event.lineno }),
         ...(event.colno && { column: event.colno }),
       },

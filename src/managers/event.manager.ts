@@ -71,6 +71,7 @@ export class EventManager extends StateManager {
     click_data,
     custom_event,
     web_vitals,
+    error_data,
     session_end_reason,
     session_start_recovered,
   }: Partial<EventData>): void {
@@ -94,6 +95,7 @@ export class EventManager extends StateManager {
       click_data,
       custom_event,
       web_vitals,
+      error_data,
       session_end_reason,
       session_start_recovered,
     });
@@ -289,6 +291,7 @@ export class EventManager extends StateManager {
       ...(data.click_data && { click_data: data.click_data }),
       ...(data.custom_event && { custom_event: data.custom_event }),
       ...(data.web_vitals && { web_vitals: data.web_vitals }),
+      ...(data.error_data && { error_data: data.error_data }),
       ...(data.session_end_reason && { session_end_reason: data.session_end_reason }),
       ...(data.session_start_recovered && { session_start_recovered: data.session_start_recovered }),
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
