@@ -36,8 +36,8 @@ Thank you for your interest in contributing to the TraceLog Library! This docume
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/tracelog-sdk.git
-cd tracelog-sdk
+git clone https://github.com/YOUR_USERNAME/tracelog-lib.git
+cd tracelog-lib
 
 # Install dependencies
 npm install
@@ -191,7 +191,7 @@ The project uses Playwright for end-to-end testing:
 npm run test:e2e
 
 # Serve test fixtures locally (for development)
-npm run serve:test  # http://localhost:3000
+npm run serve  # http://localhost:3000
 ```
 
 **Test Files:**
@@ -208,15 +208,15 @@ Create test files to verify functionality:
 
 ```javascript
 // test-example.js
-import { TraceLog } from './dist/esm/public-api.js';
+import { tracelog } from './dist/esm/public-api.js';
 
 // Test basic functionality
-await TraceLog.init({
+await tracelog.init({
   id: 'test-project-id',
   globalMetadata: { test: true }
 });
 
-TraceLog.event('test_event', {
+tracelog.event('test_event', {
   action: 'manual_test',
   timestamp: Date.now()
 });

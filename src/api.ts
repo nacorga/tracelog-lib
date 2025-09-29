@@ -14,7 +14,7 @@ let isDestroying = false;
  * @param appConfig - The configuration object for the app
  * @throws {Error} If initialization fails or environment is invalid
  * @example
- * await init({ id: 'my-project-id' });
+ * await tracelog.init({ id: 'my-project-id' });
  */
 export const init = async (appConfig: AppConfig): Promise<void> => {
   // Browser environment check
@@ -70,12 +70,12 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
  * @param metadata - Optional metadata to attach to the event.
  * @example
  * // Send a custom event with metadata
- * event('user_signup', { method: 'email', plan: 'premium' });
+ * tracelog.event('user_signup', { method: 'email', plan: 'premium' });
  * @example
  * // Send a custom event without metadata
- * event('user_login');
+ * tracelog.event('user_login');
  * @remarks
- * This function should be called after the app has been initialized using the `init` function.
+ * This function should be called after the app has been initialized using the `tracelog.init` function.
  */
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
   if (!app) {
@@ -96,12 +96,12 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
  * @param callback - Function to call when event is emitted
  * @example
  * // Listen for real-time events
- * on('realtime', (data) => {
+ * tracelog.on('realtime', (data) => {
  *   console.log('Event tracked:', data.type, data.data);
  * });
  *
  * // Listen for sent events
- * on('sent', (data) => {
+ * tracelog.on('sent', (data) => {
  *   console.log('Events sent:', data.eventCount);
  * });
  */
@@ -119,7 +119,7 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
  * @param callback - The same function reference that was used in on()
  * @example
  * // Remove a specific listener
- * off('realtime', myCallback);
+ * tracelog.off('realtime', myCallback);
  */
 export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (!app) {

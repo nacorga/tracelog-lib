@@ -8,13 +8,21 @@
 # Tests
 npm run test:unit                # Unit tests
 npm run test:integration         # Integration tests
-npm run test:e2e                 # E2E tests
+npm run test:e2e                 # E2E tests (uses Playwright)
 npm run test                     # All tests
 
 # Quality
 npm run check                    # Types + lint + format
 npm run fix                      # Auto-fix issues
 ```
+
+## E2E Test Coordination
+
+**QA Mode**: `?qaMode=true`
+- **Purpose**: Enhanced logging and debugging for testing scenarios
+- **Activation**: URL parameter or programmatic mode setting
+- **Effects**: Enables full event sampling and comprehensive debug logging
+- **Usage**: Used for both manual debugging and automated testing scenarios
 
 ## Test Failure Triage
 - If tests fail to run or fail unexpectedly, determine whether the failure stems from the test configuration/setup or from a defect in the TraceLog library.

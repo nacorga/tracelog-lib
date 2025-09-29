@@ -1,6 +1,6 @@
 # TraceLog Library
 
-A lightweight TypeScript Library for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
+A lightweight TypeScript library for web analytics and user behavior tracking. Automatically captures clicks, scrolls, page views, and performance metrics with cross-tab session management and privacy-first design.
 
 ## Features
 
@@ -9,6 +9,7 @@ A lightweight TypeScript Library for web analytics and user behavior tracking. A
 - **Privacy-first** - Built-in PII sanitization, IP exclusion options, and configurable data sampling.
 - **Framework agnostic** - Works with vanilla JS, React, Vue, Angular, or any web application.
 - **Lightweight** - Only one dependency (`web-vitals`) with dual ESM/CJS support.
+- **Event-driven** - Real-time event subscription with `on()` and `off()` methods for custom integrations.
 
 ## Installation
 
@@ -32,15 +33,15 @@ A lightweight TypeScript Library for web analytics and user behavior tracking. A
 Initialize tracking with your project ID and start capturing events immediately:
 
 ```typescript
-import * as TraceLog from '@tracelog/lib';
+import { tracelog } from '@tracelog/lib';
 
 // Initialize tracking
-await TraceLog.init({
+await tracelog.init({
   id: 'your-project-id'
 });
 
 // Send custom events
-TraceLog.event('user_signup', {
+tracelog.event('user_signup', {
   method: 'email',
   plan: 'premium'
 });
@@ -52,7 +53,7 @@ TraceLog.event('user_signup', {
 
 **Basic tracking with configuration:**
 ```typescript
-await TraceLog.init({
+await tracelog.init({
   id: 'your-project-id',
   sessionTimeout: 30 * 60 * 1000 // 30 minutes
 });
@@ -60,7 +61,7 @@ await TraceLog.init({
 
 **Custom events with metadata:**
 ```typescript
-TraceLog.event('product_viewed', {
+tracelog.event('product_viewed', {
   productId: 'abc-123',
   category: 'electronics',
   price: 299.99,
@@ -70,7 +71,7 @@ TraceLog.event('product_viewed', {
 
 **Privacy-focused configuration:**
 ```typescript
-await TraceLog.init({
+await tracelog.init({
   id: 'your-project-id',
   sensitiveQueryParams: ['token', 'session_id'],
   excludedUrlPaths: ['/admin/*', '/internal'],
@@ -83,14 +84,26 @@ await TraceLog.init({
 **Core methods:**
 - `init(config: AppConfig): Promise<void>` - Initialize tracking with project configuration.
 - `event(name: string, metadata?: Record<string, MetadataType>): void` - Send custom event with optional metadata.
-- `destroy(): void` - Clean up all tracking and remove event listeners.
+- `on(event: string, callback: Function): void` - Subscribe to events emitted by TraceLog.
+- `off(event: string, callback: Function): void` - Unsubscribe from events emitted by TraceLog.
+- `isInitialized(): boolean` - Check if the library has been initialized.
+- `destroy(): Promise<void>` - Clean up all tracking and remove event listeners.
 
 **Key configuration options:**
 - `config.id`: Your unique project identifier (required).
 - `config.sessionTimeout`: Session timeout in milliseconds (default: 15 minutes).
 - `config.globalMetadata`: Metadata automatically attached to all events.
+- `config.mode`: Logging mode controlling verbosity ('qa', 'debug', etc.).
+- `config.samplingRate`: Event sampling rate between 0 and 1.
+- `config.errorSampling`: Error event sampling rate between 0 and 1.
+- `config.excludedUrlPaths`: URL path patterns to ignore during tracking.
+- `config.sensitiveQueryParams`: Query parameters to remove before tracking URLs.
+- `config.allowHttp`: Enable HTTP requests for testing environments.
+- `config.scrollContainerSelectors`: Custom scroll containers to monitor.
+- `config.integrations`: Third-party integration configurations.
 
 **Metadata types:** `string | number | boolean | string[]`
+
 
 ## Configuration
 
@@ -98,9 +111,22 @@ await TraceLog.init({
 - Use `samplingRate: 0.1` to reduce data volume in high-traffic applications
 - Configure `sessionTimeout` to match your application's user session length
 
+**Event subscription**
+```typescript
+// Subscribe to individual events as they are tracked
+tracelog.on('event', (eventData) => {
+  console.log('Event tracked:', eventData.type, eventData);
+});
+
+// Subscribe to event queue batches being sent
+tracelog.on('queue', (queueData) => {
+  console.log('Events queued for sending:', queueData.events.length);
+});
+```
+
 **Google Analytics integration:**
 ```typescript
-await TraceLog.init({
+await tracelog.init({
   id: 'your-project-id',
   integrations: {
     googleAnalytics: {
@@ -113,7 +139,7 @@ await TraceLog.init({
 ## Compatibility
 
 - **Runtime**: Modern browsers (Chrome 60+, Firefox 55+, Safari 12+)
-- **Module formats**: ESM, CommonJS, UMD
+- **Module formats**: ESM, CommonJS
 - **TypeScript**: Full type definitions included
 - **Frameworks**: React, Vue, Angular, Svelte, vanilla JS
 
@@ -121,16 +147,22 @@ await TraceLog.init({
 
 **Development mode** → Set `NODE_ENV=dev` for event-based logging to `window` → Use browser console for runtime debugging.
 
-**Log levels** → `qa` mode shows CLIENT_ERROR, CLIENT_WARN, INFO → `debug` mode shows all levels → Configure via server-side settings.
+**Log levels** → `qa` mode shows CLIENT_ERROR, CLIENT_WARN, INFO → `debug` mode shows all levels → Configure via `mode` parameter.
 
 ```typescript
-// Enable debug logging (forces debug mode)
-await TraceLog.init({ id: SpecialProjectId.Skip });
-
-// Listen to debug events in development
-window.addEventListener('tracelog:log', (event) => {
-  console.log(event.detail); // { timestamp, level, namespace, message, data? }
+// Enable debug logging
+await tracelog.init({
+  id: 'your-project-id',
+  mode: 'debug' // or 'qa' for less verbose logging
 });
+
+// Debug logs are automatically shown in console based on mode
+// No additional event listeners needed
+
+// Check if library is initialized
+if (tracelog.isInitialized()) {
+  console.log('TraceLog is ready');
+}
 ```
 
 ## CI/CD Integration
@@ -169,6 +201,8 @@ npm install
 npm run build:all      # Build ESM + CJS + Browser
 npm run check          # Lint + format check
 npm run test:e2e       # Run E2E tests
+npm run test:unit      # Run unit tests
+npm run test:coverage  # Run tests with coverage
 ```
 
 ### Development Workflow
@@ -201,8 +235,9 @@ This project uses a **branch protection strategy** to ensure code quality:
 ### Quality Standards
 - **Code Quality**: ESLint + Prettier enforced in CI
 - **Type Safety**: TypeScript strict mode required
-- **Testing**: E2E tests with Playwright for all features
+- **Testing**: Unit tests with Vitest, E2E tests with Playwright for all features
 - **Security**: Dependency vulnerability scanning
+- **Coverage**: Comprehensive test coverage with automated reporting
 
 ## Versioning
 

@@ -130,7 +130,7 @@ Captures JavaScript errors and unhandled promise rejections for debugging and mo
 
 **Sampling Configuration**:
 ```javascript
-await TraceLog.init({
+await tracelog.init({
   id: 'project-id',
   errorSampling: 0.25  // Capture 25% of errors (default: 0.1 = 10%)
 });
@@ -214,7 +214,7 @@ Tracks scroll depth and direction across multiple containers with debounced even
 
 **Configuration**:
 ```javascript
-await TraceLog.init({
+await tracelog.init({
   id: 'project-id',
   scrollContainerSelectors: ['.main-content', '#sidebar'],
 });

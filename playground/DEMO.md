@@ -51,6 +51,10 @@ await TraceLog.init({
 The playground automatically detects:
 
 - **E2E Mode**: Playwright, HeadlessChrome, URL param `?e2e=true`
+  - Removes floating monitor UI to prevent test interference
+  - Sets project ID to `'e2e-test-project'`
+  - Enables auto-initialization and test mode
+  - Used by Playwright tests for coordinated behavior
 - **Test Mode**: URL param `?mode=test`
 - **Scenarios**: URL param `?scenario=basic|navigation|ecommerce`
 - **Project ID**: URL param `?project-id=custom-id` (default: 'playground-test-project')

@@ -1,7 +1,16 @@
-// API functions
-export { init, event, on, off, isInitialized, destroy } from './api';
+import { init, event, on, off, isInitialized, destroy } from './api';
 
-//  Types
+// TraceLog namespace containing all API methods
+export const tracelog = {
+  init,
+  event,
+  on,
+  off,
+  isInitialized,
+  destroy,
+};
+
+// Types
 export type {
   EventType,
   EventData,
@@ -24,6 +33,9 @@ export type {
   TagConditionOperator,
   TagLogicalOperator,
 } from './app.types';
+
+// Additional types for configuration
+export type { AppConfig } from './types/config.types';
 
 // Constants
 export { DEFAULT_SESSION_TIMEOUT } from './constants';

@@ -41,7 +41,7 @@ const state = {
 
 // Helper function to access TraceLog consistently through __traceLogBridge
 function getTraceLogInstance() {
-  return window.__traceLogBridge || window.TraceLog;
+  return window.__traceLogBridge || window.tracelog;
 }
 
 // Helper function to send custom events
@@ -300,7 +300,7 @@ function clearEventsMonitor() {
 
 function setupTraceLogListener() {
   // Listen for real-time events directly from EventManager.track()
-  TraceLog.on('realtime', (data) => {
+  tracelog.on('realtime', (data) => {
     const { type, data: eventData, queueLength } = data;
 
     console.log('📥 TraceLog Event:', type, eventData);
@@ -310,7 +310,7 @@ function setupTraceLogListener() {
   });
 
   // Listen for events sent successfully
-  TraceLog.on('sent', (data) => {
+  tracelog.on('sent', (data) => {
     const { eventCount, queueLength } = data;
 
     console.log('✅ TraceLog Events Sent:', eventCount);
@@ -415,7 +415,7 @@ async function initializeApp() {
       ? state.testMode.projectId
       : 'skip'; // Always use 'skip' for playground to simulate realistic flow
 
-    await TraceLog.init({ id: projectId });
+    await tracelog.init({ id: projectId });
     updateQueueStatus('▶️');
 
     if (state.testMode.enabled && state.testMode.autoInit) {
