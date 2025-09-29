@@ -33,6 +33,21 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
+      - name: Run Unit Tests
+        run: |
+          echo "🔍 Running unit tests for release..."
+          npm run test:unit
+
+      - name: Run Integration Tests
+        run: |
+          echo "🔍 Running integration tests for release..."
+          npm run test:integration
+
+      - name: Generate Test Coverage Report
+        run: |
+          echo "🔍 Generating test coverage report for release..."
+          npm run test:coverage
+
       - name: Build for release
         run: npm run build:all
 
@@ -74,7 +89,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-health-report
-          path: test-reports/anomaly-report.json
+          path: |
+            test-reports/anomaly-report.json
+            coverage/
+
+      - name: Upload Test Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-coverage-report
+          path: coverage/
+          retention-days: 90
+          if-no-files-found: ignore
 
   release:
     runs-on: ubuntu-latest
@@ -118,12 +144,16 @@ jobs:
             This release has passed comprehensive health checks and anomaly detection.
 
             ### Quality Assurance
+            - [x] Unit tests validation
+            - [x] Integration tests validation
+            - [x] Test coverage analysis
             - [x] Comprehensive E2E testing
             - [x] TraceLog library anomaly detection
             - [x] Multi-cycle stability testing
             - [x] Cross-browser compatibility verified
 
             📄 [Health Report](../actions/runs/${{ github.run_id }})
+            📊 [Test Coverage Report](../actions/runs/${{ github.run_id }})
 
   release-failed:
     runs-on: ubuntu-latest

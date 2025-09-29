@@ -72,6 +72,23 @@ jobs:
           npm run check
           echo "✅ Code quality checks passed"
 
+      - name: Run Unit Tests
+        run: |
+          echo "🔍 Running unit tests..."
+          npm run test:unit
+          echo "✅ Unit tests passed"
+
+      - name: Run Integration Tests
+        run: |
+          echo "🔍 Running integration tests..."
+          npm run test:integration
+          echo "✅ Integration tests passed"
+
+      - name: Generate Test Coverage Report
+        run: |
+          echo "🔍 Generating test coverage report..."
+          npm run test:coverage
+
       - name: Build Integrity Check
         run: |
           echo "🔍 Testing build integrity..."
@@ -115,11 +132,21 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ github.event.pull_request.number || 'main' }}
+          name: test-reports-${{ github.event.pull_request.number || 'main' }}
           path: |
             playwright-report/
             test-results/
+            coverage/
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload coverage report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.event.pull_request.number || 'main' }}
+          path: coverage/
+          retention-days: 30
           if-no-files-found: ignore
 
       - name: Package Configuration Check
@@ -163,6 +190,9 @@ jobs:
           echo "🎉 All validation checks passed!"
           echo "✅ No security vulnerabilities"
           echo "✅ Code quality passed"
+          echo "✅ Unit tests passed"
+          echo "✅ Integration tests passed"
+          echo "✅ Test coverage generated"
           echo "✅ Build integrity verified"
           echo "✅ E2E tests passed"
           echo "✅ Package configuration valid"

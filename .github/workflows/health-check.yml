@@ -45,6 +45,21 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
+      - name: Run Unit Tests
+        run: |
+          echo "🔍 Running unit tests for health check..."
+          npm run test:unit
+
+      - name: Run Integration Tests
+        run: |
+          echo "🔍 Running integration tests for health check..."
+          npm run test:integration
+
+      - name: Generate Test Coverage Report
+        run: |
+          echo "🔍 Generating test coverage report for health check..."
+          npm run test:coverage
+
       - name: Build TraceLog library
         run: npm run build:all
 
@@ -81,6 +96,7 @@ jobs:
           path: |
             test-reports/anomaly-report.json
             health-output.txt
+            coverage/
           retention-days: 30
 
       - name: Comment PR with Health Status
@@ -102,10 +118,16 @@ jobs:
             **Anomalies Detected:** ${anomalies}
             **Critical Issues:** ${critical}
 
+            ### Test Results
+            ✅ Unit tests passed
+            ✅ Integration tests passed
+            ✅ Test coverage generated
+
             ${critical > 0 ? '🚨 **Critical issues detected!** Please review the health report before merging.' : ''}
             ${anomalies > 0 ? '⚠️ Some anomalies detected. Consider reviewing before deployment.' : ''}
 
-            📄 [Download full report from artifacts](../actions/runs/${{ github.run_id }})`;
+            📄 [Download full report from artifacts](../actions/runs/${{ github.run_id }})
+            📊 [Test coverage included in artifacts](../actions/runs/${{ github.run_id }})`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
