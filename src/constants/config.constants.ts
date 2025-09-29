@@ -14,7 +14,6 @@ export const DUPLICATE_EVENT_THRESHOLD_MS = 1000; // 1 second
 export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds
 
 // Throttling and debouncing
-export const DEFAULT_THROTTLE_DELAY_MS = 1000;
 export const SCROLL_DEBOUNCE_TIME_MS = 250;
 export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
 
@@ -163,12 +162,6 @@ export const RETRY_BACKOFF_INITIAL = 1000; // 1 second
 export const RETRY_BACKOFF_MAX = 30_000; // 30 seconds
 export const RATE_LIMIT_INTERVAL = 1000; // 1 second
 export const MAX_RETRY_ATTEMPTS = 10;
-
-// ============================================================================
-// PERFORMANCE METRICS
-// ============================================================================
-
-export const LONG_TASK_THROTTLE_MS = DEFAULT_THROTTLE_DELAY_MS;
 
 // ============================================================================
 // VALIDATION

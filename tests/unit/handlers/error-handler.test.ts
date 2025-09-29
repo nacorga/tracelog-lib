@@ -1,16 +1,18 @@
 import { vi, describe, expect, it, beforeEach } from 'vitest';
 import { ErrorHandler } from '../../../src/handlers/error.handler';
 import type { EventManager } from '../../../src/managers/event.manager';
-import { ErrorType, EventType } from '../../../src/types';
+import { Config, ErrorType, EventType } from '../../../src/types';
 
 describe('ErrorHandler', () => {
   let handler: ErrorHandler;
   let eventManager: { track: ReturnType<typeof vi.fn> } & Partial<EventManager>;
+  let config: Config;
 
   beforeEach(() => {
     eventManager = { track: vi.fn() } as typeof eventManager;
     handler = new ErrorHandler(eventManager as unknown as EventManager);
-    handler['set']('config', { errorSampling: 1 });
+    config = { id: 'test', errorSampling: 1 };
+    handler['set']('config', config);
   });
 
   it('should emit the error the first time and suppress duplicates within window', () => {

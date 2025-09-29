@@ -3,7 +3,7 @@ import { EventManager } from '../../src/managers/event.manager';
 import { PerformanceHandler } from '../../src/handlers/performance.handler';
 import { ErrorHandler } from '../../src/handlers/error.handler';
 import { resetGlobalState } from '../../src/managers/state.manager';
-import { EventType } from '../../src/types';
+import { Config, EventType } from '../../src/types';
 
 class StubEventManager extends EventManager {
   events: EventType[] = [];
@@ -20,14 +20,16 @@ describe('Integration: performance and error filters', () => {
   let manager: StubEventManager;
   let performance: PerformanceHandler;
   let errorHandler: ErrorHandler;
+  let config: Config;
 
   beforeEach(() => {
     resetGlobalState();
     manager = new StubEventManager();
     performance = new PerformanceHandler(manager);
     errorHandler = new ErrorHandler(manager);
-    performance['set']('config', {} as never);
-    errorHandler['set']('config', { errorSampling: 1 });
+    config = { id: 'test', errorSampling: 1 };
+    performance['set']('config', config);
+    errorHandler['set']('config', config);
   });
 
   it('should emit only significant vitals and non-duplicate errors', () => {

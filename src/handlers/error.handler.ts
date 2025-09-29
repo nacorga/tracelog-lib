@@ -1,6 +1,12 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { ErrorType, EventType } from '../types';
+import {
+  PII_PATTERNS,
+  MAX_ERROR_MESSAGE_LENGTH,
+  ERROR_SUPPRESSION_WINDOW_MS,
+  MAX_TRACKED_ERRORS,
+} from '../constants/error.constants';
 import { debugLog } from '../utils/logging';
 
 /**
@@ -10,17 +16,6 @@ import { debugLog } from '../utils/logging';
 export class ErrorHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly recentErrors = new Map<string, number>();
-
-  private static readonly PII_PATTERNS = [
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi, // Email
-    /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, // Phone US
-    /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g, // Credit card
-    /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi, // IBAN
-  ];
-
-  private static readonly MAX_ERROR_MESSAGE_LENGTH = 500;
-  private static readonly ERROR_SUPPRESSION_WINDOW_MS = 60_000;
-  private static readonly MAX_TRACKED_ERRORS = 50;
 
   constructor(eventManager: EventManager) {
     super();
@@ -119,12 +114,9 @@ export class ErrorHandler extends StateManager {
   }
 
   private sanitize(text: string): string {
-    let sanitized =
-      text.length > ErrorHandler.MAX_ERROR_MESSAGE_LENGTH
-        ? text.slice(0, ErrorHandler.MAX_ERROR_MESSAGE_LENGTH) + '...'
-        : text;
+    let sanitized = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + '...' : text;
 
-    for (const pattern of ErrorHandler.PII_PATTERNS) {
+    for (const pattern of PII_PATTERNS) {
       // Create new regex instance to avoid global flag state issues
       const regex = new RegExp(pattern.source, pattern.flags);
       sanitized = sanitized.replace(regex, '[REDACTED]');
@@ -138,14 +130,14 @@ export class ErrorHandler extends StateManager {
     const key = `${type}:${message}`;
     const lastSeenAt = this.recentErrors.get(key);
 
-    if (lastSeenAt && now - lastSeenAt < ErrorHandler.ERROR_SUPPRESSION_WINDOW_MS) {
+    if (lastSeenAt && now - lastSeenAt < ERROR_SUPPRESSION_WINDOW_MS) {
       this.recentErrors.set(key, now);
       return true;
     }
 
     this.recentErrors.set(key, now);
 
-    if (this.recentErrors.size > ErrorHandler.MAX_TRACKED_ERRORS) {
+    if (this.recentErrors.size > MAX_TRACKED_ERRORS) {
       this.pruneOldErrors();
     }
 
@@ -155,17 +147,17 @@ export class ErrorHandler extends StateManager {
   private pruneOldErrors(): void {
     const now = Date.now();
     for (const [key, timestamp] of this.recentErrors.entries()) {
-      if (now - timestamp > ErrorHandler.ERROR_SUPPRESSION_WINDOW_MS) {
+      if (now - timestamp > ERROR_SUPPRESSION_WINDOW_MS) {
         this.recentErrors.delete(key);
       }
     }
 
-    if (this.recentErrors.size <= ErrorHandler.MAX_TRACKED_ERRORS) {
+    if (this.recentErrors.size <= MAX_TRACKED_ERRORS) {
       return;
     }
 
     const entries = Array.from(this.recentErrors.entries()).sort((a, b) => a[1] - b[1]);
-    const excess = this.recentErrors.size - ErrorHandler.MAX_TRACKED_ERRORS;
+    const excess = this.recentErrors.size - MAX_TRACKED_ERRORS;
 
     for (let index = 0; index < excess; index += 1) {
       const entry = entries[index];

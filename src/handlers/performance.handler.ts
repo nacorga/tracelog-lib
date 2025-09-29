@@ -1,8 +1,8 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType, VitalSample } from '../types';
-import { LONG_TASK_THROTTLE_MS } from '../constants';
-import { PRECISION_TWO_DECIMALS } from '../constants';
+import { LONG_TASK_THROTTLE_MS, PRECISION_TWO_DECIMALS } from '../constants';
+import { WEB_VITALS_THRESHOLDS } from '../constants/performance.constants';
 import { debugLog } from '../utils/logging';
 
 type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
@@ -14,14 +14,7 @@ export class PerformanceHandler extends StateManager {
   private readonly observers: PerformanceObserver[] = [];
   private lastLongTaskSentAt = 0;
 
-  private readonly vitalThresholds: Record<WebVitalType, number> = {
-    LCP: 4000,
-    FCP: 1800,
-    CLS: 0.25,
-    INP: 200,
-    TTFB: 600,
-    LONG_TASK: 50,
-  };
+  private readonly vitalThresholds = WEB_VITALS_THRESHOLDS;
 
   constructor(eventManager: EventManager) {
     super();
