@@ -25,4 +25,5 @@ export type {
   TagConfig,
   BaseEventsQueueDto,
   WebVitalType,
+  SessionEndReason,
 } from './types';
