@@ -10,11 +10,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/unit/**/*.test.ts'],
-    environmentOptions: {
-      jsdom: {
-        url: 'http://localhost:3000',
-        pretendToBeVisual: true,
-        resources: 'usable',
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+        isolate: false,
       },
     },
     coverage: {
