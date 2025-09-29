@@ -1,116 +1,169 @@
 import {
   QUEUE_KEY,
-  RETRY_BACKOFF_INITIAL,
-  RETRY_BACKOFF_MAX,
-  RATE_LIMIT_INTERVAL,
   EVENT_EXPIRY_HOURS,
   SYNC_XHR_TIMEOUT_MS,
-  API_BASE_URL,
+  MAX_RETRIES,
+  RETRY_DELAY_MS,
+  REQUEST_TIMEOUT_MS,
 } from '../constants';
-import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId, Mode } from '../types';
-import { debugLog } from '../utils/logging';
+import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId } from '../types';
+import { debugLog } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
+interface SendCallbacks {
+  onSuccess?: (eventCount?: number, events?: any[]) => void;
+  onFailure?: () => void;
+}
+
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
-  private readonly queueStorageKey: string;
-
-  private retryDelay: number = RETRY_BACKOFF_INITIAL;
   private retryTimeoutId: number | null = null;
-  private lastAsyncSend = 0;
-  private lastSyncSend = 0;
+  private retryCount = 0;
+  private isRetrying = false;
 
   constructor(storeManager: StorageManager) {
     super();
-
     this.storeManager = storeManager;
-    this.queueStorageKey = `${QUEUE_KEY(this.get('config')?.id)}:${this.get('userId')}`;
-    this.recoverPersistedEvents();
   }
 
-  async sendEventsQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
-    return this.executeSend(body, () => this.sendQueueAsync(body));
+  private getQueueStorageKey(): string {
+    const projectId = this.get('config')?.id || 'default';
+    const userId = this.get('userId') || 'anonymous';
+    return `${QUEUE_KEY(projectId)}:${userId}`;
   }
 
+  /**
+   * Send events synchronously using sendBeacon or XHR fallback
+   * Used primarily for page unload scenarios
+   */
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
-    return this.executeSendSync(body, () => this.sendQueueSync(body));
+    // For skip mode, simulate success immediately (sync version)
+    if (this.shouldSkipSend()) {
+      this.clearPersistedEvents();
+      this.resetRetryState();
+
+      return true;
+    }
+
+    const success = this.sendQueueSyncInternal(body);
+
+    if (success) {
+      this.clearPersistedEvents();
+      this.resetRetryState();
+    }
+
+    return success;
   }
 
-  sendEventsQueue(body: BaseEventsQueueDto): boolean {
-    return this.executeSendSync(body, () => this.sendQueue(body));
+  /**
+   * Send events asynchronously with persistence and retry logic
+   * Main method for sending events during normal operation
+   */
+  async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
+    // First, try to persist events for recovery (even in skip mode for consistency)
+    const persisted = this.persistEvents(body);
+    if (!persisted && !this.shouldSkipSend()) {
+      debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
+    }
+
+    // Attempt to send events (or simulate in skip mode)
+    const success = await this.send(body);
+
+    if (success) {
+      this.clearPersistedEvents();
+      this.resetRetryState();
+      callbacks?.onSuccess?.(body.events.length);
+    } else {
+      this.scheduleRetry(body, callbacks);
+      callbacks?.onFailure?.();
+    }
+
+    return success;
   }
 
-  recoverPersistedEvents(): void {
+  /**
+   * Recover and send previously persisted events
+   * Called during initialization to handle events from previous session
+   */
+  async recoverPersistedEvents(callbacks?: SendCallbacks): Promise<void> {
     try {
       const persistedData = this.getPersistedData();
 
       if (!persistedData || !this.isDataRecent(persistedData) || persistedData.events.length === 0) {
         this.clearPersistedEvents();
-
         return;
       }
 
-      const recoveryBody = this.createRecoveryBody(persistedData);
-      const success = this.sendRecoveredEvents(recoveryBody);
+      const body = this.createRecoveryBody(persistedData);
+      const success = await this.send(body);
 
       if (success) {
-        debugLog.info('SenderManager', 'Persisted events recovered successfully', {
-          eventsCount: persistedData.events.length,
-          sessionId: persistedData.sessionId,
-        });
-
         this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onSuccess?.(persistedData.events.length);
       } else {
-        debugLog.warn('SenderManager', 'Failed to recover persisted events, scheduling retry', {
-          eventsCount: persistedData.events.length,
-        });
-
-        this.scheduleRetryForRecoveredEvents(recoveryBody);
+        this.scheduleRetry(body, callbacks);
+        callbacks?.onFailure?.();
       }
     } catch (error) {
       debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
+      this.clearPersistedEvents(); // Clean up corrupted data
     }
   }
 
+  /**
+   * Persist events for recovery in case of failure
+   */
+  persistEventsForRecovery(body: BaseEventsQueueDto): boolean {
+    return this.persistEvents(body);
+  }
+
+  /**
+   * Legacy method for backward compatibility
+   * @deprecated Use sendEventsQueue instead
+   */
+  async sendEventsQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
+    return this.sendEventsQueue(body);
+  }
+
+  /**
+   * Stop the sender manager and clean up resources
+   */
   stop(): void {
     this.clearRetryTimeout();
     this.resetRetryState();
+    // Clear any persisted events on shutdown to prevent stale data
+    this.clearPersistedEvents();
   }
 
-  /**
-   * Sends recovered events without re-deduplication since they were already processed
-   */
-  private sendRecoveredEvents(body: BaseEventsQueueDto): boolean {
-    return this.executeSendSync(body, () => this.sendQueue(body));
-  }
-
-  /**
-   * Schedules retry for recovered events using the specific recovery method
-   */
-  private scheduleRetryForRecoveredEvents(body: BaseEventsQueueDto): void {
-    if (this.retryTimeoutId !== null) {
-      return;
+  private async send(body: BaseEventsQueueDto): Promise<boolean> {
+    if (this.shouldSkipSend()) {
+      return this.simulateSuccessfulSend();
     }
 
-    this.retryTimeoutId = window.setTimeout(() => {
-      this.retryTimeoutId = null;
-      this.sendRecoveredEvents(body);
-    }, this.retryDelay);
-
-    this.retryDelay = Math.min(this.retryDelay * 2, RETRY_BACKOFF_MAX);
-  }
-
-  private canSendAsync(): boolean {
-    return Date.now() - this.lastAsyncSend >= RATE_LIMIT_INTERVAL;
-  }
-
-  private canSendSync(): boolean {
-    return Date.now() - this.lastSyncSend >= RATE_LIMIT_INTERVAL;
-  }
-
-  private async sendQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
     const { url, payload } = this.prepareRequest(body);
+
+    try {
+      const response = await this.sendWithTimeout(url, payload);
+
+      return response.ok;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      debugLog.error('SenderManager', 'Send request failed', {
+        error: errorMessage,
+        events: body.events.length,
+        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'), // Hide domain for privacy
+      });
+
+      return false;
+    }
+  }
+
+  private async sendWithTimeout(url: string, payload: string): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(url, {
@@ -119,73 +172,97 @@ export class SenderManager extends StateManager {
           'Content-Type': 'application/json',
         },
         body: payload,
+        keepalive: true,
+        credentials: 'include',
+        signal: controller.signal,
       });
 
-      return response.ok;
-    } catch (error) {
-      debugLog.error('SenderManager', 'Failed to send events async', { error });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-      return false;
+      return response;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
-  private sendQueueSync(body: BaseEventsQueueDto): boolean {
+  private sendQueueSyncInternal(body: BaseEventsQueueDto): boolean {
     const { url, payload } = this.prepareRequest(body);
+    const blob = new Blob([payload], { type: 'application/json' });
 
-    if (this.isSendBeaconAvailable() && navigator.sendBeacon(url, payload)) {
+    if (this.isSendBeaconAvailable() && navigator.sendBeacon(url, blob)) {
       return true;
     }
 
     return this.sendSyncXHR(url, payload);
   }
 
-  private sendQueue(body: BaseEventsQueueDto): boolean {
-    if (!this.isSendBeaconAvailable()) {
-      return false;
-    }
-
-    const { url, payload } = this.prepareRequest(body);
-
-    return navigator.sendBeacon(url, payload);
-  }
-
   private sendSyncXHR(url: string, payload: string): boolean {
-    try {
-      const xhr = new XMLHttpRequest();
+    const xhr = new XMLHttpRequest();
 
+    try {
       xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.withCredentials = true;
       xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);
 
-      return xhr.status >= 200 && xhr.status < 300;
-    } catch (error) {
-      debugLog.error('SenderManager', 'Sync XHR failed', { error });
+      const success = xhr.status >= 200 && xhr.status < 300;
 
+      if (!success) {
+        debugLog.warn('SenderManager', 'Sync XHR failed', {
+          status: xhr.status,
+          statusText: xhr.statusText || 'Unknown error',
+        });
+      }
+
+      return success;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      debugLog.warn('SenderManager', 'Sync XHR error', {
+        error: errorMessage,
+        status: xhr.status || 'unknown',
+      });
       return false;
     }
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
-    const useLocalServer = this.get('config').id === SpecialProjectId.HttpLocal;
-    const baseUrl = useLocalServer ? window.location.origin : (this.get('apiUrl') ?? API_BASE_URL);
+    const url = `${this.get('apiUrl')}/collect`;
 
     return {
-      url: `${baseUrl}/events`,
+      url,
       payload: JSON.stringify(body),
     };
   }
 
   private getPersistedData(): PersistedQueueData | null {
-    const persistedDataString = this.storeManager.getItem(this.queueStorageKey);
+    try {
+      const storageKey = this.getQueueStorageKey();
+      const persistedDataString = this.storeManager.getItem(storageKey);
 
-    return persistedDataString ? (JSON.parse(persistedDataString) as PersistedQueueData) : null;
+      if (persistedDataString) {
+        return JSON.parse(persistedDataString);
+      }
+    } catch (error) {
+      debugLog.warn('SenderManager', 'Failed to parse persisted data', { error });
+      // Clean up corrupted data
+      this.clearPersistedEvents();
+    }
+
+    return null;
   }
 
   private isDataRecent(data: PersistedQueueData): boolean {
-    const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
+    if (!data.timestamp || typeof data.timestamp !== 'number') {
+      return false;
+    }
 
-    return ageInHours < EVENT_EXPIRY_HOURS;
+    const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
+    const isRecent = ageInHours < EVENT_EXPIRY_HOURS;
+
+    return isRecent;
   }
 
   private createRecoveryBody(data: PersistedQueueData): BaseEventsQueueDto {
@@ -198,16 +275,7 @@ export class SenderManager extends StateManager {
     };
   }
 
-  private logQueue(queue: BaseEventsQueueDto): void {
-    debugLog.info('SenderManager', ` ⏩ Queue snapshot`, queue);
-  }
-
-  private handleSendFailure(body: BaseEventsQueueDto): void {
-    this.persistFailedEvents(body);
-    this.scheduleRetry(body);
-  }
-
-  private persistFailedEvents(body: BaseEventsQueueDto): void {
+  private persistEvents(body: BaseEventsQueueDto): boolean {
     try {
       const persistedData: PersistedQueueData = {
         userId: body.user_id,
@@ -218,161 +286,103 @@ export class SenderManager extends StateManager {
         ...(body.global_metadata && { global_metadata: body.global_metadata }),
       };
 
-      this.storeManager.setItem(this.queueStorageKey, JSON.stringify(persistedData));
+      const storageKey = this.getQueueStorageKey();
+      this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
+
+      return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      debugLog.error('SenderManager', 'Failed to persist events', { error });
+      debugLog.warn('SenderManager', 'Failed to persist events', { error });
+      return false;
     }
   }
 
   private clearPersistedEvents(): void {
-    this.storeManager.removeItem(this.queueStorageKey);
+    try {
+      this.storeManager.removeItem(this.getQueueStorageKey());
+    } catch (error) {
+      debugLog.warn('SenderManager', 'Failed to clear persisted events', { error });
+    }
   }
 
   private resetRetryState(): void {
-    this.retryDelay = RETRY_BACKOFF_INITIAL;
+    this.retryCount = 0;
+    this.isRetrying = false;
     this.clearRetryTimeout();
   }
 
-  private scheduleRetry(body: BaseEventsQueueDto): void {
-    if (this.retryTimeoutId !== null) {
+  private scheduleRetry(body: BaseEventsQueueDto, originalCallbacks?: SendCallbacks): void {
+    if (this.retryTimeoutId !== null || this.isRetrying) {
       return;
     }
 
-    this.retryTimeoutId = window.setTimeout(() => {
+    if (this.retryCount >= MAX_RETRIES) {
+      debugLog.warn('SenderManager', 'Max retries reached, giving up', { retryCount: this.retryCount });
+      this.clearPersistedEvents();
+      this.resetRetryState();
+      originalCallbacks?.onFailure?.();
+      return;
+    }
+
+    const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount); // Exponential backoff
+
+    this.retryTimeoutId = window.setTimeout(async () => {
       this.retryTimeoutId = null;
-      this.sendEventsQueue(body);
-    }, this.retryDelay);
 
-    this.retryDelay = Math.min(this.retryDelay * 2, RETRY_BACKOFF_MAX);
-  }
-
-  private async executeSend(body: BaseEventsQueueDto, sendFn: () => Promise<boolean>): Promise<boolean> {
-    if (this.shouldSkipSend()) {
-      this.logQueue(body);
-
-      return true;
-    }
-
-    if (!this.canSendAsync()) {
-      debugLog.info('SenderManager', `⏱️ Rate limited - skipping async send`, {
-        eventsCount: body.events.length,
-        timeSinceLastSend: Date.now() - this.lastAsyncSend,
-      });
-
-      return false;
-    }
-
-    debugLog.info('SenderManager', `🌐 Sending events to server (async)`, {
-      eventsCount: body.events.length,
-      sessionId: body.session_id,
-      userId: body.user_id,
-    });
-
-    this.lastAsyncSend = Date.now();
-
-    try {
-      const success = await sendFn();
-
-      if (success) {
-        debugLog.info('SenderManager', `✅ Successfully sent events to server`, {
-          eventsCount: body.events.length,
-          method: 'async',
-        });
-
-        this.resetRetryState();
-        this.clearPersistedEvents();
-      } else {
-        debugLog.warn('SenderManager', 'Failed to send events', {
-          eventsCount: body.events.length,
-          method: 'async',
-        });
-
-        this.handleSendFailure(body);
+      if (this.isRetrying) {
+        return;
       }
 
-      return success;
-    } catch {
-      this.handleSendFailure(body);
+      this.retryCount++;
+      this.isRetrying = true;
 
-      return false;
-    }
-  }
+      try {
+        const success = await this.send(body);
 
-  private executeSendSync(body: BaseEventsQueueDto, sendFn: () => boolean): boolean {
-    if (this.shouldSkipSend()) {
-      this.logQueue(body);
-
-      return true;
-    }
-
-    if (!this.canSendSync()) {
-      debugLog.info('SenderManager', `⏱️ Rate limited - skipping sync send`, {
-        eventsCount: body.events.length,
-        timeSinceLastSend: Date.now() - this.lastSyncSend,
-      });
-
-      return false;
-    }
-
-    debugLog.info('SenderManager', `🌐 Sending events to server (sync)`, {
-      eventsCount: body.events.length,
-      sessionId: body.session_id,
-      userId: body.user_id,
-      method: 'sendBeacon/XHR',
-    });
-
-    this.lastSyncSend = Date.now();
-
-    try {
-      const success = sendFn();
-
-      if (success) {
-        debugLog.info('SenderManager', `✅ Successfully sent events to server`, {
-          eventsCount: body.events.length,
-          method: 'sync',
-        });
-
-        this.resetRetryState();
-        this.clearPersistedEvents();
-      } else {
-        debugLog.warn('SenderManager', 'Failed to send events', {
-          eventsCount: body.events.length,
-          method: 'sync',
-        });
-
-        this.handleSendFailure(body);
+        if (success) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onSuccess?.(body.events.length);
+        } else if (this.retryCount >= MAX_RETRIES) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onFailure?.();
+        } else {
+          this.scheduleRetry(body, originalCallbacks);
+        }
+      } finally {
+        this.isRetrying = false;
       }
+    }, retryDelay);
 
-      return success;
-    } catch {
-      debugLog.info('SenderManager', `💥 Exception during event sending`, {
-        eventsCount: body.events.length,
-        method: 'sync',
-      });
-
-      this.handleSendFailure(body);
-
-      return false;
-    }
+    debugLog.debug('SenderManager', 'Retry scheduled', {
+      attempt: this.retryCount + 1,
+      delay: retryDelay,
+      events: body.events.length,
+    });
   }
 
   private shouldSkipSend(): boolean {
-    const { id, mode } = this.get('config');
-    const specialModes: Mode[] = [Mode.QA, Mode.DEBUG];
+    const config = this.get('config');
+    const { id } = config || {};
 
-    if (id === SpecialProjectId.HttpSkip) {
-      return true;
-    }
+    return id === SpecialProjectId.Skip;
+  }
 
-    return !!mode && specialModes.includes(mode) && id !== SpecialProjectId.HttpLocal;
+  /**
+   * Simulate a successful send operation for skip mode
+   * Provides realistic timing and behavior without making HTTP requests
+   */
+  private async simulateSuccessfulSend(): Promise<boolean> {
+    // Simulate realistic network delay (100-500ms)
+    const delay = Math.random() * 400 + 100;
+
+    await new Promise((resolve) => setTimeout(resolve, delay));
+
+    return true; // Always successful in skip mode
   }
 
   private isSendBeaconAvailable(): boolean {
-    if (typeof navigator.sendBeacon !== 'function') {
-      return false;
-    }
-
-    return true;
+    return typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function';
   }
 
   private clearRetryTimeout(): void {

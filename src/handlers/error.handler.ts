@@ -1,16 +1,21 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { ErrorType, EventType } from '../types';
+import {
+  PII_PATTERNS,
+  MAX_ERROR_MESSAGE_LENGTH,
+  ERROR_SUPPRESSION_WINDOW_MS,
+  MAX_TRACKED_ERRORS,
+} from '../constants/error.constants';
 import { debugLog } from '../utils/logging';
 
+/**
+ * Simplified error handler for tracking JavaScript errors and unhandled promise rejections
+ * Includes PII sanitization and sampling support
+ */
 export class ErrorHandler extends StateManager {
   private readonly eventManager: EventManager;
-  private readonly piiPatterns = [
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-    /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
-    /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-    /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-  ];
+  private readonly recentErrors = new Map<string, number>();
 
   constructor(eventManager: EventManager) {
     super();
@@ -18,102 +23,147 @@ export class ErrorHandler extends StateManager {
   }
 
   startTracking(): void {
-    debugLog.debug('ErrorHandler', 'Starting error tracking');
-
-    this.setupErrorListener();
-    this.setupUnhandledRejectionListener();
+    window.addEventListener('error', this.handleError);
+    window.addEventListener('unhandledrejection', this.handleRejection);
   }
 
   stopTracking(): void {
-    debugLog.debug('ErrorHandler', 'Stopping error tracking');
-
     window.removeEventListener('error', this.handleError);
-    window.removeEventListener('unhandledrejection', this.handleUnhandledRejection);
+    window.removeEventListener('unhandledrejection', this.handleRejection);
+    this.recentErrors.clear();
   }
 
-  private setupErrorListener(): void {
-    window.addEventListener('error', this.handleError);
-  }
-
-  private setupUnhandledRejectionListener(): void {
-    window.addEventListener('unhandledrejection', this.handleUnhandledRejection);
+  private shouldSample(): boolean {
+    const config = this.get('config');
+    const samplingRate = config?.errorSampling ?? 0.1;
+    return Math.random() < samplingRate;
   }
 
   private readonly handleError = (event: ErrorEvent): void => {
-    const config = this.get('config');
-
-    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
-      debugLog.debug('ErrorHandler', `Error not sampled, skipping (errorSampling: ${config?.errorSampling})`, {
-        errorSampling: config?.errorSampling,
-      });
+    if (!this.shouldSample()) {
       return;
     }
 
-    debugLog.warn(
-      'ErrorHandler',
-      `JavaScript error captured: ${event.message} (filename: ${event.filename}, lineno: ${event.lineno})`,
-      {
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-      },
-    );
+    const sanitizedMessage = this.sanitize(event.message || 'Unknown error');
+
+    if (this.shouldSuppressError(ErrorType.JS_ERROR, sanitizedMessage)) {
+      return;
+    }
+
+    debugLog.warn('ErrorHandler', 'JS error captured', {
+      message: sanitizedMessage,
+      filename: event.filename,
+      line: event.lineno,
+    });
 
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
-        message: this.sanitizeText(event.message || 'Unknown error'),
+        message: sanitizedMessage,
+        ...(event.filename && { filename: event.filename }),
+        ...(event.lineno && { line: event.lineno }),
+        ...(event.colno && { column: event.colno }),
       },
     });
   };
 
-  private readonly handleUnhandledRejection = (event: PromiseRejectionEvent): void => {
-    const config = this.get('config');
-
-    if (!this.shouldSample(config?.errorSampling ?? 0.1)) {
-      debugLog.debug('ErrorHandler', 'Promise rejection not sampled, skipping', {
-        errorSampling: config?.errorSampling,
-      });
+  private readonly handleRejection = (event: PromiseRejectionEvent): void => {
+    if (!this.shouldSample()) {
       return;
     }
 
-    debugLog.warn('ErrorHandler', `Unhandled promise rejection captured (reason: ${typeof event.reason})`, {
-      reason: typeof event.reason,
-    });
+    const message = this.extractRejectionMessage(event.reason);
+    const sanitizedMessage = this.sanitize(message);
 
-    let reason = 'Unknown rejection';
-
-    if (event.reason) {
-      if (typeof event.reason === 'string') {
-        reason = event.reason;
-      } else if (event.reason instanceof Error) {
-        reason = event.reason.message || event.reason.toString();
-      } else {
-        reason = String(event.reason);
-      }
+    if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
+      return;
     }
+
+    debugLog.warn('ErrorHandler', 'Promise rejection captured', { message: sanitizedMessage });
 
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.PROMISE_REJECTION,
-        message: this.sanitizeText(reason),
+        message: sanitizedMessage,
       },
     });
   };
 
-  private sanitizeText(text: string): string {
-    let sanitized = text;
+  private extractRejectionMessage(reason: unknown): string {
+    if (!reason) return 'Unknown rejection';
 
-    for (const pattern of this.piiPatterns) {
-      sanitized = sanitized.replace(pattern, '[REDACTED]');
+    if (typeof reason === 'string') return reason;
+
+    if (reason instanceof Error) {
+      return reason.stack ?? reason.message ?? reason.toString();
+    }
+
+    // Handle objects with message property
+    if (typeof reason === 'object' && 'message' in reason) {
+      return String(reason.message);
+    }
+
+    // Try to stringify objects
+    try {
+      return JSON.stringify(reason);
+    } catch {
+      return String(reason);
+    }
+  }
+
+  private sanitize(text: string): string {
+    let sanitized = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + '...' : text;
+
+    for (const pattern of PII_PATTERNS) {
+      // Create new regex instance to avoid global flag state issues
+      const regex = new RegExp(pattern.source, pattern.flags);
+      sanitized = sanitized.replace(regex, '[REDACTED]');
     }
 
     return sanitized;
   }
 
-  private shouldSample(rate: number): boolean {
-    return Math.random() < rate;
+  private shouldSuppressError(type: ErrorType, message: string): boolean {
+    const now = Date.now();
+    const key = `${type}:${message}`;
+    const lastSeenAt = this.recentErrors.get(key);
+
+    if (lastSeenAt && now - lastSeenAt < ERROR_SUPPRESSION_WINDOW_MS) {
+      this.recentErrors.set(key, now);
+      return true;
+    }
+
+    this.recentErrors.set(key, now);
+
+    if (this.recentErrors.size > MAX_TRACKED_ERRORS) {
+      this.pruneOldErrors();
+    }
+
+    return false;
+  }
+
+  private pruneOldErrors(): void {
+    const now = Date.now();
+    for (const [key, timestamp] of this.recentErrors.entries()) {
+      if (now - timestamp > ERROR_SUPPRESSION_WINDOW_MS) {
+        this.recentErrors.delete(key);
+      }
+    }
+
+    if (this.recentErrors.size <= MAX_TRACKED_ERRORS) {
+      return;
+    }
+
+    const entries = Array.from(this.recentErrors.entries()).sort((a, b) => a[1] - b[1]);
+    const excess = this.recentErrors.size - MAX_TRACKED_ERRORS;
+
+    for (let index = 0; index < excess; index += 1) {
+      const entry = entries[index];
+      if (entry) {
+        this.recentErrors.delete(entry[0]);
+      }
+    }
   }
 }

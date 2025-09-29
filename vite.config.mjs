@@ -21,6 +21,7 @@ export default defineConfig({
         format: 'es',
         entryFileNames: 'tracelog.js',
         dir: 'dist/browser',
+        inlineDynamicImports: true,
       },
     },
     target: 'es2022',

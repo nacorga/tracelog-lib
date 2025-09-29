@@ -1,5 +1,117 @@
 # Changelog
 
+
+
+
+
+
+
+
+## [0.0.8] - 2025-09-23
+
+### 🐛 Bug Fixes
+
+- Update credentials settings for CORS requests in SenderManager ([681f153](../../commit/681f15364f408961cb8ab7735c2c684de1c36f07))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.7...v0.0.8
+
+
+## [0.0.7] - 2025-09-23
+
+### 🐛 Bug Fixes
+
+- Use Blob for payload in sendBeacon calls in SenderManager ([26449b3](../../commit/26449b31d163d9f4b118ed8811da1a6319905e35))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.6...v0.0.7
+
+
+## [0.0.6] - 2025-09-22
+
+### 🐛 Bug Fixes
+
+- Add Origin and Referer headers to CORS requests in SenderManager ([0532c78](../../commit/0532c7843aacdd69cb63b777517400d7c66be713))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.5...v0.0.6
+
+
+## [0.0.5] - 2025-09-22
+
+### 🐛 Bug Fixes
+
+- Update CORS settings for fetch requests ([e9d9431](../../commit/e9d9431aa37441dcd054817a3bf0f92824cf5eb5))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.4...v0.0.5
+
+
+## [0.0.4] - 2025-09-22
+
+### 🔧 Other Changes
+
+- Remove API_BASE_URL constant and update SenderManager to use apiUrl directly ([7f3e7af](../../commit/7f3e7af7ca4255ac8e16237436f0e09ddf030309))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.3...v0.0.4
+
+
+## [0.0.3] - 2025-09-22
+
+### 🔧 Other Changes
+
+- Update event URL in SenderManager to use '/collect' endpoint ([4c7c614](../../commit/4c7c6142951505b89a217ea72d59d734f3872fd1))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.2...v0.0.3
+
+
+## [0.0.2] - 2025-09-22
+
+### 🔧 Other Changes
+
+- Add mode.types export to app.types for improved type management ([f490001](../../commit/f490001244d3c80575a0ad47a2b6aa5eca2472e2))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.0.1...v0.0.2
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

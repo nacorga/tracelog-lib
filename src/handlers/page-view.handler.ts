@@ -22,10 +22,9 @@ export class PageViewHandler extends StateManager {
     debugLog.debug('PageViewHandler', 'Starting page view tracking');
 
     this.trackInitialPageView();
-    this.trackCurrentPage();
 
-    window.addEventListener('popstate', this.trackCurrentPage);
-    window.addEventListener('hashchange', this.trackCurrentPage);
+    window.addEventListener('popstate', this.trackCurrentPage, true);
+    window.addEventListener('hashchange', this.trackCurrentPage, true);
 
     this.patchHistory('pushState');
     this.patchHistory('replaceState');
@@ -34,8 +33,8 @@ export class PageViewHandler extends StateManager {
   stopTracking(): void {
     debugLog.debug('PageViewHandler', 'Stopping page view tracking');
 
-    window.removeEventListener('popstate', this.trackCurrentPage);
-    window.removeEventListener('hashchange', this.trackCurrentPage);
+    window.removeEventListener('popstate', this.trackCurrentPage, true);
+    window.removeEventListener('hashchange', this.trackCurrentPage, true);
 
     if (this.originalPushState) {
       window.history.pushState = this.originalPushState;
@@ -47,13 +46,13 @@ export class PageViewHandler extends StateManager {
   }
 
   private patchHistory(method: 'pushState' | 'replaceState'): void {
-    if (method === 'pushState' && !this.originalPushState) {
-      this.originalPushState = window.history.pushState;
-    } else if (method === 'replaceState' && !this.originalReplaceState) {
-      this.originalReplaceState = window.history.replaceState;
-    }
-
     const original = window.history[method];
+
+    if (method === 'pushState' && !this.originalPushState) {
+      this.originalPushState = original;
+    } else if (method === 'replaceState' && !this.originalReplaceState) {
+      this.originalReplaceState = original;
+    }
 
     window.history[method] = (...args: [unknown, string, string | URL | null | undefined]): void => {
       original.apply(window.history, args);
@@ -61,49 +60,62 @@ export class PageViewHandler extends StateManager {
     };
   }
 
-  private readonly trackCurrentPage = (): void => {
+  private readonly trackCurrentPage = async (): Promise<void> => {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 
-    if (this.get('pageUrl') !== normalizedUrl) {
-      const fromUrl = this.get('pageUrl');
-
-      debugLog.debug('PageViewHandler', 'Page navigation detected', { from: fromUrl, to: normalizedUrl });
-
-      this.set('pageUrl', normalizedUrl);
-
-      this.eventManager.track({
-        type: EventType.PAGE_VIEW,
-        page_url: this.get('pageUrl'),
-        from_page_url: fromUrl,
-        ...(this.extractPageViewData() && { page_view: this.extractPageViewData() }),
-      });
-
-      this.onTrack();
+    if (this.get('pageUrl') === normalizedUrl) {
+      return;
     }
-  };
 
-  private trackInitialPageView(): void {
+    this.onTrack();
+
+    const fromUrl = this.get('pageUrl');
+
+    debugLog.debug('PageViewHandler', 'Page navigation detected', { from: fromUrl, to: normalizedUrl });
+
+    this.set('pageUrl', normalizedUrl);
+
+    const pageViewData = this.extractPageViewData();
     this.eventManager.track({
       type: EventType.PAGE_VIEW,
       page_url: this.get('pageUrl'),
-      ...(this.extractPageViewData() && { page_view: this.extractPageViewData() }),
+      from_page_url: fromUrl,
+      ...(pageViewData && { page_view: pageViewData }),
+    });
+  };
+
+  private trackInitialPageView(): void {
+    const normalizedUrl = normalizeUrl(window.location.href, this.get('config').sensitiveQueryParams);
+    const pageViewData = this.extractPageViewData();
+
+    this.eventManager.track({
+      type: EventType.PAGE_VIEW,
+      page_url: normalizedUrl,
+      ...(pageViewData && { page_view: pageViewData }),
     });
 
     this.onTrack();
   }
 
   private extractPageViewData(): PageViewData | undefined {
-    const location = window.location;
+    const { pathname, search, hash } = window.location;
+    const { referrer } = document;
+    const { title } = document;
+
+    // Early return if no meaningful data
+    if (!referrer && !title && !pathname && !search && !hash) {
+      return undefined;
+    }
 
     const data: PageViewData = {
-      ...(document.referrer && { referrer: document.referrer }),
-      ...(document.title && { title: document.title }),
-      ...(location.pathname && { pathname: location.pathname }),
-      ...(location.search && { search: location.search }),
-      ...(location.hash && { hash: location.hash }),
+      ...(referrer && { referrer }),
+      ...(title && { title }),
+      ...(pathname && { pathname }),
+      ...(search && { search }),
+      ...(hash && { hash }),
     };
 
-    return Object.values(data).some((value) => !!value) ? data : undefined;
+    return data;
   }
 }

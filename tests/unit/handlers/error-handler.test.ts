@@ -1,0 +1,47 @@
+import { vi, describe, expect, it, beforeEach } from 'vitest';
+import { ErrorHandler } from '../../../src/handlers/error.handler';
+import type { EventManager } from '../../../src/managers/event.manager';
+import { Config, ErrorType, EventType } from '../../../src/types';
+
+describe('ErrorHandler', () => {
+  let handler: ErrorHandler;
+  let eventManager: { track: ReturnType<typeof vi.fn> } & Partial<EventManager>;
+  let config: Config;
+
+  beforeEach(() => {
+    eventManager = { track: vi.fn() } as typeof eventManager;
+    handler = new ErrorHandler(eventManager as unknown as EventManager);
+    config = { id: 'test', errorSampling: 1 };
+    handler['set']('config', config);
+  });
+
+  it('should emit the error the first time and suppress duplicates within window', () => {
+    const event = new ErrorEvent('error', { message: 'Boom' });
+
+    handler['handleError'](event);
+    handler['handleError'](event);
+
+    expect(eventManager.track).toHaveBeenCalledTimes(1);
+    expect(eventManager.track).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: EventType.ERROR,
+        error_data: expect.objectContaining({
+          type: ErrorType.JS_ERROR,
+          message: 'Boom',
+        }),
+      }),
+    );
+  });
+
+  it('should allow event after suppression window expires', () => {
+    vi.useFakeTimers();
+    const event = new ErrorEvent('error', { message: 'Outage' });
+
+    handler['handleError'](event);
+    vi.advanceTimersByTime(60_000);
+    handler['handleError'](event);
+
+    expect(eventManager.track).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+});

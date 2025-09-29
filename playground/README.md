@@ -11,10 +11,10 @@ npm run playground:dev
 
 # Or step by step:
 npm run playground:setup    # Build library and copy to playground
-npm run serve:playground    # Start HTTP server on port 3001
+npm run serve              # Start HTTP server on port 3000
 ```
 
-Then open `http://localhost:3001` in your browser.
+Then open `http://localhost:3000` in your browser.
 
 ### Manual Setup
 1. **Build the TraceLog library**:
@@ -30,13 +30,13 @@ Then open `http://localhost:3001` in your browser.
 3. **Start a local server** (required for proper functionality):
    ```bash
    # Option 1: Using the npm script (recommended)
-   npm run serve:playground
+   npm run serve
 
    # Option 2: Using Node.js http-server directly
-   npx http-server playground -p 3001 --cors
+   npx http-server playground -p 3000 --cors
    ```
 
-4. **Open in browser**: Navigate to `http://localhost:3001`
+4. **Open in browser**: Navigate to `http://localhost:3000`
 
 ## Features
 

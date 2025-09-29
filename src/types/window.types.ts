@@ -1,12 +1,4 @@
-import type { App } from '../app';
-
-/**
- * Testing bridge interface for E2E tests
- * Only available when NODE_ENV=dev
- */
-export interface TraceLogTestBridge extends App {
-  isInitializing(): boolean;
-}
+import { TraceLogTestBridge } from './test-bridge.types';
 
 declare global {
   interface Window {

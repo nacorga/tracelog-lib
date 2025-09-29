@@ -1,18 +1,28 @@
 import { ApiConfig, Config } from '../types';
-import { DEFAULT_SAMPLING_RATE } from './limits.constants';
-import { DEFAULT_SESSION_TIMEOUT_MS } from './timing.constants';
-
-export const API_BASE_URL = 'https://api.tracelog.io';
+import {
+  DEFAULT_SAMPLING_RATE,
+  DEFAULT_SESSION_TIMEOUT,
+  MAX_SAMPLING_RATE,
+  MIN_SAMPLING_RATE,
+} from './config.constants';
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
   samplingRate: DEFAULT_SAMPLING_RATE,
-  tags: [],
   excludedUrlPaths: [],
+  tags: [],
+  ipExcluded: false,
 };
 
 export const DEFAULT_CONFIG = (config: Config): Config => ({
   ...DEFAULT_API_CONFIG,
   ...config,
-  sessionTimeout: DEFAULT_SESSION_TIMEOUT_MS,
   allowHttp: false,
+  sessionTimeout: DEFAULT_SESSION_TIMEOUT,
+  samplingRate:
+    config.samplingRate && config.samplingRate > MIN_SAMPLING_RATE && config.samplingRate <= MAX_SAMPLING_RATE
+      ? config.samplingRate
+      : DEFAULT_SAMPLING_RATE,
+  excludedUrlPaths: config.excludedUrlPaths ?? [],
+  tags: config.tags ?? [],
+  ipExcluded: config.ipExcluded ?? false,
 });

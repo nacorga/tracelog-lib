@@ -1,1 +1,104 @@
-export { DEFAULT_SESSION_TIMEOUT_MS } from './constants';
+// Solo importamos constantes con valor analítico real
+import { WEB_VITALS_THRESHOLDS } from './constants/performance.constants';
+import { PII_PATTERNS } from './constants/error.constants';
+
+// ============================================================================
+// PERFORMANCE ANALYTICS CONSTANTS
+// ============================================================================
+
+export const PERFORMANCE_CONFIG = {
+  WEB_VITALS_THRESHOLDS, // Umbrales de negocio para análisis de rendimiento
+} as const;
+
+// ============================================================================
+// DATA PROTECTION CONSTANTS
+// ============================================================================
+
+export const DATA_PROTECTION = {
+  PII_PATTERNS, // Patrones para protección de datos sensibles
+} as const;
+
+export const ENGAGEMENT_THRESHOLDS = {
+  LOW_ACTIVITY_EVENT_COUNT: 50,
+  HIGH_ACTIVITY_EVENT_COUNT: 1000,
+  MIN_EVENTS_FOR_DYNAMIC_CALCULATION: 100,
+  MIN_EVENTS_FOR_TREND_ANALYSIS: 30,
+  BOUNCE_RATE_SESSION_THRESHOLD: 1, // Sessions with 1 page view = bounce
+  MIN_ENGAGED_SESSION_DURATION_MS: 30 * 1000,
+  MIN_SCROLL_DEPTH_ENGAGEMENT: 25, // 25% scroll depth for engagement
+} as const;
+
+export const SESSION_ANALYTICS = {
+  INACTIVITY_TIMEOUT_MS: 30 * 60 * 1000, // 30min for analytics (vs 15min client)
+  SHORT_SESSION_THRESHOLD_MS: 30 * 1000,
+  MEDIUM_SESSION_THRESHOLD_MS: 5 * 60 * 1000,
+  LONG_SESSION_THRESHOLD_MS: 30 * 60 * 1000,
+  MAX_REALISTIC_SESSION_DURATION_MS: 8 * 60 * 60 * 1000, // Filter outliers
+} as const;
+
+export const DEVICE_ANALYTICS = {
+  MOBILE_MAX_WIDTH: 768,
+  TABLET_MAX_WIDTH: 1024,
+  MOBILE_PERFORMANCE_FACTOR: 1.5, // Mobile typically 1.5x slower
+  TABLET_PERFORMANCE_FACTOR: 1.2,
+} as const;
+
+export const CONTENT_ANALYTICS = {
+  MIN_TEXT_LENGTH_FOR_ANALYSIS: 10,
+  MIN_CLICKS_FOR_HOT_ELEMENT: 10, // Popular element threshold
+  MIN_SCROLL_COMPLETION_PERCENT: 80, // Page consumption threshold
+  MIN_TIME_ON_PAGE_FOR_READ_MS: 15 * 1000,
+} as const;
+
+export const INSIGHT_THRESHOLDS = {
+  SIGNIFICANT_CHANGE_PERCENT: 20,
+  MAJOR_CHANGE_PERCENT: 50,
+  MIN_EVENTS_FOR_INSIGHT: 100,
+  MIN_SESSIONS_FOR_INSIGHT: 10,
+  MIN_CORRELATION_STRENGTH: 0.7, // Strong correlation threshold
+  LOW_ERROR_RATE_PERCENT: 1,
+  HIGH_ERROR_RATE_PERCENT: 5,
+  CRITICAL_ERROR_RATE_PERCENT: 10,
+} as const;
+
+export const TEMPORAL_ANALYSIS = {
+  SHORT_TERM_TREND_HOURS: 24,
+  MEDIUM_TERM_TREND_DAYS: 7,
+  LONG_TERM_TREND_DAYS: 30,
+  MIN_DATA_POINTS_FOR_TREND: 5,
+  WEEKLY_PATTERN_MIN_WEEKS: 4,
+  DAILY_PATTERN_MIN_DAYS: 14,
+} as const;
+
+export const SEGMENTATION_ANALYTICS = {
+  MIN_SEGMENT_SIZE: 10,
+  MIN_COHORT_SIZE: 5,
+  COHORT_ANALYSIS_DAYS: [1, 3, 7, 14, 30],
+  MIN_FUNNEL_EVENTS: 20,
+} as const;
+
+export const ANALYTICS_QUERY_LIMITS = {
+  DEFAULT_EVENTS_LIMIT: 5,
+  DEFAULT_SESSIONS_LIMIT: 5,
+  DEFAULT_PAGES_LIMIT: 5,
+  MAX_EVENTS_FOR_DEEP_ANALYSIS: 10000,
+  MAX_TIME_RANGE_DAYS: 365,
+  ANALYTICS_BATCH_SIZE: 1000, // For historical analysis
+} as const;
+
+export const ANOMALY_DETECTION = {
+  ANOMALY_THRESHOLD_SIGMA: 2.5,
+  STRONG_ANOMALY_THRESHOLD_SIGMA: 3.0,
+  TRAFFIC_DROP_ALERT_PERCENT: -30,
+  TRAFFIC_SPIKE_ALERT_PERCENT: 200,
+  MIN_BASELINE_DAYS: 7,
+  MIN_EVENTS_FOR_ANOMALY_DETECTION: 50,
+} as const;
+
+export const SPECIAL_VALUES = {
+  PAGE_URL_EXCLUDED: 'excluded',
+  PAGE_URL_UNKNOWN: 'unknown',
+  IPV6_IPV4_PREFIX: '::ffff:',
+} as const;
+
+export const LOCAL_IP_ADDRESSES = ['localhost', '127.0.0.1', '::1'] as const;

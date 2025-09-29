@@ -1,4 +1,10 @@
-import { SCROLL_DEBOUNCE_TIME_MS, SIGNIFICANT_SCROLL_DELTA } from '../constants';
+import {
+  MAX_SCROLL_EVENTS_PER_SESSION,
+  MIN_SCROLL_DEPTH_CHANGE,
+  SCROLL_DEBOUNCE_TIME_MS,
+  SCROLL_MIN_EVENT_INTERVAL_MS,
+  SIGNIFICANT_SCROLL_DELTA,
+} from '../constants';
 import { EventType, ScrollData, ScrollDirection } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
@@ -7,6 +13,9 @@ import { debugLog } from '../utils/logging';
 interface ScrollContainer {
   element: Window | HTMLElement;
   lastScrollPos: number;
+  lastDepth: number;
+  lastDirection: ScrollDirection;
+  lastEventTime: number;
   debounceTimer: number | null;
   listener: EventListener;
 }
@@ -14,6 +23,10 @@ interface ScrollContainer {
 export class ScrollHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly containers: ScrollContainer[] = [];
+  private limitWarningLogged = false;
+  private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
+  private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
+  private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
 
   constructor(eventManager: EventManager) {
     super();
@@ -22,10 +35,12 @@ export class ScrollHandler extends StateManager {
   }
 
   startTracking(): void {
+    this.limitWarningLogged = false;
+    this.applyConfigOverrides();
+    this.set('scrollEventCount', 0);
+
     const raw = this.get('config').scrollContainerSelectors;
     const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
-
-    debugLog.debug('ScrollHandler', 'Starting scroll tracking', { selectorsCount: selectors.length });
 
     const elements: Array<Window | HTMLElement> = selectors
       .map((sel) => this.safeQuerySelector(sel))
@@ -41,12 +56,8 @@ export class ScrollHandler extends StateManager {
   }
 
   stopTracking(): void {
-    debugLog.debug('ScrollHandler', 'Stopping scroll tracking', { containersCount: this.containers.length });
-
     for (const container of this.containers) {
-      if (container.debounceTimer) {
-        clearTimeout(container.debounceTimer);
-      }
+      this.clearContainerTimer(container);
 
       if (container.element instanceof Window) {
         window.removeEventListener('scroll', container.listener);
@@ -56,6 +67,8 @@ export class ScrollHandler extends StateManager {
     }
 
     this.containers.length = 0;
+    this.set('scrollEventCount', 0);
+    this.limitWarningLogged = false;
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
@@ -64,38 +77,41 @@ export class ScrollHandler extends StateManager {
       return;
     }
 
-    const container: ScrollContainer = {
-      element,
-      lastScrollPos: this.getScrollTop(element),
-      debounceTimer: null,
-      listener: () => {},
-    };
-
     const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {
-        this.set('suppressNextScroll', false);
         return;
       }
 
-      if (container.debounceTimer) {
-        clearTimeout(container.debounceTimer);
-      }
+      this.clearContainerTimer(container);
 
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
 
         if (scrollData) {
-          this.eventManager.track({
-            type: EventType.SCROLL,
-            scroll_data: scrollData,
-          });
+          const now = Date.now();
+
+          this.processScrollEvent(container, scrollData, now);
         }
 
         container.debounceTimer = null;
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
 
-    container.listener = handleScroll;
+    const initialScrollTop = this.getScrollTop(element);
+    const container: ScrollContainer = {
+      element,
+      lastScrollPos: initialScrollTop,
+      lastDepth: this.calculateScrollDepth(
+        initialScrollTop,
+        this.getScrollHeight(element),
+        this.getViewportHeight(element),
+      ),
+      lastDirection: ScrollDirection.DOWN,
+      lastEventTime: 0,
+      debounceTimer: null,
+      listener: handleScroll,
+    };
+
     this.containers.push(container);
 
     if (element instanceof Window) {
@@ -105,28 +121,117 @@ export class ScrollHandler extends StateManager {
     }
   }
 
+  private processScrollEvent(container: ScrollContainer, scrollData: ScrollData, timestamp: number): void {
+    if (!this.shouldEmitScrollEvent(container, scrollData, timestamp)) {
+      return;
+    }
+
+    container.lastEventTime = timestamp;
+    container.lastDepth = scrollData.depth;
+    container.lastDirection = scrollData.direction;
+
+    const currentCount = this.get('scrollEventCount') ?? 0;
+    this.set('scrollEventCount', currentCount + 1);
+
+    this.eventManager.track({
+      type: EventType.SCROLL,
+      scroll_data: scrollData,
+    });
+  }
+
+  private shouldEmitScrollEvent(container: ScrollContainer, scrollData: ScrollData, timestamp: number): boolean {
+    if (this.hasReachedSessionLimit()) {
+      this.logLimitOnce();
+      return false;
+    }
+
+    if (!this.hasElapsedMinimumInterval(container, timestamp)) {
+      return false;
+    }
+
+    if (!this.hasSignificantDepthChange(container, scrollData.depth)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private hasReachedSessionLimit(): boolean {
+    const currentCount = this.get('scrollEventCount') ?? 0;
+    return currentCount >= this.maxEventsPerSession;
+  }
+
+  private hasElapsedMinimumInterval(container: ScrollContainer, timestamp: number): boolean {
+    if (container.lastEventTime === 0) {
+      return true;
+    }
+    return timestamp - container.lastEventTime >= this.minIntervalMs;
+  }
+
+  private hasSignificantDepthChange(container: ScrollContainer, newDepth: number): boolean {
+    return Math.abs(newDepth - container.lastDepth) >= this.minDepthChange;
+  }
+
+  private logLimitOnce(): void {
+    if (this.limitWarningLogged) {
+      return;
+    }
+
+    this.limitWarningLogged = true;
+    debugLog.warn('ScrollHandler', 'Max scroll events per session reached', {
+      limit: this.maxEventsPerSession,
+    });
+  }
+
+  private applyConfigOverrides(): void {
+    this.minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
+    this.minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
+    this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
+  }
+
+  private isWindowScrollable(): boolean {
+    return document.documentElement.scrollHeight > window.innerHeight;
+  }
+
+  private clearContainerTimer(container: ScrollContainer): void {
+    if (container.debounceTimer !== null) {
+      clearTimeout(container.debounceTimer);
+      container.debounceTimer = null;
+    }
+  }
+
+  private getScrollDirection(current: number, previous: number): ScrollDirection {
+    return current > previous ? ScrollDirection.DOWN : ScrollDirection.UP;
+  }
+
+  private calculateScrollDepth(scrollTop: number, scrollHeight: number, viewportHeight: number): number {
+    if (scrollHeight <= viewportHeight) {
+      return 0;
+    }
+
+    const maxScrollTop = scrollHeight - viewportHeight;
+    return Math.min(100, Math.max(0, Math.floor((scrollTop / maxScrollTop) * 100)));
+  }
+
   private calculateScrollData(container: ScrollContainer): ScrollData | null {
     const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
-    const viewportHeight = this.getViewportHeight(element);
-    const scrollHeight = this.getScrollHeight(element);
 
-    // Check if the page is actually scrollable at runtime
-    if (element === window && scrollHeight <= viewportHeight) {
-      return null;
-    }
-
-    const direction = scrollTop > lastScrollPos ? ScrollDirection.DOWN : ScrollDirection.UP;
-    const depth =
-      scrollHeight > viewportHeight
-        ? Math.min(100, Math.max(0, Math.floor((scrollTop / (scrollHeight - viewportHeight)) * 100)))
-        : 0;
-
-    // Only update if scroll position changed significantly
+    // Early return: check significant movement first (cheapest check)
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
       return null;
     }
+
+    // Early return: check if window is scrollable
+    if (element === window && !this.isWindowScrollable()) {
+      return null;
+    }
+
+    const viewportHeight = this.getViewportHeight(element);
+    const scrollHeight = this.getScrollHeight(element);
+    const direction = this.getScrollDirection(scrollTop, lastScrollPos);
+    const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
 
     container.lastScrollPos = scrollTop;
 
