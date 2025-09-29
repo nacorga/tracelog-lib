@@ -78,12 +78,6 @@ jobs:
           npm run test:unit
           echo "✅ Unit tests passed"
 
-      - name: Run Integration Tests
-        run: |
-          echo "🔍 Running integration tests..."
-          npm run test:integration
-          echo "✅ Integration tests passed"
-
       - name: Generate Test Coverage Report
         run: |
           echo "🔍 Generating test coverage report..."

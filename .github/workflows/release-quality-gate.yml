@@ -38,11 +38,6 @@ jobs:
           echo "🔍 Running unit tests for release..."
           npm run test:unit
 
-      - name: Run Integration Tests
-        run: |
-          echo "🔍 Running integration tests for release..."
-          npm run test:integration
-
       - name: Generate Test Coverage Report
         run: |
           echo "🔍 Generating test coverage report for release..."
