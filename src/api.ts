@@ -22,6 +22,11 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
     throw new Error('This library can only be used in a browser environment');
   }
 
+  // Check if TraceLog is disabled
+  if (window.__traceLogDisabled) {
+    return;
+  }
+
   // Already initialized - safe to return
   if (app) {
     debugLog.debug('API', 'Library already initialized, skipping duplicate initialization');

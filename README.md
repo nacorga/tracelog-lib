@@ -107,6 +107,12 @@ await tracelog.init({
 
 ## Configuration
 
+**Disabling TraceLog:**
+```typescript
+// Set this flag before initialization to disable TraceLog completely
+window.__traceLogDisabled = true;
+```
+
 **Environment-based settings:**
 - Use `samplingRate: 0.1` to reduce data volume in high-traffic applications
 - Configure `sessionTimeout` to match your application's user session length
