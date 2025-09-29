@@ -65,6 +65,20 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
+      - name: Run Integration Tests
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "🔍 Running integration tests for release..."
+          npm run test:integration
+        continue-on-error: true
+
+      - name: Generate Test Coverage Report
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "🔍 Generating test coverage report for release..."
+          npm run test:coverage
+        continue-on-error: true
+
       - name: Run E2E tests
         if: github.event.inputs.skip_tests != 'true'
         run: |

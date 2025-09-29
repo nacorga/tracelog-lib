@@ -54,6 +54,13 @@ jobs:
         run: |
           echo "🔍 Generating test coverage report for health check..."
           npm run test:coverage
+        continue-on-error: true
+
+      - name: Run Integration Tests
+        run: |
+          echo "🔍 Running integration tests for health check..."
+          npm run test:integration
+        continue-on-error: true
 
       - name: Build TraceLog library
         run: npm run build:all

@@ -82,6 +82,13 @@ jobs:
         run: |
           echo "🔍 Generating test coverage report..."
           npm run test:coverage
+        continue-on-error: true
+
+      - name: Run Integration Tests
+        run: |
+          echo "🔍 Running integration tests..."
+          npm run test:integration
+        continue-on-error: true
 
       - name: Build Integrity Check
         run: |

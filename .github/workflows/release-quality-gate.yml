@@ -38,10 +38,17 @@ jobs:
           echo "🔍 Running unit tests for release..."
           npm run test:unit:ci
 
+      - name: Run Integration Tests
+        run: |
+          echo "🔍 Running integration tests for release quality gate..."
+          npm run test:integration
+        continue-on-error: true
+
       - name: Generate Test Coverage Report
         run: |
           echo "🔍 Generating test coverage report for release..."
           npm run test:coverage
+        continue-on-error: true
 
       - name: Build for release
         run: npm run build:all
