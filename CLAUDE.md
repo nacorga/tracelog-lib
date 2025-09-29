@@ -177,10 +177,9 @@ await TraceLog.init({
 ## Testing Guide
 
 ### Technology Stack
-- **Unit/Integration**: **Jest** + **TypeScript** with strict type safety
+- **Unit/Integration**: **Vitest** + **TypeScript** with strict type safety
 - **E2E**: **Playwright** + **TypeScript** with strict type safety
 - **Testing Bridge**: `__traceLogBridge` for consistent access
-- **Enhanced Framework**: Fixtures, Page Objects, Builders, Matchers
 
 ### 🔧 Main Commands
 
@@ -220,51 +219,48 @@ If tests fail to run or fail unexpectedly, determine whether the failure stems f
 
 #### Unit Tests
 
-##### Simple Pattern
+##### Basic Pattern
 ```typescript
-import { EventManager } from '../src/managers/event.manager';
-import { MOCK_CONFIGS } from './mocks/config.mock';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { EventManager } from '@/managers/event.manager';
 
 describe('EventManager', () => {
   let eventManager: EventManager;
 
   beforeEach(() => {
     eventManager = new EventManager();
-    eventManager.setState(MOCK_CONFIGS.MINIMAL);
   });
 
   it('should track events correctly', () => {
     const event = { type: 'CLICK', data: { x: 100, y: 200 } };
-
     eventManager.track(event);
-
-    expect(eventManager.getQueueLength()).toBe(1);
-    expect(eventManager.getLastEvent()).toMatchObject(event);
+    expect(eventManager.getQueue()).toHaveLength(1);
   });
 });
 ```
 
 ##### Mock Pattern
 ```typescript
-import { SessionManager } from '../src/managers/session.manager';
-import { mockLocalStorage, mockTimestamp } from './mocks/browser.mock';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { SessionManager } from '@/managers/session.manager';
+import { StorageManager } from '@/managers/storage.manager';
+import { EventManager } from '@/managers/event.manager';
 
 describe('SessionManager', () => {
+  let sessionManager: SessionManager;
+  let storageManager: StorageManager;
+  let eventManager: EventManager;
+
   beforeEach(() => {
-    mockLocalStorage();
-    mockTimestamp('2024-01-01T10:00:00Z');
+    vi.clearAllMocks();
+    storageManager = new StorageManager();
+    eventManager = new EventManager();
+    sessionManager = new SessionManager(storageManager, eventManager);
   });
 
-  it('should manage sessions across tabs', () => {
-    const sessionManager = new SessionManager();
-
-    sessionManager.createSession();
-
-    expect(sessionManager.getCurrentSession()).toBeDefined();
-    expect(localStorage.setItem).toHaveBeenCalledWith(
-      expect.stringContaining('session'),
-      expect.any(String)
-    );
+  it('should manage sessions correctly', async () => {
+    await sessionManager.startTracking();
+    expect(sessionManager.getCurrentSessionId()).toBeDefined();
   });
 });
 ```
@@ -273,134 +269,136 @@ describe('SessionManager', () => {
 
 ##### API Integration Pattern
 ```typescript
-import { App } from '../src/app';
-import { mockFetch, mockBridge } from './mocks/integration.mock';
-import { TRACELOG_CONFIGS } from './config/test-config';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { App } from '@/app';
 
 describe('App Integration', () => {
+  let app: App;
+
   beforeEach(() => {
-    mockFetch();
-    mockBridge();
+    vi.clearAllMocks();
+    app = new App();
   });
 
-  it('should initialize and send events to API', async () => {
-    const app = new App();
-
-    await app.init(TRACELOG_CONFIGS.STANDARD);
-    app.trackCustomEvent('purchase', { amount: 99.99 });
-
-    // Verify API calls
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/events'),
-      expect.objectContaining({
-        method: 'POST',
-        body: expect.stringContaining('purchase')
-      })
-    );
+  it('should initialize successfully', async () => {
+    const config = { id: 'test-project-id' };
+    await app.init(config);
+    expect(app.initialized).toBe(true);
   });
 });
 ```
 
 ##### Cross-Component Integration
 ```typescript
-import { App } from '../src/app';
-import { EventManager } from '../src/managers/event.manager';
-import { SessionManager } from '../src/managers/session.manager';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { App } from '@/app';
+import { EventManager } from '@/managers/event.manager';
 
 describe('Component Integration', () => {
-  it('should coordinate between managers', async () => {
-    const app = new App();
-    const eventSpy = jest.spyOn(EventManager.prototype, 'track');
-    const sessionSpy = jest.spyOn(SessionManager.prototype, 'updateActivity');
+  let app: App;
 
-    await app.init(TRACELOG_CONFIGS.FULL_FEATURED);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    app = new App();
+  });
+
+  it('should coordinate between managers', async () => {
+    const eventSpy = vi.spyOn(EventManager.prototype, 'track');
+    await app.init({ id: 'test-project-id' });
 
     // Simulate user interaction
     const clickEvent = new MouseEvent('click', { clientX: 100, clientY: 200 });
     document.dispatchEvent(clickEvent);
 
-    expect(eventSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CLICK' })
-    );
-    expect(sessionSpy).toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalled();
   });
 });
 ```
 
 #### E2E Tests
 
-##### Simple Pattern (Fixture)
+##### Basic Pattern
 ```typescript
-import { traceLogTest } from '../fixtures/tracelog-fixtures';
-import { TRACELOG_CONFIGS } from '../config/test-config';
+import { test, expect } from '@playwright/test';
 
-traceLogTest('basic test', async ({ traceLogPage }) => {
-  await traceLogPage.initializeTraceLog(TRACELOG_CONFIGS.MINIMAL);
-  await traceLogPage.clickElement('[data-testid="button"]');
+test('basic event tracking', async ({ page }) => {
+  await page.goto('http://localhost:3000');
 
-  await expect(traceLogPage).toHaveNoTraceLogErrors();
+  // Initialize TraceLog via test bridge
+  await page.evaluate(() => {
+    return window.__traceLogBridge?.initialize({ id: 'test-project-id' });
+  });
+
+  // Simulate user interaction
+  await page.click('[data-testid="button"]');
+
+  // Verify events tracked
+  const events = await page.evaluate(() => {
+    return window.__traceLogBridge?.getEvents();
+  });
+
+  expect(events).toBeDefined();
+  expect(events?.length).toBeGreaterThan(0);
 });
 ```
 
-##### Advanced Pattern (Builder DSL)
+##### Session Flow Pattern
 ```typescript
-import { TraceLogTestBuilder } from '../builders/test-scenario-builder';
+import { test, expect } from '@playwright/test';
 
-traceLogTest('complex flow', async ({ traceLogPage }) => {
-  await TraceLogTestBuilder
-    .create(traceLogPage)
-    .withConfig(TRACELOG_CONFIGS.STANDARD)
-    .expectInitialization()
-    .startEventCapture()
-    .simulateUserJourney('purchase_intent')
-    .expectEvents(['CLICK', 'SCROLL'])
-    .expectNoErrors()
-    .run();
+test('session management flow', async ({ page }) => {
+  await page.goto('http://localhost:3000');
+
+  await page.evaluate(() => {
+    return window.__traceLogBridge?.initialize({ id: 'test-project-id' });
+  });
+
+  const sessionId = await page.evaluate(() => {
+    return window.__traceLogBridge?.getSessionId();
+  });
+
+  expect(sessionId).toBeDefined();
+  expect(typeof sessionId).toBe('string');
 });
 ```
 
 ### 🔑 Essential APIs
 
-#### Unit Test Utilities
+#### Unit/Integration Test Utilities
 ```typescript
-// Mock helpers
-import { mockBrowserAPIs, restoreBrowserAPIs } from './mocks/browser.mock';
-import { createMockEvent, createMockSession } from './mocks/data.mock';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// Assertions
-expect(result).toBeValidEvent();
-expect(session).toBeValidSession();
-expect(eventQueue).toHaveLength(3);
+// Setup and teardown
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// Common assertions
+expect(result).toBeDefined();
+expect(array).toHaveLength(3);
+expect(object).toMatchObject({ key: 'value' });
+expect(fn).toHaveBeenCalledWith(expectedArg);
 ```
 
-#### Integration Test Utilities
+#### E2E Test Bridge APIs
 ```typescript
-// Test app setup
-import { createTestApp, cleanupTestApp } from './helpers/app.helper';
-import { mockNetworkRequests } from './mocks/network.mock';
+// Access TraceLog via test bridge
+window.__traceLogBridge?.initialize(config);
+window.__traceLogBridge?.getEvents();
+window.__traceLogBridge?.getSessionId();
+window.__traceLogBridge?.sendCustomEvent(name, data);
+window.__traceLogBridge?.destroy();
 
-// API verification
-expect(fetch).toHaveBeenCalledTimes(2);
-expect(mockAPI.getLastRequest()).toMatchSnapshot();
-```
-
-#### E2E Test APIs
-```typescript
-// TraceLogTestPage (automatic fixture)
-await traceLogPage.initializeTraceLog(config);
-await traceLogPage.clickElement(selector);
-await traceLogPage.sendCustomEvent(name, data);
-const events = await traceLogPage.getTrackedEvents();
-
-// Custom matchers
-await expect(traceLogPage).toHaveNoTraceLogErrors();
-await expect(events).toHaveEvent('CLICK');
-await expect(events).toHaveCustomEvent('user_action');
-
-// Predefined configurations
-TRACELOG_CONFIGS.MINIMAL        // Basic tests
-TRACELOG_CONFIGS.STANDARD       // General tests
-TRACELOG_CONFIGS.FULL_FEATURED  // Complete tests
+// Test configuration
+const testConfig = {
+  id: 'test-project-id',
+  sessionTimeout: 900000,
+  globalMetadata: { environment: 'test' }
+};
 ```
 
 ### ⚡ Best Practices
@@ -427,16 +425,15 @@ TRACELOG_CONFIGS.FULL_FEATURED  // Complete tests
 - Test configuration variations
 
 #### ✅ E2E Tests
-- Use `traceLogTest` fixture (automatic setup/cleanup)
-- Use predefined configurations (`TRACELOG_CONFIGS.*`)
-- Use custom matchers (`toHaveNoTraceLogErrors`, `toHaveEvent`)
-- Builder DSL for complex scenarios
-- Adapt `__traceLogBridge` as needed
+- Use Playwright's `test` and `expect` from `@playwright/test`
+- Access TraceLog via `window.__traceLogBridge` test bridge
+- Use `page.evaluate()` to interact with browser context
+- Wait for specific conditions, not arbitrary timeouts
+- Clean up state between tests
 
 #### ❌ Avoid
-- Hardcoded timeouts: `await page.waitForTimeout(2000)` (E2E only)
-- Inline configurations: `{ id: 'hardcoded', sessionTimeout: 900000 }`
-- Direct Bridge access: `window.__traceLogBridge.getSessionData()` (E2E only)
+- Hardcoded timeouts: `await page.waitForTimeout(2000)`
+- Inline magic values: use constants for config
 - Testing implementation details instead of behavior
 - Flaky tests that pass/fail inconsistently
 - Shared mutable state between tests

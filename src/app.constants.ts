@@ -1,21 +1,12 @@
-// Solo importamos constantes con valor analítico real
 import { WEB_VITALS_THRESHOLDS } from './constants/performance.constants';
 import { PII_PATTERNS } from './constants/error.constants';
 
-// ============================================================================
-// PERFORMANCE ANALYTICS CONSTANTS
-// ============================================================================
-
 export const PERFORMANCE_CONFIG = {
-  WEB_VITALS_THRESHOLDS, // Umbrales de negocio para análisis de rendimiento
+  WEB_VITALS_THRESHOLDS, // Business thresholds for performance analysis
 } as const;
 
-// ============================================================================
-// DATA PROTECTION CONSTANTS
-// ============================================================================
-
 export const DATA_PROTECTION = {
-  PII_PATTERNS, // Patrones para protección de datos sensibles
+  PII_PATTERNS, // Patterns for sensitive data protection
 } as const;
 
 export const ENGAGEMENT_THRESHOLDS = {
@@ -94,11 +85,3 @@ export const ANOMALY_DETECTION = {
   MIN_BASELINE_DAYS: 7,
   MIN_EVENTS_FOR_ANOMALY_DETECTION: 50,
 } as const;
-
-export const SPECIAL_VALUES = {
-  PAGE_URL_EXCLUDED: 'excluded',
-  PAGE_URL_UNKNOWN: 'unknown',
-  IPV6_IPV4_PREFIX: '::ffff:',
-} as const;
-
-export const LOCAL_IP_ADDRESSES = ['localhost', '127.0.0.1', '::1'] as const;
