@@ -300,7 +300,7 @@ export class SessionManager extends StateManager {
     };
 
     this.beforeUnloadHandler = (): void => {
-      this.eventManager.flushImmediatelySync();
+      this.endSession('page_unload');
     };
 
     // Handle tab visibility changes

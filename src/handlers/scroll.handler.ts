@@ -42,16 +42,10 @@ export class ScrollHandler extends StateManager {
     const raw = this.get('config').scrollContainerSelectors;
     const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
 
-    const elements: Array<Window | HTMLElement> = selectors
-      .map((sel) => this.safeQuerySelector(sel))
-      .filter((element): element is HTMLElement => element instanceof HTMLElement);
-
-    if (elements.length === 0) {
-      elements.push(window);
-    }
-
-    for (const element of elements) {
-      this.setupScrollContainer(element);
+    if (selectors.length === 0) {
+      this.setupScrollContainer(window);
+    } else {
+      this.trySetupContainers(selectors, 0);
     }
   }
 
@@ -69,6 +63,33 @@ export class ScrollHandler extends StateManager {
     this.containers.length = 0;
     this.set('scrollEventCount', 0);
     this.limitWarningLogged = false;
+  }
+
+  private trySetupContainers(selectors: string[], attempt: number): void {
+    const elements: HTMLElement[] = selectors
+      .map((sel) => this.safeQuerySelector(sel))
+      .filter((element): element is HTMLElement => element instanceof HTMLElement);
+
+    if (elements.length > 0) {
+      for (const element of elements) {
+        const isAlreadyTracking = this.containers.some((c) => c.element === element);
+
+        if (!isAlreadyTracking) {
+          this.setupScrollContainer(element);
+        }
+      }
+
+      return;
+    }
+
+    if (attempt < 5) {
+      setTimeout(() => this.trySetupContainers(selectors, attempt + 1), 200);
+      return;
+    }
+
+    if (this.containers.length === 0) {
+      this.setupScrollContainer(window);
+    }
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
