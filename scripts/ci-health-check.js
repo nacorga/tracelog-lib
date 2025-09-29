@@ -24,7 +24,7 @@ async function runHealthCheck() {
     // Import the existing anomaly detection
     const { runTests, parseTestOutput } = require('./test-anomaly-report.js');
 
-    console.log('\n🔍 Executing TraceLog health assessment...');
+    console.log('\n🔍 Executing TraceLog E2E health assessment...');
     const result = await runTests();
 
     const reportPath = path.join(__dirname, '..', 'test-reports', 'anomaly-report.json');
