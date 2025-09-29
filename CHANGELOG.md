@@ -12,6 +12,27 @@
 
 
 
+
+## [0.4.0] - 2025-09-29
+
+### ✨ Features
+
+- Enhance scroll tracking with dynamic container support and add new event types ([24d2afd](../../commit/24d2afd0802b30645d20e7dbf0218a881d100d42))
+
+### 🔧 Other Changes
+
+- Merge pull request #10 from nacorga/release/20250930.1 ([d10c356](../../commit/d10c356e9e90cdf26ea098bbd98de921f32ada55))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.3.0...v0.4.0
+
+
 ## [0.3.0] - 2025-09-29
 
 ### ✨ Features
