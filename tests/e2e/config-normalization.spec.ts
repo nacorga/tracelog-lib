@@ -1,7 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { SpecialProjectId, type AppConfig } from '@/types';
-
-const waitForBridge = (page: Page) => page.waitForFunction(() => Boolean(window.__traceLogBridge));
+import { navigateToPlayground, ensureTraceLogBridge } from './utils/environment.utils';
 
 const initTraceLog = async (page: Page, config: AppConfig) => {
   return page.evaluate(async (projectConfig: AppConfig) => {
@@ -15,8 +14,8 @@ const initTraceLog = async (page: Page, config: AppConfig) => {
 
 test.describe('Config Normalization', () => {
   test('normalizes samplingRate when zero provided', async ({ page }) => {
-    await page.goto('/?e2e=true');
-    await waitForBridge(page);
+    await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
+    await ensureTraceLogBridge(page);
 
     const config = await initTraceLog(page, { id: SpecialProjectId.Skip, samplingRate: 0 });
 
@@ -24,8 +23,8 @@ test.describe('Config Normalization', () => {
   });
 
   test('preserves custom exclusions after normalization', async ({ page }) => {
-    await page.goto('/?e2e=true');
-    await waitForBridge(page);
+    await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
+    await ensureTraceLogBridge(page);
 
     const exclusions = ['#/blocked'];
     const config = await initTraceLog(page, {

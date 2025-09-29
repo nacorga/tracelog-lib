@@ -6,15 +6,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('Basic Custom Events', () => {
   test('should send custom events without metadata', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page);
 
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
@@ -61,12 +57,7 @@ test.describe('Basic Custom Events', () => {
   });
 
   test('should send custom events with metadata', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page);
 
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
@@ -118,12 +109,7 @@ test.describe('Basic Custom Events', () => {
   });
 
   test('should handle multiple custom events', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page);
 
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
@@ -174,12 +160,7 @@ test.describe('Basic Custom Events', () => {
   });
 
   test('should reject invalid custom event names', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page);
 
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {

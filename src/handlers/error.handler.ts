@@ -9,6 +9,7 @@ import { debugLog } from '../utils/logging';
  */
 export class ErrorHandler extends StateManager {
   private readonly eventManager: EventManager;
+  private readonly recentErrors = new Map<string, number>();
 
   private static readonly PII_PATTERNS = [
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi, // Email
@@ -18,6 +19,8 @@ export class ErrorHandler extends StateManager {
   ];
 
   private static readonly MAX_ERROR_MESSAGE_LENGTH = 500;
+  private static readonly ERROR_SUPPRESSION_WINDOW_MS = 60_000;
+  private static readonly MAX_TRACKED_ERRORS = 50;
 
   constructor(eventManager: EventManager) {
     super();
@@ -32,6 +35,7 @@ export class ErrorHandler extends StateManager {
   stopTracking(): void {
     window.removeEventListener('error', this.handleError);
     window.removeEventListener('unhandledrejection', this.handleRejection);
+    this.recentErrors.clear();
   }
 
   private shouldSample(): boolean {
@@ -45,8 +49,14 @@ export class ErrorHandler extends StateManager {
       return;
     }
 
+    const sanitizedMessage = this.sanitize(event.message || 'Unknown error');
+
+    if (this.shouldSuppressError(ErrorType.JS_ERROR, sanitizedMessage)) {
+      return;
+    }
+
     debugLog.warn('ErrorHandler', 'JS error captured', {
-      message: event.message,
+      message: sanitizedMessage,
       filename: event.filename,
       line: event.lineno,
     });
@@ -55,7 +65,7 @@ export class ErrorHandler extends StateManager {
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
-        message: this.sanitize(event.message || 'Unknown error'),
+        message: sanitizedMessage,
         ...(event.filename && { filename: event.filename }),
         ...(event.lineno && { line: event.lineno }),
         ...(event.colno && { column: event.colno }),
@@ -69,14 +79,19 @@ export class ErrorHandler extends StateManager {
     }
 
     const message = this.extractRejectionMessage(event.reason);
+    const sanitizedMessage = this.sanitize(message);
 
-    debugLog.warn('ErrorHandler', 'Promise rejection captured', { message });
+    if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
+      return;
+    }
+
+    debugLog.warn('ErrorHandler', 'Promise rejection captured', { message: sanitizedMessage });
 
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.PROMISE_REJECTION,
-        message: this.sanitize(message),
+        message: sanitizedMessage,
       },
     });
   };
@@ -116,5 +131,47 @@ export class ErrorHandler extends StateManager {
     }
 
     return sanitized;
+  }
+
+  private shouldSuppressError(type: ErrorType, message: string): boolean {
+    const now = Date.now();
+    const key = `${type}:${message}`;
+    const lastSeenAt = this.recentErrors.get(key);
+
+    if (lastSeenAt && now - lastSeenAt < ErrorHandler.ERROR_SUPPRESSION_WINDOW_MS) {
+      this.recentErrors.set(key, now);
+      return true;
+    }
+
+    this.recentErrors.set(key, now);
+
+    if (this.recentErrors.size > ErrorHandler.MAX_TRACKED_ERRORS) {
+      this.pruneOldErrors();
+    }
+
+    return false;
+  }
+
+  private pruneOldErrors(): void {
+    const now = Date.now();
+    for (const [key, timestamp] of this.recentErrors.entries()) {
+      if (now - timestamp > ErrorHandler.ERROR_SUPPRESSION_WINDOW_MS) {
+        this.recentErrors.delete(key);
+      }
+    }
+
+    if (this.recentErrors.size <= ErrorHandler.MAX_TRACKED_ERRORS) {
+      return;
+    }
+
+    const entries = Array.from(this.recentErrors.entries()).sort((a, b) => a[1] - b[1]);
+    const excess = this.recentErrors.size - ErrorHandler.MAX_TRACKED_ERRORS;
+
+    for (let index = 0; index < excess; index += 1) {
+      const entry = entries[index];
+      if (entry) {
+        this.recentErrors.delete(entry[0]);
+      }
+    }
   }
 }

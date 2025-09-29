@@ -5,17 +5,13 @@
  * Focus: Library session validation only
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { SpecialProjectId } from '@/types';
-
-const waitForBridge = async (page: Page) => {
-  await page.waitForFunction(() => Boolean(window.__traceLogBridge), { timeout: 5000 });
-};
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('Session Management - Excluded URL Scenarios', () => {
   test('should emit session_end when session closes on excluded page', async ({ page }) => {
-    await page.goto('/?e2e=true');
-    await waitForBridge(page);
+    await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
     const result = await page.evaluate(async (projectId) => {
       const traceLog = window.__traceLogBridge!;
@@ -67,8 +63,7 @@ test.describe('Session Management - Excluded URL Scenarios', () => {
   });
 
   test('should default invalid samplingRate to full capture', async ({ page }) => {
-    await page.goto('/?e2e=true');
-    await waitForBridge(page);
+    await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
     const { normalizedRate, allSampled } = await page.evaluate(async (projectId) => {
       const traceLog = window.__traceLogBridge!;
@@ -109,8 +104,7 @@ test.describe('Session Management - Excluded URL Scenarios', () => {
   });
 
   test('should resume event tracking after leaving an excluded route', async ({ page }) => {
-    await page.goto('/?e2e=true');
-    await waitForBridge(page);
+    await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
     const result = await page.evaluate(async (projectId) => {
       const traceLog = window.__traceLogBridge!;

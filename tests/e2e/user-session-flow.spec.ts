@@ -7,12 +7,12 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('User Session Flow', () => {
   test('should maintain session during extended user activity', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test extended session activity
     const extendedSessionResult = await page.evaluate(async () => {
@@ -101,8 +101,7 @@ test.describe('User Session Flow', () => {
 
   test('should validate session data structure and consistency', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test session data validation
     const sessionValidationResult = await page.evaluate(async () => {

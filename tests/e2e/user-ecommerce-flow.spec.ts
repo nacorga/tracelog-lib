@@ -7,12 +7,12 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('User E-commerce Flow', () => {
   test('should track add_to_cart events with correct product metadata', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test e-commerce add to cart flow
     const ecommerceResult = await page.evaluate(async () => {
@@ -155,8 +155,7 @@ test.describe('User E-commerce Flow', () => {
 
   test('should track contact_form_submit events with form data', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test contact form submission flow
     const contactFormResult = await page.evaluate(async () => {
@@ -292,8 +291,7 @@ test.describe('User E-commerce Flow', () => {
 
   test('should handle mixed e-commerce interactions in single session', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test mixed e-commerce flow: shopping + contact in same session
     const mixedFlowResult = await page.evaluate(async () => {

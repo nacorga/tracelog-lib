@@ -14,6 +14,15 @@ export class PerformanceHandler extends StateManager {
   private readonly observers: PerformanceObserver[] = [];
   private lastLongTaskSentAt = 0;
 
+  private readonly vitalThresholds: Record<WebVitalType, number> = {
+    LCP: 4000,
+    FCP: 1800,
+    CLS: 0.25,
+    INP: 200,
+    TTFB: 600,
+    LONG_TASK: 50,
+  };
+
   constructor(eventManager: EventManager) {
     super();
     this.eventManager = eventManager;
@@ -186,7 +195,9 @@ export class PerformanceHandler extends StateManager {
           const now = Date.now();
 
           if (now - this.lastLongTaskSentAt >= LONG_TASK_THROTTLE_MS) {
-            this.trackWebVital('LONG_TASK', duration);
+            if (this.shouldSendVital('LONG_TASK', duration)) {
+              this.trackWebVital('LONG_TASK', duration);
+            }
             this.lastLongTaskSentAt = now;
           }
         }
@@ -196,6 +207,10 @@ export class PerformanceHandler extends StateManager {
   }
 
   private sendVital(sample: VitalSample): void {
+    if (!this.shouldSendVital(sample.type, sample.value)) {
+      return;
+    }
+
     const navId = this.getNavigationId();
 
     // Check for duplicates if we have a navigation ID
@@ -218,8 +233,8 @@ export class PerformanceHandler extends StateManager {
     this.trackWebVital(sample.type, sample.value);
   }
 
-  private trackWebVital(type: WebVitalType, value?: number): void {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
+  private trackWebVital(type: WebVitalType, value: number): void {
+    if (!Number.isFinite(value)) {
       debugLog.warn('PerformanceHandler', 'Invalid web vital value', { type, value });
       return;
     }
@@ -303,5 +318,25 @@ export class PerformanceHandler extends StateManager {
       });
       return false;
     }
+  }
+
+  private shouldSendVital(type: WebVitalType, value?: number): boolean {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      debugLog.warn('PerformanceHandler', 'Invalid web vital value', { type, value });
+      return false;
+    }
+
+    const threshold = this.vitalThresholds[type];
+
+    if (typeof threshold === 'number' && value <= threshold) {
+      debugLog.debug('PerformanceHandler', 'Web vital below threshold, skipping', {
+        type,
+        value,
+        threshold,
+      });
+      return false;
+    }
+
+    return true;
   }
 }

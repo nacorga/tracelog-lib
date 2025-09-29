@@ -20,11 +20,10 @@ if (isE2ETest) {
 }
 
 const TEST_MODE = {
-  enabled: urlParams.get('mode') === 'test' || isE2ETest,
-  scenario: urlParams.get('scenario') || 'basic',
-  autoInit: urlParams.get('auto-init') === 'true' || isE2ETest,
-  hideUI: urlParams.get('hide-ui') === 'true',
-  projectId: urlParams.get('project-id') || (isE2ETest ? 'e2e-test-project' : 'skip')
+  enabled: isE2ETest,
+  autoInit: isE2ETest && urlParams.get('auto-init') !== 'false',
+  hideUI: isE2ETest,
+  projectId: isE2ETest ? 'e2e-test-project' : 'skip'
 };
 
 const state = {
@@ -33,6 +32,7 @@ const state = {
   testMode: TEST_MODE,
   queueCount: 0,
   lastSentTime: null,
+  traceLogListenersAttached: false,
 };
 
 // ============================================================================
@@ -172,18 +172,76 @@ function setupContactForm() {
 // ============================================================================
 
 function setupFloatingMonitor() {
-  document.getElementById('clear-events').addEventListener('click', () => {
-    clearEventsMonitor();
+  const monitor = document.getElementById('floating-monitor');
+  if (!monitor) return;
+
+  const clearButton = document.getElementById('clear-events');
+  if (clearButton) {
+    clearButton.addEventListener('click', () => {
+      clearEventsMonitor();
+    });
+  }
+
+  const header = monitor.querySelector('.monitor-header');
+  const events = monitor.querySelector('.monitor-events');
+  if (!header || !events) return;
+
+  ensureLastSentIndicator(monitor);
+
+  let isMinimized = false;
+  header.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target instanceof HTMLElement && target.id === 'clear-events') return;
+
+    isMinimized = !isMinimized;
+    events.style.display = isMinimized ? 'none' : 'block';
+    monitor.classList.toggle('minimized', isMinimized);
   });
 }
 
-function updateQueueStatus(icon) {
-  document.getElementById('queue-status').textContent = icon;
+function ensureLastSentIndicator(monitor) {
+  const queueInfo = monitor.querySelector('.monitor-queue-info');
+  if (!queueInfo) return;
+
+  const existingIndicator = monitor.querySelector('#last-sent');
+  if (existingIndicator instanceof HTMLElement) {
+    existingIndicator.textContent = 'nunca';
+    existingIndicator.className = 'last-sent-never';
+    return;
+  }
+
+  const lastSentWrapper = document.createElement('span');
+  lastSentWrapper.id = 'last-sent';
+  lastSentWrapper.textContent = 'nunca';
+  lastSentWrapper.className = 'last-sent-never';
+  queueInfo.appendChild(lastSentWrapper);
+}
+
+function updateQueueStatus(status) {
+  const statusEl = document.getElementById('queue-status');
+  if (!statusEl) return;
+  const statusMap = {
+    'idle': { icon: '⏸', color: '#94a3b8' },
+    'collecting': { icon: '📥', color: '#3b82f6' },
+    'queued': { icon: '⏳', color: '#f59e0b' },
+    'sending': { icon: '📤', color: '#8b5cf6' },
+    'sent': { icon: '✅', color: '#10b981' },
+    'error': { icon: '❌', color: '#ef4444' }
+  };
+
+  const config = statusMap[status] || { icon: status, color: '#6b7280' };
+  statusEl.textContent = config.icon;
+  statusEl.style.color = config.color;
 }
 
 function updateQueueCount(count) {
   state.queueCount = count;
-  document.getElementById('queue-count').textContent = count;
+  const queueEl = document.getElementById('queue-count');
+  if (!queueEl) return;
+  queueEl.textContent = count;
+
+  // Visual feedback for queue size
+  queueEl.className = count > 0 ? 'queue-active' : 'queue-empty';
 }
 
 function updateLastSent() {
@@ -193,95 +251,184 @@ function updateLastSent() {
 
 function updateLastSentDisplay() {
   const lastSentEl = document.getElementById('last-sent');
+  if (!lastSentEl) return;
+
   if (!state.lastSentTime) {
-    lastSentEl.textContent = '-';
+    lastSentEl.textContent = 'nunca';
+    lastSentEl.className = 'last-sent-never';
     return;
   }
 
   const secondsAgo = Math.floor((Date.now() - state.lastSentTime) / 1000);
+  let displayText, className;
 
-  if (secondsAgo < 60) {
-    lastSentEl.textContent = `hace ${secondsAgo}s`;
+  if (secondsAgo < 1) {
+    displayText = 'ahora';
+    className = 'last-sent-now';
+  } else if (secondsAgo < 60) {
+    displayText = `${secondsAgo}s`;
+    className = 'last-sent-recent';
   } else {
     const minutesAgo = Math.floor(secondsAgo / 60);
-    lastSentEl.textContent = `hace ${minutesAgo}m`;
+    displayText = `${minutesAgo}m`;
+    className = 'last-sent-old';
   }
+
+  lastSentEl.textContent = displayText;
+  lastSentEl.className = className;
 }
 
 // Update the "last sent" display every second
 setInterval(updateLastSentDisplay, 1000);
 
-function addEventToMonitor(eventType, status = '⏳', eventData = null) {
+function addEventToMonitor(eventType, status = 'queued', eventData = null) {
   // Skip monitor updates during E2E tests
   if (isE2ETest) return null;
 
   const eventsList = document.getElementById('events-list');
   if (!eventsList) return;
 
+  const eventId = `event-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   const eventEl = document.createElement('div');
-  eventEl.className = 'monitor-event';
-  eventEl.dataset.eventId = Date.now();
+  eventEl.className = `monitor-event status-${status}`;
+  eventEl.dataset.eventId = eventId;
 
-  // Extract additional info from event data
-  let extraInfo = '';
+  // Extract and format event details
+  let eventDetails = '';
+  let eventPayload = '';
+
   if (eventData) {
     if (eventData.custom_event) {
-      extraInfo = `<span class="event-detail">${eventData.custom_event.name}</span>`;
+      eventDetails = eventData.custom_event.name;
+      eventPayload = JSON.stringify(eventData.custom_event.metadata || {}, null, 2);
     } else if (eventData.click_data) {
-      extraInfo = `<span class="event-detail">x:${eventData.click_data.x}, y:${eventData.click_data.y}</span>`;
+      eventDetails = `${eventData.click_data.element || 'elemento'} (${eventData.click_data.x}, ${eventData.click_data.y})`;
+      eventPayload = JSON.stringify(eventData.click_data, null, 2);
     } else if (eventData.scroll_data) {
-      extraInfo = `<span class="event-detail">${eventData.scroll_data.depth}%</span>`;
+      eventDetails = `${eventData.scroll_data.depth}% de profundidad`;
+      eventPayload = JSON.stringify(eventData.scroll_data, null, 2);
     } else if (eventData.page_url) {
-      const url = new URL(eventData.page_url);
-      extraInfo = `<span class="event-detail">${url.pathname}</span>`;
+      try {
+        const url = new URL(eventData.page_url);
+        eventDetails = url.pathname + (url.hash || '');
+      } catch {
+        eventDetails = eventData.page_url;
+      }
+      eventPayload = JSON.stringify(eventData, null, 2);
+    } else {
+      eventPayload = JSON.stringify(eventData, null, 2);
     }
   }
 
-  const timestamp = new Date().toLocaleTimeString();
+  const timestamp = new Date().toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 1
+  });
+
+  const statusConfig = {
+    'queued': { icon: '⏳', text: 'En cola', color: '#f59e0b' },
+    'sending': { icon: '📤', text: 'Enviando', color: '#8b5cf6' },
+    'sent': { icon: '✅', text: 'Enviado', color: '#10b981' },
+    'error': { icon: '❌', text: 'Error', color: '#ef4444' }
+  };
+
+  const statusInfo = statusConfig[status] || statusConfig.queued;
 
   eventEl.innerHTML = `
-    <div class="event-main">
-      <span class="event-type-badge event-type-${eventType}">${eventType}</span>
-      <span class="event-status-icon">${status}</span>
+    <div class="event-header">
+      <div class="event-type-badge event-type-${eventType.toLowerCase()}">${eventType}</div>
+      <div class="event-status" style="color: ${statusInfo.color}">
+        <span class="event-status-icon">${statusInfo.icon}</span>
+        <span class="event-status-text">${statusInfo.text}</span>
+      </div>
+      <div class="event-timestamp">${timestamp}</div>
     </div>
     <div class="event-details">
-      <span class="event-timestamp">${timestamp}</span>
-      ${extraInfo}
+      ${eventDetails ? `<div class="event-summary">${eventDetails}</div>` : ''}
     </div>
+    ${eventPayload ? `<div class="event-payload" style="display: none;"><pre><code>${eventPayload}</code></pre></div>` : ''}
   `;
+
+  // Add click handler to toggle payload visibility
+  eventEl.addEventListener('click', () => {
+    const payload = eventEl.querySelector('.event-payload');
+    if (payload) {
+      const isVisible = payload.style.display !== 'none';
+      payload.style.display = isVisible ? 'none' : 'block';
+      eventEl.classList.toggle('expanded', !isVisible);
+    }
+  });
 
   eventsList.insertBefore(eventEl, eventsList.firstChild);
 
-  // Mantener un máximo de 100 eventos para evitar problemas de rendimiento
-  while (eventsList.children.length > 100) {
+  // Mantener un máximo de 50 eventos para mejor rendimiento
+  while (eventsList.children.length > 50) {
     eventsList.removeChild(eventsList.lastChild);
   }
 
-  return eventEl.dataset.eventId;
+  return eventId;
 }
 
-// Función eliminada - ya no removemos eventos automáticamente
-
-function updateEventsAsSent(count) {
+function updateEventStatus(eventId, newStatus, details = '') {
   // Skip monitor updates during E2E tests
   if (isE2ETest) return;
 
-  const eventsList = document.getElementById('events-list');
-  if (!eventsList) return;
+  const eventEl = document.querySelector(`[data-event-id="${eventId}"]`);
+  if (!eventEl) return;
 
-  // Update the first 'count' events to show they were sent
-  const eventElements = eventsList.querySelectorAll('.monitor-event');
-  for (let i = 0; i < Math.min(count, eventElements.length); i++) {
-    const eventEl = eventElements[i];
-    const statusIcon = eventEl.querySelector('.event-status-icon');
-    if (statusIcon) {
-      statusIcon.textContent = '✅';
+  const statusConfig = {
+    'queued': { icon: '⏳', text: 'En cola', color: '#f59e0b' },
+    'sending': { icon: '📤', text: 'Enviando', color: '#8b5cf6' },
+    'sent': { icon: '✅', text: 'Enviado', color: '#10b981' },
+    'error': { icon: '❌', text: 'Error', color: '#ef4444' }
+  };
+
+  const statusInfo = statusConfig[newStatus] || statusConfig.queued;
+
+  // Update status visuals
+  eventEl.className = `monitor-event status-${newStatus}`;
+  const statusIcon = eventEl.querySelector('.event-status-icon');
+  const statusText = eventEl.querySelector('.event-status-text');
+
+  if (statusIcon) statusIcon.textContent = statusInfo.icon;
+  if (statusText) statusText.textContent = statusInfo.text;
+
+  const statusEl = eventEl.querySelector('.event-status');
+  if (statusEl) statusEl.style.color = statusInfo.color;
+
+  // Add details if error
+  if (newStatus === 'error' && details) {
+    let errorDetails = eventEl.querySelector('.event-error-details');
+    if (!errorDetails) {
+      errorDetails = document.createElement('div');
+      errorDetails.className = 'event-error-details';
+      eventEl.querySelector('.event-details').appendChild(errorDetails);
     }
-    // Keep events visible but slightly faded to show they were sent
-    eventEl.style.opacity = '0.8';
+    errorDetails.textContent = details;
   }
+}
 
-  // NO eliminar eventos automáticamente - mantener el historial
+function updateEventsAsSent(eventIds) {
+  // Skip monitor updates during E2E tests
+  if (isE2ETest) return;
+
+  if (Array.isArray(eventIds)) {
+    eventIds.forEach(id => updateEventStatus(id, 'sent'));
+  } else {
+    // Legacy: update first N events if passed a count
+    const eventsList = document.getElementById('events-list');
+    if (!eventsList) return;
+
+    const queuedEvents = eventsList.querySelectorAll('.status-queued, .status-sending');
+    const count = Math.min(eventIds || 0, queuedEvents.length);
+
+    for (let i = 0; i < count; i++) {
+      const eventId = queuedEvents[i].dataset.eventId;
+      updateEventStatus(eventId, 'sent');
+    }
+  }
 }
 
 function clearEventsMonitor() {
@@ -292,33 +439,79 @@ function clearEventsMonitor() {
   // Reset queue info when clearing
   updateQueueCount(0);
   updateQueueStatus('⏸');
+  const lastSentEl = document.getElementById('last-sent');
+  if (lastSentEl) {
+    lastSentEl.textContent = 'nunca';
+    lastSentEl.className = 'last-sent-never';
+  }
 }
 
 // ============================================================================
 // TRACELOG LISTENERS
 // ============================================================================
 
-function setupTraceLogListener() {
-  // Listen for real-time events directly from EventManager.track()
-  tracelog.on('realtime', (data) => {
-    const { type, data: eventData, queueLength } = data;
+function setupTraceLogListener(traceLog) {
+  if (!traceLog || state.traceLogListenersAttached) return;
 
-    console.log('📥 TraceLog Event:', type, eventData);
-    addEventToMonitor(type, '⏳', eventData);
-    updateQueueCount(queueLength || 0);
-    updateQueueStatus('⏳');
+  console.log('🔌 Configurando listeners de TraceLog...');
+
+  // Keep track of events for better queue management
+  const eventQueue = new Map();
+
+  // Event tracking
+  traceLog.on('event', (data) => {
+    const { type, data: eventData, queueLength } = data;
+    console.log('📥 TraceLog Event captureado:', { type, eventData, queueLength });
+
+    // Add to monitor and track
+    const eventId = addEventToMonitor(type, 'queued', eventData);
+    if (eventId) {
+      eventQueue.set(eventId, { type, data: eventData, timestamp: Date.now() });
+    }
+
+    // Update queue count with actual number from library
+    updateQueueCount(queueLength || eventQueue.size);
+    updateQueueStatus('collecting');
   });
 
-  // Listen for events sent successfully
-  tracelog.on('sent', (data) => {
-    const { eventCount, queueLength } = data;
+  // Queue events - when events are sent or processed (BaseEventsQueueDto)
+  traceLog.on('queue', (data) => {
+    // data is a BaseEventsQueueDto: { user_id, session_id, device, events, global_metadata? }
+    const eventCount = data.events ? data.events.length : 0;
+    console.log('📤 TraceLog queue procesada:', {
+      eventCount,
+      userId: data.user_id,
+      sessionId: data.session_id,
+      device: data.device,
+      hasGlobalMetadata: !!data.global_metadata
+    });
 
-    console.log('✅ TraceLog Events Sent:', eventCount);
-    updateEventsAsSent(eventCount);
-    updateQueueCount(queueLength || 0);
-    updateQueueStatus('✓');
+    // Mark events as sending immediately
+    updateQueueStatus('sending');
+
+    // Mark oldest events as sending
+    const events = Array.from(eventQueue.entries())
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, eventCount);
+
+    events.forEach(([eventId]) => {
+      updateEventStatus(eventId, 'sending');
+    });
+
+    // Mark them as sent and remove from queue immediately
+    events.forEach(([eventId]) => {
+      updateEventStatus(eventId, 'sent');
+      eventQueue.delete(eventId);
+    });
+
+    // Update queue count to 0 after sending
+    updateQueueCount(0);
+    updateQueueStatus('idle');
     updateLastSent();
   });
+
+  state.traceLogListenersAttached = true;
+  console.log('✅ TraceLog listeners configurados correctamente');
 }
 
 // ============================================================================
@@ -343,13 +536,12 @@ function setupTestMode() {
   // Add test data attributes to key elements
   document.body.setAttribute('data-testid', 'playground-body');
   document.body.setAttribute('data-test-mode', 'true');
-  document.body.setAttribute('data-test-scenario', state.testMode.scenario);
 
   // Add test indicator
   if (!state.testMode.hideUI) {
     const indicator = document.createElement('div');
     indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:#ff6b35;color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:bold;z-index:10000;pointer-events:none;';
-    indicator.textContent = `TEST MODE: ${state.testMode.scenario.toUpperCase()}`;
+    indicator.textContent = 'TEST MODE: E2E';
     indicator.setAttribute('data-testid', 'test-mode-indicator');
     document.body.appendChild(indicator);
   }
@@ -360,23 +552,6 @@ function setupTestMode() {
   };
 }
 
-function triggerTestScenario(scenario = state.testMode.scenario) {
-  console.log('🎬 Triggering test scenario:', scenario);
-
-  const actions = {
-    basic: () => document.querySelector('.btn-primary')?.click(),
-    navigation: () => {
-      setTimeout(() => navigateToPage('productos'), 100);
-      setTimeout(() => navigateToPage('nosotros'), 500);
-    },
-    ecommerce: () => document.querySelector('.btn-add-cart')?.click(),
-  };
-
-  const action = actions[scenario];
-  if (action) {
-    setTimeout(action, 100);
-  }
-}
 
 function waitForTraceLogReady(timeout = 5000) {
   return new Promise((resolve, reject) => {
@@ -406,21 +581,24 @@ async function initializeApp() {
   setupCartInteractions();
   setupContactForm();
   setupFloatingMonitor();
-  setupTraceLogListener();
 
   // Initialize TraceLog
   try {
-    await waitForTraceLogReady();
-    const projectId = (state.testMode.enabled && state.testMode.autoInit)
-      ? state.testMode.projectId
-      : 'skip'; // Always use 'skip' for playground to simulate realistic flow
+    const traceLog = await waitForTraceLogReady();
+    setupTraceLogListener(traceLog);
 
-    await tracelog.init({ id: projectId });
-    updateQueueStatus('▶️');
+    const shouldAutoInit = state.testMode.enabled ? state.testMode.autoInit : true;
 
-    if (state.testMode.enabled && state.testMode.autoInit) {
-      console.log('🧪 TraceLog auto-initialized for testing');
-      setTimeout(() => triggerTestScenario(), 500);
+    if (shouldAutoInit) {
+      const projectId = state.testMode.enabled ? state.testMode.projectId : 'skip';
+      await traceLog.init({ id: projectId });
+      updateQueueStatus('▶️');
+
+      if (state.testMode.enabled && state.testMode.autoInit) {
+        console.log('🧪 TraceLog auto-initialized for testing');
+      }
+    } else {
+      updateQueueStatus('idle');
     }
   } catch (error) {
     console.error('TraceLog init error:', error);

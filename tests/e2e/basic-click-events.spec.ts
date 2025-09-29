@@ -6,15 +6,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('Basic Click Events', () => {
   test('should capture click events', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page);
 
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
@@ -68,12 +64,7 @@ test.describe('Basic Click Events', () => {
   });
 
   test('should capture multiple click events', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page);
 
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
@@ -141,12 +132,7 @@ test.describe('Basic Click Events', () => {
   });
 
   test('should include click position data', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page);
 
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {

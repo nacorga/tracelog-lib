@@ -6,15 +6,12 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('Basic Initialization', () => {
   test('should initialize TraceLog successfully', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page, { autoInit: false });
 
     // Initialize TraceLog with basic configuration
     const initResult = await page.evaluate(async () => {
@@ -49,11 +46,17 @@ test.describe('Basic Initialization', () => {
 
   test('should handle duplicate initialization gracefully', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
+    await page.goto('/?auto-init=false');
     await page.waitForLoadState('networkidle');
 
     // Wait for TraceLog bridge to be available
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+
+    await page.evaluate(async () => {
+      if (window.__traceLogBridge?.initialized) {
+        await window.__traceLogBridge.destroy();
+      }
+    });
 
     // Initialize TraceLog twice
     const results = await page.evaluate(async () => {
@@ -81,11 +84,7 @@ test.describe('Basic Initialization', () => {
 
   test('should reject initialization without project ID', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    await navigateToPlayground(page, { autoInit: false });
 
     // Try to initialize without project ID
     const initResult = await page.evaluate(async () => {

@@ -7,12 +7,12 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('User Navigation Flow', () => {
   test('should track page_view events during realistic navigation flow', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Initialize TraceLog and capture navigation via queue events
     const navigationResult = await page.evaluate(async () => {
@@ -119,8 +119,7 @@ test.describe('User Navigation Flow', () => {
 
   test('should maintain session consistency across hash-based navigation', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test hash-based navigation consistency using queue events
     const hashNavigationResult = await page.evaluate(async () => {
@@ -211,8 +210,7 @@ test.describe('User Navigation Flow', () => {
     });
 
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test rapid navigation using queue events
     const rapidNavigationResult = await page.evaluate(async () => {

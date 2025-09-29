@@ -7,12 +7,12 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('User Data Integrity', () => {
   test('should handle malformed event data gracefully', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test malformed data handling
     const dataIntegrityResult = await page.evaluate(async () => {
@@ -161,8 +161,7 @@ test.describe('User Data Integrity', () => {
 
   test('should maintain data consistency across multiple interactions', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test data consistency across interactions
     const consistencyResult = await page.evaluate(async () => {
@@ -273,8 +272,7 @@ test.describe('User Data Integrity', () => {
 
   test('should handle rapid concurrent events without data loss', async ({ page }) => {
     // Navigate to playground
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await navigateToPlayground(page);
 
     // Test concurrent event handling
     const concurrencyResult = await page.evaluate(async () => {
