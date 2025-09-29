@@ -8,6 +8,21 @@ import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
 import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
 import { Emitter, normalizeConfig } from '@/utils';
 
+vi.mock('@/managers/sender.manager', () => {
+  class MockSenderManager {
+    sendEventsQueue = vi.fn(async () => true);
+    sendEventsQueueSync = vi.fn(() => true);
+    sendEventsQueueAsync = vi.fn(async () => true);
+    recoverPersistedEvents = vi.fn(async () => undefined);
+    persistEventsForRecovery = vi.fn(() => true);
+    stop = vi.fn();
+  }
+
+  return {
+    SenderManager: MockSenderManager,
+  };
+});
+
 /**
  * Test configuration factory
  */

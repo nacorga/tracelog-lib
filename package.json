@@ -38,7 +38,7 @@
     "check": "npm run lint && npm run format:check",
     "fix": "npm run lint:fix && npm run format",
     "test:unit": "vitest run",
-    "test:unit:ci": "NODE_OPTIONS=\"--max-old-space-size=4096 --no-experimental-fetch --require ./tests/ci-bootstrap.cjs\" NODE_ENV=test CI=true vitest run --pool=forks --poolOptions.forks.singleFork=true --poolOptions.forks.isolate=false",
+    "test:unit:ci": "NODE_OPTIONS=\"--max-old-space-size=4096 --no-experimental-fetch\" vitest run --pool=forks --poolOptions.forks.singleFork=true --poolOptions.forks.isolate=false",
     "test:unit:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.mjs",

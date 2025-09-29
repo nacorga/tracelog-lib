@@ -1,33 +1,6 @@
 import { beforeEach, vi, afterEach } from 'vitest';
 
-// Prevent webidl-conversions errors by ensuring globals are available
-if (typeof global !== 'undefined') {
-  // Ensure critical Node.js globals are available for CI
-  if (typeof global.process === 'undefined') {
-    global.process = process;
-  }
-
-  // Mock globals that webidl-conversions might try to access
-  if (typeof (global as any).get === 'undefined') {
-    (global as any).get = function () {
-      return undefined;
-    };
-  }
-
-  // Ensure standard globals are available
-  global.TextEncoder = global.TextEncoder || TextEncoder;
-  global.TextDecoder = global.TextDecoder || TextDecoder;
-
-  // Mock DOMException for CI environments
-  if (typeof global.DOMException === 'undefined') {
-    global.DOMException = class MockDOMException extends Error {
-      constructor(message?: string, name?: string) {
-        super(message);
-        this.name = name ?? 'DOMException';
-      }
-    } as any;
-  }
-}
+// Minimal setup for jsdom environment
 
 beforeEach(() => {
   // Mock navigator.sendBeacon if not available
@@ -45,17 +18,12 @@ beforeEach(() => {
         this.name = name;
       }
 
-      postMessage(_message: unknown): void {
-        // Mock implementation
-      }
+      postMessage(_message: unknown): void {}
 
-      close(): void {
-        // Mock implementation
-      }
-    } as any;
+      close(): void {}
+    } as unknown as typeof BroadcastChannel;
   }
 
-  // Clear all mocks
   vi.clearAllMocks();
 });
 

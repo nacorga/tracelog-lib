@@ -3,15 +3,6 @@ import { EventManager } from '@/managers/event.manager';
 import { EventType, ScrollDirection } from '@/types';
 import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
-// Mock dependencies
-vi.mock('@/managers/sender.manager', () => ({
-  SenderManager: vi.fn().mockImplementation(() => ({
-    sendEventsQueue: vi.fn(),
-    recoverPersistedEvents: vi.fn(),
-    stop: vi.fn(),
-  })),
-}));
-
 vi.mock('@/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),

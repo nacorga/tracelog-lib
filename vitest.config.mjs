@@ -8,10 +8,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: [
-      ...(process.env.CI === 'true' || process.env.NODE_ENV === 'test' ? ['./tests/ci-setup.ts'] : []),
-      './tests/setup.ts'
-    ],
+    setupFiles: ['./tests/setup.ts'],
     include: ['tests/unit/**/*.test.ts'],
     pool: 'forks',
     poolOptions: {
