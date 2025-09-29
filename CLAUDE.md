@@ -485,8 +485,6 @@ Tests automatically detect issues in TraceLog library:
 npm run test:unit                 # Logic and state validation
 npm run test:integration          # Component interaction validation
 npm run test:e2e                 # Runtime error detection
-npm run ci:health-check          # System health validation
-node scripts/test-anomaly-report.js  # Anomaly analysis
 ```
 
 #### Error Categories
@@ -530,6 +528,5 @@ await expect(events).not.toContainScript();
 #### Reports Generated
 
 - `coverage/` - Code coverage reports (unit/integration)
-- `test-reports/anomaly-report.json` - Performance and behavior anomalies (E2E)
 - `test-results/failed-tests.json` - Test failures with library issues (E2E)
 - `playwright-report/` - Detailed execution reports with screenshots (E2E)

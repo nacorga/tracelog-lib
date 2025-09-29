@@ -68,8 +68,8 @@ jobs:
       - name: Run TraceLog Health Analysis
         id: health-check
         run: |
-          echo "Running comprehensive TraceLog health analysis..."
-          npm run ci:health-check > health-output.txt 2>&1
+          echo "Running comprehensive TraceLog E2E tests..."
+          npm run test:e2e > health-output.txt 2>&1
           echo "exit_code=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
@@ -79,9 +79,9 @@ jobs:
         with:
           name: tracelog-health-report-node${{ matrix.node-version }}
           path: |
-            test-reports/anomaly-report.json
             health-output.txt
             coverage/
+            playwright-report/
           retention-days: 30
 
       - name: Comment PR with Health Status

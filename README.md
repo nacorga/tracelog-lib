@@ -167,21 +167,20 @@ if (tracelog.isInitialized()) {
 
 ## CI/CD Integration
 
-**Automated health checks** → Validates library integrity before deployment → Detects critical issues early.
+**Automated testing** → Validates library integrity before deployment → Detects critical issues early.
 
 ```bash
-# Install and run health check
+# Install and run tests
 npm ci && npx playwright install --with-deps
 npm run build:all
-npm run ci:health-check        # Standard mode (allows warnings)
-npm run ci:health-strict       # Strict mode (blocks on any anomalies)
+npm run test:e2e               # E2E tests for validation
 ```
 
 **GitHub Actions** → Pre-configured workflows available:
 - `health-check.yml` - Runs on PR and push
 - `release-quality-gate.yml` - Validates releases
 
-**Exit codes** → `0` = healthy deploy approved → `1` = critical issues deploy blocked
+**Exit codes** → `0` = tests passed → `1` = critical issues detected
 
 ## Troubleshooting
 
@@ -189,7 +188,7 @@ npm run ci:health-strict       # Strict mode (blocks on any anomalies)
 
 **High memory usage** → Reduce `sessionTimeout` → Lower `samplingRate` → Check for event listener leaks (call `destroy()` on cleanup).
 
-**CI health check failures** → Verify Playwright installation → Check Node.js ≥18 → Review anomaly detection patterns.
+**CI test failures** → Verify Playwright installation → Check Node.js ≥20 → Review test patterns.
 
 ## Development & Contributing
 

@@ -1,31 +1,28 @@
-// Event types
-export { EventType } from './types/event.types';
+export {
+  Mode,
+  EventType,
+  DeviceType,
+  ScrollDirection,
+  ErrorType,
+  TagConditionOperator,
+  TagLogicalOperator,
+  TagConditionType,
+} from './types';
+
 export type {
-  EventData,
   ScrollData,
   ClickData,
   CustomEventData,
+  MetadataType,
   WebVitalsData,
   ErrorData,
   PageViewData,
   UTM,
-} from './types/event.types';
-
-// Device
-export { DeviceType } from './types/device.types';
-
-// Common
-export type { MetadataType } from './types/common.types';
-
-// Config
-export type { ApiConfig } from './types/config.types';
-
-// Mode
-export { Mode } from './types/mode.types';
-
-// Queue
-export type { BaseEventsQueueDto, ExtendedEventsQueueDto } from './types/queue.types';
-
-// Tags
-export { TagConditionType, TagConditionOperator, TagLogicalOperator } from './types/tag.types';
-export type { TagConfig, TagCondition } from './types/tag.types';
+  EventData,
+  AppConfig,
+  ApiConfig,
+  ExtendedEventsQueueDto,
+  TagConfig,
+  BaseEventsQueueDto,
+  WebVitalType,
+} from './types';
