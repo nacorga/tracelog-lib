@@ -10,6 +10,22 @@
 
 
 
+
+## [0.2.2] - 2025-09-29
+
+### 🔧 Other Changes
+
+- Add special page URLs constants for improved routing management ([45313cb](../../commit/45313cb7bc04f9153874b408a631a5de59d6d28f))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.2.1...v0.2.2
+
+
 ## [0.2.1] - 2025-09-29
 
 ### 🔧 Other Changes
