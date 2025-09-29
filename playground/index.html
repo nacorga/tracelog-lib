@@ -279,8 +279,8 @@
 
     <!-- TraceLog Library -->
     <script type="module">
-        import { TraceLog } from './tracelog.js';
-        window.TraceLog = TraceLog;
+        import { init, event, on, off, isInitialized, destroy } from './tracelog.js';
+        window.TraceLog = { init, event, on, off, isInitialized, destroy };
     </script>
     <!-- Demo Script -->
     <script src="script.js"></script>

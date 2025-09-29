@@ -4,9 +4,6 @@ import { debugLog, validateAndNormalizeConfig } from './utils';
 import { TestBridge } from './test-bridge';
 import './types/window.types';
 
-export * as Types from './app.types';
-export * as Constants from './app.constants';
-
 let app: App | null = null;
 let isInitializing = false;
 let isDestroying = false;
