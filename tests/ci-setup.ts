@@ -5,13 +5,21 @@
 const isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
 
 if (isCI) {
+  // Ensure the Node bootstrap has executed
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    require('./ci-bootstrap.cjs');
+  } catch {
+    // If require fails, continue with the TypeScript fallbacks below.
+  }
+
   // 1. Fix the specific webidl-conversions error by mocking the problematic 'get' access
   // This addresses the exact error: "Cannot read properties of undefined (reading 'get')"
   const mockGetFunction = (): undefined => undefined;
 
-  // Ensure global object has the 'get' property that webidl-conversions expects
-  if (typeof (global as unknown as Record<string, unknown>).get === 'undefined') {
-    Object.defineProperty(global, 'get', {
+  const globalTarget = global as unknown as Record<string, unknown>;
+  if (typeof globalTarget.get === 'undefined') {
+    Object.defineProperty(globalTarget, 'get', {
       value: mockGetFunction,
       writable: true,
       enumerable: false,
@@ -19,19 +27,33 @@ if (isCI) {
     });
   }
 
-  // 2. Polyfill critical Node.js globals for CI environment
+  if (typeof globalTarget.window === 'undefined') {
+    globalTarget.window = globalTarget;
+  }
+
+  const windowTarget = globalTarget.window as Record<string, unknown>;
+  if (typeof windowTarget.get === 'undefined') {
+    Object.defineProperty(windowTarget, 'get', {
+      value: mockGetFunction,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+
+  // 2. Polyfill select Node.js globals if the bootstrap did not provide them
   const requiredGlobals = {
-    process: process,
-    TextEncoder: TextEncoder,
-    TextDecoder: TextDecoder,
-    ArrayBuffer: ArrayBuffer,
-    Uint8Array: Uint8Array,
-    DataView: DataView,
-  };
+    TextEncoder: typeof global.TextEncoder === 'undefined' ? TextEncoder : global.TextEncoder,
+    TextDecoder: typeof global.TextDecoder === 'undefined' ? TextDecoder : global.TextDecoder,
+    URL: typeof global.URL === 'undefined' ? URL : global.URL,
+    URLSearchParams: typeof global.URLSearchParams === 'undefined' ? URLSearchParams : global.URLSearchParams,
+    SharedArrayBuffer: typeof global.SharedArrayBuffer === 'undefined' && typeof SharedArrayBuffer !== 'undefined' ? SharedArrayBuffer : global.SharedArrayBuffer,
+    Atomics: typeof global.Atomics === 'undefined' ? (typeof Atomics !== 'undefined' ? Atomics : Object.create(null)) : global.Atomics,
+  } satisfies Record<string, unknown>;
 
   Object.entries(requiredGlobals).forEach(([name, value]) => {
-    if (typeof (global as unknown as Record<string, unknown>)[name] === 'undefined') {
-      (global as unknown as Record<string, unknown>)[name] = value;
+    if (typeof value !== 'undefined' && typeof (globalTarget as Record<string, unknown>)[name] === 'undefined') {
+      (globalTarget as Record<string, unknown>)[name] = value;
     }
   });
 
@@ -113,5 +135,16 @@ if (isCI) {
       for: Symbol.for,
       keyFor: Symbol.keyFor,
     } as unknown as SymbolConstructor;
+  }
+
+  // 7. Provide resilient WHATWG URL fallbacks if needed
+  if (typeof globalTarget.URL === 'undefined' || typeof globalTarget.URLSearchParams === 'undefined') {
+    const urlModule = await import('url');
+    if (typeof globalTarget.URL === 'undefined') {
+      globalTarget.URL = urlModule.URL as unknown as typeof URL;
+    }
+    if (typeof globalTarget.URLSearchParams === 'undefined') {
+      globalTarget.URLSearchParams = urlModule.URLSearchParams as unknown as typeof URLSearchParams;
+    }
   }
 }
