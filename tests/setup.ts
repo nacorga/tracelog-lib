@@ -4,6 +4,11 @@ import { beforeEach, vi, afterEach } from 'vitest';
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
 
+// Ensure critical Node.js globals are available
+if (typeof global.process === 'undefined') {
+  global.process = process;
+}
+
 // Mock globals that might be accessed by dependencies
 if (typeof global.window === 'undefined') {
   Object.defineProperty(global, 'window', {
@@ -22,9 +27,47 @@ if (typeof global.DOMException === 'undefined') {
   } as unknown as typeof DOMException;
 }
 
-// Ensure Node.js globals are available
-if (typeof global.process === 'undefined') {
-  global.process = process;
+// Mock WeakMap and WeakSet if not available (CI environment issue)
+if (typeof global.WeakMap === 'undefined') {
+  global.WeakMap = Map as any;
+}
+if (typeof global.WeakSet === 'undefined') {
+  global.WeakSet = Set as any;
+}
+
+// Ensure Symbol is available with required properties
+if (typeof global.Symbol === 'undefined' || !global.Symbol.iterator) {
+  const SymbolPolyfill = {
+    iterator: Symbol.for('Symbol.iterator'),
+    toStringTag: Symbol.for('Symbol.toStringTag'),
+    for: Symbol.for,
+    keyFor: Symbol.keyFor,
+  };
+  global.Symbol = SymbolPolyfill as any;
+}
+
+// Mock specific globals that webidl-conversions tries to access
+if (typeof global.ArrayBuffer === 'undefined') {
+  global.ArrayBuffer = ArrayBuffer;
+}
+if (typeof global.Uint8Array === 'undefined') {
+  global.Uint8Array = Uint8Array;
+}
+if (typeof global.DataView === 'undefined') {
+  global.DataView = DataView;
+}
+
+// Prevent webidl-conversions from accessing undefined properties
+const originalGlobalGet = (global as any).get;
+if (!originalGlobalGet) {
+  Object.defineProperty(global, 'get', {
+    value: function (_key: string) {
+      // Return a safe default for any property access
+      return undefined;
+    },
+    writable: true,
+    configurable: true,
+  });
 }
 
 // Setup DOM mocks for jsdom environment
