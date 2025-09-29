@@ -40,7 +40,7 @@
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.mjs",
     "serve": "http-server playground -p 3000 --cors",
     "playground:setup": "npm run build:browser:playground && cp dist/browser/tracelog.js playground/tracelog.js",
     "playground:dev": "npm run playground:setup && npm run serve",
