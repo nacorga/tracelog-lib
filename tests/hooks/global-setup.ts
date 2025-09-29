@@ -112,7 +112,7 @@ async function validateBuildArtifacts(): Promise<void> {
 
   if (missingFiles.length > 0) {
     console.error('❌ Missing required build artifacts:', missingFiles);
-    console.log('💡 Try running: npm run build:browser:testing');
+    console.log('💡 Try running: npm run build:browser:dev');
     throw new Error('Required build artifacts are missing. Please run the build process.');
   }
 
