@@ -18,6 +18,7 @@ export type {
   ErrorData,
   PageViewData,
   UTM,
+  EventLocation,
   EventData,
   AppConfig,
   ApiConfig,

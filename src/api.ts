@@ -100,14 +100,14 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
  * @param event - Event name to listen to
  * @param callback - Function to call when event is emitted
  * @example
- * // Listen for real-time events
- * tracelog.on('realtime', (data) => {
- *   console.log('Event tracked:', data.type, data.data);
+ * // Listen for tracked events
+ * tracelog.on('event', (data) => {
+ *   console.log('Event tracked:', data.type);
  * });
  *
- * // Listen for sent events
- * tracelog.on('sent', (data) => {
- *   console.log('Events sent:', data.eventCount);
+ * // Listen for event queues being sent
+ * tracelog.on('queue', (data) => {
+ *   console.log('Events sent:', data.events.length);
  * });
  */
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
@@ -124,7 +124,7 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
  * @param callback - The same function reference that was used in on()
  * @example
  * // Remove a specific listener
- * tracelog.off('realtime', myCallback);
+ * tracelog.off('event', myCallback);
  */
 export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (!app) {
