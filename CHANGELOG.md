@@ -8,6 +8,88 @@
 
 
 
+
+## [0.2.0] - 2025-09-29
+
+### ✨ Features
+
+- Implement configuration normalization to ensure consistent sampling rate and preserve excluded URL paths ([23f195d](../../commit/23f195d96a7078088eb7079a420f480cb3f54d15))
+- Ensure sampling rate validation and critical event handling ([aafce25](../../commit/aafce25012318e4c26e1a0d17e13d75157fc5d28))
+- Add session storage and broadcast channel support and enhance event payload handling ([5433727](../../commit/5433727d31407f031c5ee53b7ca704cd007c1368))
+- Enhance event handling, scroll tracking and emitter for event management ([2b29885](../../commit/2b2988538881043fa6ce2c5507d71697302aac26))
+- Enhance session management with error handling, and implement integration tests ([eab718e](../../commit/eab718e257f173d7a8b437e275c11f3d2aee454e))
+- User journey testing with realistic E2E scenarios, improve event validation, and add new test configurations ([fda8fec](../../commit/fda8fec5b587c5d23741715b1e44f8dff1802d49))
+- Update testing framework with integration tests, enhance configuration, and improve documentation ([06ba921](../../commit/06ba9214f89146745e4ed9131dc5dcb3d14fb2ff))
+- Add comprehensive E2E testing plan and enhance TraceLog documentation ([7563e56](../../commit/7563e567aa5f133072285a2b3dc2aca90a142512))
+- Add type-check scripts and improve playground navigation for testing ([21f6916](../../commit/21f6916822d1f3b540d95a1c9cc95acce2998697))
+- Enable inline dynamic imports in Vite config and simplify event monitoring logic in playground ([bc80563](../../commit/bc8056331691354927c441c7eecd26c0a12ba854))
+- Phase 1 ([42e6c06](../../commit/42e6c06f85823387cdb84b5b20999f4187f204f2))
+- Update playground documentation and enhance TraceLog initialization examples ([91644ee](../../commit/91644ee2b08c17d8f253bf11430096c095d3a4db))
+- Enhance initialization process with timeout handling and validation checks in API and App classes ([d8ee442](../../commit/d8ee442bbe335cf1d74027f8b39694a27e64b808))
+- Add demo page and enhance navigation structure in playground ([c1f0fb9](../../commit/c1f0fb924cf27c55cbb03ba0f70b7863ba67597c))
+- Add error recovery statistics and system recovery methods in API and EventManager ([5edb3cc](../../commit/5edb3cc9f6fa8c4bda3ab327ead47f5c386d984a))
+- Implement fetchWithTimeout utility and integrate it into ConfigManager and SenderManager ([15ec61b](../../commit/15ec61be4db5942b52da17531c1c515e8dfc957c))
+- Add centralized backoff configuration and implement BackoffManager for consistent retry logic ([0a9c7ee](../../commit/0a9c7eec892d7894b2e05b0b5a2e9a21edf1d17b))
+- Implement event recovery and enhance error handling in EventManager and SenderManager ([c403de3](../../commit/c403de3cccdb6a060043cb818b81a4dd3a915bf7))
+- Add MAX_RETRY_ATTEMPTS constant and implement retry logic in SenderManager ([d64ef73](../../commit/d64ef73733d74dc9763b55111855424453742b48))
+
+### 🧪 Tests
+
+- Enhance session management tests with excluded URL scenarios and default sampling behavior ([f9140ec](../../commit/f9140ec5f5938f1077fe47de4db5a5f167423399))
+- Implement comprehensive E2E tests for user flows ([c3a5ed0](../../commit/c3a5ed04dae2ab9ef9584c2fd3ed68e85295d180))
+
+### ♻️ Refactoring
+
+- Add comprehensive performance and data protection constants for enhanced analytics ([d701a44](../../commit/d701a4407d43c2c982d7f67959301d85ab4ebabc))
+- Centralize error handling constants and improve performance monitoring configuration ([d50bcbe](../../commit/d50bcbe9239fc6354a6444671662c3c8b2871543))
+- Enhance floating monitor UI and improve event handling in TraceLog integration ([5f40c9c](../../commit/5f40c9cc4e3205e2a56621db6c0617bc8a1c10e4))
+- Update error handling structure and improve event tracking in handlers ([e4fd0e0](../../commit/e4fd0e04a0779469fe401a3a8efad3a73fb1f6f4))
+- Streamline type exports in app.types and public-api for improved organization ([f6a22c6](../../commit/f6a22c6e2ded3ba52ed1de2ea61815e85ed300d3))
+- Update documentation and examples to use 'tracelog' namespace for API methods ([c900329](../../commit/c900329a62602c143a8fc0495ed7b555a4a551db))
+- Update TraceLog API and streamline type exports for better organization ([4351e9d](../../commit/4351e9d6f8ca870496ba316c5e23d94508a850c0))
+- Improve app initialization resilience and error handling during setup ([1603ad8](../../commit/1603ad8cb7a18324e8e2bf09f1d64f60fc489a82))
+- Update API and configuration types ([a68d86a](../../commit/a68d86aa7152ea00ae0671112f06d15a8e77d4a0))
+- Remove debug logging statements from various handlers and managers to streamline code ([3e55ff0](../../commit/3e55ff0f94ebbdaf7a6a85af3339350b4cede53b))
+- Remove unused constants, simplify performance handler, and enhance type definitions ([b5e4920](../../commit/b5e4920d99d527593d5c968feedcef82e0cf4ca0))
+- Streamline Google Analytics integration, enhance error handling, and remove unused code ([1a08659](../../commit/1a086592e1798de6867ecfa150b57f9deab6770f))
+- Introduce BaseInputListenerManager to reduce code duplication in input listener managers ([19d2776](../../commit/19d2776b869f1db4d137beef774b2506e1d4a32b))
+- Optimize async methods to synchronous in App class, improve API URL generation, and remove unused constants ([31817a3](../../commit/31817a330b5d1f94954f2f388e8a902d44b82291))
+- Simplify size property declaration in setup tests ([1228092](../../commit/1228092aeaeb87a75fa4150a0fd1a376255fa83d))
+- Remove unused constants and improve error handling in event handlers ([2144f42](../../commit/2144f429bde1dc5b308d2c74a4b56de03584fa67))
+- Phases complete ([76c40ef](../../commit/76c40efdd8713dbe995d8eb443ca834520fcee67))
+- Update event sending logic and improve validation checks in EventManager ([70196de](../../commit/70196de558136869398f5a690502b046dbedbb57))
+
+### 🔧 Other Changes
+
+- Merge pull request #9 from nacorga/release/20250929.1 ([f89a7dc](../../commit/f89a7dc51f6e255fb9be0dab71bb2946f8872cad))
+- Add SessionEndReason type to app types ([11f9a79](../../commit/11f9a799b7921e56a43a23d4c9fbf88d46956c8e))
+- Merge branch 'main' of github.com:nacorga/tracelog-lib into release/20250929.1 ([3728289](../../commit/372828990b2b53c3798842428e1407465f170a59))
+- Merge pull request #8 from nacorga/feature/refactor ([49fbc4d](../../commit/49fbc4d5c7d550d2ccd41da7f3c07011b7a06c64))
+- Update build scripts to use 'build:browser:dev' for playground setup and E2E tests ([c398214](../../commit/c3982144bb018814a5c5142d52bdd57e6ff4c66d))
+- Remove health check scripts and update CI workflows to use E2E tests for validation ([07621b3](../../commit/07621b3b54be7160847212b74b27c92a37fb5e6a))
+- Add integration tests to CI workflows with error handling for improved testing coverage ([efcfeba](../../commit/efcfebab9c981d9f5ddfa6b07aadbd575cd48159))
+- Update CI configuration and Vitest setup to use Node.js 20 and simplify global variable handling ([4c39c0d](../../commit/4c39c0d75ab7813b6d2c572bae0f22c89d006c0f))
+- Update CI configuration to include bootstrap script for improved global variable handling ([ace4806](../../commit/ace48061590ba1743a2683c5be756f2381620185))
+- Enhance CI setup and Vitest configuration for improved compatibility and error handling ([7a08706](../../commit/7a08706e72fef3854a4eba305b5ef784fd0910b2))
+- Modify Vitest configuration for improved jsdom setup ([73b62fb](../../commit/73b62fb5208d774381dcb9d6734782ce5ccabbc7))
+- Update CI workflows to use new unit test command and enhance global mock setup for compatibility ([26e372a](../../commit/26e372a55c1f5f0f82708bf8dafe02a403947b2d))
+- Remove integration tests from CI workflows to simplify testing process ([3cc4d7d](../../commit/3cc4d7d845d3442918307c3749c0fcc8a9c27988))
+- Update CI workflows to streamline test commands and enhance health analysis reporting ([ebe3f68](../../commit/ebe3f686a70af8b440ed7e42da037e6107e31c55))
+- Add CI command for unit tests and update health check logging ([297fd97](../../commit/297fd971addafc5bb3a7a763af0ccf2bb57e9caf))
+- Update Vitest configuration files and adjust test commands for integration testing ([cff9e0c](../../commit/cff9e0cfddc82bdb486f8169a2af57616ae40c23))
+- Enhance CI workflows by adding unit tests, integration tests, and coverage report generation ([80910b2](../../commit/80910b2639178391b6ff305600be460ea70bbb89))
+- Update .gitignore to include new directories and remove obsolete entries ([2b3334e](../../commit/2b3334ef3f55b220c3f07b8cd562e128cbe9ca0f))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.1.0...v0.2.0
+
+
 ## [0.1.0] - 2025-09-23
 
 ### ✨ Features
