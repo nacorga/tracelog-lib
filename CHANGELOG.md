@@ -13,6 +13,27 @@
 
 
 
+
+## [0.4.1] - 2025-09-30
+
+### 🐛 Bug Fixes
+
+- Session start deduplication logic and add corresponding tests ([55832b1](../../commit/55832b1ccf8d3fb1cc2bd7ead83458bd516143f5))
+
+### 🔧 Other Changes
+
+- Merge pull request #11 from nacorga/hotfix/20250930.1 ([a74d00b](../../commit/a74d00bf9f74168340cc95a012d23bdd06d9cae6))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.4.0...v0.4.1
+
+
 ## [0.4.0] - 2025-09-29
 
 ### ✨ Features
