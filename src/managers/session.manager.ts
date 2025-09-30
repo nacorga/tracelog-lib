@@ -190,11 +190,12 @@ export class SessionManager extends StateManager {
       this.set('sessionId', sessionId);
       this.persistSession(sessionId);
 
-      // Track session start event
-      this.eventManager.track({
-        type: EventType.SESSION_START,
-        ...(isRecovered && { session_start_recovered: true }),
-      });
+      // Track session start event only for new sessions
+      if (!isRecovered) {
+        this.eventManager.track({
+          type: EventType.SESSION_START,
+        });
+      }
 
       // Initialize components
       this.initCrossTabSync();
