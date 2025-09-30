@@ -61,10 +61,7 @@ describe('SessionManager - Lifecycle', () => {
 
     await sessionManager.startTracking();
 
-    expect(mockEventManager.track).toHaveBeenCalledWith({
-      type: EventType.SESSION_START,
-      session_start_recovered: true,
-    });
+    expect(mockEventManager.track).not.toHaveBeenCalled();
   });
 
   test('should not recover expired session', async () => {
