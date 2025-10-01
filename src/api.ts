@@ -8,32 +8,20 @@ let app: App | null = null;
 let isInitializing = false;
 let isDestroying = false;
 
-/**
- * Initializes the tracelog app with the provided configuration.
- * If already initialized, this function returns early without error.
- * @param appConfig - The configuration object for the app
- * @throws {Error} If initialization fails or environment is invalid
- * @example
- * await tracelog.init({ id: 'my-project-id' });
- */
 export const init = async (appConfig: AppConfig): Promise<void> => {
-  // Browser environment check
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('This library can only be used in a browser environment');
   }
 
-  // Check if TraceLog is disabled
   if (window.__traceLogDisabled) {
     return;
   }
 
-  // Already initialized - safe to return
   if (app) {
     debugLog.debug('API', 'Library already initialized, skipping duplicate initialization');
     return;
   }
 
-  // Prevent concurrent initialization
   if (isInitializing) {
     debugLog.warn('API', 'Initialization already in progress');
     throw new Error('Initialization already in progress');
@@ -69,19 +57,6 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
   }
 };
 
-/**
- * Sends a custom event with the specified name and metadata.
- * @param name - The name of the custom event.
- * @param metadata - Optional metadata to attach to the event.
- * @example
- * // Send a custom event with metadata
- * tracelog.event('user_signup', { method: 'email', plan: 'premium' });
- * @example
- * // Send a custom event without metadata
- * tracelog.event('user_login');
- * @remarks
- * This function should be called after the app has been initialized using the `tracelog.init` function.
- */
 export const event = (name: string, metadata?: Record<string, MetadataType> | Record<string, MetadataType>[]): void => {
   if (!app) {
     throw new Error('TraceLog not initialized. Please call init() first.');
@@ -95,21 +70,6 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
   }
 };
 
-/**
- * Subscribe to events emitted by TraceLog
- * @param event - Event name to listen to
- * @param callback - Function to call when event is emitted
- * @example
- * // Listen for tracked events
- * tracelog.on('event', (data) => {
- *   console.log('Event tracked:', data.type);
- * });
- *
- * // Listen for event queues being sent
- * tracelog.on('queue', (data) => {
- *   console.log('Events sent:', data.events.length);
- * });
- */
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (!app) {
     throw new Error('TraceLog not initialized. Please call init() first.');
@@ -118,14 +78,6 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
   app.on(event, callback);
 };
 
-/**
- * Unsubscribe from events emitted by TraceLog
- * @param event - Event name to stop listening to
- * @param callback - The same function reference that was used in on()
- * @example
- * // Remove a specific listener
- * tracelog.off('event', myCallback);
- */
 export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (!app) {
     throw new Error('TraceLog not initialized. Please call init() first.');
@@ -134,25 +86,15 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
   app.off(event, callback);
 };
 
-/**
- * Checks if the app has been initialized.
- * @returns true if the app is initialized, false otherwise
- */
 export const isInitialized = (): boolean => {
   return app !== null;
 };
 
-/**
- * Destroys the current app instance and cleans up resources.
- * @throws {Error} If not initialized or already destroying
- */
 export const destroy = async (): Promise<void> => {
-  // Check if app was never initialized
   if (!app) {
     throw new Error('App not initialized');
   }
 
-  // Prevent concurrent destroy operations
   if (isDestroying) {
     throw new Error('Destroy operation already in progress');
   }
@@ -176,7 +118,6 @@ export const destroy = async (): Promise<void> => {
   }
 };
 
-// Auto-inject testing bridge in development environments
 if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined') {
   const injectTestingBridge = (): void => {
     window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);

@@ -6,6 +6,7 @@ import {
   MAX_ERROR_MESSAGE_LENGTH,
   ERROR_SUPPRESSION_WINDOW_MS,
   MAX_TRACKED_ERRORS,
+  MAX_TRACKED_ERRORS_HARD_LIMIT,
 } from '../constants/error.constants';
 import { debugLog } from '../utils/logging';
 
@@ -136,6 +137,18 @@ export class ErrorHandler extends StateManager {
     }
 
     this.recentErrors.set(key, now);
+
+    if (this.recentErrors.size > MAX_TRACKED_ERRORS_HARD_LIMIT) {
+      debugLog.warn('ErrorHandler', 'Hard limit exceeded, clearing all tracked errors', {
+        size: this.recentErrors.size,
+        limit: MAX_TRACKED_ERRORS_HARD_LIMIT,
+      });
+
+      this.recentErrors.clear();
+      this.recentErrors.set(key, now);
+
+      return false;
+    }
 
     if (this.recentErrors.size > MAX_TRACKED_ERRORS) {
       this.pruneOldErrors();

@@ -33,19 +33,12 @@ export class SenderManager extends StateManager {
     return `${QUEUE_KEY(projectId)}:${userId}`;
   }
 
-  /**
-   * Send events synchronously using sendBeacon or XHR fallback
-   * Used primarily for page unload scenarios
-   */
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
-    // For skip mode, simulate success immediately (sync version)
-    // Note: Do NOT clear persisted events here - they should only be cleared by async recovery
     if (this.shouldSkipSend()) {
       this.resetRetryState();
       return true;
     }
 
-    // Handle Fail mode - always fail sends to trigger persistence (sync version)
     const config = this.get('config');
     if (config?.id === SpecialProjectId.Fail) {
       debugLog.warn('SenderManager', 'Fail mode: simulating network failure (sync)', {
@@ -54,8 +47,6 @@ export class SenderManager extends StateManager {
       return false;
     }
 
-    // Attempt sync send for normal mode
-    // Note: Do NOT clear persisted events here - they should only be cleared by async recovery
     const success = this.sendQueueSyncInternal(body);
 
     if (success) {
@@ -65,18 +56,12 @@ export class SenderManager extends StateManager {
     return success;
   }
 
-  /**
-   * Send events asynchronously with persistence and retry logic
-   * Main method for sending events during normal operation
-   */
   async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
-    // First, try to persist events for recovery (even in skip mode for consistency)
     const persisted = this.persistEvents(body);
     if (!persisted && !this.shouldSkipSend()) {
       debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
     }
 
-    // Attempt to send events (or simulate in skip mode)
     const success = await this.send(body);
 
     if (success) {
@@ -91,10 +76,6 @@ export class SenderManager extends StateManager {
     return success;
   }
 
-  /**
-   * Recover and send previously persisted events
-   * Called during initialization to handle events from previous session
-   */
   async recoverPersistedEvents(callbacks?: SendCallbacks): Promise<void> {
     try {
       const persistedData = this.getPersistedData();
@@ -117,32 +98,21 @@ export class SenderManager extends StateManager {
       }
     } catch (error) {
       debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
-      this.clearPersistedEvents(); // Clean up corrupted data
+      this.clearPersistedEvents();
     }
   }
 
-  /**
-   * Persist events for recovery in case of failure
-   */
   persistEventsForRecovery(body: BaseEventsQueueDto): boolean {
     return this.persistEvents(body);
   }
 
-  /**
-   * Legacy method for backward compatibility
-   * @deprecated Use sendEventsQueue instead
-   */
   async sendEventsQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
     return this.sendEventsQueue(body);
   }
 
-  /**
-   * Stop the sender manager and clean up resources
-   */
   stop(): void {
     this.clearRetryTimeout();
     this.resetRetryState();
-    // Note: We intentionally do NOT clear persisted events here to allow recovery on next init
   }
 
   private async send(body: BaseEventsQueueDto): Promise<boolean> {
@@ -150,7 +120,6 @@ export class SenderManager extends StateManager {
       return this.simulateSuccessfulSend();
     }
 
-    // Handle Fail mode - always fail sends to trigger persistence
     const config = this.get('config');
     if (config?.id === SpecialProjectId.Fail) {
       debugLog.warn('SenderManager', 'Fail mode: simulating network failure', {
@@ -171,7 +140,7 @@ export class SenderManager extends StateManager {
       debugLog.error('SenderManager', 'Send request failed', {
         error: errorMessage,
         events: body.events.length,
-        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'), // Hide domain for privacy
+        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
       });
 
       return false;
@@ -264,7 +233,6 @@ export class SenderManager extends StateManager {
       }
     } catch (error) {
       debugLog.warn('SenderManager', 'Failed to parse persisted data', { error });
-      // Clean up corrupted data
       this.clearPersistedEvents();
     }
 
@@ -343,15 +311,12 @@ export class SenderManager extends StateManager {
 
     const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount); // Exponential backoff
 
+    this.isRetrying = true;
+
     this.retryTimeoutId = window.setTimeout(async () => {
       this.retryTimeoutId = null;
 
-      if (this.isRetrying) {
-        return;
-      }
-
       this.retryCount++;
-      this.isRetrying = true;
 
       try {
         const success = await this.send(body);
@@ -383,21 +348,15 @@ export class SenderManager extends StateManager {
     const config = this.get('config');
     const { id } = config || {};
 
-    // Only Skip mode bypasses sends; Fail mode allows sends to fail naturally
     return id === SpecialProjectId.Skip;
   }
 
-  /**
-   * Simulate a successful send operation for skip mode
-   * Provides realistic timing and behavior without making HTTP requests
-   */
   private async simulateSuccessfulSend(): Promise<boolean> {
-    // Simulate realistic network delay (100-500ms)
     const delay = Math.random() * 400 + 100;
 
     await new Promise((resolve) => setTimeout(resolve, delay));
 
-    return true; // Always successful in skip mode
+    return true;
   }
 
   private isSendBeaconAvailable(): boolean {

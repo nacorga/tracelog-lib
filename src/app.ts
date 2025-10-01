@@ -15,10 +15,6 @@ import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 
-/**
- * Main application class for TraceLog analytics
- * Orchestrates event tracking, session management, and integrations
- */
 export class App extends StateManager {
   private isInitialized = false;
   private suppressNextScrollTimer: number | null = null;
@@ -133,7 +129,6 @@ export class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
 
-    // Flush pending events before cleanup (synchronously to ensure completion before cleanup)
     this.managers.event?.flushImmediatelySync();
 
     this.managers.event?.stop();
@@ -149,20 +144,16 @@ export class App extends StateManager {
   }
 
   private async setupState(appConfig: AppConfig): Promise<void> {
-    // Set API URL
     const apiUrl = getApiUrlForProject(appConfig.id, appConfig.allowHttp);
     this.set('apiUrl', apiUrl);
 
-    // Get remote configuration (already fully processed by ConfigManager)
     const configManager = new ConfigManager();
     const config = await configManager.get(apiUrl, appConfig);
     this.set('config', config);
 
-    // Set user ID
     const userId = UserManager.getId(this.managers.storage as StorageManager, config.id);
     this.set('userId', userId);
 
-    // Set device and page info
     this.set('device', getDeviceType());
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);

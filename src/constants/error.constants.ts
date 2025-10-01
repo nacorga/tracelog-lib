@@ -56,6 +56,12 @@ export const ERROR_SUPPRESSION_WINDOW_MS = 5_000; // 5 seconds
  */
 export const MAX_TRACKED_ERRORS = 50;
 
+/**
+ * Hard limit for error tracking before aggressive cleanup
+ * If this limit is exceeded, the entire error map is cleared
+ */
+export const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
+
 // ============================================================================
 // ERROR SAMPLING
 // ============================================================================

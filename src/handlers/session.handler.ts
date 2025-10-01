@@ -35,7 +35,6 @@ export class SessionHandler extends StateManager {
       this.sessionManager = new SessionManager(this.storageManager, this.eventManager, projectId);
       await this.sessionManager.startTracking();
     } catch (error) {
-      // Cleanup on failure
       if (this.sessionManager) {
         try {
           this.sessionManager.destroy();

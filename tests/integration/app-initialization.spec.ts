@@ -156,7 +156,11 @@ describe('App Initialization Integration', () => {
       // This test verifies that ConfigBuilder normalizes invalid session timeouts
       // We can't mock ConfigManager to return invalid values anymore
       const realGet = ConfigManager.prototype.get;
-      vi.spyOn(ConfigManager.prototype, 'get').mockImplementation(async function (apiUrl, appConfig) {
+      vi.spyOn(ConfigManager.prototype, 'get').mockImplementation(async function (
+        this: ConfigManager,
+        apiUrl,
+        appConfig,
+      ) {
         // Pass invalid sessionTimeout through appConfig to test ConfigBuilder validation
         const invalidAppConfig = { ...appConfig, sessionTimeout: -1000 };
         return realGet.call(this, apiUrl, invalidAppConfig);

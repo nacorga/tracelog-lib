@@ -22,7 +22,6 @@ export enum ScrollDirection {
 export enum ErrorType {
   JS_ERROR = 'js_error',
   PROMISE_REJECTION = 'promise_rejection',
-  NETWORK_ERROR = 'network_error',
 }
 
 export interface ScrollData {
