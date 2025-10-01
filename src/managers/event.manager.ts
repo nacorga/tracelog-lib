@@ -48,10 +48,15 @@ export class EventManager extends StateManager {
    */
   async recoverPersistedEvents(): Promise<void> {
     await this.dataSender.recoverPersistedEvents({
-      onSuccess: (_eventCount, recoveredEvents) => {
+      onSuccess: (_eventCount, recoveredEvents, body) => {
         if (recoveredEvents && recoveredEvents.length > 0) {
           const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
           this.removeProcessedEvents(eventIds);
+
+          // Emit queue event for recovered events
+          if (body) {
+            this.emitEventsQueue(body);
+          }
         }
       },
       onFailure: async () => {
@@ -196,6 +201,7 @@ export class EventManager extends StateManager {
       if (success) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
+        this.emitEventsQueue(body);
       }
 
       return success;
@@ -354,6 +360,10 @@ export class EventManager extends StateManager {
       fingerprint += `_vitals_${event.web_vitals.type}`;
     }
 
+    if (event.error_data) {
+      fingerprint += `_error_${event.error_data.type}_${event.error_data.message}`;
+    }
+
     return fingerprint;
   }
 
@@ -368,14 +378,21 @@ export class EventManager extends StateManager {
 
     this.emitEvent(event);
 
-    // Prevent queue overflow
+    // Prevent queue overflow - protect critical events (session_start, session_end)
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
-      const removedEvent = this.eventsQueue.shift();
+      // Find first non-critical event to remove
+      const nonCriticalIndex = this.eventsQueue.findIndex(
+        (e) => e.type !== EventType.SESSION_START && e.type !== EventType.SESSION_END,
+      );
 
-      debugLog.warn('EventManager', 'Event queue overflow, oldest event removed', {
+      const removedEvent =
+        nonCriticalIndex >= 0 ? this.eventsQueue.splice(nonCriticalIndex, 1)[0] : this.eventsQueue.shift();
+
+      debugLog.warn('EventManager', 'Event queue overflow, oldest non-critical event removed', {
         maxLength: MAX_EVENTS_QUEUE_LENGTH,
         currentLength: this.eventsQueue.length,
         removedEventType: removedEvent?.type,
+        wasCritical: removedEvent?.type === EventType.SESSION_START || removedEvent?.type === EventType.SESSION_END,
       });
     }
 

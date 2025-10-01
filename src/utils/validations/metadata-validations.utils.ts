@@ -56,13 +56,13 @@ export const isValidEventName = (eventName: string): { valid: boolean; error?: s
 };
 
 /**
- * Validates metadata for events
+ * Validates a single metadata object
  * @param eventName - The event name (for error messages)
- * @param metadata - The metadata to validate
+ * @param metadata - The metadata object to validate
  * @param type - Type of metadata (globalMetadata or customEvent)
  * @returns Validation result with sanitized metadata if valid
  */
-export const isValidMetadata = (
+const validateSingleMetadata = (
   eventName: string,
   metadata: Record<string, unknown>,
   type?: 'globalMetadata' | 'customEvent',
@@ -136,4 +136,52 @@ export const isValidMetadata = (
     valid: true,
     sanitizedMetadata,
   };
+};
+
+/**
+ * Validates metadata for events (supports both objects and arrays of objects)
+ * @param eventName - The event name (for error messages)
+ * @param metadata - The metadata to validate
+ * @param type - Type of metadata (globalMetadata or customEvent)
+ * @returns Validation result with sanitized metadata if valid
+ */
+export const isValidMetadata = (
+  eventName: string,
+  metadata: Record<string, unknown> | Record<string, unknown>[],
+  type?: 'globalMetadata' | 'customEvent',
+): {
+  valid: boolean;
+  error?: string;
+  sanitizedMetadata?: Record<string, MetadataType> | Record<string, MetadataType>[];
+} => {
+  if (Array.isArray(metadata)) {
+    const sanitizedArray: Record<string, MetadataType>[] = [];
+    const intro =
+      type && type === 'customEvent' ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
+    for (let i = 0; i < metadata.length; i++) {
+      const item = metadata[i];
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+        return {
+          valid: false,
+          error: `${intro}: array item at index ${i} must be an object.`,
+        };
+      }
+      const itemValidation = validateSingleMetadata(eventName, item, type);
+      if (!itemValidation.valid) {
+        return {
+          valid: false,
+          error: `${intro}: array item at index ${i} is invalid: ${itemValidation.error}`,
+        };
+      }
+      if (itemValidation.sanitizedMetadata) {
+        sanitizedArray.push(itemValidation.sanitizedMetadata);
+      }
+    }
+    // Allow empty arrays after sanitization
+    return {
+      valid: true,
+      sanitizedMetadata: sanitizedArray,
+    };
+  }
+  return validateSingleMetadata(eventName, metadata, type);
 };

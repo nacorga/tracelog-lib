@@ -13,13 +13,14 @@ const initTraceLog = async (page: Page, config: AppConfig) => {
 };
 
 test.describe('Config Normalization', () => {
-  test('normalizes samplingRate when zero provided', async ({ page }) => {
+  test('preserves valid samplingRate of zero', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
     await ensureTraceLogBridge(page);
 
+    // samplingRate: 0 is valid (means "don't sample any events")
     const config = await initTraceLog(page, { id: SpecialProjectId.Skip, samplingRate: 0 });
 
-    expect(config?.samplingRate).toBe(1);
+    expect(config?.samplingRate).toBe(0); // Should preserve 0 as it's valid
   });
 
   test('preserves custom exclusions after normalization', async ({ page }) => {
@@ -29,10 +30,11 @@ test.describe('Config Normalization', () => {
     const exclusions = ['#/blocked'];
     const config = await initTraceLog(page, {
       id: SpecialProjectId.Skip,
-      samplingRate: 0,
+      samplingRate: 0.5, // Use valid rate
       excludedUrlPaths: exclusions,
     });
 
     expect(config?.excludedUrlPaths).toEqual(exclusions);
+    expect(config?.samplingRate).toBe(0.5);
   });
 });

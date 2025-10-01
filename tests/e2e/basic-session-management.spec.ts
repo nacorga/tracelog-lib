@@ -62,10 +62,10 @@ test.describe('Session Management - Excluded URL Scenarios', () => {
     expect(sessionEnd?.pageUrl ?? '').toContain('#/nosotros');
   });
 
-  test('should default invalid samplingRate to full capture', async ({ page }) => {
+  test('should respect samplingRate of zero (no sampling)', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const { normalizedRate, allSampled } = await page.evaluate(async (projectId) => {
+    const { normalizedRate, noneSampled } = await page.evaluate(async (projectId) => {
       const traceLog = window.__traceLogBridge!;
       const capturedNames: string[] = [];
 
@@ -77,13 +77,13 @@ test.describe('Session Management - Excluded URL Scenarios', () => {
 
       await traceLog.init({
         id: projectId,
-        samplingRate: 0,
+        samplingRate: 0, // Valid: means "don't sample any events"
       });
 
-      const normalizedSampling = traceLog.get('config')?.samplingRate ?? 0;
+      const normalizedSampling = traceLog.get('config')?.samplingRate ?? 1;
 
       const originalRandom = Math.random;
-      Math.random = () => 0.01;
+      Math.random = () => 0.01; // Would pass sampling if rate > 0
 
       try {
         for (let index = 0; index < 10; index++) {
@@ -96,11 +96,11 @@ test.describe('Session Management - Excluded URL Scenarios', () => {
       await new Promise((resolve) => setTimeout(resolve, 400));
       await traceLog.destroy();
 
-      return { normalizedRate: normalizedSampling, allSampled: capturedNames.length >= 10 };
+      return { normalizedRate: normalizedSampling, noneSampled: capturedNames.length === 0 };
     }, SpecialProjectId.Skip);
 
-    expect(normalizedRate).toBe(1);
-    expect(allSampled).toBe(true);
+    expect(normalizedRate).toBe(0); // Should preserve 0
+    expect(noneSampled).toBe(true); // No events should be sampled with rate 0
   });
 
   test('should resume event tracking after leaving an excluded route', async ({ page }) => {

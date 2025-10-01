@@ -8,6 +8,14 @@ import { DEFAULT_SAMPLING_RATE } from '../constants';
 const globalState: State = {} as State;
 
 /**
+ * Gets a read-only copy of the global state
+ * Used by utils to access state without creating circular dependencies
+ */
+export function getGlobalState(): Readonly<State> {
+  return globalState;
+}
+
+/**
  * Resets the global state to its initial empty state.
  * Used primarily for testing and cleanup scenarios.
  */
@@ -42,7 +50,9 @@ export abstract class StateManager {
 
       if (configValue) {
         const samplingRate = configValue.samplingRate ?? DEFAULT_SAMPLING_RATE;
-        const normalizedSamplingRate = samplingRate > 0 ? samplingRate : DEFAULT_SAMPLING_RATE;
+        // Only normalize invalid sampling rates (negative or > 1), NOT zero
+        // Zero is a valid value meaning "sample no events"
+        const normalizedSamplingRate = samplingRate < 0 || samplingRate > 1 ? DEFAULT_SAMPLING_RATE : samplingRate;
         const hasNormalizedSampling = normalizedSamplingRate !== samplingRate;
 
         if (hasNormalizedSampling) {

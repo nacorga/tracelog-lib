@@ -1,9 +1,10 @@
 /**
  * Special project IDs for testing and development
  *
- * Both automatically force mode: 'debug' but differ in HTTP behavior:
+ * All automatically force mode: 'debug' but differ in HTTP behavior:
  * - Skip: NO network calls (pure offline testing)
  * - Localhost: Makes network calls to local server (integration testing)
+ * - Fail: Makes network calls that intentionally fail (persistence testing)
  */
 export enum SpecialProjectId {
   /**
@@ -33,4 +34,16 @@ export enum SpecialProjectId {
    * // Makes requests to: http://localhost:3000/config
    */
   Localhost = 'localhost:',
+  /**
+   * Value: 'localhost:9999'
+   *
+   * Makes HTTP calls to non-existent server (port 9999)
+   * All HTTP requests will fail naturally, triggering persistence
+   * Forces debug mode, perfect for testing event persistence & recovery
+   *
+   * @example
+   * await TraceLog.init({ id: SpecialProjectId.Fail });
+   * // Makes requests to: http://localhost:9999 (will fail)
+   */
+  Fail = 'localhost:9999',
 }

@@ -177,7 +177,7 @@ describe('SessionManager - Lifecycle', () => {
 
     // Create multiple sessions and check uniqueness
     for (let i = 0; i < 10; i++) {
-      const tempSessionManager = new SessionManager(mockStorage, mockEventManager);
+      const tempSessionManager = new SessionManager(mockStorage, mockEventManager, 'test-project');
       await tempSessionManager.startTracking();
 
       const setItemCalls = mockStorage.setItem as any;
@@ -189,7 +189,7 @@ describe('SessionManager - Lifecycle', () => {
       }
 
       tempSessionManager.destroy();
-      vi.clearAllMocks();
+      (mockStorage.setItem as any).mockClear(); // Clear only setItem, not the history
     }
 
     expect(sessionIds.size).toBe(10); // All should be unique

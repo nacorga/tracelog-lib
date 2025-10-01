@@ -1,15 +1,17 @@
-import { DEFAULT_API_CONFIG, DEFAULT_CONFIG, REQUEST_TIMEOUT_MS } from '../constants';
+import { DEFAULT_API_CONFIG, REQUEST_TIMEOUT_MS } from '../constants';
 import { ApiConfig, AppConfig, Config, Mode, SpecialProjectId } from '../types';
-import { sanitizeApiConfig, fetchWithTimeout, normalizeConfig } from '../utils';
+import { sanitizeApiConfig, fetchWithTimeout } from '../utils';
 import { debugLog } from '../utils/logging';
+import { ConfigBuilder } from './config.builder';
 
 /**
  * Configuration manager responsible for loading and merging application configuration.
  *
- * Handles three configuration sources:
- * 1. Default configuration (fallback values)
- * 2. API configuration (server-side settings)
- * 3. App configuration (client initialization settings)
+ * Handles configuration from two sources:
+ * 1. API configuration (server-side settings)
+ * 2. App configuration (client initialization settings)
+ *
+ * Uses ConfigBuilder for centralized merge logic.
  *
  * Supports special project IDs for development and testing:
  * - 'skip': Bypasses all network calls, uses defaults
@@ -20,35 +22,46 @@ export class ConfigManager {
   private static readonly PRODUCTION_DOMAINS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
 
   /**
-   * Gets complete configuration by merging default, API, and app configurations.
+   * Gets complete configuration by loading API config and building final config.
    *
    * @param apiUrl - Base URL for the configuration API
    * @param appConfig - Client-side configuration from init()
    * @returns Promise<Config> - Merged configuration object
    */
   async get(apiUrl: string, appConfig: AppConfig): Promise<Config> {
-    // Handle skip mode - no network calls
-    if (appConfig.id === SpecialProjectId.Skip) {
+    // Handle skip mode - no network calls for config
+    // Support 'skip' or any ID starting with 'skip-' (e.g., 'skip-1', 'skip-2')
+    // Also handle 'fail' mode (SpecialProjectId.Fail) - skip config but fail event sends
+    if (
+      appConfig.id === SpecialProjectId.Skip ||
+      appConfig.id === SpecialProjectId.Fail ||
+      appConfig.id.toLowerCase().startsWith('skip-')
+    ) {
       return this.createDefaultConfig(appConfig);
     }
 
-    const config = await this.loadFromApi(apiUrl, appConfig);
-    const { config: normalizedConfig } = normalizeConfig(config);
+    const apiConfig = await this.loadFromApi(apiUrl, appConfig);
+
+    // Apply QA mode from URL parameter if set
+    const finalApiConfig = this.applyQaModeIfEnabled(apiConfig);
+
+    const config = ConfigBuilder.build(appConfig, finalApiConfig);
 
     debugLog.info('ConfigManager', 'Configuration loaded', {
-      projectId: appConfig.id,
-      mode: normalizedConfig.mode,
-      hasTags: !!normalizedConfig.tags?.length,
-      hasExclusions: !!normalizedConfig.excludedUrlPaths?.length,
+      projectId: config.id,
+      mode: config.mode,
+      hasTags: !!config.tags?.length,
+      hasExclusions: !!config.excludedUrlPaths?.length,
     });
 
-    return normalizedConfig;
+    return config;
   }
 
   /**
-   * Loads configuration from API and merges with app config.
+   * Loads configuration from API and returns sanitized API config.
+   * Only returns values explicitly provided by the API.
    */
-  private async loadFromApi(apiUrl: string, appConfig: AppConfig): Promise<Config> {
+  private async loadFromApi(apiUrl: string, appConfig: AppConfig): Promise<ApiConfig> {
     try {
       const configUrl = this.buildConfigUrl(apiUrl, appConfig);
       const headers = this.buildHeaders(appConfig);
@@ -64,7 +77,14 @@ export class ConfigManager {
       }
 
       const rawData = await this.parseJsonResponse(response);
-      return this.mergeConfigurations(rawData, appConfig);
+      const apiConfig = sanitizeApiConfig(rawData);
+
+      // Only merge defaults for fields that are arrays (to ensure they're never undefined)
+      return {
+        ...apiConfig,
+        excludedUrlPaths: apiConfig.excludedUrlPaths ?? DEFAULT_API_CONFIG.excludedUrlPaths,
+        tags: apiConfig.tags ?? DEFAULT_API_CONFIG.tags,
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       debugLog.error('ConfigManager', 'Failed to load configuration', {
@@ -151,39 +171,32 @@ export class ConfigManager {
   }
 
   /**
-   * Merges API configuration with app configuration and applies mode-specific settings.
+   * Applies QA mode to API config if enabled via URL parameter.
    */
-  private mergeConfigurations(rawApiConfig: Record<string, unknown>, appConfig: AppConfig): Config {
-    const safeApiConfig = sanitizeApiConfig(rawApiConfig);
-    const apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG, ...safeApiConfig };
-    const mergedConfig: Config = DEFAULT_CONFIG({ ...appConfig, ...apiConfig });
-    const { config: normalizedConfig } = normalizeConfig(mergedConfig);
-
-    // Apply QA mode if enabled via URL parameter
-    if (this.isQaModeEnabled() && !normalizedConfig.mode) {
-      normalizedConfig.mode = Mode.QA;
+  private applyQaModeIfEnabled(apiConfig: ApiConfig): ApiConfig {
+    if (this.isQaModeEnabled() && !apiConfig.mode) {
       debugLog.info('ConfigManager', 'QA mode enabled via URL parameter');
+      return { ...apiConfig, mode: Mode.QA };
     }
 
-    // Set error sampling based on mode
-    const errorSampling = Object.values(Mode).includes(normalizedConfig.mode as Mode)
-      ? 1 // Full sampling for debug/qa modes
-      : (normalizedConfig.errorSampling ?? 0.1); // Default sampling for production
-
-    return { ...normalizedConfig, errorSampling };
+    return apiConfig;
   }
 
   /**
    * Creates default configuration for skip mode and fallback scenarios.
+   * Only uses API defaults for fields not provided by the app config.
    */
   private createDefaultConfig(appConfig: AppConfig): Config {
-    const defaultConfig = DEFAULT_CONFIG({
-      ...appConfig,
-      errorSampling: 1,
-      ...(appConfig.id === SpecialProjectId.Skip && { mode: Mode.DEBUG }),
-    });
+    // Only use DEFAULT_API_CONFIG for fields not provided in appConfig
+    const apiConfig: ApiConfig = {
+      // Only use defaults if app config doesn't provide these values
+      tags: DEFAULT_API_CONFIG.tags,
+      ipExcluded: DEFAULT_API_CONFIG.ipExcluded,
+      ...(appConfig.samplingRate === undefined && { samplingRate: DEFAULT_API_CONFIG.samplingRate }),
+      // Don't override excludedUrlPaths if provided by app config
+      // ConfigBuilder will handle the fallback to [] if both are undefined
+    };
 
-    const { config } = normalizeConfig(defaultConfig);
-    return config;
+    return ConfigBuilder.build(appConfig, apiConfig);
   }
 }

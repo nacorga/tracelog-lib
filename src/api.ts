@@ -82,7 +82,7 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
  * @remarks
  * This function should be called after the app has been initialized using the `tracelog.init` function.
  */
-export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
+export const event = (name: string, metadata?: Record<string, MetadataType> | Record<string, MetadataType>[]): void => {
   if (!app) {
     throw new Error('TraceLog not initialized. Please call init() first.');
   }

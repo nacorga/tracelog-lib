@@ -57,7 +57,7 @@ export interface ClickTrackingElementData {
 
 export interface CustomEventData {
   name: string;
-  metadata?: Record<string, MetadataType>;
+  metadata?: Record<string, MetadataType> | Record<string, MetadataType>[];
 }
 
 export interface WebVitalsData {

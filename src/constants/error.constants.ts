@@ -23,6 +23,15 @@ export const PII_PATTERNS = [
 
   // IBAN (International Bank Account Number)
   /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi,
+
+  // API keys/tokens (sk_test_, sk_live_, pk_test_, pk_live_, etc.)
+  /\b[sp]k_(test|live)_[a-zA-Z0-9]{10,}\b/gi,
+
+  // Bearer tokens (JWT-like patterns - matches complete and partial tokens)
+  /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
+
+  // Passwords in connection strings (protocol://user:password@host)
+  /:\/\/[^:/]+:([^@]+)@/gi,
 ] as const;
 
 // ============================================================================
@@ -39,7 +48,7 @@ export const MAX_ERROR_MESSAGE_LENGTH = 500;
  * Time window for error suppression in milliseconds
  * Prevents duplicate errors from flooding the system within this timeframe
  */
-export const ERROR_SUPPRESSION_WINDOW_MS = 60_000; // 1 minute
+export const ERROR_SUPPRESSION_WINDOW_MS = 5_000; // 5 seconds
 
 /**
  * Maximum number of unique errors to track for suppression

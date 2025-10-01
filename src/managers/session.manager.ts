@@ -14,6 +14,7 @@ interface StoredSessionData {
 export class SessionManager extends StateManager {
   private readonly storageManager: StorageManager;
   private readonly eventManager: EventManager;
+  private readonly projectId: string;
   private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private activityHandler: (() => void) | null = null;
@@ -21,10 +22,11 @@ export class SessionManager extends StateManager {
   private beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
   private isTracking = false;
 
-  constructor(storageManager: StorageManager, eventManager: EventManager) {
+  constructor(storageManager: StorageManager, eventManager: EventManager, projectId: string) {
     super();
     this.storageManager = storageManager;
     this.eventManager = eventManager;
+    this.projectId = projectId;
   }
 
   /**
@@ -69,12 +71,15 @@ export class SessionManager extends StateManager {
    * Share session with other tabs
    */
   private shareSession(sessionId: string): void {
-    this.broadcastChannel?.postMessage({
-      action: 'session_start',
-      projectId: this.getProjectId(),
-      sessionId,
-      timestamp: Date.now(),
-    });
+    // Check if postMessage exists (may not in test environments)
+    if (this.broadcastChannel && typeof this.broadcastChannel.postMessage === 'function') {
+      this.broadcastChannel.postMessage({
+        action: 'session_start',
+        projectId: this.getProjectId(),
+        sessionId,
+        timestamp: Date.now(),
+      });
+    }
   }
 
   private broadcastSessionEnd(sessionId: string | null, reason: SessionEndReason): void {
@@ -82,13 +87,16 @@ export class SessionManager extends StateManager {
       return;
     }
 
-    this.broadcastChannel?.postMessage({
-      action: 'session_end',
-      projectId: this.getProjectId(),
-      sessionId,
-      reason,
-      timestamp: Date.now(),
-    });
+    // Check if postMessage exists (may not in test environments)
+    if (this.broadcastChannel && typeof this.broadcastChannel.postMessage === 'function') {
+      this.broadcastChannel.postMessage({
+        action: 'session_end',
+        projectId: this.getProjectId(),
+        sessionId,
+        reason,
+        timestamp: Date.now(),
+      });
+    }
   }
 
   /**
@@ -96,7 +104,10 @@ export class SessionManager extends StateManager {
    */
   private cleanupCrossTabSync(): void {
     if (this.broadcastChannel) {
-      this.broadcastChannel.close();
+      // Check if close method exists (may not in test environments)
+      if (typeof this.broadcastChannel.close === 'function') {
+        this.broadcastChannel.close();
+      }
       this.broadcastChannel = null;
     }
   }
@@ -168,7 +179,7 @@ export class SessionManager extends StateManager {
   }
 
   private getProjectId(): string {
-    return this.get('config')?.id ?? '';
+    return this.projectId;
   }
 
   /**
@@ -326,12 +337,12 @@ export class SessionManager extends StateManager {
   /**
    * End current session
    */
-  private endSession(reason: SessionEndReason): void {
+  private async endSession(reason: SessionEndReason): Promise<void> {
     const sessionId = this.get('sessionId');
 
     if (!sessionId) {
       debugLog.warn('SessionManager', 'endSession called without active session', { reason });
-      this.resetSessionState();
+      this.resetSessionState(reason);
       return;
     }
 
@@ -344,7 +355,7 @@ export class SessionManager extends StateManager {
 
     const finalize = (): void => {
       this.broadcastSessionEnd(sessionId, reason);
-      this.resetSessionState();
+      this.resetSessionState(reason);
     };
 
     const flushResult = this.eventManager.flushImmediatelySync();
@@ -354,23 +365,30 @@ export class SessionManager extends StateManager {
       return;
     }
 
-    this.eventManager
-      .flushImmediately()
-      .then(finalize)
-      .catch((error) => {
-        debugLog.warn('SessionManager', 'Async flush failed during session end', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-        finalize();
+    // Wait for async flush to complete before finalizing
+    try {
+      await this.eventManager.flushImmediately();
+      finalize();
+    } catch (error) {
+      debugLog.warn('SessionManager', 'Async flush failed during session end', {
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
+      finalize();
+    }
   }
 
-  private resetSessionState(): void {
+  private resetSessionState(reason?: SessionEndReason): void {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupLifecycleListeners();
     this.cleanupCrossTabSync();
-    this.clearStoredSession();
+
+    // Only clear stored session for non-recoverable reasons
+    // Keep session in localStorage for page_unload to enable recovery after reload
+    if (reason !== 'page_unload') {
+      this.clearStoredSession();
+    }
+
     this.set('sessionId', null);
     this.set('hasStartSession', false);
     this.isTracking = false;
@@ -380,7 +398,7 @@ export class SessionManager extends StateManager {
    * Stop session tracking
    */
   async stopTracking(): Promise<void> {
-    this.endSession('manual_stop');
+    await this.endSession('manual_stop');
   }
 
   /**

@@ -12,7 +12,7 @@ import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
 interface SendCallbacks {
-  onSuccess?: (eventCount?: number, events?: any[]) => void;
+  onSuccess?: (eventCount?: number, events?: any[], body?: BaseEventsQueueDto) => void;
   onFailure?: () => void;
 }
 
@@ -39,17 +39,26 @@ export class SenderManager extends StateManager {
    */
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
     // For skip mode, simulate success immediately (sync version)
+    // Note: Do NOT clear persisted events here - they should only be cleared by async recovery
     if (this.shouldSkipSend()) {
-      this.clearPersistedEvents();
       this.resetRetryState();
-
       return true;
     }
 
+    // Handle Fail mode - always fail sends to trigger persistence (sync version)
+    const config = this.get('config');
+    if (config?.id === SpecialProjectId.Fail) {
+      debugLog.warn('SenderManager', 'Fail mode: simulating network failure (sync)', {
+        events: body.events.length,
+      });
+      return false;
+    }
+
+    // Attempt sync send for normal mode
+    // Note: Do NOT clear persisted events here - they should only be cleared by async recovery
     const success = this.sendQueueSyncInternal(body);
 
     if (success) {
-      this.clearPersistedEvents();
       this.resetRetryState();
     }
 
@@ -73,7 +82,7 @@ export class SenderManager extends StateManager {
     if (success) {
       this.clearPersistedEvents();
       this.resetRetryState();
-      callbacks?.onSuccess?.(body.events.length);
+      callbacks?.onSuccess?.(body.events.length, body.events, body);
     } else {
       this.scheduleRetry(body, callbacks);
       callbacks?.onFailure?.();
@@ -101,7 +110,7 @@ export class SenderManager extends StateManager {
       if (success) {
         this.clearPersistedEvents();
         this.resetRetryState();
-        callbacks?.onSuccess?.(persistedData.events.length);
+        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
       } else {
         this.scheduleRetry(body, callbacks);
         callbacks?.onFailure?.();
@@ -133,13 +142,21 @@ export class SenderManager extends StateManager {
   stop(): void {
     this.clearRetryTimeout();
     this.resetRetryState();
-    // Clear any persisted events on shutdown to prevent stale data
-    this.clearPersistedEvents();
+    // Note: We intentionally do NOT clear persisted events here to allow recovery on next init
   }
 
   private async send(body: BaseEventsQueueDto): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
+    }
+
+    // Handle Fail mode - always fail sends to trigger persistence
+    const config = this.get('config');
+    if (config?.id === SpecialProjectId.Fail) {
+      debugLog.warn('SenderManager', 'Fail mode: simulating network failure', {
+        events: body.events.length,
+      });
+      return false;
     }
 
     const { url, payload } = this.prepareRequest(body);
@@ -298,7 +315,8 @@ export class SenderManager extends StateManager {
 
   private clearPersistedEvents(): void {
     try {
-      this.storeManager.removeItem(this.getQueueStorageKey());
+      const key = this.getQueueStorageKey();
+      this.storeManager.removeItem(key);
     } catch (error) {
       debugLog.warn('SenderManager', 'Failed to clear persisted events', { error });
     }
@@ -365,6 +383,7 @@ export class SenderManager extends StateManager {
     const config = this.get('config');
     const { id } = config || {};
 
+    // Only Skip mode bypasses sends; Fail mode allows sends to fail naturally
     return id === SpecialProjectId.Skip;
   }
 
