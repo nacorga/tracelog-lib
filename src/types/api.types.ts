@@ -21,19 +21,20 @@ export enum SpecialProjectId {
    */
   Skip = 'skip',
   /**
-   * Value: 'localhost:' (used as prefix)
+   * Value: 'localhost:8080'
    *
-   * Makes HTTP calls to local development server
-   * Must specify full address: 'localhost:PORT' (e.g., 'localhost:3000')
-   * Converts to http://localhost:PORT/config for requests
+   * Makes HTTP calls to local development server on port 8080
+   * Converts to http://localhost:8080/config for requests
    * Requires origin to be in ALLOWED_ORIGINS list, forces debug mode
    * Perfect for local development with running middleware
    *
    * @example
-   * await TraceLog.init({ id: 'localhost:3000' });
-   * // Makes requests to: http://localhost:3000/config
+   * await TraceLog.init({ id: SpecialProjectId.Localhost });
+   * // or
+   * await TraceLog.init({ id: 'localhost:8080' });
+   * // Makes requests to: http://localhost:8080/config
    */
-  Localhost = 'localhost:',
+  Localhost = 'localhost:8080',
   /**
    * Value: 'localhost:9999'
    *
@@ -43,6 +44,8 @@ export enum SpecialProjectId {
    *
    * @example
    * await TraceLog.init({ id: SpecialProjectId.Fail });
+   * // or
+   * await TraceLog.init({ id: 'localhost:9999' });
    * // Makes requests to: http://localhost:9999 (will fail)
    */
   Fail = 'localhost:9999',

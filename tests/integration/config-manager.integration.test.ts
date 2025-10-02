@@ -90,6 +90,42 @@ describe('ConfigManager integration', () => {
     expect(config.ipExcluded).toBe(true);
   });
 
+  test('always includes X-TraceLog-Project header for all project types', async () => {
+    const manager = new ConfigManager();
+    const fetchSpy = vi.spyOn(global, 'fetch');
+
+    // Test with regular project ID
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }) as Response,
+    );
+
+    await manager.get('https://api.example.com', createAppConfig({ id: 'regular-project-123' }));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const regularCallHeaders = fetchSpy.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(regularCallHeaders).toBeDefined();
+    expect(regularCallHeaders['X-TraceLog-Project']).toBe('regular-project-123');
+
+    // Test with localhost project ID
+    fetchSpy.mockClear();
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }) as Response,
+    );
+
+    await manager.get('https://api.example.com', createAppConfig({ id: SpecialProjectId.Localhost }));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const localhostCallHeaders = fetchSpy.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(localhostCallHeaders).toBeDefined();
+    expect(localhostCallHeaders['X-TraceLog-Project']).toBe(SpecialProjectId.Localhost);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

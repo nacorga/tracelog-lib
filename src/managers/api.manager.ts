@@ -6,7 +6,7 @@ import { debugLog } from '../utils/logging';
  * Generates API URL for TraceLog service based on project ID
  *
  * Handles two special cases:
- * - 'localhost:PORT' - for local development (generates http://localhost:PORT)
+ * - 'localhost:8080' or 'localhost:9999' - for local development (generates http://localhost:PORT)
  * - Regular project IDs - generates subdomain URLs via getApiUrl utility
  *
  * @param id Project ID or localhost address
@@ -16,8 +16,8 @@ import { debugLog } from '../utils/logging';
  */
 export function getApiUrlForProject(id: string, allowHttp = false): string {
   try {
-    // Handle localhost development case
-    if (id.startsWith(SpecialProjectId.Localhost)) {
+    // Handle localhost development case (localhost:8080 or localhost:9999)
+    if (id === SpecialProjectId.Localhost || id === SpecialProjectId.Fail) {
       const url = `http://${id}`;
 
       if (!isValidUrl(url, true)) {

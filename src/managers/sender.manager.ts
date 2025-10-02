@@ -150,12 +150,14 @@ export class SenderManager extends StateManager {
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const config = this.get('config');
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-TraceLog-Project': config?.id || 'unknown',
         },
         body: payload,
         keepalive: true,
@@ -186,10 +188,12 @@ export class SenderManager extends StateManager {
 
   private sendSyncXHR(url: string, payload: string): boolean {
     const xhr = new XMLHttpRequest();
+    const config = this.get('config');
 
     try {
       xhr.open('POST', url, false);
       xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('X-TraceLog-Project', config?.id || 'unknown');
       xhr.withCredentials = true;
       xhr.timeout = SYNC_XHR_TIMEOUT_MS;
       xhr.send(payload);

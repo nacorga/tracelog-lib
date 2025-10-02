@@ -15,10 +15,9 @@ import { ConfigBuilder } from './config.builder';
  *
  * Supports special project IDs for development and testing:
  * - 'skip': Bypasses all network calls, uses defaults
- * - 'localhost:PORT': Loads config from local development server
+ * - 'localhost:8080': Loads config from local development server
  */
 export class ConfigManager {
-  private static readonly LOCALHOST_PATTERN = /^localhost:\d{1,5}$/;
   private static readonly PRODUCTION_DOMAINS = [/^https:\/\/.*\.tracelog\.app$/, /^https:\/\/.*\.tracelog\.dev$/];
 
   /**
@@ -100,10 +99,9 @@ export class ConfigManager {
    * Builds the configuration URL based on project type and QA mode.
    */
   private buildConfigUrl(apiUrl: string, appConfig: AppConfig): string {
-    const isLocalhost = appConfig.id.startsWith(SpecialProjectId.Localhost);
+    const isLocalhost = appConfig.id === SpecialProjectId.Localhost || appConfig.id === SpecialProjectId.Fail;
 
     if (isLocalhost) {
-      this.validateLocalhostProjectId(appConfig.id);
       return `http://${appConfig.id}/config`;
     }
 
@@ -115,17 +113,13 @@ export class ConfigManager {
 
   /**
    * Builds request headers based on project configuration.
+   * Always includes X-TraceLog-Project header for consistent identification.
    */
   private buildHeaders(appConfig: AppConfig): Record<string, string> {
-    const headers: Record<string, string> = {
+    return {
       'Content-Type': 'application/json',
+      'X-TraceLog-Project': appConfig.id,
     };
-
-    if (appConfig.id.startsWith(SpecialProjectId.Localhost)) {
-      headers['X-TraceLog-Project'] = appConfig.id;
-    }
-
-    return headers;
   }
 
   /**
@@ -145,21 +139,6 @@ export class ConfigManager {
     }
 
     return rawData;
-  }
-
-  /**
-   * Validates localhost project ID format and port range.
-   */
-  private validateLocalhostProjectId(projectId: string): void {
-    if (!ConfigManager.LOCALHOST_PATTERN.test(projectId)) {
-      throw new Error(`Invalid localhost format. Expected 'localhost:PORT', got '${projectId}'`);
-    }
-
-    const port = parseInt(projectId.split(':')[1], 10);
-
-    if (port < 1 || port > 65535) {
-      throw new Error(`Port must be between 1 and 65535, got ${port}`);
-    }
   }
 
   /**
