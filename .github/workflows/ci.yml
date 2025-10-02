@@ -6,6 +6,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,7 +17,7 @@ jobs:
   validate:
     name: Validate Changes
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false || github.event_name == 'push'
+    if: github.event.pull_request.draft == false || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
@@ -30,27 +31,22 @@ jobs:
           node-version: 20
           registry-url: 'https://registry.npmjs.org/'
           scope: '@tracelog'
-
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
+          cache: 'npm'
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v3
+        id: playwright-cache
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-browsers-
+            ${{ runner.os }}-playwright-
 
       - name: Install dependencies
         run: npm ci
 
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
       - name: Make scripts executable
@@ -82,13 +78,36 @@ jobs:
         run: |
           echo "🔍 Generating test coverage report..."
           npm run test:coverage
-        continue-on-error: true
+
+      - name: Validate Code Coverage
+        run: |
+          echo "🔍 Validating code coverage threshold (minimum 60%)..."
+
+          # Check if coverage summary exists
+          if [[ ! -f "coverage/coverage-summary.json" ]]; then
+            echo "❌ Coverage summary not found"
+            exit 1
+          fi
+
+          # Extract total line coverage percentage
+          COVERAGE=$(node -p "
+            const summary = require('./coverage/coverage-summary.json');
+            Math.floor(summary.total.lines.pct);
+          ")
+
+          echo "📊 Current coverage: ${COVERAGE}%"
+
+          if [[ $COVERAGE -lt 60 ]]; then
+            echo "❌ Coverage ${COVERAGE}% is below minimum threshold of 60%"
+            exit 1
+          fi
+
+          echo "✅ Coverage ${COVERAGE}% meets minimum threshold"
 
       - name: Run Integration Tests
         run: |
           echo "🔍 Running integration tests..."
           npm run test:integration
-        continue-on-error: true
 
       - name: Build Integrity Check
         run: |
@@ -192,8 +211,8 @@ jobs:
           echo "✅ No security vulnerabilities"
           echo "✅ Code quality passed"
           echo "✅ Unit tests passed"
+          echo "✅ Code coverage ≥60%"
           echo "✅ Integration tests passed"
-          echo "✅ Test coverage generated"
           echo "✅ Build integrity verified"
           echo "✅ E2E tests passed"
           echo "✅ Package configuration valid"
