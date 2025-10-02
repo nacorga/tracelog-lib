@@ -22,7 +22,6 @@ export enum ScrollDirection {
 export enum ErrorType {
   JS_ERROR = 'js_error',
   PROMISE_REJECTION = 'promise_rejection',
-  NETWORK_ERROR = 'network_error',
 }
 
 export interface ScrollData {
@@ -57,7 +56,7 @@ export interface ClickTrackingElementData {
 
 export interface CustomEventData {
   name: string;
-  metadata?: Record<string, MetadataType>;
+  metadata?: Record<string, MetadataType> | Record<string, MetadataType>[];
 }
 
 export interface WebVitalsData {

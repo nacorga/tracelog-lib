@@ -54,10 +54,6 @@ test.describe('User E-commerce Flow', () => {
       }
 
       // Add products to cart to simulate realistic shopping behavior
-      // First, verify which add-to-cart buttons actually exist
-      const availableButtons = document.querySelectorAll('[data-testid^="add-cart-"]');
-      console.log('Available add-to-cart buttons:', availableButtons.length);
-
       const addedProducts: any[] = [];
 
       // Try to add products, but be flexible about which ones exist

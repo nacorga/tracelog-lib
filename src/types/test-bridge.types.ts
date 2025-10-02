@@ -22,7 +22,7 @@ export interface TraceLogTestBridge {
 
   // Core testing methods
   isInitializing(): boolean;
-  sendCustomEvent(name: string, data?: Record<string, unknown>): void;
+  sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void;
 
   // Event subscription methods
   on(event: string, callback: (data: any) => void): void;
@@ -37,6 +37,7 @@ export interface TraceLogTestBridge {
 
   // Test simulation methods
   forceInitLock(enabled?: boolean): void;
+  simulatePersistedEvents(events: any[]): void;
 
   // State access for testing
   get<T extends keyof State>(key: T): State[T];

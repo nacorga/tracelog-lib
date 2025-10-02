@@ -93,7 +93,6 @@ export class ScrollHandler extends StateManager {
   }
 
   private setupScrollContainer(element: Window | HTMLElement): void {
-    // Skip setup for non-scrollable elements
     if (element !== window && !this.isElementScrollable(element as HTMLElement)) {
       return;
     }
@@ -238,13 +237,11 @@ export class ScrollHandler extends StateManager {
     const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
 
-    // Early return: check significant movement first (cheapest check)
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
       return null;
     }
 
-    // Early return: check if window is scrollable
     if (element === window && !this.isWindowScrollable()) {
       return null;
     }
@@ -281,7 +278,6 @@ export class ScrollHandler extends StateManager {
       style.overflow === 'auto' ||
       style.overflow === 'scroll';
 
-    // Element must have scrollable overflow AND content that exceeds the container
     const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
 
     return hasScrollableOverflow && hasOverflowContent;
@@ -291,7 +287,6 @@ export class ScrollHandler extends StateManager {
     try {
       return document.querySelector(selector);
     } catch (error) {
-      // Invalid CSS selector - log warning and continue
       debugLog.clientWarn('ScrollHandler', 'Invalid CSS selector', {
         selector,
         error: error instanceof Error ? error.message : 'Unknown error',

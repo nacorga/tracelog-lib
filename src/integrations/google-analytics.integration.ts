@@ -40,13 +40,14 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
   }
 
-  trackEvent(eventName: string, metadata: Record<string, MetadataType>): void {
+  trackEvent(eventName: string, metadata: Record<string, MetadataType> | Record<string, MetadataType>[]): void {
     if (!eventName?.trim() || !this.isInitialized || typeof window.gtag !== 'function') {
       return;
     }
 
     try {
-      window.gtag('event', eventName, metadata);
+      const normalizedMetadata = Array.isArray(metadata) ? { items: metadata } : metadata;
+      window.gtag('event', eventName, normalizedMetadata);
     } catch (error) {
       debugLog.error('GoogleAnalyticsIntegration', 'Event tracking failed', {
         error: error instanceof Error ? error.message : 'Unknown error',

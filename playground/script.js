@@ -459,8 +459,9 @@ function setupTraceLogListener(traceLog) {
   const eventQueue = new Map();
 
   // Event tracking
-  traceLog.on('event', (data) => {
-    const { type, data: eventData, queueLength } = data;
+  traceLog.on('event', (eventData) => {
+    const { type } = eventData;
+    const queueLength = traceLog.getQueueLength?.() || 0;
     console.log('📥 TraceLog Event captureado:', { type, eventData, queueLength });
 
     // Add to monitor and track
@@ -470,7 +471,7 @@ function setupTraceLogListener(traceLog) {
     }
 
     // Update queue count with actual number from library
-    updateQueueCount(queueLength || eventQueue.size);
+    updateQueueCount(queueLength);
     updateQueueStatus('collecting');
   });
 

@@ -1,9 +1,9 @@
 import { Mode } from '../../types';
-import { StateManager } from '../../managers/state.manager';
+import { getGlobalState } from '../../managers/state.manager';
 
 type LogLevel = 'CLIENT_ERROR' | 'CLIENT_WARN' | 'INFO' | 'ERROR' | 'WARN' | 'DEBUG' | 'VERBOSE';
 
-class DebugLogger extends StateManager {
+class DebugLogger {
   clientError = (ns: string, msg: string, data?: unknown): void => this.log('CLIENT_ERROR', ns, msg, data);
   clientWarn = (ns: string, msg: string, data?: unknown): void => this.log('CLIENT_WARN', ns, msg, data);
   info = (ns: string, msg: string, data?: unknown): void => this.log('INFO', ns, msg, data);
@@ -13,7 +13,7 @@ class DebugLogger extends StateManager {
   verbose = (ns: string, msg: string, data?: unknown): void => this.log('VERBOSE', ns, msg, data);
 
   private log(level: LogLevel, ns: string, msg: string, data?: unknown): void {
-    const mode = this.get('config')?.mode;
+    const mode = getGlobalState()?.config?.mode;
 
     if (!this.shouldShow(level, mode)) return;
 

@@ -37,7 +37,7 @@ describe('Integration - Session start deduplication', () => {
 
     storageManager = new StorageManager();
     eventManager = new StubEventManager();
-    sessionManager = new SessionManager(storageManager, eventManager as any);
+    sessionManager = new SessionManager(storageManager, eventManager as any, 'test-project');
 
     eventManager['set']('config', { id: 'test-project' });
     sessionManager['set']('config', { id: 'test-project', sessionTimeout: 30000 });
@@ -65,7 +65,7 @@ describe('Integration - Session start deduplication', () => {
 
     sessionManager.destroy();
 
-    const newSessionManager = new SessionManager(storageManager, eventManager as any);
+    const newSessionManager = new SessionManager(storageManager, eventManager as any, 'test-project');
     newSessionManager['set']('config', { id: 'test-project', sessionTimeout: 30000 });
 
     eventManager.clearTrackedEvents();
@@ -91,7 +91,7 @@ describe('Integration - Session start deduplication', () => {
 
     vi.advanceTimersByTime(sessionTimeout + 1000);
 
-    const newSessionManager = new SessionManager(storageManager, eventManager as any);
+    const newSessionManager = new SessionManager(storageManager, eventManager as any, 'test-project');
     newSessionManager['set']('config', { id: 'test-project', sessionTimeout });
 
     eventManager.clearTrackedEvents();
