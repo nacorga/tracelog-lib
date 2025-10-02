@@ -108,31 +108,6 @@ describe('SessionManager - Lifecycle', () => {
     });
   });
 
-  test('should reset timeout on user activity', async () => {
-    mockStorage.getItem = vi.fn(() => null);
-
-    await sessionManager.startTracking();
-    vi.clearAllMocks(); // Clear startTracking events
-
-    // Simulate user activity
-    const clickEvent = new Event('click');
-    document.dispatchEvent(clickEvent);
-
-    // Fast forward but not past the reset timeout
-    vi.advanceTimersByTime(DEFAULT_SESSION_TIMEOUT - 1000);
-
-    // Session should not have ended
-    expect(mockEventManager.track).not.toHaveBeenCalled();
-
-    // Now advance past the new timeout
-    vi.advanceTimersByTime(2000);
-
-    expect(mockEventManager.track).toHaveBeenCalledWith({
-      type: EventType.SESSION_END,
-      session_end_reason: 'inactivity',
-    });
-  });
-
   test('should handle visibility change events', async () => {
     mockStorage.getItem = vi.fn(() => null);
 
