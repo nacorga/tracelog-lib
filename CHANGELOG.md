@@ -14,6 +14,44 @@
 
 
 
+
+## [0.5.0] - 2025-10-02
+
+### ✨ Features
+
+- Add global Vitest setup and comprehensive unit tests for listener managers and click handler ([8387829](../../commit/8387829a8392aa29bce5cddcb7634f5846678f0a))
+
+### 🐛 Bug Fixes
+
+- Enhance event metadata handling, and improve session management logic ([c41010e](../../commit/c41010e8450ae1deb9be900b4a7f172f1897950a))
+
+### 🧪 Tests
+
+- Add comprehensive integration and unit tests for API methods ([7f5d1e7](../../commit/7f5d1e7df5554044e8381c8d7364b995d8884589))
+
+### ♻️ Refactoring
+
+- Simplify send logic in SenderManager, enhance payload with metadata for sendBeacon fallback ([a335b92](../../commit/a335b921e6d396fd40fc481ea3969762f81d7d0c))
+- Update localhost handling in API and config managers, enhance metadata validation tests ([95117b6](../../commit/95117b6957fa5dee624b52f1a8314170ffe8d0dc))
+- Improve event handling and session management, enforce hard limit on tracked errors ([a1ebc1e](../../commit/a1ebc1e7a7183127bdbaa14f6087d8f89166b9a3))
+
+### 🔧 Other Changes
+
+- Merge pull request #13 from nacorga/release/20251002.1 ([8d9913e](../../commit/8d9913ef2283b9e2fcfe765748beda2453947654))
+- Update Vitest coverage configuration to include json-summary reporter and increase coverage thresholds ([6263fd5](../../commit/6263fd5d6e0b75dee1d2382e5b7ff13a7c297f40))
+- Update CI workflows ([a6c53ce](../../commit/a6c53ce8099c9bc89544cd4f5a838c1b52d12a9d))
+- Merge pull request #12 from nacorga/feature/warranty ([94a54b2](../../commit/94a54b260dae728cdf06e65445ec15ceb6d25672))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.4.1...v0.5.0
+
+
 ## [0.4.1] - 2025-09-30
 
 ### 🐛 Bug Fixes
