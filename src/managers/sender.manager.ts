@@ -1,11 +1,4 @@
-import {
-  QUEUE_KEY,
-  EVENT_EXPIRY_HOURS,
-  SYNC_XHR_TIMEOUT_MS,
-  MAX_RETRIES,
-  RETRY_DELAY_MS,
-  REQUEST_TIMEOUT_MS,
-} from '../constants';
+import { QUEUE_KEY, EVENT_EXPIRY_HOURS, MAX_RETRIES, RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId } from '../types';
 import { debugLog } from '../utils';
 import { StorageManager } from './storage.manager';
@@ -179,51 +172,38 @@ export class SenderManager extends StateManager {
     const { url, payload } = this.prepareRequest(body);
     const blob = new Blob([payload], { type: 'application/json' });
 
-    if (this.isSendBeaconAvailable() && navigator.sendBeacon(url, blob)) {
-      return true;
-    }
+    if (this.isSendBeaconAvailable()) {
+      const success = navigator.sendBeacon(url, blob);
 
-    return this.sendSyncXHR(url, payload);
-  }
-
-  private sendSyncXHR(url: string, payload: string): boolean {
-    const xhr = new XMLHttpRequest();
-    const config = this.get('config');
-
-    try {
-      xhr.open('POST', url, false);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('X-TraceLog-Project', config?.id || 'unknown');
-      xhr.withCredentials = true;
-      xhr.timeout = SYNC_XHR_TIMEOUT_MS;
-      xhr.send(payload);
-
-      const success = xhr.status >= 200 && xhr.status < 300;
-
-      if (!success) {
-        debugLog.warn('SenderManager', 'Sync XHR failed', {
-          status: xhr.status,
-          statusText: xhr.statusText || 'Unknown error',
-        });
+      if (success) {
+        return true;
       }
-
-      return success;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      debugLog.warn('SenderManager', 'Sync XHR error', {
-        error: errorMessage,
-        status: xhr.status || 'unknown',
-      });
-      return false;
+      debugLog.warn('SenderManager', 'sendBeacon failed, persisting events for recovery');
+    } else {
+      debugLog.warn('SenderManager', 'sendBeacon not available, persisting events for recovery');
     }
+
+    this.persistEventsForRecovery(body);
+
+    return false;
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
     const url = `${this.get('apiUrl')}/collect`;
 
+    // Enrich payload with metadata for sendBeacon() fallback
+    // sendBeacon() doesn't send custom headers, so we include referer in payload
+    const enrichedBody = {
+      ...body,
+      _metadata: {
+        referer: typeof window !== 'undefined' ? window.location.href : undefined,
+        timestamp: Date.now(),
+      },
+    };
+
     return {
       url,
-      payload: JSON.stringify(body),
+      payload: JSON.stringify(enrichedBody),
     };
   }
 
