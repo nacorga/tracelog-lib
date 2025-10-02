@@ -9,7 +9,6 @@ import { GoogleAnalyticsIntegration } from './integrations/google-analytics.inte
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { State, TraceLogTestBridge } from './types';
-import { normalizeConfig } from './utils';
 
 /**
  * Test bridge for E2E testing
@@ -28,8 +27,11 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return this._isInitializing;
   }
 
-  sendCustomEvent(name: string, data?: Record<string, unknown>): void {
-    this.ensureInitialized();
+  sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void {
+    // Silently ignore events after destroy instead of throwing error
+    if (!this.initialized) {
+      return;
+    }
     super.sendCustomEvent(name, data);
   }
 
@@ -44,8 +46,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
   setSessionTimeout(timeout: number): void {
     const config = this.get('config');
     if (config) {
-      const { config: normalizedConfig } = normalizeConfig({ ...config, sessionTimeout: timeout });
-      this.set('config', normalizedConfig);
+      this.set('config', { ...config, sessionTimeout: timeout });
     }
   }
 
@@ -55,6 +56,34 @@ export class TestBridge extends App implements TraceLogTestBridge {
 
   forceInitLock(enabled = true): void {
     this._isInitializing = enabled;
+  }
+
+  simulatePersistedEvents(events: any[]): void {
+    const storageManager = this.managers?.storage;
+    if (!storageManager) {
+      throw new Error('Storage manager not available');
+    }
+
+    const projectId = this.get('config')?.id;
+    const userId = this.get('userId');
+    const sessionId = this.get('sessionId');
+
+    if (!projectId || !userId) {
+      throw new Error('Project ID or User ID not available. Initialize TraceLog first.');
+    }
+
+    // Build the persisted data structure matching what SenderManager expects
+    const persistedData = {
+      userId,
+      sessionId: sessionId || `test-session-${Date.now()}`,
+      device: 'desktop',
+      events,
+      timestamp: Date.now(),
+    };
+
+    // Store in the same format as SenderManager.persistEvents()
+    const storageKey = `tl:${projectId}:queue:${userId}`;
+    storageManager.setItem(storageKey, JSON.stringify(persistedData));
   }
 
   get<T extends keyof State>(key: T): State[T] {
@@ -100,14 +129,18 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return this.safeAccess(this.integrations?.googleAnalytics);
   }
 
-  async destroy(): Promise<void> {
-    this.ensureInitialized();
+  async destroy(force = false): Promise<void> {
+    // If not initialized and not forcing, silently return (no-op)
+    if (!this.initialized && !force) {
+      return;
+    }
+
     this.ensureNotDestroying();
 
     this._isDestroying = true;
 
     try {
-      await super.destroy();
+      await super.destroy(force);
     } finally {
       this._isDestroying = false;
     }

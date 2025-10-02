@@ -9,16 +9,12 @@ import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { AppConfig, EventType, EmitterCallback, EmitterMap } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter, normalizeConfig } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 
-/**
- * Main application class for TraceLog analytics
- * Orchestrates event tracking, session management, and integrations
- */
 export class App extends StateManager {
   private isInitialized = false;
   private suppressNextScrollTimer: number | null = null;
@@ -77,7 +73,7 @@ export class App extends StateManager {
     }
   }
 
-  sendCustomEvent(name: string, metadata?: Record<string, unknown>): void {
+  sendCustomEvent(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
     if (!this.managers.event) {
       return;
     }
@@ -133,6 +129,8 @@ export class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
 
+    this.managers.event?.flushImmediatelySync();
+
     this.managers.event?.stop();
 
     this.emitter.removeAllListeners();
@@ -146,23 +144,18 @@ export class App extends StateManager {
   }
 
   private async setupState(appConfig: AppConfig): Promise<void> {
-    // Set API URL
     const apiUrl = getApiUrlForProject(appConfig.id, appConfig.allowHttp);
     this.set('apiUrl', apiUrl);
 
-    // Get remote configuration
     const configManager = new ConfigManager();
     const config = await configManager.get(apiUrl, appConfig);
-    const { config: normalizedConfig } = normalizeConfig(config);
-    this.set('config', normalizedConfig);
+    this.set('config', config);
 
-    // Set user ID
-    const userId = UserManager.getId(this.managers.storage as StorageManager, normalizedConfig.id);
+    const userId = UserManager.getId(this.managers.storage as StorageManager, config.id);
     this.set('userId', userId);
 
-    // Set device and page info
     this.set('device', getDeviceType());
-    const pageUrl = normalizeUrl(window.location.href, normalizedConfig.sensitiveQueryParams);
+    const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);
   }
 

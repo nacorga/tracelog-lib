@@ -10,7 +10,7 @@ import { ApiConfig } from '../types';
 // ============================================================================
 
 export const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-export const DUPLICATE_EVENT_THRESHOLD_MS = 1000; // 1 second
+export const DUPLICATE_EVENT_THRESHOLD_MS = 500; // 500ms
 export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds
 
 // Throttling and debouncing
@@ -25,7 +25,7 @@ export const EVENT_PERSISTENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 // LIMITS & RETRIES
 // ============================================================================
 
-export const MAX_EVENTS_QUEUE_LENGTH = 500;
+export const MAX_EVENTS_QUEUE_LENGTH = 100;
 export const MAX_RETRIES = 3;
 export const RETRY_DELAY_MS = 5000;
 export const REQUEST_TIMEOUT_MS = 10000;
@@ -186,7 +186,7 @@ export const VALIDATION_MESSAGES = {
   INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
 
   // Sampling rate validation
-  INVALID_SAMPLING_RATE: 'Sampling rate must be greater than 0 and less than or equal to 1',
+  INVALID_SAMPLING_RATE: 'Sampling rate must be between 0 and 1',
   INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
 
   // Integration validation

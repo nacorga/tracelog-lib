@@ -1,10 +1,5 @@
-import {
-  DEFAULT_SAMPLING_RATE,
-  MAX_SESSION_TIMEOUT_MS,
-  MIN_SESSION_TIMEOUT_MS,
-  VALIDATION_MESSAGES,
-} from '../../constants';
-import { AppConfig, Config, ApiConfig, Mode } from '../../types';
+import { MAX_SESSION_TIMEOUT_MS, MIN_SESSION_TIMEOUT_MS, VALIDATION_MESSAGES } from '../../constants';
+import { AppConfig, ApiConfig, Mode } from '../../types';
 import {
   ProjectIdValidationError,
   AppConfigValidationError,
@@ -238,131 +233,6 @@ export const validateAndNormalizeConfig = (config: AppConfig): AppConfig => {
 };
 
 /**
- * Validates sampling rate
- * @param samplingRate - The sampling rate to validate
- * @param errors - Array to push errors to
- */
-const validateSamplingRate = (samplingRate: unknown, errors: string[]): number | undefined => {
-  if (samplingRate === undefined) {
-    return undefined;
-  }
-
-  if (typeof samplingRate !== 'number') {
-    errors.push('samplingRate must be a number');
-    return DEFAULT_SAMPLING_RATE;
-  }
-
-  if (Number.isNaN(samplingRate) || samplingRate <= 0 || samplingRate > 1) {
-    errors.push(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE);
-    return DEFAULT_SAMPLING_RATE;
-  }
-
-  return samplingRate;
-};
-
-/**
- * Validates excluded URL paths
- * @param excludedUrlPaths - The excluded URL paths to validate
- * @param errors - Array to push errors to
- * @param prefix - Optional prefix for error messages
- */
-const validateExcludedUrlPaths = (excludedUrlPaths: unknown, errors: string[], prefix = ''): void => {
-  if (excludedUrlPaths !== undefined) {
-    if (Array.isArray(excludedUrlPaths)) {
-      for (const [index, path] of excludedUrlPaths.entries()) {
-        if (typeof path === 'string') {
-          try {
-            new RegExp(path);
-          } catch {
-            errors.push(`${prefix}excludedUrlPaths[${index}] is not a valid regex pattern`);
-          }
-        } else {
-          errors.push(`${prefix}excludedUrlPaths[${index}] must be a string`);
-        }
-      }
-    } else {
-      errors.push(`${prefix}excludedUrlPaths must be an array`);
-    }
-  }
-};
-
-/**
- * Validates a complete configuration object
- * @param config - The configuration to validate
- * @returns Validation result with errors and warnings
- */
-export const validateConfig = (config: Config): { errors: string[]; warnings: string[]; samplingRate: number } => {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  if (config.sessionTimeout !== undefined) {
-    if (typeof config.sessionTimeout !== 'number') {
-      errors.push('sessionTimeout must be a number');
-    } else if (config.sessionTimeout < MIN_SESSION_TIMEOUT_MS) {
-      errors.push('sessionTimeout must be at least 30 seconds (30000ms)');
-    } else if (config.sessionTimeout > MAX_SESSION_TIMEOUT_MS) {
-      warnings.push('sessionTimeout is very long (>24 hours), consider reducing it');
-    }
-  }
-
-  if (config.globalMetadata !== undefined) {
-    if (typeof config.globalMetadata !== 'object' || config.globalMetadata === null) {
-      errors.push('globalMetadata must be an object');
-    } else {
-      const metadataSize = JSON.stringify(config.globalMetadata).length;
-
-      if (metadataSize > 10_240) {
-        errors.push('globalMetadata is too large (max 10KB)');
-      }
-
-      if (Object.keys(config.globalMetadata).length > 12) {
-        errors.push('globalMetadata has too many keys (max 12)');
-      }
-    }
-  }
-
-  // No custom API endpoints supported
-
-  const validatedSamplingRate = validateSamplingRate(config.samplingRate, errors) ?? DEFAULT_SAMPLING_RATE;
-
-  if (config.tags !== undefined && !Array.isArray(config.tags)) {
-    errors.push('tags must be an array');
-  }
-
-  validateExcludedUrlPaths(config.excludedUrlPaths, errors);
-
-  return { errors, warnings, samplingRate: validatedSamplingRate };
-};
-
-export const normalizeConfig = (config: Config): { config: Config; errors: string[]; warnings: string[] } => {
-  const { errors, warnings, samplingRate } = validateConfig(config);
-  return {
-    config: {
-      ...config,
-      samplingRate,
-    },
-    errors,
-    warnings,
-  };
-};
-
-/**
- * Validates the final configuration
- * @param config - The configuration to validate
- * @returns Validation result with errors and warnings
- */
-export const validateFinalConfig = (config: Config): { errors: string[]; warnings: string[]; samplingRate: number } => {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  const validatedSamplingRate = validateSamplingRate(config.samplingRate, errors) ?? DEFAULT_SAMPLING_RATE;
-  validateExcludedUrlPaths(config.excludedUrlPaths, errors);
-  // No custom API endpoints supported
-
-  return { errors, warnings, samplingRate: validatedSamplingRate };
-};
-
-/**
  * Type guard to check if a JSON response is a valid API config
  * @param json - The JSON to validate
  * @returns True if the JSON is a valid API config
@@ -377,9 +247,12 @@ export const isValidConfigApiResponse = (json: unknown): json is ApiConfig => {
 
     const result: Record<keyof ApiConfig, boolean> = {
       mode: response['mode'] === undefined || [Mode.QA, Mode.DEBUG].includes(response['mode'] as Mode),
+      // Zero is valid for samplingRate (means "sample nothing")
       samplingRate:
         response['samplingRate'] === undefined ||
-        (typeof response['samplingRate'] === 'number' && response['samplingRate'] > 0 && response['samplingRate'] <= 1),
+        (typeof response['samplingRate'] === 'number' &&
+          response['samplingRate'] >= 0 &&
+          response['samplingRate'] <= 1),
       tags: response['tags'] === undefined || Array.isArray(response['tags']),
       excludedUrlPaths: response['excludedUrlPaths'] === undefined || Array.isArray(response['excludedUrlPaths']),
       ipExcluded: response['ipExcluded'] === undefined || typeof response['ipExcluded'] === 'boolean',

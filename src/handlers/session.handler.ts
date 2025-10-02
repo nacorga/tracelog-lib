@@ -26,11 +26,15 @@ export class SessionHandler extends StateManager {
       return;
     }
 
+    const projectId = this.get('config')?.id;
+    if (!projectId) {
+      throw new Error('Cannot start session tracking: config not available');
+    }
+
     try {
-      this.sessionManager = new SessionManager(this.storageManager, this.eventManager);
+      this.sessionManager = new SessionManager(this.storageManager, this.eventManager, projectId);
       await this.sessionManager.startTracking();
     } catch (error) {
-      // Cleanup on failure
       if (this.sessionManager) {
         try {
           this.sessionManager.destroy();

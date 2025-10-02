@@ -308,7 +308,7 @@ describe('ClickHandler', () => {
         { clientX: 110, clientY: 110, expectedRelX: 1, expectedRelY: 1 }, // Outside (clamped)
       ];
 
-      testCases.forEach((testCase, _index) => {
+      testCases.forEach((testCase) => {
         vi.clearAllMocks();
 
         const clickEvent = new MouseEvent('click', {

@@ -10,16 +10,6 @@ import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
 
-/**
- * EventManager - Core event tracking and queue management
- *
- * Responsibilities:
- * - Track user events (clicks, scrolls, page views, custom events)
- * - Queue events and batch send them to the analytics API
- * - Handle deduplication of similar events
- * - Manage event sending intervals and retry logic
- * - Integrate with Google Analytics when configured
- */
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
   private readonly dataSender: SenderManager;
@@ -42,16 +32,16 @@ export class EventManager extends StateManager {
     this.emitter = emitter;
   }
 
-  /**
-   * Recovers persisted events from localStorage
-   * Should be called after initialization to recover any events that failed to send
-   */
   async recoverPersistedEvents(): Promise<void> {
     await this.dataSender.recoverPersistedEvents({
-      onSuccess: (_eventCount, recoveredEvents) => {
+      onSuccess: (_eventCount, recoveredEvents, body) => {
         if (recoveredEvents && recoveredEvents.length > 0) {
           const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
           this.removeProcessedEvents(eventIds);
+
+          if (body) {
+            this.emitEventsQueue(body);
+          }
         }
       },
       onFailure: async () => {
@@ -60,9 +50,6 @@ export class EventManager extends StateManager {
     });
   }
 
-  /**
-   * Track user events with automatic deduplication and queueing
-   */
   track({
     type,
     page_url,
@@ -84,7 +71,6 @@ export class EventManager extends StateManager {
     const isSessionEnd = eventType === EventType.SESSION_END;
     const isCriticalEvent = isSessionStart || isSessionEnd;
 
-    // Build event payload
     const currentPageUrl = (page_url as string) || this.get('pageUrl');
     const payload = this.buildEventPayload({
       type: eventType,
@@ -98,12 +84,10 @@ export class EventManager extends StateManager {
       session_end_reason,
     });
 
-    // Check URL exclusions
     if (this.isEventExcluded(payload)) {
       return;
     }
 
-    // Skip sampling for critical events, apply for the rest
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
     }
@@ -125,48 +109,34 @@ export class EventManager extends StateManager {
       this.set('hasStartSession', true);
     }
 
-    // Check for duplicates
     if (this.isDuplicateEvent(payload)) {
       return;
     }
 
-    // Add to queue and schedule sending
     this.addToQueue(payload);
   }
 
   stop(): void {
-    // Clear interval
     if (this.sendIntervalId) {
       clearInterval(this.sendIntervalId);
       this.sendIntervalId = null;
     }
 
-    // Reset state
     this.eventsQueue = [];
     this.lastEventFingerprint = null;
     this.lastEventTime = 0;
 
-    // Stop sender
     this.dataSender.stop();
   }
 
-  /**
-   * Flush all queued events immediately (async)
-   */
   async flushImmediately(): Promise<boolean> {
     return this.flushEvents(false);
   }
 
-  /**
-   * Flush all queued events immediately (sync)
-   */
   flushImmediatelySync(): boolean {
     return this.flushEvents(true) as boolean;
   }
 
-  /**
-   * Queue management and sending intervals
-   */
   getQueueLength(): number {
     return this.eventsQueue.length;
   }
@@ -178,9 +148,6 @@ export class EventManager extends StateManager {
     }
   }
 
-  /**
-   * Shared flush implementation for both sync and async modes
-   */
   private flushEvents(isSync: boolean): boolean | Promise<boolean> {
     if (this.eventsQueue.length === 0) {
       return isSync ? true : Promise.resolve(true);
@@ -196,6 +163,7 @@ export class EventManager extends StateManager {
       if (success) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
+        this.emitEventsQueue(body);
       }
 
       return success;
@@ -215,9 +183,6 @@ export class EventManager extends StateManager {
     }
   }
 
-  /**
-   * Send queued events to the API
-   */
   private async sendEventsQueue(): Promise<void> {
     if (!this.get('sessionId') || this.eventsQueue.length === 0) {
       return;
@@ -240,10 +205,6 @@ export class EventManager extends StateManager {
     });
   }
 
-  /**
-   * Build the payload for sending events to the API
-   * Includes basic deduplication and sorting
-   */
   private buildEventsPayload(): BaseEventsQueueDto {
     const eventMap = new Map<string, EventData>();
     const order: string[] = [];
@@ -272,9 +233,6 @@ export class EventManager extends StateManager {
     };
   }
 
-  /**
-   * Helper methods for event processing
-   */
   private buildEventPayload(data: Partial<EventData>): EventData {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
@@ -294,7 +252,6 @@ export class EventManager extends StateManager {
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 
-    // Add project tags
     const projectTags = this.get('config')?.tags;
     if (projectTags?.length) {
       payload.tags = projectTags;
@@ -321,12 +278,10 @@ export class EventManager extends StateManager {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event);
 
-    // Check if this is a duplicate within the threshold
     if (this.lastEventFingerprint === fingerprint && now - this.lastEventTime < DUPLICATE_EVENT_THRESHOLD_MS) {
       return true;
     }
 
-    // Update tracking
     this.lastEventFingerprint = fingerprint;
     this.lastEventTime = now;
     return false;
@@ -336,7 +291,6 @@ export class EventManager extends StateManager {
     let fingerprint = `${event.type}_${event.page_url}`;
 
     if (event.click_data) {
-      // Round coordinates to reduce false duplicates
       const x = Math.round((event.click_data.x || 0) / 10) * 10;
       const y = Math.round((event.click_data.y || 0) / 10) * 10;
       fingerprint += `_click_${x}_${y}`;
@@ -354,6 +308,10 @@ export class EventManager extends StateManager {
       fingerprint += `_vitals_${event.web_vitals.type}`;
     }
 
+    if (event.error_data) {
+      fingerprint += `_error_${event.error_data.type}_${event.error_data.message}`;
+    }
+
     return fingerprint;
   }
 
@@ -364,18 +322,21 @@ export class EventManager extends StateManager {
   private addToQueue(event: EventData): void {
     this.eventsQueue.push(event);
 
-    debugLog.info('EventManager', 'Event added to queue', event);
-
     this.emitEvent(event);
 
-    // Prevent queue overflow
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
-      const removedEvent = this.eventsQueue.shift();
+      const nonCriticalIndex = this.eventsQueue.findIndex(
+        (e) => e.type !== EventType.SESSION_START && e.type !== EventType.SESSION_END,
+      );
 
-      debugLog.warn('EventManager', 'Event queue overflow, oldest event removed', {
+      const removedEvent =
+        nonCriticalIndex >= 0 ? this.eventsQueue.splice(nonCriticalIndex, 1)[0] : this.eventsQueue.shift();
+
+      debugLog.warn('EventManager', 'Event queue overflow, oldest non-critical event removed', {
         maxLength: MAX_EVENTS_QUEUE_LENGTH,
         currentLength: this.eventsQueue.length,
         removedEventType: removedEvent?.type,
+        wasCritical: removedEvent?.type === EventType.SESSION_START || removedEvent?.type === EventType.SESSION_END,
       });
     }
 
@@ -383,7 +344,6 @@ export class EventManager extends StateManager {
       this.startSendInterval();
     }
 
-    // Google Analytics integration
     this.handleGoogleAnalyticsIntegration(event);
   }
 
@@ -398,10 +358,9 @@ export class EventManager extends StateManager {
   private handleGoogleAnalyticsIntegration(event: EventData): void {
     if (this.googleAnalytics && event.type === EventType.CUSTOM && event.custom_event) {
       if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
-        // Skip GA tracking in QA/debug modes
-      } else {
-        this.googleAnalytics.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
+        return;
       }
+      this.googleAnalytics.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
     }
   }
 
@@ -418,18 +377,12 @@ export class EventManager extends StateManager {
     });
   }
 
-  /**
-   * Emit event for external listeners
-   */
   private emitEvent(eventData: EventData): void {
     if (this.emitter) {
       this.emitter.emit(EmitterEvent.EVENT, eventData);
     }
   }
 
-  /**
-   * Emit events queue for external listeners
-   */
   private emitEventsQueue(queue: BaseEventsQueueDto): void {
     if (this.emitter) {
       this.emitter.emit(EmitterEvent.QUEUE, queue);

@@ -86,12 +86,10 @@ export class ClickHandler extends StateManager {
   private getRelevantClickElement(element: HTMLElement): HTMLElement {
     for (const selector of INTERACTIVE_SELECTORS) {
       try {
-        // First check if the element itself matches
         if (element.matches(selector)) {
           return element;
         }
 
-        // If not, search for matching ancestors
         const parent = element.closest(selector) as HTMLElement;
         if (parent) {
           return parent;
@@ -168,22 +166,18 @@ export class ClickHandler extends StateManager {
     const clickedText = clickedElement.textContent?.trim() ?? '';
     const relevantText = relevantElement.textContent?.trim() ?? '';
 
-    // No text available
     if (!clickedText && !relevantText) {
       return '';
     }
 
-    // Prefer clicked element text if it's reasonable length
     if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
       return clickedText;
     }
 
-    // Use relevant element text if it fits
     if (relevantText.length <= MAX_TEXT_LENGTH) {
       return relevantText;
     }
 
-    // Truncate relevant text if too long
     return relevantText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
   }
 

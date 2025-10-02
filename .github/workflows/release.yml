@@ -56,45 +56,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Run Integration Tests
-        if: github.event.inputs.skip_tests != 'true'
-        run: |
-          echo "🔍 Running integration tests for release..."
-          npm run test:integration
-        continue-on-error: true
-
-      - name: Generate Test Coverage Report
-        if: github.event.inputs.skip_tests != 'true'
-        run: |
-          echo "🔍 Generating test coverage report for release..."
-          npm run test:coverage
-        continue-on-error: true
-
-      - name: Run E2E tests
-        if: github.event.inputs.skip_tests != 'true'
-        run: |
-          echo "Running E2E tests..."
-          npm run test:e2e
-
-      - name: Upload test results (if tests fail)
-        if: failure() && github.event.inputs.skip_tests != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-pre-release
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 7
-          if-no-files-found: ignore
 
       - name: Check if release is needed
         id: check-release
@@ -140,29 +103,24 @@ jobs:
           node-version: 20
           registry-url: 'https://registry.npmjs.org/'
           scope: '@tracelog'
+          cache: 'npm'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
       - name: Cache Playwright browsers
-        uses: actions/cache@v3
+        id: playwright-cache
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-browsers-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-browsers-
+            ${{ runner.os }}-playwright-
 
       - name: Install dependencies
         run: npm ci
 
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
       - name: Make scripts executable
@@ -173,11 +131,12 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
-      - name: Verify main branch is healthy
+      - name: Verify CI Status
         run: |
           echo "🔍 Verifying main branch passed all CI checks..."
-          # This release assumes CI has already validated everything
           echo "✅ Release triggered from validated main branch"
+          echo "📝 Note: All tests were validated by CI workflow"
+          echo "🚀 Proceeding with build and publish only"
 
       - name: Execute release
         env:
@@ -192,7 +151,8 @@ jobs:
             RELEASE_CMD="$RELEASE_CMD --dry-run"
           fi
 
-          # Tests are skipped - they were already validated in CI
+          # Skip tests - they were already validated in CI workflow
+          RELEASE_CMD="$RELEASE_CMD --skip-tests"
 
           # Add version type or force version
           if [[ -n "${{ github.event.inputs.force_version }}" ]]; then

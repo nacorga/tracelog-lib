@@ -9,6 +9,8 @@ export class StorageManager {
   private readonly storage: Storage | null;
   private readonly fallbackStorage = new Map<string, string>();
 
+  private hasQuotaExceededError = false;
+
   constructor() {
     this.storage = this.initializeStorage();
 
@@ -42,7 +44,16 @@ export class StorageManager {
         return;
       }
     } catch (error) {
-      debugLog.warn('StorageManager', 'Failed to set item, using fallback', { key, error });
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        this.hasQuotaExceededError = true;
+
+        debugLog.error('StorageManager', 'localStorage quota exceeded - data will not persist after reload', {
+          key,
+          valueSize: value.length,
+        });
+      } else {
+        debugLog.warn('StorageManager', 'Failed to set item, using fallback', { key, error });
+      }
     }
 
     // Always update fallback for consistency
@@ -99,6 +110,14 @@ export class StorageManager {
    */
   isAvailable(): boolean {
     return this.storage !== null;
+  }
+
+  /**
+   * Checks if a QuotaExceededError has occurred
+   * This indicates localStorage is full and data may not persist
+   */
+  hasQuotaError(): boolean {
+    return this.hasQuotaExceededError;
   }
 
   /**

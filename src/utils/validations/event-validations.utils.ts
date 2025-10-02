@@ -10,8 +10,12 @@ import { debugLog } from '../logging';
  */
 export const isEventValid = (
   eventName: string,
-  metadata?: Record<string, unknown>,
-): { valid: boolean; error?: string; sanitizedMetadata?: Record<string, MetadataType> } => {
+  metadata?: Record<string, unknown> | Record<string, unknown>[],
+): {
+  valid: boolean;
+  error?: string;
+  sanitizedMetadata?: Record<string, MetadataType> | Record<string, MetadataType>[];
+} => {
   const nameValidation = isValidEventName(eventName);
 
   if (!nameValidation.valid) {

@@ -6,7 +6,7 @@ import { StateManager, resetGlobalState } from '@/managers/state.manager';
 import { Config, Mode } from '@/types';
 import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
 import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
-import { Emitter, normalizeConfig } from '@/utils';
+import { Emitter } from '@/utils';
 
 vi.mock('@/managers/sender.manager', () => {
   class MockSenderManager {
@@ -74,8 +74,6 @@ export const createMockEmitter = (): Emitter =>
 export const setupTestState = async (config: Config = createTestConfig()): Promise<void> => {
   resetGlobalState();
 
-  const { config: normalizedConfig } = normalizeConfig(config);
-
   // Create a temporary StateManager to set up global state
   const tempStateManager = new (class extends StateManager {
     async setConfig(config: Config): Promise<void> {
@@ -89,7 +87,7 @@ export const setupTestState = async (config: Config = createTestConfig()): Promi
     }
   })();
 
-  await tempStateManager.setConfig(normalizedConfig);
+  await tempStateManager.setConfig(config);
   await tempStateManager.setPageUrl('https://example.com');
   await tempStateManager.setSessionId('test-session');
 };
@@ -111,8 +109,13 @@ export const createTestEventManager = (
 export const createTestSessionManager = (
   storageManager?: StorageManager,
   eventManager?: EventManager,
+  projectId?: string,
 ): SessionManager => {
-  return new SessionManager(storageManager || createMockStorageManager(), eventManager || createTestEventManager());
+  return new SessionManager(
+    storageManager || createMockStorageManager(),
+    eventManager || createTestEventManager(),
+    projectId || 'test-project',
+  );
 };
 
 /**
@@ -139,7 +142,7 @@ export const setupTestEnvironment = async (
 
   const storageManager = createMockStorageManager();
   const eventManager = createTestEventManager(storageManager);
-  const sessionManager = createTestSessionManager(storageManager, eventManager);
+  const sessionManager = createTestSessionManager(storageManager, eventManager, testConfig.id);
 
   return {
     config: testConfig,

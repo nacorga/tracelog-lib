@@ -8,8 +8,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./tests/setup.ts'],
-    include: ['tests/unit/**/*.test.ts'],
+    setupFiles: ['./tests/vitest-setup.ts', './tests/setup.ts'],
+    include: ['tests/unit/**/*.{test,spec}.ts'],
     pool: 'forks',
     poolOptions: {
       forks: {
@@ -26,7 +26,7 @@ export default defineConfig({
     },
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'json-summary', 'html'],
       include: ['src/**/*.ts'],
       exclude: [
         'src/**/*.types.ts',
@@ -34,10 +34,10 @@ export default defineConfig({
         'src/types/**',
       ],
       thresholds: {
-        lines: 30,
+        lines: 60,
         functions: 50,
         branches: 65,
-        statements: 30,
+        statements: 60,
       },
     },
   },
