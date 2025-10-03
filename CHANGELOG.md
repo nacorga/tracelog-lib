@@ -18,6 +18,22 @@
 
 
 
+
+## [0.5.4] - 2025-10-03
+
+### 🐛 Bug Fixes
+
+- Update README and Vite configuration to ensure consistent usage of 'tracelog' global object ([53ca8c1](../../commit/53ca8c1c54113c40f05c9649562fb9b7ec13000d))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.3...v0.5.4
+
+
 ## [0.5.3] - 2025-10-03
 
 ### 🐛 Bug Fixes
