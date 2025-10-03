@@ -18,7 +18,7 @@ import { WebVitalType } from '../types';
  * - FCP (First Contentful Paint): 1800ms threshold (good threshold)
  * - CLS (Cumulative Layout Shift): 0.25 threshold (unitless, needs improvement threshold)
  * - INP (Interaction to Next Paint): 200ms threshold (good threshold)
- *   TTFB (Time to First Byte): 800ms threshold (good/needs improvement boundary, aligned with Web Vitals standard)
+ * - TTFB (Time to First Byte): 800ms threshold (good/needs improvement boundary, aligned with Web Vitals standard)
  * - LONG_TASK: 50ms threshold for long task detection
  */
 export const WEB_VITALS_THRESHOLDS: Record<WebVitalType, number> = {
