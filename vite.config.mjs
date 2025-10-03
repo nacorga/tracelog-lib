@@ -25,13 +25,18 @@ export default defineConfig({
       output: [
         {
           // IIFE format for traditional <script> tags
-          // Creates: window.TraceLog = { tracelog: { init, event, ... } }
+          // Creates: window.tracelog = { init, event, ... }
           format: 'iife',
           name: 'TraceLog',
           entryFileNames: 'tracelog.js',
           dir: 'dist/browser',
           inlineDynamicImports: true,
           extend: true,
+          footer: `
+            if (typeof window !== 'undefined' && (window.TraceLog?.tracelog || window.tracelog?.tracelog)) {
+              window.tracelog = window.TraceLog.tracelog || window.tracelog.tracelog;
+            }
+          `,
         },
         {
           // ES Module format for modern imports
