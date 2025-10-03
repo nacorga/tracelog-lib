@@ -19,6 +19,22 @@
 
 
 
+
+## [0.5.5] - 2025-10-03
+
+### 🔧 Other Changes
+
+- Simplify Vite configuration by removing redundant check for 'tracelog' global object ([7a17c4f](../../commit/7a17c4fa23293d2653e7cbf35255d0e551fe8208))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.4...v0.5.5
+
+
 ## [0.5.4] - 2025-10-03
 
 ### 🐛 Bug Fixes
