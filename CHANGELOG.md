@@ -15,6 +15,24 @@
 
 
 
+
+## [0.5.1] - 2025-10-03
+
+### 🔧 Other Changes
+
+- Merge pull request #14 from nacorga/release/20251003.1 ([ff9d04d](../../commit/ff9d04d155ef256b34507e03b8569c89467fb809))
+- Update playground setup and test commands to use ESM bundle ([53a10b4](../../commit/53a10b4d27523acf60d45dd73b9aef02c9ec362b))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.0...v0.5.1
+
+
 ## [0.5.0] - 2025-10-02
 
 ### ✨ Features
