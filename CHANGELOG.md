@@ -16,6 +16,26 @@
 
 
 
+
+## [0.5.2] - 2025-10-03
+
+### 🔧 Other Changes
+
+- Merge pull request #15 from nacorga/release/20251003.2 ([411544e](../../commit/411544e5ca91e57978ee5da8185393132d413f16))
+- Add setup files for Vitest integration tests ([bf26178](../../commit/bf2617867327cde5c887ec9be63e03f4f1968f56))
+- Correct formatting of TTFB threshold description in performance constants ([dcd7134](../../commit/dcd713435db6e5679c0cce84229d1b8395823f9f))
+- Update Vite configuration and refine TTFB threshold description in performance constants ([7d8d96e](../../commit/7d8d96ecb5d4d2b8a558b2652f2ca37d97910b6b))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.1...v0.5.2
+
+
 ## [0.5.1] - 2025-10-03
 
 ### 🔧 Other Changes
