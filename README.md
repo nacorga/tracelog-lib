@@ -20,7 +20,7 @@ A lightweight TypeScript library for web analytics and user behavior tracking. A
 | Your Setup | File to Use | How to Use |
 |-----------|-------------|------------|
 | **npm/yarn** (React, Vue, Angular, etc.) | Automatic | `import { tracelog } from '@tracelog/lib'` |
-| **HTML + `<script>` tag** | `tracelog.js` (IIFE) | `<script src="...tracelog.js"></script>` then use `tracelog.init()` |
+| **HTML + `<script>` tag** | `tracelog.js` (IIFE) | `<script src="...tracelog.js"></script>` then use `TraceLog.tracelog.init()` |
 | **HTML + `<script type="module">`** | `tracelog.esm.js` (ESM) | `import { tracelog } from '...tracelog.esm.js'` |
 
 ### Installation Methods
@@ -45,9 +45,9 @@ tracelog.event('user_action', { data: 'example' });
 ```html
 <script src="https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.js"></script>
 <script>
-  // tracelog is available globally
-  tracelog.init({ id: 'your-project-id' });
-  tracelog.event('page_view');
+  // TraceLog is available globally
+  TraceLog.tracelog.init({ id: 'your-project-id' });
+  TraceLog.tracelog.event('page_view');
 </script>
 ```
 
