@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from 'node:url';
  * Vite Build Configuration for Browser Bundles
  *
  * Generates two browser-compatible bundles:
- * - tracelog.js (IIFE) → Use with <script> tags, creates window.tracelog
+ * - tracelog.js (IIFE) → Use with <script> tags, creates window.TraceLog.tracelog
  * - tracelog.esm.js (ESM) → Use with <script type="module"> and import statements
  */
 export default defineConfig({
@@ -25,12 +25,13 @@ export default defineConfig({
       output: [
         {
           // IIFE format for traditional <script> tags
-          // Creates: window.tracelog = { init, event, ... }
+          // Creates: window.TraceLog = { tracelog: {...}, init, event, ... }
           format: 'iife',
-          name: 'tracelog',
+          name: 'TraceLog',
           entryFileNames: 'tracelog.js',
           dir: 'dist/browser',
           inlineDynamicImports: true,
+          extend: true,
         },
         {
           // ES Module format for modern imports
