@@ -25,7 +25,7 @@ export default defineConfig({
       output: [
         {
           // IIFE format for traditional <script> tags
-          // Creates: window.TraceLog = { tracelog: {...}, init, event, ... }
+          // Creates: window.TraceLog = { tracelog: { init, event, ... } }
           format: 'iife',
           name: 'TraceLog',
           entryFileNames: 'tracelog.js',
