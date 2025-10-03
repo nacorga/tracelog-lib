@@ -15,39 +15,60 @@ A lightweight TypeScript library for web analytics and user behavior tracking. A
 
 **Prerequisites**: Modern browser with ES6+ support. No server-side requirements.
 
-- npm:
-  ```bash
-  npm install @tracelog/lib
-  ```
-- yarn:
-  ```bash
-  yarn add @tracelog/lib
-  ```
-- CDN (browser):
-  ```html
-  <script src="https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.js"></script>
-  ```
+## 📦 Which File Should I Use?
 
-## Quick Start
+| Your Setup | File to Use | How to Use |
+|-----------|-------------|------------|
+| **npm/yarn** (React, Vue, Angular, etc.) | Automatic | `import { tracelog } from '@tracelog/lib'` |
+| **HTML + `<script>` tag** | `tracelog.js` (IIFE) | `<script src="...tracelog.js"></script>` then use `tracelog.init()` |
+| **HTML + `<script type="module">`** | `tracelog.esm.js` (ESM) | `import { tracelog } from '...tracelog.esm.js'` |
 
-Initialize tracking with your project ID and start capturing events immediately:
+### Installation Methods
+
+#### 1. NPM/Yarn (Recommended for Modern Apps)
+```bash
+npm install @tracelog/lib
+```
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
 
-// Initialize tracking
-await tracelog.init({
-  id: 'your-project-id'
-});
-
-// Send custom events
-tracelog.event('user_signup', {
-  method: 'email',
-  plan: 'premium'
-});
+tracelog.init({ id: 'your-project-id' });
+tracelog.event('user_action', { data: 'example' });
 ```
 
-**Expected behavior**: Automatic tracking begins immediately. Check browser dev tools console for event logs (when `mode: 'qa'`).
+**✅ Best for:** React, Vue, Angular, Next.js, Vite, webpack, or any bundler
+
+---
+
+#### 2. CDN - IIFE (Maximum Compatibility)
+```html
+<script src="https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.js"></script>
+<script>
+  // tracelog is available globally
+  tracelog.init({ id: 'your-project-id' });
+  tracelog.event('page_view');
+</script>
+```
+
+**✅ Best for:** WordPress, static HTML, CMS, legacy browsers, no build step
+
+---
+
+#### 3. CDN - ES Module (Modern Only)
+```html
+<script type="module">
+  import { tracelog } from 'https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.esm.js';
+
+  await tracelog.init({ id: 'your-project-id' });
+  tracelog.event('page_view');
+</script>
+```
+
+**✅ Best for:** Modern browsers, no bundler, prefer native modules
+**⚠️ Note:** Won't work in IE11 or older browsers
+
+**Expected behavior**: Automatic tracking begins immediately. Check browser dev tools console for event logs (when `mode: 'qa'` or `mode: 'debug'`).
 
 ## Usage
 
@@ -247,6 +268,45 @@ This project uses a **branch protection strategy** to ensure code quality:
 ## Versioning
 
 Follows [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH). Breaking changes are documented in release notes with migration guides.
+
+## Testing & Validation
+
+Verify the installation works correctly:
+
+### Quick Validation
+
+Open DevTools Console and check for:
+1. `[TraceLog:App] Initializing TraceLog` - Library loaded
+2. `[TraceLog:SessionManager] Session started` - Session active
+3. No errors or warnings
+4. Events logged when you interact with the page
+
+### Manual Test
+
+```javascript
+// Should work after installation
+tracelog.init({
+  id: 'skip',  // Use 'skip' for local testing
+  mode: 'debug'  // Enables console logging
+});
+
+// Send a test event
+tracelog.event('test_event', { foo: 'bar' });
+
+// Check DevTools Console for:
+// [TraceLog:EventManager] Tracking event: test_event
+```
+
+### Playground
+
+The library includes a full demo at [`playground/index.html`](playground/index.html):
+
+```bash
+npm run playground:setup  # Build and copy library
+npm run serve            # Start server on localhost:3000
+```
+
+Open http://localhost:3000 to see TraceLog in action with real-time event monitoring.
 
 ## License
 
