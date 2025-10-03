@@ -33,8 +33,8 @@ export default defineConfig({
           inlineDynamicImports: true,
           extend: true,
           footer: `
-            if (typeof window !== 'undefined' && (window.TraceLog?.tracelog || window.tracelog?.tracelog)) {
-              window.tracelog = window.TraceLog.tracelog || window.tracelog.tracelog;
+            if (typeof window !== 'undefined' && window.TraceLog?.tracelog) {
+              window.tracelog = window.TraceLog.tracelog;
             }
           `,
         },
