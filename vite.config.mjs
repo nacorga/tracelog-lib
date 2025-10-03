@@ -31,10 +31,6 @@ export default defineConfig({
           entryFileNames: 'tracelog.js',
           dir: 'dist/browser',
           inlineDynamicImports: true,
-          extend: true,
-          globals: {
-            tracelog: 'tracelog'
-          }
         },
         {
           // ES Module format for modern imports
