@@ -14,11 +14,11 @@ import { WebVitalType } from '../types';
  * These define the minimum values required to report a web vital metric
  *
  * Based on Core Web Vitals standards:
- * - LCP (Largest Contentful Paint): 4000ms threshold
- * - FCP (First Contentful Paint): 1800ms threshold
- * - CLS (Cumulative Layout Shift): 0.25 threshold (unitless)
- * - INP (Interaction to Next Paint): 200ms threshold
- * - TTFB (Time to First Byte): 600ms threshold
+ * - LCP (Largest Contentful Paint): 4000ms threshold (poor threshold)
+ * - FCP (First Contentful Paint): 1800ms threshold (good threshold)
+ * - CLS (Cumulative Layout Shift): 0.25 threshold (unitless, needs improvement threshold)
+ * - INP (Interaction to Next Paint): 200ms threshold (good threshold)
+ * - TTFB (Time to First Byte): 800ms threshold (good threshold, aligned with Google recommendations)
  * - LONG_TASK: 50ms threshold for long task detection
  */
 export const WEB_VITALS_THRESHOLDS: Record<WebVitalType, number> = {
@@ -26,7 +26,7 @@ export const WEB_VITALS_THRESHOLDS: Record<WebVitalType, number> = {
   FCP: 1800,
   CLS: 0.25,
   INP: 200,
-  TTFB: 600,
+  TTFB: 800,
   LONG_TASK: 50,
 } as const;
 
