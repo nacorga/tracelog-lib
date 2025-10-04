@@ -1,5 +1,3 @@
-import { getApiUrlForProject } from './managers/api.manager';
-import { ConfigManager } from './managers/config.manager';
 import { EventManager } from './managers/event.manager';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
@@ -7,9 +5,9 @@ import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { AppConfig, EventType, EmitterCallback, EmitterMap } from './types';
+import { Config, EventType, EmitterCallback, EmitterMap } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter, getApiUrl } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -43,19 +41,15 @@ export class App extends StateManager {
     return this.isInitialized;
   }
 
-  async init(appConfig: AppConfig): Promise<void> {
+  async init(config: Config): Promise<void> {
     if (this.isInitialized) {
       return;
-    }
-
-    if (!appConfig.id?.trim()) {
-      throw new Error('Project ID is required');
     }
 
     this.managers.storage = new StorageManager();
 
     try {
-      await this.setupState(appConfig);
+      await this.setupState(config);
       await this.setupIntegrations();
 
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
@@ -143,18 +137,18 @@ export class App extends StateManager {
     this.handlers = {};
   }
 
-  private async setupState(appConfig: AppConfig): Promise<void> {
-    const apiUrl = getApiUrlForProject(appConfig.id, appConfig.allowHttp);
-    this.set('apiUrl', apiUrl);
-
-    const configManager = new ConfigManager();
-    const config = await configManager.get(apiUrl, appConfig);
+  private async setupState(config: Config): Promise<void> {
     this.set('config', config);
 
-    const userId = UserManager.getId(this.managers.storage as StorageManager, config.id);
+    const userId = UserManager.getId(this.managers.storage as StorageManager);
     this.set('userId', userId);
 
-    this.set('device', getDeviceType());
+    const apiUrl = getApiUrl(config);
+    this.set('apiUrl', apiUrl);
+
+    const device = getDeviceType();
+    this.set('device', device);
+
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);
   }
@@ -163,7 +157,7 @@ export class App extends StateManager {
     const config = this.get('config');
     const measurementId = config.integrations?.googleAnalytics?.measurementId;
 
-    if (!config.ipExcluded && measurementId?.trim()) {
+    if (measurementId?.trim()) {
       try {
         this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
         await this.integrations.googleAnalytics.initialize();

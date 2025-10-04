@@ -1,5 +1,5 @@
 import { App } from './app';
-import { MetadataType, AppConfig, EmitterCallback, EmitterMap } from './types';
+import { MetadataType, Config, EmitterCallback, EmitterMap } from './types';
 import { debugLog, validateAndNormalizeConfig } from './utils';
 import { TestBridge } from './test-bridge';
 import './types/window.types';
@@ -8,7 +8,7 @@ let app: App | null = null;
 let isInitializing = false;
 let isDestroying = false;
 
-export const init = async (appConfig: AppConfig): Promise<void> => {
+export const init = async (config: Config): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('This library can only be used in a browser environment');
   }
@@ -18,34 +18,29 @@ export const init = async (appConfig: AppConfig): Promise<void> => {
   }
 
   if (app) {
-    debugLog.debug('API', 'Library already initialized, skipping duplicate initialization');
     return;
   }
 
   if (isInitializing) {
-    debugLog.warn('API', 'Initialization already in progress');
-    throw new Error('Initialization already in progress');
+    return;
   }
 
   isInitializing = true;
 
   try {
-    debugLog.info('API', 'Initializing TraceLog', { projectId: appConfig.id });
-
-    const validatedConfig = validateAndNormalizeConfig(appConfig);
+    const validatedConfig = validateAndNormalizeConfig(config);
     const instance = new App();
 
     try {
       await instance.init(validatedConfig);
       app = instance;
-
-      debugLog.info('API', 'TraceLog initialized successfully', { projectId: validatedConfig.id });
     } catch (error) {
       try {
         await instance.destroy(true);
       } catch (cleanupError) {
         debugLog.warn('API', 'Failed to cleanup partially initialized app', { cleanupError });
       }
+
       throw error;
     }
   } catch (error) {

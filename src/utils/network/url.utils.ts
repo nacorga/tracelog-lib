@@ -1,35 +1,41 @@
 import { isValidUrl } from '../validations';
 import { debugLog } from '../logging';
+import { Config } from '@/types';
 
 /**
  * Generates an API URL based on project ID and current domain
  * @param id - The project ID
  * @returns The generated API URL
  */
-export const getApiUrl = (id: string, allowHttp = false): string => {
-  const url = new URL(window.location.href);
-  const host = url.hostname;
-  const parts = host.split('.');
-
-  if (parts.length === 0) {
-    debugLog.clientError('URLUtils', 'Invalid hostname - no domain parts found', { hostname: host });
-    throw new Error('Invalid URL');
+export const getApiUrl = (config: Config): string => {
+  if (config.integrations?.custom?.apiUrl) {
+    return config.integrations.custom.apiUrl;
   }
 
-  const cleanDomain = parts.slice(-2).join('.');
-  const protocol = allowHttp && url.protocol === 'http:' ? 'http' : 'https';
-  const apiUrl = `${protocol}://${id}.${cleanDomain}`;
-  const isValid = isValidUrl(apiUrl, allowHttp);
+  if (config.integrations?.tracelog?.projectId) {
+    const url = new URL(window.location.href);
+    const host = url.hostname;
+    const parts = host.split('.');
 
-  if (!isValid) {
-    debugLog.clientError('URLUtils', 'Generated API URL failed validation', {
-      apiUrl,
-      allowHttp,
-    });
-    throw new Error('Invalid URL');
+    if (parts.length === 0) {
+      throw new Error('Invalid URL');
+    }
+
+    const allowHttp = config.allowHttp ?? false;
+    const projectId = config.integrations.tracelog.projectId;
+    const cleanDomain = parts.slice(-2).join('.');
+    const protocol = allowHttp && url.protocol === 'http:' ? 'http' : 'https';
+    const apiUrl = `${protocol}://${projectId}.${cleanDomain}`;
+    const isValid = isValidUrl(apiUrl, allowHttp);
+
+    if (!isValid) {
+      throw new Error('Invalid URL');
+    }
+
+    return apiUrl;
   }
 
-  return apiUrl;
+  return '';
 };
 
 /**

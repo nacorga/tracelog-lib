@@ -3,5 +3,4 @@
  */
 export enum Mode {
   QA = 'qa',
-  DEBUG = 'debug',
 }

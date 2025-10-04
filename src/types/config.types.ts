@@ -1,21 +1,7 @@
 import { MetadataType } from './common.types';
-import { TagConfig } from './tag.types';
 import { Mode } from './mode.types';
 
-export type Config = AppConfig & ExclusiveApiConfig;
-export type ApiConfig = SharedConfig & ExclusiveApiConfig;
-export type SharedConfig = Pick<AppConfig, 'mode' | 'samplingRate' | 'excludedUrlPaths'>;
-
-export interface ExclusiveApiConfig {
-  /** Tag definitions used to categorize tracked events. */
-  tags?: TagConfig[];
-  /** Determines if IP address is excluded from tracking. */
-  ipExcluded?: boolean;
-}
-
-export interface AppConfig {
-  /** Project identifier used for tracing. */
-  id: string;
+export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */
   sessionTimeout?: number;
   /** Metadata appended to every tracked event. */
@@ -36,6 +22,16 @@ export interface AppConfig {
   excludedUrlPaths?: string[];
   /** Optional configuration for third-party integrations. */
   integrations?: {
+    /** TraceLog integration options. */
+    tracelog?: {
+      /** Required project ID for Google Analytics. */
+      projectId: string;
+    };
+    /** Custom integration options. */
+    custom?: {
+      /** Required API URL for custom integration. */
+      apiUrl: string;
+    };
     /** Google Analytics integration options. */
     googleAnalytics?: {
       /** Required measurement ID for Google Analytics. */
