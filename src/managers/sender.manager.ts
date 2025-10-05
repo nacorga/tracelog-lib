@@ -52,10 +52,12 @@ export class SenderManager extends StateManager {
   }
 
   async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
-    const persisted = this.persistEvents(body);
+    if (!this.shouldSkipSend()) {
+      const persisted = this.persistEvents(body);
 
-    if (!persisted && !this.shouldSkipSend()) {
-      debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
+      if (!persisted) {
+        debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
+      }
     }
 
     const success = await this.send(body);

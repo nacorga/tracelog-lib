@@ -277,14 +277,35 @@ describe('SessionManager', () => {
   });
 
   describe('Session Persistence', () => {
-    // v0.6.0: SessionManager now uses sessionStorage - test needs update
-    it.skip('should persist session to storage - NEEDS UPDATE', () => {
-      // Test uses old localStorage API, needs migration to sessionStorage
+    it('should persist session to localStorage', async () => {
+      await sessionManager.startTracking();
+
+      const sessionId = sessionManager['get']('sessionId');
+      const storageKey = `tlog:test-project:session`;
+      const stored = storageManager.getItem(storageKey);
+
+      expect(stored).not.toBeNull();
+      const parsed = JSON.parse(stored!);
+      expect(parsed.id).toBe(sessionId);
+      expect(parsed.lastActivity).toBeDefined();
     });
 
-    // v0.6.0: SessionManager storage API changed
-    it.skip('should update lastActivity on activity reset - NEEDS UPDATE', async () => {
-      // Test uses old localStorage API, needs migration to sessionStorage
+    it('should update lastActivity on activity reset', async () => {
+      await sessionManager.startTracking();
+
+      const storageKey = `tlog:test-project:session`;
+      const initialStored = storageManager.getItem(storageKey);
+      const initialParsed = JSON.parse(initialStored!);
+      const initialLastActivity = initialParsed.lastActivity;
+
+      // Wait a bit and trigger activity
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      sessionManager['resetSessionTimeout']();
+
+      const updatedStored = storageManager.getItem(storageKey);
+      const updatedParsed = JSON.parse(updatedStored!);
+
+      expect(updatedParsed.lastActivity).toBeGreaterThan(initialLastActivity);
     });
   });
 
@@ -329,9 +350,15 @@ describe('SessionManager', () => {
       expect(sessionId).toBeNull();
     });
 
-    // v0.6.0: SessionManager storage API changed
-    it.skip('should clear storage after session end - NEEDS UPDATE', async () => {
-      // Test uses old localStorage API, needs migration to sessionStorage
+    it('should clear storage after session end', async () => {
+      await sessionManager.startTracking();
+
+      const storageKey = `tlog:test-project:session`;
+      expect(storageManager.getItem(storageKey)).not.toBeNull();
+
+      await sessionManager.stopTracking();
+
+      expect(storageManager.getItem(storageKey)).toBeNull();
     });
   });
 

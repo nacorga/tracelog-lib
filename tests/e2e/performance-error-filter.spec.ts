@@ -31,7 +31,9 @@ test.describe('Performance & Error Filters', () => {
       });
 
       try {
-        await window.__traceLogBridge!.init({});
+        await window.__traceLogBridge!.init({
+          errorSampling: 1, // Capture 100% of errors in E2E tests
+        });
       } catch (error) {
         return { success: false, error: (error as Error).message };
       }

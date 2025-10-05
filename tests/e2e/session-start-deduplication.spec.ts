@@ -25,8 +25,7 @@ test.describe('Session Start - Single emission per session', () => {
     expect(sessionStartEvents).toHaveLength(1);
   });
 
-  // TODO: Investigate - cross-tab session recovery may emit session_start before BroadcastChannel sync
-  test.skip('should NOT emit session_start when recovering session in new tab', async ({ context }) => {
+  test('should NOT emit session_start when recovering session in new tab', async ({ context }) => {
     const page1 = await context.newPage();
     await navigateToPlayground(page1, { autoInit: false, searchParams: { e2e: 'true' } });
 

@@ -10,10 +10,9 @@ import { test, expect } from '@playwright/test';
 import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('User Data Integrity', () => {
-  // TODO: Strict validation only active in QA mode - test needs QA mode enabled
-  test.skip('should handle malformed event data gracefully', async ({ page }) => {
-    // Navigate to playground
-    await navigateToPlayground(page);
+  test('should handle malformed event data gracefully', async ({ page }) => {
+    // Navigate to playground with QA mode enabled for strict validation
+    await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true', tlog_mode: 'qa' } });
 
     // Test malformed data handling
     const dataIntegrityResult = await page.evaluate(async () => {
@@ -47,7 +46,7 @@ test.describe('User Data Integrity', () => {
         originalError.apply(console, args);
       };
 
-      // Initialize TraceLog
+      // Initialize TraceLog (QA mode auto-detected from URL param)
       await window.__traceLogBridge!.init({});
 
       // Test various data scenarios

@@ -70,7 +70,7 @@ describe('Session Lifecycle Integration', () => {
 
       const sessionId = sessionManager['get']('sessionId');
       const storageKey = sessionManager['getSessionStorageKey']();
-      const stored = storageManager.getSessionItem(storageKey);
+      const stored = storageManager.getItem(storageKey);
 
       expect(stored).not.toBeNull();
 
@@ -129,7 +129,7 @@ describe('Session Lifecycle Integration', () => {
       await sessionManager.startTracking();
 
       const storageKey = sessionManager['getSessionStorageKey']();
-      const stored = storageManager.getSessionItem(storageKey);
+      const stored = storageManager.getItem(storageKey);
       const parsed = JSON.parse(stored!);
 
       // lastActivity should be updated to now
@@ -207,7 +207,7 @@ describe('Session Lifecycle Integration', () => {
 
       await sessionManager.stopTracking();
 
-      const stored = storageManager.getSessionItem(storageKey);
+      const stored = storageManager.getItem(storageKey);
       expect(stored).toBeNull();
     });
 
@@ -269,7 +269,7 @@ describe('Session Lifecycle Integration', () => {
       const storageKey = sessionManager['getSessionStorageKey']();
 
       // Get initial lastActivity
-      const initial = JSON.parse(storageManager.getSessionItem(storageKey)!);
+      const initial = JSON.parse(storageManager.getItem(storageKey)!);
       const initialActivity = initial.lastActivity;
 
       // Advance time
@@ -282,7 +282,7 @@ describe('Session Lifecycle Integration', () => {
       vi.advanceTimersByTime(100);
 
       // Get updated lastActivity
-      const updated = JSON.parse(storageManager.getSessionItem(storageKey)!);
+      const updated = JSON.parse(storageManager.getItem(storageKey)!);
       const updatedActivity = updated.lastActivity;
 
       expect(updatedActivity).toBeGreaterThan(initialActivity);

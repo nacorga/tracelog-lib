@@ -83,13 +83,10 @@ describe('Integration - Session start deduplication', () => {
     expect(firstEvents).toHaveLength(1);
 
     // Get existing session and mark it as expired
-    const storedSession = storageManager.getSessionItem(`tlog:test-project:session`);
+    const storedSession = storageManager.getItem(`tlog:test-project:session`);
     const session = JSON.parse(storedSession || '{}');
     const expiredTimestamp = Date.now() - (DEFAULT_SESSION_TIMEOUT + 1000);
-    storageManager.setSessionItem(
-      `tlog:test-project:session`,
-      JSON.stringify({ ...session, lastActivity: expiredTimestamp }),
-    );
+    storageManager.setItem(`tlog:test-project:session`, JSON.stringify({ ...session, lastActivity: expiredTimestamp }));
 
     sessionManager.destroy();
 
