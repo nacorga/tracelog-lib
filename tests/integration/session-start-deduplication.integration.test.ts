@@ -38,9 +38,6 @@ describe('Integration - Session start deduplication', () => {
     storageManager = new StorageManager();
     eventManager = new StubEventManager();
     sessionManager = new SessionManager(storageManager, eventManager as any, 'test-project');
-
-    eventManager['set']('config', { id: 'test-project' });
-    sessionManager['set']('config', { id: 'test-project', sessionTimeout: 30000 });
   });
 
   afterEach(() => {
@@ -66,7 +63,6 @@ describe('Integration - Session start deduplication', () => {
     sessionManager.destroy();
 
     const newSessionManager = new SessionManager(storageManager, eventManager as any, 'test-project');
-    newSessionManager['set']('config', { id: 'test-project', sessionTimeout: 30000 });
 
     eventManager.clearTrackedEvents();
 
@@ -79,20 +75,25 @@ describe('Integration - Session start deduplication', () => {
   });
 
   test('should emit new session_start after session expires', async () => {
-    const sessionTimeout = 10000;
-    sessionManager['set']('config', { id: 'test-project', sessionTimeout });
+    const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 
     await sessionManager.startTracking();
 
     const firstEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);
     expect(firstEvents).toHaveLength(1);
 
+    // Get existing session and mark it as expired
+    const storedSession = storageManager.getSessionItem(`tlog:test-project:session`);
+    const session = JSON.parse(storedSession || '{}');
+    const expiredTimestamp = Date.now() - (DEFAULT_SESSION_TIMEOUT + 1000);
+    storageManager.setSessionItem(
+      `tlog:test-project:session`,
+      JSON.stringify({ ...session, lastActivity: expiredTimestamp }),
+    );
+
     sessionManager.destroy();
 
-    vi.advanceTimersByTime(sessionTimeout + 1000);
-
     const newSessionManager = new SessionManager(storageManager, eventManager as any, 'test-project');
-    newSessionManager['set']('config', { id: 'test-project', sessionTimeout });
 
     eventManager.clearTrackedEvents();
 
@@ -105,9 +106,6 @@ describe('Integration - Session start deduplication', () => {
   });
 
   test('should work correctly regardless of URL exclusions', async () => {
-    eventManager['set']('config', { id: 'test-project', excludedUrlPaths: ['/admin'] });
-    sessionManager['set']('config', { id: 'test-project', excludedUrlPaths: ['/admin'], sessionTimeout: 30000 });
-
     await sessionManager.startTracking();
 
     const sessionStartEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);

@@ -39,7 +39,7 @@ describe('SessionManager - Single session_start per session', () => {
   });
 
   test('should emit session_start only once for new session', async () => {
-    mockStorage.getItem = vi.fn(() => null);
+    mockStorage.getSessionItem = vi.fn(() => null);
 
     await sessionManager.startTracking();
 
@@ -55,7 +55,7 @@ describe('SessionManager - Single session_start per session', () => {
       lastActivity: Date.now() - 5000,
     });
 
-    mockStorage.getItem = vi.fn().mockReturnValueOnce(storedSessionData);
+    mockStorage.getSessionItem = vi.fn().mockReturnValueOnce(storedSessionData);
 
     await sessionManager.startTracking();
 
@@ -68,7 +68,7 @@ describe('SessionManager - Single session_start per session', () => {
       lastActivity: Date.now() - DEFAULT_SESSION_TIMEOUT - 1000,
     });
 
-    mockStorage.getItem = vi.fn().mockReturnValueOnce(expiredSessionData);
+    mockStorage.getSessionItem = vi.fn().mockReturnValueOnce(expiredSessionData);
 
     await sessionManager.startTracking();
 

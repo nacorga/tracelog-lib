@@ -1,9 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SpecialProjectId, type AppConfig } from '@/types';
+import { type Config } from '@/types';
 import { navigateToPlayground, ensureTraceLogBridge } from './utils/environment.utils';
 
-const initTraceLog = async (page: Page, config: AppConfig) => {
-  return page.evaluate(async (projectConfig: AppConfig) => {
+const initTraceLog = async (page: Page, config: Config) => {
+  return page.evaluate(async (projectConfig: Config) => {
     const traceLog = window.__traceLogBridge!;
     await traceLog.init(projectConfig);
     const normalizedConfig = traceLog.get('config');
@@ -18,23 +18,22 @@ test.describe('Config Normalization', () => {
     await ensureTraceLogBridge(page);
 
     // samplingRate: 0 is valid (means "don't sample any events")
-    const config = await initTraceLog(page, { id: SpecialProjectId.Skip, samplingRate: 0 });
+    const config = await initTraceLog(page, { samplingRate: 0 });
 
     expect(config?.samplingRate).toBe(0); // Should preserve 0 as it's valid
   });
 
-  test('preserves custom exclusions after normalization', async ({ page }) => {
+  test('preserves custom session timeout after normalization', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
     await ensureTraceLogBridge(page);
 
-    const exclusions = ['#/blocked'];
+    const customTimeout = 600000; // 10 minutes
     const config = await initTraceLog(page, {
-      id: SpecialProjectId.Skip,
-      samplingRate: 0.5, // Use valid rate
-      excludedUrlPaths: exclusions,
+      samplingRate: 0.5,
+      sessionTimeout: customTimeout,
     });
 
-    expect(config?.excludedUrlPaths).toEqual(exclusions);
+    expect(config?.sessionTimeout).toBe(customTimeout);
     expect(config?.samplingRate).toBe(0.5);
   });
 });

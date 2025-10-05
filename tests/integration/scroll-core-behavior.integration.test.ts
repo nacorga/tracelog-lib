@@ -27,7 +27,6 @@ describe('ScrollHandler Integration - Core Behavior', () => {
 
     app = new App();
     await app.init({
-      id: 'skip',
       scrollContainerSelectors: '#scroll-container',
     });
 
@@ -53,7 +52,6 @@ describe('ScrollHandler Integration - Core Behavior', () => {
 
     app = new App();
     await app.init({
-      id: 'skip',
       scrollContainerSelectors: ['#container-1', '#container-2'],
     });
 
@@ -71,7 +69,6 @@ describe('ScrollHandler Integration - Core Behavior', () => {
 
     app = new App();
     await app.init({
-      id: 'skip',
       scrollContainerSelectors: '#container',
     });
 

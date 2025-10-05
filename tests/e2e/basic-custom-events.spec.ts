@@ -15,7 +15,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -62,7 +62,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -114,7 +114,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -165,7 +165,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };

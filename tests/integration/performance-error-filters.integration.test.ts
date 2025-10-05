@@ -24,10 +24,10 @@ describe('Integration: performance and error filters', () => {
 
   beforeEach(() => {
     resetGlobalState();
+    config = { errorSampling: 1 }; // v0.6.0: initialize config
     manager = new StubEventManager();
     performance = new PerformanceHandler(manager);
     errorHandler = new ErrorHandler(manager);
-    config = { id: 'test', errorSampling: 1 };
     performance['set']('config', config);
     errorHandler['set']('config', config);
   });

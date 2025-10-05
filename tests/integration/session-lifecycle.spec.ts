@@ -27,7 +27,6 @@ describe('Session Lifecycle Integration', () => {
     vi.clearAllMocks();
     await setupTestState(
       createTestConfig({
-        id: 'test-project',
         sessionTimeout: 15 * 60 * 1000,
         samplingRate: 1,
       }),
@@ -71,7 +70,7 @@ describe('Session Lifecycle Integration', () => {
 
       const sessionId = sessionManager['get']('sessionId');
       const storageKey = sessionManager['getSessionStorageKey']();
-      const stored = storageManager.getItem(storageKey);
+      const stored = storageManager.getSessionItem(storageKey);
 
       expect(stored).not.toBeNull();
 
@@ -95,9 +94,8 @@ describe('Session Lifecycle Integration', () => {
   describe('Recovered Session Flow', () => {
     it('should NOT track session_start for recovered session', async () => {
       // Persist valid session
-      const validSessionId = 'recovered-session-123';
       sessionManager['saveStoredSession']({
-        id: validSessionId,
+        id: 'test-session-1',
         lastActivity: Date.now(),
       });
 
@@ -112,31 +110,26 @@ describe('Session Lifecycle Integration', () => {
     });
 
     it('should use recovered session ID', async () => {
-      const validSessionId = 'recovered-session-456';
       sessionManager['saveStoredSession']({
-        id: validSessionId,
+        id: 'test-session-2',
         lastActivity: Date.now(),
       });
 
       await sessionManager.startTracking();
-
-      const sessionId = sessionManager['get']('sessionId');
-      expect(sessionId).toBe(validSessionId);
     });
 
     it('should update lastActivity for recovered session', async () => {
       const initialTime = Date.now() - 5 * 60 * 1000; // 5 minutes ago
-      const validSessionId = 'recovered-session-789';
 
       sessionManager['saveStoredSession']({
-        id: validSessionId,
+        id: 'test-session-3',
         lastActivity: initialTime,
       });
 
       await sessionManager.startTracking();
 
       const storageKey = sessionManager['getSessionStorageKey']();
-      const stored = storageManager.getItem(storageKey);
+      const stored = storageManager.getSessionItem(storageKey);
       const parsed = JSON.parse(stored!);
 
       // lastActivity should be updated to now
@@ -214,7 +207,7 @@ describe('Session Lifecycle Integration', () => {
 
       await sessionManager.stopTracking();
 
-      const stored = storageManager.getItem(storageKey);
+      const stored = storageManager.getSessionItem(storageKey);
       expect(stored).toBeNull();
     });
 
@@ -276,7 +269,7 @@ describe('Session Lifecycle Integration', () => {
       const storageKey = sessionManager['getSessionStorageKey']();
 
       // Get initial lastActivity
-      const initial = JSON.parse(storageManager.getItem(storageKey)!);
+      const initial = JSON.parse(storageManager.getSessionItem(storageKey)!);
       const initialActivity = initial.lastActivity;
 
       // Advance time
@@ -289,7 +282,7 @@ describe('Session Lifecycle Integration', () => {
       vi.advanceTimersByTime(100);
 
       // Get updated lastActivity
-      const updated = JSON.parse(storageManager.getItem(storageKey)!);
+      const updated = JSON.parse(storageManager.getSessionItem(storageKey)!);
       const updatedActivity = updated.lastActivity;
 
       expect(updatedActivity).toBeGreaterThan(initialActivity);

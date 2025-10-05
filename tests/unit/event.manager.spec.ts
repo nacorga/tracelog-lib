@@ -25,7 +25,6 @@ describe('EventManager', () => {
     vi.clearAllMocks();
     await setupTestState(
       createTestConfig({
-        id: 'test-project',
         samplingRate: 1,
       }),
     );
@@ -128,7 +127,6 @@ describe('EventManager', () => {
       // Reconfigure with different sampling rate
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           samplingRate: 0.5,
         }),
       );
@@ -156,7 +154,6 @@ describe('EventManager', () => {
       // Reconfigure with sampling rate 0
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           samplingRate: 0,
         }),
       );
@@ -193,7 +190,6 @@ describe('EventManager', () => {
       // Reconfigure with sampling rate 0
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           samplingRate: 0, // Sample nothing
         }),
       );
@@ -206,87 +202,6 @@ describe('EventManager', () => {
       });
 
       // Should be tracked despite 0 sampling rate
-      expect(eventManager.getQueueLength()).toBe(1);
-    });
-  });
-
-  describe('URL Exclusions', () => {
-    it('should exclude events on excluded URL paths', async () => {
-      await setupTestState(
-        createTestConfig({
-          id: 'test-project',
-          samplingRate: 1,
-          excludedUrlPaths: ['/admin', '*/settings/*'],
-        }),
-      );
-
-      // Recreate EventManager to pick up new config
-      const tempStorageManager = new StorageManager();
-      const tempEventManager = new EventManager(tempStorageManager);
-
-      // Set pageUrl to match exclusion pattern
-      tempEventManager['set']('pageUrl', 'https://example.com/admin');
-
-      tempEventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: { name: 'admin_event' },
-      });
-
-      // Should be excluded
-      expect(tempEventManager.getQueueLength()).toBe(0);
-    });
-
-    it('should NOT exclude events on allowed URLs', async () => {
-      await setupTestState(
-        createTestConfig({
-          id: 'test-project',
-          samplingRate: 1,
-          excludedUrlPaths: ['*/admin'],
-        }),
-      );
-
-      eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: { name: 'dashboard_event' },
-      });
-
-      // Should NOT be excluded
-      expect(eventManager.getQueueLength()).toBe(1);
-    });
-
-    it('should always track session_start even on excluded URLs', async () => {
-      await setupTestState(
-        createTestConfig({
-          id: 'test-project',
-          samplingRate: 1,
-          excludedUrlPaths: ['*/admin'],
-        }),
-      );
-
-      eventManager.track({
-        type: EventType.SESSION_START,
-      });
-
-      // Session start should bypass exclusion
-      expect(eventManager.getQueueLength()).toBe(1);
-    });
-
-    it('should track session_end on excluded URL if session was started', async () => {
-      await setupTestState(
-        createTestConfig({
-          id: 'test-project',
-          samplingRate: 1,
-          excludedUrlPaths: ['*/admin'],
-        }),
-      );
-
-      // Note: hasStartSession would need to be tracked by EventManager internally
-      eventManager.track({
-        type: EventType.SESSION_END,
-        session_end_reason: 'manual_stop',
-      });
-
-      // Session end should be tracked
       expect(eventManager.getQueueLength()).toBe(1);
     });
   });
@@ -321,44 +236,6 @@ describe('EventManager', () => {
     });
   });
 
-  describe('IP Exclusion', () => {
-    it('should exclude all events when IP is excluded', async () => {
-      await setupTestState(
-        createTestConfig({
-          id: 'test-project',
-          samplingRate: 1,
-          ipExcluded: true,
-        }),
-      );
-
-      eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: { name: 'test_event' },
-      });
-
-      // Should be excluded
-      expect(eventManager.getQueueLength()).toBe(0);
-    });
-
-    it('should track events when IP is not excluded', async () => {
-      await setupTestState(
-        createTestConfig({
-          id: 'test-project',
-          samplingRate: 1,
-          ipExcluded: false,
-        }),
-      );
-
-      eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: { name: 'test_event' },
-      });
-
-      // Should be tracked
-      expect(eventManager.getQueueLength()).toBe(1);
-    });
-  });
-
   describe('Session Start Deduplication', () => {
     it('should track only one session_start per session', () => {
       // First session_start
@@ -381,7 +258,6 @@ describe('EventManager', () => {
       // Setup state but explicitly clear sessionId to test the validation
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           samplingRate: 1,
         }),
       );

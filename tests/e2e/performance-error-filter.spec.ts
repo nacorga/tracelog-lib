@@ -31,7 +31,7 @@ test.describe('Performance & Error Filters', () => {
       });
 
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
       } catch (error) {
         return { success: false, error: (error as Error).message };
       }

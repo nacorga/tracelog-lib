@@ -107,22 +107,6 @@ describe('SessionHandler', () => {
       expect(mockSessionManager.startTracking).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw error when config is not available', async () => {
-      vi.spyOn(sessionHandler as any, 'get').mockReturnValue(null);
-
-      await expect(sessionHandler.startTracking()).rejects.toThrow(
-        'Cannot start session tracking: config not available',
-      );
-    });
-
-    it('should throw error when config id is missing', async () => {
-      vi.spyOn(sessionHandler as any, 'get').mockReturnValue({});
-
-      await expect(sessionHandler.startTracking()).rejects.toThrow(
-        'Cannot start session tracking: config not available',
-      );
-    });
-
     it('should not start tracking when handler is destroyed', async () => {
       (sessionHandler as any).destroyed = true;
 

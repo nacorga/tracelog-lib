@@ -21,7 +21,6 @@ test.describe('Dynamic Scroll Containers', () => {
       const events: any[] = [];
 
       await window.__traceLogBridge!.init({
-        id: 'skip',
         scrollContainerSelectors: '.delayed',
       });
 
@@ -68,7 +67,6 @@ test.describe('Dynamic Scroll Containers', () => {
       const events: any[] = [];
 
       await window.__traceLogBridge!.init({
-        id: 'skip',
         scrollContainerSelectors: '.never-exists',
       });
 
