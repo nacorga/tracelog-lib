@@ -334,7 +334,7 @@ export class EventManager extends StateManager {
 
   private handleGoogleAnalyticsIntegration(event: EventData): void {
     if (this.googleAnalytics && event.type === EventType.CUSTOM && event.custom_event) {
-      if (this.get('config')?.mode === Mode.QA) {
+      if (this.get('mode') === Mode.QA) {
         return;
       }
 

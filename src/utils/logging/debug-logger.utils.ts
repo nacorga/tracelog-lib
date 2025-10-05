@@ -13,7 +13,7 @@ class DebugLogger {
   verbose = (ns: string, msg: string, data?: unknown): void => this.log('VERBOSE', ns, msg, data);
 
   private log(level: LogLevel, ns: string, msg: string, data?: unknown): void {
-    const mode = getGlobalState()?.config?.mode;
+    const mode = getGlobalState()?.mode;
 
     if (!this.shouldShow(level, mode)) return;
 

@@ -1,5 +1,4 @@
 import { MetadataType } from './common.types';
-import { Mode } from './mode.types';
 
 export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */
@@ -14,8 +13,6 @@ export interface Config {
   sensitiveQueryParams?: string[];
   /** Error event sampling rate between 0 and 1. */
   errorSampling?: number;
-  /** Logging mode controlling verbosity of client logs. */
-  mode?: Mode;
   /** Event sampling rate between 0 and 1. */
   samplingRate?: number;
   /** Optional configuration for third-party integrations. */

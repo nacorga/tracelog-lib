@@ -128,12 +128,12 @@ export class SessionManager extends StateManager {
 
   private clearStoredSession(): void {
     const storageKey = this.getSessionStorageKey();
-    this.storageManager.removeItem(storageKey);
+    this.storageManager.removeSessionItem(storageKey);
   }
 
   private loadStoredSession(): StoredSessionData | null {
     const storageKey = this.getSessionStorageKey();
-    const storedData = this.storageManager.getItem(storageKey);
+    const storedData = this.storageManager.getSessionItem(storageKey);
 
     if (!storedData) {
       return null;
@@ -146,14 +146,14 @@ export class SessionManager extends StateManager {
       }
       return parsed;
     } catch {
-      this.storageManager.removeItem(storageKey);
+      this.storageManager.removeSessionItem(storageKey);
       return null;
     }
   }
 
   private saveStoredSession(session: StoredSessionData): void {
     const storageKey = this.getSessionStorageKey();
-    this.storageManager.setItem(storageKey, JSON.stringify(session));
+    this.storageManager.setSessionItem(storageKey, JSON.stringify(session));
   }
 
   private getSessionStorageKey(): string {

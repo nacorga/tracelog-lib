@@ -5,9 +5,9 @@ import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { Config, EventType, EmitterCallback, EmitterMap } from './types';
+import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter, getApiUrl } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter, getApiUrl, detectQaMode } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -75,10 +75,10 @@ export class App extends StateManager {
     const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
 
     if (!valid) {
-      const config = this.get('config');
-      if (config?.mode === 'qa' || config?.mode === 'debug') {
+      if (this.get('mode') === Mode.QA) {
         throw new Error(`Custom event "${name}" validation failed: ${error}`);
       }
+
       return;
     }
 
@@ -151,6 +151,12 @@ export class App extends StateManager {
 
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);
+
+    const mode = detectQaMode() ? Mode.QA : undefined;
+
+    if (mode) {
+      this.set('mode', mode);
+    }
   }
 
   private async setupIntegrations(): Promise<void> {

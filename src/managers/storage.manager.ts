@@ -1,21 +1,27 @@
 import { debugLog } from '../utils/logging/debug-logger.utils';
 
 /**
- * Manages localStorage with automatic fallback to in-memory storage.
+ * Manages localStorage and sessionStorage with automatic fallback to in-memory storage.
  * Provides a consistent interface for storing session data, configuration,
  * and analytics metadata across browser environments.
  */
 export class StorageManager {
   private readonly storage: Storage | null;
+  private readonly sessionStorageRef: Storage | null;
   private readonly fallbackStorage = new Map<string, string>();
+  private readonly fallbackSessionStorage = new Map<string, string>();
 
   private hasQuotaExceededError = false;
 
   constructor() {
-    this.storage = this.initializeStorage();
+    this.storage = this.initializeStorage('localStorage');
+    this.sessionStorageRef = this.initializeStorage('sessionStorage');
 
     if (!this.storage) {
       debugLog.warn('StorageManager', 'localStorage not available, using memory fallback');
+    }
+    if (!this.sessionStorageRef) {
+      debugLog.warn('StorageManager', 'sessionStorage not available, using memory fallback');
     }
   }
 
@@ -121,15 +127,15 @@ export class StorageManager {
   }
 
   /**
-   * Initialize localStorage with feature detection
+   * Initialize storage (localStorage or sessionStorage) with feature detection
    */
-  private initializeStorage(): Storage | null {
+  private initializeStorage(type: 'localStorage' | 'sessionStorage'): Storage | null {
     if (typeof window === 'undefined') {
       return null;
     }
 
     try {
-      const storage = window.localStorage;
+      const storage = type === 'localStorage' ? window.localStorage : window.sessionStorage;
       const testKey = '__tracelog_test__';
 
       storage.setItem(testKey, 'test');
@@ -139,5 +145,60 @@ export class StorageManager {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Retrieves an item from sessionStorage
+   */
+  getSessionItem(key: string): string | null {
+    try {
+      if (this.sessionStorageRef) {
+        return this.sessionStorageRef.getItem(key);
+      }
+      return this.fallbackSessionStorage.get(key) ?? null;
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Failed to get session item, using fallback', { key, error });
+      return this.fallbackSessionStorage.get(key) ?? null;
+    }
+  }
+
+  /**
+   * Stores an item in sessionStorage
+   */
+  setSessionItem(key: string, value: string): void {
+    try {
+      if (this.sessionStorageRef) {
+        this.sessionStorageRef.setItem(key, value);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        debugLog.error('StorageManager', 'sessionStorage quota exceeded - data will not persist', {
+          key,
+          valueSize: value.length,
+        });
+      } else {
+        debugLog.warn('StorageManager', 'Failed to set session item, using fallback', { key, error });
+      }
+    }
+
+    // Always update fallback for consistency
+    this.fallbackSessionStorage.set(key, value);
+  }
+
+  /**
+   * Removes an item from sessionStorage
+   */
+  removeSessionItem(key: string): void {
+    try {
+      if (this.sessionStorageRef) {
+        this.sessionStorageRef.removeItem(key);
+      }
+    } catch (error) {
+      debugLog.warn('StorageManager', 'Failed to remove session item', { key, error });
+    }
+
+    // Always clean fallback
+    this.fallbackSessionStorage.delete(key);
   }
 }
