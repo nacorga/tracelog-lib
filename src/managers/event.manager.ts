@@ -4,7 +4,7 @@ import {
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants/config.constants';
 import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
-import { getUTMParameters, isUrlPathExcluded, debugLog, Emitter } from '../utils';
+import { getUTMParameters, debugLog, Emitter } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -83,10 +83,6 @@ export class EventManager extends StateManager {
       error_data,
       session_end_reason,
     });
-
-    if (this.isEventExcluded(payload)) {
-      return;
-    }
 
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
@@ -253,20 +249,6 @@ export class EventManager extends StateManager {
     };
 
     return payload;
-  }
-
-  private isEventExcluded(event: EventData): boolean {
-    const config = this.get('config');
-    const isRouteExcluded = isUrlPathExcluded(event.page_url, config?.excludedUrlPaths ?? []);
-    const hasStartSession = this.get('hasStartSession');
-    const isSessionEndEvent = event.type === EventType.SESSION_END;
-    const isSessionStartEvent = event.type === EventType.SESSION_START;
-
-    if (isRouteExcluded && !isSessionStartEvent && !(isSessionEndEvent && hasStartSession)) {
-      return true;
-    }
-
-    return false;
   }
 
   private isDuplicateEvent(event: EventData): boolean {

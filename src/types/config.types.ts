@@ -18,8 +18,6 @@ export interface Config {
   mode?: Mode;
   /** Event sampling rate between 0 and 1. */
   samplingRate?: number;
-  /** URL path patterns that should be ignored by tracking. */
-  excludedUrlPaths?: string[];
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */
