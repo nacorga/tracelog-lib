@@ -331,7 +331,7 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    return !this.get('config').integrations?.custom?.apiUrl;
+    return !this.get('apiUrl');
   }
 
   private async simulateSuccessfulSend(): Promise<boolean> {
