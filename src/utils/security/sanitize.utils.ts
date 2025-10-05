@@ -67,36 +67,6 @@ export const sanitizeString = (value: string): string => {
 };
 
 /**
- * Sanitizes a path string for route exclusion checks
- * @param value - The path string to sanitize
- * @returns The sanitized path string
- */
-export const sanitizePathString = (value: string): string => {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  if (value.length > MAX_STRING_LENGTH) {
-    value = value.slice(0, Math.max(0, MAX_STRING_LENGTH));
-  }
-
-  let sanitized = value;
-
-  for (const pattern of XSS_PATTERNS) {
-    sanitized = sanitized.replace(pattern, '');
-  }
-
-  sanitized = sanitized
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#x27;');
-
-  return sanitized.trim();
-};
-
-/**
  * Sanitizes any value recursively with depth protection
  * @param value - The value to sanitize
  * @param depth - Current recursion depth

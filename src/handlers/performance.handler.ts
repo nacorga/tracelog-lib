@@ -1,6 +1,6 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { EventType, WebVitalType, VitalSample } from '../types';
+import { EventType, WebVitalType } from '../types';
 import { LONG_TASK_THROTTLE_MS, PRECISION_TWO_DECIMALS } from '../constants';
 import { WEB_VITALS_THRESHOLDS } from '../constants/performance.constants';
 import { debugLog } from '../utils/logging';
@@ -133,7 +133,7 @@ export class PerformanceHandler extends StateManager {
       const { onLCP, onCLS, onFCP, onTTFB, onINP } = await import('web-vitals');
 
       const report =
-        (type: VitalSample['type']) =>
+        (type: WebVitalType) =>
         (metric: { value: number }): void => {
           const value = Number(metric.value.toFixed(PRECISION_TWO_DECIMALS));
           this.sendVital({ type, value });
@@ -199,7 +199,7 @@ export class PerformanceHandler extends StateManager {
     );
   }
 
-  private sendVital(sample: VitalSample): void {
+  private sendVital(sample: { type: WebVitalType; value: number }): void {
     if (!this.shouldSendVital(sample.type, sample.value)) {
       return;
     }

@@ -1,6 +1,23 @@
-import { isValidUrl } from '../validations';
 import { debugLog } from '../logging';
 import { Config } from '@/types';
+
+/**
+ * Validates if a URL is valid and optionally allows HTTP URLs
+ * @param url - The URL to validate
+ * @param allowHttp - Whether to allow HTTP URLs (default: false)
+ * @returns True if the URL is valid, false otherwise
+ */
+const isValidUrl = (url: string, allowHttp = false): boolean => {
+  try {
+    const parsed = new URL(url);
+    const isHttps = parsed.protocol === 'https:';
+    const isHttp = parsed.protocol === 'http:';
+
+    return isHttps || (allowHttp && isHttp);
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Generates an API URL based on project ID and current domain

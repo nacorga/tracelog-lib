@@ -26,7 +26,9 @@ export class SessionHandler extends StateManager {
       return;
     }
 
-    const projectId = this.get('config')?.id;
+    const config = this.get('config');
+    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.apiUrl ?? 'default';
+
     if (!projectId) {
       throw new Error('Cannot start session tracking: config not available');
     }
