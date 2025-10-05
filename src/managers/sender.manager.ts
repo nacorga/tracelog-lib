@@ -1,5 +1,5 @@
 import { QUEUE_KEY, EVENT_EXPIRY_HOURS, MAX_RETRIES, RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '../constants';
-import { PersistedQueueData, BaseEventsQueueDto, SpecialProjectId } from '../types';
+import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl } from '../types';
 import { debugLog } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -21,22 +21,24 @@ export class SenderManager extends StateManager {
   }
 
   private getQueueStorageKey(): string {
-    const projectId = this.get('config')?.id || 'default';
     const userId = this.get('userId') || 'anonymous';
-    return `${QUEUE_KEY(projectId)}:${userId}`;
+    return QUEUE_KEY(userId);
   }
 
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
     if (this.shouldSkipSend()) {
       this.resetRetryState();
+
       return true;
     }
 
     const config = this.get('config');
-    if (config?.id === SpecialProjectId.Fail) {
+
+    if (config?.integrations?.custom?.apiUrl === SpecialApiUrl.Fail) {
       debugLog.warn('SenderManager', 'Fail mode: simulating network failure (sync)', {
         events: body.events.length,
       });
+
       return false;
     }
 
@@ -51,6 +53,7 @@ export class SenderManager extends StateManager {
 
   async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
     const persisted = this.persistEvents(body);
+
     if (!persisted && !this.shouldSkipSend()) {
       debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
     }
@@ -114,10 +117,11 @@ export class SenderManager extends StateManager {
     }
 
     const config = this.get('config');
-    if (config?.id === SpecialProjectId.Fail) {
+    if (config?.integrations?.custom?.apiUrl === SpecialApiUrl.Fail) {
       debugLog.warn('SenderManager', 'Fail mode: simulating network failure', {
         events: body.events.length,
       });
+
       return false;
     }
 
@@ -143,19 +147,17 @@ export class SenderManager extends StateManager {
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    const config = this.get('config');
 
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-TraceLog-Project': config?.id || 'unknown',
-        },
         body: payload,
         keepalive: true,
         credentials: 'include',
         signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
@@ -329,10 +331,7 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    const config = this.get('config');
-    const { id } = config || {};
-
-    return id === SpecialProjectId.Skip;
+    return this.get('config').integrations?.custom?.apiUrl === SpecialApiUrl.Skip;
   }
 
   private async simulateSuccessfulSend(): Promise<boolean> {

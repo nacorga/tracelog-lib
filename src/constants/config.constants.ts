@@ -3,8 +3,6 @@
  * This file centralizes all timing, limits, browser, and initialization constants
  */
 
-import { ApiConfig } from '../types';
-
 // ============================================================================
 // SESSION & TIMING
 // ============================================================================
@@ -166,15 +164,6 @@ export const MAX_RETRY_ATTEMPTS = 10;
 // ============================================================================
 // VALIDATION
 // ============================================================================
-
-// Allowed API config keys for runtime validation
-export const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>([
-  'mode',
-  'tags',
-  'samplingRate',
-  'excludedUrlPaths',
-  'ipExcluded',
-]);
 
 // Validation error messages - standardized across all layers
 export const VALIDATION_MESSAGES = {

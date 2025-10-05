@@ -1,11 +1,5 @@
-import {
-  ALLOWED_API_CONFIG_KEYS,
-  MAX_ARRAY_LENGTH,
-  MAX_OBJECT_DEPTH,
-  MAX_STRING_LENGTH,
-  XSS_PATTERNS,
-} from '../../constants';
-import { MetadataType, ApiConfig } from '../../types';
+import { MAX_ARRAY_LENGTH, MAX_OBJECT_DEPTH, MAX_STRING_LENGTH, XSS_PATTERNS } from '../../constants';
+import { MetadataType } from '../../types';
 import { debugLog } from '../logging';
 
 /**
@@ -207,99 +201,17 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 };
 
 /**
- * Sanitizes API configuration data with strict validation
- * @param data - The API config data to sanitize
- * @returns The sanitized API config
- */
-export const sanitizeApiConfig = (data: unknown): ApiConfig => {
-  debugLog.debug('Sanitize', 'Starting API config sanitization');
-  const safeData: Record<string, unknown> = {};
-
-  if (typeof data !== 'object' || data === null) {
-    debugLog.warn('Sanitize', 'API config data is not an object', { data, type: typeof data });
-    return safeData;
-  }
-
-  try {
-    const originalKeys = Object.keys(data);
-    let processedKeys = 0;
-    let filteredKeys = 0;
-
-    for (const key of originalKeys) {
-      if (ALLOWED_API_CONFIG_KEYS.has(key as keyof ApiConfig)) {
-        const value = (data as Record<string, unknown>)[key];
-
-        if (key === 'excludedUrlPaths') {
-          const paths: string[] = Array.isArray(value) ? (value as string[]) : typeof value === 'string' ? [value] : [];
-          const originalPathsCount = paths.length;
-
-          safeData.excludedUrlPaths = paths.map((path) => sanitizePathString(String(path))).filter(Boolean);
-
-          const filteredPathsCount = originalPathsCount - (safeData.excludedUrlPaths as string[]).length;
-          if (filteredPathsCount > 0) {
-            debugLog.warn('Sanitize', 'Some excluded URL paths were filtered during sanitization', {
-              originalCount: originalPathsCount,
-              filteredCount: filteredPathsCount,
-            });
-          }
-        } else if (key === 'tags') {
-          if (Array.isArray(value)) {
-            safeData.tags = value;
-            debugLog.debug('Sanitize', 'Tags processed', { count: value.length });
-          } else {
-            debugLog.warn('Sanitize', 'Tags value is not an array', { value, type: typeof value });
-          }
-        } else if (key === 'samplingRate') {
-          const sanitizedValue = sanitizeValue(value);
-
-          if (typeof sanitizedValue === 'number') {
-            safeData.samplingRate = sanitizedValue;
-          }
-        } else {
-          const sanitizedValue = sanitizeValue(value);
-
-          if (sanitizedValue !== null) {
-            safeData[key] = sanitizedValue;
-          } else {
-            debugLog.warn('Sanitize', 'API config value sanitized to null', { key, originalValue: value });
-          }
-        }
-        processedKeys++;
-      } else {
-        filteredKeys++;
-        debugLog.debug('Sanitize', 'API config key not allowed', { key });
-      }
-    }
-
-    debugLog.info('Sanitize', 'API config sanitization completed', {
-      originalKeys: originalKeys.length,
-      processedKeys,
-      filteredKeys,
-      finalKeys: Object.keys(safeData).length,
-    });
-  } catch (error) {
-    debugLog.error('Sanitize', 'API config sanitization failed', {
-      error: error instanceof Error ? error.message : error,
-    });
-    throw new Error(`API config sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-
-  return safeData;
-};
-
-/**
  * Sanitizes user metadata for custom events
  * @param metadata - The metadata to sanitize
  * @returns The sanitized metadata
  */
 export const sanitizeMetadata = (metadata: unknown): Record<string, MetadataType> => {
-  debugLog.debug('Sanitize', 'Starting metadata sanitization', { hasMetadata: metadata != null });
-
   if (typeof metadata !== 'object' || metadata === null) {
     debugLog.debug('Sanitize', 'Metadata is not an object, returning empty object', {
       metadata,
       type: typeof metadata,
     });
+
     return {};
   }
 

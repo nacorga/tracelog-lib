@@ -3,7 +3,7 @@ import {
   MAX_EVENTS_QUEUE_LENGTH,
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants/config.constants';
-import { BaseEventsQueueDto, EmitterEvent, EventData, EventType } from '../types';
+import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
 import { getUTMParameters, isUrlPathExcluded, debugLog, Emitter } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
@@ -252,11 +252,6 @@ export class EventManager extends StateManager {
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 
-    const projectTags = this.get('config')?.tags;
-    if (projectTags?.length) {
-      payload.tags = projectTags;
-    }
-
     return payload;
   }
 
@@ -271,7 +266,7 @@ export class EventManager extends StateManager {
       return true;
     }
 
-    return config?.ipExcluded === true;
+    return false;
   }
 
   private isDuplicateEvent(event: EventData): boolean {
@@ -357,9 +352,10 @@ export class EventManager extends StateManager {
 
   private handleGoogleAnalyticsIntegration(event: EventData): void {
     if (this.googleAnalytics && event.type === EventType.CUSTOM && event.custom_event) {
-      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+      if (this.get('config')?.mode === Mode.QA) {
         return;
       }
+
       this.googleAnalytics.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
     }
   }
