@@ -20,6 +20,58 @@
 
 
 
+
+## [0.6.0] - 2025-10-06
+
+### ✨ Features
+
+- Enhance event listener management with buffering for uninitialized states ([06e027f](../../commit/06e027f09813678792a0ff7aa32f8d6388b2b7fd))
+- Implement event buffering and flushing mechanism for uninitialized sessions ([ef2ef1b](../../commit/ef2ef1bd4085b73ed970382e5e97dff2934756c3))
+- Implement unique event ID generation for enhanced event tracking ([b4ac157](../../commit/b4ac1574c55befd83592dba788602976a725be82))
+
+### 🐛 Bug Fixes
+
+- Update QA mode URL parameter ([2623bb9](../../commit/2623bb99258a3a56f06f16fd5aed0f924e8be300))
+
+### 🧪 Tests
+
+- Session ID management by parameterizing storage key in cross-tab session sync tests ([d5ac293](../../commit/d5ac293424e4db76c64ec2ece0c1f00a28d4e694))
+- Integration tests for API emitters and app lifecycle ([1ef8bc0](../../commit/1ef8bc08c1580c153733f169703614ce1fe129ad))
+- Add comprehensive unit tests for public API, SenderManager edge cases, and Emitter utility ([858716e](../../commit/858716e815f3d3e1566f44399555e09b28008947))
+
+### ♻️ Refactoring
+
+- Update HTML data attributes and improve storage key management ([e885fe1](../../commit/e885fe1decbaffca24ea88b91258399644db26bf))
+- Optimize localStorage cleanup process for TraceLog data ([c2f45db](../../commit/c2f45dbab2ef20bc25e5a01b25e31bb94ddbd03c))
+- Enhance event tracking library with client-only architecture ([374f378](../../commit/374f378d7eed1c72e275f5ae408e41857d20bc15))
+- Add validation for nested objects in arrays and update type guard utilities ([2d72fed](../../commit/2d72fed61e01ff3d085da204e51f899a1c21e240))
+- Emit custom events in QA mode and update test cases for event capturing ([10384fa](../../commit/10384fab1f9b33090f925d27e197c0c408370b00))
+- Replace debug logging with unified log utility and enhance error messages throughout the codebase ([aa94683](../../commit/aa9468330f22104fcb1936e899eb24f6e3acd6de))
+- Update session management to use unified storage methods and improve event handling in SenderManager ([d017dbf](../../commit/d017dbf4976a2bd005e64458bc04d3c9bcf2f5c4))
+- Update TraceLog initialization to support local-only mode and remove project ID requirement ([9c29b8e](../../commit/9c29b8eacb965ef181545859f7b5a36ba411958f))
+- Simplify API URL handling in SenderManager ([f9fcdb0](../../commit/f9fcdb041a74bc5a5113acab89a0611d69146fbc))
+- Enhance session and storage management by implementing sessionStorage support and updating mode handling ([d8a4a9a](../../commit/d8a4a9a2242e06fd580af13efeb9fe2803a56623))
+- Remove excludedUrlPaths from Config ([c9e5390](../../commit/c9e5390fa20dace0bf1cb9172e35560e24513af6))
+- Remove unused types and constants, update exports in public API ([3c64d1c](../../commit/3c64d1cd2b31c9009372b66b4eb655f33dfce5f4))
+- Remove unused managers and update constants ([cf9263c](../../commit/cf9263cff2e865ace6e1a383421dc4fb02f7194e))
+- Update configuration handling by renaming AppConfig to Config and removing unused managers ([2683b78](../../commit/2683b78bac08633df7e343be3794b6d0a2f4ed93))
+
+### 🔧 Other Changes
+
+- Merge pull request #18 from nacorga/release/20251006.1 ([57499b4](../../commit/57499b439c60b7c81575a8aa8d4aa74e657a1ec6))
+- Merge pull request #17 from nacorga/feature/open-source ([c472313](../../commit/c4723136560bf7c90305d970a2612acf956cbfc6))
+- Remove AGENTS.md file containing project instructions and guidelines ([0c3d64e](../../commit/0c3d64eeb2230e7a065a9782b57ef38267af05a1))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.5...v0.6.0
+
+
 ## [0.5.5] - 2025-10-03
 
 ### 🔧 Other Changes
