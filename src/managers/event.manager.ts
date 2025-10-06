@@ -3,8 +3,8 @@ import {
   MAX_EVENTS_QUEUE_LENGTH,
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants/config.constants';
-import { BaseEventsQueueDto, EmitterEvent, EventData, EventType } from '../types';
-import { getUTMParameters, isUrlPathExcluded, debugLog, Emitter } from '../utils';
+import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
+import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -16,6 +16,7 @@ export class EventManager extends StateManager {
   private readonly emitter: Emitter | null;
 
   private eventsQueue: EventData[] = [];
+  private pendingEventsBuffer: Partial<EventData>[] = [];
   private lastEventFingerprint: string | null = null;
   private lastEventTime = 0;
   private sendIntervalId: number | null = null;
@@ -36,7 +37,7 @@ export class EventManager extends StateManager {
     await this.dataSender.recoverPersistedEvents({
       onSuccess: (_eventCount, recoveredEvents, body) => {
         if (recoveredEvents && recoveredEvents.length > 0) {
-          const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
+          const eventIds = recoveredEvents.map((e) => e.id);
           this.removeProcessedEvents(eventIds);
 
           if (body) {
@@ -45,7 +46,7 @@ export class EventManager extends StateManager {
         }
       },
       onFailure: async () => {
-        debugLog.warn('EventManager', 'Failed to recover persisted events');
+        log('warn', 'Failed to recover persisted events');
       },
     });
   }
@@ -62,7 +63,23 @@ export class EventManager extends StateManager {
     session_end_reason,
   }: Partial<EventData>): void {
     if (!type) {
-      debugLog.warn('EventManager', 'Event type is required');
+      log('warn', 'Event type is required');
+      return;
+    }
+
+    if (!this.get('sessionId')) {
+      this.pendingEventsBuffer.push({
+        type,
+        page_url,
+        from_page_url,
+        scroll_data,
+        click_data,
+        custom_event,
+        web_vitals,
+        error_data,
+        session_end_reason,
+      });
+
       return;
     }
 
@@ -84,10 +101,6 @@ export class EventManager extends StateManager {
       session_end_reason,
     });
 
-    if (this.isEventExcluded(payload)) {
-      return;
-    }
-
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
     }
@@ -95,13 +108,13 @@ export class EventManager extends StateManager {
     if (isSessionStart) {
       const currentSessionId = this.get('sessionId');
       if (!currentSessionId) {
-        debugLog.warn('EventManager', 'Session start event ignored: missing sessionId');
+        log('warn', 'Session start event ignored: missing sessionId');
         return;
       }
 
       if (this.get('hasStartSession')) {
-        debugLog.warn('EventManager', 'Duplicate session_start detected', {
-          sessionId: currentSessionId,
+        log('warn', 'Duplicate session_start detected', {
+          data: { sessionId: currentSessionId },
         });
         return;
       }
@@ -110,6 +123,17 @@ export class EventManager extends StateManager {
     }
 
     if (this.isDuplicateEvent(payload)) {
+      return;
+    }
+
+    if (this.get('mode') === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
+      console.log('[TraceLog] Event', {
+        name: custom_event.name,
+        ...(custom_event.metadata && { metadata: custom_event.metadata }),
+      });
+
+      this.emitEvent(payload);
+
       return;
     }
 
@@ -123,6 +147,7 @@ export class EventManager extends StateManager {
     }
 
     this.eventsQueue = [];
+    this.pendingEventsBuffer = [];
     this.lastEventFingerprint = null;
     this.lastEventTime = 0;
 
@@ -141,6 +166,25 @@ export class EventManager extends StateManager {
     return this.eventsQueue.length;
   }
 
+  flushPendingEvents(): void {
+    if (this.pendingEventsBuffer.length === 0) {
+      return;
+    }
+
+    if (!this.get('sessionId')) {
+      log('warn', 'Cannot flush pending events: session not initialized');
+      return;
+    }
+
+    const bufferedEvents = [...this.pendingEventsBuffer];
+
+    this.pendingEventsBuffer = [];
+
+    bufferedEvents.forEach((event) => {
+      this.track(event);
+    });
+  }
+
   private clearSendInterval(): void {
     if (this.sendIntervalId) {
       clearInterval(this.sendIntervalId);
@@ -155,7 +199,7 @@ export class EventManager extends StateManager {
 
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => `${e.timestamp}_${e.type}`);
+    const eventIds = eventsToSend.map((e) => e.id);
 
     if (isSync) {
       const success = this.dataSender.sendEventsQueueSync(body);
@@ -175,8 +219,8 @@ export class EventManager extends StateManager {
           this.emitEventsQueue(body);
         },
         onFailure: () => {
-          debugLog.warn('EventManager', 'Async flush failed', {
-            eventCount: eventsToSend.length,
+          log('warn', 'Async flush failed', {
+            data: { eventCount: eventsToSend.length },
           });
         },
       });
@@ -190,7 +234,7 @@ export class EventManager extends StateManager {
 
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => `${e.timestamp}_${e.type}`);
+    const eventIds = eventsToSend.map((e) => e.id);
 
     await this.dataSender.sendEventsQueue(body, {
       onSuccess: () => {
@@ -198,8 +242,8 @@ export class EventManager extends StateManager {
         this.emitEventsQueue(body);
       },
       onFailure: async () => {
-        debugLog.warn('EventManager', 'Events send failed, keeping in queue', {
-          eventCount: eventsToSend.length,
+        log('warn', 'Events send failed, keeping in queue', {
+          data: { eventCount: eventsToSend.length },
         });
       },
     });
@@ -238,6 +282,7 @@ export class EventManager extends StateManager {
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
 
     const payload: EventData = {
+      id: generateEventId(),
       type: data.type as EventType,
       page_url: currentPageUrl,
       timestamp: Date.now(),
@@ -252,26 +297,7 @@ export class EventManager extends StateManager {
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 
-    const projectTags = this.get('config')?.tags;
-    if (projectTags?.length) {
-      payload.tags = projectTags;
-    }
-
     return payload;
-  }
-
-  private isEventExcluded(event: EventData): boolean {
-    const config = this.get('config');
-    const isRouteExcluded = isUrlPathExcluded(event.page_url, config?.excludedUrlPaths ?? []);
-    const hasStartSession = this.get('hasStartSession');
-    const isSessionEndEvent = event.type === EventType.SESSION_END;
-    const isSessionStartEvent = event.type === EventType.SESSION_START;
-
-    if (isRouteExcluded && !isSessionStartEvent && !(isSessionEndEvent && hasStartSession)) {
-      return true;
-    }
-
-    return config?.ipExcluded === true;
   }
 
   private isDuplicateEvent(event: EventData): boolean {
@@ -332,11 +358,13 @@ export class EventManager extends StateManager {
       const removedEvent =
         nonCriticalIndex >= 0 ? this.eventsQueue.splice(nonCriticalIndex, 1)[0] : this.eventsQueue.shift();
 
-      debugLog.warn('EventManager', 'Event queue overflow, oldest non-critical event removed', {
-        maxLength: MAX_EVENTS_QUEUE_LENGTH,
-        currentLength: this.eventsQueue.length,
-        removedEventType: removedEvent?.type,
-        wasCritical: removedEvent?.type === EventType.SESSION_START || removedEvent?.type === EventType.SESSION_END,
+      log('warn', 'Event queue overflow, oldest non-critical event removed', {
+        data: {
+          maxLength: MAX_EVENTS_QUEUE_LENGTH,
+          currentLength: this.eventsQueue.length,
+          removedEventType: removedEvent?.type,
+          wasCritical: removedEvent?.type === EventType.SESSION_START || removedEvent?.type === EventType.SESSION_END,
+        },
       });
     }
 
@@ -357,9 +385,10 @@ export class EventManager extends StateManager {
 
   private handleGoogleAnalyticsIntegration(event: EventData): void {
     if (this.googleAnalytics && event.type === EventType.CUSTOM && event.custom_event) {
-      if (this.get('config')?.mode === 'qa' || this.get('config')?.mode === 'debug') {
+      if (this.get('mode') === Mode.QA) {
         return;
       }
+
       this.googleAnalytics.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
     }
   }
@@ -371,9 +400,9 @@ export class EventManager extends StateManager {
 
   private removeProcessedEvents(eventIds: string[]): void {
     const eventIdSet = new Set(eventIds);
+
     this.eventsQueue = this.eventsQueue.filter((event) => {
-      const eventId = `${event.timestamp}_${event.type}`;
-      return !eventIdSet.has(eventId);
+      return !eventIdSet.has(event.id);
     });
   }
 

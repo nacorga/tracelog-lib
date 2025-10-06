@@ -40,7 +40,7 @@ describe('SenderManager - Retry Race Condition', () => {
       user_id: 'user-123',
       session_id: 'session-456',
       device: DeviceType.Desktop,
-      events: [{ type: 'PAGE_VIEW' as any, page_url: '/test', timestamp: Date.now() }],
+      events: [{ id: 'test-1', type: 'PAGE_VIEW' as any, page_url: '/test', timestamp: Date.now() }],
     };
 
     // Mock fetch to always fail
@@ -69,6 +69,7 @@ describe('SenderManager - Retry Race Condition', () => {
       device: DeviceType.Desktop,
       events: [
         {
+          id: 'test-2',
           type: 'CLICK' as any,
           page_url: '/test',
           timestamp: Date.now(),
@@ -95,7 +96,7 @@ describe('SenderManager - Retry Race Condition', () => {
       user_id: 'user-123',
       session_id: 'session-456',
       device: DeviceType.Desktop,
-      events: [{ type: 'SESSION_START' as any, page_url: '/test', timestamp: Date.now() }],
+      events: [{ id: 'test-3', type: 'SESSION_START' as any, page_url: '/test', timestamp: Date.now() }],
     };
 
     // Mock successful send
@@ -122,7 +123,15 @@ describe('SenderManager - Retry Race Condition', () => {
       user_id: 'user-123',
       session_id: 'session-456',
       device: DeviceType.Desktop,
-      events: [{ type: 'CUSTOM' as any, page_url: '/test', timestamp: Date.now(), custom_event: { name: 'test' } }],
+      events: [
+        {
+          id: 'test-4',
+          type: 'CUSTOM' as any,
+          page_url: '/test',
+          timestamp: Date.now(),
+          custom_event: { name: 'test' },
+        },
+      ],
     };
 
     global.fetch = vi.fn().mockRejectedValue(new Error('Network failure'));

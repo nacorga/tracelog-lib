@@ -9,9 +9,9 @@ describe('ErrorHandler', () => {
   let config: Config;
 
   beforeEach(() => {
+    config = { errorSampling: 1 };
     eventManager = { track: vi.fn() } as typeof eventManager;
     handler = new ErrorHandler(eventManager as unknown as EventManager);
-    config = { id: 'test', errorSampling: 1 };
     handler['set']('config', config);
   });
 

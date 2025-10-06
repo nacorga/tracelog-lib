@@ -1,54 +1,34 @@
 // ============================================================================
-// STATE MANAGEMENT & TEST MODE DETECTION
+// STATE MANAGEMENT
 // ============================================================================
 
-// Auto-detect E2E test mode and parse URL parameters
+// Detect if running in E2E test environment (Playwright will initialize manually)
 const urlParams = new URLSearchParams(window.location.search);
-const isE2ETest = navigator.userAgent.includes('HeadlessChrome') ||
-                 navigator.userAgent.includes('Playwright') ||
-                 urlParams.get('e2e') === 'true';
-
-// Remove floating monitor in E2E test mode
-if (isE2ETest) {
-  const removeMonitor = () => document.getElementById('floating-monitor')?.remove();
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', removeMonitor);
-  } else {
-    removeMonitor();
-  }
-}
-
-const TEST_MODE = {
-  enabled: isE2ETest,
-  autoInit: isE2ETest && urlParams.get('auto-init') !== 'false',
-  hideUI: isE2ETest,
-  projectId: isE2ETest ? 'e2e-test-project' : 'skip'
-};
+const isE2ETest = urlParams.get('auto-init') === 'false';
 
 const state = {
   currentPage: 'inicio',
   cartCount: 0,
-  testMode: TEST_MODE,
   queueCount: 0,
   lastSentTime: null,
   traceLogListenersAttached: false,
+  autoInit: !isE2ETest, // Auto-init unless explicitly disabled
 };
 
 // ============================================================================
 // TRACELOG HELPERS
 // ============================================================================
 
-// Helper function to access TraceLog consistently through __traceLogBridge
+// Helper function to access TraceLog public API
 function getTraceLogInstance() {
-  return window.__traceLogBridge || window.tracelog;
+  return window.tracelog;
 }
 
-// Helper function to send custom events
+// Helper function to send custom events using public API
 function sendTraceLogEvent(eventName, eventData) {
   const traceLog = getTraceLogInstance();
-  if (traceLog?.sendCustomEvent) {
-    return traceLog.sendCustomEvent(eventName, eventData);
+  if (traceLog?.event) {
+    return traceLog.event(eventName, eventData);
   }
 }
 
@@ -282,9 +262,6 @@ function updateLastSentDisplay() {
 setInterval(updateLastSentDisplay, 1000);
 
 function addEventToMonitor(eventType, status = 'queued', eventData = null) {
-  // Skip monitor updates during E2E tests
-  if (isE2ETest) return null;
-
   const eventsList = document.getElementById('events-list');
   if (!eventsList) return;
 
@@ -372,9 +349,6 @@ function addEventToMonitor(eventType, status = 'queued', eventData = null) {
 }
 
 function updateEventStatus(eventId, newStatus, details = '') {
-  // Skip monitor updates during E2E tests
-  if (isE2ETest) return;
-
   const eventEl = document.querySelector(`[data-event-id="${eventId}"]`);
   if (!eventEl) return;
 
@@ -411,9 +385,6 @@ function updateEventStatus(eventId, newStatus, details = '') {
 }
 
 function updateEventsAsSent(eventIds) {
-  // Skip monitor updates during E2E tests
-  if (isE2ETest) return;
-
   if (Array.isArray(eventIds)) {
     eventIds.forEach(id => updateEventStatus(id, 'sent'));
   } else {
@@ -453,8 +424,6 @@ function clearEventsMonitor() {
 function setupTraceLogListener(traceLog) {
   if (!traceLog || state.traceLogListenersAttached) return;
 
-  console.log('🔌 Configurando listeners de TraceLog...');
-
   // Keep track of events for better queue management
   const eventQueue = new Map();
 
@@ -462,7 +431,7 @@ function setupTraceLogListener(traceLog) {
   traceLog.on('event', (eventData) => {
     const { type } = eventData;
     const queueLength = traceLog.getQueueLength?.() || 0;
-    console.log('📥 TraceLog Event captureado:', { type, eventData, queueLength });
+    console.log('📥 TraceLog Event:', eventData);
 
     // Add to monitor and track
     const eventId = addEventToMonitor(type, 'queued', eventData);
@@ -479,13 +448,7 @@ function setupTraceLogListener(traceLog) {
   traceLog.on('queue', (data) => {
     // data is a BaseEventsQueueDto: { user_id, session_id, device, events, global_metadata? }
     const eventCount = data.events ? data.events.length : 0;
-    console.log('📤 TraceLog queue procesada:', {
-      eventCount,
-      userId: data.user_id,
-      sessionId: data.session_id,
-      device: data.device,
-      hasGlobalMetadata: !!data.global_metadata
-    });
+    console.log('📤 TraceLog Queue:', data);
 
     // Mark events as sending immediately
     updateQueueStatus('sending');
@@ -512,47 +475,11 @@ function setupTraceLogListener(traceLog) {
   });
 
   state.traceLogListenersAttached = true;
-  console.log('✅ TraceLog listeners configurados correctamente');
 }
 
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
-
-// ============================================================================
-// TEST MODE SETUP
-// ============================================================================
-
-function setupTestMode() {
-  if (!state.testMode.enabled) return;
-
-  console.log('🧪 Test mode enabled:', state.testMode);
-
-  // Remove floating monitor during E2E tests to prevent click interception
-  if (isE2ETest || state.testMode.hideUI) {
-    const monitor = document.getElementById('floating-monitor');
-    if (monitor) monitor.remove();
-  }
-
-  // Add test data attributes to key elements
-  document.body.setAttribute('data-testid', 'playground-body');
-  document.body.setAttribute('data-test-mode', 'true');
-
-  // Add test indicator
-  if (!state.testMode.hideUI) {
-    const indicator = document.createElement('div');
-    indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:#ff6b35;color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:bold;z-index:10000;pointer-events:none;';
-    indicator.textContent = 'TEST MODE: E2E';
-    indicator.setAttribute('data-testid', 'test-mode-indicator');
-    document.body.appendChild(indicator);
-  }
-
-  // Test helpers for E2E compatibility
-  window.testHelpers = {
-    sendCustomEvent: (name, data) => sendTraceLogEvent(name, data)
-  };
-}
-
 
 function waitForTraceLogReady(timeout = 5000) {
   return new Promise((resolve, reject) => {
@@ -577,32 +504,35 @@ function waitForTraceLogReady(timeout = 5000) {
 }
 
 async function initializeApp() {
-  setupTestMode();
   setupNavigation();
   setupCartInteractions();
   setupContactForm();
   setupFloatingMonitor();
 
-  // Initialize TraceLog
   try {
     const traceLog = await waitForTraceLogReady();
-    setupTraceLogListener(traceLog);
 
-    const shouldAutoInit = state.testMode.enabled ? state.testMode.autoInit : true;
-
-    if (shouldAutoInit) {
-      const projectId = state.testMode.enabled ? state.testMode.projectId : 'skip';
-      await traceLog.init({ id: projectId });
-      updateQueueStatus('▶️');
-
-      if (state.testMode.enabled && state.testMode.autoInit) {
-        console.log('🧪 TraceLog auto-initialized for testing');
+    // Auto-init if enabled (normal playground use with visual monitor)
+    if (state.autoInit) {
+      // Clear only TraceLog data from localStorage to ensure fresh session (demo mode)
+      // This preserves any other localStorage data from other apps on the same domain
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('tracelog_')) {
+          keysToRemove.push(key);
+        }
       }
-    } else {
-      updateQueueStatus('idle');
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
+
+      setupTraceLogListener(traceLog); // Setup listeners BEFORE init to capture initial events
+      await traceLog.init({});
+      updateQueueStatus('▶️');
+      return;
     }
+
+    updateQueueStatus('⏸');
   } catch (error) {
-    console.error('TraceLog init error:', error);
     updateQueueStatus('❌');
   }
 }

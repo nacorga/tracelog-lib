@@ -14,17 +14,15 @@
 
 import { test, expect } from '@playwright/test';
 import { navigateToPlayground } from './utils/environment.utils';
-import { SpecialProjectId } from '@/types';
 
 test.describe('Destroy Lifecycle', () => {
   test('should clean up all event listeners on destroy', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -52,7 +50,7 @@ test.describe('Destroy Lifecycle', () => {
       return {
         destroyedSuccessfully: true,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify destroy completed successfully
     expect(result.destroyedSuccessfully).toBe(true);
@@ -61,14 +59,13 @@ test.describe('Destroy Lifecycle', () => {
   test('should clear all intervals and timeouts on destroy', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       // Track active intervals/timeouts before init
       const initialIntervalCount = (window as any).__intervalCount || 0;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -89,7 +86,7 @@ test.describe('Destroy Lifecycle', () => {
         afterDestroyIntervalCount,
         intervalsCleared: true, // If no crashes, intervals were likely cleared
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify destroy completed without errors
     expect(result.intervalsCleared).toBe(true);
@@ -98,7 +95,7 @@ test.describe('Destroy Lifecycle', () => {
   test('should support multiple init/destroy cycles without memory leaks', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
       const cycles: { initialized: boolean; destroyed: boolean }[] = [];
       const memorySnapshots: number[] = [];
@@ -112,7 +109,6 @@ test.describe('Destroy Lifecycle', () => {
       for (let cycle = 0; cycle < 5; cycle++) {
         // Initialize
         await traceLog.init({
-          id: projectId,
           samplingRate: 1,
         });
 
@@ -145,7 +141,7 @@ test.describe('Destroy Lifecycle', () => {
         hasMemoryAPI: !!(performance as any).memory,
         allCyclesSuccessful: cycles.every((c) => c.initialized && c.destroyed),
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify all cycles completed successfully
     expect(result.allCyclesSuccessful).toBe(true);
@@ -165,7 +161,7 @@ test.describe('Destroy Lifecycle', () => {
   test('should clean up BroadcastChannel on destroy', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       // Check if BroadcastChannel is supported
@@ -176,7 +172,6 @@ test.describe('Destroy Lifecycle', () => {
       }
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -192,7 +187,7 @@ test.describe('Destroy Lifecycle', () => {
         hasBroadcastChannel: true,
         cleanedUp: true,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify cleanup completed
     expect(result.cleanedUp).toBe(true);
@@ -201,7 +196,7 @@ test.describe('Destroy Lifecycle', () => {
   test('should allow re-initialization after destroy', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
       const queues: any[] = [];
 
@@ -214,7 +209,6 @@ test.describe('Destroy Lifecycle', () => {
 
       // First initialization
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -238,7 +232,6 @@ test.describe('Destroy Lifecycle', () => {
 
       // Second initialization
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -260,7 +253,7 @@ test.describe('Destroy Lifecycle', () => {
         secondInitialized,
         queues,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify lifecycle states
     expect(result.firstInitialized).toBe(true);
@@ -280,11 +273,10 @@ test.describe('Destroy Lifecycle', () => {
   test('should properly clean up storage on destroy', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -306,7 +298,7 @@ test.describe('Destroy Lifecycle', () => {
         // Session storage should be cleaned
         sessionCleanedUp: keysAfterDestroy <= keysBeforeDestroy,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify storage cleanup occurred
     expect(result.sessionCleanedUp).toBe(true);
@@ -339,7 +331,7 @@ test.describe('Destroy Lifecycle', () => {
   test('should flush pending events before destroy', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
       const queues: any[] = [];
 
@@ -348,7 +340,6 @@ test.describe('Destroy Lifecycle', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -369,7 +360,7 @@ test.describe('Destroy Lifecycle', () => {
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     // Extract custom events
     const allEvents = result.queues.flatMap((queue: any) =>
@@ -383,7 +374,7 @@ test.describe('Destroy Lifecycle', () => {
   test('should prevent new events after destroy', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
       const queuesBeforeDestroy: any[] = [];
       const queuesAfterDestroy: any[] = [];
@@ -397,7 +388,6 @@ test.describe('Destroy Lifecycle', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -421,7 +411,7 @@ test.describe('Destroy Lifecycle', () => {
         queuesAfterDestroy,
         eventsAfterDestroyIgnored: queuesAfterDestroy.length === 0,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify events after destroy were ignored
     expect(result.eventsAfterDestroyIgnored).toBe(true);

@@ -1,5 +1,5 @@
 import { EventListenerManager } from './listeners.types';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 export class UnloadListenerManager implements EventListenerManager {
   private readonly onInactivity: () => void;
@@ -14,7 +14,7 @@ export class UnloadListenerManager implements EventListenerManager {
       window.addEventListener('beforeunload', this.onInactivity, this.options);
       window.addEventListener('pagehide', this.onInactivity, this.options);
     } catch (error) {
-      debugLog.error('UnloadListenerManager', 'Failed to setup unload listeners', { error });
+      log('error', 'Failed to setup unload listeners', { error });
       throw error;
     }
   }
@@ -24,7 +24,7 @@ export class UnloadListenerManager implements EventListenerManager {
       window.removeEventListener('beforeunload', this.onInactivity);
       window.removeEventListener('pagehide', this.onInactivity);
     } catch (error) {
-      debugLog.warn('UnloadListenerManager', 'Error during unload listeners cleanup', { error });
+      log('warn', 'Error during unload listeners cleanup', { error });
     }
   }
 }

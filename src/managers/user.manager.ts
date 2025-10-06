@@ -15,8 +15,8 @@ export class UserManager {
    * @param projectId - Project identifier for namespacing
    * @returns Persistent unique user ID
    */
-  static getId(storageManager: StorageManager, projectId?: string): string {
-    const storageKey = USER_ID_KEY(projectId ?? '');
+  static getId(storageManager: StorageManager): string {
+    const storageKey = USER_ID_KEY;
     const storedUserId = storageManager.getItem(storageKey);
 
     if (storedUserId) {

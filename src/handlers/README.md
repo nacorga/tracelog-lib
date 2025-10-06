@@ -48,7 +48,7 @@ Captures mouse clicks and converts them into analytics events with element conte
 **Key Features**:
 - Smart element detection via `INTERACTIVE_SELECTORS` (buttons, links, form elements)
 - Relative coordinates calculation (0-1 scale within element bounds)
-- Custom event tracking via `data-tl-name` attributes
+- Custom event tracking via `data-tlog-name` attributes
 - Text extraction with length limits (255 chars max)
 
 **Event Data**:
@@ -73,12 +73,12 @@ Captures mouse clicks and converts them into analytics events with element conte
   }
 }
 
-// Custom tracked element (data-tl-name="signup-cta")
+// Custom tracked element (data-tlog-name="signup-cta")
 {
   type: 'custom',
   custom_event: {
     name: 'signup-cta',
-    metadata: { value: 'premium' }  // data-tl-value if present
+    metadata: { value: 'premium' }  // data-tlog-value if present
   }
 }
 ```

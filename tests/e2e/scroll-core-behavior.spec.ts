@@ -24,7 +24,6 @@ test.describe('Scroll Core Behavior', () => {
         '<div id="scroll-box" style="overflow: auto; height: 400px;"><div style="height: 2000px; background: linear-gradient(red, blue);"></div></div>';
 
       await window.__traceLogBridge!.init({
-        id: 'skip',
         scrollContainerSelectors: '#scroll-box',
       });
 

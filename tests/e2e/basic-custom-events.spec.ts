@@ -15,7 +15,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -62,7 +62,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -114,7 +114,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -165,7 +165,7 @@ test.describe('Basic Custom Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({ id: 'skip' });
+        await window.__traceLogBridge!.init({});
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -188,5 +188,70 @@ test.describe('Basic Custom Events', () => {
     // Should handle invalid names gracefully (library might validate or silently ignore)
     // The test passes regardless since we're testing the library doesn't crash
     expect(typeof result.success).toBe('boolean');
+  });
+
+  test('should assign unique IDs to all custom events', async ({ page }) => {
+    await navigateToPlayground(page);
+
+    // Initialize TraceLog
+    const initResult = await page.evaluate(async () => {
+      try {
+        await window.__traceLogBridge!.init({});
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    expect(initResult.success).toBe(true);
+
+    // Send multiple custom events and verify IDs
+    const result = await page.evaluate(async () => {
+      const events: any[] = [];
+
+      // Listen for custom events
+      window.__traceLogBridge!.on('event', (data: any) => {
+        if (data.type === 'custom') {
+          events.push(data);
+        }
+      });
+
+      // Send 10 custom events rapidly
+      for (let i = 0; i < 10; i++) {
+        window.__traceLogBridge!.sendCustomEvent(`event_${i}`, { index: i });
+      }
+
+      // Wait for events to be captured
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      return events;
+    });
+
+    // Verify all events were captured
+    expect(result.length).toBe(10);
+
+    // Verify each event has a unique ID
+    const eventIds = new Set<string>();
+    const eventIdRegex = /^\d{13}-[0-9a-f]{8}$/;
+
+    result.forEach((event, index) => {
+      // Verify ID exists and is a string
+      expect(event.id).toBeDefined();
+      expect(typeof event.id).toBe('string');
+
+      // Verify ID is a valid hybrid ID format: {timestamp}-{counter}-{random}
+      expect(event.id).toMatch(eventIdRegex);
+
+      // Verify ID is unique
+      expect(eventIds.has(event.id)).toBe(false);
+      eventIds.add(event.id);
+
+      // Verify event data integrity
+      expect(event.type).toBe('custom');
+      expect(event.custom_event.name).toBe(`event_${index}`);
+    });
+
+    // Final uniqueness check
+    expect(eventIds.size).toBe(10);
   });
 });

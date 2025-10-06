@@ -10,8 +10,8 @@
  * Focus: Detect cross-tab coordination defects
  */
 
+import { STORAGE_BASE_KEY } from '@/constants';
 import { test, expect } from '@playwright/test';
-import { SpecialProjectId } from '@/types';
 
 test.describe('Cross-Tab Session Sync', () => {
   test('should share session ID across browser contexts', async ({ browser }) => {
@@ -32,11 +32,10 @@ test.describe('Cross-Tab Session Sync', () => {
       await page2.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
       // Initialize on page1 first
-      const result1 = await page1.evaluate(async (projectId) => {
+      const result1 = await page1.evaluate(async () => {
         const traceLog = window.__traceLogBridge!;
 
         await traceLog.init({
-          id: projectId,
           samplingRate: 1,
         });
 
@@ -48,17 +47,16 @@ test.describe('Cross-Tab Session Sync', () => {
           sessionId: sessionData?.id,
           initialized: traceLog.initialized,
         };
-      }, SpecialProjectId.Skip);
+      });
 
       expect(result1.initialized).toBe(true);
       expect(result1.sessionId).toBeDefined();
 
       // Initialize on page2 (should sync with page1)
-      const result2 = await page2.evaluate(async (projectId) => {
+      const result2 = await page2.evaluate(async () => {
         const traceLog = window.__traceLogBridge!;
 
         await traceLog.init({
-          id: projectId,
           samplingRate: 1,
         });
 
@@ -71,7 +69,7 @@ test.describe('Cross-Tab Session Sync', () => {
           sessionId: sessionData?.id,
           initialized: traceLog.initialized,
         };
-      }, SpecialProjectId.Skip);
+      });
 
       expect(result2.initialized).toBe(true);
       expect(result2.sessionId).toBeDefined();
@@ -91,11 +89,10 @@ test.describe('Cross-Tab Session Sync', () => {
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Initialize on first tab
-    const tab1Result = await page.evaluate(async (projectId) => {
+    const tab1Result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -106,7 +103,7 @@ test.describe('Cross-Tab Session Sync', () => {
       return {
         sessionId: sessionData?.id,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     expect(tab1Result.sessionId).toBeDefined();
 
@@ -116,11 +113,10 @@ test.describe('Cross-Tab Session Sync', () => {
     await page2.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Initialize on second tab
-    const tab2Result = await page2.evaluate(async (projectId) => {
+    const tab2Result = await page2.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -132,7 +128,7 @@ test.describe('Cross-Tab Session Sync', () => {
       return {
         sessionId: sessionData?.id,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     expect(tab2Result.sessionId).toBeDefined();
 
@@ -146,16 +142,15 @@ test.describe('Cross-Tab Session Sync', () => {
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Initialize first tab
-    await page.evaluate(async (projectId) => {
+    await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 300));
-    }, SpecialProjectId.Skip);
+    });
 
     // Open second tab
     const page2 = await context.newPage();
@@ -163,20 +158,19 @@ test.describe('Cross-Tab Session Sync', () => {
     await page2.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Set up listener on second tab
-    const tab2Result = await page2.evaluate(async (projectId) => {
+    const tab2Result = await page2.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
       const receivedMessages: any[] = [];
 
       // Mock BroadcastChannel if available
       if (typeof BroadcastChannel !== 'undefined') {
-        const channel = new BroadcastChannel(`tracelog_session_${projectId}`);
+        const channel = new BroadcastChannel('tracelog_session_default');
         channel.onmessage = (event) => {
           receivedMessages.push(event.data);
         };
       }
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -186,7 +180,7 @@ test.describe('Cross-Tab Session Sync', () => {
         initialized: traceLog.initialized,
         hasBroadcastChannel: typeof BroadcastChannel !== 'undefined',
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Destroy first tab (should broadcast session_end)
     await page.evaluate(async () => {
@@ -205,7 +199,7 @@ test.describe('Cross-Tab Session Sync', () => {
     await page.goto('/?auto-init=false&e2e=true');
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       // Temporarily disable BroadcastChannel
@@ -216,7 +210,6 @@ test.describe('Cross-Tab Session Sync', () => {
 
       try {
         await traceLog.init({
-          id: projectId,
           samplingRate: 1,
         });
       } catch (error) {
@@ -235,7 +228,7 @@ test.describe('Cross-Tab Session Sync', () => {
         sessionId: sessionData?.id,
         initialized: traceLog.initialized,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Should still work without BroadcastChannel
     expect(result.initError).toBeNull();
@@ -243,74 +236,19 @@ test.describe('Cross-Tab Session Sync', () => {
     expect(result.sessionId).toBeDefined();
   });
 
-  test('should maintain separate sessions when projectId differs', async ({ context, page }) => {
-    await page.goto('/?auto-init=false&e2e=true');
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
-
-    // Initialize with project1
-    const tab1Result = await page.evaluate(async () => {
-      const traceLog = window.__traceLogBridge!;
-
-      await traceLog.init({
-        id: 'skip-1',
-        samplingRate: 1,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      const sessionData = traceLog.getSessionData();
-
-      return {
-        sessionId: sessionData?.id,
-        projectId: 'skip-1',
-      };
-    });
-
-    // Open second tab
-    const page2 = await context.newPage();
-    await page2.goto('/?auto-init=false&e2e=true');
-    await page2.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
-
-    // Initialize with project2 - use a different Skip variant
-    const tab2Result = await page2.evaluate(async () => {
-      const traceLog = window.__traceLogBridge!;
-
-      await traceLog.init({
-        id: 'skip-2',
-        samplingRate: 1,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      const sessionData = traceLog.getSessionData();
-
-      return {
-        sessionId: sessionData?.id,
-        projectId: 'skip-2',
-      };
-    });
-
-    // Should have different sessions (different projects)
-    expect(tab1Result.sessionId).not.toBe(tab2Result.sessionId);
-    expect(tab1Result.projectId).not.toBe(tab2Result.projectId);
-
-    await page2.close();
-  });
-
   test('should handle rapid session updates across tabs', async ({ context, page }) => {
     await page.goto('/?auto-init=false&e2e=true');
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
-    await page.evaluate(async (projectId) => {
+    await page.evaluate(async () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 300));
-    }, SpecialProjectId.Skip);
+    });
 
     // Open multiple tabs rapidly
     const pages: any[] = [];
@@ -320,16 +258,15 @@ test.describe('Cross-Tab Session Sync', () => {
       await newPage.goto('/?auto-init=false&e2e=true');
       await newPage.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
-      await newPage.evaluate(async (projectId) => {
+      await newPage.evaluate(async () => {
         const traceLog = window.__traceLogBridge!;
 
         await traceLog.init({
-          id: projectId,
           samplingRate: 1,
         });
 
         await new Promise((resolve) => setTimeout(resolve, 200));
-      }, SpecialProjectId.Skip);
+      });
 
       pages.push(newPage);
     }
@@ -370,26 +307,25 @@ test.describe('Cross-Tab Session Sync', () => {
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Initialize and get session ID
-    const initialData = await page.evaluate(async (projectId) => {
+    const initialData = await page.evaluate(async (storageBaseKey: string) => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const sessionData = traceLog.getSessionData();
-      const storageKey = `tl:${projectId}:session`;
+      const storageKey = `${storageBaseKey}:default:session`;
       const storedValue = localStorage.getItem(storageKey);
 
       return {
         sessionId: sessionData?.id,
         storedValue,
-        allKeys: Object.keys(localStorage).filter((k) => k.startsWith('tl:')),
+        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${storageBaseKey}:`)),
       };
-    }, SpecialProjectId.Skip);
+    }, STORAGE_BASE_KEY);
 
     expect(initialData.sessionId).toBeDefined();
 
@@ -401,14 +337,13 @@ test.describe('Cross-Tab Session Sync', () => {
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Reinitialize and check session recovery
-    const recoveredData = await page.evaluate(async (projectId) => {
-      const storageKey = `tl:${projectId}:session`;
+    const recoveredData = await page.evaluate(async (storageBaseKey: string) => {
+      const storageKey = `${storageBaseKey}:default:session`;
       const storedBeforeInit = localStorage.getItem(storageKey);
 
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -421,9 +356,9 @@ test.describe('Cross-Tab Session Sync', () => {
         sessionId: sessionData?.id,
         storedBeforeInit,
         storedAfterInit,
-        allKeys: Object.keys(localStorage).filter((k) => k.startsWith('tl:')),
+        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${storageBaseKey}:`)),
       };
-    }, SpecialProjectId.Skip);
+    }, STORAGE_BASE_KEY);
 
     // Session should be recovered (same session ID)
     expect(recoveredData.sessionId).toBe(initialData.sessionId);

@@ -1,28 +1,57 @@
 # Testing Guide
 
-**Jest** (unit/integration) + **Playwright** (E2E) + **TypeScript** strict mode
+**Vitest** (unit/integration) + **Playwright** (E2E) + **TypeScript** strict mode
 
 ## Commands
 
 ```bash
 # Tests
-npm run test:unit                # Unit tests
-npm run test:integration         # Integration tests
-npm run test:e2e                 # E2E tests (uses Playwright)
+npm run test:unit                # Unit tests (Vitest)
+npm run test:integration         # Integration tests (Vitest)
+npm run test:e2e                 # E2E tests (Playwright)
 npm run test                     # All tests
+npm run test:coverage            # Coverage report
 
 # Quality
 npm run check                    # Types + lint + format
 npm run fix                      # Auto-fix issues
 ```
 
-## E2E Test Coordination
+## QA Mode for Testing
 
-**QA Mode**: `?qaMode=true`
-- **Purpose**: Enhanced logging and debugging for testing scenarios
-- **Activation**: URL parameter or programmatic mode setting
-- **Effects**: Enables full event sampling and comprehensive debug logging
-- **Usage**: Used for both manual debugging and automated testing scenarios
+**Auto-Detection**: `?tlog_mode=qa`
+
+### How It Works
+1. **URL Detection**: Library checks for `?tlog_mode=qa` query parameter on init
+2. **Persistence**: Stores mode in sessionStorage (`tlog:qa_mode`)
+3. **URL Cleanup**: Removes query param using `history.replaceState()`
+4. **Visual Feedback**: Console log with orange badge when activated
+
+### Effects When Active
+- **Custom events displayed in console** instead of being sent to server
+- **Strict validation** - Throws errors on validation failures (instead of silently ignoring)
+- **Events still emitted** to `on('event')` listeners for E2E testing
+- **No server transmission** - Custom events are NOT added to send queue
+- **No Google Analytics** - Custom events are NOT forwarded to GA integration
+- Useful for both manual debugging and automated E2E testing
+
+### E2E Testing Patterns
+```typescript
+// Activate QA mode via URL
+await page.goto('http://localhost:3000?tlog_mode=qa');
+
+// Or navigate after page load
+await page.goto('http://localhost:3000');
+await page.evaluate(() => {
+  window.location.href = window.location.href + '?tlog_mode=qa';
+});
+```
+
+### Manual Deactivation
+```typescript
+import { disableQaMode } from '@tracelog/lib';
+disableQaMode(); // Removes from sessionStorage
+```
 
 ## Test Failure Triage
 - If tests fail to run or fail unexpectedly, determine whether the failure stems from the test configuration/setup or from a defect in the TraceLog library.
@@ -51,9 +80,19 @@ import { App } from '../src/app';
 describe('App Integration', () => {
   it('should send events to API', async () => {
     const app = new App();
-    await app.init({ id: 'test' });
-    app.trackCustomEvent('purchase', { amount: 99.99 });
+    await app.init({
+      integrations: { custom: { apiUrl: 'http://localhost:8080' } }
+    });
+    app.sendCustomEvent('purchase', { amount: 99.99 });
     expect(fetch).toHaveBeenCalled();
+  });
+
+  it('should work without HTTP integration', async () => {
+    const app = new App();
+    await app.init({}); // No integrations = no HTTP calls
+    app.sendCustomEvent('test', { foo: 'bar' });
+    expect(app.initialized).toBe(true);
+    // Events tracked locally but not sent
   });
 });
 ```
@@ -70,7 +109,13 @@ const result = await page.evaluate(async () => {
     retries++;
   }
 
-  await window.__traceLogBridge!.init({ id: 'skip' });
+  await window.__traceLogBridge!.init({
+    integrations: { custom: { apiUrl: 'http://localhost:8080' } }
+  });
+
+  // OR for local-only mode (no HTTP):
+  // await window.__traceLogBridge!.init({});
+
   return { initialized: window.__traceLogBridge!.initialized };
 });
 ```
@@ -101,8 +146,13 @@ console.error = (...args: any[]) => {
 
 ### E2E Bridge
 ```typescript
-// Initialize
-await window.__traceLogBridge!.init({ id: 'skip' });
+// Initialize with HTTP integration
+await window.__traceLogBridge!.init({
+  integrations: { custom: { apiUrl: 'http://localhost:8080' } }
+});
+
+// Initialize without HTTP (local-only mode)
+await window.__traceLogBridge!.init({});
 
 // Listen for events/queues
 window.__traceLogBridge!.on('event', callback);
@@ -137,10 +187,12 @@ window.__traceLogBridge!.getSessionData();
 
 ### ✅ E2E
 - Use `page.evaluate()` + `window.__traceLogBridge!`
-- Use `{ id: 'skip' }` configuration
+- Use `{ integrations: { custom: { apiUrl: 'http://localhost:8080' } } }` for HTTP tests
+- Use `{}` for local-only mode (no HTTP calls)
 - **CSP-Safe**: Internal waiting pattern (avoid `page.waitForFunction()`)
 - Queue events timeout: 10-12 seconds
 - **Key**: `sessionId` in `queue.session_id`, NOT individual events
+- QA mode: Use `?tlog_mode=qa` URL parameter
 
 ### ❌ Avoid
 - `page.waitForFunction()` (CSP-blocked)

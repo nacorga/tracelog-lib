@@ -3,8 +3,6 @@
  * This file centralizes all timing, limits, browser, and initialization constants
  */
 
-import { ApiConfig } from '../types';
-
 // ============================================================================
 // SESSION & TIMING
 // ============================================================================
@@ -55,6 +53,7 @@ export const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
 export const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024; // 8KB
 export const MAX_CUSTOM_EVENT_KEYS = 10;
 export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
+export const MAX_NESTED_OBJECT_KEYS = 20; // Maximum keys in nested objects within arrays
 
 // Text content limits
 export const MAX_TEXT_LENGTH = 255; // For click tracking text content
@@ -79,7 +78,7 @@ export const MAX_FINGERPRINTS_HARD_LIMIT = 2000; // Hard limit for aggressive cl
 // BROWSER & HTML
 // ============================================================================
 
-export const HTML_DATA_ATTR_PREFIX = 'data-tl';
+export const HTML_DATA_ATTR_PREFIX = 'data-tlog';
 
 // Interactive element selectors for click tracking
 export const INTERACTIVE_SELECTORS = [
@@ -167,38 +166,18 @@ export const MAX_RETRY_ATTEMPTS = 10;
 // VALIDATION
 // ============================================================================
 
-// Allowed API config keys for runtime validation
-export const ALLOWED_API_CONFIG_KEYS = new Set<keyof ApiConfig>([
-  'mode',
-  'tags',
-  'samplingRate',
-  'excludedUrlPaths',
-  'ipExcluded',
-]);
-
 // Validation error messages - standardized across all layers
 export const VALIDATION_MESSAGES = {
-  // Project ID validation - consistent message across all layers
   MISSING_PROJECT_ID: 'Project ID is required',
   PROJECT_ID_EMPTY_AFTER_TRIM: 'Project ID is required',
-
-  // Session timeout validation
   INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
-
-  // Sampling rate validation
   INVALID_SAMPLING_RATE: 'Sampling rate must be between 0 and 1',
   INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
-
-  // Integration validation
+  INVALID_TRACELOG_PROJECT_ID: 'TraceLog project ID is required when integration is enabled',
+  INVALID_CUSTOM_API_URL: 'Custom API URL is required when integration is enabled',
   INVALID_GOOGLE_ANALYTICS_ID: 'Google Analytics measurement ID is required when integration is enabled',
-
-  // UI validation
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
-
-  // Global metadata validation
   INVALID_GLOBAL_METADATA: 'Global metadata must be an object',
-
-  // Array validation
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',
 } as const;
 

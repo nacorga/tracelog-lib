@@ -32,6 +32,10 @@ export default defineConfig({
         'src/**/*.types.ts',
         'src/constants/**',
         'src/types/**',
+        'src/public-api.ts',
+        'src/test-bridge.ts',
+        'src/**/index.ts',
+        'src/app.ts',
       ],
       thresholds: {
         lines: 60,

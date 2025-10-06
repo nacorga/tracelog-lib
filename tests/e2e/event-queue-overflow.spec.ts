@@ -12,13 +12,12 @@
 
 import { test, expect } from '@playwright/test';
 import { navigateToPlayground } from './utils/environment.utils';
-import { SpecialProjectId } from '@/types';
 
 test.describe('Event Queue Overflow', () => {
   test('should enforce MAX_EVENTS_QUEUE_LENGTH and discard oldest events', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -27,7 +26,6 @@ test.describe('Event Queue Overflow', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1, // Capture all events
       });
 
@@ -50,7 +48,7 @@ test.describe('Event Queue Overflow', () => {
       await traceLog.destroy();
 
       return { queues, queueCount: queues.length };
-    }, SpecialProjectId.Skip);
+    });
 
     expect(result.queueCount).toBeGreaterThan(0);
 
@@ -69,7 +67,7 @@ test.describe('Event Queue Overflow', () => {
   test('should never discard critical session events during overflow', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -78,7 +76,6 @@ test.describe('Event Queue Overflow', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -99,7 +96,7 @@ test.describe('Event Queue Overflow', () => {
       await traceLog.destroy();
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     // Extract all events
     const allEvents = result.queues.flatMap((queue: any) => queue.events);
@@ -117,7 +114,7 @@ test.describe('Event Queue Overflow', () => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
     // This test verifies library stability under stress
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const errors: string[] = [];
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
@@ -137,7 +134,6 @@ test.describe('Event Queue Overflow', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -174,7 +170,7 @@ test.describe('Event Queue Overflow', () => {
       await traceLog.destroy();
 
       return { errors, queueCount: queues.length, initialized: traceLog.initialized };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify no unexpected errors occurred
     expect(result.errors).toHaveLength(0);
@@ -187,7 +183,7 @@ test.describe('Event Queue Overflow', () => {
     test.setTimeout(60000); // Need 44s for 4x11s waits + overhead
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -196,7 +192,6 @@ test.describe('Event Queue Overflow', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -248,7 +243,7 @@ test.describe('Event Queue Overflow', () => {
         cycle3Count,
         totalCustomEvents,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     expect(result.queueCount).toBeGreaterThan(0);
 
@@ -272,12 +267,11 @@ test.describe('Event Queue Overflow', () => {
   test('should handle overflow without memory leaks', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const traceLog = window.__traceLogBridge!;
       const memorySnapshots: number[] = [];
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -309,7 +303,7 @@ test.describe('Event Queue Overflow', () => {
         memorySnapshots,
         hasMemoryAPI: !!(performance as any).memory,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // If memory API is available, verify no significant memory growth
     if (result.hasMemoryAPI && result.memorySnapshots.length > 2) {

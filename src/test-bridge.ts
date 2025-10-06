@@ -9,6 +9,8 @@ import { GoogleAnalyticsIntegration } from './integrations/google-analytics.inte
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { State, TraceLogTestBridge } from './types';
+import { __setAppInstance } from './api';
+import { STORAGE_BASE_KEY } from './constants';
 
 /**
  * Test bridge for E2E testing
@@ -21,6 +23,36 @@ export class TestBridge extends App implements TraceLogTestBridge {
     super();
     this._isInitializing = isInitializing;
     this._isDestroying = isDestroying;
+  }
+
+  async init(config: any): Promise<void> {
+    // Guard: TestBridge should only be used in development
+    if (process.env.NODE_ENV !== 'dev') {
+      throw new Error('[TraceLog] TestBridge is only available in development mode');
+    }
+
+    // First sync with window.tracelog BEFORE initializing
+    // This ensures both APIs point to the same instance from the start
+    if (!__setAppInstance) {
+      throw new Error('[TraceLog] __setAppInstance is not available (production build?)');
+    }
+
+    try {
+      __setAppInstance(this);
+    } catch {
+      // If __setAppInstance fails (e.g., already initialized), throw clear error
+      throw new Error('[TraceLog] TestBridge cannot sync with existing tracelog instance. Call destroy() first.');
+    }
+
+    try {
+      await super.init(config);
+    } catch (error) {
+      // If init fails, clear the sync
+      if (__setAppInstance) {
+        __setAppInstance(null);
+      }
+      throw error;
+    }
   }
 
   isInitializing(): boolean {
@@ -64,7 +96,8 @@ export class TestBridge extends App implements TraceLogTestBridge {
       throw new Error('Storage manager not available');
     }
 
-    const projectId = this.get('config')?.id;
+    const config = this.get('config');
+    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.apiUrl ?? 'test';
     const userId = this.get('userId');
     const sessionId = this.get('sessionId');
 
@@ -82,7 +115,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     };
 
     // Store in the same format as SenderManager.persistEvents()
-    const storageKey = `tl:${projectId}:queue:${userId}`;
+    const storageKey = `${STORAGE_BASE_KEY}:${projectId}:queue:${userId}`;
     storageManager.setItem(storageKey, JSON.stringify(persistedData));
   }
 
@@ -141,6 +174,10 @@ export class TestBridge extends App implements TraceLogTestBridge {
 
     try {
       await super.destroy(force);
+      // Clear window.tracelog API reference (only in dev mode)
+      if (__setAppInstance) {
+        __setAppInstance(null);
+      }
     } finally {
       this._isDestroying = false;
     }

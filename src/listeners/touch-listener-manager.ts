@@ -1,5 +1,5 @@
 import { EventListenerManager } from './listeners.types';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 export class TouchListenerManager implements EventListenerManager {
   private readonly onActivity: () => void;
@@ -16,7 +16,7 @@ export class TouchListenerManager implements EventListenerManager {
       window.addEventListener('touchend', this.onActivity, this.options);
       window.addEventListener('orientationchange', this.onActivity, this.options);
     } catch (error) {
-      debugLog.error('TouchListenerManager', 'Failed to setup touch listeners', { error });
+      log('error', 'Failed to setup touch listeners', { error });
       throw error;
     }
   }
@@ -28,7 +28,7 @@ export class TouchListenerManager implements EventListenerManager {
       window.removeEventListener('touchend', this.onActivity);
       window.removeEventListener('orientationchange', this.onActivity);
     } catch (error) {
-      debugLog.warn('TouchListenerManager', 'Error during touch listeners cleanup', { error });
+      log('warn', 'Error during touch listeners cleanup', { error });
     }
   }
 }

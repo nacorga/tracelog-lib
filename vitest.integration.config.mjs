@@ -31,6 +31,10 @@ export default defineConfig({
       exclude: [
         'src/**/*.test.ts',
         'src/**/*.spec.ts',
+        'src/**/*.types.ts',
+        'src/types/**',
+        'src/test-bridge.ts',
+        'src/**/index.ts',
         'tests/**/*',
         'playground/**/*',
         'dist/**/*',

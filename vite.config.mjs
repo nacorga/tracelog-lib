@@ -10,6 +10,11 @@ import { fileURLToPath, URL } from 'node:url';
  * - tracelog.esm.js (ESM) → Use with <script type="module"> and import statements
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   define: {
     'process.env.NODE_ENV': JSON.stringify(
       process.env.NODE_ENV === 'dev' ? process.env.NODE_ENV : 'production'

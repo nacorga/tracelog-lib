@@ -12,13 +12,12 @@
 
 import { test, expect } from '@playwright/test';
 import { navigateToPlayground } from './utils/environment.utils';
-import { SpecialProjectId } from '@/types';
 
 test.describe('Metadata Array Support', () => {
   test('should accept array of objects as metadata', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -27,7 +26,6 @@ test.describe('Metadata Array Support', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -50,7 +48,7 @@ test.describe('Metadata Array Support', () => {
       await traceLog.destroy();
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     // Extract custom events
     const allEvents = result.queues.flatMap((queue) => queue.events.filter((e: any) => e.type === 'custom'));
@@ -65,7 +63,7 @@ test.describe('Metadata Array Support', () => {
   test('should preserve array structure and data', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -74,7 +72,6 @@ test.describe('Metadata Array Support', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -96,7 +93,7 @@ test.describe('Metadata Array Support', () => {
       await traceLog.destroy();
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     const allEvents = result.queues.flatMap((queue) => queue.events.filter((e: any) => e.type === 'custom'));
 
@@ -126,7 +123,7 @@ test.describe('Metadata Array Support', () => {
   test('should handle array with string arrays in objects', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -135,7 +132,6 @@ test.describe('Metadata Array Support', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -156,7 +152,7 @@ test.describe('Metadata Array Support', () => {
       await traceLog.destroy();
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     const allEvents = result.queues.flatMap((queue) => queue.events.filter((e: any) => e.type === 'custom'));
 
@@ -174,7 +170,7 @@ test.describe('Metadata Array Support', () => {
   test('should handle empty array as metadata', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -183,7 +179,6 @@ test.describe('Metadata Array Support', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -200,7 +195,7 @@ test.describe('Metadata Array Support', () => {
       await traceLog.destroy();
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     const allEvents = result.queues.flatMap((queue) => queue.events.filter((e: any) => e.type === 'custom'));
 
@@ -214,7 +209,7 @@ test.describe('Metadata Array Support', () => {
   test('should handle single object in array', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -223,7 +218,6 @@ test.describe('Metadata Array Support', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -240,7 +234,7 @@ test.describe('Metadata Array Support', () => {
       await traceLog.destroy();
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     const allEvents = result.queues.flatMap((queue) => queue.events.filter((e: any) => e.type === 'custom'));
 
@@ -256,7 +250,7 @@ test.describe('Metadata Array Support', () => {
   test('should handle large arrays without performance issues', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -265,7 +259,6 @@ test.describe('Metadata Array Support', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -294,7 +287,7 @@ test.describe('Metadata Array Support', () => {
         queues,
         processingTime: endTime - startTime,
       };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify processing was fast (< 100ms)
     expect(result.processingTime).toBeLessThan(100);
@@ -311,7 +304,7 @@ test.describe('Metadata Array Support', () => {
   test('should work alongside regular object metadata', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async (_projectId) => {
       const queues: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -320,7 +313,6 @@ test.describe('Metadata Array Support', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         samplingRate: 1,
       });
 
@@ -344,7 +336,7 @@ test.describe('Metadata Array Support', () => {
       await traceLog.destroy();
 
       return { queues };
-    }, SpecialProjectId.Skip);
+    });
 
     const allEvents = result.queues.flatMap((queue) => queue.events.filter((e: any) => e.type === 'custom'));
 

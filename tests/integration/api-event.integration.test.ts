@@ -7,7 +7,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as TraceLog from '@/api';
-import { SpecialProjectId } from '@/types';
 
 describe('API Integration - Event Method', () => {
   beforeEach(async () => {
@@ -47,7 +46,7 @@ describe('API Integration - Event Method', () => {
 
   describe('After Initialization', () => {
     beforeEach(async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
     });
 
     it('should send custom event with name only', () => {
@@ -76,15 +75,21 @@ describe('API Integration - Event Method', () => {
       ).not.toThrow();
     });
 
-    it('should reject custom event with nested metadata (strict validation)', () => {
+    it('should reject custom event with nested metadata (strict validation)', async () => {
+      // Re-initialize with QA mode enabled
+      await TraceLog.destroy();
+      sessionStorage.setItem('tlog:qa_mode', 'true');
+      await TraceLog.init({});
+
       expect(() =>
         TraceLog.event('order-placed', {
           order: {
-            id: '12345',
             total: 199.99,
           },
         } as any),
       ).toThrow(/invalid types/i);
+
+      sessionStorage.removeItem('tlog:qa_mode');
     });
 
     it('should send custom event with array metadata', () => {
@@ -120,7 +125,7 @@ describe('API Integration - Event Method', () => {
 
   describe('Event Name Validation', () => {
     beforeEach(async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
     });
 
     it('should accept event name with letters only', () => {
@@ -151,7 +156,7 @@ describe('API Integration - Event Method', () => {
 
   describe('Multiple Events', () => {
     beforeEach(async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
     });
 
     it('should send multiple events in sequence', () => {
@@ -181,10 +186,15 @@ describe('API Integration - Event Method', () => {
 
   describe('Edge Cases', () => {
     beforeEach(async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
     });
 
-    it('should reject very large metadata objects (validation limit)', () => {
+    it('should reject very large metadata objects (validation limit)', async () => {
+      // Re-initialize with QA mode for strict validation
+      await TraceLog.destroy();
+      sessionStorage.setItem('tlog:qa_mode', 'true');
+      await TraceLog.init({});
+
       const largeMetadata: Record<string, string> = {};
       for (let i = 0; i < 100; i++) {
         largeMetadata[`key${i}`] = `value${i}`;
@@ -192,9 +202,16 @@ describe('API Integration - Event Method', () => {
 
       // Library has size limits for metadata
       expect(() => TraceLog.event('large-event', largeMetadata)).toThrow();
+
+      sessionStorage.removeItem('tlog:qa_mode');
     });
 
-    it('should reject deeply nested metadata (strict validation)', () => {
+    it('should reject deeply nested metadata (strict validation)', async () => {
+      // Re-initialize with QA mode for strict validation
+      await TraceLog.destroy();
+      sessionStorage.setItem('tlog:qa_mode', 'true');
+      await TraceLog.init({});
+
       expect(() =>
         TraceLog.event('nested-event', {
           level1: {
@@ -208,6 +225,8 @@ describe('API Integration - Event Method', () => {
           },
         } as any),
       ).toThrow(/invalid types/i);
+
+      sessionStorage.removeItem('tlog:qa_mode');
     });
 
     it('should handle special characters in metadata values', () => {
@@ -220,12 +239,19 @@ describe('API Integration - Event Method', () => {
       ).not.toThrow();
     });
 
-    it('should reject metadata with circular references', () => {
+    it('should reject metadata with circular references', async () => {
+      // Re-initialize with QA mode for strict validation
+      await TraceLog.destroy();
+      sessionStorage.setItem('tlog:qa_mode', 'true');
+      await TraceLog.init({});
+
       const circular: Record<string, unknown> = { name: 'test' };
       circular.self = circular;
 
       // Strict validation rejects circular references
       expect(() => TraceLog.event('circular', circular as any)).toThrow();
+
+      sessionStorage.removeItem('tlog:qa_mode');
     });
 
     it('should handle reasonable-sized flat metadata', () => {
@@ -243,7 +269,7 @@ describe('API Integration - Event Method', () => {
 
   describe('After Destroy', () => {
     it('should throw error when called after destroy()', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -252,13 +278,13 @@ describe('API Integration - Event Method', () => {
 
     it('should work again after re-initialization', async () => {
       // First lifecycle
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       TraceLog.event('event1');
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Second lifecycle
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       expect(() => TraceLog.event('event2')).not.toThrow();
     });
   });
@@ -266,7 +292,6 @@ describe('API Integration - Event Method', () => {
   describe('Integration with Global Metadata', () => {
     it('should send events with global metadata applied', async () => {
       await TraceLog.init({
-        id: SpecialProjectId.Skip,
         globalMetadata: {
           appVersion: '1.0.0',
           environment: 'test',
@@ -285,11 +310,18 @@ describe('API Integration - Event Method', () => {
 
   describe('Error Handling', () => {
     beforeEach(async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
     });
 
-    it('should throw error for empty event name', () => {
+    it('should throw error for empty event name', async () => {
+      // Re-initialize with QA mode for strict validation
+      await TraceLog.destroy();
+      sessionStorage.setItem('tlog:qa_mode', 'true');
+      await TraceLog.init({});
+
       expect(() => TraceLog.event('')).toThrow();
+
+      sessionStorage.removeItem('tlog:qa_mode');
     });
 
     it('should accept whitespace-only event name (current behavior)', () => {

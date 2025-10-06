@@ -1,5 +1,5 @@
 import { EventListenerManager } from './listeners.types';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 export class VisibilityListenerManager implements EventListenerManager {
   private readonly onActivity: () => void;
@@ -28,7 +28,7 @@ export class VisibilityListenerManager implements EventListenerManager {
         window.addEventListener('offline', this.onVisibilityChange, this.options);
       }
     } catch (error) {
-      debugLog.error('VisibilityListenerManager', 'Failed to setup visibility listeners', { error });
+      log('error', 'Failed to setup visibility listeners', { error });
     }
   }
 
@@ -46,7 +46,7 @@ export class VisibilityListenerManager implements EventListenerManager {
         window.removeEventListener('offline', this.onVisibilityChange);
       }
     } catch (error) {
-      debugLog.warn('VisibilityListenerManager', 'Error during visibility listeners cleanup', { error });
+      log('warn', 'Error during visibility listeners cleanup', { error });
     }
   }
 }

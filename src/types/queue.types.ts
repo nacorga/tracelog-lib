@@ -10,12 +10,6 @@ export interface BaseEventsQueueDto {
   global_metadata?: Record<string, MetadataType>;
 }
 
-export interface ExtendedEventsQueueDto extends BaseEventsQueueDto {
-  project: string;
-  source: string;
-  ip: string;
-}
-
 export interface PersistedQueueData {
   userId: string;
   sessionId: string;
@@ -23,5 +17,4 @@ export interface PersistedQueueData {
   events: BaseEventsQueueDto['events'];
   timestamp: number;
   global_metadata?: BaseEventsQueueDto['global_metadata'];
-  fallbackMode?: boolean;
 }

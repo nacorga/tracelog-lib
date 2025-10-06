@@ -12,13 +12,12 @@
 
 import { test, expect } from '@playwright/test';
 import { navigateToPlayground } from './utils/environment.utils';
-import { SpecialProjectId } from '@/types';
 
 test.describe('Error Tracking', () => {
   test('should capture JavaScript errors', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (_projectId) => {
+    const result = await page.evaluate(async () => {
       const events: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -29,7 +28,6 @@ test.describe('Error Tracking', () => {
       });
 
       await traceLog.init({
-        id: _projectId,
         errorSampling: 1, // Capture all errors for testing
       });
 
@@ -58,7 +56,7 @@ test.describe('Error Tracking', () => {
       await traceLog.destroy();
 
       return { events, capturedCount: events.length };
-    }, SpecialProjectId.Skip);
+    });
 
     // Verify error was captured
     expect(result.capturedCount).toBeGreaterThan(0);
@@ -70,7 +68,7 @@ test.describe('Error Tracking', () => {
   test('should capture unhandled promise rejections', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const events: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -81,7 +79,6 @@ test.describe('Error Tracking', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         errorSampling: 1,
       });
 
@@ -100,7 +97,7 @@ test.describe('Error Tracking', () => {
       await traceLog.destroy();
 
       return { events, capturedCount: events.length };
-    }, SpecialProjectId.Skip);
+    });
 
     expect(result.capturedCount).toBeGreaterThan(0);
     expect(result.events[0].type).toBe('error');
@@ -111,7 +108,7 @@ test.describe('Error Tracking', () => {
   test('should sanitize PII from error messages', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const events: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -122,7 +119,6 @@ test.describe('Error Tracking', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         errorSampling: 1,
       });
 
@@ -164,7 +160,7 @@ test.describe('Error Tracking', () => {
       await traceLog.destroy();
 
       return { events };
-    }, SpecialProjectId.Skip);
+    });
 
     expect(result.events.length).toBeGreaterThanOrEqual(3);
 
@@ -191,7 +187,7 @@ test.describe('Error Tracking', () => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
     // Test 1: errorSampling = 0 should capture NO errors
-    const result1 = await page.evaluate(async (projectId) => {
+    const result1 = await page.evaluate(async () => {
       const events: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -202,7 +198,6 @@ test.describe('Error Tracking', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         errorSampling: 0, // 0% - should capture NOTHING
       });
 
@@ -224,13 +219,13 @@ test.describe('Error Tracking', () => {
       await traceLog.destroy();
 
       return { capturedCount: events.length };
-    }, SpecialProjectId.Skip);
+    });
 
     // With errorSampling = 0, should capture 0 errors
     expect(result1.capturedCount).toBe(0);
 
     // Test 2: errorSampling = 1 should capture ALL errors
-    const result2 = await page.evaluate(async (projectId) => {
+    const result2 = await page.evaluate(async () => {
       const events: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -241,7 +236,6 @@ test.describe('Error Tracking', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         errorSampling: 1, // 100% - should capture ALL
       });
 
@@ -263,7 +257,7 @@ test.describe('Error Tracking', () => {
       await traceLog.destroy();
 
       return { capturedCount: events.length };
-    }, SpecialProjectId.Skip);
+    });
 
     // With errorSampling = 1, should capture all 10 errors
     expect(result2.capturedCount).toBe(10);
@@ -272,7 +266,7 @@ test.describe('Error Tracking', () => {
   test('should suppress duplicate errors within time window', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const events: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -283,7 +277,6 @@ test.describe('Error Tracking', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         errorSampling: 1,
       });
 
@@ -320,7 +313,7 @@ test.describe('Error Tracking', () => {
       await traceLog.destroy();
 
       return { events, capturedCount: events.length };
-    }, SpecialProjectId.Skip);
+    });
 
     // Should capture 2 errors: 1 from first batch, 1 after suppression window
     expect(result.capturedCount).toBe(2);
@@ -331,7 +324,7 @@ test.describe('Error Tracking', () => {
   test('should handle very long error messages', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async (projectId) => {
+    const result = await page.evaluate(async () => {
       const events: any[] = [];
       const traceLog = window.__traceLogBridge!;
 
@@ -342,7 +335,6 @@ test.describe('Error Tracking', () => {
       });
 
       await traceLog.init({
-        id: projectId,
         errorSampling: 1,
       });
 
@@ -363,7 +355,7 @@ test.describe('Error Tracking', () => {
       await traceLog.destroy();
 
       return { events, messageLength: events[0]?.error_data?.message?.length || 0 };
-    }, SpecialProjectId.Skip);
+    });
 
     // Should truncate to MAX_ERROR_MESSAGE_LENGTH (likely 1000 or 2000)
     expect(result.messageLength).toBeLessThan(3000);

@@ -6,14 +6,15 @@ A lightweight TypeScript library for web analytics and user behavior tracking. A
 
 - **Zero-config tracking** - Automatically captures clicks, scrolls, page navigation, and web vitals out of the box.
 - **Cross-tab session management** - Maintains consistent user sessions across multiple browser tabs with automatic recovery.
-- **Privacy-first** - Built-in PII sanitization, IP exclusion options, and configurable data sampling.
+- **Client-only architecture** - Fully autonomous with optional backend integrations (TraceLog SaaS, custom API, Google Analytics).
+- **Privacy-first** - Built-in PII sanitization and client-side sampling controls.
 - **Framework agnostic** - Works with vanilla JS, React, Vue, Angular, or any web application.
 - **Lightweight** - Only one dependency (`web-vitals`) with dual ESM/CJS support.
 - **Event-driven** - Real-time event subscription with `on()` and `off()` methods for custom integrations.
 
 ## Installation
 
-**Prerequisites**: Modern browser with ES6+ support. No server-side requirements.
+**Prerequisites**: Modern browser with ES6+ support.
 
 ## 📦 Which File Should I Use?
 
@@ -33,7 +34,16 @@ npm install @tracelog/lib
 ```typescript
 import { tracelog } from '@tracelog/lib';
 
-tracelog.init({ id: 'your-project-id' });
+// Standalone mode (no backend required)
+tracelog.init({});
+
+// OR with TraceLog SaaS integration
+tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' }
+  }
+});
+
 tracelog.event('user_action', { data: 'example' });
 ```
 
@@ -45,7 +55,15 @@ tracelog.event('user_action', { data: 'example' });
 ```html
 <script src="https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.js"></script>
 <script>
-  tracelog.init({ id: 'your-project-id' });
+  // Standalone mode
+  tracelog.init({});
+
+  // OR with TraceLog SaaS
+  tracelog.init({
+    integrations: {
+      tracelog: { projectId: 'your-project-id' }
+    }
+  });
 </script>
 ```
 
@@ -58,7 +76,7 @@ tracelog.event('user_action', { data: 'example' });
 <script type="module">
   import { tracelog } from 'https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.esm.js';
 
-  await tracelog.init({ id: 'your-project-id' });
+  await tracelog.init({}); // Standalone mode
   tracelog.event('page_view');
 </script>
 ```
@@ -66,99 +84,151 @@ tracelog.event('user_action', { data: 'example' });
 **✅ Best for:** Modern browsers, no bundler, prefer native modules
 **⚠️ Note:** Won't work in IE11 or older browsers
 
-**Expected behavior**: Automatic tracking begins immediately. Check browser dev tools console for event logs (when `mode: 'qa'` or `mode: 'debug'`).
+## How It Works
+
+- **Standalone Mode** (no `integrations`): Events captured and emitted locally via `on('event')`. No network requests.
+- **With Backend** (`integrations.tracelog` or `integrations.custom`): Events sent to configured endpoint after client-side validation.
+
+All validation, sampling, and deduplication happen client-side. Enable QA mode with `?tlog_mode=qa` URL parameter.
 
 ## Usage
 
-**Basic tracking with configuration:**
 ```typescript
+// Standalone mode
 await tracelog.init({
-  id: 'your-project-id',
-  sessionTimeout: 30 * 60 * 1000 // 30 minutes
+  sessionTimeout: 30 * 60 * 1000,
+  samplingRate: 1.0
 });
-```
 
-**Custom events with metadata:**
-```typescript
+// With TraceLog SaaS
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' }
+  }
+});
+
+// With custom backend
+await tracelog.init({
+  integrations: {
+    custom: { apiUrl: 'https://your-api.com/collect' }
+  }
+});
+
+// Custom events
 tracelog.event('product_viewed', {
   productId: 'abc-123',
   category: 'electronics',
-  price: 299.99,
-  tags: ['featured', 'sale']
+  price: 299.99
 });
-```
 
-**Privacy-focused configuration:**
-```typescript
+// Privacy controls
 await tracelog.init({
-  id: 'your-project-id',
   sensitiveQueryParams: ['token', 'session_id'],
-  excludedUrlPaths: ['/admin/*', '/internal'],
-  errorSampling: 0.1 // Only sample 10% of errors
+  samplingRate: 0.5,
+  errorSampling: 0.1
 });
 ```
 
 ## API
 
-**Core methods:**
-- `init(config: AppConfig): Promise<void>` - Initialize tracking with project configuration.
-- `event(name: string, metadata?: Record<string, MetadataType>): void` - Send custom event with optional metadata.
-- `on(event: string, callback: Function): void` - Subscribe to events emitted by TraceLog.
-- `off(event: string, callback: Function): void` - Unsubscribe from events emitted by TraceLog.
-- `isInitialized(): boolean` - Check if the library has been initialized.
-- `destroy(): Promise<void>` - Clean up all tracking and remove event listeners.
+**Methods:**
+- `init(config?: Config): Promise<void>` - Initialize tracking
+- `event(name: string, metadata?: Record<string, MetadataType>): void` - Send custom event
+- `on(event: string, callback: Function): void` - Subscribe to events
+- `off(event: string, callback: Function): void` - Unsubscribe from events
+- `isInitialized(): boolean` - Check initialization status
+- `destroy(): Promise<void>` - Clean up and remove listeners
 
-**Key configuration options:**
-- `config.id`: Your unique project identifier (required).
-- `config.sessionTimeout`: Session timeout in milliseconds (default: 15 minutes).
-- `config.globalMetadata`: Metadata automatically attached to all events.
-- `config.mode`: Logging mode controlling verbosity ('qa', 'debug', etc.).
-- `config.samplingRate`: Event sampling rate between 0 and 1.
-- `config.errorSampling`: Error event sampling rate between 0 and 1.
-- `config.excludedUrlPaths`: URL path patterns to ignore during tracking.
-- `config.sensitiveQueryParams`: Query parameters to remove before tracking URLs.
-- `config.allowHttp`: Enable HTTP requests for testing environments.
-- `config.scrollContainerSelectors`: Custom scroll containers to monitor.
-- `config.integrations`: Third-party integration configurations.
+**Config (all optional):**
+- `sessionTimeout`: Session timeout in ms (default: 900000)
+- `globalMetadata`: Metadata attached to all events
+- `samplingRate`: Event sampling rate 0-1 (default: 1.0)
+- `errorSampling`: Error sampling rate 0-1 (default: 1.0)
+- `sensitiveQueryParams`: Query params to remove from URLs
+- `allowHttp`: Enable HTTP for testing
+- `scrollContainerSelectors`: Custom scroll containers
+- `integrations`:
+  - `tracelog.projectId`: TraceLog SaaS
+  - `custom.apiUrl`: Custom backend
+  - `googleAnalytics.measurementId`: GA4
 
-**Metadata types:** `string | number | boolean | string[]`
+## Event Data Structure
 
+Each event contains a base structure with type-specific data:
 
-## Configuration
+**Base fields (all events):**
+- `id`: Unique event identifier
+- `type`: Event type (see below)
+- `page_url`: Current page URL
+- `timestamp`: Unix timestamp in milliseconds
+- `referrer`: Document referrer (optional)
+- `utm`: UTM parameters (source, medium, campaign, term, content)
 
-**Disabling TraceLog:**
+**Event-specific data:**
+
+- **`PAGE_VIEW`**: Navigation tracking
+  - `page_view.title`: Page title
+  - `page_view.pathname`: URL pathname
+  - `page_view.search`: Query string
+  - `page_view.hash`: URL hash
+
+- **`CLICK`**: User interactions
+  - `click_data.x/y`: Viewport coordinates
+  - `click_data.relativeX/relativeY`: Element-relative position
+  - `click_data.tag/id/class`: Element identifiers
+  - `click_data.text/href/title`: Element content
+  - `click_data.role/ariaLabel`: Accessibility attributes
+  - `click_data.dataAttributes`: Data attributes
+
+- **`SCROLL`**: Scroll engagement
+  - `scroll_data.depth`: Scroll depth percentage (0-100)
+  - `scroll_data.direction`: Scroll direction (up/down)
+
+- **`SESSION_START`**: Session initialization
+  - No additional data
+
+- **`SESSION_END`**: Session termination
+  - `session_end_reason`: Reason (timeout, manual, tab_close)
+
+- **`CUSTOM`**: Business-specific events
+  - `custom_event.name`: Event name
+  - `custom_event.metadata`: Custom data (any JSON-serializable value)
+
+- **`WEB_VITALS`**: Performance metrics
+  - `web_vitals.type`: Metric type (LCP, CLS, INP, FCP, TTFB, LONG_TASK)
+  - `web_vitals.value`: Metric value in milliseconds
+
+- **`ERROR`**: JavaScript errors
+  - `error_data.type`: Error type (js_error, promise_rejection)
+  - `error_data.message`: Error message
+  - `error_data.filename/line/column`: Error location
+
+## Advanced
+
+**Event subscription:**
 ```typescript
-// Set this flag before initialization to disable TraceLog completely
-window.__traceLogDisabled = true;
+// Important: Register listeners BEFORE init() to capture initial events (SESSION_START, PAGE_VIEW)
+tracelog.on('event', (data) => console.log('Event:', data.type));
+tracelog.on('queue', (data) => console.log('Queued:', data.events.length));
+
+await tracelog.init({});
 ```
 
-**Environment-based settings:**
-- Use `samplingRate: 0.1` to reduce data volume in high-traffic applications
-- Configure `sessionTimeout` to match your application's user session length
+**Note**: Listeners are buffered if registered before `init()`, ensuring you don't miss initial events.
 
-**Event subscription**
-```typescript
-// Subscribe to individual events as they are tracked
-tracelog.on('event', (eventData) => {
-  console.log('Event tracked:', eventData.type, eventData);
-});
-
-// Subscribe to event queue batches being sent
-tracelog.on('queue', (queueData) => {
-  console.log('Events queued for sending:', queueData.events.length);
-});
-```
-
-**Google Analytics integration:**
+**Multiple integrations:**
 ```typescript
 await tracelog.init({
-  id: 'your-project-id',
   integrations: {
-    googleAnalytics: {
-      measurementId: 'G-XXXXXXXXXX'
-    }
+    tracelog: { projectId: 'your-project-id' },
+    googleAnalytics: { measurementId: 'G-XXXXXXXXXX' }
   }
 });
+```
+
+**Disable globally:**
+```typescript
+window.__traceLogDisabled = true;
 ```
 
 ## Compatibility
@@ -168,52 +238,20 @@ await tracelog.init({
 - **TypeScript**: Full type definitions included
 - **Frameworks**: React, Vue, Angular, Svelte, vanilla JS
 
-## Logging & Debug
+## Debug
 
-**Development mode** → Set `NODE_ENV=dev` for event-based logging to `window` → Use browser console for runtime debugging.
-
-**Log levels** → `qa` mode shows CLIENT_ERROR, CLIENT_WARN, INFO → `debug` mode shows all levels → Configure via `mode` parameter.
+Enable QA mode: `?tlog_mode=qa` URL parameter
 
 ```typescript
-// Enable debug logging
-await tracelog.init({
-  id: 'your-project-id',
-  mode: 'debug' // or 'qa' for less verbose logging
-});
-
-// Debug logs are automatically shown in console based on mode
-// No additional event listeners needed
-
-// Check if library is initialized
-if (tracelog.isInitialized()) {
-  console.log('TraceLog is ready');
-}
+tracelog.init({});
+console.log(tracelog.isInitialized()); // true
 ```
-
-## CI/CD Integration
-
-**Automated testing** → Validates library integrity before deployment → Detects critical issues early.
-
-```bash
-# Install and run tests
-npm ci && npx playwright install --with-deps
-npm run build:all
-npm run test:e2e               # E2E tests for validation
-```
-
-**GitHub Actions** → Pre-configured workflows available:
-- `health-check.yml` - Runs on PR and push
-- `release-quality-gate.yml` - Validates releases
-
-**Exit codes** → `0` = tests passed → `1` = critical issues detected
 
 ## Troubleshooting
 
-**Session tracking issues** → Verify localStorage is available → Check for cross-tab conflicts → Review session timeout settings.
-
-**High memory usage** → Reduce `sessionTimeout` → Lower `samplingRate` → Check for event listener leaks (call `destroy()` on cleanup).
-
-**CI test failures** → Verify Playwright installation → Check Node.js ≥20 → Review test patterns.
+- **Session issues**: Check localStorage availability and session timeout
+- **Memory usage**: Reduce `sessionTimeout`, lower `samplingRate`, call `destroy()` on cleanup
+- **CI failures**: Verify Playwright installation and Node.js ≥20
 
 ## Development & Contributing
 
@@ -229,82 +267,21 @@ npm run test:unit      # Run unit tests
 npm run test:coverage  # Run tests with coverage
 ```
 
-### Development Workflow
+### Workflow
 
-This project uses a **branch protection strategy** to ensure code quality:
+1. Create feature branch
+2. Submit PR to `main`
+3. CI validates: security, quality, build, tests
+4. Merge after approval
+5. Release via GitHub Actions
 
-1. **Feature Development:**
-   ```bash
-   git checkout -b feature/your-feature-name
-   # Make your changes
-   git commit -m "feat: add new feature"
-   git push origin feature/your-feature-name
-   ```
-
-2. **Pull Request Process:**
-   - Create PR to `main` branch
-   - CI automatically runs all validations:
-     - Security audit
-     - Code quality (ESLint + Prettier)
-     - Build integrity
-     - E2E tests
-   - PR cannot be merged until CI passes
-   - Code review required
-
-3. **Release Process:**
-   - Once merged to `main`, code is validated and ready
-   - Run Release workflow manually from GitHub Actions
-   - Automatic version bump, changelog, and NPM publish
-
-### Quality Standards
-- **Code Quality**: ESLint + Prettier enforced in CI
-- **Type Safety**: TypeScript strict mode required
-- **Testing**: Unit tests with Vitest, E2E tests with Playwright for all features
-- **Security**: Dependency vulnerability scanning
-- **Coverage**: Comprehensive test coverage with automated reporting
-
-## Versioning
-
-Follows [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH). Breaking changes are documented in release notes with migration guides.
-
-## Testing & Validation
-
-Verify the installation works correctly:
-
-### Quick Validation
-
-Open DevTools Console and check for:
-1. `[TraceLog:App] Initializing TraceLog` - Library loaded
-2. `[TraceLog:SessionManager] Session started` - Session active
-3. No errors or warnings
-4. Events logged when you interact with the page
-
-### Manual Test
-
-```javascript
-// Should work after installation
-tracelog.init({
-  id: 'skip',  // Use 'skip' for local testing
-  mode: 'debug'  // Enables console logging
-});
-
-// Send a test event
-tracelog.event('test_event', { foo: 'bar' });
-
-// Check DevTools Console for:
-// [TraceLog:EventManager] Tracking event: test_event
-```
-
-### Playground
-
-The library includes a full demo at [`playground/index.html`](playground/index.html):
+## Testing
 
 ```bash
-npm run playground:setup  # Build and copy library
-npm run serve            # Start server on localhost:3000
+npm run playground:setup && npm run serve  # Demo at localhost:3000
+npm run test:unit                           # Unit tests
+npm run test:e2e                            # E2E tests
 ```
-
-Open http://localhost:3000 to see TraceLog in action with real-time event monitoring.
 
 ## License
 

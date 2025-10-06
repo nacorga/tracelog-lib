@@ -22,7 +22,6 @@ describe('ScrollHandler Integration - Container Retry', () => {
     app = new App();
 
     await app.init({
-      id: 'skip',
       scrollContainerSelectors: '.delayed',
     });
 
@@ -44,7 +43,6 @@ describe('ScrollHandler Integration - Container Retry', () => {
     app = new App();
 
     await app.init({
-      id: 'skip',
       scrollContainerSelectors: '.never-exists',
     });
 

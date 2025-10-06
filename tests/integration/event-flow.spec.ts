@@ -27,9 +27,7 @@ describe('Event Flow Integration', () => {
     // Setup global state using test utility
     await setupTestState(
       createTestConfig({
-        id: 'test-project',
         samplingRate: 1,
-        excludedUrlPaths: [],
         sensitiveQueryParams: [],
         sessionTimeout: 900000,
       }),
@@ -133,7 +131,6 @@ describe('Event Flow Integration', () => {
         expect.objectContaining({
           type: EventType.CLICK,
           click_data: expect.objectContaining({
-            id: 'test-button',
             class: 'btn primary',
             tag: 'button',
             text: 'Click Me',
@@ -352,7 +349,6 @@ describe('Event Flow Integration', () => {
       // Setup state with global metadata
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           samplingRate: 1,
           globalMetadata: {
             environment: 'production',

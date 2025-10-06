@@ -7,7 +7,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as TraceLog from '@/api';
-import { SpecialProjectId } from '@/types';
 
 describe('API Integration - Destroy Flow', () => {
   beforeEach(async () => {
@@ -43,7 +42,7 @@ describe('API Integration - Destroy Flow', () => {
 
   describe('After Initialization', () => {
     beforeEach(async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
     });
 
     it('should destroy successfully', async () => {
@@ -78,7 +77,7 @@ describe('API Integration - Destroy Flow', () => {
 
   describe('Multiple Destroy Calls', () => {
     it('should throw error on second destroy call', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -86,7 +85,7 @@ describe('API Integration - Destroy Flow', () => {
     });
 
     it('should throw error when destroy is in progress', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
 
       // Start destroy (don't await yet)
       const firstDestroy = TraceLog.destroy();
@@ -102,31 +101,31 @@ describe('API Integration - Destroy Flow', () => {
   describe('Re-initialization After Destroy', () => {
     it('should allow init after destroy', async () => {
       // First lifecycle
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Second lifecycle
-      await expect(TraceLog.init({ id: SpecialProjectId.Skip })).resolves.not.toThrow();
+      await expect(TraceLog.init({})).resolves.not.toThrow();
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
     it('should work correctly after re-initialization', async () => {
       // First lifecycle
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       TraceLog.event('event1');
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Second lifecycle
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       expect(() => TraceLog.event('event2')).not.toThrow();
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
     it('should handle multiple init/destroy cycles', async () => {
       for (let i = 0; i < 3; i++) {
-        await TraceLog.init({ id: SpecialProjectId.Skip });
+        await TraceLog.init({});
         TraceLog.event(`event-cycle-${i}`);
         expect(TraceLog.isInitialized()).toBe(true);
 
@@ -139,7 +138,7 @@ describe('API Integration - Destroy Flow', () => {
 
   describe('Cleanup Verification', () => {
     it('should cleanup event listeners', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
 
       // Destroy should remove all event listeners
       await TraceLog.destroy();
@@ -154,7 +153,7 @@ describe('API Integration - Destroy Flow', () => {
     });
 
     it('should cleanup timers and intervals', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
 
       // Destroy should clear all timers
       await TraceLog.destroy();
@@ -165,7 +164,7 @@ describe('API Integration - Destroy Flow', () => {
     });
 
     it('should cleanup storage listeners', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
 
       // Destroy should remove storage listeners
       await TraceLog.destroy();
@@ -184,18 +183,17 @@ describe('API Integration - Destroy Flow', () => {
 
   describe('With Different Configurations', () => {
     it('should destroy when initialized with skip mode', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
       await expect(TraceLog.destroy()).resolves.not.toThrow();
     });
 
-    it('should destroy when initialized with fail mode', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Fail });
+    it('should destroy when initialized with empty config', async () => {
+      await TraceLog.init({});
       await expect(TraceLog.destroy()).resolves.not.toThrow();
     });
 
     it('should destroy when initialized with global metadata', async () => {
       await TraceLog.init({
-        id: SpecialProjectId.Skip,
         globalMetadata: { version: '1.0.0' },
       });
       await expect(TraceLog.destroy()).resolves.not.toThrow();
@@ -203,7 +201,6 @@ describe('API Integration - Destroy Flow', () => {
 
     it('should destroy when initialized with custom timeout', async () => {
       await TraceLog.init({
-        id: SpecialProjectId.Skip,
         sessionTimeout: 60000,
       });
       await expect(TraceLog.destroy()).resolves.not.toThrow();
@@ -212,7 +209,7 @@ describe('API Integration - Destroy Flow', () => {
 
   describe('Edge Cases', () => {
     it('should handle destroy with pending events', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
 
       // Queue up some events
       TraceLog.event('event1');
@@ -224,14 +221,14 @@ describe('API Integration - Destroy Flow', () => {
     });
 
     it('should handle destroy immediately after init', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
 
       // Destroy right away
       await expect(TraceLog.destroy()).resolves.not.toThrow();
     });
 
     it('should handle destroy without any events sent', async () => {
-      await TraceLog.init({ id: SpecialProjectId.Skip });
+      await TraceLog.init({});
 
       // Destroy without sending any custom events
       await expect(TraceLog.destroy()).resolves.not.toThrow();
