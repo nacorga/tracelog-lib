@@ -283,6 +283,66 @@ describe('Config Validations', () => {
       });
     });
 
+    describe('Sampling Rate Validation', () => {
+      it('should accept valid sampling rate 0', () => {
+        const config: Config = { samplingRate: 0 };
+        expect(() => validateAppConfig(config)).not.toThrow();
+      });
+
+      it('should accept valid sampling rate 1', () => {
+        const config: Config = { samplingRate: 1 };
+        expect(() => validateAppConfig(config)).not.toThrow();
+      });
+
+      it('should accept valid sampling rate 0.5', () => {
+        const config: Config = { samplingRate: 0.5 };
+        expect(() => validateAppConfig(config)).not.toThrow();
+      });
+
+      it('should reject negative sampling rate', () => {
+        const config: Config = { samplingRate: -0.1 };
+        expect(() => validateAppConfig(config)).toThrow(SamplingRateValidationError);
+      });
+
+      it('should reject sampling rate above 1', () => {
+        const config: Config = { samplingRate: 1.1 };
+        expect(() => validateAppConfig(config)).toThrow(SamplingRateValidationError);
+      });
+
+      it('should reject non-number sampling rate', () => {
+        expect(() => validateAppConfig({ samplingRate: '0.5' as any })).toThrow(SamplingRateValidationError);
+        expect(() => validateAppConfig({ samplingRate: true as any })).toThrow(SamplingRateValidationError);
+      });
+
+      it('should accept undefined', () => {
+        const config: Config = {};
+        expect(() => validateAppConfig(config)).not.toThrow();
+      });
+    });
+
+    describe('Allow HTTP Validation', () => {
+      it('should accept true', () => {
+        const config: Config = { allowHttp: true };
+        expect(() => validateAppConfig(config)).not.toThrow();
+      });
+
+      it('should accept false', () => {
+        const config: Config = { allowHttp: false };
+        expect(() => validateAppConfig(config)).not.toThrow();
+      });
+
+      it('should reject non-boolean', () => {
+        expect(() => validateAppConfig({ allowHttp: 'true' as any })).toThrow(AppConfigValidationError);
+        expect(() => validateAppConfig({ allowHttp: 1 as any })).toThrow(AppConfigValidationError);
+        expect(() => validateAppConfig({ allowHttp: 'true' as any })).toThrow('allowHttp must be a boolean');
+      });
+
+      it('should accept undefined', () => {
+        const config: Config = {};
+        expect(() => validateAppConfig(config)).not.toThrow();
+      });
+    });
+
     describe('Google Analytics Integration Validation', () => {
       it('should accept valid Google Analytics 4 measurement ID', () => {
         const config: Config = {
@@ -383,10 +443,71 @@ describe('Config Validations', () => {
         expect(normalized.sensitiveQueryParams).toEqual(params);
       });
 
+      it('should set default samplingRate to 1', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.samplingRate).toBe(1);
+      });
+
+      it('should preserve existing samplingRate', () => {
+        const config: Config = { samplingRate: 0.5 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.samplingRate).toBe(0.5);
+      });
+
+      it('should preserve samplingRate of 0', () => {
+        const config: Config = { samplingRate: 0 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.samplingRate).toBe(0);
+      });
+
+      it('should set default sessionTimeout to DEFAULT_SESSION_TIMEOUT (900000)', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.sessionTimeout).toBe(900000);
+      });
+
+      it('should preserve existing sessionTimeout', () => {
+        const config: Config = { sessionTimeout: 600000 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.sessionTimeout).toBe(600000);
+      });
+
+      it('should set default errorSampling to 1', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.errorSampling).toBe(1);
+      });
+
+      it('should preserve existing errorSampling', () => {
+        const config: Config = { errorSampling: 0.5 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.errorSampling).toBe(0.5);
+      });
+
+      it('should preserve errorSampling of 0', () => {
+        const config: Config = { errorSampling: 0 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.errorSampling).toBe(0);
+      });
+
+      it('should set default allowHttp to false', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.allowHttp).toBe(false);
+      });
+
+      it('should preserve existing allowHttp', () => {
+        const config: Config = { allowHttp: true };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.allowHttp).toBe(true);
+      });
+
       it('should preserve all other config properties', () => {
         const config: Config = {
           sessionTimeout: 900000,
           errorSampling: 0.5,
+          samplingRate: 0.8,
           scrollContainerSelectors: ['.container'],
           integrations: {
             googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
@@ -395,6 +516,7 @@ describe('Config Validations', () => {
         const normalized = validateAndNormalizeConfig(config);
         expect(normalized.sessionTimeout).toBe(900000);
         expect(normalized.errorSampling).toBe(0.5);
+        expect(normalized.samplingRate).toBe(0.8);
         expect(normalized.scrollContainerSelectors).toEqual(['.container']);
         expect(normalized.integrations).toEqual(config.integrations);
       });

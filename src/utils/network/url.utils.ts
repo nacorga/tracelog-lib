@@ -25,9 +25,7 @@ const isValidUrl = (url: string, allowHttp = false): boolean => {
  * @returns The generated API URL
  */
 export const getApiUrl = (config: Config): string => {
-  if (config.integrations?.custom?.apiUrl) {
-    return config.integrations.custom.apiUrl;
-  }
+  const allowHttp = config.allowHttp ?? false;
 
   if (config.integrations?.tracelog?.projectId) {
     const url = new URL(window.location.href);
@@ -38,11 +36,21 @@ export const getApiUrl = (config: Config): string => {
       throw new Error('Invalid URL');
     }
 
-    const allowHttp = config.allowHttp ?? false;
     const projectId = config.integrations.tracelog.projectId;
     const cleanDomain = parts.slice(-2).join('.');
     const protocol = allowHttp && url.protocol === 'http:' ? 'http' : 'https';
     const apiUrl = `${protocol}://${projectId}.${cleanDomain}`;
+    const isValid = isValidUrl(apiUrl, allowHttp);
+
+    if (!isValid) {
+      throw new Error('Invalid URL');
+    }
+
+    return apiUrl;
+  }
+
+  if (config.integrations?.custom?.apiUrl) {
+    const apiUrl = config.integrations.custom.apiUrl;
     const isValid = isValidUrl(apiUrl, allowHttp);
 
     if (!isValid) {

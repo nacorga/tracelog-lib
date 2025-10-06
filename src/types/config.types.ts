@@ -19,7 +19,7 @@ export interface Config {
   integrations?: {
     /** TraceLog integration options. */
     tracelog?: {
-      /** Required project ID for Google Analytics. */
+      /** Required project ID TraceLog SaaS integration. */
       projectId: string;
     };
     /** Custom integration options. */

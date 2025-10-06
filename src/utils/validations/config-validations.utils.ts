@@ -1,4 +1,9 @@
-import { MAX_SESSION_TIMEOUT_MS, MIN_SESSION_TIMEOUT_MS, VALIDATION_MESSAGES } from '../../constants';
+import {
+  MAX_SESSION_TIMEOUT_MS,
+  MIN_SESSION_TIMEOUT_MS,
+  DEFAULT_SESSION_TIMEOUT,
+  VALIDATION_MESSAGES,
+} from '../../constants';
 import { Config } from '../../types';
 import {
   AppConfigValidationError,
@@ -59,6 +64,18 @@ export const validateAppConfig = (config: Config): void => {
   if (config.errorSampling !== undefined) {
     if (typeof config.errorSampling !== 'number' || config.errorSampling < 0 || config.errorSampling > 1) {
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_ERROR_SAMPLING_RATE, 'config');
+    }
+  }
+
+  if (config.samplingRate !== undefined) {
+    if (typeof config.samplingRate !== 'number' || config.samplingRate < 0 || config.samplingRate > 1) {
+      throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE, 'config');
+    }
+  }
+
+  if (config.allowHttp !== undefined) {
+    if (typeof config.allowHttp !== 'boolean') {
+      throw new AppConfigValidationError('allowHttp must be a boolean', 'config');
     }
   }
 };
@@ -201,8 +218,12 @@ export const validateAndNormalizeConfig = (config: Config): Config => {
 
   const normalizedConfig: Config = {
     ...config,
+    sessionTimeout: config.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT,
     globalMetadata: config.globalMetadata ?? {},
     sensitiveQueryParams: config.sensitiveQueryParams ?? [],
+    errorSampling: config.errorSampling ?? 1,
+    samplingRate: config.samplingRate ?? 1,
+    allowHttp: config.allowHttp ?? false,
   };
 
   return normalizedConfig;

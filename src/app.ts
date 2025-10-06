@@ -49,7 +49,7 @@ export class App extends StateManager {
     this.managers.storage = new StorageManager();
 
     try {
-      await this.setupState(config);
+      this.setupState(config);
       await this.setupIntegrations();
 
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
@@ -138,7 +138,7 @@ export class App extends StateManager {
     this.handlers = {};
   }
 
-  private async setupState(config: Config): Promise<void> {
+  private setupState(config: Config): void {
     this.set('config', config);
 
     const userId = UserManager.getId(this.managers.storage as StorageManager);

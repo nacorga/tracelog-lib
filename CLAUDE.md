@@ -4,7 +4,7 @@
 
 ## 🎯 Purpose
 
-Event tracking library that automatically captures user interactions (clicks, scrolls, navigation, web performance) and supports custom events. Features cross-tab session management, session recovery, Google Analytics integration, and event sampling.
+Client-only event tracking library that automatically captures user interactions (clicks, scrolls, navigation, web performance) and supports custom events. Operates autonomously without backend dependencies. Features cross-tab session management, session recovery, optional integrations (TraceLog SaaS, custom API, Google Analytics), and client-side event sampling.
 
 ## 🏗️ Architecture
 
@@ -27,7 +27,7 @@ src/
 └── types/                 # TypeScript type definitions
 ```
 
-**Main flow**: `init()` → Configure → Activate handlers → EventManager queues → Send events
+**Main flow**: `init()` → Validate config → Activate handlers → EventManager queues → Process locally OR send to optional backend
 
 ## 🛠️ Tech Stack
 
@@ -100,9 +100,11 @@ DOM event occurs → Handler captures → `EventManager.track()` queues event �
 
 User activity tracked → `SessionManager` syncs across tabs → recovers session on failure
 
-### 4. Data Sending
+### 4. Data Processing
 
-Events batched → Validated → Sent via `sendEventsQueue()` → Retries if failure detected
+Events batched → Client-side validation and sampling applied → **If `apiUrl` exists in state**: sent to backend via `sendEventsQueue()` → Retries on failure → **If no `apiUrl`**: events emitted locally only
+
+**Note**: `apiUrl` is set when `integrations.tracelog.projectId` or `integrations.custom.apiUrl` is configured
 
 ## ⚠️ WHAT NOT TO DO
 
@@ -156,9 +158,17 @@ npm run build:all       # Ensure build success
 ### Debug
 
 ```typescript
-await TraceLog.init({
-  id: 'your-project-id'
+// Standalone mode (no backend)
+await tracelog.init({});
+
+// With TraceLog SaaS
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' }
+  }
 });
+
+// Enable QA mode: add ?tracelog_qa=true to URL
 ```
 
 
@@ -281,7 +291,7 @@ describe('App Integration', () => {
   });
 
   it('should initialize successfully', async () => {
-    const config = { id: 'test-project-id' };
+    const config = {}; // Standalone mode
     await app.init(config);
     expect(app.initialized).toBe(true);
   });
@@ -304,7 +314,7 @@ describe('Component Integration', () => {
 
   it('should coordinate between managers', async () => {
     const eventSpy = vi.spyOn(EventManager.prototype, 'track');
-    await app.init({ id: 'test-project-id' });
+    await app.init({});
 
     // Simulate user interaction
     const clickEvent = new MouseEvent('click', { clientX: 100, clientY: 200 });
@@ -324,9 +334,9 @@ import { test, expect } from '@playwright/test';
 test('basic event tracking', async ({ page }) => {
   await page.goto('http://localhost:3000');
 
-  // Initialize TraceLog via test bridge
+  // Initialize TraceLog via test bridge (standalone mode)
   await page.evaluate(() => {
-    return window.__traceLogBridge?.initialize({ id: 'test-project-id' });
+    return window.__traceLogBridge?.initialize({});
   });
 
   // Simulate user interaction
@@ -350,7 +360,7 @@ test('session management flow', async ({ page }) => {
   await page.goto('http://localhost:3000');
 
   await page.evaluate(() => {
-    return window.__traceLogBridge?.initialize({ id: 'test-project-id' });
+    return window.__traceLogBridge?.initialize({});
   });
 
   const sessionId = await page.evaluate(() => {
@@ -395,9 +405,9 @@ window.__traceLogBridge?.destroy();
 
 // Test configuration
 const testConfig = {
-  id: 'test-project-id',
   sessionTimeout: 900000,
-  globalMetadata: { environment: 'test' }
+  globalMetadata: { environment: 'test' },
+  samplingRate: 1.0
 };
 ```
 

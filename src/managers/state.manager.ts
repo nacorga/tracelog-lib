@@ -1,5 +1,4 @@
 import { State } from '../types';
-import { DEFAULT_SAMPLING_RATE } from '../constants';
 
 const globalState: State = {} as State;
 
@@ -19,26 +18,7 @@ export abstract class StateManager {
   }
 
   protected set<T extends keyof State>(key: T, value: State[T]): void {
-    if (key === 'config' && value) {
-      const configValue = value as State['config'];
-
-      if (configValue) {
-        const samplingRate = configValue.samplingRate ?? DEFAULT_SAMPLING_RATE;
-        const normalizedSamplingRate = samplingRate < 0 || samplingRate > 1 ? DEFAULT_SAMPLING_RATE : samplingRate;
-        const hasNormalizedSampling = normalizedSamplingRate !== samplingRate;
-
-        if (hasNormalizedSampling) {
-          const normalizedConfig = { ...configValue, samplingRate: normalizedSamplingRate };
-          globalState[key] = normalizedConfig as State[T];
-        } else {
-          globalState[key] = configValue as State[T];
-        }
-      } else {
-        globalState[key] = value;
-      }
-    } else {
-      globalState[key] = value;
-    }
+    globalState[key] = value;
   }
 
   protected getState(): Readonly<State> {
