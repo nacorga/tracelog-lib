@@ -152,6 +152,56 @@ await tracelog.init({
   - `custom.apiUrl`: Custom backend
   - `googleAnalytics.measurementId`: GA4
 
+## Event Data Structure
+
+Each event contains a base structure with type-specific data:
+
+**Base fields (all events):**
+- `id`: Unique event identifier
+- `type`: Event type (see below)
+- `page_url`: Current page URL
+- `timestamp`: Unix timestamp in milliseconds
+- `referrer`: Document referrer (optional)
+- `utm`: UTM parameters (source, medium, campaign, term, content)
+
+**Event-specific data:**
+
+- **`PAGE_VIEW`**: Navigation tracking
+  - `page_view.title`: Page title
+  - `page_view.pathname`: URL pathname
+  - `page_view.search`: Query string
+  - `page_view.hash`: URL hash
+
+- **`CLICK`**: User interactions
+  - `click_data.x/y`: Viewport coordinates
+  - `click_data.relativeX/relativeY`: Element-relative position
+  - `click_data.tag/id/class`: Element identifiers
+  - `click_data.text/href/title`: Element content
+  - `click_data.role/ariaLabel`: Accessibility attributes
+  - `click_data.dataAttributes`: Data attributes
+
+- **`SCROLL`**: Scroll engagement
+  - `scroll_data.depth`: Scroll depth percentage (0-100)
+  - `scroll_data.direction`: Scroll direction (up/down)
+
+- **`SESSION_START`**: Session initialization
+  - No additional data
+
+- **`SESSION_END`**: Session termination
+  - `session_end_reason`: Reason (timeout, manual, tab_close)
+
+- **`CUSTOM`**: Business-specific events
+  - `custom_event.name`: Event name
+  - `custom_event.metadata`: Custom data (any JSON-serializable value)
+
+- **`WEB_VITALS`**: Performance metrics
+  - `web_vitals.type`: Metric type (LCP, CLS, INP, FCP, TTFB, LONG_TASK)
+  - `web_vitals.value`: Metric value in milliseconds
+
+- **`ERROR`**: JavaScript errors
+  - `error_data.type`: Error type (js_error, promise_rejection)
+  - `error_data.message`: Error message
+  - `error_data.filename/line/column`: Error location
 
 ## Advanced
 

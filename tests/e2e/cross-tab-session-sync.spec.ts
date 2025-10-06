@@ -307,7 +307,7 @@ test.describe('Cross-Tab Session Sync', () => {
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Initialize and get session ID
-    const initialData = await page.evaluate(async () => {
+    const initialData = await page.evaluate(async (storageBaseKey: string) => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
@@ -317,15 +317,15 @@ test.describe('Cross-Tab Session Sync', () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const sessionData = traceLog.getSessionData();
-      const storageKey = `${STORAGE_BASE_KEY}:default:session`;
+      const storageKey = `${storageBaseKey}:default:session`;
       const storedValue = localStorage.getItem(storageKey);
 
       return {
         sessionId: sessionData?.id,
         storedValue,
-        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${STORAGE_BASE_KEY}:`)),
+        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${storageBaseKey}:`)),
       };
-    });
+    }, STORAGE_BASE_KEY);
 
     expect(initialData.sessionId).toBeDefined();
 
@@ -337,8 +337,8 @@ test.describe('Cross-Tab Session Sync', () => {
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
     // Reinitialize and check session recovery
-    const recoveredData = await page.evaluate(async () => {
-      const storageKey = `${STORAGE_BASE_KEY}:default:session`;
+    const recoveredData = await page.evaluate(async (storageBaseKey: string) => {
+      const storageKey = `${storageBaseKey}:default:session`;
       const storedBeforeInit = localStorage.getItem(storageKey);
 
       const traceLog = window.__traceLogBridge!;
@@ -356,9 +356,9 @@ test.describe('Cross-Tab Session Sync', () => {
         sessionId: sessionData?.id,
         storedBeforeInit,
         storedAfterInit,
-        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${STORAGE_BASE_KEY}:`)),
+        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${storageBaseKey}:`)),
       };
-    });
+    }, STORAGE_BASE_KEY);
 
     // Session should be recovered (same session ID)
     expect(recoveredData.sessionId).toBe(initialData.sessionId);
