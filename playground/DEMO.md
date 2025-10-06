@@ -1,247 +1,285 @@
-# TraceLog Playground - Interactive Demo
+# TraceLog Playground - Realistic Demo Environment
 
-Interactive playground to test and demonstrate TraceLog functionalities in real-time.
+Interactive playground demonstrating TraceLog in a **realistic production-like environment**.
 
 ## 🎯 Purpose
 
-- **Development**: Quick testing of features during development
-- **Demo**: Showcase TraceLog capabilities to stakeholders
-- **Debugging**: Visualize events and behaviors in real-time
-- **E2E Tests**: Foundation for automated tests with Playwright
+- **Realistic Demo**: Showcases how TraceLog works in a real e-commerce website
+- **Development Testing**: Quick manual testing during feature development
+- **Documentation**: Live examples of TraceLog capabilities
+- **Visual Debugging**: Real-time event monitoring with floating monitor
 
 ## 🚀 Quick Start
 
 ```bash
-# Start playground with automatic build and server
+# Build and start playground
 npm run playground:dev
 
-# Server only (requires manual build first)
-npm run serve
-
-# Build only without server
-npm run playground:setup
+# Or step by step:
+npm run playground:setup    # Build library and copy to playground
+npm run serve              # Start HTTP server on port 3000
 ```
 
 **URL**: http://localhost:3000
 
-### Available Modes
+## 🛍️ What's Included
 
-- **Normal Demo**: Full visualization with monitor
-- **E2E Test**: Auto-detection, hidden monitor, automatic events
-- **QA Mode**: Extended debugging with detailed logs
+### Realistic E-commerce SPA: TechShop
 
-## ⚙️ Configuration
+A fully functional single-page application simulating a real tech store:
 
-### Default Initialization
+- **Product Catalog**: 6 products with images, prices, descriptions
+- **Shopping Cart**: Add/remove items with visual feedback
+- **Multi-page Navigation**: Home, Products, About, Contact (SPA routing)
+- **Contact Form**: Form submission with validation
+- **Responsive Design**: Works on desktop, tablet, mobile
+
+### TraceLog Integration (Production-Like)
+
+The playground uses TraceLog **exactly as a real client would**:
 
 ```javascript
-// Standalone mode (no backend - events processed locally)
-await tracelog.init({});
+// 1. Setup event listeners BEFORE initialization (to capture initial events)
+window.tracelog.on('event', (event) => {
+  console.log('Event captured:', event);
+});
 
-// With custom API integration (sends events to backend)
-await tracelog.init({
-  integrations: {
-    custom: { apiUrl: 'http://localhost:3002' }  // Local API
-  }
+window.tracelog.on('queue', (queue) => {
+  console.log('Events queued:', queue);
+});
+
+// 2. Initialize in standalone mode (no backend)
+await window.tracelog.init({});
+
+// 3. Send custom events
+window.tracelog.event('add_to_cart', {
+  product_id: '1',
+  product_name: 'Laptop Pro M2',
+  timestamp: Date.now()
 });
 ```
 
-### Automatic Detection
+**Important**: Listeners should be registered **before** `init()` to capture initial events like `SESSION_START` and `PAGE_VIEW`. TraceLog buffers listeners registered before initialization and attaches them during the init process.
 
-The playground automatically detects:
+### Real-time Event Monitor
 
-- **E2E Mode**: Playwright, HeadlessChrome, URL param `?e2e=true`
-  - Removes floating monitor UI to prevent test interference
-  - Sets project ID to `'e2e-test-project'`
-  - Enables auto-initialization and test mode
-  - Used by Playwright tests for coordinated behavior
-- **Test Mode**: URL param `?mode=test`
-- **Scenarios**: URL param `?scenario=basic|navigation|ecommerce`
-- **Project ID**: URL param `?project-id=custom-id` (default: 'playground-test-project')
-
-### Bridge API Consistency
-
-Usa `__traceLogBridge` consistentemente:
-```javascript
-// Unified helper
-function getTraceLogInstance() {
-  return window.__traceLogBridge || window.TraceLog;
-}
-
-// Event sending
-function sendTraceLogEvent(name, data) {
-  const traceLog = getTraceLogInstance();
-  return traceLog?.sendCustomEvent(name, data);
-}
-```
-
-## 📊 Event Monitor
-
-### Monitor View
+Floating monitor showing live TraceLog activity:
 
 ```
 ┌─────────────────────────────────┐
-│ TraceLog Monitor        Limpiar │
+│ TraceLog        Queue: 3     ▶️ │
 ├─────────────────────────────────┤
-│ Cola: 3                      ▶️ │
-├─────────────────────────────────┤
-│ [CLICK]              ✓          │
-│ [PAGE_VIEW]          ✓          │
-│ [SCROLL]             ⏳         │
+│ [PAGE_VIEW]  12:34:56.789    ✓ │
+│ [CLICK]      12:34:57.123    ✓ │
+│ [CUSTOM]     12:34:58.456    ⏳ │
 └─────────────────────────────────┘
 ```
 
-### Monitor States
-
-- **▶️** - Queue processing normally
+**Monitor States:**
+- **▶️** - Queue processing
 - **✓** - Event sent successfully
 - **⏳** - Event pending in queue
-- **🔄** - Retrying send
 - **❌** - Send error
 
-### Event Badges
-
+**Event Type Badges:**
 - `PAGE_VIEW` - Blue (navigation)
-- `CLICK` - Green (interaction)
-- `SCROLL` - Cyan (scroll)
+- `CLICK` - Green (interactions)
+- `SCROLL` - Cyan (scroll tracking)
 - `CUSTOM` - Purple (custom events)
-- `SESSION_START` - Yellow (session start)
-- `WEB_VITALS` - Pink (metrics)
-- `ERROR` - Red (errors)
+- `SESSION_START` - Yellow (session lifecycle)
+- `WEB_VITALS` - Pink (performance metrics)
+- `ERROR` - Red (error tracking)
 
-## 🛍️ E-commerce Simulation
+## 🔧 Realistic User Flows
 
-### Available Features
+### 1. Shopping Journey
 
-- **SPA Navigation**: `home` → `products` → `about` → `contact`
-- **Add to Cart**: Buttons with product tracking
-- **Form Submit**: Contact form with validation
-- **Custom Events**: Business-specific events
-
-### Generated Events
-
-```javascript
-// Automatic navigation
-{ type: 'PAGE_VIEW', page_url: '#products' }
-
-// Product interaction
-{
-  type: 'CUSTOM',
-  custom_event: {
-    name: 'add_to_cart',
-    metadata: { product_id: '1', product_name: 'Laptop Pro M2' }
-  }
-}
-
-// Contact form
-{
-  type: 'CUSTOM',
-  custom_event: {
-    name: 'contact_form_submit',
-    metadata: { name: 'John', email: 'john@email.com' }
-  }
-}
+```
+Home Page → Browse Products → Add to Cart → View Cart → Contact Support
 ```
 
-## 🧪 Testing and Debugging
+**Events Generated:**
+- `page_view` - Initial page load
+- `page_view` - Navigate to products
+- `click` - Product card click
+- `custom: add_to_cart` - Add item with product metadata
+- `page_view` - Navigate to contact
+- `custom: contact_form_submit` - Form submission
 
-### Available Global Functions
+### 2. Product Discovery
 
-```javascript
-// Helpers de testing (disponibles en window.testHelpers)
-window.testHelpers.sendCustomEvent('test_event', { key: 'value' });
+```
+Products Page → Scroll Products → Click Product → Add Multiple Items
 ```
 
-### Bridge Testing Methods
+**Events Generated:**
+- `page_view` - Products page
+- `scroll` - Scroll depth tracking
+- `click` - Product interactions
+- Multiple `custom: add_to_cart` events with different products
 
-When `NODE_ENV=dev`, the `__traceLogBridge` includes:
+### 3. Contact Flow
 
-```javascript
-const bridge = window.__traceLogBridge;
-
-// State information
-bridge.getAppInstance()        // App instance with initialized flag
-bridge.getSessionData()        // session info
-bridge.getQueueLength()        // pending events
-
-// Testing helpers
-bridge.sendCustomEvent(name, data)  // send custom event
-bridge.setSessionTimeout(ms)        // configure timeout
+```
+Navigate to Contact → Fill Form → Submit → Success Feedback
 ```
 
-### Console Integration
+**Events Generated:**
+- `page_view` - Contact page navigation
+- `click` - Form field interactions
+- `custom: contact_form_submit` - Form data with email, message
+
+## 📊 Monitored Events
+
+### Automatic Events
+
+TraceLog captures these automatically:
+
+- **Page Views**: SPA navigation with hash routing (`#productos`, `#contacto`)
+- **Clicks**: Interactive elements (buttons, links, nav items)
+- **Scrolls**: Scroll depth percentage and engagement
+- **Sessions**: Session start/end with cross-tab sync
+- **Performance**: Web Vitals (LCP, INP, CLS)
+- **Errors**: JavaScript errors with stack traces
+
+### Custom Business Events
+
+Playground implements realistic custom events:
 
 ```javascript
-// Listen to TraceLog events
-window.addEventListener('tracelog:log', (event) => {
-  const { namespace, message, data } = event.detail;
-  console.log(`[${namespace}] ${message}`, data);
+// E-commerce: Add to cart
+tracelog.event('add_to_cart', {
+  product_id: '1',
+  product_name: 'Laptop Pro M2',
+  timestamp: Date.now()
+});
+
+// Contact: Form submission
+tracelog.event('contact_form_submit', {
+  name: 'Juan Pérez',
+  email: 'juan@example.com',
+  message: 'Product inquiry...'
 });
 ```
 
-## 🎬 Testing Flow
+## 🧪 Development & Testing
 
-### 1. Manual Testing
+### Manual Testing
 
-1. Open playground at http://localhost:3000
-2. Interact with elements (clicks, navigation, forms)
-3. Observe events in real-time monitor
-4. Verify logs in browser console
+1. Open playground: `npm run playground:dev`
+2. Interact with UI (clicks, navigation, forms)
+3. Watch events in floating monitor
+4. Check browser console for TraceLog logs
 
-### 2. Automated Testing (E2E)
+### Integration with E2E Tests
+
+The playground serves as the test environment for Playwright E2E tests:
 
 ```bash
-# Run E2E tests that use the playground
+# Run E2E tests against playground
 npm run test:e2e
 
-# Only a specific test
-npm run test:e2e -- --grep "should initialize successfully"
+# Specific test
+npm run test:e2e -- --grep "navigation flow"
 ```
 
-Tests automatically:
-- Detect E2E mode (hide monitor)
-- Use `__traceLogBridge` for consistent access
-- Utilize traceLogTest fixtures
-- Apply custom matchers like toHaveNoTraceLogErrors()
+**How it works:**
+- Tests navigate to playground (`http://localhost:3000`)
+- TraceLog `__traceLogBridge` is available (injected by Vite in dev builds)
+- Tests interact with UI and verify events via bridge API
+- Playground behaves **identically** for manual use and automated tests
 
-### 3. Scenario Testing
+### Browser Console
+
+Monitor TraceLog activity:
 
 ```javascript
-// URL params for specific testing
-http://localhost:3000?scenario=basic        // Basic click
-http://localhost:3000?scenario=navigation   // Page navigation
-http://localhost:3000?scenario=ecommerce    // Add to cart
+// Check TraceLog instance
+console.log(window.tracelog);
+
+// Listen to events (setup BEFORE init to capture initial events)
+window.tracelog.on('event', console.log);
+window.tracelog.on('queue', console.log);
+
+// Initialize
+await window.tracelog.init({});
+
+// Check initialization status
+window.tracelog.isInitialized(); // true/false
 ```
 
-## ✨ Playground Advantages
+## 🎨 Design Philosophy
 
-### Development
-✅ **Hot Reload** - Instant changes with `npm run playground:dev`
-✅ **Bridge Consistency** - Uses `__traceLogBridge` like tests
-✅ **Visual Feedback** - Real-time event monitor
-✅ **Multiple Scenarios** - Automated testing of different cases
+### Production-First
 
-### Testing
-✅ **E2E Ready** - Foundation for Playwright tests
-✅ **Cross-browser** - Works on Chrome, Firefox, Safari
-✅ **Auto-detection** - E2E mode without manual configuration
-✅ **Clean State** - Each reload starts clean
+The playground **simulates a real production environment**:
 
-### Debugging
-✅ **Console Integration** - `tracelog:log` events available
-✅ **Queue Visibility** - Event queue monitor
-✅ **Error Tracking** - Captures and displays errors
-✅ **Session Management** - Session state visualization
+- ✅ Uses only public TraceLog API (`window.tracelog`)
+- ✅ Standard initialization (standalone mode by default)
+- ✅ No test-specific code or conditional behavior
+- ✅ Realistic user interactions and business logic
+- ✅ Production-quality HTML/CSS/JavaScript
 
-## 🏗️ Playground Architecture
+### Debugging-Friendly
+
+While realistic, it includes helpful development tools:
+
+- ✅ Floating event monitor (like DevTools)
+- ✅ Console logging for visibility
+- ✅ `data-testid` attributes for testing (common in production)
+- ✅ Clear visual feedback for actions
+
+## 📚 Use Cases
+
+### 1. Feature Development
+
+Test new TraceLog features in realistic context:
+
+```javascript
+// Test new API feature
+await tracelog.init({
+  sessionTimeout: 1800000,
+  globalMetadata: { version: '2.0', env: 'playground' }
+});
+```
+
+### 2. Demo for Stakeholders
+
+Show TraceLog capabilities to clients/team:
+
+- Navigate through realistic e-commerce flows
+- Show real-time event capture
+- Demonstrate session management
+- Display performance tracking
+
+### 3. Documentation Examples
+
+Playground serves as live documentation:
+
+- **README examples**: Copy patterns from playground
+- **Integration guides**: Reference real implementation
+- **API documentation**: Show real usage
+
+### 4. Debugging Issues
+
+Reproduce and debug issues in controlled environment:
+
+- Consistent setup
+- Visual feedback
+- Isolated from real app complexity
+- Easy to modify and test fixes
+
+## 🔍 Technical Details
+
+### Architecture
 
 ```
 ┌──────────────┐
 │   Browser    │
-│  (localhost) │
+│  localhost   │
 └──────┬───────┘
        │
-       │ __traceLogBridge API
+       │ window.tracelog API
        ↓
 ┌──────────────────────────────────┐
 │      TraceLog Client             │
@@ -250,54 +288,117 @@ http://localhost:3000?scenario=ecommerce    // Add to cart
 │  • PerformanceHandler            │
 └──────┬───────────────────────────┘
        │
-       │ Events: tracelog:log
+       │ Events: 'event', 'queue'
        ↓
 ┌──────────────────────────────────┐
 │   Playground Monitor             │
 │   • Visual event queue           │
 │   • Real-time status             │
-│   • Error visualization          │
+│   • Event inspection             │
 └──────────────────────────────────┘
 ```
 
-## 🔧 Troubleshooting
+### Files
 
-### Playground won't load
+- `index.html` - E-commerce UI (TechShop)
+- `style.css` - Responsive styling (~900 lines)
+- `script.js` - App logic + TraceLog integration
+- `tracelog.js` - TraceLog library (copied from build)
+
+### Build Process
+
 ```bash
-# Rebuild and restart
-npm run playground:setup
+# 1. Build TraceLog library
+npm run build:browser
+
+# 2. Copy to playground
+cp dist/browser/tracelog.js playground/tracelog.js
+
+# 3. Start server
 npm run serve
 
-# Or all together
+# All in one:
 npm run playground:dev
 ```
 
-### Events don't appear in monitor
-- **E2E Mode**: Monitor hidden by design
-- **JS Errors**: Check browser console
-- **Bridge Missing**: Verify that `NODE_ENV=dev` in build
-- **Integration**: Without `integrations` config, events are processed locally (not sent to backend)
+## ⚠️ Important Notes
 
-### Bridge not available
+### Standalone Mode
+
+By default, playground runs in **standalone mode**:
+
+- No backend required
+- Events processed locally
+- No network requests
+- Perfect for testing client-side logic
+
+To test with backend integration:
+
 ```javascript
-// Debug in console
-console.log(window.__traceLogBridge);  // should exist
-console.log(window.TraceLog);          // fallback
+// Modify script.js initializeApp()
+await tracelog.init({
+  integrations: {
+    custom: { apiUrl: 'http://localhost:8080' }
+  }
+});
 ```
 
-### E2E tests fail
-1. Verify playground is on port 3000
-2. Build must be `NODE_ENV=dev` to have bridge
-3. Tests use `traceLogTest` fixtures and custom matchers
-4. Use `SpecialProjectId.Skip` ('skip') for tests without HTTP calls
+### Test Bridge Compatibility
 
-## 📚 Related Resources
+While the playground uses **only public API**, E2E tests can access `__traceLogBridge`:
 
-- **E2E Tests**: `tests/E2E_TESTING_GUIDE.md` - Testing framework guide
-- **Fixtures**: `tests/fixtures/tracelog-fixtures.ts` - TraceLogTestPage class
-- **Matchers**: `tests/matchers/tracelog-matchers.ts` - Custom assertions
-- **Source code**: `playground/script.js` - Playground logic
-- **Build config**: `vite.config.ts` - Build configuration
-- **Test bridge**: `src/types/window.types.ts` - Bridge definition
-- **Event types**: `src/types/event.types.ts` - Event types
-- **API types**: `src/types/api.types.ts` - SpecialProjectId enum
+- Bridge is injected by Vite (not by playground code)
+- Available in development builds (`NODE_ENV=dev`)
+- Tests use bridge for internal state access
+- Playground remains production-realistic
+
+### Data Persistence
+
+Events are **not persisted** between page reloads:
+
+- TraceLog `localStorage` keys (prefixed with `tracelog_`) are removed before initialization (demo mode only)
+- Ensures fresh sessions on every page load for consistent demo experience
+- Session always starts with `SESSION_START` event
+- Event queue clears on refresh
+- Mirrors real user first visit
+- **Preserves other localStorage data** from other applications on the same domain
+
+**Note**: In production environments, TraceLog naturally persists sessions in localStorage for session recovery. The playground removes these keys to ensure predictable demo behavior and to guarantee `SESSION_START` events are visible.
+
+## 🚧 Troubleshooting
+
+### TraceLog not initializing
+
+```bash
+# Check build exists
+ls -la playground/tracelog.js
+
+# Rebuild if missing
+npm run playground:setup
+```
+
+### Events not appearing
+
+- Check browser console for errors
+- Verify TraceLog initialized: `window.tracelog.isInitialized()`
+- Ensure listeners were set up **before** `init()` to capture initial events
+- Check monitor is visible (should always be visible)
+
+### Monitor not updating
+
+- Monitor updates in real-time
+- Click events to expand details
+- Clear button to reset monitor
+
+## 📖 Related Resources
+
+- **Main README**: [/README.md](../README.md)
+- **Library Docs**: [/CLAUDE.md](../CLAUDE.md)
+- **E2E Testing**: [/tests/TESTING_GUIDE.md](../tests/TESTING_GUIDE.md)
+- **API Reference**: Check source code in `/src/api.ts`
+
+---
+
+**Last Updated**: January 2025
+**Purpose**: Production-realistic demo environment
+**Compatibility**: E2E tests via `__traceLogBridge` (Vite-injected)

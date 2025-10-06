@@ -88,9 +88,11 @@ npm run fix             # Auto-fix lint and format issues
 
 ## 🔍 Critical Paths
 
-### 1. Initialization
+### 1. Initialization & Listener Buffering
 
-`api.init()` → `App.init()` → `setState()` → `initHandlers()` → event listeners active
+**User API calls** → `on()` buffers in `pendingListeners[]` → `init()` called → `App` instance created → Buffered listeners attached to `App` → `App.init()` executes → Handlers emit initial events (SESSION_START, PAGE_VIEW) → Buffered listeners receive events
+
+**Key mechanism**: `pendingListeners` array in `api.ts` stores listeners registered before `init()`, ensuring they capture initial events emitted during initialization.
 
 ### 2. Event Tracking
 
@@ -105,6 +107,10 @@ User activity tracked → `SessionManager` syncs across tabs → recovers sessio
 Events batched → Client-side validation and sampling applied → **If `apiUrl` exists in state**: sent to backend via `sendEventsQueue()` → Retries on failure → **If no `apiUrl`**: events emitted locally only
 
 **Note**: `apiUrl` is set when `integrations.tracelog.projectId` or `integrations.custom.apiUrl` is configured
+
+### 5. Cleanup & Re-initialization
+
+`destroy()` called → `App.destroy()` → Handlers cleanup → `pendingListeners` cleared → `app = null` → Ready for re-init
 
 ## ⚠️ WHAT NOT TO DO
 

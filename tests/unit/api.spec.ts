@@ -191,11 +191,9 @@ describe('Public API', () => {
   });
 
   describe('on()', () => {
-    it('should throw error when not initialized', () => {
+    it('should buffer listeners when not initialized', () => {
       const callback = vi.fn();
-      expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).toThrow(
-        'TraceLog not initialized. Please call init() first.',
-      );
+      expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).not.toThrow();
     });
 
     it('should register event listener when initialized', async () => {
@@ -211,11 +209,9 @@ describe('Public API', () => {
   });
 
   describe('off()', () => {
-    it('should throw error when not initialized', () => {
+    it('should allow removing buffered listeners when not initialized', () => {
       const callback = vi.fn();
-      expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).toThrow(
-        'TraceLog not initialized. Please call init() first.',
-      );
+      expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).not.toThrow();
     });
 
     it('should unregister event listener when initialized', async () => {

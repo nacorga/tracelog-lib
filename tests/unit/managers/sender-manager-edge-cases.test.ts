@@ -30,7 +30,7 @@ describe('SenderManager Edge Cases', () => {
     user_id: 'user-123',
     session_id: 'session-456',
     device: DeviceType.Desktop,
-    events: [{ type: 'PAGE_VIEW' as any, page_url: '/test', timestamp: Date.now() }],
+    events: [{ id: 'test-1', type: 'PAGE_VIEW' as any, page_url: '/test', timestamp: Date.now() }],
   });
 
   beforeEach(() => {

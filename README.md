@@ -157,9 +157,14 @@ await tracelog.init({
 
 **Event subscription:**
 ```typescript
+// Important: Register listeners BEFORE init() to capture initial events (SESSION_START, PAGE_VIEW)
 tracelog.on('event', (data) => console.log('Event:', data.type));
 tracelog.on('queue', (data) => console.log('Queued:', data.events.length));
+
+await tracelog.init({});
 ```
+
+**Note**: Listeners are buffered if registered before `init()`, ensuring you don't miss initial events.
 
 **Multiple integrations:**
 ```typescript

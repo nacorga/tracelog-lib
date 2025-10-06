@@ -38,14 +38,14 @@ describe('API Integration - Emitter Methods', () => {
 
   describe('on() method', () => {
     describe('Before Initialization', () => {
-      it('should throw error when called before init()', () => {
+      it('should buffer listeners when called before init()', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).toThrow('TraceLog not initialized');
+        expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).not.toThrow();
       });
 
-      it('should throw error for queue event before init()', () => {
+      it('should buffer queue listeners before init()', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.on(EmitterEvent.QUEUE, callback)).toThrow('TraceLog not initialized');
+        expect(() => TraceLog.on(EmitterEvent.QUEUE, callback)).not.toThrow();
       });
     });
 
@@ -149,9 +149,9 @@ describe('API Integration - Emitter Methods', () => {
 
   describe('off() method', () => {
     describe('Before Initialization', () => {
-      it('should throw error when called before init()', () => {
+      it('should allow removing buffered listeners when called before init()', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).toThrow('TraceLog not initialized');
+        expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).not.toThrow();
       });
     });
 
