@@ -109,14 +109,15 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // QA mode: Show custom events in console instead of sending to server
     if (this.get('mode') === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
       console.log('[TraceLog] Event', {
         name: custom_event.name,
         ...(custom_event.metadata && { metadata: custom_event.metadata }),
       });
 
-      return; // Don't send to server in QA mode
+      this.emitEvent(payload);
+
+      return;
     }
 
     this.addToQueue(payload);
