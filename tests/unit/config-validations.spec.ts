@@ -51,14 +51,11 @@ describe('Config Validations', () => {
         expect(() => validateAppConfig(true as any)).toThrow(AppConfigValidationError);
       });
 
-      // v0.6.0: Empty config is valid - no required fields
       it('should accept empty config', () => {
         const config = {} as Config;
         expect(() => validateAppConfig(config)).not.toThrow();
       });
     });
-
-    // v0.6.0: Project ID Validation section removed - id field no longer exists in Config type
 
     describe('Session Timeout Validation', () => {
       it('should accept valid session timeout', () => {
@@ -360,8 +357,6 @@ describe('Config Validations', () => {
 
   describe('validateAndNormalizeConfig()', () => {
     describe('Normalization Behavior', () => {
-      // v0.6.0: Test removed - id field no longer exists
-
       it('should set default globalMetadata to empty object', () => {
         const config: Config = {};
         const normalized = validateAndNormalizeConfig(config);
@@ -405,15 +400,12 @@ describe('Config Validations', () => {
       });
     });
 
-    // v0.6.0: Post-Normalization Validation section removed - id field no longer exists
-
     describe('Integration with validateAppConfig', () => {
-      // v0.6.0: Test removed - id validation no longer exists
-
       it('should validate all fields before normalization', () => {
         const config: Config = {
           sessionTimeout: -1000,
         };
+
         expect(() => validateAndNormalizeConfig(config)).toThrow(SessionTimeoutValidationError);
       });
     });

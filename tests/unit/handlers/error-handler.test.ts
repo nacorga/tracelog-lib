@@ -9,7 +9,7 @@ describe('ErrorHandler', () => {
   let config: Config;
 
   beforeEach(() => {
-    config = { errorSampling: 1 }; // v0.6.0: empty config is valid, but set errorSampling for testing
+    config = { errorSampling: 1 };
     eventManager = { track: vi.fn() } as typeof eventManager;
     handler = new ErrorHandler(eventManager as unknown as EventManager);
     handler['set']('config', config);

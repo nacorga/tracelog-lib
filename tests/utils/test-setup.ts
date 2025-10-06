@@ -25,7 +25,6 @@ vi.mock('@/managers/sender.manager', () => {
 
 /**
  * Test configuration factory
- * v0.6.0: Removed excludedUrlPaths, mode, ipExcluded, id (server-side only or removed)
  */
 export const createTestConfig = (overrides: Partial<Config> = {}): Config => ({
   sessionTimeout: DEFAULT_SESSION_TIMEOUT,
@@ -143,7 +142,6 @@ export const setupTestEnvironment = async (
 
   const storageManager = createMockStorageManager();
   const eventManager = createTestEventManager(storageManager);
-  // v0.6.0: projectId for SessionManager defaults to 'default' (not in Config anymore)
   const sessionManager = createTestSessionManager(storageManager, eventManager, 'default');
 
   return {

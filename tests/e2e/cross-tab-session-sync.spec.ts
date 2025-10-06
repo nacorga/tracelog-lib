@@ -35,7 +35,6 @@ test.describe('Cross-Tab Session Sync', () => {
         const traceLog = window.__traceLogBridge!;
 
         await traceLog.init({
-          // v0.6.0: id field removed
           samplingRate: 1,
         });
 
@@ -57,7 +56,6 @@ test.describe('Cross-Tab Session Sync', () => {
         const traceLog = window.__traceLogBridge!;
 
         await traceLog.init({
-          // v0.6.0: id field removed
           samplingRate: 1,
         });
 
@@ -94,7 +92,6 @@ test.describe('Cross-Tab Session Sync', () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        // v0.6.0: id field removed
         samplingRate: 1,
       });
 
@@ -119,7 +116,6 @@ test.describe('Cross-Tab Session Sync', () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        // v0.6.0: id field removed
         samplingRate: 1,
       });
 
@@ -149,7 +145,6 @@ test.describe('Cross-Tab Session Sync', () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        // v0.6.0: id field removed
         samplingRate: 1,
       });
 
@@ -168,7 +163,6 @@ test.describe('Cross-Tab Session Sync', () => {
 
       // Mock BroadcastChannel if available
       if (typeof BroadcastChannel !== 'undefined') {
-        // v0.6.0: Use default channel name for local-only mode
         const channel = new BroadcastChannel('tracelog_session_default');
         channel.onmessage = (event) => {
           receivedMessages.push(event.data);
@@ -176,7 +170,6 @@ test.describe('Cross-Tab Session Sync', () => {
       }
 
       await traceLog.init({
-        // v0.6.0: id field removed
         samplingRate: 1,
       });
 
@@ -216,7 +209,6 @@ test.describe('Cross-Tab Session Sync', () => {
 
       try {
         await traceLog.init({
-          // v0.6.0: id field removed
           samplingRate: 1,
         });
       } catch (error) {
@@ -243,9 +235,6 @@ test.describe('Cross-Tab Session Sync', () => {
     expect(result.sessionId).toBeDefined();
   });
 
-  // v0.6.0: Test removed - projectId no longer exists
-  // In v0.6.0, all local-only mode instances share the same session namespace
-
   test('should handle rapid session updates across tabs', async ({ context, page }) => {
     await page.goto('/?auto-init=false&e2e=true');
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
@@ -254,7 +243,6 @@ test.describe('Cross-Tab Session Sync', () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        // v0.6.0: id field removed
         samplingRate: 1,
       });
 
@@ -273,7 +261,6 @@ test.describe('Cross-Tab Session Sync', () => {
         const traceLog = window.__traceLogBridge!;
 
         await traceLog.init({
-          // v0.6.0: id field removed
           samplingRate: 1,
         });
 
@@ -323,14 +310,12 @@ test.describe('Cross-Tab Session Sync', () => {
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        // v0.6.0: id field removed
         samplingRate: 1,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const sessionData = traceLog.getSessionData();
-      // v0.6.0: Use default storage key for local-only mode
       const storageKey = 'tl:default:session';
       const storedValue = localStorage.getItem(storageKey);
 
@@ -352,14 +337,12 @@ test.describe('Cross-Tab Session Sync', () => {
 
     // Reinitialize and check session recovery
     const recoveredData = await page.evaluate(async () => {
-      // v0.6.0: Use default storage key for local-only mode
       const storageKey = 'tl:default:session';
       const storedBeforeInit = localStorage.getItem(storageKey);
 
       const traceLog = window.__traceLogBridge!;
 
       await traceLog.init({
-        // v0.6.0: id field removed
         samplingRate: 1,
       });
 

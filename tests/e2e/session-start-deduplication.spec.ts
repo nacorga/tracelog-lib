@@ -83,6 +83,4 @@ test.describe('Session Start - Single emission per session', () => {
     await page1.close();
     await page2.close();
   });
-
-  // v0.6.0: excludedUrlPaths moved to server-side only - test removed
 });

@@ -53,6 +53,7 @@ export const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
 export const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024; // 8KB
 export const MAX_CUSTOM_EVENT_KEYS = 10;
 export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
+export const MAX_NESTED_OBJECT_KEYS = 20; // Maximum keys in nested objects within arrays
 
 // Text content limits
 export const MAX_TEXT_LENGTH = 255; // For click tracking text content

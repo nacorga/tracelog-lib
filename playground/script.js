@@ -590,7 +590,6 @@ async function initializeApp() {
     const shouldAutoInit = state.testMode.enabled ? state.testMode.autoInit : true;
 
     if (shouldAutoInit) {
-      // v0.6.0+: Use empty config for local-only mode
       await traceLog.init({});
       updateQueueStatus('▶️');
 

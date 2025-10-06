@@ -17,7 +17,7 @@ npm run check                    # Types + lint + format
 npm run fix                      # Auto-fix issues
 ```
 
-## QA Mode for Testing (v0.6.0+)
+## QA Mode for Testing
 
 **Auto-Detection**: `?tlog_mode=qa`
 
@@ -107,7 +107,6 @@ const result = await page.evaluate(async () => {
     retries++;
   }
 
-  // v0.6.0+: Use proper integration config or empty object
   await window.__traceLogBridge!.init({
     integrations: { custom: { apiUrl: 'http://localhost:8080' } }
   });
