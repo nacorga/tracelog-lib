@@ -1,6 +1,6 @@
 import { App } from './app';
 import { MetadataType, Config, EmitterCallback, EmitterMap } from './types';
-import { debugLog, validateAndNormalizeConfig } from './utils';
+import { log, validateAndNormalizeConfig } from './utils';
 import { TestBridge } from './test-bridge';
 import './types/window.types';
 
@@ -10,7 +10,7 @@ let isDestroying = false;
 
 export const init = async (config: Config): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    throw new Error('This library can only be used in a browser environment');
+    throw new Error('[TraceLog] This library can only be used in a browser environment');
   }
 
   if (window.__traceLogDisabled) {
@@ -38,14 +38,13 @@ export const init = async (config: Config): Promise<void> => {
       try {
         await instance.destroy(true);
       } catch (cleanupError) {
-        debugLog.warn('API', 'Failed to cleanup partially initialized app', { cleanupError });
+        log('error', 'Failed to cleanup partially initialized app', { error: cleanupError });
       }
 
       throw error;
     }
   } catch (error) {
     app = null;
-    debugLog.error('API', 'Initialization failed', { error });
     throw error;
   } finally {
     isInitializing = false;
@@ -54,20 +53,19 @@ export const init = async (config: Config): Promise<void> => {
 
 export const event = (name: string, metadata?: Record<string, MetadataType> | Record<string, MetadataType>[]): void => {
   if (!app) {
-    throw new Error('TraceLog not initialized. Please call init() first.');
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
   }
 
-  try {
-    app.sendCustomEvent(name, metadata);
-  } catch (error) {
-    debugLog.error('API', 'Failed to send custom event', { eventName: name, error });
-    throw error;
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot send events while TraceLog is being destroyed');
   }
+
+  app.sendCustomEvent(name, metadata);
 };
 
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (!app) {
-    throw new Error('TraceLog not initialized. Please call init() first.');
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
   }
 
   app.on(event, callback);
@@ -75,7 +73,7 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
 
 export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (!app) {
-    throw new Error('TraceLog not initialized. Please call init() first.');
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
   }
 
   app.off(event, callback);
@@ -87,26 +85,23 @@ export const isInitialized = (): boolean => {
 
 export const destroy = async (): Promise<void> => {
   if (!app) {
-    throw new Error('App not initialized');
+    throw new Error('[TraceLog] App not initialized');
   }
 
   if (isDestroying) {
-    throw new Error('Destroy operation already in progress');
+    throw new Error('[TraceLog] Destroy operation already in progress');
   }
 
   isDestroying = true;
 
   try {
-    debugLog.info('API', 'Destroying TraceLog instance');
     await app.destroy();
     app = null;
     isInitializing = false;
-    debugLog.info('API', 'TraceLog destroyed successfully');
   } catch (error) {
-    // Force cleanup even if destroy fails
     app = null;
     isInitializing = false;
-    debugLog.error('API', 'Error during destroy, forced cleanup', { error });
+    log('error', 'Error during destroy, forced cleanup', { error });
     throw error;
   } finally {
     isDestroying = false;

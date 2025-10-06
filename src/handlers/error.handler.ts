@@ -8,7 +8,6 @@ import {
   MAX_TRACKED_ERRORS,
   MAX_TRACKED_ERRORS_HARD_LIMIT,
 } from '../constants/error.constants';
-import { debugLog } from '../utils/logging';
 
 /**
  * Simplified error handler for tracking JavaScript errors and unhandled promise rejections
@@ -51,12 +50,6 @@ export class ErrorHandler extends StateManager {
       return;
     }
 
-    debugLog.warn('ErrorHandler', 'JS error captured', {
-      message: sanitizedMessage,
-      filename: event.filename,
-      line: event.lineno,
-    });
-
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
@@ -80,8 +73,6 @@ export class ErrorHandler extends StateManager {
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
       return;
     }
-
-    debugLog.warn('ErrorHandler', 'Promise rejection captured', { message: sanitizedMessage });
 
     this.eventManager.track({
       type: EventType.ERROR,
@@ -139,11 +130,7 @@ export class ErrorHandler extends StateManager {
     this.recentErrors.set(key, now);
 
     if (this.recentErrors.size > MAX_TRACKED_ERRORS_HARD_LIMIT) {
-      debugLog.warn('ErrorHandler', 'Hard limit exceeded, clearing all tracked errors', {
-        size: this.recentErrors.size,
-        limit: MAX_TRACKED_ERRORS_HARD_LIMIT,
-      });
-
+      // Hard limit exceeded, clearing all tracked errors
       this.recentErrors.clear();
       this.recentErrors.set(key, now);
 

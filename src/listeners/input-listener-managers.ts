@@ -1,5 +1,5 @@
 import { EventListenerManager } from './listeners.types';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 /**
  * Base class for input listener managers to reduce code duplication
@@ -20,7 +20,7 @@ abstract class BaseInputListenerManager implements EventListenerManager {
         window.addEventListener(event, this.onActivity, this.options);
       });
     } catch (error) {
-      debugLog.error(this.logPrefix, `Failed to setup ${this.logPrefix.toLowerCase()} listeners`, { error });
+      log('error', `Failed to setup ${this.logPrefix.toLowerCase()} listeners`, { error });
     }
   }
 
@@ -30,7 +30,7 @@ abstract class BaseInputListenerManager implements EventListenerManager {
         window.removeEventListener(event, this.onActivity);
       });
     } catch (error) {
-      debugLog.warn(this.logPrefix, `Error during ${this.logPrefix.toLowerCase()} listeners cleanup`, { error });
+      log('warn', `Error during ${this.logPrefix.toLowerCase()} listeners cleanup`, { error });
     }
   }
 }

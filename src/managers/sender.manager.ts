@@ -1,6 +1,6 @@
 import { QUEUE_KEY, EVENT_EXPIRY_HOURS, MAX_RETRIES, RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl } from '../types';
-import { debugLog } from '../utils';
+import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -35,8 +35,8 @@ export class SenderManager extends StateManager {
     const config = this.get('config');
 
     if (config?.integrations?.custom?.apiUrl === SpecialApiUrl.Fail) {
-      debugLog.warn('SenderManager', 'Fail mode: simulating network failure (sync)', {
-        events: body.events.length,
+      log('warn', 'Fail mode: simulating network failure (sync)', {
+        data: { events: body.events.length },
       });
 
       return false;
@@ -56,7 +56,7 @@ export class SenderManager extends StateManager {
       const persisted = this.persistEvents(body);
 
       if (!persisted) {
-        debugLog.warn('SenderManager', 'Failed to persist events, attempting immediate send');
+        log('warn', 'Failed to persist events, attempting immediate send');
       }
     }
 
@@ -95,7 +95,7 @@ export class SenderManager extends StateManager {
         callbacks?.onFailure?.();
       }
     } catch (error) {
-      debugLog.error('SenderManager', 'Failed to recover persisted events', { error });
+      log('error', 'Failed to recover persisted events', { error });
       this.clearPersistedEvents();
     }
   }
@@ -120,8 +120,8 @@ export class SenderManager extends StateManager {
 
     const config = this.get('config');
     if (config?.integrations?.custom?.apiUrl === SpecialApiUrl.Fail) {
-      debugLog.warn('SenderManager', 'Fail mode: simulating network failure', {
-        events: body.events.length,
+      log('warn', 'Fail mode: simulating network failure', {
+        data: { events: body.events.length },
       });
 
       return false;
@@ -134,12 +134,12 @@ export class SenderManager extends StateManager {
 
       return response.ok;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      debugLog.error('SenderManager', 'Send request failed', {
-        error: errorMessage,
-        events: body.events.length,
-        url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+      log('error', 'Send request failed', {
+        error,
+        data: {
+          events: body.events.length,
+          url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+        },
       });
 
       return false;
@@ -182,9 +182,9 @@ export class SenderManager extends StateManager {
       if (success) {
         return true;
       }
-      debugLog.warn('SenderManager', 'sendBeacon failed, persisting events for recovery');
+      log('warn', 'sendBeacon failed, persisting events for recovery');
     } else {
-      debugLog.warn('SenderManager', 'sendBeacon not available, persisting events for recovery');
+      log('warn', 'sendBeacon not available, persisting events for recovery');
     }
 
     this.persistEventsForRecovery(body);
@@ -220,7 +220,7 @@ export class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      debugLog.warn('SenderManager', 'Failed to parse persisted data', { error });
+      log('warn', 'Failed to parse persisted data', { error });
       this.clearPersistedEvents();
     }
 
@@ -264,7 +264,7 @@ export class SenderManager extends StateManager {
 
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      debugLog.warn('SenderManager', 'Failed to persist events', { error });
+      log('warn', 'Failed to persist events', { error });
       return false;
     }
   }
@@ -274,7 +274,7 @@ export class SenderManager extends StateManager {
       const key = this.getQueueStorageKey();
       this.storeManager.removeItem(key);
     } catch (error) {
-      debugLog.warn('SenderManager', 'Failed to clear persisted events', { error });
+      log('warn', 'Failed to clear persisted events', { error });
     }
   }
 
@@ -290,7 +290,7 @@ export class SenderManager extends StateManager {
     }
 
     if (this.retryCount >= MAX_RETRIES) {
-      debugLog.warn('SenderManager', 'Max retries reached, giving up', { retryCount: this.retryCount });
+      log('warn', 'Max retries reached, giving up', { data: { retryCount: this.retryCount } });
       this.clearPersistedEvents();
       this.resetRetryState();
       originalCallbacks?.onFailure?.();
@@ -324,12 +324,6 @@ export class SenderManager extends StateManager {
         this.isRetrying = false;
       }
     }, retryDelay);
-
-    debugLog.debug('SenderManager', 'Retry scheduled', {
-      attempt: this.retryCount + 1,
-      delay: retryDelay,
-      events: body.events.length,
-    });
   }
 
   private shouldSkipSend(): boolean {

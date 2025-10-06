@@ -158,30 +158,36 @@ export const isValidMetadata = (
     const sanitizedArray: Record<string, MetadataType>[] = [];
     const intro =
       type && type === 'customEvent' ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
+
     for (let i = 0; i < metadata.length; i++) {
       const item = metadata[i];
+
       if (typeof item !== 'object' || item === null || Array.isArray(item)) {
         return {
           valid: false,
           error: `${intro}: array item at index ${i} must be an object.`,
         };
       }
+
       const itemValidation = validateSingleMetadata(eventName, item, type);
+
       if (!itemValidation.valid) {
         return {
           valid: false,
           error: `${intro}: array item at index ${i} is invalid: ${itemValidation.error}`,
         };
       }
+
       if (itemValidation.sanitizedMetadata) {
         sanitizedArray.push(itemValidation.sanitizedMetadata);
       }
     }
-    // Allow empty arrays after sanitization
+
     return {
       valid: true,
       sanitizedMetadata: sanitizedArray,
     };
   }
+
   return validateSingleMetadata(eventName, metadata, type);
 };

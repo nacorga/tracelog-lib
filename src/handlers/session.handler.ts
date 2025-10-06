@@ -2,7 +2,7 @@ import { EventManager } from '../managers/event.manager';
 import { SessionManager } from '../managers/session.manager';
 import { StateManager } from '../managers/state.manager';
 import { StorageManager } from '../managers/storage.manager';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 export class SessionHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -22,7 +22,7 @@ export class SessionHandler extends StateManager {
     }
 
     if (this.destroyed) {
-      debugLog.warn('SessionHandler', 'Cannot start tracking on destroyed handler');
+      log('warn', 'Cannot start tracking on destroyed handler');
       return;
     }
 
@@ -46,9 +46,7 @@ export class SessionHandler extends StateManager {
         this.sessionManager = null;
       }
 
-      debugLog.error('SessionHandler', 'Failed to start session tracking', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      log('error', 'Failed to start session tracking', { error });
       throw error;
     }
   }

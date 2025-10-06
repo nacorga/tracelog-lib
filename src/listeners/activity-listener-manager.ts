@@ -1,5 +1,5 @@
 import { EventListenerManager } from './listeners.types';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 export class ActivityListenerManager implements EventListenerManager {
   private readonly onActivity: () => void;
@@ -15,7 +15,7 @@ export class ActivityListenerManager implements EventListenerManager {
       window.addEventListener('resize', this.onActivity, this.options);
       window.addEventListener('focus', this.onActivity, this.options);
     } catch (error) {
-      debugLog.error('ActivityListenerManager', 'Failed to setup activity listeners', { error });
+      log('error', 'Failed to setup activity listeners', { error });
       throw error;
     }
   }
@@ -26,7 +26,7 @@ export class ActivityListenerManager implements EventListenerManager {
       window.removeEventListener('resize', this.onActivity);
       window.removeEventListener('focus', this.onActivity);
     } catch (error) {
-      debugLog.warn('ActivityListenerManager', 'Error during activity listeners cleanup', { error });
+      log('warn', 'Error during activity listeners cleanup', { error });
     }
   }
 }

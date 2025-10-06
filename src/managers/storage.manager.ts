@@ -1,4 +1,4 @@
-import { debugLog } from '../utils/logging/debug-logger.utils';
+import { log } from '../utils';
 
 /**
  * Manages localStorage and sessionStorage with automatic fallback to in-memory storage.
@@ -18,10 +18,10 @@ export class StorageManager {
     this.sessionStorageRef = this.initializeStorage('sessionStorage');
 
     if (!this.storage) {
-      debugLog.warn('StorageManager', 'localStorage not available, using memory fallback');
+      log('warn', 'localStorage not available, using memory fallback');
     }
     if (!this.sessionStorageRef) {
-      debugLog.warn('StorageManager', 'sessionStorage not available, using memory fallback');
+      log('warn', 'sessionStorage not available, using memory fallback');
     }
   }
 
@@ -34,8 +34,8 @@ export class StorageManager {
         return this.storage.getItem(key);
       }
       return this.fallbackStorage.get(key) ?? null;
-    } catch (error) {
-      debugLog.warn('StorageManager', 'Failed to get item, using fallback', { key, error });
+    } catch {
+      // Silent fallback - user already warned in constructor
       return this.fallbackStorage.get(key) ?? null;
     }
   }
@@ -53,13 +53,12 @@ export class StorageManager {
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         this.hasQuotaExceededError = true;
 
-        debugLog.error('StorageManager', 'localStorage quota exceeded - data will not persist after reload', {
-          key,
-          valueSize: value.length,
+        log('error', 'localStorage quota exceeded - data will not persist after reload', {
+          error,
+          data: { key, valueSize: value.length },
         });
-      } else {
-        debugLog.warn('StorageManager', 'Failed to set item, using fallback', { key, error });
       }
+      // Else: Silent fallback - user already warned in constructor
     }
 
     // Always update fallback for consistency
@@ -74,8 +73,8 @@ export class StorageManager {
       if (this.storage) {
         this.storage.removeItem(key);
       }
-    } catch (error) {
-      debugLog.warn('StorageManager', 'Failed to remove item', { key, error });
+    } catch {
+      // Silent - not critical
     }
 
     // Always clean fallback
@@ -103,10 +102,8 @@ export class StorageManager {
 
       keysToRemove.forEach((key) => this.storage!.removeItem(key));
       this.fallbackStorage.clear();
-
-      debugLog.debug('StorageManager', 'Cleared storage', { itemsRemoved: keysToRemove.length });
     } catch (error) {
-      debugLog.error('StorageManager', 'Failed to clear storage', { error });
+      log('error', 'Failed to clear storage', { error });
       this.fallbackStorage.clear();
     }
   }
@@ -156,8 +153,8 @@ export class StorageManager {
         return this.sessionStorageRef.getItem(key);
       }
       return this.fallbackSessionStorage.get(key) ?? null;
-    } catch (error) {
-      debugLog.warn('StorageManager', 'Failed to get session item, using fallback', { key, error });
+    } catch {
+      // Silent fallback - user already warned in constructor
       return this.fallbackSessionStorage.get(key) ?? null;
     }
   }
@@ -173,13 +170,12 @@ export class StorageManager {
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-        debugLog.error('StorageManager', 'sessionStorage quota exceeded - data will not persist', {
-          key,
-          valueSize: value.length,
+        log('error', 'sessionStorage quota exceeded - data will not persist', {
+          error,
+          data: { key, valueSize: value.length },
         });
-      } else {
-        debugLog.warn('StorageManager', 'Failed to set session item, using fallback', { key, error });
       }
+      // Else: Silent fallback - user already warned in constructor
     }
 
     // Always update fallback for consistency
@@ -194,8 +190,8 @@ export class StorageManager {
       if (this.sessionStorageRef) {
         this.sessionStorageRef.removeItem(key);
       }
-    } catch (error) {
-      debugLog.warn('StorageManager', 'Failed to remove session item', { key, error });
+    } catch {
+      // Silent - not critical
     }
 
     // Always clean fallback

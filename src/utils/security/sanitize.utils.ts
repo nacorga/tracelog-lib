@@ -1,6 +1,6 @@
 import { MAX_ARRAY_LENGTH, MAX_OBJECT_DEPTH, MAX_STRING_LENGTH, XSS_PATTERNS } from '../../constants';
 import { MetadataType } from '../../types';
-import { debugLog } from '../logging';
+import { log } from '../logging.utils';
 
 /**
  * Sanitizes a string value to prevent XSS attacks
@@ -9,21 +9,15 @@ import { debugLog } from '../logging';
  */
 export const sanitizeString = (value: string): string => {
   if (!value || typeof value !== 'string' || value.trim().length === 0) {
-    debugLog.debug('Sanitize', 'String sanitization skipped - empty or invalid input', { value, type: typeof value });
     return '';
   }
 
-  const originalLength = value.length;
   let sanitized = value;
 
   // Limit string length
   if (value.length > MAX_STRING_LENGTH) {
     sanitized = value.slice(0, Math.max(0, MAX_STRING_LENGTH));
-    debugLog.warn('Sanitize', 'String truncated due to length limit', {
-      originalLength,
-      maxLength: MAX_STRING_LENGTH,
-      truncatedLength: sanitized.length,
-    });
+    // Silent truncation - this is expected behavior for long strings
   }
 
   // Remove potential XSS patterns
@@ -37,9 +31,11 @@ export const sanitizeString = (value: string): string => {
   }
 
   if (xssPatternMatches > 0) {
-    debugLog.warn('Sanitize', 'XSS patterns detected and removed', {
-      patternMatches: xssPatternMatches,
-      originalValue: value.slice(0, 100), // Log first 100 chars for debugging
+    log('warn', 'XSS patterns detected and removed', {
+      data: {
+        patternMatches: xssPatternMatches,
+        originalValue: value.slice(0, 100),
+      },
     });
   }
 
@@ -54,15 +50,6 @@ export const sanitizeString = (value: string): string => {
 
   const result = sanitized.trim();
 
-  if (originalLength > 50 || xssPatternMatches > 0) {
-    debugLog.debug('Sanitize', 'String sanitization completed', {
-      originalLength,
-      sanitizedLength: result.length,
-      xssPatternMatches,
-      wasTruncated: originalLength > MAX_STRING_LENGTH,
-    });
-  }
-
   return result;
 };
 
@@ -75,10 +62,7 @@ export const sanitizeString = (value: string): string => {
 const sanitizeValue = (value: unknown, depth = 0): unknown => {
   // Prevent infinite recursion
   if (depth > MAX_OBJECT_DEPTH) {
-    debugLog.warn('Sanitize', 'Maximum object depth exceeded during sanitization', {
-      depth,
-      maxDepth: MAX_OBJECT_DEPTH,
-    });
+    // Silent depth limit - prevents stack overflow
     return null;
   }
 
@@ -92,7 +76,7 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value < -Number.MAX_SAFE_INTEGER || value > Number.MAX_SAFE_INTEGER) {
-      debugLog.warn('Sanitize', 'Invalid number sanitized to 0', { value, isFinite: Number.isFinite(value) });
+      // Silent normalization - invalid numbers become 0
       return 0;
     }
 
@@ -104,41 +88,21 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
   }
 
   if (Array.isArray(value)) {
-    const originalLength = value.length;
     const limitedArray = value.slice(0, MAX_ARRAY_LENGTH);
 
-    if (originalLength > MAX_ARRAY_LENGTH) {
-      debugLog.warn('Sanitize', 'Array truncated due to length limit', {
-        originalLength,
-        maxLength: MAX_ARRAY_LENGTH,
-        depth,
-      });
-    }
-
+    // Silent array length limit
     const sanitizedArray = limitedArray.map((item) => sanitizeValue(item, depth + 1)).filter((item) => item !== null);
 
-    if (originalLength > 0 && sanitizedArray.length === 0) {
-      debugLog.warn('Sanitize', 'All array items were filtered out during sanitization', { originalLength, depth });
-    }
-
+    // Silent filter - empty arrays are valid results
     return sanitizedArray;
   }
 
   if (typeof value === 'object') {
     const sanitizedObject: Record<string, unknown> = {};
     const entries = Object.entries(value);
-    const originalKeysCount = entries.length;
     const limitedEntries = entries.slice(0, 20);
 
-    if (originalKeysCount > 20) {
-      debugLog.warn('Sanitize', 'Object keys truncated due to limit', {
-        originalKeys: originalKeysCount,
-        maxKeys: 20,
-        depth,
-      });
-    }
-
-    let filteredKeysCount = 0;
+    // Silent object keys limit
     for (const [key, value_] of limitedEntries) {
       const sanitizedKey = sanitizeString(key);
 
@@ -147,26 +111,13 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 
         if (sanitizedValue !== null) {
           sanitizedObject[sanitizedKey] = sanitizedValue;
-        } else {
-          filteredKeysCount++;
         }
-      } else {
-        filteredKeysCount++;
       }
-    }
-
-    if (filteredKeysCount > 0) {
-      debugLog.debug('Sanitize', 'Object properties filtered during sanitization', {
-        filteredKeysCount,
-        remainingKeys: Object.keys(sanitizedObject).length,
-        depth,
-      });
     }
 
     return sanitizedObject;
   }
 
-  debugLog.debug('Sanitize', 'Unknown value type sanitized to null', { type: typeof value, depth });
   return null;
 };
 
@@ -177,32 +128,17 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
  */
 export const sanitizeMetadata = (metadata: unknown): Record<string, MetadataType> => {
   if (typeof metadata !== 'object' || metadata === null) {
-    debugLog.debug('Sanitize', 'Metadata is not an object, returning empty object', {
-      metadata,
-      type: typeof metadata,
-    });
-
     return {};
   }
 
   try {
-    const originalKeys = Object.keys(metadata).length;
     const sanitized = sanitizeValue(metadata);
     const result =
       typeof sanitized === 'object' && sanitized !== null ? (sanitized as Record<string, MetadataType>) : {};
-    const finalKeys = Object.keys(result).length;
-
-    debugLog.debug('Sanitize', 'Metadata sanitization completed', {
-      originalKeys,
-      finalKeys,
-      keysFiltered: originalKeys - finalKeys,
-    });
 
     return result;
   } catch (error) {
-    debugLog.error('Sanitize', 'Metadata sanitization failed', {
-      error: error instanceof Error ? error.message : error,
-    });
-    throw new Error(`Metadata sanitization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`[TraceLog] Metadata sanitization failed: ${errorMessage}`);
   }
 };

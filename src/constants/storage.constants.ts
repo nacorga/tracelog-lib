@@ -1,4 +1,5 @@
 export const STORAGE_BASE_KEY = 'tlog';
+export const QA_MODE_KEY = `${STORAGE_BASE_KEY}:qa_mode`;
 export const USER_ID_KEY = `${STORAGE_BASE_KEY}:uid`;
 
 export const QUEUE_KEY = (id: string): string => (id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`);

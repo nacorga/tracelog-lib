@@ -1,9 +1,8 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType } from '../types';
-import { LONG_TASK_THROTTLE_MS, PRECISION_TWO_DECIMALS } from '../constants';
-import { WEB_VITALS_THRESHOLDS } from '../constants/performance.constants';
-import { debugLog } from '../utils/logging';
+import { LONG_TASK_THROTTLE_MS, PRECISION_TWO_DECIMALS, WEB_VITALS_THRESHOLDS } from '../constants';
+import { log } from '@/utils';
 
 type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
 
@@ -31,10 +30,7 @@ export class PerformanceHandler extends StateManager {
       try {
         obs.disconnect();
       } catch (error) {
-        debugLog.warn('PerformanceHandler', 'Failed to disconnect performance observer', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          observerIndex: index,
-        });
+        log('warn', 'Failed to disconnect performance observer', { error, data: { observerIndex: index } });
       }
     });
 
@@ -145,9 +141,7 @@ export class PerformanceHandler extends StateManager {
       onTTFB(report('TTFB'));
       onINP(report('INP'));
     } catch (error) {
-      debugLog.warn('PerformanceHandler', 'Failed to load web-vitals library, using fallback', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      log('warn', 'Failed to load web-vitals library, using fallback', { error });
       this.observeWebVitalsFallback();
     }
   }
@@ -171,9 +165,7 @@ export class PerformanceHandler extends StateManager {
         this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
       }
     } catch (error) {
-      debugLog.warn('PerformanceHandler', 'Failed to report TTFB', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      log('warn', 'Failed to report TTFB', { error });
     }
   }
 
@@ -228,7 +220,7 @@ export class PerformanceHandler extends StateManager {
 
   private trackWebVital(type: WebVitalType, value: number): void {
     if (!Number.isFinite(value)) {
-      debugLog.warn('PerformanceHandler', 'Invalid web vital value', { type, value });
+      log('warn', 'Invalid web vital value', { data: { type, value } });
       return;
     }
 
@@ -254,9 +246,7 @@ export class PerformanceHandler extends StateManager {
       const random = Math.random().toString(36).substr(2, 5);
       return `${timestamp.toFixed(2)}_${window.location.pathname}_${random}`;
     } catch (error) {
-      debugLog.warn('PerformanceHandler', 'Failed to get navigation ID', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      log('warn', 'Failed to get navigation ID', { error });
       return null;
     }
   }
@@ -282,9 +272,9 @@ export class PerformanceHandler extends StateManager {
         try {
           cb(list, observer);
         } catch (callbackError) {
-          debugLog.warn('PerformanceHandler', 'Observer callback failed', {
-            type,
-            error: callbackError instanceof Error ? callbackError.message : 'Unknown error',
+          log('warn', 'Observer callback failed', {
+            error: callbackError,
+            data: { type },
           });
         }
 
@@ -305,9 +295,9 @@ export class PerformanceHandler extends StateManager {
 
       return true;
     } catch (error) {
-      debugLog.warn('PerformanceHandler', 'Failed to create performance observer', {
-        type,
-        error: error instanceof Error ? error.message : 'Unknown error',
+      log('warn', 'Failed to create performance observer', {
+        error,
+        data: { type },
       });
       return false;
     }
@@ -315,18 +305,13 @@ export class PerformanceHandler extends StateManager {
 
   private shouldSendVital(type: WebVitalType, value?: number): boolean {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
-      debugLog.warn('PerformanceHandler', 'Invalid web vital value', { type, value });
+      log('warn', 'Invalid web vital value', { data: { type, value } });
       return false;
     }
 
     const threshold = this.vitalThresholds[type];
 
     if (typeof threshold === 'number' && value <= threshold) {
-      debugLog.debug('PerformanceHandler', 'Web vital below threshold, skipping', {
-        type,
-        value,
-        threshold,
-      });
       return false;
     }
 

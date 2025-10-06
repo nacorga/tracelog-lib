@@ -6,7 +6,7 @@ import {
   SamplingRateValidationError,
   IntegrationValidationError,
 } from '../../types/validation-error.types';
-import { debugLog } from '../logging';
+import { log } from '../logging.utils';
 
 /**
  * Validates the app configuration object (before normalization)
@@ -110,21 +110,29 @@ const validateScrollContainerSelectors = (selectors: string | string[]): void =>
 
   for (const selector of selectorsArray) {
     if (typeof selector !== 'string' || selector.trim() === '') {
-      debugLog.clientError('ConfigValidation', 'Invalid scroll container selector', {
-        selector,
-        type: typeof selector,
-        isEmpty: selector === '' || (typeof selector === 'string' && selector.trim() === ''),
+      log('error', 'Invalid scroll container selector', {
+        showToClient: true,
+        data: {
+          selector,
+          type: typeof selector,
+          isEmpty: selector === '' || (typeof selector === 'string' && selector.trim() === ''),
+        },
       });
+
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, 'config');
     }
 
     // Validate CSS selector syntax using regex-based validation (XSS prevention)
     // This validates syntax WITHOUT executing document.querySelector()
     if (!isValidCssSelectorSyntax(selector)) {
-      debugLog.clientError('ConfigValidation', 'Invalid or potentially unsafe CSS selector', {
-        selector,
-        reason: 'Failed security validation',
+      log('error', 'Invalid or potentially unsafe CSS selector', {
+        showToClient: true,
+        data: {
+          selector,
+          reason: 'Failed security validation',
+        },
       });
+
       throw new AppConfigValidationError('Invalid or potentially unsafe CSS selector', 'config');
     }
   }

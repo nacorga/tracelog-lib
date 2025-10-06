@@ -1,7 +1,7 @@
 import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
 import { EventType } from '../types';
 import { SessionEndReason } from '../types/session.types';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { EventManager } from './event.manager';
@@ -31,7 +31,7 @@ export class SessionManager extends StateManager {
 
   private initCrossTabSync(): void {
     if (typeof BroadcastChannel === 'undefined') {
-      debugLog.warn('SessionManager', 'BroadcastChannel not supported');
+      log('warn', 'BroadcastChannel not supported');
       return;
     }
 
@@ -46,7 +46,6 @@ export class SessionManager extends StateManager {
       }
 
       if (action === 'session_end') {
-        debugLog.debug('SessionManager', 'Session end synced from another tab');
         this.resetSessionState();
         return;
       }
@@ -58,8 +57,6 @@ export class SessionManager extends StateManager {
         if (this.isTracking) {
           this.setupSessionTimeout();
         }
-
-        debugLog.debug('SessionManager', 'Session synced from another tab', { sessionId });
       }
     };
   }
@@ -110,12 +107,10 @@ export class SessionManager extends StateManager {
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
 
     if (Date.now() - storedSession.lastActivity > sessionTimeout) {
-      debugLog.debug('SessionManager', 'Stored session expired');
       this.clearStoredSession();
       return null;
     }
 
-    debugLog.info('SessionManager', 'Session recovered from storage', { sessionId: storedSession.id });
     return storedSession.id;
   }
 
@@ -166,7 +161,7 @@ export class SessionManager extends StateManager {
 
   async startTracking(): Promise<void> {
     if (this.isTracking) {
-      debugLog.warn('SessionManager', 'Session tracking already active');
+      log('warn', 'Session tracking already active');
       return;
     }
 
@@ -191,8 +186,6 @@ export class SessionManager extends StateManager {
       this.setupSessionTimeout();
       this.setupActivityListeners();
       this.setupLifecycleListeners();
-
-      debugLog.info('SessionManager', 'Session tracking started', { sessionId, recovered: isRecovered });
     } catch (error) {
       this.isTracking = false;
       this.clearSessionTimeout();
@@ -291,12 +284,10 @@ export class SessionManager extends StateManager {
     const sessionId = this.get('sessionId');
 
     if (!sessionId) {
-      debugLog.warn('SessionManager', 'endSession called without active session', { reason });
+      log('warn', 'endSession called without active session', { data: { reason } });
       this.resetSessionState(reason);
       return;
     }
-
-    debugLog.info('SessionManager', 'Ending session', { sessionId, reason });
 
     this.eventManager.track({
       type: EventType.SESSION_END,
@@ -319,9 +310,7 @@ export class SessionManager extends StateManager {
       await this.eventManager.flushImmediately();
       finalize();
     } catch (error) {
-      debugLog.warn('SessionManager', 'Async flush failed during session end', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      log('warn', 'Async flush failed during session end', { error });
       finalize();
     }
   }

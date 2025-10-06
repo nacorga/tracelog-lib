@@ -1,5 +1,5 @@
-import { debugLog } from '../logging';
 import { Config } from '@/types';
+import { log } from '../logging.utils';
 
 /**
  * Validates if a URL is valid and optionally allows HTTP URLs
@@ -65,7 +65,6 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
   try {
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
-    const originalParamCount = Array.from(searchParams.keys()).length;
 
     let hasChanged = false;
     const removedParams: string[] = [];
@@ -78,14 +77,6 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
       }
     });
 
-    if (hasChanged) {
-      debugLog.debug('URLUtils', 'Sensitive parameters removed from URL', {
-        removedParams,
-        originalParamCount,
-        finalParamCount: Array.from(searchParams.keys()).length,
-      });
-    }
-
     if (!hasChanged && url.includes('?')) {
       return url;
     }
@@ -95,10 +86,7 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
 
     return result;
   } catch (error) {
-    debugLog.warn('URLUtils', 'URL normalization failed, returning original', {
-      url: url.slice(0, 100),
-      error: error instanceof Error ? error.message : error,
-    });
+    log('warn', 'URL normalization failed, returning original', { error, data: { url: url.slice(0, 100) } });
 
     return url;
   }

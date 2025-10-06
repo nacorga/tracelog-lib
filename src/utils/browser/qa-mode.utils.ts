@@ -1,4 +1,6 @@
-const QA_MODE_KEY = 'tlog:qa_mode';
+import { QA_MODE_KEY } from '@/constants';
+import { log } from '../logging.utils';
+
 const QA_MODE_PARAM = 'tlog_mode';
 const QA_MODE_VALUE = 'qa';
 
@@ -35,8 +37,8 @@ export const detectQaMode = (): boolean => {
 
     try {
       window.history.replaceState({}, '', newUrl);
-    } catch {
-      // Silently fail if history API is not available
+    } catch (error) {
+      log('warn', 'History API not available, cannot replace URL', { error });
     }
 
     console.log(
