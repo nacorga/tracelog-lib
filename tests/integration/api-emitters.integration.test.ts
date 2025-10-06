@@ -331,5 +331,71 @@ describe('API Integration - Emitter Methods', () => {
 
       expect(callback).toHaveBeenCalled();
     });
+
+    it('should generate unique IDs for all events', async () => {
+      const eventIds = new Set<string>();
+      const eventIdRegex = /^\d{13}-[0-9a-f]{8}$/;
+
+      const callback = vi.fn((eventData) => {
+        expect(eventData.id).toBeDefined();
+        expect(typeof eventData.id).toBe('string');
+
+        // Validate hybrid ID format: {timestamp}-{counter}-{random}
+        expect(eventData.id).toMatch(eventIdRegex);
+
+        // Track IDs for uniqueness check
+        eventIds.add(eventData.id);
+      });
+
+      TraceLog.on(EmitterEvent.EVENT, callback);
+
+      // Create 10 events rapidly
+      for (let i = 0; i < 10; i++) {
+        TraceLog.event(`event-${i}`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // All events should have been emitted
+      expect(callback).toHaveBeenCalledTimes(10);
+
+      // All IDs should be unique (no collisions)
+      expect(eventIds.size).toBe(10);
+    });
+
+    it('should preserve unique IDs across all emitted events', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      // Create multiple events rapidly
+      TraceLog.event('event1', { key: 'value1' });
+      TraceLog.event('event2', { key: 'value2' });
+      TraceLog.event('event3', { key: 'value3' });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // At least 3 events should have been emitted
+      expect(eventCallback.mock.calls.length).toBeGreaterThanOrEqual(3);
+
+      // Collect all emitted event IDs
+      const eventIds = new Set<string>();
+      const eventIdRegex = /^\d{13}-[0-9a-f]{8}$/;
+
+      eventCallback.mock.calls.forEach((call) => {
+        const eventData = call[0];
+        if (eventData && eventData.type === 'custom') {
+          // Verify ID exists and is valid hybrid ID format
+          expect(eventData.id).toBeDefined();
+          expect(typeof eventData.id).toBe('string');
+          expect(eventData.id).toMatch(eventIdRegex);
+
+          // Track IDs for uniqueness check
+          eventIds.add(eventData.id);
+        }
+      });
+
+      // All IDs should be unique
+      expect(eventIds.size).toBeGreaterThanOrEqual(3);
+    });
   });
 });

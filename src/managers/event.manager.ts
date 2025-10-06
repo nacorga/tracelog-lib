@@ -4,7 +4,7 @@ import {
   DUPLICATE_EVENT_THRESHOLD_MS,
 } from '../constants/config.constants';
 import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
-import { getUTMParameters, log, Emitter } from '../utils';
+import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -36,7 +36,7 @@ export class EventManager extends StateManager {
     await this.dataSender.recoverPersistedEvents({
       onSuccess: (_eventCount, recoveredEvents, body) => {
         if (recoveredEvents && recoveredEvents.length > 0) {
-          const eventIds = recoveredEvents.map((e) => e.timestamp + '_' + e.type);
+          const eventIds = recoveredEvents.map((e) => e.id);
           this.removeProcessedEvents(eventIds);
 
           if (body) {
@@ -162,7 +162,7 @@ export class EventManager extends StateManager {
 
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => `${e.timestamp}_${e.type}`);
+    const eventIds = eventsToSend.map((e) => e.id);
 
     if (isSync) {
       const success = this.dataSender.sendEventsQueueSync(body);
@@ -197,7 +197,7 @@ export class EventManager extends StateManager {
 
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => `${e.timestamp}_${e.type}`);
+    const eventIds = eventsToSend.map((e) => e.id);
 
     await this.dataSender.sendEventsQueue(body, {
       onSuccess: () => {
@@ -245,6 +245,7 @@ export class EventManager extends StateManager {
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
 
     const payload: EventData = {
+      id: generateEventId(),
       type: data.type as EventType,
       page_url: currentPageUrl,
       timestamp: Date.now(),
@@ -362,9 +363,9 @@ export class EventManager extends StateManager {
 
   private removeProcessedEvents(eventIds: string[]): void {
     const eventIdSet = new Set(eventIds);
+
     this.eventsQueue = this.eventsQueue.filter((event) => {
-      const eventId = `${event.timestamp}_${event.type}`;
-      return !eventIdSet.has(eventId);
+      return !eventIdSet.has(event.id);
     });
   }
 

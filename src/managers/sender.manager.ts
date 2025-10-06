@@ -119,6 +119,7 @@ export class SenderManager extends StateManager {
     }
 
     const config = this.get('config');
+
     if (config?.integrations?.custom?.apiUrl === SpecialApiUrl.Fail) {
       log('warn', 'Fail mode: simulating network failure', {
         data: { events: body.events.length },

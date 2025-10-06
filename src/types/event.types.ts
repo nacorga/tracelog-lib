@@ -89,6 +89,7 @@ export interface PageViewData {
 }
 
 export interface EventData {
+  id: string;
   type: EventType;
   page_url: string;
   timestamp: number;
