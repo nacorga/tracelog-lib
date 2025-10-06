@@ -10,6 +10,7 @@
  * Focus: Detect cross-tab coordination defects
  */
 
+import { STORAGE_BASE_KEY } from '@/constants';
 import { test, expect } from '@playwright/test';
 
 test.describe('Cross-Tab Session Sync', () => {
@@ -316,13 +317,13 @@ test.describe('Cross-Tab Session Sync', () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const sessionData = traceLog.getSessionData();
-      const storageKey = 'tl:default:session';
+      const storageKey = `${STORAGE_BASE_KEY}:default:session`;
       const storedValue = localStorage.getItem(storageKey);
 
       return {
         sessionId: sessionData?.id,
         storedValue,
-        allKeys: Object.keys(localStorage).filter((k) => k.startsWith('tl:')),
+        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${STORAGE_BASE_KEY}:`)),
       };
     });
 
@@ -337,7 +338,7 @@ test.describe('Cross-Tab Session Sync', () => {
 
     // Reinitialize and check session recovery
     const recoveredData = await page.evaluate(async () => {
-      const storageKey = 'tl:default:session';
+      const storageKey = `${STORAGE_BASE_KEY}:default:session`;
       const storedBeforeInit = localStorage.getItem(storageKey);
 
       const traceLog = window.__traceLogBridge!;
@@ -355,7 +356,7 @@ test.describe('Cross-Tab Session Sync', () => {
         sessionId: sessionData?.id,
         storedBeforeInit,
         storedAfterInit,
-        allKeys: Object.keys(localStorage).filter((k) => k.startsWith('tl:')),
+        allKeys: Object.keys(localStorage).filter((k) => k.startsWith(`${STORAGE_BASE_KEY}:`)),
       };
     });
 

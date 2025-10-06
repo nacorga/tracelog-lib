@@ -78,7 +78,7 @@ export const MAX_FINGERPRINTS_HARD_LIMIT = 2000; // Hard limit for aggressive cl
 // BROWSER & HTML
 // ============================================================================
 
-export const HTML_DATA_ATTR_PREFIX = 'data-tl';
+export const HTML_DATA_ATTR_PREFIX = 'data-tlog';
 
 // Interactive element selectors for click tracking
 export const INTERACTIVE_SELECTORS = [

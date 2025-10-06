@@ -10,6 +10,7 @@ import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { State, TraceLogTestBridge } from './types';
 import { __setAppInstance } from './api';
+import { STORAGE_BASE_KEY } from './constants';
 
 /**
  * Test bridge for E2E testing
@@ -114,7 +115,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     };
 
     // Store in the same format as SenderManager.persistEvents()
-    const storageKey = `tl:${projectId}:queue:${userId}`;
+    const storageKey = `${STORAGE_BASE_KEY}:${projectId}:queue:${userId}`;
     storageManager.setItem(storageKey, JSON.stringify(persistedData));
   }
 
