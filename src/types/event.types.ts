@@ -88,17 +88,8 @@ export interface PageViewData {
   hash?: string;
 }
 
-export interface EventLocation {
-  country: string;
-  country_code: string;
-}
-
-export interface VitalSample {
-  type: WebVitalType;
-  value: number;
-}
-
 export interface EventData {
+  id: string;
   type: EventType;
   page_url: string;
   timestamp: number;
@@ -112,6 +103,4 @@ export interface EventData {
   session_end_reason?: SessionEndReason;
   error_data?: ErrorData;
   utm?: UTM;
-  location?: EventLocation;
-  tags?: string[] | { id: string; key: string }[];
 }

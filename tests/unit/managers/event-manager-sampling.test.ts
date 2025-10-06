@@ -116,7 +116,7 @@ describe('EventManager - Sampling', () => {
     expect(eventManager.getQueueLength()).toBe(2);
   });
 
-  test('should clamp invalid sampling rates to default value', async () => {
+  test('invalid sampling rates are caught by config validation (not EventManager)', async () => {
     const { eventManager } = await setupTestEnvironment({ samplingRate: -0.3 });
 
     for (let i = 0; i < 50; i++) {
@@ -127,7 +127,7 @@ describe('EventManager - Sampling', () => {
       });
     }
 
-    expect(eventManager.getQueueLength()).toBe(50);
+    expect(eventManager.getQueueLength()).toBe(0);
   });
 
   test('should accept zero as valid sampling rate (sample nothing)', async () => {

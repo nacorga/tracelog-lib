@@ -17,6 +17,60 @@
 
 
 
+
+
+
+## [0.5.5] - 2025-10-03
+
+### 🔧 Other Changes
+
+- Simplify Vite configuration by removing redundant check for 'tracelog' global object ([7a17c4f](../../commit/7a17c4fa23293d2653e7cbf35255d0e551fe8208))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.4...v0.5.5
+
+
+## [0.5.4] - 2025-10-03
+
+### 🐛 Bug Fixes
+
+- Update README and Vite configuration to ensure consistent usage of 'tracelog' global object ([53ca8c1](../../commit/53ca8c1c54113c40f05c9649562fb9b7ec13000d))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.3...v0.5.4
+
+
+## [0.5.3] - 2025-10-03
+
+### 🐛 Bug Fixes
+
+- Update README and Vite configuration to reflect global object changes from 'tracelog' to 'TraceLog.tracelog' ([65f24cb](../../commit/65f24cb094823b453a62cc236b69c6df44d0b48d))
+
+### 🔧 Other Changes
+
+- Merge pull request #16 from nacorga/hotfix/20251003.1 ([6039f7c](../../commit/6039f7c6f64729fe449d3c7c509d1e206d5bb279))
+- Correct comment in Vite configuration to accurately reflect structure of the global TraceLog object ([b076210](../../commit/b0762104cfecf9171af92fd53e75d414a13de6c9))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.5.2...v0.5.3
+
+
 ## [0.5.2] - 2025-10-03
 
 ### 🔧 Other Changes

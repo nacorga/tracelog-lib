@@ -7,7 +7,7 @@ import { SessionHandler } from '@/handlers/session.handler';
 import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
 import { EventManager } from '@/managers/event.manager';
 import { StorageManager as TraceLogStorageManager } from '@/managers/storage.manager';
-import { AppConfig } from './config.types';
+import { Config } from './config.types';
 import { State } from './state.types';
 
 /**
@@ -17,7 +17,7 @@ import { State } from './state.types';
 export interface TraceLogTestBridge {
   // Core App methods
   readonly initialized: boolean;
-  init(config: AppConfig): Promise<void>;
+  init(config: Config): Promise<void>;
   destroy(): Promise<void>;
 
   // Core testing methods

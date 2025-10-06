@@ -4,7 +4,7 @@ import { init, event, on, off, isInitialized, destroy } from './api';
 export * from './app.constants';
 
 // Types
-export * from './app.types';
+export * from './types';
 
 // TraceLog namespace containing all API methods
 export const tracelog = {

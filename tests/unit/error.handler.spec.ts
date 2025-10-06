@@ -27,7 +27,6 @@ describe('ErrorHandler', () => {
     vi.clearAllMocks();
     await setupTestState(
       createTestConfig({
-        id: 'test-project',
         samplingRate: 1,
         errorSampling: 1, // Capture all errors by default for testing
       }),
@@ -122,7 +121,6 @@ describe('ErrorHandler', () => {
     it('should sample no errors with rate 0', async () => {
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           errorSampling: 0,
         }),
       );
@@ -137,7 +135,6 @@ describe('ErrorHandler', () => {
     it('should respect sampling rate of 0.1 (10%)', async () => {
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           errorSampling: 0.1,
         }),
       );
@@ -158,7 +155,6 @@ describe('ErrorHandler', () => {
     it('should use default sampling rate when not configured', async () => {
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           // errorSampling not set, default should be used
         }),
       );
@@ -303,7 +299,6 @@ describe('ErrorHandler', () => {
     it('should NOT track errors when sampling rate is 0', async () => {
       await setupTestState(
         createTestConfig({
-          id: 'test-project',
           errorSampling: 0,
         }),
       );

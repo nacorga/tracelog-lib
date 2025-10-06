@@ -64,7 +64,8 @@ export class TestBridge extends App implements TraceLogTestBridge {
       throw new Error('Storage manager not available');
     }
 
-    const projectId = this.get('config')?.id;
+    const config = this.get('config');
+    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.apiUrl ?? 'test';
     const userId = this.get('userId');
     const sessionId = this.get('sessionId');
 

@@ -35,14 +35,14 @@ npm run playground:setup
 ### Default Initialization
 
 ```javascript
-// Auto-initialization in demo mode (sends events to local API)
-await TraceLog.init({
-  id: 'localhost:3002',  // Local API (if available)
-});
+// Standalone mode (no backend - events processed locally)
+await tracelog.init({});
 
-// E2E/Testing mode (no HTTP calls - uses SpecialProjectId.Skip)
-await TraceLog.init({
-  id: 'skip', // Doesn't send events, only simulates
+// With custom API integration (sends events to backend)
+await tracelog.init({
+  integrations: {
+    custom: { apiUrl: 'http://localhost:3002' }  // Local API
+  }
 });
 ```
 
@@ -276,7 +276,7 @@ npm run playground:dev
 - **E2E Mode**: Monitor hidden by design
 - **JS Errors**: Check browser console
 - **Bridge Missing**: Verify that `NODE_ENV=dev` in build
-- **Project ID**: If using 'skip', events aren't sent (only simulated)
+- **Integration**: Without `integrations` config, events are processed locally (not sent to backend)
 
 ### Bridge not available
 ```javascript

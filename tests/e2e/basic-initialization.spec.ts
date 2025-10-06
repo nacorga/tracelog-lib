@@ -13,12 +13,10 @@ test.describe('Basic Initialization', () => {
     // Navigate to playground
     await navigateToPlayground(page, { autoInit: false });
 
-    // Initialize TraceLog with basic configuration
+    // Initialize TraceLog with basic configuration (local-only mode)
     const initResult = await page.evaluate(async () => {
       try {
-        const result = await window.__traceLogBridge!.init({
-          id: 'skip',
-        });
+        const result = await window.__traceLogBridge!.init({});
         return { success: true, result };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -60,7 +58,7 @@ test.describe('Basic Initialization', () => {
 
     // Initialize TraceLog twice
     const results = await page.evaluate(async () => {
-      const config = { id: 'skip' };
+      const config = {};
 
       try {
         const firstInit = await window.__traceLogBridge!.init(config);
@@ -82,22 +80,22 @@ test.describe('Basic Initialization', () => {
     expect(results.isInitialized).toBe(true);
   });
 
-  test('should reject initialization without project ID', async ({ page }) => {
+  test('should initialize without integrations (local-only mode)', async ({ page }) => {
     // Navigate to playground
     await navigateToPlayground(page, { autoInit: false });
 
-    // Try to initialize without project ID
+    // Initialize without integrations - local-only mode
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({} as any);
-        return { success: true };
+        await window.__traceLogBridge!.init({});
+        return { success: true, initialized: window.__traceLogBridge!.initialized };
       } catch (error) {
         return { success: false, error: (error as Error).message };
       }
     });
 
-    // Should fail with appropriate error
-    expect(initResult.success).toBe(false);
-    expect(initResult.error).toContain('Project ID is required');
+    // Should succeed in local-only mode
+    expect(initResult.success).toBe(true);
+    expect(initResult.initialized).toBe(true);
   });
 });

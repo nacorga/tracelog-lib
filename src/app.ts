@@ -1,5 +1,3 @@
-import { getApiUrlForProject } from './managers/api.manager';
-import { ConfigManager } from './managers/config.manager';
 import { EventManager } from './managers/event.manager';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
@@ -7,9 +5,9 @@ import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { AppConfig, EventType, EmitterCallback, EmitterMap } from './types';
+import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, debugLog, Emitter } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, Emitter, getApiUrl, detectQaMode, log } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -43,33 +41,30 @@ export class App extends StateManager {
     return this.isInitialized;
   }
 
-  async init(appConfig: AppConfig): Promise<void> {
+  async init(config: Config): Promise<void> {
     if (this.isInitialized) {
       return;
-    }
-
-    if (!appConfig.id?.trim()) {
-      throw new Error('Project ID is required');
     }
 
     this.managers.storage = new StorageManager();
 
     try {
-      await this.setupState(appConfig);
+      this.setupState(config);
       await this.setupIntegrations();
 
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
 
-      this.initializeHandlers();
+      await this.initializeHandlers();
 
-      await this.managers.event.recoverPersistedEvents().catch(() => {
-        debugLog.warn('App', 'Failed to recover persisted events');
+      await this.managers.event.recoverPersistedEvents().catch((error) => {
+        log('warn', 'Failed to recover persisted events', { error });
       });
 
       this.isInitialized = true;
     } catch (error) {
       await this.destroy(true);
-      throw new Error(`TraceLog initialization failed: ${error}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`);
     }
   }
 
@@ -81,10 +76,10 @@ export class App extends StateManager {
     const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
 
     if (!valid) {
-      const config = this.get('config');
-      if (config?.mode === 'qa' || config?.mode === 'debug') {
-        throw new Error(`Custom event "${name}" validation failed: ${error}`);
+      if (this.get('mode') === Mode.QA) {
+        throw new Error(`[TraceLog] Custom event "${name}" validation failed: ${error}`);
       }
+
       return;
     }
 
@@ -117,8 +112,8 @@ export class App extends StateManager {
       .map(async (handler) => {
         try {
           await handler.stopTracking();
-        } catch {
-          debugLog.warn('App', 'Failed to stop tracking');
+        } catch (error) {
+          log('warn', 'Failed to stop tracking', { error });
         }
       });
 
@@ -143,27 +138,33 @@ export class App extends StateManager {
     this.handlers = {};
   }
 
-  private async setupState(appConfig: AppConfig): Promise<void> {
-    const apiUrl = getApiUrlForProject(appConfig.id, appConfig.allowHttp);
-    this.set('apiUrl', apiUrl);
-
-    const configManager = new ConfigManager();
-    const config = await configManager.get(apiUrl, appConfig);
+  private setupState(config: Config): void {
     this.set('config', config);
 
-    const userId = UserManager.getId(this.managers.storage as StorageManager, config.id);
+    const userId = UserManager.getId(this.managers.storage as StorageManager);
     this.set('userId', userId);
 
-    this.set('device', getDeviceType());
+    const apiUrl = getApiUrl(config);
+    this.set('apiUrl', apiUrl);
+
+    const device = getDeviceType();
+    this.set('device', device);
+
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);
+
+    const mode = detectQaMode() ? Mode.QA : undefined;
+
+    if (mode) {
+      this.set('mode', mode);
+    }
   }
 
   private async setupIntegrations(): Promise<void> {
     const config = this.get('config');
     const measurementId = config.integrations?.googleAnalytics?.measurementId;
 
-    if (!config.ipExcluded && measurementId?.trim()) {
+    if (measurementId?.trim()) {
       try {
         this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
         await this.integrations.googleAnalytics.initialize();
@@ -173,17 +174,13 @@ export class App extends StateManager {
     }
   }
 
-  private initializeHandlers(): void {
+  private async initializeHandlers(): Promise<void> {
     this.handlers.session = new SessionHandler(
       this.managers.storage as StorageManager,
       this.managers.event as EventManager,
     );
 
-    this.handlers.session.startTracking().catch((error) => {
-      debugLog.error('App', 'Session handler failed to start', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    });
+    await this.handlers.session.startTracking();
 
     const onPageView = (): void => {
       this.set('suppressNextScroll', true);
@@ -207,8 +204,8 @@ export class App extends StateManager {
     this.handlers.scroll.startTracking();
 
     this.handlers.performance = new PerformanceHandler(this.managers.event as EventManager);
-    this.handlers.performance.startTracking().catch(() => {
-      debugLog.warn('App', 'Failed to start performance tracking');
+    this.handlers.performance.startTracking().catch((error) => {
+      log('warn', 'Failed to start performance tracking', { error });
     });
 
     this.handlers.error = new ErrorHandler(this.managers.event as EventManager);

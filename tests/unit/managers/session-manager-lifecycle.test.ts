@@ -45,7 +45,7 @@ describe('SessionManager - Lifecycle', () => {
 
     await sessionManager.startTracking();
 
-    expect(mockStorage.setItem).toHaveBeenCalledWith('tl:test-project:session', expect.any(String));
+    expect(mockStorage.setItem).toHaveBeenCalledWith('tlog:default:session', expect.any(String));
     expect(mockEventManager.track).toHaveBeenCalledWith({
       type: EventType.SESSION_START,
     });
@@ -65,10 +65,12 @@ describe('SessionManager - Lifecycle', () => {
   });
 
   test('should not recover expired session', async () => {
-    const storedSessionId = 'expired-session-123';
-    const expiredTimestamp = (Date.now() - DEFAULT_SESSION_TIMEOUT - 1000).toString(); // Expired
+    const storedSessionData = JSON.stringify({
+      id: 'expired-session-123',
+      lastActivity: Date.now() - DEFAULT_SESSION_TIMEOUT - 1000, // Expired
+    });
 
-    mockStorage.getItem = vi.fn().mockReturnValueOnce(storedSessionId).mockReturnValueOnce(expiredTimestamp);
+    mockStorage.getItem = vi.fn().mockReturnValueOnce(storedSessionData);
 
     await sessionManager.startTracking();
 
@@ -91,7 +93,7 @@ describe('SessionManager - Lifecycle', () => {
       type: EventType.SESSION_END,
       session_end_reason: 'inactivity',
     });
-    expect(mockStorage.removeItem).toHaveBeenCalledWith('tl:test-project:session');
+    expect(mockStorage.removeItem).toHaveBeenCalledWith('tlog:default:session');
   });
 
   test('should end session manually', async () => {
@@ -156,7 +158,7 @@ describe('SessionManager - Lifecycle', () => {
       await tempSessionManager.startTracking();
 
       const setItemCalls = mockStorage.setItem as any;
-      const sessionIdCall = setItemCalls.mock.calls.find((call: any) => call[0] === 'tl:test-project:session');
+      const sessionIdCall = setItemCalls.mock.calls.find((call: any) => call[0] === 'tlog:test-project:session');
 
       if (sessionIdCall) {
         const sessionData = JSON.parse(sessionIdCall[1]);

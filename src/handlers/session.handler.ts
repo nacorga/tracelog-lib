@@ -2,7 +2,7 @@ import { EventManager } from '../managers/event.manager';
 import { SessionManager } from '../managers/session.manager';
 import { StateManager } from '../managers/state.manager';
 import { StorageManager } from '../managers/storage.manager';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 export class SessionHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -22,11 +22,13 @@ export class SessionHandler extends StateManager {
     }
 
     if (this.destroyed) {
-      debugLog.warn('SessionHandler', 'Cannot start tracking on destroyed handler');
+      log('warn', 'Cannot start tracking on destroyed handler');
       return;
     }
 
-    const projectId = this.get('config')?.id;
+    const config = this.get('config');
+    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.apiUrl ?? 'default';
+
     if (!projectId) {
       throw new Error('Cannot start session tracking: config not available');
     }
@@ -44,9 +46,7 @@ export class SessionHandler extends StateManager {
         this.sessionManager = null;
       }
 
-      debugLog.error('SessionHandler', 'Failed to start session tracking', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      log('error', 'Failed to start session tracking', { error });
       throw error;
     }
   }

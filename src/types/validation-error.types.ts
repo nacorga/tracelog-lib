@@ -23,15 +23,6 @@ export abstract class TraceLogValidationError extends Error {
 }
 
 /**
- * Thrown when project ID validation fails
- */
-export class ProjectIdValidationError extends TraceLogValidationError {
-  constructor(message = 'Project ID is required', layer: 'config' | 'app' | 'runtime' = 'config') {
-    super(message, 'PROJECT_ID_INVALID', layer);
-  }
-}
-
-/**
  * Thrown when app configuration validation fails
  */
 export class AppConfigValidationError extends TraceLogValidationError {

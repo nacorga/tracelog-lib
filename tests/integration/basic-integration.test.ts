@@ -69,7 +69,7 @@ describe('Basic Integration Tests', () => {
 
   describe('Utility Functions', () => {
     test('should handle basic data manipulation', () => {
-      const data = { id: 1, name: 'test' };
+      const data = { test: 'value', number: 123 };
       const serialized = JSON.stringify(data);
       const parsed = JSON.parse(serialized);
 

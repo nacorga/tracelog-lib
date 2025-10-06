@@ -36,7 +36,7 @@ test.describe('User Navigation Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({ id: 'skip' });
+      await window.__traceLogBridge!.init({});
 
       // Get initial session ID
       const sessionData = window.__traceLogBridge!.getSessionData();
@@ -143,7 +143,7 @@ test.describe('User Navigation Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({ id: 'skip' });
+      await window.__traceLogBridge!.init({});
       sessionData = window.__traceLogBridge!.getSessionData();
 
       // Wait for initial event to settle
@@ -233,7 +233,7 @@ test.describe('User Navigation Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({ id: 'skip' });
+      await window.__traceLogBridge!.init({});
 
       // Wait for initial setup
       await new Promise((resolve) => setTimeout(resolve, 500));

@@ -2,39 +2,6 @@
 
 Core business logic components that handle analytics data processing, state management, and external integrations.
 
-## ApiManager
-
-**Purpose**: Utility module for generating API URLs based on project identifiers with development and production environment support.
-
-**Core Functionality**:
-- **Development URLs**: Converts `localhost:PORT` format to `http://localhost:PORT` for local development
-- **Production URLs**: Generates subdomain-based URLs via domain parsing
-- **URL Validation**: Ensures generated URLs meet security requirements (HTTPS enforcement)
-- **Error Handling**: Provides detailed error context for debugging
-
-**Key Features**:
-- Zero dependencies, uses only existing TraceLog utilities
-- Special handling for localhost URLs with HTTP support
-- Security-first with HTTPS enforcement by default
-- Debug-friendly with comprehensive logging
-
-## ConfigManager
-
-**Purpose**: Loads and merges application configuration from three sources: default settings, API configuration, and client initialization parameters.
-
-**Core Functionality**:
-- **Configuration Loading**: Fetches server-side configuration via API calls
-- **Intelligent Merging**: Combines default, API, and app configs with proper precedence
-- **Environment Detection**: Auto-detects QA mode, localhost, and skip scenarios
-- **Dynamic Settings**: Applies mode-specific settings (error sampling rates, debug flags)
-
-**Key Features**:
-- Skip mode (`id: 'skip'`) for pure offline testing
-- Localhost development server support
-- QA mode detection via URL parameters
-- Configurable error sampling rates
-- Sanitized configuration merging
-
 ## EventManager
 
 **Purpose**: Core component responsible for event tracking, queue management, deduplication, and API communication coordination.
@@ -131,23 +98,6 @@ Core business logic components that handle analytics data processing, state mana
 - Explicit cleanup methods for TraceLog-namespaced data
 - Public availability checking for conditional logic
 - Consistent API regardless of underlying storage mechanism
-
-## TagsManager
-
-**Purpose**: Evaluates event data against configured tag conditions and returns matching tag IDs for flexible event categorization and segmentation.
-
-**Core Functionality**:
-- **Condition Evaluation**: Processes tag conditions based on URL patterns, device types, UTM parameters, and DOM properties
-- **Event Tagging**: Returns matching tag IDs for events based on conditional logic
-- **Flexible Matching**: Supports multiple condition types (equals, contains, regex, starts with, ends with)
-- **Logical Operators**: Handles AND/OR logic across multiple conditions per tag
-
-**Key Features**:
-- Unified string matching for URL, device, and UTM conditions
-- Optimized element data matching with exact and fuzzy search paths
-- Safe regex evaluation with error handling
-- Performance optimized with reduced string operations (~60% fewer toLowerCase() calls)
-- Support for complex conditional logic with multiple operators
 
 ## UserManager
 

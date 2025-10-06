@@ -1,35 +1,66 @@
-import { isValidUrl } from '../validations';
-import { debugLog } from '../logging';
+import { Config } from '@/types';
+import { log } from '../logging.utils';
+
+/**
+ * Validates if a URL is valid and optionally allows HTTP URLs
+ * @param url - The URL to validate
+ * @param allowHttp - Whether to allow HTTP URLs (default: false)
+ * @returns True if the URL is valid, false otherwise
+ */
+const isValidUrl = (url: string, allowHttp = false): boolean => {
+  try {
+    const parsed = new URL(url);
+    const isHttps = parsed.protocol === 'https:';
+    const isHttp = parsed.protocol === 'http:';
+
+    return isHttps || (allowHttp && isHttp);
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Generates an API URL based on project ID and current domain
  * @param id - The project ID
  * @returns The generated API URL
  */
-export const getApiUrl = (id: string, allowHttp = false): string => {
-  const url = new URL(window.location.href);
-  const host = url.hostname;
-  const parts = host.split('.');
+export const getApiUrl = (config: Config): string => {
+  const allowHttp = config.allowHttp ?? false;
 
-  if (parts.length === 0) {
-    debugLog.clientError('URLUtils', 'Invalid hostname - no domain parts found', { hostname: host });
-    throw new Error('Invalid URL');
+  if (config.integrations?.tracelog?.projectId) {
+    const url = new URL(window.location.href);
+    const host = url.hostname;
+    const parts = host.split('.');
+
+    if (parts.length === 0) {
+      throw new Error('Invalid URL');
+    }
+
+    const projectId = config.integrations.tracelog.projectId;
+    const cleanDomain = parts.slice(-2).join('.');
+    const protocol = allowHttp && url.protocol === 'http:' ? 'http' : 'https';
+    const apiUrl = `${protocol}://${projectId}.${cleanDomain}`;
+    const isValid = isValidUrl(apiUrl, allowHttp);
+
+    if (!isValid) {
+      throw new Error('Invalid URL');
+    }
+
+    return apiUrl;
   }
 
-  const cleanDomain = parts.slice(-2).join('.');
-  const protocol = allowHttp && url.protocol === 'http:' ? 'http' : 'https';
-  const apiUrl = `${protocol}://${id}.${cleanDomain}`;
-  const isValid = isValidUrl(apiUrl, allowHttp);
+  if (config.integrations?.custom?.apiUrl) {
+    const apiUrl = config.integrations.custom.apiUrl;
+    const isValid = isValidUrl(apiUrl, allowHttp);
 
-  if (!isValid) {
-    debugLog.clientError('URLUtils', 'Generated API URL failed validation', {
-      apiUrl,
-      allowHttp,
-    });
-    throw new Error('Invalid URL');
+    if (!isValid) {
+      throw new Error('Invalid URL');
+    }
+
+    return apiUrl;
   }
 
-  return apiUrl;
+  return '';
 };
 
 /**
@@ -42,7 +73,6 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
   try {
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
-    const originalParamCount = Array.from(searchParams.keys()).length;
 
     let hasChanged = false;
     const removedParams: string[] = [];
@@ -55,14 +85,6 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
       }
     });
 
-    if (hasChanged) {
-      debugLog.debug('URLUtils', 'Sensitive parameters removed from URL', {
-        removedParams,
-        originalParamCount,
-        finalParamCount: Array.from(searchParams.keys()).length,
-      });
-    }
-
     if (!hasChanged && url.includes('?')) {
       return url;
     }
@@ -72,84 +94,8 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
 
     return result;
   } catch (error) {
-    debugLog.warn('URLUtils', 'URL normalization failed, returning original', {
-      url: url.slice(0, 100),
-      error: error instanceof Error ? error.message : error,
-    });
+    log('warn', 'URL normalization failed, returning original', { error, data: { url: url.slice(0, 100) } });
 
     return url;
   }
-};
-
-/**
- * Checks if a URL path should be excluded from tracking
- * @param url - The URL to check
- * @param excludedPaths - Array of patterns to match against
- * @returns True if the URL should be excluded
- */
-export const isUrlPathExcluded = (url: string, excludedPaths: string[] = []): boolean => {
-  if (excludedPaths.length === 0) {
-    return false;
-  }
-
-  let path: string;
-
-  try {
-    const parsedUrl = new URL(url, window.location.origin);
-    path = parsedUrl.pathname + (parsedUrl.hash ?? '');
-  } catch (error) {
-    debugLog.warn('URLUtils', 'Failed to parse URL for path exclusion check', {
-      url: url.slice(0, 100),
-      error: error instanceof Error ? error.message : error,
-    });
-
-    return false;
-  }
-
-  const isRegularExpression = (value: unknown): value is RegExp =>
-    typeof value === 'object' && value !== undefined && typeof (value as RegExp).test === 'function';
-
-  const escapeRegexString = (string_: string): string => string_.replaceAll(/[$()*+.?[\\\]^{|}]/g, '\\$&');
-
-  const wildcardToRegex = (string_: string): RegExp =>
-    new RegExp(
-      '^' +
-        string_
-          .split('*')
-          .map((element) => escapeRegexString(element))
-          .join('.+') +
-        '$',
-    );
-
-  const matchedPattern = excludedPaths.find((pattern) => {
-    try {
-      if (isRegularExpression(pattern)) {
-        const matches = pattern.test(path);
-
-        return matches;
-      }
-
-      if (pattern.includes('*')) {
-        const regex = wildcardToRegex(pattern);
-        const matches = regex.test(path);
-
-        return matches;
-      }
-
-      const matches = pattern === path;
-
-      return matches;
-    } catch (error) {
-      debugLog.warn('URLUtils', 'Error testing exclusion pattern', {
-        pattern,
-        path,
-        error: error instanceof Error ? error.message : error,
-      });
-      return false;
-    }
-  });
-
-  const isExcluded = !!matchedPattern;
-
-  return isExcluded;
 };

@@ -8,7 +8,7 @@ import {
 import { EventType, ScrollData, ScrollDirection } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { debugLog } from '../utils/logging';
+import { log } from '../utils';
 
 interface ScrollContainer {
   element: Window | HTMLElement;
@@ -198,8 +198,9 @@ export class ScrollHandler extends StateManager {
     }
 
     this.limitWarningLogged = true;
-    debugLog.warn('ScrollHandler', 'Max scroll events per session reached', {
-      limit: this.maxEventsPerSession,
+
+    log('warn', 'Max scroll events per session reached', {
+      data: { limit: this.maxEventsPerSession },
     });
   }
 
@@ -287,10 +288,12 @@ export class ScrollHandler extends StateManager {
     try {
       return document.querySelector(selector);
     } catch (error) {
-      debugLog.clientWarn('ScrollHandler', 'Invalid CSS selector', {
-        selector,
-        error: error instanceof Error ? error.message : 'Unknown error',
+      log('warn', 'Invalid CSS selector', {
+        error,
+        data: { selector },
+        showToClient: true,
       });
+
       return null;
     }
   }

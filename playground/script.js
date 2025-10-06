@@ -23,7 +23,6 @@ const TEST_MODE = {
   enabled: isE2ETest,
   autoInit: isE2ETest && urlParams.get('auto-init') !== 'false',
   hideUI: isE2ETest,
-  projectId: isE2ETest ? 'e2e-test-project' : 'skip'
 };
 
 const state = {
@@ -591,12 +590,11 @@ async function initializeApp() {
     const shouldAutoInit = state.testMode.enabled ? state.testMode.autoInit : true;
 
     if (shouldAutoInit) {
-      const projectId = state.testMode.enabled ? state.testMode.projectId : 'skip';
-      await traceLog.init({ id: projectId });
+      await traceLog.init({});
       updateQueueStatus('▶️');
 
       if (state.testMode.enabled && state.testMode.autoInit) {
-        console.log('🧪 TraceLog auto-initialized for testing');
+        console.log('🧪 TraceLog auto-initialized for testing (local-only mode)');
       }
     } else {
       updateQueueStatus('idle');

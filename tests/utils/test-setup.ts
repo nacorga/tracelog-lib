@@ -3,7 +3,7 @@ import { EventManager } from '@/managers/event.manager';
 import { SessionManager } from '@/managers/session.manager';
 import { StorageManager } from '@/managers/storage.manager';
 import { StateManager, resetGlobalState } from '@/managers/state.manager';
-import { Config, Mode } from '@/types';
+import { Config } from '@/types';
 import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
 import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
 import { Emitter } from '@/utils';
@@ -27,10 +27,6 @@ vi.mock('@/managers/sender.manager', () => {
  * Test configuration factory
  */
 export const createTestConfig = (overrides: Partial<Config> = {}): Config => ({
-  excludedUrlPaths: [],
-  mode: Mode.QA,
-  ipExcluded: false,
-  id: 'test-project',
   sessionTimeout: DEFAULT_SESSION_TIMEOUT,
   samplingRate: 1,
   ...overrides,
@@ -45,6 +41,10 @@ export const createMockStorageManager = (): StorageManager =>
     setItem: vi.fn(),
     removeItem: vi.fn(),
     clear: vi.fn(),
+    getSessionItem: vi.fn(),
+    setSessionItem: vi.fn(),
+    removeSessionItem: vi.fn(),
+    clearSessionStorage: vi.fn(),
   }) as unknown as StorageManager;
 
 /**
@@ -142,7 +142,7 @@ export const setupTestEnvironment = async (
 
   const storageManager = createMockStorageManager();
   const eventManager = createTestEventManager(storageManager);
-  const sessionManager = createTestSessionManager(storageManager, eventManager, testConfig.id);
+  const sessionManager = createTestSessionManager(storageManager, eventManager, 'default');
 
   return {
     config: testConfig,
