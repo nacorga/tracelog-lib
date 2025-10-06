@@ -16,6 +16,7 @@ export class EventManager extends StateManager {
   private readonly emitter: Emitter | null;
 
   private eventsQueue: EventData[] = [];
+  private pendingEventsBuffer: Partial<EventData>[] = [];
   private lastEventFingerprint: string | null = null;
   private lastEventTime = 0;
   private sendIntervalId: number | null = null;
@@ -63,6 +64,22 @@ export class EventManager extends StateManager {
   }: Partial<EventData>): void {
     if (!type) {
       log('warn', 'Event type is required');
+      return;
+    }
+
+    if (!this.get('sessionId')) {
+      this.pendingEventsBuffer.push({
+        type,
+        page_url,
+        from_page_url,
+        scroll_data,
+        click_data,
+        custom_event,
+        web_vitals,
+        error_data,
+        session_end_reason,
+      });
+
       return;
     }
 
@@ -130,6 +147,7 @@ export class EventManager extends StateManager {
     }
 
     this.eventsQueue = [];
+    this.pendingEventsBuffer = [];
     this.lastEventFingerprint = null;
     this.lastEventTime = 0;
 
@@ -146,6 +164,25 @@ export class EventManager extends StateManager {
 
   getQueueLength(): number {
     return this.eventsQueue.length;
+  }
+
+  flushPendingEvents(): void {
+    if (this.pendingEventsBuffer.length === 0) {
+      return;
+    }
+
+    if (!this.get('sessionId')) {
+      log('warn', 'Cannot flush pending events: session not initialized');
+      return;
+    }
+
+    const bufferedEvents = [...this.pendingEventsBuffer];
+
+    this.pendingEventsBuffer = [];
+
+    bufferedEvents.forEach((event) => {
+      this.track(event);
+    });
   }
 
   private clearSendInterval(): void {

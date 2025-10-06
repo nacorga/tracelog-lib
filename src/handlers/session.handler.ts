@@ -36,6 +36,9 @@ export class SessionHandler extends StateManager {
     try {
       this.sessionManager = new SessionManager(this.storageManager, this.eventManager, projectId);
       await this.sessionManager.startTracking();
+
+      // Flush any events that were buffered during initialization
+      this.eventManager.flushPendingEvents();
     } catch (error) {
       if (this.sessionManager) {
         try {
