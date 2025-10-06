@@ -168,7 +168,7 @@ await tracelog.init({
   }
 });
 
-// Enable QA mode: add ?tracelog_qa=true to URL
+// Enable QA mode: add ?tlog_mode=qa to URL
 ```
 
 

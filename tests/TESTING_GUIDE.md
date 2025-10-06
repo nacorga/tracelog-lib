@@ -28,9 +28,11 @@ npm run fix                      # Auto-fix issues
 4. **Visual Feedback**: Console log with orange badge when activated
 
 ### Effects When Active
-- Enhanced debug logging for all events
-- Full event sampling (no rate limiting)
-- Detailed error messages and validation feedback
+- **Custom events displayed in console** instead of being sent to server
+- **Strict validation** - Throws errors on validation failures (instead of silently ignoring)
+- **Events still emitted** to `on('event')` listeners for E2E testing
+- **No server transmission** - Custom events are NOT added to send queue
+- **No Google Analytics** - Custom events are NOT forwarded to GA integration
 - Useful for both manual debugging and automated E2E testing
 
 ### E2E Testing Patterns

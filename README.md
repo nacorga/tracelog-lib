@@ -89,7 +89,7 @@ tracelog.event('user_action', { data: 'example' });
 - **Standalone Mode** (no `integrations`): Events captured and emitted locally via `on('event')`. No network requests.
 - **With Backend** (`integrations.tracelog` or `integrations.custom`): Events sent to configured endpoint after client-side validation.
 
-All validation, sampling, and deduplication happen client-side. Enable QA mode with `?tracelog_qa=true` URL parameter.
+All validation, sampling, and deduplication happen client-side. Enable QA mode with `?tlog_mode=qa` URL parameter.
 
 ## Usage
 
@@ -185,7 +185,7 @@ window.__traceLogDisabled = true;
 
 ## Debug
 
-Enable QA mode: `?tracelog_qa=true` URL parameter
+Enable QA mode: `?tlog_mode=qa` URL parameter
 
 ```typescript
 tracelog.init({});
