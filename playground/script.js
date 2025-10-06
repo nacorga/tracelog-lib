@@ -516,9 +516,14 @@ async function initializeApp() {
     if (state.autoInit) {
       // Clear only TraceLog data from localStorage to ensure fresh session (demo mode)
       // This preserves any other localStorage data from other apps on the same domain
-      Object.keys(localStorage)
-        .filter((key) => key.startsWith('tracelog_'))
-        .forEach((key) => localStorage.removeItem(key));
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('tracelog_')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
 
       setupTraceLogListener(traceLog); // Setup listeners BEFORE init to capture initial events
       await traceLog.init({});

@@ -78,8 +78,8 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
 };
 
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
-  if (!app) {
-    // Buffer listeners registered before init()
+  if (!app || isInitializing) {
+    // Buffer listeners registered before or during init()
     pendingListeners.push({ event, callback } as PendingListener);
     return;
   }
