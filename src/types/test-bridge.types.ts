@@ -17,7 +17,7 @@ import { State } from './state.types';
 export interface TraceLogTestBridge {
   // Core App methods
   readonly initialized: boolean;
-  init(config: Config): Promise<void>;
+  init(config?: Config): Promise<void>;
   destroy(): Promise<void>;
 
   // Core testing methods

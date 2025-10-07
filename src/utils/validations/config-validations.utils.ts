@@ -20,9 +20,13 @@ import { log } from '../logging.utils';
  * @throws {ProjectIdValidationError} If project ID validation fails
  * @throws {AppConfigValidationError} If other configuration validation fails
  */
-export const validateAppConfig = (config: Config): void => {
-  if (!config || typeof config !== 'object') {
+export const validateAppConfig = (config?: Config): void => {
+  if (config !== undefined && (config === null || typeof config !== 'object')) {
     throw new AppConfigValidationError('Configuration must be an object', 'config');
+  }
+
+  if (!config) {
+    return;
   }
 
   if (config.sessionTimeout !== undefined) {
@@ -222,16 +226,16 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
  * @throws {ProjectIdValidationError} If project ID validation fails after normalization
  * @throws {AppConfigValidationError} If other configuration validation fails
  */
-export const validateAndNormalizeConfig = (config: Config): Config => {
+export const validateAndNormalizeConfig = (config?: Config): Config => {
   validateAppConfig(config);
 
   const normalizedConfig: Config = {
-    ...config,
-    sessionTimeout: config.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT,
-    globalMetadata: config.globalMetadata ?? {},
-    sensitiveQueryParams: config.sensitiveQueryParams ?? [],
-    errorSampling: config.errorSampling ?? 1,
-    samplingRate: config.samplingRate ?? 1,
+    ...(config ?? {}),
+    sessionTimeout: config?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT,
+    globalMetadata: config?.globalMetadata ?? {},
+    sensitiveQueryParams: config?.sensitiveQueryParams ?? [],
+    errorSampling: config?.errorSampling ?? 1,
+    samplingRate: config?.samplingRate ?? 1,
   };
 
   // Normalize integrations

@@ -49,14 +49,20 @@ describe('API Integration - Init Flow', () => {
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
+    it('should initialize without config parameter (undefined)', async () => {
+      await TraceLog.init();
+
+      expect(TraceLog.isInitialized()).toBe(true);
+    });
+
     it('should initialize with skip mode (no network call)', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
 
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
     it('should initialize with fail mode (persistence test mode)', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
 
       expect(TraceLog.isInitialized()).toBe(true);
     });
@@ -78,7 +84,7 @@ describe('API Integration - Init Flow', () => {
 
   describe('Valid Config Boundaries', () => {
     it('should accept project id with special characters', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
@@ -105,11 +111,11 @@ describe('API Integration - Init Flow', () => {
 
   describe('Duplicate Initialization Prevention', () => {
     it('should ignore second init call when already initialized', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
 
       // Second init should be silently ignored
-      await TraceLog.init({});
+      await TraceLog.init();
 
       // Should still be initialized
       expect(TraceLog.isInitialized()).toBe(true);
@@ -120,7 +126,7 @@ describe('API Integration - Init Flow', () => {
     it('should skip initialization when __traceLogDisabled is true', async () => {
       (window as any).__traceLogDisabled = true;
 
-      await TraceLog.init({});
+      await TraceLog.init();
 
       expect(TraceLog.isInitialized()).toBe(false);
 
@@ -130,14 +136,14 @@ describe('API Integration - Init Flow', () => {
 
     it('should initialize normally after removing __traceLogDisabled flag', async () => {
       (window as any).__traceLogDisabled = true;
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(false);
 
       // Remove flag
       delete (window as any).__traceLogDisabled;
 
       // Should work now
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
     });
   });
@@ -145,7 +151,7 @@ describe('API Integration - Init Flow', () => {
   describe('Post-Destroy Initialization', () => {
     it('should allow init after destroy', async () => {
       // First init
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
 
       // Destroy
@@ -154,13 +160,13 @@ describe('API Integration - Init Flow', () => {
       expect(TraceLog.isInitialized()).toBe(false);
 
       // Re-init should work
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
     it('should handle multiple init/destroy cycles', async () => {
       for (let i = 0; i < 3; i++) {
-        await TraceLog.init({});
+        await TraceLog.init();
         expect(TraceLog.isInitialized()).toBe(true);
 
         await TraceLog.destroy();
@@ -253,12 +259,12 @@ describe('API Integration - Init Flow', () => {
     });
 
     it('should return true after init', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
     it('should return false after destroy', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(TraceLog.isInitialized()).toBe(false);
@@ -267,12 +273,12 @@ describe('API Integration - Init Flow', () => {
 
   describe('Special Project IDs', () => {
     it('should handle "skip" project id correctly', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
     it('should handle "fail" project id (persistence test mode)', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
     });
   });

@@ -16,7 +16,7 @@ test.describe('Basic Initialization', () => {
     // Initialize TraceLog with basic configuration (local-only mode)
     const initResult = await page.evaluate(async () => {
       try {
-        const result = await window.__traceLogBridge!.init({});
+        const result = await window.__traceLogBridge!.init();
         return { success: true, result };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -87,7 +87,7 @@ test.describe('Basic Initialization', () => {
     // Initialize without integrations - local-only mode
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({});
+        await window.__traceLogBridge!.init();
         return { success: true, initialized: window.__traceLogBridge!.initialized };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -95,6 +95,25 @@ test.describe('Basic Initialization', () => {
     });
 
     // Should succeed in local-only mode
+    expect(initResult.success).toBe(true);
+    expect(initResult.initialized).toBe(true);
+  });
+
+  test('should initialize without any parameters (undefined config)', async ({ page }) => {
+    // Navigate to playground
+    await navigateToPlayground(page, { autoInit: false });
+
+    // Initialize without any parameters - no config passed
+    const initResult = await page.evaluate(async () => {
+      try {
+        await window.__traceLogBridge!.init();
+        return { success: true, initialized: window.__traceLogBridge!.initialized };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // Should succeed without any config
     expect(initResult.success).toBe(true);
     expect(initResult.initialized).toBe(true);
   });

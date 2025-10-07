@@ -41,8 +41,8 @@ describe('Config Validations', () => {
         expect(() => validateAppConfig(null as any)).toThrow('Configuration must be an object');
       });
 
-      it('should reject undefined config', () => {
-        expect(() => validateAppConfig(undefined as any)).toThrow(AppConfigValidationError);
+      it('should accept undefined config', () => {
+        expect(() => validateAppConfig(undefined)).not.toThrow();
       });
 
       it('should reject non-object config', () => {

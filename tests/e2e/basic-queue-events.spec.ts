@@ -15,7 +15,7 @@ test.describe('Basic Queue Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({});
+        await window.__traceLogBridge!.init();
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -72,7 +72,7 @@ test.describe('Basic Queue Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({});
+        await window.__traceLogBridge!.init();
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -126,7 +126,7 @@ test.describe('Basic Queue Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({});
+        await window.__traceLogBridge!.init();
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -174,7 +174,7 @@ test.describe('Basic Queue Events', () => {
     // Initialize TraceLog
     const initResult = await page.evaluate(async () => {
       try {
-        await window.__traceLogBridge!.init({});
+        await window.__traceLogBridge!.init();
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };

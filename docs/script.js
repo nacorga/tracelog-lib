@@ -527,7 +527,7 @@ async function initializeApp() {
       keysToRemove.forEach((key) => localStorage.removeItem(key));
 
       setupTraceLogListener(traceLog); // Setup listeners BEFORE init to capture initial events
-      await traceLog.init({});
+      await traceLog.init();
       updateQueueStatus('▶️');
       return;
     }

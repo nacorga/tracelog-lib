@@ -17,7 +17,7 @@ let app: App | null = null;
 let isInitializing = false;
 let isDestroying = false;
 
-export const init = async (config: Config): Promise<void> => {
+export const init = async (config?: Config): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('[TraceLog] This library can only be used in a browser environment');
   }
@@ -37,7 +37,7 @@ export const init = async (config: Config): Promise<void> => {
   isInitializing = true;
 
   try {
-    const validatedConfig = validateAndNormalizeConfig(config);
+    const validatedConfig = validateAndNormalizeConfig(config ?? {});
     const instance = new App();
 
     try {

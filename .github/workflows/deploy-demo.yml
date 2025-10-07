@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'playground/**'
+      - 'docs/**'
       - 'src/**'
       - '.github/workflows/deploy-demo.yml'
   workflow_dispatch:
@@ -39,21 +39,21 @@ jobs:
           npm run build:browser
           echo "✅ Build completed"
 
-      - name: Copy build to playground
+      - name: Copy build to docs
         run: |
-          echo "📦 Copying tracelog.js to playground..."
-          cp dist/browser/tracelog.esm.js playground/tracelog.js
+          echo "📦 Copying tracelog.js to docs..."
+          cp dist/browser/tracelog.esm.js docs/tracelog.js
           echo "✅ Copy completed"
 
       - name: Check for changes
         id: check-changes
         run: |
-          if git diff --quiet playground/tracelog.js; then
+          if git diff --quiet docs/tracelog.js; then
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes detected in playground/tracelog.js"
+            echo "ℹ️ No changes detected in docs/tracelog.js"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✨ Changes detected in playground/tracelog.js"
+            echo "✨ Changes detected in docs/tracelog.js"
           fi
 
       - name: Configure Git
@@ -66,8 +66,8 @@ jobs:
         if: steps.check-changes.outputs.changed == 'true'
         run: |
           echo "💾 Committing updated tracelog.js..."
-          git add playground/tracelog.js
-          git commit -m "chore(demo): update playground tracelog.js build [skip ci]"
+          git add docs/tracelog.js
+          git commit -m "chore(demo): update docs tracelog.js build [skip ci]"
           echo "✅ Changes committed"
 
       - name: Push changes
@@ -83,7 +83,7 @@ jobs:
           echo "🎉 Demo deployment completed!"
           echo ""
           if [[ "${{ steps.check-changes.outputs.changed }}" == "true" ]]; then
-            echo "✅ playground/tracelog.js updated and committed"
+            echo "✅ docs/tracelog.js updated and committed"
             echo "📡 GitHub Pages will auto-deploy the updated demo"
           else
             echo "ℹ️ No build changes detected"
@@ -91,10 +91,10 @@ jobs:
           fi
           echo ""
           echo "🌐 Demo URL: https://nacorga.github.io/tracelog-lib/"
-          echo "📁 Source: /playground folder"
+          echo "📁 Source: /docs folder"
           echo ""
-          echo "ℹ️ Note: Configure GitHub Pages to serve from /playground folder"
-          echo "   Settings → Pages → Source: main branch → /playground folder"
+          echo "ℹ️ Note: Configure GitHub Pages to serve from /docs folder"
+          echo "   Settings → Pages → Source: main branch → /docs folder"
 
   notify-failure:
     name: Notify Deployment Failure

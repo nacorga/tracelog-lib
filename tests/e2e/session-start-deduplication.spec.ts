@@ -14,7 +14,7 @@ test.describe('Session Start - Single emission per session', () => {
         events.push({ type: payload.type as string });
       });
 
-      await traceLog.init({});
+      await traceLog.init();
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -37,7 +37,7 @@ test.describe('Session Start - Single emission per session', () => {
         events.push({ type: payload.type as string });
       });
 
-      await traceLog.init({});
+      await traceLog.init();
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -64,7 +64,7 @@ test.describe('Session Start - Single emission per session', () => {
         events.push({ type: payload.type as string });
       });
 
-      await traceLog.init({});
+      await traceLog.init();
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 

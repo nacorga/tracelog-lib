@@ -41,7 +41,7 @@ export class App extends StateManager {
     return this.isInitialized;
   }
 
-  async init(config: Config): Promise<void> {
+  async init(config?: Config): Promise<void> {
     if (this.isInitialized) {
       return;
     }
@@ -49,7 +49,7 @@ export class App extends StateManager {
     this.managers.storage = new StorageManager();
 
     try {
-      this.setupState(config);
+      this.setupState(config ?? {});
       await this.setupIntegrations();
 
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
