@@ -45,56 +45,27 @@ jobs:
           cp dist/browser/tracelog.esm.js docs/tracelog.js
           echo "✅ Copy completed"
 
-      - name: Check for changes
-        id: check-changes
-        run: |
-          if git diff --quiet docs/tracelog.js; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes detected in docs/tracelog.js"
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✨ Changes detected in docs/tracelog.js"
-          fi
-
-      - name: Configure Git
-        if: steps.check-changes.outputs.changed == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-
-      - name: Commit updated tracelog.js
-        if: steps.check-changes.outputs.changed == 'true'
-        run: |
-          echo "💾 Committing updated tracelog.js..."
-          git add docs/tracelog.js
-          git commit -m "chore(demo): update docs tracelog.js build [skip ci]"
-          echo "✅ Changes committed"
-
-      - name: Push changes
-        if: steps.check-changes.outputs.changed == 'true'
-        run: |
-          echo "🚀 Pushing changes to main..."
-          git push
-          echo "✅ Changes pushed successfully"
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          publish_branch: gh-pages
+          commit_message: 'chore(demo): deploy updated demo to GitHub Pages'
 
       - name: Deployment summary
         run: |
           echo ""
           echo "🎉 Demo deployment completed!"
           echo ""
-          if [[ "${{ steps.check-changes.outputs.changed }}" == "true" ]]; then
-            echo "✅ docs/tracelog.js updated and committed"
-            echo "📡 GitHub Pages will auto-deploy the updated demo"
-          else
-            echo "ℹ️ No build changes detected"
-            echo "📡 GitHub Pages already has the latest version"
-          fi
+          echo "✅ docs/ folder deployed to gh-pages branch"
+          echo "📡 GitHub Pages will serve from gh-pages branch"
           echo ""
           echo "🌐 Demo URL: https://nacorga.github.io/tracelog-lib/"
-          echo "📁 Source: /docs folder"
+          echo "📁 Source: gh-pages branch (auto-updated)"
           echo ""
-          echo "ℹ️ Note: Configure GitHub Pages to serve from /docs folder"
-          echo "   Settings → Pages → Source: main branch → /docs folder"
+          echo "ℹ️ Note: Ensure GitHub Pages is configured:"
+          echo "   Settings → Pages → Source: gh-pages branch → /(root)"
 
   notify-failure:
     name: Notify Deployment Failure
