@@ -3,6 +3,26 @@
 
 
 
+
+## [0.7.3] - 2025-10-07
+
+### ♻️ Refactoring
+
+- Improve event queue management and status updates ([84e4f2c](../../commit/84e4f2cd2d15177f43336851f9cffb94f227cd5c))
+
+### 🔧 Other Changes
+
+- Add repository, homepage, and bugs information to package.json ([303e84a](../../commit/303e84aafe9d4efe877fee0863d3e1502349dc05))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.7.2...v0.7.3
+
+
 ## [0.7.2] - 2025-10-07
 
 ### ♻️ Refactoring
