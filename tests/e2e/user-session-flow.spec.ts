@@ -36,7 +36,7 @@ test.describe('User Session Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
       sessionData = window.__traceLogBridge!.getSessionData();
 
       // Simulate extended user activity over time
@@ -124,7 +124,7 @@ test.describe('User Session Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
       const sessionData = window.__traceLogBridge!.getSessionData();
 
       // Generate validation activities

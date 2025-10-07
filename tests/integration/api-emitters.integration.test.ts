@@ -51,7 +51,7 @@ describe('API Integration - Emitter Methods', () => {
 
     describe('After Initialization', () => {
       beforeEach(async () => {
-        await TraceLog.init({});
+        await TraceLog.init();
       });
 
       it('should register event listener successfully', () => {
@@ -133,7 +133,7 @@ describe('API Integration - Emitter Methods', () => {
         await TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        await TraceLog.init({});
+        await TraceLog.init();
         TraceLog.on(EmitterEvent.EVENT, callback);
 
         // Send a custom event which will be tracked
@@ -157,7 +157,7 @@ describe('API Integration - Emitter Methods', () => {
 
     describe('After Initialization', () => {
       beforeEach(async () => {
-        await TraceLog.init({});
+        await TraceLog.init();
       });
 
       it('should unregister event listener successfully', () => {
@@ -221,12 +221,12 @@ describe('API Integration - Emitter Methods', () => {
 
   describe('Emitter Lifecycle', () => {
     it('should work after destroy and re-initialization', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Re-initialization should work
-      await TraceLog.init({});
+      await TraceLog.init();
       const callback = vi.fn();
       TraceLog.on(EmitterEvent.EVENT, callback);
 
@@ -238,11 +238,11 @@ describe('API Integration - Emitter Methods', () => {
     });
 
     it('should allow registering new listeners after destroy', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      await TraceLog.init({});
+      await TraceLog.init();
       const callback = vi.fn();
 
       // Should be able to register listeners after re-init
@@ -252,7 +252,7 @@ describe('API Integration - Emitter Methods', () => {
 
   describe('Event and Queue Emitters', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should handle both event and queue listeners simultaneously', async () => {
@@ -285,7 +285,7 @@ describe('API Integration - Emitter Methods', () => {
 
   describe('Error Scenarios', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should handle valid callback registration', () => {
@@ -306,7 +306,7 @@ describe('API Integration - Emitter Methods', () => {
 
   describe('Performance and Stress Tests', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should handle many listeners efficiently', () => {

@@ -46,7 +46,7 @@ describe('API Integration - Event Method', () => {
 
   describe('After Initialization', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should send custom event with name only', () => {
@@ -79,7 +79,7 @@ describe('API Integration - Event Method', () => {
       // Re-initialize with QA mode enabled
       await TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
-      await TraceLog.init({});
+      await TraceLog.init();
 
       expect(() =>
         TraceLog.event('order-placed', {
@@ -125,7 +125,7 @@ describe('API Integration - Event Method', () => {
 
   describe('Event Name Validation', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should accept event name with letters only', () => {
@@ -156,7 +156,7 @@ describe('API Integration - Event Method', () => {
 
   describe('Multiple Events', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should send multiple events in sequence', () => {
@@ -186,14 +186,14 @@ describe('API Integration - Event Method', () => {
 
   describe('Edge Cases', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should reject very large metadata objects (validation limit)', async () => {
       // Re-initialize with QA mode for strict validation
       await TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
-      await TraceLog.init({});
+      await TraceLog.init();
 
       const largeMetadata: Record<string, string> = {};
       for (let i = 0; i < 100; i++) {
@@ -210,7 +210,7 @@ describe('API Integration - Event Method', () => {
       // Re-initialize with QA mode for strict validation
       await TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
-      await TraceLog.init({});
+      await TraceLog.init();
 
       expect(() =>
         TraceLog.event('nested-event', {
@@ -243,7 +243,7 @@ describe('API Integration - Event Method', () => {
       // Re-initialize with QA mode for strict validation
       await TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
-      await TraceLog.init({});
+      await TraceLog.init();
 
       const circular: Record<string, unknown> = { name: 'test' };
       circular.self = circular;
@@ -269,7 +269,7 @@ describe('API Integration - Event Method', () => {
 
   describe('After Destroy', () => {
     it('should throw error when called after destroy()', async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -278,13 +278,13 @@ describe('API Integration - Event Method', () => {
 
     it('should work again after re-initialization', async () => {
       // First lifecycle
-      await TraceLog.init({});
+      await TraceLog.init();
       TraceLog.event('event1');
       await TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Second lifecycle
-      await TraceLog.init({});
+      await TraceLog.init();
       expect(() => TraceLog.event('event2')).not.toThrow();
     });
   });
@@ -310,14 +310,14 @@ describe('API Integration - Event Method', () => {
 
   describe('Error Handling', () => {
     beforeEach(async () => {
-      await TraceLog.init({});
+      await TraceLog.init();
     });
 
     it('should throw error for empty event name', async () => {
       // Re-initialize with QA mode for strict validation
       await TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
-      await TraceLog.init({});
+      await TraceLog.init();
 
       expect(() => TraceLog.event('')).toThrow();
 

@@ -42,7 +42,7 @@ test.describe('User Data Integrity', () => {
       };
 
       // Initialize TraceLog (QA mode auto-detected from URL param)
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
 
       // IMPORTANT: Attach listener AFTER init() so it connects to the initialized EventManager
       window.__traceLogBridge!.on('event', (data: any) => {
@@ -180,7 +180,7 @@ test.describe('User Data Integrity', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
       const sessionData = window.__traceLogBridge!.getSessionData();
 
       // Simulate complex user journey with data consistency checks
@@ -291,7 +291,7 @@ test.describe('User Data Integrity', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
 
       // Generate rapid concurrent events
       const eventPromises: Promise<void>[] = [];

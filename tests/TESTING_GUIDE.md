@@ -89,7 +89,7 @@ describe('App Integration', () => {
 
   it('should work without HTTP integration', async () => {
     const app = new App();
-    await app.init({}); // No integrations = no HTTP calls
+    await app.init(); // No integrations = no HTTP calls
     app.sendCustomEvent('test', { foo: 'bar' });
     expect(app.initialized).toBe(true);
     // Events tracked locally but not sent
@@ -114,7 +114,7 @@ const result = await page.evaluate(async () => {
   });
 
   // OR for local-only mode (no HTTP):
-  // await window.__traceLogBridge!.init({});
+  // await window.__traceLogBridge!.init();
 
   return { initialized: window.__traceLogBridge!.initialized };
 });
@@ -152,7 +152,7 @@ await window.__traceLogBridge!.init({
 });
 
 // Initialize without HTTP (local-only mode)
-await window.__traceLogBridge!.init({});
+await window.__traceLogBridge!.init();
 
 // Listen for events/queues
 window.__traceLogBridge!.on('event', callback);

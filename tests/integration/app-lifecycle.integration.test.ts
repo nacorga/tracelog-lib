@@ -124,7 +124,7 @@ describe('App Lifecycle Integration', () => {
   describe('Custom Events', () => {
     beforeEach(async () => {
       sessionStorage.clear(); // Clear QA mode from previous tests
-      await app.init({});
+      await app.init();
     });
 
     it('should send custom event with valid name and metadata', () => {
@@ -193,7 +193,7 @@ describe('App Lifecycle Integration', () => {
 
       await app.destroy();
       app = new App();
-      await app.init({});
+      await app.init();
 
       expect(() => {
         app.sendCustomEvent('', { test: 'data' });
@@ -213,7 +213,7 @@ describe('App Lifecycle Integration', () => {
 
   describe('Event Emitters', () => {
     beforeEach(async () => {
-      await app.init({});
+      await app.init();
     });
 
     it('should register and call event listeners', () => {
@@ -265,7 +265,7 @@ describe('App Lifecycle Integration', () => {
 
   describe('Destroy and Cleanup', () => {
     it('should destroy successfully when initialized', async () => {
-      await app.init({});
+      await app.init();
       await app.destroy();
 
       expect(app.initialized).toBe(false);
@@ -284,7 +284,7 @@ describe('App Lifecycle Integration', () => {
     });
 
     it('should cleanup all handlers during destroy', async () => {
-      await app.init({});
+      await app.init();
       const eventSpy = vi.fn();
       app.on(EmitterEvent.EVENT, eventSpy);
 
@@ -301,7 +301,7 @@ describe('App Lifecycle Integration', () => {
     });
 
     it('should remove all event listeners during destroy', async () => {
-      await app.init({});
+      await app.init();
       const callback = vi.fn();
       app.on(EmitterEvent.EVENT, callback);
 
@@ -315,7 +315,7 @@ describe('App Lifecycle Integration', () => {
     });
 
     it('should complete destroy successfully', async () => {
-      await app.init({});
+      await app.init();
 
       await app.destroy();
 
@@ -325,7 +325,7 @@ describe('App Lifecycle Integration', () => {
     // GA cleanup test removed - covered in unit tests
 
     it('should handle handler cleanup errors gracefully', async () => {
-      await app.init({});
+      await app.init();
 
       // Force an error scenario by destroying
       await expect(app.destroy()).resolves.not.toThrow();
@@ -344,7 +344,7 @@ describe('App Lifecycle Integration', () => {
     });
 
     it('should remain initialized after operations', async () => {
-      await app.init({});
+      await app.init();
 
       app.sendCustomEvent('test_event', { data: 'value' });
 

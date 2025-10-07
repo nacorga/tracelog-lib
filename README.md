@@ -35,7 +35,7 @@ npm install @tracelog/lib
 import { tracelog } from '@tracelog/lib';
 
 // Standalone mode (no backend required)
-tracelog.init({});
+tracelog.init();
 
 // OR with TraceLog SaaS integration
 tracelog.init({
@@ -56,7 +56,7 @@ tracelog.event('user_action', { data: 'example' });
 <script src="https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.js"></script>
 <script>
   // Standalone mode
-  tracelog.init({});
+  tracelog.init();
 
   // OR with TraceLog SaaS
   tracelog.init({
@@ -76,7 +76,7 @@ tracelog.event('user_action', { data: 'example' });
 <script type="module">
   import { tracelog } from 'https://cdn.jsdelivr.net/npm/@tracelog/lib@latest/dist/browser/tracelog.esm.js';
 
-  await tracelog.init({}); // Standalone mode
+  await tracelog.init(); // Standalone mode
   tracelog.event('page_view');
 </script>
 ```
@@ -211,7 +211,7 @@ Each event contains a base structure with type-specific data:
 tracelog.on('event', (data) => console.log('Event:', data.type));
 tracelog.on('queue', (data) => console.log('Queued:', data.events.length));
 
-await tracelog.init({});
+await tracelog.init();
 ```
 
 **Note**: Listeners are buffered if registered before `init()`, ensuring you don't miss initial events.
@@ -243,7 +243,7 @@ window.__traceLogDisabled = true;
 Enable QA mode: `?tlog_mode=qa` URL parameter
 
 ```typescript
-tracelog.init({});
+tracelog.init();
 console.log(tracelog.isInitialized()); // true
 ```
 
@@ -278,7 +278,7 @@ npm run test:coverage  # Run tests with coverage
 ## Testing
 
 ```bash
-npm run playground:setup && npm run serve  # Demo at localhost:3000
+npm run docs:dev  # Demo at localhost:3000
 npm run test:unit                           # Unit tests
 npm run test:e2e                            # E2E tests
 ```

@@ -36,7 +36,7 @@ test.describe('User E-commerce Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
 
       // Get session ID
       const sessionData = window.__traceLogBridge!.getSessionData();
@@ -175,7 +175,7 @@ test.describe('User E-commerce Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
 
       // Get session ID
       const sessionData = window.__traceLogBridge!.getSessionData();
@@ -311,7 +311,7 @@ test.describe('User E-commerce Flow', () => {
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init({});
+      await window.__traceLogBridge!.init();
 
       // Get session ID
       const sessionData = window.__traceLogBridge!.getSessionData();
