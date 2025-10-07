@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.5] - 2025-10-07
+
+### 🐛 Bug Fixes
+
+- Prevent tags pointing to wrong commits in release workflow
+- Automate package-lock.json updates in release process
+
+### 📝 Release Notes
+
+- Skipped versions 0.6.2 and 0.6.4 due to tag synchronization issues
+- Version 0.6.4 exists on NPM but with incorrect git metadata
 
 ## [0.6.3] - 2025-10-07
 
