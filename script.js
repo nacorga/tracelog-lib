@@ -408,9 +408,13 @@ function clearEventsMonitor() {
   if (eventsList) {
     eventsList.innerHTML = '';
   }
+
+  // Clear the event queue
+  eventQueue.clear();
+
   // Reset queue info when clearing
   updateQueueCount(0);
-  updateQueueStatus('⏸');
+  updateQueueStatus('idle');
   const lastSentEl = document.getElementById('last-sent');
   if (lastSentEl) {
     lastSentEl.textContent = 'nunca';
@@ -422,16 +426,15 @@ function clearEventsMonitor() {
 // TRACELOG LISTENERS
 // ============================================================================
 
+// Global event queue for tracking events across listeners
+const eventQueue = new Map();
+
 function setupTraceLogListener(traceLog) {
   if (!traceLog || state.traceLogListenersAttached) return;
-
-  // Keep track of events for better queue management
-  const eventQueue = new Map();
 
   // Event tracking
   traceLog.on('event', (eventData) => {
     const { type } = eventData;
-    const queueLength = traceLog.getQueueLength?.() || 0;
     console.log('📥 TraceLog Event:', eventData);
 
     // Add to monitor and track
@@ -440,8 +443,8 @@ function setupTraceLogListener(traceLog) {
       eventQueue.set(eventId, { type, data: eventData, timestamp: Date.now() });
     }
 
-    // Update queue count with actual number from library
-    updateQueueCount(queueLength);
+    // Update queue count based on local queue size
+    updateQueueCount(eventQueue.size);
     updateQueueStatus('collecting');
   });
 
@@ -469,8 +472,8 @@ function setupTraceLogListener(traceLog) {
       eventQueue.delete(eventId);
     });
 
-    // Update queue count to 0 after sending
-    updateQueueCount(0);
+    // Update queue count based on remaining events in local queue
+    updateQueueCount(eventQueue.size);
     updateQueueStatus('idle');
     updateLastSent();
   });
@@ -520,7 +523,7 @@ async function initializeApp() {
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('tracelog_')) {
+        if (key && key.startsWith('tlog')) {
           keysToRemove.push(key);
         }
       }
@@ -528,13 +531,13 @@ async function initializeApp() {
 
       setupTraceLogListener(traceLog); // Setup listeners BEFORE init to capture initial events
       await traceLog.init();
-      updateQueueStatus('▶️');
+      updateQueueStatus('idle');
       return;
     }
 
-    updateQueueStatus('⏸');
+    updateQueueStatus('idle');
   } catch (error) {
-    updateQueueStatus('❌');
+    updateQueueStatus('error');
   }
 }
 
