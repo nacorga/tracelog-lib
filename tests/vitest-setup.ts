@@ -13,3 +13,9 @@ vi.mock('web-vitals', () => ({
   onINP: vi.fn(),
   onFID: vi.fn(),
 }));
+
+// Ensure HTMLElement is available in test environment to prevent race conditions
+// This prevents "ReferenceError: HTMLElement is not defined" in CI environments
+if (typeof HTMLElement === 'undefined') {
+  (globalThis as any).HTMLElement = class MockHTMLElement {};
+}

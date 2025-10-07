@@ -68,7 +68,10 @@ export class ScrollHandler extends StateManager {
   private trySetupContainers(selectors: string[], attempt: number): void {
     const elements: HTMLElement[] = selectors
       .map((sel) => this.safeQuerySelector(sel))
-      .filter((element): element is HTMLElement => element instanceof HTMLElement);
+      .filter(
+        (element): element is HTMLElement =>
+          element != null && typeof HTMLElement !== 'undefined' && element instanceof HTMLElement,
+      );
 
     if (elements.length > 0) {
       for (const element of elements) {
