@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { App } from '@/app';
+import { App } from '../../src/app';
 
 describe('ScrollHandler Integration - Core Behavior', () => {
   let app: App | null = null;

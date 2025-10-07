@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { isOnlyPrimitiveFields } from '@/utils/validations/type-guards.utils';
+import { isOnlyPrimitiveFields } from '../../../src/utils/validations/type-guards.utils';
 
 describe('Type Guards Utils', () => {
   describe('isOnlyPrimitiveFields', () => {

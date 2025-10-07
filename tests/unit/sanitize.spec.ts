@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { sanitizeString, sanitizeMetadata } from '@/utils/security/sanitize.utils';
-import { MAX_STRING_LENGTH } from '@/constants';
+import { sanitizeString, sanitizeMetadata } from '../../src/utils/security/sanitize.utils';
+import { MAX_STRING_LENGTH } from '../../src/constants';
 
 describe('Sanitization Security', () => {
   beforeEach(() => {

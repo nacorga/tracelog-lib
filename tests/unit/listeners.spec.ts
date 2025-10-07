@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ActivityListenerManager } from '@/listeners/activity-listener-manager';
-import { VisibilityListenerManager } from '@/listeners/visibility-listener-manager';
-import { UnloadListenerManager } from '@/listeners/unload-listener-manager';
-import { TouchListenerManager } from '@/listeners/touch-listener-manager';
-import { MouseListenerManager, KeyboardListenerManager } from '@/listeners/input-listener-managers';
+import { ActivityListenerManager } from '../../src/listeners/activity-listener-manager';
+import { VisibilityListenerManager } from '../../src/listeners/visibility-listener-manager';
+import { UnloadListenerManager } from '../../src/listeners/unload-listener-manager';
+import { TouchListenerManager } from '../../src/listeners/touch-listener-manager';
+import { MouseListenerManager, KeyboardListenerManager } from '../../src/listeners/input-listener-managers';
 
 describe('Listener Managers', () => {
   let mockCallback: ReturnType<typeof vi.fn>;

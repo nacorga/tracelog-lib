@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { UserManager } from '@/managers/user.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { USER_ID_KEY } from '@/constants';
+import { UserManager } from '../../../src/managers/user.manager';
+import { StorageManager } from '../../../src/managers/storage.manager';
+import { USER_ID_KEY } from '../../../src/constants';
 
 describe('UserManager', () => {
   let storageManager: StorageManager;

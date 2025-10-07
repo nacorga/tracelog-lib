@@ -6,10 +6,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SenderManager } from '@/managers/sender.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { DeviceType } from '@/types';
-import type { BaseEventsQueueDto } from '@/types';
+import { SenderManager } from '../../src/managers/sender.manager';
+import { StorageManager } from '../../src/managers/storage.manager';
+import { DeviceType } from '../../src/types';
+import type { BaseEventsQueueDto } from '../../src/types';
 
 describe('SenderManager - Retry Race Condition', () => {
   let senderManager: SenderManager;

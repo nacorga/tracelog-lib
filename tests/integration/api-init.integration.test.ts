@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as TraceLog from '@/api';
-import type { Config } from '@/types';
+import * as TraceLog from '../../src/api';
+import type { Config } from '../../src/types';
 
 describe('API Integration - Init Flow', () => {
   beforeEach(async () => {

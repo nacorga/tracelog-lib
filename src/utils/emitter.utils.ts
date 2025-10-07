@@ -1,4 +1,4 @@
-import { EmitterCallback, EmitterMap } from '@/types';
+import { EmitterCallback, EmitterMap } from '../types';
 
 export class Emitter {
   private readonly listeners: Map<string, EmitterCallback[]> = new Map();

@@ -2,7 +2,7 @@ import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType } from '../types';
 import { LONG_TASK_THROTTLE_MS, PRECISION_TWO_DECIMALS, WEB_VITALS_THRESHOLDS } from '../constants';
-import { log } from '@/utils';
+import { log } from '../utils';
 
 type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
 

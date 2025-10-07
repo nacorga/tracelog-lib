@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test';
 import { navigateToPlayground } from './utils/environment.utils';
-import { EventType } from '@/types';
+import { EventType } from '../../src/types';
 
 test.describe('Performance & Error Filters', () => {
   test('should emit only 1 relevant vital and 1 unique error', async ({ page }) => {

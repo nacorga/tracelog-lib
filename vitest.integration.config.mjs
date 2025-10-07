@@ -42,11 +42,6 @@ export default defineConfig({
       ],
     },
   },
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
-    },
-  },
   esbuild: {
     target: 'es2020',
   },

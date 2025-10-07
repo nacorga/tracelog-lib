@@ -6,8 +6,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as TraceLog from '@/api';
-import { EmitterEvent } from '@/types';
+import * as TraceLog from '../../src/api';
+import { EmitterEvent } from '../../src/types';
 
 describe('API Integration - Emitter Methods', () => {
   beforeEach(async () => {

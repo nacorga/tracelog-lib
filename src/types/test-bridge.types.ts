@@ -1,12 +1,12 @@
-import { ClickHandler } from '@/handlers/click.handler';
-import { ErrorHandler } from '@/handlers/error.handler';
-import { PageViewHandler } from '@/handlers/page-view.handler';
-import { PerformanceHandler } from '@/handlers/performance.handler';
-import { ScrollHandler } from '@/handlers/scroll.handler';
-import { SessionHandler } from '@/handlers/session.handler';
-import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
-import { EventManager } from '@/managers/event.manager';
-import { StorageManager as TraceLogStorageManager } from '@/managers/storage.manager';
+import { ClickHandler } from '../handlers/click.handler';
+import { ErrorHandler } from '../handlers/error.handler';
+import { PageViewHandler } from '../handlers/page-view.handler';
+import { PerformanceHandler } from '../handlers/performance.handler';
+import { ScrollHandler } from '../handlers/scroll.handler';
+import { SessionHandler } from '../handlers/session.handler';
+import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
+import { EventManager } from '../managers/event.manager';
+import { StorageManager as TraceLogStorageManager } from '../managers/storage.manager';
 import { Config } from './config.types';
 import { State } from './state.types';
 

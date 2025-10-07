@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EventManager } from '@/managers/event.manager';
-import { EventType, ScrollDirection } from '@/types';
+import { EventManager } from '../../../src/managers/event.manager';
+import { EventType, ScrollDirection } from '../../../src/types';
 import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
-vi.mock('@/utils/logging', () => ({
+vi.mock('../../../src/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),
     info: vi.fn(),

@@ -1,12 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SessionManager } from '@/managers/session.manager';
-import { EventManager } from '@/managers/event.manager';
-import { EventType } from '@/types';
-import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
+import { SessionManager } from '../../../src/managers/session.manager';
+import { EventManager } from '../../../src/managers/event.manager';
+import { EventType } from '../../../src/types';
+import { DEFAULT_SESSION_TIMEOUT } from '../../../src/constants';
 import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
 // Mock dependencies
-vi.mock('@/utils/logging', () => ({
+vi.mock('../../../src/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),
     info: vi.fn(),

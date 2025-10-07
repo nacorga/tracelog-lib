@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { App } from '@/app';
-import { Config, EventType, EmitterEvent } from '@/types';
+import { App } from '../../src/app';
+import { Config, EventType, EmitterEvent } from '../../src/types';
 
 describe('App Lifecycle Integration', () => {
   let app: App;

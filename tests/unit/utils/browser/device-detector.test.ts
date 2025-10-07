@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getDeviceType } from '@/utils/browser/device-detector.utils';
-import { DeviceType } from '@/types/device.types';
+import { getDeviceType } from '../../../../src/utils/browser/device-detector.utils';
+import { DeviceType } from '../../../../src/types/device.types';
 
 describe('Device Detector', () => {
   beforeEach(() => {
