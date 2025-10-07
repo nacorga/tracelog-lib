@@ -1,3 +1,5 @@
 {
-  "src/**/*.ts": ["npm run fix"]
+  "src/**/*.ts": ["npm run fix"],
+  "scripts/**/*.js": ["npx prettier --write"],
+  "*.{json,md}": ["npx prettier --write"]
 }
