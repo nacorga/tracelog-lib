@@ -1,5 +1,44 @@
 # Changelog
 
+
+## [0.6.3] - 2025-10-07
+
+### 🐛 Bug Fixes
+
+- Resolve release workflow tag duplication issue ([f9c8fb1](../../commit/f9c8fb1918b9d9ba477f8a54de911659b98c6502))
+- Ensure HTMLElement is defined in both handlers and test setup to prevent ReferenceError in CI environments ([b5f8ae6](../../commit/b5f8ae6fddc46de21d1a47ba7d6ad48f529e09f2))
+
+### ♻️ Refactoring
+
+- Rename apiUrl to collectApiUrl in configuration and update related references ([f523f53](../../commit/f523f535967f68a244a370b39b9393c7299aa114))
+- Improve event management by implementing pending events buffer and rate limiting ([675fe31](../../commit/675fe31c071ac21961d680bcae73bf2d095a10a1))
+- Update configuration for HTTP allowance in API ([a700076](../../commit/a700076badb72976ebb5ed1fe668f687b89d3d0b))
+
+### 🔧 Other Changes
+
+- Update package-lock.json to version 0.6.2 ([9496afd](../../commit/9496afd68a185b4b74690617c62bbbb13c218df1))
+- Expand lint-staged to cover scripts and config files ([d1400cb](../../commit/d1400cbfd5d611387c33a510b7176122e49c57da))
+- Update docs tracelog.js build [skip ci] ([4049bdb](../../commit/4049bdb46d730f50ad5317cad3b43a9951e5f859))
+- Merge pull request #21 from nacorga/release/20251007.3 ([419f0b1](../../commit/419f0b184e88895697824b3675a31e5db33df2f0))
+- Update docs tracelog.js build [skip ci] ([efd9585](../../commit/efd95850ef0661470d592d1174da0842918565d9))
+- Merge pull request #20 from nacorga/release/20251007.2 ([6e00ee4](../../commit/6e00ee4f72c865d8ea13429d2aaa678b7c5f8535))
+- Update .gitignore to include CLAUDE.md ([c31e11d](../../commit/c31e11da8c65e7aef46574341ce109befe43dcb6))
+- Migrate playground to docs, update file structure and references for TraceLog demo ([18ae09d](../../commit/18ae09d30c97cb7f0a408ef0be4bea4f14cff301))
+- Update playground tracelog.js build [skip ci] ([1e3ae8b](../../commit/1e3ae8b9f9650e4a2a5fcf6a403ff540ec2cd46b))
+- Merge pull request #19 from nacorga/release/20251007.1 ([4e2c1af](../../commit/4e2c1afd2e4768dd0fdaa8c1802f0ba6d52064ec))
+- Update .gitignore, add GitHub Actions workflow for demo deployment ([d977796](../../commit/d977796b85a8e293c54285444c49de32aa3fbab1))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- GitHub Action
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.6.0...v0.6.3
+
+
 ## [0.6.2] - 2025-10-07
 
 ### 🐛 Fixes
