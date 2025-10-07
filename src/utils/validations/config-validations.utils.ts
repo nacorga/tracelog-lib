@@ -174,9 +174,9 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
 
   if (integrations.custom) {
     if (
-      !integrations.custom.apiUrl ||
-      typeof integrations.custom.apiUrl !== 'string' ||
-      integrations.custom.apiUrl.trim() === ''
+      !integrations.custom.collectApiUrl ||
+      typeof integrations.custom.collectApiUrl !== 'string' ||
+      integrations.custom.collectApiUrl.trim() === ''
     ) {
       throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_CUSTOM_API_URL, 'config');
     }
@@ -185,15 +185,15 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
       throw new IntegrationValidationError('allowHttp must be a boolean', 'config');
     }
 
-    const apiUrl = integrations.custom.apiUrl.trim();
+    const collectApiUrl = integrations.custom.collectApiUrl.trim();
 
-    if (!apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+    if (!collectApiUrl.startsWith('http://') && !collectApiUrl.startsWith('https://')) {
       throw new IntegrationValidationError('Custom API URL must start with "http://" or "https://"', 'config');
     }
 
     const allowHttp = integrations.custom.allowHttp ?? false;
 
-    if (!allowHttp && apiUrl.startsWith('http://')) {
+    if (!allowHttp && collectApiUrl.startsWith('http://')) {
       throw new IntegrationValidationError(
         'Custom API URL must use HTTPS in production. Set allowHttp: true in integration config to allow HTTP (not recommended)',
         'config',

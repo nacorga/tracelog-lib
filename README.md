@@ -110,7 +110,7 @@ await tracelog.init({
 // With custom backend
 await tracelog.init({
   integrations: {
-    custom: { apiUrl: 'https://your-api.com/collect' }
+    custom: { collectApiUrl: 'https://your-api.com/collect' }
   }
 });
 
@@ -148,7 +148,7 @@ await tracelog.init({
 - `scrollContainerSelectors`: Custom scroll containers
 - `integrations`:
   - `tracelog.projectId`: TraceLog SaaS
-  - `custom.apiUrl`: Custom backend
+  - `custom.collectApiUrl`: Custom backend
   - `custom.allowHttp`: Enable HTTP for testing
   - `googleAnalytics.measurementId`: GA4
 

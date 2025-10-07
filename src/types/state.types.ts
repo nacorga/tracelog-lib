@@ -4,7 +4,7 @@ import { Mode } from './mode.types';
 
 export interface State {
   mode?: Mode;
-  apiUrl: string;
+  collectApiUrl: string;
   config: Config;
   sessionId: string | null;
   userId: string;

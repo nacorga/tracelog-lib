@@ -79,7 +79,7 @@ Core business logic components that handle analytics data processing, state mana
 - Critical state change logging for debugging
 - Memory-efficient synchronous operations
 - Clean reset functionality for test isolation
-- Supports all core state: `apiUrl`, `config`, `sessionId`, `userId`, `device`, `pageUrl`
+- Supports all core state: `collectApiUrl`, `config`, `sessionId`, `userId`, `device`, `pageUrl`
 
 ## StorageManager
 

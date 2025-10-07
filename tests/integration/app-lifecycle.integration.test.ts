@@ -107,7 +107,7 @@ describe('App Lifecycle Integration', () => {
       const config: Config = {
         integrations: {
           custom: {
-            apiUrl: 'https://api.example.com',
+            collectApiUrl: 'https://api.example.com/collect',
           },
         },
       };

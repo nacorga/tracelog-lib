@@ -7,7 +7,7 @@ import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, Emitter, getApiUrl, detectQaMode, log } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrl, detectQaMode, log } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -41,7 +41,7 @@ export class App extends StateManager {
     return this.isInitialized;
   }
 
-  async init(config?: Config): Promise<void> {
+  async init(config: Config = {}): Promise<void> {
     if (this.isInitialized) {
       return;
     }
@@ -49,7 +49,7 @@ export class App extends StateManager {
     this.managers.storage = new StorageManager();
 
     try {
-      this.setupState(config ?? {});
+      this.setupState(config);
       await this.setupIntegrations();
 
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
@@ -138,14 +138,14 @@ export class App extends StateManager {
     this.handlers = {};
   }
 
-  private setupState(config: Config): void {
+  private setupState(config: Config = {}): void {
     this.set('config', config);
 
     const userId = UserManager.getId(this.managers.storage as StorageManager);
     this.set('userId', userId);
 
-    const apiUrl = getApiUrl(config);
-    this.set('apiUrl', apiUrl);
+    const collectApiUrl = getCollectApiUrl(config);
+    this.set('collectApiUrl', collectApiUrl);
 
     const device = getDeviceType();
     this.set('device', device);

@@ -43,7 +43,7 @@ describe('SenderManager Edge Cases', () => {
     // Setup minimal state
     vi.spyOn(senderManager as any, 'get').mockImplementation((key: unknown) => {
       if (key === 'config') return { id: 'test-project' };
-      if (key === 'apiUrl') return 'http://localhost:3000';
+      if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
       if (key === 'userId') return 'anonymous';
       return null;
     });

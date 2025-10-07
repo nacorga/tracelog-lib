@@ -34,7 +34,7 @@ export class SenderManager extends StateManager {
 
     const config = this.get('config');
 
-    if (config?.integrations?.custom?.apiUrl === SpecialApiUrl.Fail) {
+    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
       log('warn', 'Fail mode: simulating network failure (sync)', {
         data: { events: body.events.length },
       });
@@ -120,7 +120,7 @@ export class SenderManager extends StateManager {
 
     const config = this.get('config');
 
-    if (config?.integrations?.custom?.apiUrl === SpecialApiUrl.Fail) {
+    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
       log('warn', 'Fail mode: simulating network failure', {
         data: { events: body.events.length },
       });
@@ -194,8 +194,6 @@ export class SenderManager extends StateManager {
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
-    const url = `${this.get('apiUrl')}/collect`;
-
     // Enrich payload with metadata for sendBeacon() fallback
     // sendBeacon() doesn't send custom headers, so we include referer in payload
     const enrichedBody = {
@@ -207,7 +205,7 @@ export class SenderManager extends StateManager {
     };
 
     return {
-      url,
+      url: this.get('collectApiUrl'),
       payload: JSON.stringify(enrichedBody),
     };
   }
@@ -328,7 +326,7 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    return !this.get('apiUrl');
+    return !this.get('collectApiUrl');
   }
 
   private async simulateSuccessfulSend(): Promise<boolean> {

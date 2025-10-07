@@ -81,7 +81,7 @@ describe('App Integration', () => {
   it('should send events to API', async () => {
     const app = new App();
     await app.init({
-      integrations: { custom: { apiUrl: 'http://localhost:8080' } }
+      integrations: { custom: { collectApiUrl: 'http://localhost:8080/collect' } }
     });
     app.sendCustomEvent('purchase', { amount: 99.99 });
     expect(fetch).toHaveBeenCalled();
@@ -110,7 +110,7 @@ const result = await page.evaluate(async () => {
   }
 
   await window.__traceLogBridge!.init({
-    integrations: { custom: { apiUrl: 'http://localhost:8080' } }
+    integrations: { custom: { collectApiUrl: 'http://localhost:8080/collect' } }
   });
 
   // OR for local-only mode (no HTTP):
@@ -148,7 +148,7 @@ console.error = (...args: any[]) => {
 ```typescript
 // Initialize with HTTP integration
 await window.__traceLogBridge!.init({
-  integrations: { custom: { apiUrl: 'http://localhost:8080' } }
+  integrations: { custom: { collectApiUrl: 'http://localhost:8080/collect' } }
 });
 
 // Initialize without HTTP (local-only mode)
@@ -187,7 +187,7 @@ window.__traceLogBridge!.getSessionData();
 
 ### ✅ E2E
 - Use `page.evaluate()` + `window.__traceLogBridge!`
-- Use `{ integrations: { custom: { apiUrl: 'http://localhost:8080' } } }` for HTTP tests
+- Use `{ integrations: { custom: { collectApiUrl: 'http://localhost:8080/collect' } } }` for HTTP tests
 - Use `{}` for local-only mode (no HTTP calls)
 - **CSP-Safe**: Internal waiting pattern (avoid `page.waitForFunction()`)
 - Queue events timeout: 10-12 seconds
