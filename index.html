@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechShop - Tu tienda de tecnología</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="brand-icon">🛒</span>
+                <span class="brand-text">TechShop</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#inicio" class="nav-link active" data-page="inicio" data-testid="nav-inicio">Inicio</a></li>
+                <li><a href="#productos" class="nav-link" data-page="productos" data-testid="nav-productos">Productos</a></li>
+                <li><a href="#nosotros" class="nav-link" data-page="nosotros" data-testid="nav-nosotros">Nosotros</a></li>
+                <li><a href="#contacto" class="nav-link" data-page="contacto" data-testid="nav-contacto">Contacto</a></li>
+            </ul>
+            <div class="nav-cart">
+                <button class="cart-btn" data-testid="cart-button">
+                    <span>🛒</span>
+                    <span class="cart-count" id="cart-count" data-testid="cart-count">0</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page: Inicio -->
+    <div id="page-inicio" class="page active" data-testid="page-inicio">
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-container">
+                <div class="hero-content">
+                    <h1 class="hero-title">La mejor tecnología al mejor precio</h1>
+                    <p class="hero-subtitle">Descubre nuestros productos premium seleccionados para ti</p>
+                    <div class="hero-buttons">
+                        <button class="btn btn-primary" data-action="cta-ver-productos" data-testid="cta-ver-productos">Ver Productos</button>
+                        <button class="btn btn-secondary" data-action="cta-contacto" data-testid="cta-contacto">Contáctanos</button>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="hero-placeholder">📱💻⌚</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="features">
+            <div class="container">
+                <h2 class="section-title">¿Por qué elegir TechShop?</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🚚</div>
+                        <h3>Envío Gratis</h3>
+                        <p>En compras superiores a $50</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🔒</div>
+                        <h3>Pago Seguro</h3>
+                        <p>Transacciones 100% protegidas</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">💬</div>
+                        <h3>Soporte 24/7</h3>
+                        <p>Siempre estamos para ayudarte</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Products Preview -->
+        <section class="products-preview">
+            <div class="container">
+                <h2 class="section-title">Productos Destacados</h2>
+                <div class="products-grid">
+                    <div class="product-card" data-product="laptop-pro">
+                        <div class="product-image">💻</div>
+                        <h3 class="product-name">Laptop Pro M2</h3>
+                        <p class="product-price">$1,299</p>
+                        <button class="btn btn-add-cart" data-product-id="1" data-product-name="Laptop Pro M2" data-testid="add-cart-1">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="smartphone-x">
+                        <div class="product-image">📱</div>
+                        <h3 class="product-name">Smartphone X</h3>
+                        <p class="product-price">$899</p>
+                        <button class="btn btn-add-cart" data-product-id="2" data-product-name="Smartphone X" data-testid="add-cart-2">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="smartwatch-ultra">
+                        <div class="product-image">⌚</div>
+                        <h3 class="product-name">Smartwatch Ultra</h3>
+                        <p class="product-price">$499</p>
+                        <button class="btn btn-add-cart" data-product-id="3" data-product-name="Smartwatch Ultra" data-testid="add-cart-3">Añadir al Carrito</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Page: Productos -->
+    <div id="page-productos" class="page" data-testid="page-productos">
+        <section class="page-header">
+            <div class="container">
+                <h1>Nuestros Productos</h1>
+                <p>Explora nuestra colección completa de tecnología premium</p>
+            </div>
+        </section>
+        <section class="products-full">
+            <div class="container">
+                <div class="products-grid">
+                    <div class="product-card" data-product="laptop-pro">
+                        <div class="product-image">💻</div>
+                        <h3 class="product-name">Laptop Pro M2</h3>
+                        <p class="product-desc">Potencia y rendimiento profesional</p>
+                        <p class="product-price">$1,299</p>
+                        <button class="btn btn-add-cart" data-product-id="1" data-product-name="Laptop Pro M2" data-testid="add-cart-1">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="smartphone-x">
+                        <div class="product-image">📱</div>
+                        <h3 class="product-name">Smartphone X</h3>
+                        <p class="product-desc">Última generación en telefonía móvil</p>
+                        <p class="product-price">$899</p>
+                        <button class="btn btn-add-cart" data-product-id="2" data-product-name="Smartphone X" data-testid="add-cart-2">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="smartwatch-ultra">
+                        <div class="product-image">⌚</div>
+                        <h3 class="product-name">Smartwatch Ultra</h3>
+                        <p class="product-desc">Fitness y salud en tu muñeca</p>
+                        <p class="product-price">$499</p>
+                        <button class="btn btn-add-cart" data-product-id="3" data-product-name="Smartwatch Ultra" data-testid="add-cart-3">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="headphones-pro">
+                        <div class="product-image">🎧</div>
+                        <h3 class="product-name">Headphones Pro</h3>
+                        <p class="product-desc">Sonido de alta fidelidad</p>
+                        <p class="product-price">$349</p>
+                        <button class="btn btn-add-cart" data-product-id="4" data-product-name="Headphones Pro" data-testid="add-cart-4">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="tablet-air">
+                        <div class="product-image">📲</div>
+                        <h3 class="product-name">Tablet Air</h3>
+                        <p class="product-desc">Diseño ultradelgado y potente</p>
+                        <p class="product-price">$699</p>
+                        <button class="btn btn-add-cart" data-product-id="5" data-product-name="Tablet Air" data-testid="add-cart-5">Añadir al Carrito</button>
+                    </div>
+                    <div class="product-card" data-product="camera-4k">
+                        <div class="product-image">📷</div>
+                        <h3 class="product-name">Camera 4K</h3>
+                        <p class="product-desc">Captura momentos en alta definición</p>
+                        <p class="product-price">$1,199</p>
+                        <button class="btn btn-add-cart" data-product-id="6" data-product-name="Camera 4K" data-testid="add-cart-6">Añadir al Carrito</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Page: Nosotros -->
+    <div id="page-nosotros" class="page" data-testid="page-nosotros">
+        <section class="page-header">
+            <div class="container">
+                <h1>Sobre Nosotros</h1>
+                <p>Conoce más sobre TechShop y nuestro equipo</p>
+            </div>
+        </section>
+        <section class="about-content">
+            <div class="container">
+                <div class="about-text">
+                    <h2>Nuestra Historia</h2>
+                    <p>TechShop nació en 2020 con la misión de acercar la mejor tecnología a todos. Comenzamos como una pequeña tienda en línea y hoy somos líderes en el mercado digital.</p>
+                    <p>Nos especializamos en productos de alta calidad cuidadosamente seleccionados para satisfacer las necesidades de nuestros clientes más exigentes.</p>
+                </div>
+                <div class="team-section">
+                    <h2>Nuestro Equipo</h2>
+                    <div class="team-grid">
+                        <div class="team-member">
+                            <div class="team-avatar">👨‍💼</div>
+                            <h3>Juan Pérez</h3>
+                            <p>CEO & Fundador</p>
+                        </div>
+                        <div class="team-member">
+                            <div class="team-avatar">👩‍💻</div>
+                            <h3>María García</h3>
+                            <p>CTO</p>
+                        </div>
+                        <div class="team-member">
+                            <div class="team-avatar">👨‍🔧</div>
+                            <h3>Carlos López</h3>
+                            <p>Product Manager</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Page: Contacto -->
+    <div id="page-contacto" class="page" data-testid="page-contacto">
+        <section class="page-header">
+            <div class="container">
+                <h1>Contáctanos</h1>
+                <p>Estamos aquí para ayudarte</p>
+            </div>
+        </section>
+        <section class="contact-content">
+            <div class="container">
+                <div class="contact-grid">
+                    <div class="contact-info">
+                        <h2>Información de Contacto</h2>
+                        <div class="contact-item">
+                            <span class="contact-icon">📍</span>
+                            <div>
+                                <h3>Dirección</h3>
+                                <p>Av. Tecnología 123, Madrid, España</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <span class="contact-icon">📧</span>
+                            <div>
+                                <h3>Email</h3>
+                                <p>hola@techshop.com</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <span class="contact-icon">📞</span>
+                            <div>
+                                <h3>Teléfono</h3>
+                                <p>+34 900 123 456</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="contact-form-container">
+                        <h2>Envíanos un Mensaje</h2>
+                        <form id="contact-form" class="contact-form" data-testid="contact-form">
+                            <div class="form-group">
+                                <label for="name">Nombre</label>
+                                <input type="text" id="name" name="name" data-testid="form-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="email">Email</label>
+                                <input type="email" id="email" name="email" data-testid="form-email" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="message">Mensaje</label>
+                                <textarea id="message" name="message" rows="5" data-testid="form-message" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary" data-testid="form-submit">Enviar Mensaje</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Floating Monitor -->
+    <div id="floating-monitor" class="floating-monitor" data-testid="tracelog-monitor">
+        <div class="monitor-header">
+            <span class="monitor-title">TraceLog</span>
+            <div class="monitor-queue-info">
+                <span id="queue-count" data-testid="queue-count">0</span>
+                <span id="queue-status" data-testid="queue-status">⏸</span>
+            </div>
+            <button id="clear-events" class="monitor-clear" data-testid="clear-events">×</button>
+        </div>
+        <div id="events-list" class="monitor-events" data-testid="events-list"></div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 TechShop. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+
+
+    <!-- TraceLog Library -->
+    <script type="module">
+        import { tracelog } from './tracelog.js';
+        window.tracelog = tracelog;
+    </script>
+    <!-- Demo Script -->
+    <script src="script.js"></script>
+</body>
+</html>
