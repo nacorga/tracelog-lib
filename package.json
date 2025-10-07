@@ -15,6 +15,14 @@
     "import": "./dist/esm/public-api.js",
     "require": "./dist/cjs/public-api.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nacorga/tracelog-lib.git"
+  },
+  "homepage": "https://github.com/nacorga/tracelog-lib#readme",
+  "bugs": {
+    "url": "https://github.com/nacorga/tracelog-lib/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
