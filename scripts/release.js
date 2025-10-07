@@ -83,18 +83,17 @@ class ReleaseManager {
       await this.updateVersion(versionInfo);
       await this.generateChangelog(versionInfo);
 
-      // Step 6: Create git tag
-      await this.createGitTag(versionInfo);
+      // Step 6: Commit version changes
+      await this.commitVersionChanges(versionInfo);
 
       // Step 7: Publish to NPM
       if (!this.skipPublish) {
         await this.publishToNpm(versionInfo);
       }
 
-      // Step 8: Create GitHub release
-      await this.createGitHubRelease(versionInfo);
-
-      this.log.success(`Release ${versionInfo.newVersion} completed successfully! 🎉`);
+      // Step 8: Note about GitHub release
+      this.log.info('GitHub Actions will handle git push, tag creation, and GitHub release');
+      this.log.success(`Release ${versionInfo.newVersion} prepared successfully! 🎉`);
     } catch (error) {
       this.log.error(`Release failed: ${error.message}`);
       if (this.verbose) {
@@ -317,7 +316,7 @@ class ReleaseManager {
     this.log.success('Changelog updated');
   }
 
-  async createGitTag(versionInfo) {
+  async commitVersionChanges(versionInfo) {
     this.log.step(`Committing version changes for v${versionInfo.newVersion}...`);
 
     if (this.dryRun) {
@@ -340,9 +339,7 @@ class ReleaseManager {
 
       execSync(`git commit -m "chore: release v${versionInfo.newVersion}"`, { cwd: this.projectRoot });
       this.log.success(`Version changes committed for v${versionInfo.newVersion}`);
-
-      // Note: Git tag will be created by GitHub Actions workflow
-      this.log.info('Git tag will be created by GitHub Actions after push');
+      this.log.info('Commit will be pushed by GitHub Actions workflow');
     } catch (error) {
       throw new Error(`Failed to commit version changes: ${error.message}`);
     }
@@ -372,25 +369,6 @@ class ReleaseManager {
       this.log.success(`Published v${versionInfo.newVersion} to NPM`);
     } catch (error) {
       throw new Error(`NPM publish failed: ${error.message}`);
-    }
-  }
-
-  async createGitHubRelease(versionInfo) {
-    this.log.step('Pushing changes to GitHub...');
-
-    if (this.dryRun) {
-      this.log.info('DRY RUN: Would push to GitHub');
-      return;
-    }
-
-    try {
-      // Push commits only (tag will be created by GitHub Actions)
-      execSync('git push origin', { cwd: this.projectRoot });
-
-      this.log.success('Pushed commits to GitHub');
-      this.log.info('GitHub Actions will create the tag and release automatically');
-    } catch (error) {
-      this.log.warning(`Failed to push to GitHub: ${error.message}`);
     }
   }
 }

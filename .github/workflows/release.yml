@@ -180,6 +180,12 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Released version: $VERSION"
 
+      - name: Push release commit
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          git push origin main
+          echo "✅ Release commit pushed to main"
+
       - name: Create GitHub Release
         id: create_release
         if: github.event.inputs.dry_run != 'true'
