@@ -49,7 +49,7 @@ const m = {
   /<embed\b[^>]*>/gi,
   /<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi
 ];
-var j = /* @__PURE__ */ ((r) => (r.Localhost = "localhost:8080", r.Fail = "localhost:9999", r))(j || {}), _ = /* @__PURE__ */ ((r) => (r.Mobile = "mobile", r.Tablet = "tablet", r.Desktop = "desktop", r.Unknown = "unknown", r))(_ || {}), X = /* @__PURE__ */ ((r) => (r.EVENT = "event", r.QUEUE = "queue", r))(X || {}), d = /* @__PURE__ */ ((r) => (r.PAGE_VIEW = "page_view", r.CLICK = "click", r.SCROLL = "scroll", r.SESSION_START = "session_start", r.SESSION_END = "session_end", r.CUSTOM = "custom", r.WEB_VITALS = "web_vitals", r.ERROR = "error", r))(d || {}), D = /* @__PURE__ */ ((r) => (r.UP = "up", r.DOWN = "down", r))(D || {}), L = /* @__PURE__ */ ((r) => (r.JS_ERROR = "js_error", r.PROMISE_REJECTION = "promise_rejection", r))(L || {}), R = /* @__PURE__ */ ((r) => (r.QA = "qa", r))(R || {});
+var X = /* @__PURE__ */ ((r) => (r.Localhost = "localhost:8080", r.Fail = "localhost:9999", r))(X || {}), _ = /* @__PURE__ */ ((r) => (r.Mobile = "mobile", r.Tablet = "tablet", r.Desktop = "desktop", r.Unknown = "unknown", r))(_ || {}), j = /* @__PURE__ */ ((r) => (r.EVENT = "event", r.QUEUE = "queue", r))(j || {}), d = /* @__PURE__ */ ((r) => (r.PAGE_VIEW = "page_view", r.CLICK = "click", r.SCROLL = "scroll", r.SESSION_START = "session_start", r.SESSION_END = "session_end", r.CUSTOM = "custom", r.WEB_VITALS = "web_vitals", r.ERROR = "error", r))(d || {}), D = /* @__PURE__ */ ((r) => (r.UP = "up", r.DOWN = "down", r))(D || {}), L = /* @__PURE__ */ ((r) => (r.JS_ERROR = "js_error", r.PROMISE_REJECTION = "promise_rejection", r))(L || {}), R = /* @__PURE__ */ ((r) => (r.QA = "qa", r))(R || {}), Pe = /* @__PURE__ */ ((r) => (r.AND = "AND", r.OR = "OR", r))(Pe || {}), De = /* @__PURE__ */ ((r) => (r.URL_MATCHES = "url_matches", r.ELEMENT_MATCHES = "element_matches", r.DEVICE_TYPE = "device_type", r.ELEMENT_TEXT = "element_text", r.ELEMENT_ATTRIBUTE = "element_attribute", r.UTM_SOURCE = "utm_source", r.UTM_MEDIUM = "utm_medium", r.UTM_CAMPAIGN = "utm_campaign", r))(De || {}), ke = /* @__PURE__ */ ((r) => (r.EQUALS = "equals", r.CONTAINS = "contains", r.STARTS_WITH = "starts_with", r.ENDS_WITH = "ends_with", r.REGEX = "regex", r.GREATER_THAN = "greater_than", r.LESS_THAN = "less_than", r.EXISTS = "exists", r.NOT_EXISTS = "not_exists", r))(ke || {});
 class C extends Error {
   constructor(e, t, s) {
     super(e), this.errorCode = t, this.layer = s, this.name = this.constructor.name, Error.captureStackTrace && Error.captureStackTrace(this, this.constructor);
@@ -60,7 +60,7 @@ class y extends C {
     super(e, "APP_CONFIG_INVALID", t);
   }
 }
-class Pe extends C {
+class Ue extends C {
   constructor(e, t = "config") {
     super(e, "SESSION_TIMEOUT_INVALID", t);
   }
@@ -75,12 +75,12 @@ class v extends C {
     super(e, "INTEGRATION_INVALID", t);
   }
 }
-class xt extends C {
+class Gt extends C {
   constructor(e, t, s = "runtime") {
     super(e, "INITIALIZATION_TIMEOUT", s), this.timeoutMs = t;
   }
 }
-const De = (r, e) => {
+const He = (r, e) => {
   if (e) {
     if (e instanceof Error) {
       const t = e.message.replace(/\s+at\s+.*$/gm, "").replace(/\(.*?:\d+:\d+\)/g, "");
@@ -90,13 +90,13 @@ const De = (r, e) => {
   }
   return `[TraceLog] ${r}`;
 }, o = (r, e, t) => {
-  const { error: s, data: n, showToClient: i = !1 } = t ?? {}, a = s ? De(e, s) : `[TraceLog] ${e}`, l = r === "error" ? "error" : r === "warn" ? "warn" : "log";
+  const { error: s, data: n, showToClient: i = !1 } = t ?? {}, a = s ? He(e, s) : `[TraceLog] ${e}`, l = r === "error" ? "error" : r === "warn" ? "warn" : "log";
   if (!(r === "debug" || r === "info" && !i))
     if (n !== void 0) {
-      const c = ke(n);
+      const c = xe(n);
       console[l](a, c);
     } else n !== void 0 ? console[l](a, n) : console[l](a);
-}, ke = (r) => {
+}, xe = (r) => {
   const e = {}, t = ["token", "password", "secret", "key", "apikey", "api_key", "sessionid", "session_id"];
   for (const [s, n] of Object.entries(r)) {
     const i = s.toLowerCase();
@@ -105,27 +105,27 @@ const De = (r, e) => {
   return e;
 };
 let W, pe;
-const Ue = () => {
+const Ve = () => {
   typeof window < "u" && !W && (W = window.matchMedia("(pointer: coarse)"), pe = window.matchMedia("(hover: none)"));
-}, He = () => {
+}, Fe = () => {
   try {
     const r = navigator;
     if (r.userAgentData && typeof r.userAgentData.mobile == "boolean")
       return r.userAgentData.platform && /ipad|tablet/i.test(r.userAgentData.platform) ? _.Tablet : r.userAgentData.mobile ? _.Mobile : _.Desktop;
-    Ue();
+    Ve();
     const e = window.innerWidth, t = W?.matches ?? !1, s = pe?.matches ?? !1, n = "ontouchstart" in window || navigator.maxTouchPoints > 0, i = navigator.userAgent.toLowerCase(), a = /mobile|android|iphone|ipod|blackberry|iemobile|opera mini/.test(i), l = /tablet|ipad|android(?!.*mobile)/.test(i);
     return e <= 767 || a && n ? _.Mobile : e >= 768 && e <= 1024 || l || t && s && n ? _.Tablet : _.Desktop;
   } catch (r) {
     return o("warn", "Device detection failed, defaulting to desktop", { error: r }), _.Desktop;
   }
-}, T = "tlog", le = `${T}:qa_mode`, xe = `${T}:uid`, Ve = (r) => r ? `${T}:${r}:queue` : `${T}:queue`, Fe = (r) => r ? `${T}:${r}:session` : `${T}:session`, Ge = (r) => r ? `${T}:${r}:broadcast` : `${T}:broadcast`, _e = {
+}, T = "tlog", le = `${T}:qa_mode`, Ge = `${T}:uid`, ze = (r) => r ? `${T}:${r}:queue` : `${T}:queue`, Qe = (r) => r ? `${T}:${r}:session` : `${T}:session`, $e = (r) => r ? `${T}:${r}:broadcast` : `${T}:broadcast`, _e = {
   LCP: 4e3,
   FCP: 1800,
   CLS: 0.25,
   INP: 200,
   TTFB: 800,
   LONG_TASK: 50
-}, ze = 1e3, Te = [
+}, Be = 1e3, Te = [
   // Email addresses
   /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
   // US Phone numbers (various formats)
@@ -140,10 +140,10 @@ const Ue = () => {
   /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
   // Passwords in connection strings (protocol://user:password@host)
   /:\/\/[^:/]+:([^@]+)@/gi
-], ce = 500, ue = 5e3, k = 50, $e = k * 2, de = "tlog_mode", Qe = "qa", Be = () => {
+], ce = 500, ue = 5e3, k = 50, Xe = k * 2, de = "tlog_mode", je = "qa", We = () => {
   if (sessionStorage.getItem(le) === "true")
     return !0;
-  const e = new URLSearchParams(window.location.search), s = e.get(de) === Qe;
+  const e = new URLSearchParams(window.location.search), s = e.get(de) === je;
   if (s) {
     sessionStorage.setItem(le, "true"), e.delete(de);
     const n = e.toString(), i = `${window.location.pathname}${n ? "?" + n : ""}${window.location.hash}`;
@@ -167,10 +167,10 @@ const Ue = () => {
       e[i] = n;
     }
   }), Object.keys(e).length ? e : void 0;
-}, je = () => typeof crypto < "u" && crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (r) => {
+}, Ye = () => typeof crypto < "u" && crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (r) => {
   const e = Math.random() * 16 | 0;
   return (r === "x" ? e : e & 3 | 8).toString(16);
-}), Xe = () => {
+}), Ke = () => {
   const r = Date.now();
   let e = "";
   try {
@@ -188,7 +188,7 @@ const Ue = () => {
   } catch {
     return !1;
   }
-}, We = (r) => {
+}, qe = (r) => {
   if (r.integrations?.tracelog?.projectId) {
     const n = new URL(window.location.href).hostname.split(".");
     if (n.length === 0)
@@ -256,7 +256,7 @@ const Ue = () => {
     return t;
   }
   return null;
-}, Ye = (r) => {
+}, Ze = (r) => {
   if (typeof r != "object" || r === null)
     return {};
   try {
@@ -266,15 +266,15 @@ const Ue = () => {
     const t = e instanceof Error ? e.message : String(e);
     throw new Error(`[TraceLog] Metadata sanitization failed: ${t}`);
   }
-}, Ke = (r) => {
+}, Je = (r) => {
   if (r !== void 0 && (r === null || typeof r != "object"))
     throw new y("Configuration must be an object", "config");
   if (r) {
     if (r.sessionTimeout !== void 0 && (typeof r.sessionTimeout != "number" || r.sessionTimeout < 3e4 || r.sessionTimeout > 864e5))
-      throw new Pe(m.INVALID_SESSION_TIMEOUT, "config");
+      throw new Ue(m.INVALID_SESSION_TIMEOUT, "config");
     if (r.globalMetadata !== void 0 && (typeof r.globalMetadata != "object" || r.globalMetadata === null))
       throw new y(m.INVALID_GLOBAL_METADATA, "config");
-    if (r.scrollContainerSelectors !== void 0 && Ze(r.scrollContainerSelectors), r.integrations && Je(r.integrations), r.sensitiveQueryParams !== void 0) {
+    if (r.scrollContainerSelectors !== void 0 && tt(r.scrollContainerSelectors), r.integrations && rt(r.integrations), r.sensitiveQueryParams !== void 0) {
       if (!Array.isArray(r.sensitiveQueryParams))
         throw new y(m.INVALID_SENSITIVE_QUERY_PARAMS, "config");
       for (const e of r.sensitiveQueryParams)
@@ -286,7 +286,7 @@ const Ue = () => {
     if (r.samplingRate !== void 0 && (typeof r.samplingRate != "number" || r.samplingRate < 0 || r.samplingRate > 1))
       throw new oe(m.INVALID_SAMPLING_RATE, "config");
   }
-}, qe = (r) => {
+}, et = (r) => {
   if (r.includes("<") || r.includes(">") || /on\w+\s*=/i.test(r) || !/^[a-zA-Z0-9\-_#.[\]="':, >+~*()]+$/.test(r))
     return !1;
   let t = 0;
@@ -297,7 +297,7 @@ const Ue = () => {
   for (const n of r)
     if (n === "[" && s++, n === "]" && s--, s < 0) return !1;
   return s === 0;
-}, Ze = (r) => {
+}, tt = (r) => {
   const e = Array.isArray(r) ? r : [r];
   for (const t of e) {
     if (typeof t != "string" || t.trim() === "")
@@ -309,7 +309,7 @@ const Ue = () => {
           isEmpty: t === "" || typeof t == "string" && t.trim() === ""
         }
       }), new y(m.INVALID_SCROLL_CONTAINER_SELECTORS, "config");
-    if (!qe(t))
+    if (!et(t))
       throw o("error", "Invalid or potentially unsafe CSS selector", {
         showToClient: !0,
         data: {
@@ -318,7 +318,7 @@ const Ue = () => {
         }
       }), new y("Invalid or potentially unsafe CSS selector", "config");
   }
-}, Je = (r) => {
+}, rt = (r) => {
   if (r) {
     if (r.tracelog && (!r.tracelog.projectId || typeof r.tracelog.projectId != "string" || r.tracelog.projectId.trim() === ""))
       throw new v(m.INVALID_TRACELOG_PROJECT_ID, "config");
@@ -343,8 +343,8 @@ const Ue = () => {
         throw new v('Google Analytics measurement ID must start with "G-" or "UA-"', "config");
     }
   }
-}, et = (r) => {
-  Ke(r);
+}, st = (r) => {
+  Je(r);
   const e = {
     ...r ?? {},
     sessionTimeout: r?.sessionTimeout ?? 9e5,
@@ -357,7 +357,7 @@ const Ue = () => {
     ...e.integrations.custom,
     allowHttp: e.integrations.custom.allowHttp ?? !1
   }), e;
-}, tt = (r) => {
+}, nt = (r) => {
   if (typeof r == "string")
     return !0;
   if (typeof r == "object" && r !== null && !Array.isArray(r)) {
@@ -374,7 +374,7 @@ const Ue = () => {
     return !0;
   }
   return !1;
-}, rt = (r) => {
+}, it = (r) => {
   if (typeof r != "object" || r === null)
     return !1;
   for (const e of Object.values(r)) {
@@ -388,7 +388,7 @@ const Ue = () => {
         if (typeof e[0] == "string") {
           if (!e.every((i) => typeof i == "string"))
             return !1;
-        } else if (!e.every((i) => tt(i)))
+        } else if (!e.every((i) => nt(i)))
           return !1;
         continue;
       }
@@ -396,7 +396,7 @@ const Ue = () => {
     }
   }
   return !0;
-}, st = (r) => typeof r != "string" ? {
+}, at = (r) => typeof r != "string" ? {
   valid: !1,
   error: "Event name must be a string"
 } : r.length === 0 ? {
@@ -412,8 +412,8 @@ const Ue = () => {
   valid: !1,
   error: "Event name cannot be a reserved word"
 } : { valid: !0 }, Se = (r, e, t) => {
-  const s = Ye(e), n = `${t} "${r}" metadata error`;
-  if (!rt(s))
+  const s = Ze(e), n = `${t} "${r}" metadata error`;
+  if (!it(s))
     return {
       valid: !1,
       error: `${n}: object has invalid types. Valid types are string, number, boolean or string arrays.`
@@ -461,7 +461,7 @@ const Ue = () => {
     valid: !0,
     sanitizedMetadata: s
   };
-}, nt = (r, e, t) => {
+}, ot = (r, e, t) => {
   if (Array.isArray(e)) {
     const s = [], n = `${t} "${r}" metadata error`;
     for (let i = 0; i < e.length; i++) {
@@ -485,8 +485,8 @@ const Ue = () => {
     };
   }
   return Se(r, e, t);
-}, it = (r, e) => {
-  const t = st(r);
+}, lt = (r, e) => {
+  const t = at(r);
   if (!t.valid)
     return o("error", "Event name validation failed", {
       showToClient: !0,
@@ -494,7 +494,7 @@ const Ue = () => {
     }), t;
   if (!e)
     return { valid: !0 };
-  const s = nt(r, e, "customEvent");
+  const s = ot(r, e, "customEvent");
   return s.valid || o("error", "Event metadata validation failed", {
     showToClient: !0,
     data: {
@@ -503,7 +503,7 @@ const Ue = () => {
     }
   }), s;
 };
-class at {
+class ct {
   listeners = /* @__PURE__ */ new Map();
   on(e, t) {
     this.listeners.has(e) || this.listeners.set(e, []), this.listeners.get(e).push(t);
@@ -523,19 +523,19 @@ class at {
     this.listeners.clear();
   }
 }
-const $ = {};
+const Q = {};
 class f {
   get(e) {
-    return $[e];
+    return Q[e];
   }
   set(e, t) {
-    $[e] = t;
+    Q[e] = t;
   }
   getState() {
-    return { ...$ };
+    return { ...Q };
   }
 }
-class ot extends f {
+class ut extends f {
   storeManager;
   retryTimeoutId = null;
   retryCount = 0;
@@ -545,12 +545,12 @@ class ot extends f {
   }
   getQueueStorageKey() {
     const e = this.get("userId") || "anonymous";
-    return Ve(e);
+    return ze(e);
   }
   sendEventsQueueSync(e) {
     if (this.shouldSkipSend())
       return this.resetRetryState(), !0;
-    if (this.get("config")?.integrations?.custom?.collectApiUrl === j.Fail)
+    if (this.get("config")?.integrations?.custom?.collectApiUrl === X.Fail)
       return o("warn", "Fail mode: simulating network failure (sync)", {
         data: { events: e.events.length }
       }), !1;
@@ -587,7 +587,7 @@ class ot extends f {
   async send(e) {
     if (this.shouldSkipSend())
       return this.simulateSuccessfulSend();
-    if (this.get("config")?.integrations?.custom?.collectApiUrl === j.Fail)
+    if (this.get("config")?.integrations?.custom?.collectApiUrl === X.Fail)
       return o("warn", "Fail mode: simulating network failure", {
         data: { events: e.events.length }
       }), !1;
@@ -726,7 +726,7 @@ class ot extends f {
     this.retryTimeoutId !== null && (clearTimeout(this.retryTimeoutId), this.retryTimeoutId = null);
   }
 }
-class lt extends f {
+class dt extends f {
   googleAnalytics;
   dataSender;
   emitter;
@@ -738,7 +738,7 @@ class lt extends f {
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
   constructor(e, t = null, s = null) {
-    super(), this.googleAnalytics = t, this.dataSender = new ot(e), this.emitter = s;
+    super(), this.googleAnalytics = t, this.dataSender = new ut(e), this.emitter = s;
   }
   async recoverPersistedEvents() {
     await this.dataSender.recoverPersistedEvents({
@@ -906,7 +906,7 @@ class lt extends f {
   buildEventPayload(e) {
     const t = e.type === d.SESSION_START, s = e.page_url ?? this.get("pageUrl");
     return {
-      id: Xe(),
+      id: Ke(),
       type: e.type,
       page_url: s,
       timestamp: Date.now(),
@@ -977,13 +977,13 @@ class lt extends f {
     this.eventsQueue = this.eventsQueue.filter((s) => !t.has(s.id));
   }
   emitEvent(e) {
-    this.emitter && this.emitter.emit(X.EVENT, e);
+    this.emitter && this.emitter.emit(j.EVENT, e);
   }
   emitEventsQueue(e) {
-    this.emitter && this.emitter.emit(X.QUEUE, e);
+    this.emitter && this.emitter.emit(j.QUEUE, e);
   }
 }
-class ct {
+class ht {
   /**
    * Gets or creates a unique user ID for the given project.
    * The user ID is persisted in localStorage and reused across sessions.
@@ -993,14 +993,14 @@ class ct {
    * @returns Persistent unique user ID
    */
   static getId(e) {
-    const t = xe, s = e.getItem(t);
+    const t = Ge, s = e.getItem(t);
     if (s)
       return s;
-    const n = je();
+    const n = Ye();
     return e.setItem(t, n), n;
   }
 }
-class ut extends f {
+class ft extends f {
   storageManager;
   eventManager;
   projectId;
@@ -1019,7 +1019,7 @@ class ut extends f {
       return;
     }
     const e = this.getProjectId();
-    this.broadcastChannel = new BroadcastChannel(Ge(e)), this.broadcastChannel.onmessage = (t) => {
+    this.broadcastChannel = new BroadcastChannel($e(e)), this.broadcastChannel.onmessage = (t) => {
       const { action: s, sessionId: n, timestamp: i, projectId: a } = t.data ?? {};
       if (a === e) {
         if (s === "session_end") {
@@ -1083,7 +1083,7 @@ class ut extends f {
     this.storageManager.setItem(t, JSON.stringify(e));
   }
   getSessionStorageKey() {
-    return Fe(this.getProjectId());
+    return Qe(this.getProjectId());
   }
   getProjectId() {
     return this.projectId;
@@ -1170,7 +1170,7 @@ class ut extends f {
     this.clearSessionTimeout(), this.cleanupActivityListeners(), this.cleanupCrossTabSync(), this.cleanupLifecycleListeners(), this.isTracking = !1, this.set("hasStartSession", !1);
   }
 }
-class dt extends f {
+class gt extends f {
   eventManager;
   storageManager;
   sessionManager = null;
@@ -1189,7 +1189,7 @@ class dt extends f {
     if (!t)
       throw new Error("Cannot start session tracking: config not available");
     try {
-      this.sessionManager = new ut(this.storageManager, this.eventManager, t), await this.sessionManager.startTracking(), this.eventManager.flushPendingEvents();
+      this.sessionManager = new ft(this.storageManager, this.eventManager, t), await this.sessionManager.startTracking(), this.eventManager.flushPendingEvents();
     } catch (s) {
       if (this.sessionManager) {
         try {
@@ -1214,7 +1214,7 @@ class dt extends f {
     this.destroyed || (this.sessionManager && (this.sessionManager.destroy(), this.sessionManager = null), this.destroyed = !0, this.set("hasStartSession", !1));
   }
 }
-class ht extends f {
+class St extends f {
   eventManager;
   onTrack;
   originalPushState;
@@ -1268,7 +1268,7 @@ class ht extends f {
     };
   }
 }
-class ft extends f {
+class Et extends f {
   eventManager;
   clickHandler;
   constructor(e) {
@@ -1387,7 +1387,7 @@ class ft extends f {
     };
   }
 }
-class gt extends f {
+class mt extends f {
   eventManager;
   containers = [];
   limitWarningLogged = !1;
@@ -1526,7 +1526,7 @@ class gt extends f {
     }
   }
 }
-class St extends f {
+class pt extends f {
   isInitialized = !1;
   async initialize() {
     if (this.isInitialized)
@@ -1578,7 +1578,7 @@ class St extends f {
     `, document.head.appendChild(s);
   }
 }
-class Et {
+class _t {
   storage;
   sessionStorageRef;
   fallbackStorage = /* @__PURE__ */ new Map();
@@ -1754,7 +1754,7 @@ class Et {
     this.fallbackSessionStorage.delete(e);
   }
 }
-class mt extends f {
+class Tt extends f {
   eventManager;
   reportedByNav = /* @__PURE__ */ new Map();
   observers = [];
@@ -1825,7 +1825,7 @@ class mt extends f {
   }
   async initWebVitals() {
     try {
-      const { onLCP: e, onCLS: t, onFCP: s, onTTFB: n, onINP: i } = await Promise.resolve().then(() => Ht), a = (l) => (c) => {
+      const { onLCP: e, onCLS: t, onFCP: s, onTTFB: n, onINP: i } = await Promise.resolve().then(() => Ft), a = (l) => (c) => {
         const u = Number(c.value.toFixed(2));
         this.sendVital({ type: l, value: u });
       };
@@ -1852,7 +1852,7 @@ class mt extends f {
         const t = e.getEntries();
         for (const s of t) {
           const n = Number(s.duration.toFixed(2)), i = Date.now();
-          i - this.lastLongTaskSentAt >= ze && (this.shouldSendVital("LONG_TASK", n) && this.trackWebVital("LONG_TASK", n), this.lastLongTaskSentAt = i);
+          i - this.lastLongTaskSentAt >= Be && (this.shouldSendVital("LONG_TASK", n) && this.trackWebVital("LONG_TASK", n), this.lastLongTaskSentAt = i);
         }
       },
       { type: "longtask", buffered: !0 }
@@ -1933,7 +1933,7 @@ class mt extends f {
     return !(typeof s == "number" && t <= s);
   }
 }
-class pt extends f {
+class vt extends f {
   eventManager;
   recentErrors = /* @__PURE__ */ new Map();
   constructor(e) {
@@ -1999,7 +1999,7 @@ class pt extends f {
   }
   shouldSuppressError(e, t) {
     const s = Date.now(), n = `${e}:${t}`, i = this.recentErrors.get(n);
-    return i && s - i < ue ? (this.recentErrors.set(n, s), !0) : (this.recentErrors.set(n, s), this.recentErrors.size > $e ? (this.recentErrors.clear(), this.recentErrors.set(n, s), !1) : (this.recentErrors.size > k && this.pruneOldErrors(), !1));
+    return i && s - i < ue ? (this.recentErrors.set(n, s), !0) : (this.recentErrors.set(n, s), this.recentErrors.size > Xe ? (this.recentErrors.clear(), this.recentErrors.set(n, s), !1) : (this.recentErrors.size > k && this.pruneOldErrors(), !1));
   }
   pruneOldErrors() {
     const e = Date.now();
@@ -2014,10 +2014,10 @@ class pt extends f {
     }
   }
 }
-class _t extends f {
+class It extends f {
   isInitialized = !1;
   suppressNextScrollTimer = null;
-  emitter = new at();
+  emitter = new ct();
   managers = {};
   handlers = {};
   integrations = {};
@@ -2026,9 +2026,9 @@ class _t extends f {
   }
   async init(e = {}) {
     if (!this.isInitialized) {
-      this.managers.storage = new Et();
+      this.managers.storage = new _t();
       try {
-        this.setupState(e), await this.setupIntegrations(), this.managers.event = new lt(this.managers.storage, this.integrations.googleAnalytics, this.emitter), await this.initializeHandlers(), await this.managers.event.recoverPersistedEvents().catch((t) => {
+        this.setupState(e), await this.setupIntegrations(), this.managers.event = new dt(this.managers.storage, this.integrations.googleAnalytics, this.emitter), await this.initializeHandlers(), await this.managers.event.recoverPersistedEvents().catch((t) => {
           o("warn", "Failed to recover persisted events", { error: t });
         }), this.isInitialized = !0;
       } catch (t) {
@@ -2041,7 +2041,7 @@ class _t extends f {
   sendCustomEvent(e, t) {
     if (!this.managers.event)
       return;
-    const { valid: s, error: n, sanitizedMetadata: i } = it(e, t);
+    const { valid: s, error: n, sanitizedMetadata: i } = lt(e, t);
     if (!s) {
       if (this.get("mode") === R.QA)
         throw new Error(`[TraceLog] Custom event "${e}" validation failed: ${n}`);
@@ -2076,27 +2076,27 @@ class _t extends f {
   }
   setupState(e = {}) {
     this.set("config", e);
-    const t = ct.getId(this.managers.storage);
+    const t = ht.getId(this.managers.storage);
     this.set("userId", t);
-    const s = We(e);
+    const s = qe(e);
     this.set("collectApiUrl", s);
-    const n = He();
+    const n = Fe();
     this.set("device", n);
     const i = Y(window.location.href, e.sensitiveQueryParams);
     this.set("pageUrl", i);
-    const a = Be() ? R.QA : void 0;
+    const a = We() ? R.QA : void 0;
     a && this.set("mode", a);
   }
   async setupIntegrations() {
     if (this.get("config").integrations?.googleAnalytics?.measurementId?.trim())
       try {
-        this.integrations.googleAnalytics = new St(), await this.integrations.googleAnalytics.initialize();
+        this.integrations.googleAnalytics = new pt(), await this.integrations.googleAnalytics.initialize();
       } catch {
         this.integrations.googleAnalytics = void 0;
       }
   }
   async initializeHandlers() {
-    this.handlers.session = new dt(
+    this.handlers.session = new gt(
       this.managers.storage,
       this.managers.event
     ), await this.handlers.session.startTracking();
@@ -2105,20 +2105,20 @@ class _t extends f {
         this.set("suppressNextScroll", !1);
       }, 250 * 2);
     };
-    this.handlers.pageView = new ht(this.managers.event, e), this.handlers.pageView.startTracking(), this.handlers.click = new ft(this.managers.event), this.handlers.click.startTracking(), this.handlers.scroll = new gt(this.managers.event), this.handlers.scroll.startTracking(), this.handlers.performance = new mt(this.managers.event), this.handlers.performance.startTracking().catch((t) => {
+    this.handlers.pageView = new St(this.managers.event, e), this.handlers.pageView.startTracking(), this.handlers.click = new Et(this.managers.event), this.handlers.click.startTracking(), this.handlers.scroll = new mt(this.managers.event), this.handlers.scroll.startTracking(), this.handlers.performance = new Tt(this.managers.event), this.handlers.performance.startTracking().catch((t) => {
       o("warn", "Failed to start performance tracking", { error: t });
-    }), this.handlers.error = new pt(this.managers.event), this.handlers.error.startTracking();
+    }), this.handlers.error = new vt(this.managers.event), this.handlers.error.startTracking();
   }
 }
 const I = [];
 let h = null, w = !1, U = !1;
-const Tt = async (r) => {
+const yt = async (r) => {
   if (typeof window > "u" || typeof document > "u")
     throw new Error("[TraceLog] This library can only be used in a browser environment");
   if (!window.__traceLogDisabled && !h && !w) {
     w = !0;
     try {
-      const e = et(r ?? {}), t = new _t();
+      const e = st(r ?? {}), t = new It();
       try {
         I.forEach(({ event: i, callback: a }) => {
           t.on(i, a);
@@ -2143,26 +2143,26 @@ const Tt = async (r) => {
       w = !1;
     }
   }
-}, vt = (r, e) => {
+}, At = (r, e) => {
   if (!h)
     throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
   if (U)
     throw new Error("[TraceLog] Cannot send events while TraceLog is being destroyed");
   h.sendCustomEvent(r, e);
-}, It = (r, e) => {
+}, wt = (r, e) => {
   if (!h || w) {
     I.push({ event: r, callback: e });
     return;
   }
   h.on(r, e);
-}, yt = (r, e) => {
+}, Mt = (r, e) => {
   if (!h) {
     const t = I.findIndex((s) => s.event === r && s.callback === e);
     t !== -1 && I.splice(t, 1);
     return;
   }
   h.off(r, e);
-}, At = () => h !== null, wt = async () => {
+}, Nt = () => h !== null, Lt = async () => {
   if (!h)
     throw new Error("[TraceLog] App not initialized");
   if (U)
@@ -2175,13 +2175,13 @@ const Tt = async (r) => {
   } finally {
     U = !1;
   }
-}, Vt = {
+}, zt = {
   WEB_VITALS_THRESHOLDS: _e
   // Business thresholds for performance analysis
-}, Ft = {
+}, Qt = {
   PII_PATTERNS: Te
   // Patterns for sensitive data protection
-}, Gt = {
+}, $t = {
   LOW_ACTIVITY_EVENT_COUNT: 50,
   HIGH_ACTIVITY_EVENT_COUNT: 1e3,
   MIN_EVENTS_FOR_DYNAMIC_CALCULATION: 100,
@@ -2191,7 +2191,7 @@ const Tt = async (r) => {
   MIN_ENGAGED_SESSION_DURATION_MS: 30 * 1e3,
   MIN_SCROLL_DEPTH_ENGAGEMENT: 25
   // 25% scroll depth for engagement
-}, zt = {
+}, Bt = {
   INACTIVITY_TIMEOUT_MS: 30 * 60 * 1e3,
   // 30min for analytics (vs 15min client)
   SHORT_SESSION_THRESHOLD_MS: 30 * 1e3,
@@ -2199,20 +2199,20 @@ const Tt = async (r) => {
   LONG_SESSION_THRESHOLD_MS: 30 * 60 * 1e3,
   MAX_REALISTIC_SESSION_DURATION_MS: 8 * 60 * 60 * 1e3
   // Filter outliers
-}, $t = {
+}, Xt = {
   MOBILE_MAX_WIDTH: 768,
   TABLET_MAX_WIDTH: 1024,
   MOBILE_PERFORMANCE_FACTOR: 1.5,
   // Mobile typically 1.5x slower
   TABLET_PERFORMANCE_FACTOR: 1.2
-}, Qt = {
+}, jt = {
   MIN_TEXT_LENGTH_FOR_ANALYSIS: 10,
   MIN_CLICKS_FOR_HOT_ELEMENT: 10,
   // Popular element threshold
   MIN_SCROLL_COMPLETION_PERCENT: 80,
   // Page consumption threshold
   MIN_TIME_ON_PAGE_FOR_READ_MS: 15 * 1e3
-}, Bt = {
+}, Wt = {
   SIGNIFICANT_CHANGE_PERCENT: 20,
   MAJOR_CHANGE_PERCENT: 50,
   MIN_EVENTS_FOR_INSIGHT: 100,
@@ -2222,19 +2222,19 @@ const Tt = async (r) => {
   LOW_ERROR_RATE_PERCENT: 1,
   HIGH_ERROR_RATE_PERCENT: 5,
   CRITICAL_ERROR_RATE_PERCENT: 10
-}, jt = {
+}, Yt = {
   SHORT_TERM_TREND_HOURS: 24,
   MEDIUM_TERM_TREND_DAYS: 7,
   LONG_TERM_TREND_DAYS: 30,
   MIN_DATA_POINTS_FOR_TREND: 5,
   WEEKLY_PATTERN_MIN_WEEKS: 4,
   DAILY_PATTERN_MIN_DAYS: 14
-}, Xt = {
+}, Kt = {
   MIN_SEGMENT_SIZE: 10,
   MIN_COHORT_SIZE: 5,
   COHORT_ANALYSIS_DAYS: [1, 3, 7, 14, 30],
   MIN_FUNNEL_EVENTS: 20
-}, Wt = {
+}, qt = {
   DEFAULT_EVENTS_LIMIT: 5,
   DEFAULT_SESSIONS_LIMIT: 5,
   DEFAULT_PAGES_LIMIT: 5,
@@ -2242,23 +2242,23 @@ const Tt = async (r) => {
   MAX_TIME_RANGE_DAYS: 365,
   ANALYTICS_BATCH_SIZE: 1e3
   // For historical analysis
-}, Yt = {
+}, Zt = {
   ANOMALY_THRESHOLD_SIGMA: 2.5,
   STRONG_ANOMALY_THRESHOLD_SIGMA: 3,
   TRAFFIC_DROP_ALERT_PERCENT: -30,
   TRAFFIC_SPIKE_ALERT_PERCENT: 200,
   MIN_BASELINE_DAYS: 7,
   MIN_EVENTS_FOR_ANOMALY_DETECTION: 50
-}, Kt = {
+}, Jt = {
   PAGE_URL_EXCLUDED: "excluded",
   PAGE_URL_UNKNOWN: "unknown"
-}, qt = {
-  init: Tt,
-  event: vt,
-  on: It,
-  off: yt,
-  isInitialized: At,
-  destroy: wt
+}, er = {
+  init: yt,
+  event: At,
+  on: wt,
+  off: Mt,
+  isInitialized: Nt,
+  destroy: Lt
 };
 var q, ve = -1, M = function(r) {
   addEventListener("pageshow", function(e) {
@@ -2310,10 +2310,10 @@ var q, ve = -1, M = function(r) {
 }, A = -1, Ee = function() {
   return document.visibilityState !== "hidden" || document.prerendering ? 1 / 0 : 0;
 }, x = function(r) {
-  document.visibilityState === "hidden" && A > -1 && (A = r.type === "visibilitychange" ? r.timeStamp : 0, Mt());
+  document.visibilityState === "hidden" && A > -1 && (A = r.type === "visibilitychange" ? r.timeStamp : 0, Rt());
 }, me = function() {
   addEventListener("visibilitychange", x, !0), addEventListener("prerenderingchange", x, !0);
-}, Mt = function() {
+}, Rt = function() {
   removeEventListener("visibilitychange", x, !0), removeEventListener("prerenderingchange", x, !0);
 }, Ie = function() {
   return A < 0 && (A = Ee(), me(), M(function() {
@@ -2340,7 +2340,7 @@ var q, ve = -1, M = function(r) {
       });
     }));
   });
-}, J = [0.1, 0.25], Nt = function(r, e) {
+}, J = [0.1, 0.25], Ct = function(r, e) {
   e = e || {}, ye(ie(function() {
     var t, s = S("CLS", 0), n = 0, i = [], a = function(c) {
       c.forEach(function(u) {
@@ -2358,19 +2358,19 @@ var q, ve = -1, M = function(r) {
       });
     }), setTimeout(t, 0));
   }));
-}, Ae = 0, Q = 1 / 0, P = 0, Lt = function(r) {
+}, Ae = 0, $ = 1 / 0, P = 0, bt = function(r) {
   r.forEach(function(e) {
-    e.interactionId && (Q = Math.min(Q, e.interactionId), P = Math.max(P, e.interactionId), Ae = P ? (P - Q) / 7 + 1 : 0);
+    e.interactionId && ($ = Math.min($, e.interactionId), P = Math.max(P, e.interactionId), Ae = P ? (P - $) / 7 + 1 : 0);
   });
 }, we = function() {
   return q ? Ae : performance.interactionCount || 0;
-}, Rt = function() {
-  "interactionCount" in performance || q || (q = b("event", Lt, { type: "event", buffered: !0, durationThreshold: 0 }));
-}, g = [], H = /* @__PURE__ */ new Map(), Me = 0, Ct = function() {
+}, Ot = function() {
+  "interactionCount" in performance || q || (q = b("event", bt, { type: "event", buffered: !0, durationThreshold: 0 }));
+}, g = [], H = /* @__PURE__ */ new Map(), Me = 0, Pt = function() {
   var r = Math.min(g.length - 1, Math.floor((we() - Me) / 50));
   return g[r];
-}, bt = [], Ot = function(r) {
-  if (bt.forEach(function(n) {
+}, Dt = [], kt = function(r) {
+  if (Dt.forEach(function(n) {
     return n(r);
   }), r.interactionId || r.entryType === "first-input") {
     var e = g[g.length - 1], t = H.get(r.interactionId);
@@ -2390,14 +2390,14 @@ var q, ve = -1, M = function(r) {
 }, Ne = function(r) {
   var e = self.requestIdleCallback || self.setTimeout, t = -1;
   return r = ie(r), document.visibilityState === "hidden" ? r() : (t = e(r), F(r)), t;
-}, ee = [200, 500], Pt = function(r, e) {
+}, ee = [200, 500], Ut = function(r, e) {
   "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (e = e || {}, G(function() {
     var t;
-    Rt();
+    Ot();
     var s, n = S("INP"), i = function(l) {
       Ne(function() {
-        l.forEach(Ot);
-        var c = Ct();
+        l.forEach(kt);
+        var c = Pt();
         c && c.latency !== n.value && (n.value = c.latency, n.entries = c.entries, s());
       });
     }, a = b("event", i, { durationThreshold: (t = e.durationThreshold) !== null && t !== void 0 ? t : 40 });
@@ -2407,7 +2407,7 @@ var q, ve = -1, M = function(r) {
       Me = we(), g.length = 0, H.clear(), n = S("INP"), s = E(r, n, ee, e.reportAllChanges);
     }));
   }));
-}, te = [2500, 4e3], B = {}, Dt = function(r, e) {
+}, te = [2500, 4e3], B = {}, Ht = function(r, e) {
   e = e || {}, G(function() {
     var t, s = Ie(), n = S("LCP"), i = function(c) {
       e.reportAllChanges || (c = c.slice(-1)), c.forEach(function(u) {
@@ -2430,60 +2430,63 @@ var q, ve = -1, M = function(r) {
       });
     }
   });
-}, re = [800, 1800], kt = function r(e) {
+}, re = [800, 1800], xt = function r(e) {
   document.prerendering ? G(function() {
     return r(e);
   }) : document.readyState !== "complete" ? addEventListener("load", function() {
     return r(e);
   }, !0) : setTimeout(e, 0);
-}, Ut = function(r, e) {
+}, Vt = function(r, e) {
   e = e || {};
   var t = S("TTFB"), s = E(r, t, re, e.reportAllChanges);
-  kt(function() {
+  xt(function() {
     var n = se();
     n && (t.value = Math.max(n.responseStart - V(), 0), t.entries = [n], s(!0), M(function() {
       t = S("TTFB", 0), (s = E(r, t, re, e.reportAllChanges))(!0);
     }));
   });
 };
-const Ht = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const Ft = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   CLSThresholds: J,
   FCPThresholds: Z,
   INPThresholds: ee,
   LCPThresholds: te,
   TTFBThresholds: re,
-  onCLS: Nt,
+  onCLS: Ct,
   onFCP: ye,
-  onINP: Pt,
-  onLCP: Dt,
-  onTTFB: Ut
+  onINP: Ut,
+  onLCP: Ht,
+  onTTFB: Vt
 }, Symbol.toStringTag, { value: "Module" }));
 export {
-  Wt as ANALYTICS_QUERY_LIMITS,
-  Yt as ANOMALY_DETECTION,
+  qt as ANALYTICS_QUERY_LIMITS,
+  Zt as ANOMALY_DETECTION,
   y as AppConfigValidationError,
-  Qt as CONTENT_ANALYTICS,
-  Ft as DATA_PROTECTION,
-  $t as DEVICE_ANALYTICS,
+  jt as CONTENT_ANALYTICS,
+  Qt as DATA_PROTECTION,
+  Xt as DEVICE_ANALYTICS,
   _ as DeviceType,
-  Gt as ENGAGEMENT_THRESHOLDS,
-  X as EmitterEvent,
+  $t as ENGAGEMENT_THRESHOLDS,
+  j as EmitterEvent,
   L as ErrorType,
   d as EventType,
-  Bt as INSIGHT_THRESHOLDS,
-  xt as InitializationTimeoutError,
+  Wt as INSIGHT_THRESHOLDS,
+  Gt as InitializationTimeoutError,
   v as IntegrationValidationError,
   R as Mode,
-  Vt as PERFORMANCE_CONFIG,
-  Xt as SEGMENTATION_ANALYTICS,
-  zt as SESSION_ANALYTICS,
-  Kt as SPECIAL_PAGE_URLS,
+  zt as PERFORMANCE_CONFIG,
+  Kt as SEGMENTATION_ANALYTICS,
+  Bt as SESSION_ANALYTICS,
+  Jt as SPECIAL_PAGE_URLS,
   oe as SamplingRateValidationError,
   D as ScrollDirection,
-  Pe as SessionTimeoutValidationError,
-  j as SpecialApiUrl,
-  jt as TEMPORAL_ANALYSIS,
+  Ue as SessionTimeoutValidationError,
+  X as SpecialApiUrl,
+  Yt as TEMPORAL_ANALYSIS,
+  ke as TagConditionOperator,
+  De as TagConditionType,
+  Pe as TagLogicalOperator,
   C as TraceLogValidationError,
-  qt as tracelog
+  er as tracelog
 };
