@@ -49,7 +49,6 @@ describe('EventManager', () => {
 
     it('should reject events without type', () => {
       eventManager.track({} as any);
-
       expect(eventManager.getQueueLength()).toBe(0);
     });
 

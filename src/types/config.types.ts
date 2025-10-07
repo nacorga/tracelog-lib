@@ -7,8 +7,6 @@ export interface Config {
   globalMetadata?: Record<string, MetadataType>;
   /** Selectors defining custom scroll containers to monitor. */
   scrollContainerSelectors?: string | string[];
-  /** Enables HTTP requests for testing and development flows. */
-  allowHttp?: boolean;
   /** Query parameters to remove before tracking URLs. */
   sensitiveQueryParams?: string[];
   /** Error event sampling rate between 0 and 1. */
@@ -26,6 +24,8 @@ export interface Config {
     custom?: {
       /** Required API URL for custom integration. */
       apiUrl: string;
+      /** Allow HTTP URLs (not recommended for production). @default false */
+      allowHttp?: boolean;
     };
     /** Google Analytics integration options. */
     googleAnalytics?: {

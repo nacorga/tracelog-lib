@@ -1,6 +1,22 @@
 # TraceLog Playground - Realistic Demo Environment
 
+> 🌐 **[Try the Live Demo →](https://nacorga.github.io/tracelog-lib/)**
+
 Interactive playground demonstrating TraceLog in a **realistic production-like environment**.
+
+## 🌐 Live Demo
+
+**Public Demo**: [https://nacorga.github.io/tracelog-lib/](https://nacorga.github.io/tracelog-lib/)
+
+Try TraceLog in action without installing anything:
+- ✅ Full e-commerce demo (TechShop)
+- ✅ Real-time event monitoring
+- ✅ Interactive shopping flows
+- ✅ No backend required (standalone mode)
+
+**For Developers**: Continue reading for local setup and testing instructions.
+
+---
 
 ## 🎯 Purpose
 

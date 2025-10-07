@@ -2,6 +2,9 @@ import {
   EVENT_SENT_INTERVAL_MS,
   MAX_EVENTS_QUEUE_LENGTH,
   DUPLICATE_EVENT_THRESHOLD_MS,
+  RATE_LIMIT_WINDOW_MS,
+  MAX_EVENTS_PER_SECOND,
+  MAX_PENDING_EVENTS_BUFFER,
 } from '../constants/config.constants';
 import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
@@ -20,6 +23,8 @@ export class EventManager extends StateManager {
   private lastEventFingerprint: string | null = null;
   private lastEventTime = 0;
   private sendIntervalId: number | null = null;
+  private rateLimitCounter = 0;
+  private rateLimitWindowStart = 0;
 
   constructor(
     storeManager: StorageManager,
@@ -63,11 +68,21 @@ export class EventManager extends StateManager {
     session_end_reason,
   }: Partial<EventData>): void {
     if (!type) {
-      log('warn', 'Event type is required');
+      log('error', 'Event type is required - event will be ignored');
       return;
     }
 
+    // Check session BEFORE rate limiting to avoid consuming quota for buffered events
     if (!this.get('sessionId')) {
+      // Protect against unbounded buffer growth during initialization delays
+      if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
+        // Drop oldest event (FIFO) to make room for new one
+        this.pendingEventsBuffer.shift();
+        log('warn', 'Pending events buffer full - dropping oldest event', {
+          data: { maxBufferSize: MAX_PENDING_EVENTS_BUFFER },
+        });
+      }
+
       this.pendingEventsBuffer.push({
         type,
         page_url,
@@ -83,10 +98,17 @@ export class EventManager extends StateManager {
       return;
     }
 
+    // Rate limiting check (except for critical events)
+    // Applied AFTER session check to only rate-limit processable events
+    const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
+    if (!isCriticalEvent && !this.checkRateLimit()) {
+      // Rate limit exceeded - drop event silently
+      // Logging would itself cause performance issues
+      return;
+    }
+
     const eventType = type as EventType;
     const isSessionStart = eventType === EventType.SESSION_START;
-    const isSessionEnd = eventType === EventType.SESSION_END;
-    const isCriticalEvent = isSessionStart || isSessionEnd;
 
     const currentPageUrl = (page_url as string) || this.get('pageUrl');
     const payload = this.buildEventPayload({
@@ -107,8 +129,9 @@ export class EventManager extends StateManager {
 
     if (isSessionStart) {
       const currentSessionId = this.get('sessionId');
+
       if (!currentSessionId) {
-        log('warn', 'Session start event ignored: missing sessionId');
+        log('error', 'Session start event requires sessionId - event will be ignored');
         return;
       }
 
@@ -116,6 +139,7 @@ export class EventManager extends StateManager {
         log('warn', 'Duplicate session_start detected', {
           data: { sessionId: currentSessionId },
         });
+
         return;
       }
 
@@ -150,6 +174,8 @@ export class EventManager extends StateManager {
     this.pendingEventsBuffer = [];
     this.lastEventFingerprint = null;
     this.lastEventTime = 0;
+    this.rateLimitCounter = 0;
+    this.rateLimitWindowStart = 0;
 
     this.dataSender.stop();
   }
@@ -171,15 +197,22 @@ export class EventManager extends StateManager {
       return;
     }
 
-    if (!this.get('sessionId')) {
-      log('warn', 'Cannot flush pending events: session not initialized');
+    const currentSessionId = this.get('sessionId');
+    if (!currentSessionId) {
+      // Keep events in buffer for future retry - do NOT discard
+      // This prevents data loss during legitimate race conditions
+      log('warn', 'Cannot flush pending events: session not initialized - keeping in buffer', {
+        data: { bufferedEventCount: this.pendingEventsBuffer.length },
+      });
+
       return;
     }
 
+    // Create copy before clearing to avoid infinite recursion
     const bufferedEvents = [...this.pendingEventsBuffer];
-
     this.pendingEventsBuffer = [];
 
+    // Process all buffered events now that session exists
     bufferedEvents.forEach((event) => {
       this.track(event);
     });
@@ -396,6 +429,25 @@ export class EventManager extends StateManager {
   private shouldSample(): boolean {
     const samplingRate = this.get('config')?.samplingRate ?? 1;
     return Math.random() < samplingRate;
+  }
+
+  private checkRateLimit(): boolean {
+    const now = Date.now();
+
+    // Reset counter if window has expired
+    if (now - this.rateLimitWindowStart > RATE_LIMIT_WINDOW_MS) {
+      this.rateLimitCounter = 0;
+      this.rateLimitWindowStart = now;
+    }
+
+    // Check if limit exceeded
+    if (this.rateLimitCounter >= MAX_EVENTS_PER_SECOND) {
+      return false;
+    }
+
+    // Increment counter
+    this.rateLimitCounter++;
+    return true;
   }
 
   private removeProcessedEvents(eventIds: string[]): void {

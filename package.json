@@ -43,6 +43,7 @@
     "serve": "http-server playground -p 3000 --cors",
     "playground:setup": "npm run build:browser:dev && cp dist/browser/tracelog.esm.js playground/tracelog.js",
     "playground:dev": "npm run playground:setup && npm run serve",
+    "playground:gh-pages": "npm run build:browser && cp dist/browser/tracelog.esm.js playground/tracelog.js",
     "test:e2e": "npm run build:browser:dev && cp dist/browser/tracelog.esm.js playground/tracelog.js && NODE_ENV=dev playwright test",
     "ci:build": "npm run build:all",
     "prepare": "husky",
@@ -55,7 +56,7 @@
     "changelog:preview": "node scripts/generate-changelog.js --dry-run"
   },
   "dependencies": {
-    "web-vitals": "^4.2.4"
+    "web-vitals": "4.2.4"
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^19.8.1",

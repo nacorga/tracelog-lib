@@ -11,6 +11,4 @@
 /test-results
 /test-reports
 /playwright-report
-/tests/fixtures/tracelog.js
-/playground/tracelog.js
 /coverage-integration

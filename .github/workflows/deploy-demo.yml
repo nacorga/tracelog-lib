@@ -1,0 +1,110 @@
+name: Deploy Demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'playground/**'
+      - 'src/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-demo:
+    name: Build and Deploy Playground Demo
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TraceLog library (production)
+        run: |
+          echo "🔨 Building TraceLog library for production..."
+          npm run build:browser
+          echo "✅ Build completed"
+
+      - name: Copy build to playground
+        run: |
+          echo "📦 Copying tracelog.js to playground..."
+          cp dist/browser/tracelog.esm.js playground/tracelog.js
+          echo "✅ Copy completed"
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if git diff --quiet playground/tracelog.js; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes detected in playground/tracelog.js"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✨ Changes detected in playground/tracelog.js"
+          fi
+
+      - name: Configure Git
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Commit updated tracelog.js
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          echo "💾 Committing updated tracelog.js..."
+          git add playground/tracelog.js
+          git commit -m "chore(demo): update playground tracelog.js build [skip ci]"
+          echo "✅ Changes committed"
+
+      - name: Push changes
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          echo "🚀 Pushing changes to main..."
+          git push
+          echo "✅ Changes pushed successfully"
+
+      - name: Deployment summary
+        run: |
+          echo ""
+          echo "🎉 Demo deployment completed!"
+          echo ""
+          if [[ "${{ steps.check-changes.outputs.changed }}" == "true" ]]; then
+            echo "✅ playground/tracelog.js updated and committed"
+            echo "📡 GitHub Pages will auto-deploy the updated demo"
+          else
+            echo "ℹ️ No build changes detected"
+            echo "📡 GitHub Pages already has the latest version"
+          fi
+          echo ""
+          echo "🌐 Demo URL: https://nacorga.github.io/tracelog-lib/"
+          echo "📁 Source: /playground folder"
+          echo ""
+          echo "ℹ️ Note: Configure GitHub Pages to serve from /playground folder"
+          echo "   Settings → Pages → Source: main branch → /playground folder"
+
+  notify-failure:
+    name: Notify Deployment Failure
+    runs-on: ubuntu-latest
+    needs: deploy-demo
+    if: failure()
+
+    steps:
+      - name: Deployment Failure Notification
+        run: |
+          echo "❌ Demo deployment failed!"
+          echo "🔍 Check the workflow logs for details"
+          exit 1

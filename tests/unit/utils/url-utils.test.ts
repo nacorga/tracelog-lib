@@ -182,7 +182,7 @@ describe('URL Utils', () => {
       expect(result).toBe('https://test-project.example.com');
     });
 
-    test('should allow HTTP when allowHttp is true', () => {
+    test('should allow HTTP when allowHttp is true in custom integration', () => {
       Object.defineProperty(window, 'location', {
         value: {
           href: 'http://localhost:3000/page',
@@ -194,10 +194,10 @@ describe('URL Utils', () => {
       });
 
       const config: Config = {
-        allowHttp: true,
         integrations: {
-          tracelog: {
-            projectId: 'test',
+          custom: {
+            apiUrl: 'http://localhost:3000',
+            allowHttp: true,
           },
         },
       };
@@ -207,7 +207,7 @@ describe('URL Utils', () => {
       expect(result).toContain('http://');
     });
 
-    test('should default to HTTPS when allowHttp is false', () => {
+    test('should reject HTTP URL when allowHttp is false in custom integration', () => {
       Object.defineProperty(window, 'location', {
         value: {
           href: 'http://localhost:3000/page',
@@ -219,17 +219,16 @@ describe('URL Utils', () => {
       });
 
       const config: Config = {
-        allowHttp: false,
         integrations: {
-          tracelog: {
-            projectId: 'test',
+          custom: {
+            apiUrl: 'http://localhost:3000',
+            allowHttp: false,
           },
         },
       };
 
-      const result = getApiUrl(config);
-
-      expect(result).toContain('https://');
+      // This should throw an error because HTTP is not allowed
+      expect(() => getApiUrl(config)).toThrow('Invalid URL');
     });
 
     test('should prioritize custom apiUrl over tracelog projectId', () => {

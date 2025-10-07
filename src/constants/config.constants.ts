@@ -40,9 +40,12 @@ export const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 export const DEFAULT_SAMPLING_RATE = 1;
 export const MIN_SAMPLING_RATE = 0;
 export const MAX_SAMPLING_RATE = 1;
+export const RATE_LIMIT_WINDOW_MS = 1000; // 1 second window
+export const MAX_EVENTS_PER_SECOND = 200; // Maximum 200 events per second
 
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
+export const MAX_PENDING_EVENTS_BUFFER = 100; // Maximum events to buffer before session init
 
 // Session timeout validation limits
 export const MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds minimum

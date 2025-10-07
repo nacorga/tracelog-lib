@@ -1,0 +1,73 @@
+# NPM Publish Exclusions
+# Only dist/ folders will be published as specified in package.json "files" array
+
+# Development files
+.github/
+.husky/
+tests/
+scripts/
+playground/
+coverage/
+coverage-integration/
+test-results/
+test-reports/
+playwright-report/
+node_modules/
+
+# Source files (only dist/ is published)
+src/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.log
+*.tgz
+.npmrc
+
+# Configuration files
+tsconfig*.json
+vite.config.mjs
+vitest.config.mjs
+vitest.integration.config.mjs
+playwright.config.ts
+eslintrc.*
+.prettierrc
+.eslintrc.cjs
+
+# Documentation (keep LICENSE and README)
+CLAUDE.md
+CONTRIBUTING.md
+RELEASE.md
+AGENTS.md
+
+# Build artifacts
+*.map
+!dist/**/*.map
+
+# IDE and OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.llm/
+.playwright-mcp/
+.archive/
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Archives
+dist_v2/

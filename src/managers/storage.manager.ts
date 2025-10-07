@@ -44,6 +44,10 @@ export class StorageManager {
    * Stores an item in storage
    */
   setItem(key: string, value: string): void {
+    // Always update fallback FIRST for consistency
+    // This ensures fallback is in sync and can serve as backup if storage fails
+    this.fallbackStorage.set(key, value);
+
     try {
       if (this.storage) {
         this.storage.setItem(key, value);
@@ -53,16 +57,37 @@ export class StorageManager {
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         this.hasQuotaExceededError = true;
 
-        log('error', 'localStorage quota exceeded - data will not persist after reload', {
-          error,
+        log('warn', 'localStorage quota exceeded, attempting cleanup', {
           data: { key, valueSize: value.length },
         });
+
+        // Attempt to free up space by removing old TraceLog data
+        const cleanedUp = this.cleanupOldData();
+
+        if (cleanedUp) {
+          // Retry after cleanup
+          try {
+            if (this.storage) {
+              this.storage.setItem(key, value);
+              // Successfully stored after cleanup
+              return;
+            }
+          } catch (retryError) {
+            log('error', 'localStorage quota exceeded even after cleanup - data will not persist', {
+              error: retryError,
+              data: { key, valueSize: value.length },
+            });
+          }
+        } else {
+          log('error', 'localStorage quota exceeded and no data to cleanup - data will not persist', {
+            error,
+            data: { key, valueSize: value.length },
+          });
+        }
       }
       // Else: Silent fallback - user already warned in constructor
+      // Data is already in fallbackStorage (set at beginning)
     }
-
-    // Always update fallback for consistency
-    this.fallbackStorage.set(key, value);
   }
 
   /**
@@ -124,6 +149,77 @@ export class StorageManager {
   }
 
   /**
+   * Attempts to cleanup old TraceLog data from storage to free up space
+   * Returns true if any data was removed, false otherwise
+   */
+  private cleanupOldData(): boolean {
+    if (!this.storage) {
+      return false;
+    }
+
+    try {
+      const tracelogKeys: string[] = [];
+      const persistedEventsKeys: string[] = [];
+
+      // Collect all TraceLog keys
+      for (let i = 0; i < this.storage.length; i++) {
+        const key = this.storage.key(i);
+        if (key?.startsWith('tracelog_')) {
+          tracelogKeys.push(key);
+
+          // Prioritize removing old persisted events
+          if (key.startsWith('tracelog_persisted_events_')) {
+            persistedEventsKeys.push(key);
+          }
+        }
+      }
+
+      // First, try to remove old persisted events (usually the largest data)
+      if (persistedEventsKeys.length > 0) {
+        persistedEventsKeys.forEach((key) => {
+          try {
+            this.storage!.removeItem(key);
+          } catch {
+            // Ignore errors during cleanup
+          }
+        });
+
+        // Successfully cleaned up - no need to log in production
+        return true;
+      }
+
+      // If no persisted events, remove non-critical keys
+      // Define critical key prefixes that should be preserved
+      const criticalPrefixes = ['tracelog_session_', 'tracelog_user_id', 'tracelog_device_id', 'tracelog_config'];
+
+      const nonCriticalKeys = tracelogKeys.filter((key) => {
+        // Keep keys that start with any critical prefix
+        return !criticalPrefixes.some((prefix) => key.startsWith(prefix));
+      });
+
+      if (nonCriticalKeys.length > 0) {
+        // Remove up to 5 non-critical keys
+        const keysToRemove = nonCriticalKeys.slice(0, 5);
+        keysToRemove.forEach((key) => {
+          try {
+            this.storage!.removeItem(key);
+          } catch {
+            // Ignore errors during cleanup
+          }
+        });
+
+        // Successfully cleaned up - no need to log in production
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      log('error', 'Failed to cleanup old data', { error });
+      return false;
+    }
+  }
+
+  /**
    * Initialize storage (localStorage or sessionStorage) with feature detection
    */
   private initializeStorage(type: 'localStorage' | 'sessionStorage'): Storage | null {
@@ -163,6 +259,9 @@ export class StorageManager {
    * Stores an item in sessionStorage
    */
   setSessionItem(key: string, value: string): void {
+    // Always update fallback FIRST for consistency
+    this.fallbackSessionStorage.set(key, value);
+
     try {
       if (this.sessionStorageRef) {
         this.sessionStorageRef.setItem(key, value);
@@ -176,10 +275,8 @@ export class StorageManager {
         });
       }
       // Else: Silent fallback - user already warned in constructor
+      // Data is already in fallbackSessionStorage (set at beginning)
     }
-
-    // Always update fallback for consistency
-    this.fallbackSessionStorage.set(key, value);
   }
 
   /**
