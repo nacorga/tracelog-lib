@@ -145,11 +145,11 @@ await tracelog.init({
 - `samplingRate`: Event sampling rate 0-1 (default: 1.0)
 - `errorSampling`: Error sampling rate 0-1 (default: 1.0)
 - `sensitiveQueryParams`: Query params to remove from URLs
-- `allowHttp`: Enable HTTP for testing
 - `scrollContainerSelectors`: Custom scroll containers
 - `integrations`:
   - `tracelog.projectId`: TraceLog SaaS
   - `custom.apiUrl`: Custom backend
+  - `custom.allowHttp`: Enable HTTP for testing
   - `googleAnalytics.measurementId`: GA4
 
 ## Event Data Structure

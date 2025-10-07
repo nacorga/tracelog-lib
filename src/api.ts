@@ -2,6 +2,7 @@ import { App } from './app';
 import { MetadataType, Config, EmitterCallback, EmitterMap } from './types';
 import { log, validateAndNormalizeConfig } from './utils';
 import { TestBridge } from './test-bridge';
+import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
 
 interface PendingListener {
@@ -46,7 +47,16 @@ export const init = async (config: Config): Promise<void> => {
       });
       pendingListeners.length = 0;
 
-      await instance.init(validatedConfig);
+      // Wrap initialization with timeout using Promise.race
+      const initPromise = instance.init(validatedConfig);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
+        }, INITIALIZATION_TIMEOUT_MS);
+      });
+
+      await Promise.race([initPromise, timeoutPromise]);
+
       app = instance;
     } catch (error) {
       try {
@@ -130,8 +140,10 @@ export const destroy = async (): Promise<void> => {
     app = null;
     isInitializing = false;
     pendingListeners.length = 0;
-    log('error', 'Error during destroy, forced cleanup', { error });
-    throw error;
+
+    // Log error but don't re-throw - destroy should always complete successfully
+    // Applications should be able to tear down TraceLog even if internal cleanup fails
+    log('warn', 'Error during destroy, forced cleanup completed', { error });
   } finally {
     isDestroying = false;
   }

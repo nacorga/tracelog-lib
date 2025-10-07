@@ -37,6 +37,7 @@ export default defineConfig({
           dir: 'dist/browser',
           inlineDynamicImports: true,
           extend: true,
+          sourcemap: process.env.NODE_ENV === 'dev' ? true : 'hidden',
           footer: `
             if (typeof window !== 'undefined' && window.TraceLog?.tracelog) {
               window.tracelog = window.TraceLog.tracelog;
@@ -50,11 +51,12 @@ export default defineConfig({
           entryFileNames: 'tracelog.esm.js',
           dir: 'dist/browser',
           inlineDynamicImports: true,
+          sourcemap: process.env.NODE_ENV === 'dev' ? true : 'hidden',
         },
       ],
     },
     target: 'es2022',
     minify: process.env.NODE_ENV !== 'dev',
-    sourcemap: process.env.NODE_ENV === 'dev',
+    sourcemap: process.env.NODE_ENV === 'dev' ? true : 'hidden',
   },
 });

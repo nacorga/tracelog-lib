@@ -81,7 +81,7 @@ jobs:
 
       - name: Validate Code Coverage
         run: |
-          echo "🔍 Validating code coverage threshold (minimum 60%)..."
+          echo "🔍 Validating code coverage threshold (minimum 70%)..."
 
           # Check if coverage summary exists
           if [[ ! -f "coverage/coverage-summary.json" ]]; then
@@ -97,8 +97,8 @@ jobs:
 
           echo "📊 Current coverage: ${COVERAGE}%"
 
-          if [[ $COVERAGE -lt 60 ]]; then
-            echo "❌ Coverage ${COVERAGE}% is below minimum threshold of 60%"
+          if [[ $COVERAGE -lt 70 ]]; then
+            echo "❌ Coverage ${COVERAGE}% is below minimum threshold of 70%"
             exit 1
           fi
 

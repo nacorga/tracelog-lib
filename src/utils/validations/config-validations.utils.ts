@@ -72,12 +72,6 @@ export const validateAppConfig = (config: Config): void => {
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE, 'config');
     }
   }
-
-  if (config.allowHttp !== undefined) {
-    if (typeof config.allowHttp !== 'boolean') {
-      throw new AppConfigValidationError('allowHttp must be a boolean', 'config');
-    }
-  }
 };
 
 /**
@@ -183,8 +177,23 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
       throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_CUSTOM_API_URL, 'config');
     }
 
-    if (!integrations.custom.apiUrl.startsWith('http')) {
-      throw new IntegrationValidationError('Custom API URL must start with "http"', 'config');
+    if (integrations.custom.allowHttp !== undefined && typeof integrations.custom.allowHttp !== 'boolean') {
+      throw new IntegrationValidationError('allowHttp must be a boolean', 'config');
+    }
+
+    const apiUrl = integrations.custom.apiUrl.trim();
+
+    if (!apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+      throw new IntegrationValidationError('Custom API URL must start with "http://" or "https://"', 'config');
+    }
+
+    const allowHttp = integrations.custom.allowHttp ?? false;
+
+    if (!allowHttp && apiUrl.startsWith('http://')) {
+      throw new IntegrationValidationError(
+        'Custom API URL must use HTTPS in production. Set allowHttp: true in integration config to allow HTTP (not recommended)',
+        'config',
+      );
     }
   }
 
@@ -223,8 +232,15 @@ export const validateAndNormalizeConfig = (config: Config): Config => {
     sensitiveQueryParams: config.sensitiveQueryParams ?? [],
     errorSampling: config.errorSampling ?? 1,
     samplingRate: config.samplingRate ?? 1,
-    allowHttp: config.allowHttp ?? false,
   };
+
+  // Normalize integrations
+  if (normalizedConfig.integrations?.custom) {
+    normalizedConfig.integrations.custom = {
+      ...normalizedConfig.integrations.custom,
+      allowHttp: normalizedConfig.integrations.custom.allowHttp ?? false,
+    };
+  }
 
   return normalizedConfig;
 };
