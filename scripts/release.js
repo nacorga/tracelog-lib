@@ -284,15 +284,27 @@ class ReleaseManager {
     this.log.step(`Updating version to ${versionInfo.newVersion}...`);
 
     if (this.dryRun) {
-      this.log.info('DRY RUN: Would update package.json version');
+      this.log.info('DRY RUN: Would update package.json and package-lock.json');
       return;
     }
 
+    // Update package.json
     const packageJson = JSON.parse(fs.readFileSync(this.packagePath, 'utf8'));
     packageJson.version = versionInfo.newVersion;
-
     fs.writeFileSync(this.packagePath, JSON.stringify(packageJson, null, 2) + '\n');
-    this.log.success(`Version updated to ${versionInfo.newVersion}`);
+
+    // Update package-lock.json automatically
+    try {
+      this.log.debug('Updating package-lock.json...');
+      execSync('npm install --package-lock-only', {
+        stdio: this.verbose ? 'inherit' : 'ignore',
+        cwd: this.projectRoot,
+      });
+      this.log.success(`Version updated to ${versionInfo.newVersion} (package.json + package-lock.json)`);
+    } catch (error) {
+      this.log.warning('Failed to update package-lock.json automatically');
+      this.log.success(`Version updated to ${versionInfo.newVersion} (package.json only)`);
+    }
   }
 
   async generateChangelog(versionInfo) {
@@ -314,8 +326,8 @@ class ReleaseManager {
     }
 
     try {
-      // Add and commit version changes
-      execSync('git add package.json CHANGELOG.md', { cwd: this.projectRoot });
+      // Add and commit version changes (including package-lock.json)
+      execSync('git add package.json package-lock.json CHANGELOG.md', { cwd: this.projectRoot });
 
       // Check if there are changes to commit
       try {
