@@ -2,6 +2,27 @@
 
 
 
+
+## [0.7.2] - 2025-10-07
+
+### ♻️ Refactoring
+
+- Update import paths to relative references ([9bd9f81](../../commit/9bd9f81341edc97c51bbbd073bab04cb8a52d622))
+
+### 🔧 Other Changes
+
+- Merge pull request #22 from nacorga/release/20251007.3 ([99240c7](../../commit/99240c728dc73094ec280dc9a8e997cc81399342))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.7.1...v0.7.2
+
+
 ## [0.7.1] - 2025-10-07
 
 ### 🐛 Bug Fixes
