@@ -1,6 +1,27 @@
 # Changelog
 
 
+
+## [0.7.1] - 2025-10-07
+
+### 🐛 Bug Fixes
+
+- Eliminate duplicate pages-build-deployment executions ([bbaf3e1](../../commit/bbaf3e1be6276d037a93dd7fe33c5f38ce3b67b2))
+
+### ♻️ Refactoring
+
+- Remove export of unused tag types from index ([f20594c](../../commit/f20594c92d59592b4ba70eef331ca186cc324f8d))
+- Remove unused tag types and conditions ([e668dfe](../../commit/e668dfe030de2e42a8880c2d3ceb91256de84a18))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.7.0...v0.7.1
+
+
 ## [0.7.0] - 2025-10-07
 
 ### ✨ Features
