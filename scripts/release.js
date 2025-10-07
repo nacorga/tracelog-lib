@@ -306,25 +306,33 @@ class ReleaseManager {
   }
 
   async createGitTag(versionInfo) {
-    this.log.step(`Creating git tag v${versionInfo.newVersion}...`);
+    this.log.step(`Committing version changes for v${versionInfo.newVersion}...`);
 
     if (this.dryRun) {
-      this.log.info('DRY RUN: Would create git tag and commit');
+      this.log.info('DRY RUN: Would commit version changes');
       return;
     }
 
     try {
       // Add and commit version changes
       execSync('git add package.json CHANGELOG.md', { cwd: this.projectRoot });
+
+      // Check if there are changes to commit
+      try {
+        execSync('git diff --cached --quiet', { cwd: this.projectRoot });
+        this.log.warning('No changes to commit');
+        return;
+      } catch {
+        // There are changes, proceed with commit
+      }
+
       execSync(`git commit -m "chore: release v${versionInfo.newVersion}"`, { cwd: this.projectRoot });
+      this.log.success(`Version changes committed for v${versionInfo.newVersion}`);
 
-      // Create annotated tag
-      const tagMessage = `Release v${versionInfo.newVersion}`;
-      execSync(`git tag -a v${versionInfo.newVersion} -m "${tagMessage}"`, { cwd: this.projectRoot });
-
-      this.log.success(`Git tag v${versionInfo.newVersion} created`);
+      // Note: Git tag will be created by GitHub Actions workflow
+      this.log.info('Git tag will be created by GitHub Actions after push');
     } catch (error) {
-      throw new Error(`Failed to create git tag: ${error.message}`);
+      throw new Error(`Failed to commit version changes: ${error.message}`);
     }
   }
 
@@ -356,20 +364,19 @@ class ReleaseManager {
   }
 
   async createGitHubRelease(versionInfo) {
-    this.log.step('Creating GitHub release...');
+    this.log.step('Pushing changes to GitHub...');
 
     if (this.dryRun) {
-      this.log.info('DRY RUN: Would create GitHub release');
+      this.log.info('DRY RUN: Would push to GitHub');
       return;
     }
 
     try {
-      // Push commits and tags
+      // Push commits only (tag will be created by GitHub Actions)
       execSync('git push origin', { cwd: this.projectRoot });
-      execSync(`git push origin v${versionInfo.newVersion}`, { cwd: this.projectRoot });
 
-      this.log.success('Pushed to GitHub');
-      this.log.info('GitHub release can be created manually or via GitHub CLI');
+      this.log.success('Pushed commits to GitHub');
+      this.log.info('GitHub Actions will create the tag and release automatically');
     } catch (error) {
       this.log.warning(`Failed to push to GitHub: ${error.message}`);
     }

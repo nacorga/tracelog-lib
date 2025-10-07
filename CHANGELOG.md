@@ -1,7 +1,12 @@
 # Changelog
 
+## [0.6.2] - 2025-10-07
 
+### 🐛 Fixes
 
+- Fix release workflow tag duplication issue
+- Update release script to prevent GitHub Actions tag conflicts
+- Remove tag creation from release script (handled by GitHub Actions)
 
 
 
