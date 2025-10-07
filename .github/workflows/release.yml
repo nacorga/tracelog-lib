@@ -136,12 +136,9 @@ jobs:
           echo "🔍 Verifying main branch passed all CI checks..."
           echo "✅ Release triggered from validated main branch"
           echo "📝 Note: All tests were validated by CI workflow"
-          echo "🚀 Proceeding with build and publish only"
+          echo "🚀 Proceeding with release preparation"
 
-      - name: Execute release
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare release (update version, changelog, commit)
         run: |
           # Build release command based on inputs
           RELEASE_CMD="node scripts/release.js"
@@ -150,9 +147,6 @@ jobs:
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             RELEASE_CMD="$RELEASE_CMD --dry-run"
           fi
-
-          # Skip tests - they were already validated in CI workflow
-          RELEASE_CMD="$RELEASE_CMD --skip-tests"
 
           # Add version type or force version
           if [[ -n "${{ github.event.inputs.force_version }}" ]]; then
@@ -178,7 +172,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Released version: $VERSION"
+          echo "📦 Release version: $VERSION"
 
       - name: Push release commit
         if: github.event.inputs.dry_run != 'true'
@@ -186,42 +180,48 @@ jobs:
           git push origin main
           echo "✅ Release commit pushed to main"
 
+      - name: Create git tag
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          git tag -a v${{ steps.get-version.outputs.version }} -m "Release v${{ steps.get-version.outputs.version }}"
+          git push origin v${{ steps.get-version.outputs.version }}
+          echo "✅ Git tag v${{ steps.get-version.outputs.version }} created and pushed"
+
+      - name: Publish to NPM
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "📦 Publishing to NPM..."
+          npm publish
+          echo "✅ Published v${{ steps.get-version.outputs.version }} to NPM"
+
       - name: Create GitHub Release
-        id: create_release
         if: github.event.inputs.dry_run != 'true'
-        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.get-version.outputs.version }}
-          release_name: Release v${{ steps.get-version.outputs.version }}
-          body: |
-            Release v${{ steps.get-version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          echo "📝 Creating GitHub Release for v${VERSION}..."
 
-            For detailed changes, see [CHANGELOG.md](./CHANGELOG.md).
+          gh release create "v${VERSION}" \
+            --title "Release v${VERSION}" \
+            --notes "Release v${VERSION}
 
-            ## Installation
+          For detailed changes, see [CHANGELOG.md](./CHANGELOG.md).
 
-            ```bash
-            npm install @tracelog/lib@${{ steps.get-version.outputs.version }}
-            ```
+          ## Installation
 
-            ## Documentation
+          \`\`\`bash
+          npm install @tracelog/lib@${VERSION}
+          \`\`\`
 
-            See [README.md](./README.md) for usage instructions.
-          draft: false
-          prerelease: false
+          ## Documentation
 
-      - name: Upload Release Assets
-        if: github.event.inputs.dry_run != 'true'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist/browser/tracelog.js
-          asset_name: tracelog-${{ steps.get-version.outputs.version }}.js
-          asset_content_type: application/javascript
+          See [README.md](./README.md) for usage instructions." \
+            dist/browser/tracelog.js#tracelog-${VERSION}.js
+
+          echo "✅ GitHub Release created for v${VERSION}"
 
       - name: Post-release validation
         if: github.event.inputs.dry_run != 'true'

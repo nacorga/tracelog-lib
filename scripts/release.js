@@ -35,7 +35,6 @@ class ReleaseManager {
     this.dryRun = options.dryRun || false;
     this.forceVersion = options.forceVersion || null;
     this.skipBuild = options.skipBuild || false;
-    this.skipPublish = options.skipPublish || false;
     this.verbose = options.verbose || false;
 
     this.projectRoot = path.join(__dirname, '..');
@@ -86,13 +85,14 @@ class ReleaseManager {
       // Step 6: Commit version changes
       await this.commitVersionChanges(versionInfo);
 
-      // Step 7: Publish to NPM
-      if (!this.skipPublish) {
-        await this.publishToNpm(versionInfo);
-      }
-
-      // Step 8: Note about GitHub release
-      this.log.info('GitHub Actions will handle git push, tag creation, and GitHub release');
+      // Step 7: Note about remaining steps
+      this.log.info('');
+      this.log.info('📋 Remaining steps (handled by GitHub Actions):');
+      this.log.info('  1. Push commit to main branch');
+      this.log.info('  2. Create git tag');
+      this.log.info('  3. Publish to NPM');
+      this.log.info('  4. Create GitHub Release');
+      this.log.info('');
       this.log.success(`Release ${versionInfo.newVersion} prepared successfully! 🎉`);
     } catch (error) {
       this.log.error(`Release failed: ${error.message}`);
@@ -131,14 +131,8 @@ class ReleaseManager {
       throw new Error('package.json not found');
     }
 
-    // Check NPM authentication if not skipping publish
-    if (!this.skipPublish && !this.dryRun) {
-      try {
-        execSync('npm whoami', { stdio: 'ignore' });
-      } catch {
-        throw new Error('Not authenticated with NPM. Run `npm login` first.');
-      }
-    }
+    // Note: NPM authentication will be checked by GitHub Actions workflow
+    this.log.info('NPM publish will be handled by GitHub Actions');
 
     this.log.success('Environment validation passed');
   }
@@ -344,33 +338,6 @@ class ReleaseManager {
       throw new Error(`Failed to commit version changes: ${error.message}`);
     }
   }
-
-  async publishToNpm(versionInfo) {
-    this.log.step('Publishing to NPM...');
-
-    if (this.dryRun) {
-      this.log.info('DRY RUN: Would publish to NPM');
-      return;
-    }
-
-    try {
-      // Verify package can be published
-      execSync('npm publish --dry-run', {
-        stdio: this.verbose ? 'inherit' : 'ignore',
-        cwd: this.projectRoot,
-      });
-
-      // Actual publish
-      execSync('npm publish', {
-        stdio: this.verbose ? 'inherit' : 'ignore',
-        cwd: this.projectRoot,
-      });
-
-      this.log.success(`Published v${versionInfo.newVersion} to NPM`);
-    } catch (error) {
-      throw new Error(`NPM publish failed: ${error.message}`);
-    }
-  }
 }
 
 // CLI Interface
@@ -388,9 +355,6 @@ function parseArgs() {
         break;
       case '--skip-build':
         options.skipBuild = true;
-        break;
-      case '--skip-publish':
-        options.skipPublish = true;
         break;
       case '--verbose':
         options.verbose = true;
@@ -415,9 +379,11 @@ Options:
   --dry-run           Simulate the release without making changes
   --force-version     Force a specific version (e.g., 1.2.3)
   --skip-build        Skip building the project
-  --skip-publish      Skip publishing to NPM
   --verbose           Show detailed output
   --help              Show this help message
+
+Note:
+  NPM publishing is handled by GitHub Actions workflow, not by this script.
 
 Examples:
   node scripts/release.js                    # Automatic release
