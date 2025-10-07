@@ -71,8 +71,9 @@ describe('EventManager - Sampling', () => {
   test('should sample ~10% events with rate 0.1', async () => {
     const eventManager = await createEventManager(0.1);
 
-    // Track many events to get statistical significance
-    for (let i = 0; i < 1000; i++) {
+    // Track 190 events to stay under rate limit (200 events/sec)
+    // Expected: ~10% = ~19 events (allow 6-38 for statistical variance)
+    for (let i = 0; i < 190; i++) {
       eventManager.track({
         type: EventType.CLICK,
         page_url: `https://example.com/${i}`,
@@ -82,9 +83,9 @@ describe('EventManager - Sampling', () => {
 
     const queueLength = eventManager.getQueueLength();
 
-    // Allow for statistical variance (5-15%)
-    expect(queueLength).toBeGreaterThan(50);
-    expect(queueLength).toBeLessThan(150);
+    // Expect ~10% of 190 = ~19 events (allow 6-38 for variance)
+    expect(queueLength).toBeGreaterThan(6);
+    expect(queueLength).toBeLessThan(38);
   });
 
   test('should use default sampling rate of 1 when not configured', async () => {

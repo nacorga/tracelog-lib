@@ -239,10 +239,10 @@ describe('EventManager - Session Guard', () => {
 
       expect(eventManager['pendingEventsBuffer'].length).toBe(1);
 
-      // Try to flush without session
+      // Try to flush without session - should keep events in buffer (not discard)
       eventManager.flushPendingEvents();
 
-      // Events should remain buffered
+      // Events should remain in buffer for future retry
       expect(eventManager['pendingEventsBuffer'].length).toBe(1);
       expect(eventManager.getQueueLength()).toBe(0);
     });

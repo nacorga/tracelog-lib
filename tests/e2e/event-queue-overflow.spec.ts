@@ -31,8 +31,17 @@ test.describe('Event Queue Overflow', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      // Generate 150 custom events rapidly (MAX_EVENTS_QUEUE_LENGTH is likely 100)
-      for (let i = 0; i < 150; i++) {
+      // Generate 150 custom events in 2 batches to avoid rate limiting (200 events/sec)
+      // Batch 1: 75 events
+      for (let i = 0; i < 75; i++) {
+        traceLog.sendCustomEvent(`overflow_test_event_${i}`, { index: i });
+      }
+
+      // Wait 1 second to reset rate limit window
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Batch 2: 75 events
+      for (let i = 75; i < 150; i++) {
         traceLog.sendCustomEvent(`overflow_test_event_${i}`, { index: i });
       }
 

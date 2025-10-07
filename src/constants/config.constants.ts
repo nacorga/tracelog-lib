@@ -45,6 +45,7 @@ export const MAX_EVENTS_PER_SECOND = 200; // Maximum 200 events per second
 
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
+export const MAX_PENDING_EVENTS_BUFFER = 100; // Maximum events to buffer before session init
 
 // Session timeout validation limits
 export const MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds minimum

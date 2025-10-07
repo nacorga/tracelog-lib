@@ -34,7 +34,6 @@ describe('App Lifecycle Integration', () => {
         sensitiveQueryParams: ['token', 'key'],
         samplingRate: 0.5,
         errorSampling: 0.8,
-        allowHttp: true,
       };
 
       await app.init(config);

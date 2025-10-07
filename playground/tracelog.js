@@ -13,6 +13,7 @@ const SCROLL_MIN_EVENT_INTERVAL_MS = 500;
 const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 const RATE_LIMIT_WINDOW_MS = 1e3;
 const MAX_EVENTS_PER_SECOND = 200;
+const MAX_PENDING_EVENTS_BUFFER = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
 const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
@@ -1131,8 +1132,6 @@ class EventManager extends StateManager {
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
-  rateLimitDroppedCount = 0;
-  rateLimitLastLogTime = 0;
   constructor(storeManager, googleAnalytics = null, emitter = null) {
     super();
     this.googleAnalytics = googleAnalytics;
@@ -1170,22 +1169,13 @@ class EventManager extends StateManager {
       log("error", "Event type is required - event will be ignored");
       return;
     }
-    const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
-    if (!isCriticalEvent && !this.checkRateLimit()) {
-      this.rateLimitDroppedCount++;
-      const now = Date.now();
-      if (now - this.rateLimitLastLogTime > 1e4) {
-        log("warn", `Rate limit exceeded: ${this.rateLimitDroppedCount} events dropped in last 10s`, {
-          data: {
-            maxEventsPerSecond: MAX_EVENTS_PER_SECOND
-          }
-        });
-        this.rateLimitDroppedCount = 0;
-        this.rateLimitLastLogTime = now;
-      }
-      return;
-    }
     if (!this.get("sessionId")) {
+      if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
+        this.pendingEventsBuffer.shift();
+        log("warn", "Pending events buffer full - dropping oldest event", {
+          data: { maxBufferSize: MAX_PENDING_EVENTS_BUFFER }
+        });
+      }
       this.pendingEventsBuffer.push({
         type,
         page_url,
@@ -1197,6 +1187,10 @@ class EventManager extends StateManager {
         error_data,
         session_end_reason
       });
+      return;
+    }
+    const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
+    if (!isCriticalEvent && !this.checkRateLimit()) {
       return;
     }
     const eventType = type;
@@ -1254,8 +1248,6 @@ class EventManager extends StateManager {
     this.lastEventTime = 0;
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
-    this.rateLimitDroppedCount = 0;
-    this.rateLimitLastLogTime = 0;
     this.dataSender.stop();
   }
   async flushImmediately() {
@@ -1271,9 +1263,11 @@ class EventManager extends StateManager {
     if (this.pendingEventsBuffer.length === 0) {
       return;
     }
-    if (!this.get("sessionId")) {
-      log("warn", "Cannot flush pending events: session not initialized - events will be discarded");
-      this.pendingEventsBuffer = [];
+    const currentSessionId = this.get("sessionId");
+    if (!currentSessionId) {
+      log("warn", "Cannot flush pending events: session not initialized - keeping in buffer", {
+        data: { bufferedEventCount: this.pendingEventsBuffer.length }
+      });
       return;
     }
     const bufferedEvents = [...this.pendingEventsBuffer];
@@ -2398,6 +2392,7 @@ class StorageManager {
    * Stores an item in storage
    */
   setItem(key, value) {
+    this.fallbackStorage.set(key, value);
     try {
       if (this.storage) {
         this.storage.setItem(key, value);
@@ -2430,7 +2425,6 @@ class StorageManager {
         }
       }
     }
-    this.fallbackStorage.set(key, value);
   }
   /**
    * Removes an item from storage
@@ -2509,9 +2503,10 @@ class StorageManager {
         });
         return true;
       }
-      const nonCriticalKeys = tracelogKeys.filter(
-        (key) => !key.includes("session") && !key.includes("user") && !key.includes("device")
-      );
+      const criticalPrefixes = ["tracelog_session_", "tracelog_user_id", "tracelog_device_id", "tracelog_config"];
+      const nonCriticalKeys = tracelogKeys.filter((key) => {
+        return !criticalPrefixes.some((prefix) => key.startsWith(prefix));
+      });
       if (nonCriticalKeys.length > 0) {
         const keysToRemove = nonCriticalKeys.slice(0, 5);
         keysToRemove.forEach((key) => {
@@ -2562,6 +2557,7 @@ class StorageManager {
    * Stores an item in sessionStorage
    */
   setSessionItem(key, value) {
+    this.fallbackSessionStorage.set(key, value);
     try {
       if (this.sessionStorageRef) {
         this.sessionStorageRef.setItem(key, value);
@@ -2575,7 +2571,6 @@ class StorageManager {
         });
       }
     }
-    this.fallbackSessionStorage.set(key, value);
   }
   /**
    * Removes an item from sessionStorage

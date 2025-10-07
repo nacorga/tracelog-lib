@@ -320,24 +320,63 @@ describe('Config Validations', () => {
       });
     });
 
-    describe('Allow HTTP Validation', () => {
-      it('should accept true', () => {
-        const config: Config = { allowHttp: true };
+    describe('Custom Integration Validation', () => {
+      it('should accept valid custom integration with apiUrl', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: 'https://api.example.com' },
+          },
+        };
         expect(() => validateAppConfig(config)).not.toThrow();
       });
 
-      it('should accept false', () => {
-        const config: Config = { allowHttp: false };
+      it('should accept custom integration with allowHttp true', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: 'http://localhost:3000', allowHttp: true },
+          },
+        };
         expect(() => validateAppConfig(config)).not.toThrow();
       });
 
-      it('should reject non-boolean', () => {
-        expect(() => validateAppConfig({ allowHttp: 'true' as any })).toThrow(AppConfigValidationError);
-        expect(() => validateAppConfig({ allowHttp: 1 as any })).toThrow(AppConfigValidationError);
-        expect(() => validateAppConfig({ allowHttp: 'true' as any })).toThrow('allowHttp must be a boolean');
+      it('should accept custom integration with allowHttp false', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: 'https://api.example.com', allowHttp: false },
+          },
+        };
+        expect(() => validateAppConfig(config)).not.toThrow();
       });
 
-      it('should accept undefined', () => {
+      it('should reject custom integration with non-boolean allowHttp', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: 'https://api.example.com', allowHttp: 'true' as any },
+          },
+        };
+        expect(() => validateAppConfig(config)).toThrow(IntegrationValidationError);
+        expect(() => validateAppConfig(config)).toThrow('allowHttp must be a boolean');
+      });
+
+      it('should reject custom integration with empty apiUrl', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: '' },
+          },
+        };
+        expect(() => validateAppConfig(config)).toThrow(IntegrationValidationError);
+      });
+
+      it('should reject custom integration with non-string apiUrl', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: 123 as any },
+          },
+        };
+        expect(() => validateAppConfig(config)).toThrow(IntegrationValidationError);
+      });
+
+      it('should accept undefined custom integration', () => {
         const config: Config = {};
         expect(() => validateAppConfig(config)).not.toThrow();
       });
@@ -491,16 +530,24 @@ describe('Config Validations', () => {
         expect(normalized.errorSampling).toBe(0);
       });
 
-      it('should set default allowHttp to false', () => {
-        const config: Config = {};
+      it('should set default allowHttp to false in custom integration', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: 'https://api.example.com' },
+          },
+        };
         const normalized = validateAndNormalizeConfig(config);
-        expect(normalized.allowHttp).toBe(false);
+        expect(normalized.integrations?.custom?.allowHttp).toBe(false);
       });
 
-      it('should preserve existing allowHttp', () => {
-        const config: Config = { allowHttp: true };
+      it('should preserve existing allowHttp in custom integration', () => {
+        const config: Config = {
+          integrations: {
+            custom: { apiUrl: 'https://api.example.com', allowHttp: true },
+          },
+        };
         const normalized = validateAndNormalizeConfig(config);
-        expect(normalized.allowHttp).toBe(true);
+        expect(normalized.integrations?.custom?.allowHttp).toBe(true);
       });
 
       it('should preserve all other config properties', () => {

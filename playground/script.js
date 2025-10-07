@@ -118,9 +118,10 @@ function setupCartInteractions() {
       });
 
       // Visual feedback
-      e.currentTarget.textContent = 'Añadido ✓';
+      const button = e.currentTarget;
+      button.textContent = 'Añadido ✓';
       setTimeout(() => {
-        e.currentTarget.textContent = 'Añadir al Carrito';
+        button.textContent = 'Añadir al Carrito';
       }, 1000);
     });
   });

@@ -79,7 +79,6 @@ Monitors keyboard input for user activity detection.
 
 **Key Features**:
 - Modern event handling (`keydown` only)
-- Removed deprecated `keypress` for v1 simplicity
 - Essential for detecting typing activity
 
 ## Architecture Notes

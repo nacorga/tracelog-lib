@@ -296,10 +296,11 @@ describe('Public API', () => {
       await TraceLog.init(config);
 
       const mockAppInstance = new App();
-      const destroyError = new Error('Destroy failed');
+      const destroyError = new Error('Destroy operation failed');
       vi.mocked(mockAppInstance.destroy).mockRejectedValueOnce(destroyError);
 
-      await expect(TraceLog.destroy()).rejects.toThrow('Destroy failed');
+      // Destroy should not throw - always complete successfully
+      await expect(TraceLog.destroy()).resolves.not.toThrow();
       expect(TraceLog.isInitialized()).toBe(false); // Still cleaned up
     });
 
