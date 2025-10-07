@@ -10,10 +10,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PerformanceHandler } from '@/handlers/performance.handler';
-import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { EventType } from '@/types';
+import { PerformanceHandler } from '../../src/handlers/performance.handler';
+import { EventManager } from '../../src/managers/event.manager';
+import { StorageManager } from '../../src/managers/storage.manager';
+import { EventType } from '../../src/types';
 
 describe('PerformanceHandler', () => {
   let performanceHandler: PerformanceHandler;

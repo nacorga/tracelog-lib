@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { detectQaMode } from '@/utils/browser/qa-mode.utils';
-import { QA_MODE_KEY } from '@/constants';
+import { detectQaMode } from '../../../../src/utils/browser/qa-mode.utils';
+import { QA_MODE_KEY } from '../../../../src/constants';
 
 describe('QA Mode Detection', () => {
   beforeEach(() => {

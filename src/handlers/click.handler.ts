@@ -2,7 +2,7 @@ import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH, INTERACTIVE_SELECTORS } from '.
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { log } from '@/utils';
+import { log } from '../utils';
 
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;

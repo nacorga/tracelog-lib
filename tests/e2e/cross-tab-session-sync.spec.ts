@@ -10,7 +10,7 @@
  * Focus: Detect cross-tab coordination defects
  */
 
-import { STORAGE_BASE_KEY } from '@/constants';
+import { STORAGE_BASE_KEY } from '../../src/constants';
 import { test, expect } from '@playwright/test';
 
 test.describe('Cross-Tab Session Sync', () => {

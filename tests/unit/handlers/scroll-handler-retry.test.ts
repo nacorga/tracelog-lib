@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ScrollHandler } from '@/handlers/scroll.handler';
+import { ScrollHandler } from '../../../src/handlers/scroll.handler';
 import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
-vi.mock('@/utils/logging', () => ({
+vi.mock('../../../src/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),
     info: vi.fn(),

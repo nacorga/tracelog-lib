@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { __setAppInstance } from '@/api';
-import { App } from '@/app';
+import { __setAppInstance } from '../../src/api';
+import { App } from '../../src/app';
 
 describe('API Security', () => {
   describe('__setAppInstance protection', () => {

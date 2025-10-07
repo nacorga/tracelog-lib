@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StorageManager } from '@/managers/storage.manager';
+import { StorageManager } from '../../src/managers/storage.manager';
 
 describe('StorageManager - Quota Error Detection', () => {
   let storageManager: StorageManager;

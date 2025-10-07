@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { normalizeUrl, getCollectApiUrl } from '@/utils/network/url.utils';
-import { Config } from '@/types';
+import { normalizeUrl, getCollectApiUrl } from '../../../src/utils/network/url.utils';
+import { Config } from '../../../src/types';
 
 describe('URL Utils', () => {
   describe('normalizeUrl', () => {

@@ -10,10 +10,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SessionHandler } from '@/handlers/session.handler';
-import { SessionManager } from '@/managers/session.manager';
-import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
+import { SessionHandler } from '../../src/handlers/session.handler';
+import { SessionManager } from '../../src/managers/session.manager';
+import { EventManager } from '../../src/managers/event.manager';
+import { StorageManager } from '../../src/managers/storage.manager';
 
 describe('SessionHandler', () => {
   let sessionHandler: SessionHandler;

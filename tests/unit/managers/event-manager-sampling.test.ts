@@ -1,10 +1,10 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EventManager } from '@/managers/event.manager';
-import { EventType } from '@/types';
+import { EventManager } from '../../../src/managers/event.manager';
+import { EventType } from '../../../src/types';
 import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
 // Mock dependencies
-vi.mock('@/managers/sender.manager', () => ({
+vi.mock('../../../src/managers/sender.manager', () => ({
   SenderManager: vi.fn().mockImplementation(() => ({
     sendEventsQueue: vi.fn(),
     recoverPersistedEvents: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock('@/managers/sender.manager', () => ({
   })),
 }));
 
-vi.mock('@/utils/logging', () => ({
+vi.mock('../../../src/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),
     info: vi.fn(),

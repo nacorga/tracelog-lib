@@ -31,7 +31,7 @@ beforeEach(() => {
 afterEach(async () => {
   // Reset global state to prevent test interference
   try {
-    const { resetGlobalState } = await import('@/managers/state.manager');
+    const { resetGlobalState } = await import('../src/managers/state.manager');
     if (typeof resetGlobalState === 'function') {
       resetGlobalState();
     }

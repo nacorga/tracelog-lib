@@ -10,10 +10,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PageViewHandler } from '@/handlers/page-view.handler';
-import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { EventType } from '@/types';
+import { PageViewHandler } from '../../src/handlers/page-view.handler';
+import { EventManager } from '../../src/managers/event.manager';
+import { StorageManager } from '../../src/managers/storage.manager';
+import { EventType } from '../../src/types';
 
 describe('PageViewHandler', () => {
   let pageViewHandler: PageViewHandler;

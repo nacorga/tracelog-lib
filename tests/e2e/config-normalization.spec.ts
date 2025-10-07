@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { type Config } from '@/types';
+import { type Config } from '../../src/types';
 import { navigateToPlayground, ensureTraceLogBridge } from './utils/environment.utils';
 
 const initTraceLog = async (page: Page, config: Config) => {

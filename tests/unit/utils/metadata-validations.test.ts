@@ -7,8 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isValidMetadata, isValidEventName } from '@/utils/validations/metadata-validations.utils';
-import { MetadataType } from '@/types';
+import { isValidMetadata, isValidEventName } from '../../../src/utils/validations/metadata-validations.utils';
+import { MetadataType } from '../../../src/types';
 
 describe('Metadata Validations - Type Support', () => {
   describe('Single Object Metadata', () => {

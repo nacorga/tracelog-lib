@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { validateAppConfig, validateAndNormalizeConfig } from '@/utils/validations/config-validations.utils';
-import { Config } from '@/types';
+import { validateAppConfig, validateAndNormalizeConfig } from '../../src/utils/validations/config-validations.utils';
+import { Config } from '../../src/types';
 import {
   AppConfigValidationError,
   SessionTimeoutValidationError,
   SamplingRateValidationError,
   IntegrationValidationError,
-} from '@/types/validation-error.types';
-import { MIN_SESSION_TIMEOUT_MS, MAX_SESSION_TIMEOUT_MS } from '@/constants';
+} from '../../src/types/validation-error.types';
+import { MIN_SESSION_TIMEOUT_MS, MAX_SESSION_TIMEOUT_MS } from '../../src/constants';
 
 describe('Config Validations', () => {
   beforeEach(() => {

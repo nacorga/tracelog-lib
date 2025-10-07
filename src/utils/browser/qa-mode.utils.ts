@@ -1,4 +1,4 @@
-import { QA_MODE_KEY } from '@/constants';
+import { QA_MODE_KEY } from '../../constants';
 import { log } from '../logging.utils';
 
 const QA_MODE_PARAM = 'tlog_mode';

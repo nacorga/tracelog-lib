@@ -6,10 +6,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ErrorHandler } from '@/handlers/error.handler';
-import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { MAX_TRACKED_ERRORS_HARD_LIMIT } from '@/constants/error.constants';
+import { ErrorHandler } from '../../src/handlers/error.handler';
+import { EventManager } from '../../src/managers/event.manager';
+import { StorageManager } from '../../src/managers/storage.manager';
+import { MAX_TRACKED_ERRORS_HARD_LIMIT } from '../../src/constants/error.constants';
 
 describe('ErrorHandler - Memory Leak Prevention', () => {
   let errorHandler: ErrorHandler;

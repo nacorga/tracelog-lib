@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
+import { GoogleAnalyticsIntegration } from '../../src/integrations/google-analytics.integration';
 
 describe('Google Analytics Integration', () => {
   let gaIntegration: GoogleAnalyticsIntegration;

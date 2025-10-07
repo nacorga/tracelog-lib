@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as TraceLog from '@/api';
+import * as TraceLog from '../../src/api';
 
 describe('API Integration - Event Method', () => {
   beforeEach(async () => {

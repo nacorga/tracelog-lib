@@ -1,14 +1,14 @@
 import { vi } from 'vitest';
-import { EventManager } from '@/managers/event.manager';
-import { SessionManager } from '@/managers/session.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { StateManager, resetGlobalState } from '@/managers/state.manager';
-import { Config } from '@/types';
-import { DEFAULT_SESSION_TIMEOUT } from '@/constants';
-import { GoogleAnalyticsIntegration } from '@/integrations/google-analytics.integration';
-import { Emitter } from '@/utils';
+import { EventManager } from '../../src/managers/event.manager';
+import { SessionManager } from '../../src/managers/session.manager';
+import { StorageManager } from '../../src/managers/storage.manager';
+import { StateManager, resetGlobalState } from '../../src/managers/state.manager';
+import { Config } from '../../src/types';
+import { DEFAULT_SESSION_TIMEOUT } from '../../src/constants';
+import { GoogleAnalyticsIntegration } from '../../src/integrations/google-analytics.integration';
+import { Emitter } from '../../src/utils';
 
-vi.mock('@/managers/sender.manager', () => {
+vi.mock('../../src/managers/sender.manager', () => {
   class MockSenderManager {
     sendEventsQueue = vi.fn(async () => true);
     sendEventsQueueSync = vi.fn(() => true);

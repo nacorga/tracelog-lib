@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { EventManager } from '@/managers/event.manager';
-import { StorageManager } from '@/managers/storage.manager';
-import { EventType, ScrollDirection, ErrorType, DeviceType } from '@/types';
-import type { SessionEndReason } from '@/types';
+import { EventManager } from '../../../src/managers/event.manager';
+import { StorageManager } from '../../../src/managers/storage.manager';
+import { EventType, ScrollDirection, ErrorType, DeviceType } from '../../../src/types';
+import type { SessionEndReason } from '../../../src/types';
 
 describe('EventManager - Session Guard', () => {
   let eventManager: EventManager;

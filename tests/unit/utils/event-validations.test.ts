@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isEventValid } from '@/utils/validations/event-validations.utils';
+import { isEventValid } from '../../../src/utils/validations/event-validations.utils';
 
 describe('Event Validations', () => {
   describe('isEventValid', () => {

@@ -1,11 +1,11 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ClickHandler } from '@/handlers/click.handler';
-import { EventType } from '@/types';
-import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH } from '@/constants';
+import { ClickHandler } from '../../../src/handlers/click.handler';
+import { EventType } from '../../../src/types';
+import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH } from '../../../src/constants';
 import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 
 // Mock dependencies
-vi.mock('@/utils/logging', () => ({
+vi.mock('../../../src/utils/logging', () => ({
   debugLog: {
     debug: vi.fn(),
     info: vi.fn(),
