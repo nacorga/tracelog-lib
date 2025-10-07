@@ -1,5 +1,35 @@
 # Changelog
 
+
+## [0.7.0] - 2025-10-07
+
+### ✨ Features
+
+- Guarantee version synchronization across all release channels ([af157d0](../../commit/af157d0c877be4c4998ddbe1569dde1b2ec7984c))
+
+### 🐛 Bug Fixes
+
+- Prevent tag pointing to wrong commit in release workflow ([9ec5c77](../../commit/9ec5c77621a815f0636f6161ab6906759e4757fb))
+
+### 🔧 Other Changes
+
+- Bump version to 0.6.5 and update changelog ([ea67665](../../commit/ea67665c53ed36dc81a66e59516a9a51e02b7a34))
+- Update docs tracelog.js build [skip ci] ([a5fd32f](../../commit/a5fd32fda37c93980298fa5cf09e827dee8c9cd5))
+- Merge branch 'develop' of github.com:nacorga/tracelog-lib ([3df8f8c](../../commit/3df8f8c1d2de25220bdad4448ba44d0f50e2b821))
+- Add tag types and conditions for tagging system ([c4d92fe](../../commit/c4d92fe5dad0ce1dd8066d3e8124c71c5473c34e))
+- Release v0.6.3 ([8e679c4](../../commit/8e679c4bfac2f25df704614eb7167891c96c690d))
+- Automate package-lock.json updates in release script ([079f25d](../../commit/079f25d8eb94adbae07f2363b0e6164e3fafe466))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- GitHub Action
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.6.3...v0.7.0
+
+
 ## [0.6.5] - 2025-10-07
 
 ### 🐛 Bug Fixes
