@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { normalizeUrl, getApiUrl } from '@/utils/network/url.utils';
+import { normalizeUrl, getCollectApiUrl } from '@/utils/network/url.utils';
 import { Config } from '@/types';
 
 describe('URL Utils', () => {
@@ -98,7 +98,7 @@ describe('URL Utils', () => {
     });
   });
 
-  describe('getApiUrl', () => {
+  describe('getCollectApiUrl', () => {
     beforeEach(() => {
       Object.defineProperty(window, 'location', {
         value: {
@@ -113,7 +113,7 @@ describe('URL Utils', () => {
 
     test('should return empty string when no integrations configured', () => {
       const config: Config = {};
-      const result = getApiUrl(config);
+      const result = getCollectApiUrl(config);
 
       expect(result).toBe('');
     });
@@ -127,35 +127,35 @@ describe('URL Utils', () => {
         },
       };
 
-      const result = getApiUrl(config);
+      const result = getCollectApiUrl(config);
 
-      expect(result).toBe('https://my-project.example.com');
+      expect(result).toBe('https://my-project.example.com/collect');
     });
 
-    test('should use custom apiUrl when provided', () => {
+    test('should use custom collectApiUrl when provided', () => {
       const config: Config = {
         integrations: {
           custom: {
-            apiUrl: 'https://api.custom.com',
+            collectApiUrl: 'https://api.custom.com/collect',
           },
         },
       };
 
-      const result = getApiUrl(config);
+      const result = getCollectApiUrl(config);
 
-      expect(result).toBe('https://api.custom.com');
+      expect(result).toBe('https://api.custom.com/collect');
     });
 
-    test('should throw error for invalid custom apiUrl', () => {
+    test('should throw error for invalid custom collectApiUrl', () => {
       const config: Config = {
         integrations: {
           custom: {
-            apiUrl: 'not-a-valid-url',
+            collectApiUrl: 'not-a-valid-url',
           },
         },
       };
 
-      expect(() => getApiUrl(config)).toThrow('Invalid URL');
+      expect(() => getCollectApiUrl(config)).toThrow('Invalid URL');
     });
 
     test('should handle subdomain extraction correctly', () => {
@@ -177,9 +177,9 @@ describe('URL Utils', () => {
         },
       };
 
-      const result = getApiUrl(config);
+      const result = getCollectApiUrl(config);
 
-      expect(result).toBe('https://test-project.example.com');
+      expect(result).toBe('https://test-project.example.com/collect');
     });
 
     test('should allow HTTP when allowHttp is true in custom integration', () => {
@@ -196,13 +196,13 @@ describe('URL Utils', () => {
       const config: Config = {
         integrations: {
           custom: {
-            apiUrl: 'http://localhost:3000',
+            collectApiUrl: 'http://localhost:3000/collect',
             allowHttp: true,
           },
         },
       };
 
-      const result = getApiUrl(config);
+      const result = getCollectApiUrl(config);
 
       expect(result).toContain('http://');
     });
@@ -221,32 +221,32 @@ describe('URL Utils', () => {
       const config: Config = {
         integrations: {
           custom: {
-            apiUrl: 'http://localhost:3000',
+            collectApiUrl: 'http://localhost:3000/collect',
             allowHttp: false,
           },
         },
       };
 
       // This should throw an error because HTTP is not allowed
-      expect(() => getApiUrl(config)).toThrow('Invalid URL');
+      expect(() => getCollectApiUrl(config)).toThrow('Invalid URL');
     });
 
-    test('should prioritize custom apiUrl over tracelog projectId', () => {
+    test('should prioritize tracelog projectId over custom collectApiUrl', () => {
       const config: Config = {
         integrations: {
           tracelog: {
             projectId: 'project-1',
           },
           custom: {
-            apiUrl: 'https://api.custom.com',
+            collectApiUrl: 'https://api.custom.com/collect',
           },
         },
       };
 
-      const result = getApiUrl(config);
+      const result = getCollectApiUrl(config);
 
       // tracelog is checked first in the actual implementation
-      expect(result).toBe('https://project-1.example.com');
+      expect(result).toBe('https://project-1.example.com/collect');
     });
 
     test('should throw error when domain parts are invalid', () => {
@@ -268,7 +268,7 @@ describe('URL Utils', () => {
         },
       };
 
-      expect(() => getApiUrl(config)).toThrow('Invalid URL');
+      expect(() => getCollectApiUrl(config)).toThrow('Invalid URL');
     });
   });
 });

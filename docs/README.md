@@ -93,7 +93,7 @@ await window.tracelog.init({
 await window.tracelog.init({
   integrations: {
     custom: {
-      apiUrl: 'http://localhost:8080',
+      collectApiUrl: 'http://localhost:8080/collect',
       allowHttp: true // Dev only
     }
   }

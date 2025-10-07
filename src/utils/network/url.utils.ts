@@ -24,7 +24,7 @@ const isValidUrl = (url: string, allowHttp = false): boolean => {
  * @param id - The project ID
  * @returns The generated API URL
  */
-export const getApiUrl = (config: Config): string => {
+export const getCollectApiUrl = (config: Config): string => {
   if (config.integrations?.tracelog?.projectId) {
     const url = new URL(window.location.href);
     const host = url.hostname;
@@ -36,26 +36,27 @@ export const getApiUrl = (config: Config): string => {
 
     const projectId = config.integrations.tracelog.projectId;
     const cleanDomain = parts.slice(-2).join('.');
-    const apiUrl = `https://${projectId}.${cleanDomain}`;
-    const isValid = isValidUrl(apiUrl);
+    const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
+    const isValid = isValidUrl(collectApiUrl);
 
     if (!isValid) {
       throw new Error('Invalid URL');
     }
 
-    return apiUrl;
+    return collectApiUrl;
   }
 
-  if (config.integrations?.custom?.apiUrl) {
-    const apiUrl = config.integrations.custom.apiUrl;
+  const collectApiUrl = config.integrations?.custom?.collectApiUrl;
+
+  if (collectApiUrl) {
     const allowHttp = config.integrations?.custom?.allowHttp ?? false;
-    const isValid = isValidUrl(apiUrl, allowHttp);
+    const isValid = isValidUrl(collectApiUrl, allowHttp);
 
     if (!isValid) {
       throw new Error('Invalid URL');
     }
 
-    return apiUrl;
+    return collectApiUrl;
   }
 
   return '';

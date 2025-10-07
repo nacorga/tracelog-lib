@@ -321,10 +321,10 @@ describe('Config Validations', () => {
     });
 
     describe('Custom Integration Validation', () => {
-      it('should accept valid custom integration with apiUrl', () => {
+      it('should accept valid custom integration with collectApiUrl', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: 'https://api.example.com' },
+            custom: { collectApiUrl: 'https://api.example.com/collect' },
           },
         };
         expect(() => validateAppConfig(config)).not.toThrow();
@@ -333,7 +333,7 @@ describe('Config Validations', () => {
       it('should accept custom integration with allowHttp true', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: 'http://localhost:3000', allowHttp: true },
+            custom: { collectApiUrl: 'http://localhost:3000/collect', allowHttp: true },
           },
         };
         expect(() => validateAppConfig(config)).not.toThrow();
@@ -342,7 +342,7 @@ describe('Config Validations', () => {
       it('should accept custom integration with allowHttp false', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: 'https://api.example.com', allowHttp: false },
+            custom: { collectApiUrl: 'https://api.example.com/collect', allowHttp: false },
           },
         };
         expect(() => validateAppConfig(config)).not.toThrow();
@@ -351,26 +351,26 @@ describe('Config Validations', () => {
       it('should reject custom integration with non-boolean allowHttp', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: 'https://api.example.com', allowHttp: 'true' as any },
+            custom: { collectApiUrl: 'https://api.example.com/collect', allowHttp: 'true' as any },
           },
         };
         expect(() => validateAppConfig(config)).toThrow(IntegrationValidationError);
         expect(() => validateAppConfig(config)).toThrow('allowHttp must be a boolean');
       });
 
-      it('should reject custom integration with empty apiUrl', () => {
+      it('should reject custom integration with empty collectApiUrl', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: '' },
+            custom: { collectApiUrl: '' },
           },
         };
         expect(() => validateAppConfig(config)).toThrow(IntegrationValidationError);
       });
 
-      it('should reject custom integration with non-string apiUrl', () => {
+      it('should reject custom integration with non-string collectApiUrl', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: 123 as any },
+            custom: { collectApiUrl: 123 as any },
           },
         };
         expect(() => validateAppConfig(config)).toThrow(IntegrationValidationError);
@@ -533,7 +533,7 @@ describe('Config Validations', () => {
       it('should set default allowHttp to false in custom integration', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: 'https://api.example.com' },
+            custom: { collectApiUrl: 'https://api.example.com/collect' },
           },
         };
         const normalized = validateAndNormalizeConfig(config);
@@ -543,7 +543,7 @@ describe('Config Validations', () => {
       it('should preserve existing allowHttp in custom integration', () => {
         const config: Config = {
           integrations: {
-            custom: { apiUrl: 'https://api.example.com', allowHttp: true },
+            custom: { collectApiUrl: 'https://api.example.com/collect', allowHttp: true },
           },
         };
         const normalized = validateAndNormalizeConfig(config);

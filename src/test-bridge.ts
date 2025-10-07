@@ -97,7 +97,8 @@ export class TestBridge extends App implements TraceLogTestBridge {
     }
 
     const config = this.get('config');
-    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.apiUrl ?? 'test';
+    const projectId =
+      config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.collectApiUrl ?? 'test';
     const userId = this.get('userId');
     const sessionId = this.get('sessionId');
 

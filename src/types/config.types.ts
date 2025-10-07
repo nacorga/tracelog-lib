@@ -22,8 +22,8 @@ export interface Config {
     };
     /** Custom integration options. */
     custom?: {
-      /** Required API URL for custom integration. */
-      apiUrl: string;
+      /** Endpoint for collecting events. */
+      collectApiUrl: string;
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
     };
