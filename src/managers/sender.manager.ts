@@ -1,5 +1,5 @@
 import { QUEUE_KEY, EVENT_EXPIRY_HOURS, MAX_RETRIES, RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '../constants';
-import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl } from '../types';
+import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl, PermanentError } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -60,18 +60,34 @@ export class SenderManager extends StateManager {
       }
     }
 
-    const success = await this.send(body);
+    try {
+      const success = await this.send(body);
 
-    if (success) {
-      this.clearPersistedEvents();
-      this.resetRetryState();
-      callbacks?.onSuccess?.(body.events.length, body.events, body);
-    } else {
-      this.scheduleRetry(body, callbacks);
-      callbacks?.onFailure?.();
+      if (success) {
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onSuccess?.(body.events.length, body.events, body);
+      } else {
+        this.scheduleRetry(body, callbacks);
+        callbacks?.onFailure?.();
+      }
+
+      return success;
+    } catch (error) {
+      // Permanent errors should not be retried
+      if (error instanceof PermanentError) {
+        log('warn', 'Permanent error, not retrying', {
+          data: { status: error.statusCode, message: error.message },
+        });
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onFailure?.();
+        return false;
+      }
+
+      // Re-throw unexpected errors
+      throw error;
     }
-
-    return success;
   }
 
   async recoverPersistedEvents(callbacks?: SendCallbacks): Promise<void> {
@@ -95,6 +111,17 @@ export class SenderManager extends StateManager {
         callbacks?.onFailure?.();
       }
     } catch (error) {
+      // Permanent errors should clear persisted events immediately
+      if (error instanceof PermanentError) {
+        log('warn', 'Permanent error during recovery, clearing persisted events', {
+          data: { status: error.statusCode, message: error.message },
+        });
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onFailure?.();
+        return;
+      }
+
       log('error', 'Failed to recover persisted events', { error });
       this.clearPersistedEvents();
     }
@@ -135,6 +162,11 @@ export class SenderManager extends StateManager {
 
       return response.ok;
     } catch (error) {
+      // Re-throw PermanentError to be caught by caller
+      if (error instanceof PermanentError) {
+        throw error;
+      }
+
       log('error', 'Send request failed', {
         error,
         data: {
@@ -164,6 +196,17 @@ export class SenderManager extends StateManager {
       });
 
       if (!response.ok) {
+        // 4xx errors are permanent client errors - don't retry
+        const isPermanentError = response.status >= 400 && response.status < 500;
+
+        if (isPermanentError) {
+          log('error', `Permanent HTTP error, not retrying`, {
+            data: { status: response.status, statusText: response.statusText },
+          });
+          throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+        }
+
+        // 5xx or other errors - retry
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
@@ -313,6 +356,26 @@ export class SenderManager extends StateManager {
           this.resetRetryState();
           originalCallbacks?.onSuccess?.(body.events.length);
         } else if (this.retryCount >= MAX_RETRIES) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onFailure?.();
+        } else {
+          this.scheduleRetry(body, originalCallbacks);
+        }
+      } catch (error) {
+        // If it's a permanent error, don't retry
+        if (error instanceof PermanentError) {
+          log('warn', 'Permanent error detected during retry, giving up', {
+            data: { status: error.statusCode, message: error.message },
+          });
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onFailure?.();
+          return;
+        }
+
+        // For other errors, continue normal retry flow
+        if (this.retryCount >= MAX_RETRIES) {
           this.clearPersistedEvents();
           this.resetRetryState();
           originalCallbacks?.onFailure?.();

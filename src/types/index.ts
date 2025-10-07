@@ -2,6 +2,7 @@ export * from './common.types';
 export * from './config.types';
 export * from './device.types';
 export * from './emitter.types';
+export * from './error.types';
 export * from './event.types';
 export * from './log.types';
 export * from './mode.types';

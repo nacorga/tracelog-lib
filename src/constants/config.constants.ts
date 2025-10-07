@@ -16,8 +16,8 @@ export const SCROLL_DEBOUNCE_TIME_MS = 250;
 export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
 
 // Event expiry
-export const EVENT_EXPIRY_HOURS = 24;
-export const EVENT_PERSISTENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const EVENT_EXPIRY_HOURS = 2;
+export const EVENT_PERSISTENCE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // ============================================================================
 // LIMITS & RETRIES
