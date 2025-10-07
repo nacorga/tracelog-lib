@@ -1,6 +1,7 @@
 *.tgz
 .npmrc
 .DS_Store
+CLAUDE.md
 /.llm
 /.playwright-mcp
 /.archive
