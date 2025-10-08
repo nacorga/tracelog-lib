@@ -69,7 +69,7 @@ export const createMockEmitter = (): Emitter =>
 /**
  * Setup global state for testing
  */
-export const setupTestState = async (config: Config = createTestConfig()): Promise<void> => {
+export const setupTestState = (config: Config = createTestConfig()): void => {
   resetGlobalState();
 
   // Create a temporary StateManager to set up global state
@@ -136,7 +136,7 @@ export const setupTestEnvironment = async (
   sessionManager: SessionManager;
 }> => {
   const testConfig = createTestConfig(config);
-  await setupTestState(testConfig);
+  setupTestState(testConfig);
 
   const storageManager = createMockStorageManager();
   const eventManager = createTestEventManager(storageManager);

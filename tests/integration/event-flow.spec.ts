@@ -21,11 +21,11 @@ describe('Event Flow Integration', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
 
     // Setup global state using test utility
-    await setupTestState(
+    setupTestState(
       createTestConfig({
         samplingRate: 1,
         sensitiveQueryParams: [],
@@ -345,9 +345,9 @@ describe('Event Flow Integration', () => {
   });
 
   describe('Global Metadata Flow', () => {
-    it('should add global metadata to queue payload', async () => {
+    it('should add global metadata to queue payload', () => {
       // Setup state with global metadata
-      await setupTestState(
+      setupTestState(
         createTestConfig({
           samplingRate: 1,
           globalMetadata: {

@@ -23,9 +23,9 @@ describe('SessionManager', () => {
   let storageManager: StorageManager;
   let eventManager: EventManager;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    await setupTestState(
+    setupTestState(
       createTestConfig({
         sessionTimeout: 15 * 60 * 1000, // 15 minutes
       }),

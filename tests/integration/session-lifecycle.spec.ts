@@ -23,9 +23,9 @@ describe('Session Lifecycle Integration', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    await setupTestState(
+    setupTestState(
       createTestConfig({
         sessionTimeout: 15 * 60 * 1000,
         samplingRate: 1,

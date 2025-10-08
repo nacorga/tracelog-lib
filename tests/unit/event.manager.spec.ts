@@ -21,9 +21,9 @@ describe('EventManager', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    await setupTestState(
+    setupTestState(
       createTestConfig({
         samplingRate: 1,
       }),
@@ -122,9 +122,9 @@ describe('EventManager', () => {
   });
 
   describe('Sampling Rate', () => {
-    it('should respect sampling rate of 0.5', async () => {
+    it('should respect sampling rate of 0.5', () => {
       // Reconfigure with different sampling rate
-      await setupTestState(
+      setupTestState(
         createTestConfig({
           samplingRate: 0.5,
         }),
@@ -149,9 +149,9 @@ describe('EventManager', () => {
       expect(eventManager.getQueueLength()).toBe(5);
     });
 
-    it('should sample NO events with rate 0', async () => {
+    it('should sample NO events with rate 0', () => {
       // Reconfigure with sampling rate 0
-      await setupTestState(
+      setupTestState(
         createTestConfig({
           samplingRate: 0,
         }),
@@ -185,9 +185,9 @@ describe('EventManager', () => {
       expect(eventManager.getQueueLength()).toBe(10);
     });
 
-    it('should NOT apply sampling to critical session events', async () => {
+    it('should NOT apply sampling to critical session events', () => {
       // Reconfigure with sampling rate 0
-      await setupTestState(
+      setupTestState(
         createTestConfig({
           samplingRate: 0, // Sample nothing
         }),
@@ -253,9 +253,9 @@ describe('EventManager', () => {
       expect(eventManager.getQueueLength()).toBe(1);
     });
 
-    it('should ignore session_start without sessionId', async () => {
+    it('should ignore session_start without sessionId', () => {
       // Setup state but explicitly clear sessionId to test the validation
-      await setupTestState(
+      setupTestState(
         createTestConfig({
           samplingRate: 1,
         }),

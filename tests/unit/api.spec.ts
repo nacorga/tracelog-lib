@@ -33,9 +33,9 @@ vi.mock('../../src/app', () => {
 });
 
 describe('Public API', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    await setupTestState(createTestConfig());
+    setupTestState(createTestConfig());
     cleanupTestState();
   });
 
