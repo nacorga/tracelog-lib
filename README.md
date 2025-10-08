@@ -247,10 +247,25 @@ tracelog.init();
 console.log(tracelog.isInitialized()); // true
 ```
 
+## Error Handling & Retry Logic
+
+TraceLog automatically handles network errors with intelligent retry logic:
+
+- **Permanent errors (4xx)**: No retries - events are cleared immediately
+  - `400 Bad Request`, `403 Forbidden`, `404 Not Found` → Stop retrying
+  - Prevents infinite retry loops for configuration issues (e.g., excluded IPs, invalid projects)
+
+- **Temporary errors (5xx)**: Automatic retry with exponential backoff
+  - `500`, `502`, `503`, `504` → Retry up to 3 times (5s, 10s, 20s delays)
+  - Events persist in localStorage for recovery across page reloads
+
+- **Event expiry**: Persisted events expire after 2 hours to prevent stale data recovery
+
 ## Troubleshooting
 
 - **Session issues**: Check localStorage availability and session timeout
 - **Memory usage**: Reduce `sessionTimeout`, lower `samplingRate`, call `destroy()` on cleanup
+- **Events not sending**: Check browser console for `PermanentError` logs indicating 4xx errors
 - **CI failures**: Verify Playwright installation and Node.js ≥20
 
 ## Development & Contributing
