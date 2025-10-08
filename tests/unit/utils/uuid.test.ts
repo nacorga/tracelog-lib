@@ -88,17 +88,16 @@ describe('UUID Utils', () => {
       expect(timestamp).toBeLessThanOrEqual(afterTime);
     });
 
-    test('should be sortable by timestamp', () => {
+    test('should be sortable by timestamp', async () => {
       const id1 = generateEventId();
+
       // Wait 10ms to ensure different timestamp
-      const waitPromise = new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
-      return waitPromise.then(() => {
-        const id2 = generateEventId();
+      const id2 = generateEventId();
 
-        // String comparison should work for chronological ordering
-        expect(id2 > id1).toBe(true);
-      });
+      // String comparison should work for chronological ordering
+      expect(id2 > id1).toBe(true);
     });
 
     test('should be a string', () => {

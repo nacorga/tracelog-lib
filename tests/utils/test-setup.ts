@@ -74,20 +74,20 @@ export const setupTestState = async (config: Config = createTestConfig()): Promi
 
   // Create a temporary StateManager to set up global state
   const tempStateManager = new (class extends StateManager {
-    async setConfig(config: Config): Promise<void> {
-      await this.set('config', config);
+    setConfig(config: Config): void {
+      this.set('config', config);
     }
-    async setPageUrl(url: string): Promise<void> {
-      await this.set('pageUrl', url);
+    setPageUrl(url: string): void {
+      this.set('pageUrl', url);
     }
-    async setSessionId(id: string): Promise<void> {
-      await this.set('sessionId', id);
+    setSessionId(id: string): void {
+      this.set('sessionId', id);
     }
   })();
 
-  await tempStateManager.setConfig(config);
-  await tempStateManager.setPageUrl('https://example.com');
-  await tempStateManager.setSessionId('test-session');
+  tempStateManager.setConfig(config);
+  tempStateManager.setPageUrl('https://example.com');
+  tempStateManager.setSessionId('test-session');
 };
 
 /**

@@ -1535,13 +1535,17 @@ class SessionManager extends StateManager {
       return;
     }
     if (this.broadcastChannel && typeof this.broadcastChannel.postMessage === "function") {
-      this.broadcastChannel.postMessage({
-        action: "session_end",
-        projectId: this.getProjectId(),
-        sessionId,
-        reason,
-        timestamp: Date.now()
-      });
+      try {
+        this.broadcastChannel.postMessage({
+          action: "session_end",
+          projectId: this.getProjectId(),
+          sessionId,
+          reason,
+          timestamp: Date.now()
+        });
+      } catch (error) {
+        log("warn", "Failed to broadcast session end", { error, data: { sessionId, reason } });
+      }
     }
   }
   cleanupCrossTabSync() {
