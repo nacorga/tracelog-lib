@@ -6,6 +6,30 @@
 
 
 
+
+## [0.8.2] - 2025-10-08
+
+### ♻️ Refactoring
+
+- Introduce new constants for custom event validation limits ([aadf733](../../commit/aadf7332ded7d337017f3224dbc82a8f1b80df5a))
+- Enhance ESLint rules and TypeScript configuration for improved code quality and safety ([bf617eb](../../commit/bf617eb086bfdd00d1f914a4f8a3f25ba3f28152))
+
+### 🔧 Other Changes
+
+- Merge pull request #27 from nacorga/release/20251008.3 ([d96eeae](../../commit/d96eeae889dc0b691dc4b321476d21af86614b3f))
+- Merge pull request #26 from nacorga/refactor/rules-and-config ([9d35e5d](../../commit/9d35e5d60254b44fb8a43f148b36f74b69e1aa59))
+- Streamline ESLint rules and TypeScript configuration for better clarity and consistency ([a3e0aee](../../commit/a3e0aeebf09fd2e88254e7f207d838ef0ebfe4af))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.8.1...v0.8.2
+
+
 ## [0.8.1] - 2025-10-08
 
 ### 🐛 Bug Fixes
