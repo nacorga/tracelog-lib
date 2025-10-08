@@ -54,7 +54,7 @@ test.describe('Event Queue Overflow', () => {
       // Wait for queue to be sent
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues, queueCount: queues.length };
     });
@@ -102,7 +102,7 @@ test.describe('Event Queue Overflow', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues };
     });
@@ -176,7 +176,7 @@ test.describe('Event Queue Overflow', () => {
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
       console.error = originalError;
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { errors, queueCount: queues.length, initialized: traceLog.initialized };
     });
@@ -235,7 +235,7 @@ test.describe('Event Queue Overflow', () => {
       // Wait for final queue
       await new Promise((resolve) => setTimeout(resolve, 11000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       // Debug: Extract cycle counts before returning
       const allEvents = queues.flatMap((queue: any) => queue.events.filter((e: any) => e.type === 'custom'));
@@ -306,7 +306,7 @@ test.describe('Event Queue Overflow', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return {
         memorySnapshots,

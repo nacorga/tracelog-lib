@@ -144,10 +144,19 @@ describe('Type Guards Utils', () => {
       expect(isOnlyPrimitiveFields(obj)).toBe(true);
     });
 
-    test('should return false for object with directly nested objects (not in arrays)', () => {
+    test('should return true for object with one level of nested objects', () => {
       const obj = {
         name: 'John',
-        address: { city: 'NYC' },
+        address: { city: 'NYC', zip: '10001' },
+        currency: 'USD',
+      };
+      expect(isOnlyPrimitiveFields(obj)).toBe(true);
+    });
+
+    test('should return false for object with two levels of nested objects', () => {
+      const obj = {
+        name: 'John',
+        address: { location: { city: 'NYC' } },
       };
       expect(isOnlyPrimitiveFields(obj)).toBe(false);
     });

@@ -20,11 +20,11 @@ describe('SessionManager - Lifecycle', () => {
   let mockEventManager: EventManager;
   let mockStorage: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
 
-    const testEnv = await setupTestEnvironment({ sessionTimeout: DEFAULT_SESSION_TIMEOUT });
+    const testEnv = setupTestEnvironment({ sessionTimeout: DEFAULT_SESSION_TIMEOUT });
     sessionManager = testEnv.sessionManager;
     mockEventManager = testEnv.eventManager;
     mockStorage = testEnv.storageManager;
@@ -40,10 +40,10 @@ describe('SessionManager - Lifecycle', () => {
     cleanupTestState();
   });
 
-  test('should create new session when no stored session exists', async () => {
+  test('should create new session when no stored session exists', () => {
     mockStorage.getItem = vi.fn(() => null);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     expect(mockStorage.setItem).toHaveBeenCalledWith('tlog:default:session', expect.any(String));
     expect(mockEventManager.track).toHaveBeenCalledWith({
@@ -51,7 +51,7 @@ describe('SessionManager - Lifecycle', () => {
     });
   });
 
-  test('should recover valid stored session', async () => {
+  test('should recover valid stored session', () => {
     const storedSessionData = JSON.stringify({
       id: 'stored-session-123',
       lastActivity: Date.now() - 5000, // 5 seconds ago
@@ -59,12 +59,12 @@ describe('SessionManager - Lifecycle', () => {
 
     mockStorage.getItem = vi.fn().mockReturnValueOnce(storedSessionData); // session data
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     expect(mockEventManager.track).not.toHaveBeenCalled();
   });
 
-  test('should not recover expired session', async () => {
+  test('should not recover expired session', () => {
     const storedSessionData = JSON.stringify({
       id: 'expired-session-123',
       lastActivity: Date.now() - DEFAULT_SESSION_TIMEOUT - 1000, // Expired
@@ -72,7 +72,7 @@ describe('SessionManager - Lifecycle', () => {
 
     mockStorage.getItem = vi.fn().mockReturnValueOnce(storedSessionData);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     // Should create new session, not recover
     expect(mockEventManager.track).toHaveBeenCalledWith({
@@ -80,10 +80,10 @@ describe('SessionManager - Lifecycle', () => {
     });
   });
 
-  test('should end session on timeout', async () => {
+  test('should end session on timeout', () => {
     mockStorage.getItem = vi.fn(() => null);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
     vi.clearAllMocks(); // Clear startTracking events
 
     // Fast forward past session timeout
@@ -96,13 +96,13 @@ describe('SessionManager - Lifecycle', () => {
     expect(mockStorage.removeItem).toHaveBeenCalledWith('tlog:default:session');
   });
 
-  test('should end session manually', async () => {
+  test('should end session manually', () => {
     mockStorage.getItem = vi.fn(() => null);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
     vi.clearAllMocks(); // Clear startTracking events
 
-    await sessionManager.stopTracking();
+    sessionManager.stopTracking();
 
     expect(mockEventManager.track).toHaveBeenCalledWith({
       type: EventType.SESSION_END,
@@ -110,10 +110,10 @@ describe('SessionManager - Lifecycle', () => {
     });
   });
 
-  test('should handle visibility change events', async () => {
+  test('should handle visibility change events', () => {
     mockStorage.getItem = vi.fn(() => null);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     // Mock document.hidden
     Object.defineProperty(document, 'hidden', {
@@ -135,10 +135,10 @@ describe('SessionManager - Lifecycle', () => {
     });
   });
 
-  test('should flush events on page unload', async () => {
+  test('should flush events on page unload', () => {
     mockStorage.getItem = vi.fn(() => null);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     // Trigger beforeunload
     const beforeUnloadEvent = new Event('beforeunload');
@@ -147,7 +147,7 @@ describe('SessionManager - Lifecycle', () => {
     expect(mockEventManager.flushImmediatelySync).toHaveBeenCalled();
   });
 
-  test('should generate unique session IDs', async () => {
+  test('should generate unique session IDs', () => {
     const sessionIds = new Set<string>();
 
     mockStorage.getItem = vi.fn(() => null);
@@ -155,9 +155,9 @@ describe('SessionManager - Lifecycle', () => {
     // Create multiple sessions and check uniqueness
     for (let i = 0; i < 10; i++) {
       const tempSessionManager = new SessionManager(mockStorage, mockEventManager, 'test-project');
-      await tempSessionManager.startTracking();
+      tempSessionManager.startTracking();
 
-      const setItemCalls = mockStorage.setItem as any;
+      const setItemCalls = mockStorage.setItem;
       const sessionIdCall = setItemCalls.mock.calls.find((call: any) => call[0] === 'tlog:test-project:session');
 
       if (sessionIdCall) {
@@ -166,16 +166,16 @@ describe('SessionManager - Lifecycle', () => {
       }
 
       tempSessionManager.destroy();
-      (mockStorage.setItem as any).mockClear(); // Clear only setItem, not the history
+      mockStorage.setItem.mockClear(); // Clear only setItem, not the history
     }
 
     expect(sessionIds.size).toBe(10); // All should be unique
   });
 
-  test('should clean up resources on destroy', async () => {
+  test('should clean up resources on destroy', () => {
     mockStorage.getItem = vi.fn(() => null);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     sessionManager.destroy();
 

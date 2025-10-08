@@ -23,9 +23,9 @@ describe('ErrorHandler', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    await setupTestState(
+    setupTestState(
       createTestConfig({
         samplingRate: 1,
         errorSampling: 1, // Capture all errors by default for testing
@@ -118,8 +118,8 @@ describe('ErrorHandler', () => {
       expect(result).toBe(true);
     });
 
-    it('should sample no errors with rate 0', async () => {
-      await setupTestState(
+    it('should sample no errors with rate 0', () => {
+      setupTestState(
         createTestConfig({
           errorSampling: 0,
         }),
@@ -132,8 +132,8 @@ describe('ErrorHandler', () => {
       expect(result).toBe(false);
     });
 
-    it('should respect sampling rate of 0.1 (10%)', async () => {
-      await setupTestState(
+    it('should respect sampling rate of 0.1 (10%)', () => {
+      setupTestState(
         createTestConfig({
           errorSampling: 0.1,
         }),
@@ -152,8 +152,8 @@ describe('ErrorHandler', () => {
       expect(sampledCount).toBe(1); // 10% of 10 = 1
     });
 
-    it('should use default sampling rate when not configured', async () => {
-      await setupTestState(
+    it('should use default sampling rate when not configured', () => {
+      setupTestState(
         createTestConfig({
           // errorSampling not set, default should be used
         }),
@@ -296,8 +296,8 @@ describe('ErrorHandler', () => {
       );
     });
 
-    it('should NOT track errors when sampling rate is 0', async () => {
-      await setupTestState(
+    it('should NOT track errors when sampling rate is 0', () => {
+      setupTestState(
         createTestConfig({
           errorSampling: 0,
         }),

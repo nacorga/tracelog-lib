@@ -147,8 +147,8 @@ export interface Disposable {
 export class TestUtilityError extends Error {
   constructor(
     message: string,
-    public readonly type: TestErrorType,
-    public readonly cause?: unknown,
+    public override readonly cause?: unknown,
+    public readonly type?: TestErrorType,
   ) {
     super(message);
     this.name = 'TestUtilityError';
@@ -159,6 +159,6 @@ export class TestUtilityError extends Error {
    */
   static create(type: TestErrorType, message: string, cause?: unknown): TestUtilityError {
     const formattedMessage = `[${type}] ${message}`;
-    return new TestUtilityError(formattedMessage, type, cause);
+    return new TestUtilityError(formattedMessage, cause, type);
   }
 }

@@ -27,7 +27,7 @@ class FailedOnlyReporter implements Reporter {
     }
   }
 
-  async onEnd(): Promise<void> {
+  onEnd(): void {
     const outputPath = 'test-results/failed-tests.json';
 
     mkdirSync(dirname(outputPath), { recursive: true });

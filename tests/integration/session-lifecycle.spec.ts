@@ -23,9 +23,9 @@ describe('Session Lifecycle Integration', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    await setupTestState(
+    setupTestState(
       createTestConfig({
         sessionTimeout: 15 * 60 * 1000,
         samplingRate: 1,
@@ -43,10 +43,10 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('New Session Flow', () => {
-    it('should track session_start for new session', async () => {
+    it('should track session_start for new session', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Verify session_start was tracked
       expect(trackSpy).toHaveBeenCalledWith({
@@ -54,8 +54,8 @@ describe('Session Lifecycle Integration', () => {
       });
     });
 
-    it('should generate and set session ID before tracking start', async () => {
-      await sessionManager.startTracking();
+    it('should generate and set session ID before tracking start', () => {
+      sessionManager.startTracking();
 
       const sessionId = sessionManager['get']('sessionId');
 
@@ -65,8 +65,8 @@ describe('Session Lifecycle Integration', () => {
       expect(sessionId).not.toBe('');
     });
 
-    it('should persist session immediately on start', async () => {
-      await sessionManager.startTracking();
+    it('should persist session immediately on start', () => {
+      sessionManager.startTracking();
 
       const sessionId = sessionManager['get']('sessionId');
       const storageKey = sessionManager['getSessionStorageKey']();
@@ -79,10 +79,10 @@ describe('Session Lifecycle Integration', () => {
       expect(parsed.lastActivity).toBeDefined();
     });
 
-    it('should set up session timeout on start', async () => {
+    it('should set up session timeout on start', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Timeout should be set
       expect(sessionManager['sessionTimeoutId']).not.toBeNull();
@@ -92,7 +92,7 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('Recovered Session Flow', () => {
-    it('should NOT track session_start for recovered session', async () => {
+    it('should NOT track session_start for recovered session', () => {
       // Persist valid session
       sessionManager['saveStoredSession']({
         id: 'test-session-1',
@@ -101,7 +101,7 @@ describe('Session Lifecycle Integration', () => {
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Should NOT track session_start
       expect(trackSpy).not.toHaveBeenCalledWith({
@@ -109,16 +109,16 @@ describe('Session Lifecycle Integration', () => {
       });
     });
 
-    it('should use recovered session ID', async () => {
+    it('should use recovered session ID', () => {
       sessionManager['saveStoredSession']({
         id: 'test-session-2',
         lastActivity: Date.now(),
       });
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
     });
 
-    it('should update lastActivity for recovered session', async () => {
+    it('should update lastActivity for recovered session', () => {
       const initialTime = Date.now() - 5 * 60 * 1000; // 5 minutes ago
 
       sessionManager['saveStoredSession']({
@@ -126,7 +126,7 @@ describe('Session Lifecycle Integration', () => {
         lastActivity: initialTime,
       });
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const storageKey = sessionManager['getSessionStorageKey']();
       const stored = storageManager.getItem(storageKey);
@@ -138,12 +138,12 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('Session End Flow', () => {
-    it('should track session_end with manual_stop reason', async () => {
-      await sessionManager.startTracking();
+    it('should track session_end with manual_stop reason', () => {
+      sessionManager.startTracking();
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      await sessionManager.stopTracking();
+      sessionManager.stopTracking();
 
       // Verify session_end was tracked
       expect(trackSpy).toHaveBeenCalledWith(
@@ -154,10 +154,10 @@ describe('Session Lifecycle Integration', () => {
       );
     });
 
-    it('should track session_end with inactivity reason on timeout', async () => {
+    it('should track session_end with inactivity reason on timeout', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
@@ -175,8 +175,8 @@ describe('Session Lifecycle Integration', () => {
       vi.useRealTimers();
     });
 
-    it('should track session_end with page_unload reason', async () => {
-      await sessionManager.startTracking();
+    it('should track session_end with page_unload reason', () => {
+      sessionManager.startTracking();
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
@@ -192,29 +192,29 @@ describe('Session Lifecycle Integration', () => {
       );
     });
 
-    it('should clear session ID after end', async () => {
-      await sessionManager.startTracking();
-      await sessionManager.stopTracking();
+    it('should clear session ID after end', () => {
+      sessionManager.startTracking();
+      sessionManager.stopTracking();
 
       const sessionId = sessionManager['get']('sessionId');
       expect(sessionId).toBeNull();
     });
 
-    it('should clear session storage after end', async () => {
-      await sessionManager.startTracking();
+    it('should clear session storage after end', () => {
+      sessionManager.startTracking();
 
       const storageKey = sessionManager['getSessionStorageKey']();
 
-      await sessionManager.stopTracking();
+      sessionManager.stopTracking();
 
       const stored = storageManager.getItem(storageKey);
       expect(stored).toBeNull();
     });
 
-    it('should flush events before ending session', async () => {
+    it('should flush events before ending session', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Add some events
       eventManager.track({
@@ -224,7 +224,7 @@ describe('Session Lifecycle Integration', () => {
 
       const flushSpy = vi.spyOn(eventManager, 'flushImmediatelySync');
 
-      await sessionManager.stopTracking();
+      sessionManager.stopTracking();
 
       // Verify flush was called
       expect(flushSpy).toHaveBeenCalled();
@@ -234,23 +234,23 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('Session State Coordination', () => {
-    it('should set hasStartSession flag after tracking start', async () => {
-      await sessionManager.startTracking();
+    it('should set hasStartSession flag after tracking start', () => {
+      sessionManager.startTracking();
 
       const hasStartSession = sessionManager['get']('hasStartSession');
       expect(hasStartSession).toBe(true);
     });
 
-    it('should clear hasStartSession flag after session end', async () => {
-      await sessionManager.startTracking();
-      await sessionManager.stopTracking();
+    it('should clear hasStartSession flag after session end', () => {
+      sessionManager.startTracking();
+      sessionManager.stopTracking();
 
       const hasStartSession = sessionManager['get']('hasStartSession');
       expect(hasStartSession).toBe(false);
     });
 
-    it('should coordinate session ID between managers', async () => {
-      await sessionManager.startTracking();
+    it('should coordinate session ID between managers', () => {
+      sessionManager.startTracking();
 
       const sessionIdInSessionManager = sessionManager['get']('sessionId');
       const sessionIdInEventManager = eventManager['get']('sessionId');
@@ -261,10 +261,10 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('Session Activity Updates', () => {
-    it('should update lastActivity on user interaction', async () => {
+    it('should update lastActivity on user interaction', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const storageKey = sessionManager['getSessionStorageKey']();
 
@@ -290,10 +290,10 @@ describe('Session Lifecycle Integration', () => {
       vi.useRealTimers();
     });
 
-    it('should reset timeout on user activity', async () => {
+    it('should reset timeout on user activity', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
@@ -316,7 +316,7 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('Cross-Tab Coordination', () => {
-    it('should share session via BroadcastChannel on start', async () => {
+    it('should share session via BroadcastChannel on start', () => {
       if (typeof BroadcastChannel === 'undefined') {
         // Skip if BroadcastChannel not supported
         return;
@@ -331,7 +331,7 @@ describe('Session Lifecycle Integration', () => {
         onmessage: null,
       })) as any;
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Verify session was shared
       expect(postMessageSpy).toHaveBeenCalledWith(
@@ -343,7 +343,7 @@ describe('Session Lifecycle Integration', () => {
       );
     });
 
-    it('should broadcast session_end on stop', async () => {
+    it('should broadcast session_end on stop', () => {
       if (typeof BroadcastChannel === 'undefined') {
         return;
       }
@@ -356,8 +356,8 @@ describe('Session Lifecycle Integration', () => {
         onmessage: null,
       })) as any;
 
-      await sessionManager.startTracking();
-      await sessionManager.stopTracking();
+      sessionManager.startTracking();
+      sessionManager.stopTracking();
 
       // Verify session_end was broadcast
       expect(postMessageSpy).toHaveBeenCalledWith(
@@ -370,8 +370,8 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('Session Data in Events', () => {
-    it('should include session ID in tracked events', async () => {
-      await sessionManager.startTracking();
+    it('should include session ID in tracked events', () => {
+      sessionManager.startTracking();
 
       const sessionId = sessionManager['get']('sessionId');
 
@@ -386,7 +386,7 @@ describe('Session Lifecycle Integration', () => {
       expect(payload.session_id).toBe(sessionId);
     });
 
-    it('should prevent event sending without session ID', async () => {
+    it('should prevent event sending without session ID', () => {
       // Don't start session
 
       eventManager.track({
@@ -401,32 +401,32 @@ describe('Session Lifecycle Integration', () => {
   });
 
   describe('Multiple Session Cycles', () => {
-    it('should handle stop -> start cycle correctly', async () => {
+    it('should handle stop -> start cycle correctly', () => {
       // First session
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
       const firstSessionId = sessionManager['get']('sessionId');
-      await sessionManager.stopTracking();
+      sessionManager.stopTracking();
 
       // Second session
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
       const secondSessionId = sessionManager['get']('sessionId');
 
       // Should be different sessions
       expect(secondSessionId).not.toBe(firstSessionId);
     });
 
-    it('should track session_start for each new session', async () => {
+    it('should track session_start for each new session', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
 
       // First session
-      await sessionManager.startTracking();
-      await sessionManager.stopTracking();
+      sessionManager.startTracking();
+      sessionManager.stopTracking();
 
       // Clear previous calls
       trackSpy.mockClear();
 
       // Second session
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Should track session_start again
       expect(trackSpy).toHaveBeenCalledWith({

@@ -16,10 +16,10 @@ describe('ScrollHandler - Retry Logic', () => {
   let scrollHandler: ScrollHandler;
   let mockEventManager: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    const testEnv = await setupTestEnvironment();
+    const testEnv = setupTestEnvironment();
     mockEventManager = testEnv.eventManager;
     document.body.innerHTML = '';
   });
@@ -33,7 +33,7 @@ describe('ScrollHandler - Retry Logic', () => {
 
   test('should use window when no selectors configured', () => {
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { id: 'test' } as any);
+    scrollHandler['set']('config', { sessionTimeout: 900000 });
 
     scrollHandler.startTracking();
 
@@ -48,7 +48,7 @@ describe('ScrollHandler - Retry Logic', () => {
     Object.defineProperty(container, 'clientHeight', { value: 100, configurable: true });
 
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { id: 'test', scrollContainerSelectors: '#scroll-box' } as any);
+    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '#scroll-box' });
 
     scrollHandler.startTracking();
 
@@ -58,7 +58,7 @@ describe('ScrollHandler - Retry Logic', () => {
 
   test('should find element after retry', () => {
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { id: 'test', scrollContainerSelectors: '.delayed' } as any);
+    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '.delayed' });
 
     scrollHandler.startTracking();
     expect(scrollHandler['containers']).toHaveLength(0);
@@ -77,7 +77,7 @@ describe('ScrollHandler - Retry Logic', () => {
 
   test('should fallback to window after max retries', () => {
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { id: 'test', scrollContainerSelectors: '.never-exists' } as any);
+    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '.never-exists' });
 
     scrollHandler.startTracking();
     vi.advanceTimersByTime(1000);
@@ -93,7 +93,7 @@ describe('ScrollHandler - Retry Logic', () => {
     Object.defineProperty(container, 'clientHeight', { value: 100, configurable: true });
 
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { id: 'test', scrollContainerSelectors: '#once' } as any);
+    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '#once' });
 
     scrollHandler.startTracking();
     vi.advanceTimersByTime(1000);

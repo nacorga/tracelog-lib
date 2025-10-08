@@ -36,7 +36,7 @@ test.describe('Destroy Lifecycle', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Destroy library
-      await traceLog.destroy();
+      traceLog.destroy();
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -74,7 +74,7 @@ test.describe('Destroy Lifecycle', () => {
       // Library should have started some intervals (e.g., send interval)
       const duringInitIntervalCount = (window as any).__intervalCount || 0;
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -122,7 +122,7 @@ test.describe('Destroy Lifecycle', () => {
         const initialized = traceLog.initialized;
 
         // Destroy
-        await traceLog.destroy();
+        traceLog.destroy();
 
         await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -178,7 +178,7 @@ test.describe('Destroy Lifecycle', () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Destroy should close BroadcastChannel
-      await traceLog.destroy();
+      traceLog.destroy();
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -221,7 +221,7 @@ test.describe('Destroy Lifecycle', () => {
       const firstInitialized = traceLog.initialized;
 
       // Destroy (removes all listeners)
-      await traceLog.destroy();
+      traceLog.destroy();
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -245,7 +245,7 @@ test.describe('Destroy Lifecycle', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return {
         firstInitialized,
@@ -285,7 +285,7 @@ test.describe('Destroy Lifecycle', () => {
       // Check storage keys before destroy
       const keysBeforeDestroy = Object.keys(localStorage).filter((key) => key.includes('tracelog'));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -307,13 +307,13 @@ test.describe('Destroy Lifecycle', () => {
   test('should handle destroy when not initialized', async ({ page }) => {
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(() => {
       const traceLog = window.__traceLogBridge!;
       let error: Error | null = null;
 
       // Try to destroy without initializing
       try {
-        await traceLog.destroy();
+        traceLog.destroy();
       } catch (e) {
         error = e as Error;
       }
@@ -354,7 +354,7 @@ test.describe('Destroy Lifecycle', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Destroy should flush these events
-      await traceLog.destroy();
+      traceLog.destroy();
 
       // Wait for flush to complete
       await new Promise((resolve) => setTimeout(resolve, 12000));
@@ -397,7 +397,7 @@ test.describe('Destroy Lifecycle', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 

@@ -42,10 +42,10 @@ test.describe('User Data Integrity', () => {
       };
 
       // Initialize TraceLog (QA mode auto-detected from URL param)
-      await window.__traceLogBridge!.init();
+      await window.__traceLogBridge.init();
 
       // IMPORTANT: Attach listener AFTER init() so it connects to the initialized EventManager
-      window.__traceLogBridge!.on('event', (data: any) => {
+      window.__traceLogBridge.on('event', (data: any) => {
         if (data.type === 'custom') {
           capturedEvents.push(data);
         }
@@ -70,7 +70,7 @@ test.describe('User Data Integrity', () => {
 
       for (const testCase of testCases) {
         try {
-          window.__traceLogBridge!.sendCustomEvent(testCase.name, testCase.metadata);
+          window.__traceLogBridge.sendCustomEvent(testCase.name, testCase.metadata);
           successfulEvents.push(testCase.name);
           // Small delay between events
           await new Promise((resolve) => setTimeout(resolve, 50));
@@ -85,7 +85,7 @@ test.describe('User Data Integrity', () => {
       }
 
       // Send trigger event
-      window.__traceLogBridge!.sendCustomEvent('test_data_integrity_complete', { trigger: 'end_integrity_test' });
+      window.__traceLogBridge.sendCustomEvent('test_data_integrity_complete', { trigger: 'end_integrity_test' });
 
       // Wait for events to be captured
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -99,7 +99,7 @@ test.describe('User Data Integrity', () => {
         testCases,
         successfulEvents,
         rejectedEvents,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 
@@ -173,15 +173,15 @@ test.describe('User Data Integrity', () => {
       const capturedEvents: any[] = [];
 
       // Listen for individual events
-      window.__traceLogBridge!.on('event', (data: any) => {
+      window.__traceLogBridge.on('event', (data: any) => {
         if (data.type === 'custom') {
           capturedEvents.push(data);
         }
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
-      const sessionData = window.__traceLogBridge!.getSessionData();
+      await window.__traceLogBridge.init();
+      const sessionData = window.__traceLogBridge.getSessionData();
 
       // Simulate complex user journey with data consistency checks
       const journey = [
@@ -199,7 +199,7 @@ test.describe('User Data Integrity', () => {
       // Execute journey with consistent metadata
       const userId = 'user_' + Math.random().toString(36).substr(2, 9);
       for (const journeyStep of journey) {
-        window.__traceLogBridge!.sendCustomEvent(journeyStep.action, {
+        window.__traceLogBridge.sendCustomEvent(journeyStep.action, {
           ...journeyStep.data,
           userId,
           sessionId: sessionData?.id,
@@ -209,7 +209,7 @@ test.describe('User Data Integrity', () => {
       }
 
       // Send trigger event
-      window.__traceLogBridge!.sendCustomEvent('test_consistency_complete', { trigger: 'end_consistency_test' });
+      window.__traceLogBridge.sendCustomEvent('test_consistency_complete', { trigger: 'end_consistency_test' });
 
       // Wait for events to be captured
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -219,7 +219,7 @@ test.describe('User Data Integrity', () => {
         sessionData,
         journey,
         userId,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 
@@ -284,14 +284,14 @@ test.describe('User Data Integrity', () => {
       const capturedEvents: any[] = [];
 
       // Listen for individual events
-      window.__traceLogBridge!.on('event', (data: any) => {
+      window.__traceLogBridge.on('event', (data: any) => {
         if (data.type === 'custom') {
           capturedEvents.push(data);
         }
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
+      await window.__traceLogBridge.init();
 
       // Generate rapid concurrent events
       const eventPromises: Promise<void>[] = [];
@@ -319,7 +319,7 @@ test.describe('User Data Integrity', () => {
       await Promise.all(eventPromises);
 
       // Send trigger event
-      window.__traceLogBridge!.sendCustomEvent('test_concurrency_complete', { trigger: 'end_concurrency_test' });
+      window.__traceLogBridge.sendCustomEvent('test_concurrency_complete', { trigger: 'end_concurrency_test' });
 
       // Wait for events to be captured
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -327,7 +327,7 @@ test.describe('User Data Integrity', () => {
       return {
         capturedEvents,
         expectedEvents,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 

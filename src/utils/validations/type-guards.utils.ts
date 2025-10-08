@@ -38,12 +38,19 @@ const isValidArrayItem = (item: unknown): boolean => {
 };
 
 /**
- * Checks if an object contains only primitive fields, string arrays, or arrays of flat objects
+ * Checks if an object contains only primitive fields, string arrays, arrays of flat objects,
+ * or nested objects with primitive fields
  * @param object - The object to check
+ * @param depth - Current nesting depth (default: 0, max: 1)
  * @returns True if the object contains only valid fields
  */
-export const isOnlyPrimitiveFields = (object: Record<string, unknown>): boolean => {
+export const isOnlyPrimitiveFields = (object: Record<string, unknown>, depth = 0): boolean => {
   if (typeof object !== 'object' || object === null) {
+    return false;
+  }
+
+  // Allow only one level of nesting (depth 0 -> depth 1)
+  if (depth > 1) {
     return false;
   }
 
@@ -78,6 +85,14 @@ export const isOnlyPrimitiveFields = (object: Record<string, unknown>): boolean 
         }
       }
 
+      continue;
+    }
+
+    // Allow nested objects at depth 0 only (one level deep)
+    if (type === 'object' && depth === 0) {
+      if (!isOnlyPrimitiveFields(value as Record<string, unknown>, depth + 1)) {
+        return false;
+      }
       continue;
     }
 

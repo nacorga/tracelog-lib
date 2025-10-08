@@ -19,11 +19,11 @@ describe('SessionManager - Single session_start per session', () => {
   let mockEventManager: EventManager;
   let mockStorage: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
 
-    const testEnv = await setupTestEnvironment({ sessionTimeout: DEFAULT_SESSION_TIMEOUT });
+    const testEnv = setupTestEnvironment({ sessionTimeout: DEFAULT_SESSION_TIMEOUT });
     sessionManager = testEnv.sessionManager;
     mockEventManager = testEnv.eventManager;
     mockStorage = testEnv.storageManager;
@@ -38,10 +38,10 @@ describe('SessionManager - Single session_start per session', () => {
     cleanupTestState();
   });
 
-  test('should emit session_start only once for new session', async () => {
+  test('should emit session_start only once for new session', () => {
     mockStorage.getItem = vi.fn(() => null);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     expect(mockEventManager.track).toHaveBeenCalledTimes(1);
     expect(mockEventManager.track).toHaveBeenCalledWith({
@@ -49,7 +49,7 @@ describe('SessionManager - Single session_start per session', () => {
     });
   });
 
-  test('should NOT emit session_start when recovering existing session', async () => {
+  test('should NOT emit session_start when recovering existing session', () => {
     const storedSessionData = JSON.stringify({
       id: 'recovered-session-123',
       lastActivity: Date.now() - 5000,
@@ -57,12 +57,12 @@ describe('SessionManager - Single session_start per session', () => {
 
     mockStorage.getItem = vi.fn().mockReturnValueOnce(storedSessionData);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     expect(mockEventManager.track).not.toHaveBeenCalled();
   });
 
-  test('should emit session_start for expired session', async () => {
+  test('should emit session_start for expired session', () => {
     const expiredSessionData = JSON.stringify({
       id: 'expired-session',
       lastActivity: Date.now() - DEFAULT_SESSION_TIMEOUT - 1000,
@@ -70,7 +70,7 @@ describe('SessionManager - Single session_start per session', () => {
 
     mockStorage.getItem = vi.fn().mockReturnValueOnce(expiredSessionData);
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     expect(mockEventManager.track).toHaveBeenCalledTimes(1);
     expect(mockEventManager.track).toHaveBeenCalledWith({

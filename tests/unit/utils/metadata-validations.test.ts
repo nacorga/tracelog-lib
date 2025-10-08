@@ -57,10 +57,27 @@ describe('Metadata Validations - Type Support', () => {
       expect(sanitized.description).toContain('Normal text');
     });
 
-    it('should reject nested objects in single object', () => {
+    it('should accept one level of nested objects in single object', () => {
       const metadata = {
         nested: {
           value: 'test',
+          count: 42,
+        },
+        currency: 'USD',
+      };
+
+      const result = isValidMetadata('test-event', metadata);
+
+      expect(result.valid).toBe(true);
+      expect(result.sanitizedMetadata).toBeDefined();
+    });
+
+    it('should reject two levels of nested objects in single object', () => {
+      const metadata = {
+        nested: {
+          deeper: {
+            value: 'test',
+          },
         },
       };
 
@@ -81,6 +98,27 @@ describe('Metadata Validations - Type Support', () => {
       const result = isValidMetadata('test-event', metadata);
 
       expect(result.valid).toBe(true);
+    });
+
+    it('should accept e-commerce event with items array', () => {
+      const metadata = {
+        currency: 'EUR',
+        items: [
+          {
+            item_id: 'AC2',
+            item_name: 'AC2',
+            product_code: 'AC2',
+            price: 1170,
+            quantity: 1,
+          },
+        ],
+        value: 1170,
+      };
+
+      const result = isValidMetadata('add_to_cart', metadata, 'customEvent');
+
+      expect(result.valid).toBe(true);
+      expect(result.sanitizedMetadata).toBeDefined();
     });
   });
 
@@ -132,11 +170,30 @@ describe('Metadata Validations - Type Support', () => {
       });
     });
 
-    it('should reject array with nested objects', () => {
+    it('should accept array with one level of nested objects', () => {
       const metadata = [
         {
           nested: {
             value: 'test',
+            price: 100,
+          },
+          currency: 'USD',
+        },
+      ];
+
+      const result = isValidMetadata('test-event', metadata);
+
+      expect(result.valid).toBe(true);
+      expect(Array.isArray(result.sanitizedMetadata)).toBe(true);
+    });
+
+    it('should reject array with two levels of nested objects', () => {
+      const metadata = [
+        {
+          nested: {
+            deeper: {
+              value: 'test',
+            },
           },
         },
       ];
@@ -281,7 +338,9 @@ describe('Metadata Validations - Type Support', () => {
     it('should include event name in error message for single object', () => {
       const metadata = {
         nested: {
-          invalid: 'structure',
+          deeper: {
+            invalid: 'structure',
+          },
         },
       };
 
@@ -292,7 +351,16 @@ describe('Metadata Validations - Type Support', () => {
     });
 
     it('should include array index in error message', () => {
-      const metadata = [{ valid: 'item' }, { nested: { invalid: 'structure' } }];
+      const metadata = [
+        { valid: 'item' },
+        {
+          nested: {
+            deeper: {
+              invalid: 'structure',
+            },
+          },
+        },
+      ];
 
       const result = isValidMetadata('cart-update', metadata, 'customEvent');
 

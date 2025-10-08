@@ -34,14 +34,20 @@ describe('ErrorHandler', () => {
   });
 
   it('should allow event after suppression window expires', () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+
     const event = new ErrorEvent('error', { message: 'Outage' });
 
     handler['handleError'](event);
-    vi.advanceTimersByTime(60_000);
-    handler['handleError'](event);
+    expect(eventManager.track).toHaveBeenCalledTimes(1);
 
+    // Advance time beyond suppression window (5 seconds)
+    vi.advanceTimersByTime(6_000);
+
+    handler['handleError'](event);
     expect(eventManager.track).toHaveBeenCalledTimes(2);
+
     vi.useRealTimers();
   });
 });

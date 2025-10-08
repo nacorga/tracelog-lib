@@ -78,13 +78,17 @@ export class SessionManager extends StateManager {
     }
 
     if (this.broadcastChannel && typeof this.broadcastChannel.postMessage === 'function') {
-      this.broadcastChannel.postMessage({
-        action: 'session_end',
-        projectId: this.getProjectId(),
-        sessionId,
-        reason,
-        timestamp: Date.now(),
-      });
+      try {
+        this.broadcastChannel.postMessage({
+          action: 'session_end',
+          projectId: this.getProjectId(),
+          sessionId,
+          reason,
+          timestamp: Date.now(),
+        });
+      } catch (error) {
+        log('warn', 'Failed to broadcast session end', { error, data: { sessionId, reason } });
+      }
     }
   }
 
@@ -159,7 +163,7 @@ export class SessionManager extends StateManager {
     return this.projectId;
   }
 
-  async startTracking(): Promise<void> {
+  startTracking(): void {
     if (this.isTracking) {
       log('warn', 'Session tracking already active');
       return;
@@ -280,7 +284,7 @@ export class SessionManager extends StateManager {
     }
   }
 
-  private async endSession(reason: SessionEndReason): Promise<void> {
+  private endSession(reason: SessionEndReason): void {
     const sessionId = this.get('sessionId');
 
     if (!sessionId) {
@@ -294,25 +298,16 @@ export class SessionManager extends StateManager {
       session_end_reason: reason,
     });
 
-    const finalize = (): void => {
-      this.broadcastSessionEnd(sessionId, reason);
-      this.resetSessionState(reason);
-    };
-
     const flushResult = this.eventManager.flushImmediatelySync();
 
-    if (flushResult) {
-      finalize();
-      return;
+    if (!flushResult) {
+      log('warn', 'Sync flush failed during session end, events persisted for recovery', {
+        data: { reason, sessionId },
+      });
     }
 
-    try {
-      await this.eventManager.flushImmediately();
-      finalize();
-    } catch (error) {
-      log('warn', 'Async flush failed during session end', { error });
-      finalize();
-    }
+    this.broadcastSessionEnd(sessionId, reason);
+    this.resetSessionState(reason);
   }
 
   private resetSessionState(reason?: SessionEndReason): void {
@@ -330,8 +325,8 @@ export class SessionManager extends StateManager {
     this.isTracking = false;
   }
 
-  async stopTracking(): Promise<void> {
-    await this.endSession('manual_stop');
+  stopTracking(): void {
+    this.endSession('manual_stop');
   }
 
   destroy(): void {

@@ -10,9 +10,9 @@ describe('ScrollHandler Integration - Container Retry', () => {
     vi.useFakeTimers();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     if (app) {
-      await app.destroy();
+      app.destroy();
     }
     document.body.innerHTML = '';
     vi.useRealTimers();

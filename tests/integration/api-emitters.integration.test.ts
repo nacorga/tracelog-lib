@@ -17,7 +17,7 @@ describe('API Integration - Emitter Methods', () => {
     // Cleanup any existing instance
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     } catch {
@@ -28,7 +28,7 @@ describe('API Integration - Emitter Methods', () => {
   afterEach(async () => {
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     } catch {
@@ -130,7 +130,7 @@ describe('API Integration - Emitter Methods', () => {
         const callback = vi.fn();
 
         // Register listener early to catch session_start
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
 
         await TraceLog.init();
@@ -222,7 +222,7 @@ describe('API Integration - Emitter Methods', () => {
   describe('Emitter Lifecycle', () => {
     it('should work after destroy and re-initialization', async () => {
       await TraceLog.init();
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Re-initialization should work
@@ -239,7 +239,7 @@ describe('API Integration - Emitter Methods', () => {
 
     it('should allow registering new listeners after destroy', async () => {
       await TraceLog.init();
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       await TraceLog.init();

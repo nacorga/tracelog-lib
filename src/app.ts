@@ -54,7 +54,7 @@ export class App extends StateManager {
 
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
 
-      await this.initializeHandlers();
+      this.initializeHandlers();
 
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log('warn', 'Failed to recover persisted events', { error });
@@ -62,7 +62,7 @@ export class App extends StateManager {
 
       this.isInitialized = true;
     } catch (error) {
-      await this.destroy(true);
+      this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`);
     }
@@ -100,24 +100,22 @@ export class App extends StateManager {
     this.emitter.off(event, callback);
   }
 
-  async destroy(force = false): Promise<void> {
+  destroy(force = false): void {
     if (!this.isInitialized && !force) {
       return;
     }
 
     this.integrations.googleAnalytics?.cleanup();
 
-    const handlerCleanups = Object.values(this.handlers)
+    Object.values(this.handlers)
       .filter(Boolean)
-      .map(async (handler) => {
+      .forEach((handler) => {
         try {
-          await handler.stopTracking();
+          handler.stopTracking();
         } catch (error) {
           log('warn', 'Failed to stop tracking', { error });
         }
       });
-
-    await Promise.allSettled(handlerCleanups);
 
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
@@ -174,13 +172,13 @@ export class App extends StateManager {
     }
   }
 
-  private async initializeHandlers(): Promise<void> {
+  private initializeHandlers(): void {
     this.handlers.session = new SessionHandler(
       this.managers.storage as StorageManager,
       this.managers.event as EventManager,
     );
 
-    await this.handlers.session.startTracking();
+    this.handlers.session.startTracking();
 
     const onPageView = (): void => {
       this.set('suppressNextScroll', true);

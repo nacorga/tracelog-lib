@@ -33,17 +33,17 @@ vi.mock('../../src/app', () => {
 });
 
 describe('Public API', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    await setupTestState(createTestConfig());
+    setupTestState(createTestConfig());
     cleanupTestState();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     // Force cleanup by setting internal app to null
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
       }
     } catch {
       // Ignore errors during cleanup
@@ -241,7 +241,7 @@ describe('Public API', () => {
     it('should return false after destroy', async () => {
       const config = createTestConfig();
       await TraceLog.init(config);
-      await TraceLog.destroy();
+      TraceLog.destroy();
 
       expect(TraceLog.isInitialized()).toBe(false);
     });
@@ -265,8 +265,8 @@ describe('Public API', () => {
   });
 
   describe('destroy()', () => {
-    it('should throw error when not initialized', async () => {
-      await expect(TraceLog.destroy()).rejects.toThrow('App not initialized');
+    it('should throw error when not initialized', () => {
+      expect(() => TraceLog.destroy()).toThrow('App not initialized');
     });
 
     it('should destroy successfully when initialized', async () => {
@@ -274,21 +274,20 @@ describe('Public API', () => {
       await TraceLog.init(config);
 
       const mockAppInstance = new App();
-      await TraceLog.destroy();
+      TraceLog.destroy();
 
       expect(mockAppInstance.destroy).toHaveBeenCalledTimes(1);
       expect(TraceLog.isInitialized()).toBe(false);
     });
 
-    it('should prevent concurrent destroy operations', async () => {
+    it('should throw error when calling destroy after already destroyed', async () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const promise1 = TraceLog.destroy();
-      const promise2 = TraceLog.destroy();
+      TraceLog.destroy();
 
-      await expect(promise2).rejects.toThrow('Destroy operation already in progress');
-      await promise1;
+      // Second destroy should throw because app is now null
+      expect(() => TraceLog.destroy()).toThrow('App not initialized');
     });
 
     it('should force cleanup even if destroy fails', async () => {
@@ -297,10 +296,12 @@ describe('Public API', () => {
 
       const mockAppInstance = new App();
       const destroyError = new Error('Destroy operation failed');
-      vi.mocked(mockAppInstance.destroy).mockRejectedValueOnce(destroyError);
+      vi.mocked(mockAppInstance.destroy).mockImplementationOnce(() => {
+        throw destroyError;
+      });
 
       // Destroy should not throw - always complete successfully
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
       expect(TraceLog.isInitialized()).toBe(false); // Still cleaned up
     });
 
@@ -308,7 +309,7 @@ describe('Public API', () => {
       const config = createTestConfig();
 
       await TraceLog.init(config);
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await TraceLog.init(config);
 
       expect(TraceLog.isInitialized()).toBe(true);

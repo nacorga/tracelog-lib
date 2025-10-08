@@ -10,11 +10,9 @@ import { Emitter } from '../../src/utils';
 
 vi.mock('../../src/managers/sender.manager', () => {
   class MockSenderManager {
-    sendEventsQueue = vi.fn(async () => true);
+    sendEventsQueue = vi.fn(() => true);
     sendEventsQueueSync = vi.fn(() => true);
-    sendEventsQueueAsync = vi.fn(async () => true);
-    recoverPersistedEvents = vi.fn(async () => undefined);
-    persistEventsForRecovery = vi.fn(() => true);
+    recoverPersistedEvents = vi.fn(() => undefined);
     stop = vi.fn();
   }
 
@@ -71,25 +69,25 @@ export const createMockEmitter = (): Emitter =>
 /**
  * Setup global state for testing
  */
-export const setupTestState = async (config: Config = createTestConfig()): Promise<void> => {
+export const setupTestState = (config: Config = createTestConfig()): void => {
   resetGlobalState();
 
   // Create a temporary StateManager to set up global state
   const tempStateManager = new (class extends StateManager {
-    async setConfig(config: Config): Promise<void> {
-      await this.set('config', config);
+    setConfig(config: Config): void {
+      this.set('config', config);
     }
-    async setPageUrl(url: string): Promise<void> {
-      await this.set('pageUrl', url);
+    setPageUrl(url: string): void {
+      this.set('pageUrl', url);
     }
-    async setSessionId(id: string): Promise<void> {
-      await this.set('sessionId', id);
+    setSessionId(id: string): void {
+      this.set('sessionId', id);
     }
   })();
 
-  await tempStateManager.setConfig(config);
-  await tempStateManager.setPageUrl('https://example.com');
-  await tempStateManager.setSessionId('test-session');
+  tempStateManager.setConfig(config);
+  tempStateManager.setPageUrl('https://example.com');
+  tempStateManager.setSessionId('test-session');
 };
 
 /**
@@ -129,16 +127,16 @@ export const cleanupTestState = (): void => {
 /**
  * Setup common test environment
  */
-export const setupTestEnvironment = async (
+export const setupTestEnvironment = (
   config?: Partial<Config>,
-): Promise<{
+): {
   config: Config;
   storageManager: StorageManager;
   eventManager: EventManager;
   sessionManager: SessionManager;
-}> => {
+} => {
   const testConfig = createTestConfig(config);
-  await setupTestState(testConfig);
+  setupTestState(testConfig);
 
   const storageManager = createMockStorageManager();
   const eventManager = createTestEventManager(storageManager);

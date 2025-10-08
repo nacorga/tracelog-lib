@@ -25,7 +25,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     this._isDestroying = isDestroying;
   }
 
-  async init(config?: any): Promise<void> {
+  override async init(config?: any): Promise<void> {
     // Guard: TestBridge should only be used in development
     if (process.env.NODE_ENV !== 'dev') {
       throw new Error('[TraceLog] TestBridge is only available in development mode');
@@ -59,7 +59,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return this._isInitializing;
   }
 
-  sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void {
+  override sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void {
     // Silently ignore events after destroy instead of throwing error
     if (!this.initialized) {
       return;
@@ -120,7 +120,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     storageManager.setItem(storageKey, JSON.stringify(persistedData));
   }
 
-  get<T extends keyof State>(key: T): State[T] {
+  override get<T extends keyof State>(key: T): State[T] {
     return super.get(key);
   }
 
@@ -163,7 +163,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return this.safeAccess(this.integrations?.googleAnalytics);
   }
 
-  async destroy(force = false): Promise<void> {
+  override destroy(force = false): void {
     // If not initialized and not forcing, silently return (no-op)
     if (!this.initialized && !force) {
       return;
@@ -174,7 +174,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     this._isDestroying = true;
 
     try {
-      await super.destroy(force);
+      super.destroy(force);
       // Clear window.tracelog API reference (only in dev mode)
       if (__setAppInstance) {
         __setAppInstance(null);
@@ -189,15 +189,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
    */
   private safeAccess<T>(value: T | undefined): T | null {
     return value ?? null;
-  }
-
-  /**
-   * Ensures the app is initialized, throws if not
-   */
-  private ensureInitialized(): void {
-    if (!this.initialized) {
-      throw new Error('App not initialized');
-    }
   }
 
   /**

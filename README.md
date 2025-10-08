@@ -249,19 +249,40 @@ tracelog.init();
 console.log(tracelog.isInitialized()); // true
 ```
 
-## Error Handling & Retry Logic
+## Error Handling & Event Persistence
 
-TraceLog automatically handles network errors with intelligent retry logic:
+TraceLog uses a hybrid sendBeacon/fetch strategy with intelligent error handling:
 
-- **Permanent errors (4xx)**: No retries - events are cleared immediately
-  - `400 Bad Request`, `403 Forbidden`, `404 Not Found` → Stop retrying
+### Send Strategy
+
+- **Async events (normal operation)**: Uses `fetch` with full HTTP error detection
+  - Detects 4xx/5xx errors and handles them appropriately
+  - Returns detailed error information for debugging
+
+- **Sync events (page unload, session end)**: Uses `sendBeacon` for guaranteed delivery
+  - Browser queues the request even if the page is closing
+  - No HTTP error feedback available (limitation of sendBeacon API)
+
+### Error Handling
+
+- **Permanent errors (4xx)**: Events are discarded immediately
+  - `400 Bad Request`, `403 Forbidden`, `404 Not Found` → No persistence, no retry
   - Prevents infinite retry loops for configuration issues (e.g., excluded IPs, invalid projects)
 
-- **Temporary errors (5xx)**: Automatic retry with exponential backoff
-  - `500`, `502`, `503`, `504` → Retry up to 3 times (5s, 10s, 20s delays)
-  - Events persist in localStorage for recovery across page reloads
+- **Temporary errors (5xx, network failures)**: Events persist in localStorage
+  - `500`, `502`, `503`, `504` → Events saved for recovery on next page load
+  - Network failures → Events persist and recover automatically
+  - No automatic in-session retries to avoid performance impact
 
 - **Event expiry**: Persisted events expire after 2 hours to prevent stale data recovery
+
+### sendBeacon Limitations
+
+When using `sendBeacon` (page unload scenarios):
+- Browser only returns `true` (queued) or `false` (rejected)
+- No visibility into HTTP response codes (403, 500, etc.)
+- Events failing server-side validation won't be detected
+- Accepted events are persisted as fallback and cleared on next successful session
 
 ## Troubleshooting
 

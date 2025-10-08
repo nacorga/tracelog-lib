@@ -31,15 +31,15 @@ test.describe('User Navigation Flow', () => {
       let sessionId: string | null = null;
 
       // Listen for queue events to capture page_view events with session_id
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
+      await window.__traceLogBridge.init();
 
       // Get initial session ID
-      const sessionData = window.__traceLogBridge!.getSessionData();
+      const sessionData = window.__traceLogBridge.getSessionData();
       sessionId =
         sessionData && typeof sessionData === 'object' && 'id' in sessionData ? (sessionData.id as string) : null;
 
@@ -68,7 +68,7 @@ test.describe('User Navigation Flow', () => {
       }
 
       // Send a custom event to trigger queue sending
-      window.__traceLogBridge!.sendCustomEvent('test_navigation', { trigger: 'end_navigation' });
+      window.__traceLogBridge.sendCustomEvent('test_navigation', { trigger: 'end_navigation' });
 
       // Wait for queue events (realistic mode uses 10-second intervals)
       const startTime = Date.now();
@@ -79,7 +79,7 @@ test.describe('User Navigation Flow', () => {
       return {
         queueEvents,
         sessionId,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 
@@ -138,13 +138,13 @@ test.describe('User Navigation Flow', () => {
       let sessionData: any = null;
 
       // Listen for queue events to capture session_id with page_view events
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
-      sessionData = window.__traceLogBridge!.getSessionData();
+      await window.__traceLogBridge.init();
+      sessionData = window.__traceLogBridge.getSessionData();
 
       // Wait for initial event to settle
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -160,7 +160,7 @@ test.describe('User Navigation Flow', () => {
       await new Promise((resolve) => setTimeout(resolve, 800));
 
       // Send custom event to trigger queue sending
-      window.__traceLogBridge!.sendCustomEvent('test_hash_navigation', { trigger: 'end_hash_navigation' });
+      window.__traceLogBridge.sendCustomEvent('test_hash_navigation', { trigger: 'end_hash_navigation' });
 
       // Wait for queue events
       const startTime = Date.now();
@@ -228,12 +228,12 @@ test.describe('User Navigation Flow', () => {
       const queueEvents: any[] = [];
 
       // Listen for queue events
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
+      await window.__traceLogBridge.init();
 
       // Wait for initial setup
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -250,7 +250,7 @@ test.describe('User Navigation Flow', () => {
       }
 
       // Send custom event to trigger queue sending
-      window.__traceLogBridge!.sendCustomEvent('test_rapid_navigation', { trigger: 'end_rapid_navigation' });
+      window.__traceLogBridge.sendCustomEvent('test_rapid_navigation', { trigger: 'end_rapid_navigation' });
 
       // Wait for queue events
       const startTime = Date.now();
@@ -260,7 +260,7 @@ test.describe('User Navigation Flow', () => {
 
       return {
         queueEvents,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 

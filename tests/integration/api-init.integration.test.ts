@@ -18,7 +18,7 @@ describe('API Integration - Init Flow', () => {
     // Cleanup any existing instance with retry
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         // Small delay to ensure cleanup completes
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -31,7 +31,7 @@ describe('API Integration - Init Flow', () => {
     // Always cleanup after tests
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         // Small delay to ensure cleanup completes
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -155,7 +155,7 @@ describe('API Integration - Init Flow', () => {
       expect(TraceLog.isInitialized()).toBe(true);
 
       // Destroy
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(TraceLog.isInitialized()).toBe(false);
 
@@ -169,7 +169,7 @@ describe('API Integration - Init Flow', () => {
         await TraceLog.init();
         expect(TraceLog.isInitialized()).toBe(true);
 
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(TraceLog.isInitialized()).toBe(false);
       }
@@ -265,7 +265,7 @@ describe('API Integration - Init Flow', () => {
 
     it('should return false after destroy', async () => {
       await TraceLog.init();
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(TraceLog.isInitialized()).toBe(false);
     });

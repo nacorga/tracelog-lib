@@ -15,8 +15,8 @@ vi.mock('../../../src/utils/logging', () => ({
 describe('EventManager - Deduplication', () => {
   let eventManager: EventManager;
 
-  beforeEach(async () => {
-    const testEnv = await setupTestEnvironment();
+  beforeEach(() => {
+    const testEnv = setupTestEnvironment();
     eventManager = testEnv.eventManager;
   });
 
@@ -151,7 +151,7 @@ describe('EventManager - Deduplication', () => {
     expect(eventManager.getQueueLength()).toBe(1);
   });
 
-  test('should NOT deduplicate after threshold time', async () => {
+  test('should NOT deduplicate after threshold time', () => {
     vi.useFakeTimers();
 
     const clickEvent = {

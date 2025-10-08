@@ -7,6 +7,7 @@ import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 vi.mock('../../../src/managers/sender.manager', () => ({
   SenderManager: vi.fn().mockImplementation(() => ({
     sendEventsQueue: vi.fn(),
+    sendEventsQueueSync: vi.fn(),
     recoverPersistedEvents: vi.fn(),
     stop: vi.fn(),
   })),
@@ -30,13 +31,13 @@ describe('EventManager - Sampling', () => {
     cleanupTestState();
   });
 
-  const createEventManager = async (samplingRate: number): Promise<EventManager> => {
-    const testEnv = await setupTestEnvironment({ samplingRate });
+  const createEventManager = (samplingRate: number): EventManager => {
+    const testEnv = setupTestEnvironment({ samplingRate });
     return testEnv.eventManager;
   };
 
-  test('should sample all events with rate 1.0', async () => {
-    const eventManager = await createEventManager(1.0);
+  test('should sample all events with rate 1.0', () => {
+    const eventManager = createEventManager(1.0);
 
     for (let i = 0; i < 100; i++) {
       eventManager.track({
@@ -49,8 +50,8 @@ describe('EventManager - Sampling', () => {
     expect(eventManager.getQueueLength()).toBe(100);
   });
 
-  test('should sample ~50% events with rate 0.5', async () => {
-    const eventManager = await createEventManager(0.5);
+  test('should sample ~50% events with rate 0.5', () => {
+    const eventManager = createEventManager(0.5);
 
     // Track 100 events (stay within MAX_EVENTS_QUEUE_LENGTH of 100)
     for (let i = 0; i < 100; i++) {
@@ -68,8 +69,8 @@ describe('EventManager - Sampling', () => {
     expect(queueLength).toBeLessThan(70);
   });
 
-  test('should sample ~10% events with rate 0.1', async () => {
-    const eventManager = await createEventManager(0.1);
+  test('should sample ~10% events with rate 0.1', () => {
+    const eventManager = createEventManager(0.1);
 
     // Track 190 events to stay under rate limit (200 events/sec)
     // Expected: ~10% = ~19 events (allow 6-38 for statistical variance)
@@ -88,9 +89,9 @@ describe('EventManager - Sampling', () => {
     expect(queueLength).toBeLessThan(38);
   });
 
-  test('should use default sampling rate of 1 when not configured', async () => {
+  test('should use default sampling rate of 1 when not configured', () => {
     // Use default config without samplingRate to test default behavior
-    const eventManager = await createEventManager(1.0); // Default rate
+    const eventManager = createEventManager(1.0); // Default rate
 
     for (let i = 0; i < 50; i++) {
       eventManager.track({
@@ -103,8 +104,8 @@ describe('EventManager - Sampling', () => {
     expect(eventManager.getQueueLength()).toBe(50);
   });
 
-  test('should always capture critical session events regardless of sampling rate', async () => {
-    const eventManager = await createEventManager(0.1);
+  test('should always capture critical session events regardless of sampling rate', () => {
+    const eventManager = createEventManager(0.1);
 
     eventManager.track({
       type: EventType.SESSION_START,
@@ -117,8 +118,8 @@ describe('EventManager - Sampling', () => {
     expect(eventManager.getQueueLength()).toBe(2);
   });
 
-  test('invalid sampling rates are caught by config validation (not EventManager)', async () => {
-    const { eventManager } = await setupTestEnvironment({ samplingRate: -0.3 });
+  test('invalid sampling rates are caught by config validation (not EventManager)', () => {
+    const { eventManager } = setupTestEnvironment({ samplingRate: -0.3 });
 
     for (let i = 0; i < 50; i++) {
       eventManager.track({
@@ -131,10 +132,10 @@ describe('EventManager - Sampling', () => {
     expect(eventManager.getQueueLength()).toBe(0);
   });
 
-  test('should accept zero as valid sampling rate (sample nothing)', async () => {
+  test('should accept zero as valid sampling rate (sample nothing)', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.2);
 
-    const { eventManager } = await setupTestEnvironment({ samplingRate: 0 });
+    const { eventManager } = setupTestEnvironment({ samplingRate: 0 });
 
     expect(eventManager.getQueueLength()).toBe(0);
 

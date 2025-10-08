@@ -16,7 +16,7 @@ async function globalSetup(_config: FullConfig): Promise<void> {
 
   try {
     // Validate required environment
-    await validateEnvironment();
+    validateEnvironment();
 
     // Setup test directories
     await setupTestDirectories();
@@ -37,7 +37,7 @@ async function globalSetup(_config: FullConfig): Promise<void> {
 /**
  * Validate that the testing environment is properly configured
  */
-async function validateEnvironment(): Promise<void> {
+function validateEnvironment(): void {
   console.log('📋 Validating test environment...');
 
   // Check Node.js version

@@ -24,21 +24,21 @@ test.describe('Performance & Error Filters', () => {
       }
 
       const captured: Array<{ type: string }> = [];
-      window.__traceLogBridge!.on('event', (data: { type: string }) => {
+      window.__traceLogBridge.on('event', (data: { type: string }) => {
         if ((data.type === 'web_vitals' || data.type === 'error') && captured.length < 2) {
           captured.push(data);
         }
       });
 
       try {
-        await window.__traceLogBridge!.init({
+        await window.__traceLogBridge.init({
           errorSampling: 1, // Capture 100% of errors in E2E tests
         });
       } catch (error) {
         return { success: false, error: (error as Error).message };
       }
 
-      const eventManager = window.__traceLogBridge!.getEventManager();
+      const eventManager = window.__traceLogBridge.getEventManager();
 
       // Track web vitals events - first one should be captured
       eventManager?.track({

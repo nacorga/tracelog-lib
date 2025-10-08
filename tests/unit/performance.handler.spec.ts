@@ -65,7 +65,7 @@ describe('PerformanceHandler', () => {
       await expect(performanceHandler.startTracking()).resolves.not.toThrow();
     });
 
-    it('should initialize web vitals library', async () => {
+    it('should initialize web vitals library', () => {
       const mockWebVitals = {
         onLCP: vi.fn(),
         onCLS: vi.fn(),
@@ -76,7 +76,7 @@ describe('PerformanceHandler', () => {
 
       vi.doMock('web-vitals', () => mockWebVitals);
 
-      await performanceHandler.startTracking();
+      void performanceHandler.startTracking();
 
       // Note: Dynamic import mocking in Vitest is complex
       // This test verifies the method doesn't throw
@@ -100,8 +100,8 @@ describe('PerformanceHandler', () => {
   });
 
   describe('stopTracking()', () => {
-    beforeEach(async () => {
-      await performanceHandler.startTracking();
+    beforeEach(() => {
+      void performanceHandler.startTracking();
     });
 
     it('should disconnect all observers', () => {
@@ -139,8 +139,8 @@ describe('PerformanceHandler', () => {
   });
 
   describe('Web Vitals Tracking', () => {
-    beforeEach(async () => {
-      await performanceHandler.startTracking();
+    beforeEach(() => {
+      void performanceHandler.startTracking();
     });
 
     it('should track valid LCP value', () => {
@@ -239,8 +239,8 @@ describe('PerformanceHandler', () => {
   });
 
   describe('Deduplication Logic', () => {
-    beforeEach(async () => {
-      await performanceHandler.startTracking();
+    beforeEach(() => {
+      void performanceHandler.startTracking();
 
       // Mock shouldSendVital to always return true for these tests
       vi.spyOn(performanceHandler as any, 'shouldSendVital').mockReturnValue(true);
@@ -303,8 +303,8 @@ describe('PerformanceHandler', () => {
   });
 
   describe('Threshold Filtering', () => {
-    beforeEach(async () => {
-      await performanceHandler.startTracking();
+    beforeEach(() => {
+      void performanceHandler.startTracking();
     });
 
     it('should filter vitals below threshold', () => {
@@ -397,8 +397,8 @@ describe('PerformanceHandler', () => {
   });
 
   describe('Safe Observer Creation', () => {
-    beforeEach(async () => {
-      await performanceHandler.startTracking();
+    beforeEach(() => {
+      void performanceHandler.startTracking();
     });
 
     it('should create observer successfully', () => {
@@ -421,7 +421,7 @@ describe('PerformanceHandler', () => {
       expect(result).toBe(false);
     });
 
-    it('should disconnect observer when once flag is true', () => {
+    it('should disconnect observer when once flag is true', async () => {
       const disconnectSpy = vi.fn();
       global.PerformanceObserver = vi.fn().mockImplementation((callback) => {
         const observer = {
@@ -585,8 +585,8 @@ describe('PerformanceHandler', () => {
       const originalPerf = global.performance;
       (global as any).performance = undefined;
 
-      expect(async () => {
-        await performanceHandler.startTracking();
+      expect(() => {
+        void performanceHandler.startTracking();
       }).not.toThrow();
 
       global.performance = originalPerf;

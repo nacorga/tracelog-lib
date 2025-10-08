@@ -16,7 +16,7 @@ export class SessionHandler extends StateManager {
     this.storageManager = storageManager;
   }
 
-  async startTracking(): Promise<void> {
+  startTracking(): void {
     if (this.isActive()) {
       return;
     }
@@ -36,7 +36,7 @@ export class SessionHandler extends StateManager {
 
     try {
       this.sessionManager = new SessionManager(this.storageManager, this.eventManager, projectId);
-      await this.sessionManager.startTracking();
+      this.sessionManager.startTracking();
 
       // Flush any events that were buffered during initialization
       this.eventManager.flushPendingEvents();
@@ -59,16 +59,16 @@ export class SessionHandler extends StateManager {
     return this.sessionManager !== null && !this.destroyed;
   }
 
-  private async cleanupSessionManager(): Promise<void> {
+  private cleanupSessionManager(): void {
     if (this.sessionManager) {
-      await this.sessionManager.stopTracking();
+      this.sessionManager.stopTracking();
       this.sessionManager.destroy();
       this.sessionManager = null;
     }
   }
 
-  async stopTracking(): Promise<void> {
-    await this.cleanupSessionManager();
+  stopTracking(): void {
+    this.cleanupSessionManager();
   }
 
   destroy(): void {
