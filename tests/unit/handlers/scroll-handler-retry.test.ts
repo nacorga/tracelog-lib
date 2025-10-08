@@ -38,7 +38,9 @@ describe('ScrollHandler - Retry Logic', () => {
     scrollHandler.startTracking();
 
     expect(scrollHandler['containers']).toHaveLength(1);
-    expect(scrollHandler['containers'][0].element).toBe(window);
+    const container = scrollHandler['containers'][0];
+    expect(container).toBeDefined();
+    expect(container!.element).toBe(window);
   });
 
   test('should setup container when element exists', () => {
@@ -53,7 +55,9 @@ describe('ScrollHandler - Retry Logic', () => {
     scrollHandler.startTracking();
 
     expect(scrollHandler['containers']).toHaveLength(1);
-    expect(scrollHandler['containers'][0].element).toBe(container);
+    const setupContainer = scrollHandler['containers'][0];
+    expect(setupContainer).toBeDefined();
+    expect(setupContainer!.element).toBe(container);
   });
 
   test('should find element after retry', () => {
@@ -83,7 +87,9 @@ describe('ScrollHandler - Retry Logic', () => {
     vi.advanceTimersByTime(1000);
 
     expect(scrollHandler['containers']).toHaveLength(1);
-    expect(scrollHandler['containers'][0].element).toBe(window);
+    const fallbackContainer = scrollHandler['containers'][0];
+    expect(fallbackContainer).toBeDefined();
+    expect(fallbackContainer!.element).toBe(window);
   });
 
   test('should not add duplicate containers', () => {

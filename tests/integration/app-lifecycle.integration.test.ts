@@ -134,7 +134,8 @@ describe('App Lifecycle Integration', () => {
       app.sendCustomEvent('purchase_complete', { orderId: '12345', amount: 99.99 });
 
       expect(eventSpy).toHaveBeenCalled();
-      const emittedEvent = eventSpy.mock.calls[0][0];
+      const emittedEvent = eventSpy.mock.calls[0]?.[0];
+      expect(emittedEvent).toBeDefined();
       expect(emittedEvent.type).toBe(EventType.CUSTOM);
       expect(emittedEvent.custom_event?.name).toBe('purchase_complete');
       expect(emittedEvent.custom_event?.metadata).toEqual({ orderId: '12345', amount: 99.99 });
@@ -147,7 +148,8 @@ describe('App Lifecycle Integration', () => {
       app.sendCustomEvent('button_click');
 
       expect(eventSpy).toHaveBeenCalled();
-      const emittedEvent = eventSpy.mock.calls[0][0];
+      const emittedEvent = eventSpy.mock.calls[0]?.[0];
+      expect(emittedEvent).toBeDefined();
       expect(emittedEvent.type).toBe(EventType.CUSTOM);
       expect(emittedEvent.custom_event?.name).toBe('button_click');
       expect(emittedEvent.custom_event?.metadata).toBeUndefined();
@@ -178,7 +180,8 @@ describe('App Lifecycle Integration', () => {
       app.sendCustomEvent('test', { key: Symbol('invalid') } as any);
 
       expect(eventSpy).toHaveBeenCalled();
-      const emittedEvent = eventSpy.mock.calls[0][0];
+      const emittedEvent = eventSpy.mock.calls[0]?.[0];
+      expect(emittedEvent).toBeDefined();
       expect(emittedEvent.custom_event?.name).toBe('test');
     });
 
@@ -207,7 +210,9 @@ describe('App Lifecycle Integration', () => {
       app.destroy();
 
       // sendCustomEvent should not throw, just silently ignore
-      expect(() => app.sendCustomEvent('test_event')).not.toThrow();
+      expect(() => {
+        app.sendCustomEvent('test_event');
+      }).not.toThrow();
     });
   });
 
@@ -328,7 +333,9 @@ describe('App Lifecycle Integration', () => {
       await app.init();
 
       // Force an error scenario by destroying
-      expect(() => app.destroy()).not.toThrow();
+      expect(() => {
+        app.destroy();
+      }).not.toThrow();
     });
   });
 

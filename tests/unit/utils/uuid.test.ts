@@ -82,7 +82,9 @@ describe('UUID Utils', () => {
       const eventId = generateEventId();
       const afterTime = Date.now();
 
-      const timestamp = parseInt(eventId.split('-')[0]);
+      const timestampStr = eventId.split('-')[0];
+      expect(timestampStr).toBeDefined();
+      const timestamp = parseInt(timestampStr!);
 
       expect(timestamp).toBeGreaterThanOrEqual(beforeTime);
       expect(timestamp).toBeLessThanOrEqual(afterTime);
@@ -110,8 +112,9 @@ describe('UUID Utils', () => {
       const eventId = generateEventId();
       const randomPart = eventId.split('-')[1];
 
-      expect(randomPart).toMatch(/^[0-9a-f]{8}$/);
-      expect(randomPart.length).toBe(8);
+      expect(randomPart).toBeDefined();
+      expect(randomPart!).toMatch(/^[0-9a-f]{8}$/);
+      expect(randomPart!.length).toBe(8);
     });
 
     test('should work when crypto.getRandomValues is unavailable', () => {

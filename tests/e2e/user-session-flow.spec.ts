@@ -43,11 +43,14 @@ test.describe('User Session Flow', () => {
       const activities = ['page_visit', 'product_view', 'add_to_cart', 'checkout_start', 'form_fill', 'final_action'];
 
       for (let i = 0; i < activities.length; i++) {
-        window.__traceLogBridge.sendCustomEvent(activities[i], {
-          step: i + 1,
-          timestamp: Date.now(),
-        });
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        const activity = activities[i];
+        if (activity) {
+          window.__traceLogBridge.sendCustomEvent(activity, {
+            step: i + 1,
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
       }
 
       // Trigger queue sending

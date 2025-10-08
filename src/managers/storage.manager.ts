@@ -125,7 +125,9 @@ export class StorageManager {
         }
       }
 
-      keysToRemove.forEach((key) => this.storage!.removeItem(key));
+      keysToRemove.forEach((key) => {
+        this.storage!.removeItem(key);
+      });
       this.fallbackStorage.clear();
     } catch (error) {
       log('error', 'Failed to clear storage', { error });

@@ -49,6 +49,8 @@ describe('ScrollHandler Integration - Container Retry', () => {
     vi.advanceTimersByTime(1500);
 
     const scrollHandler = app['handlers'].scroll;
-    expect(scrollHandler?.['containers'][0].element).toBe(window);
+    const container = scrollHandler?.['containers'][0];
+    expect(container).toBeDefined();
+    expect(container!.element).toBe(window);
   });
 });

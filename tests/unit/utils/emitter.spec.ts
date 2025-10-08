@@ -95,9 +95,9 @@ describe('Emitter Utils', () => {
       emitter.off(EmitterEvent.QUEUE, callback); // Not registered
 
       // Should not throw error
-      expect(() =>
-        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop }),
-      ).not.toThrow();
+      expect(() => {
+        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop });
+      }).not.toThrow();
     });
 
     it('should handle removing listener for non-existent event', () => {
@@ -105,9 +105,9 @@ describe('Emitter Utils', () => {
       emitter.off('nonexistent' as any, callback);
 
       // Should not throw error
-      expect(() =>
-        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop }),
-      ).not.toThrow();
+      expect(() => {
+        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop });
+      }).not.toThrow();
     });
   });
 
@@ -135,9 +135,9 @@ describe('Emitter Utils', () => {
     });
 
     it('should not throw when emitting event with no listeners', () => {
-      expect(() =>
-        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop }),
-      ).not.toThrow();
+      expect(() => {
+        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop });
+      }).not.toThrow();
     });
 
     it('should handle callback errors without stopping other callbacks', () => {
@@ -150,9 +150,9 @@ describe('Emitter Utils', () => {
       emitter.on(EmitterEvent.QUEUE, callback2);
 
       // Should throw from callback1 but continue
-      expect(() =>
-        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop }),
-      ).toThrow('Callback error');
+      expect(() => {
+        emitter.emit(EmitterEvent.QUEUE, { events: [], user_id: 'u1', session_id: 's1', device: DeviceType.Desktop });
+      }).toThrow('Callback error');
 
       expect(callback1).toHaveBeenCalledTimes(1);
       // Note: callback2 won't be called because forEach stops on error

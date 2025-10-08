@@ -142,7 +142,9 @@ describe('Public API', () => {
 
   describe('event()', () => {
     it('should throw error when not initialized', () => {
-      expect(() => TraceLog.event('test_event')).toThrow('TraceLog not initialized. Please call init() first.');
+      expect(() => {
+        TraceLog.event('test_event');
+      }).toThrow('TraceLog not initialized. Please call init() first.');
     });
 
     it('should send custom event when initialized', async () => {
@@ -186,14 +188,18 @@ describe('Public API', () => {
         throw eventError;
       });
 
-      expect(() => TraceLog.event('invalid_event', { bad: 'data' })).toThrow('Event validation failed');
+      expect(() => {
+        TraceLog.event('invalid_event', { bad: 'data' });
+      }).toThrow('Event validation failed');
     });
   });
 
   describe('on()', () => {
     it('should buffer listeners when not initialized', () => {
       const callback = vi.fn();
-      expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).not.toThrow();
+      expect(() => {
+        TraceLog.on(EmitterEvent.EVENT, callback);
+      }).not.toThrow();
     });
 
     it('should register event listener when initialized', async () => {
@@ -211,7 +217,9 @@ describe('Public API', () => {
   describe('off()', () => {
     it('should allow removing buffered listeners when not initialized', () => {
       const callback = vi.fn();
-      expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).not.toThrow();
+      expect(() => {
+        TraceLog.off(EmitterEvent.EVENT, callback);
+      }).not.toThrow();
     });
 
     it('should unregister event listener when initialized', async () => {
@@ -266,7 +274,9 @@ describe('Public API', () => {
 
   describe('destroy()', () => {
     it('should throw error when not initialized', () => {
-      expect(() => TraceLog.destroy()).toThrow('App not initialized');
+      expect(() => {
+        TraceLog.destroy();
+      }).toThrow('App not initialized');
     });
 
     it('should destroy successfully when initialized', async () => {
@@ -287,7 +297,9 @@ describe('Public API', () => {
       TraceLog.destroy();
 
       // Second destroy should throw because app is now null
-      expect(() => TraceLog.destroy()).toThrow('App not initialized');
+      expect(() => {
+        TraceLog.destroy();
+      }).toThrow('App not initialized');
     });
 
     it('should force cleanup even if destroy fails', async () => {
@@ -301,7 +313,9 @@ describe('Public API', () => {
       });
 
       // Destroy should not throw - always complete successfully
-      expect(() => TraceLog.destroy()).not.toThrow();
+      expect(() => {
+        TraceLog.destroy();
+      }).not.toThrow();
       expect(TraceLog.isInitialized()).toBe(false); // Still cleaned up
     });
 

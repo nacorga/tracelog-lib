@@ -540,7 +540,9 @@ describe('PageViewHandler', () => {
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      expect(() => pageViewHandler.startTracking()).not.toThrow();
+      expect(() => {
+        pageViewHandler.startTracking();
+      }).not.toThrow();
       expect(trackSpy).toHaveBeenCalled();
     });
 
@@ -553,7 +555,9 @@ describe('PageViewHandler', () => {
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      expect(() => pageViewHandler.startTracking()).not.toThrow();
+      expect(() => {
+        pageViewHandler.startTracking();
+      }).not.toThrow();
       expect(trackSpy).toHaveBeenCalled();
     });
 

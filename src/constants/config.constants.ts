@@ -49,18 +49,27 @@ export const MAX_PENDING_EVENTS_BUFFER = 100; // Maximum events to buffer before
 export const MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds minimum
 export const MAX_SESSION_TIMEOUT_MS = 86400000; // 24 hours maximum
 
-// Custom event validation limits
+// Custom event validation limits (client-side)
 export const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
 export const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024; // 8KB
 export const MAX_CUSTOM_EVENT_KEYS = 10;
 export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
 export const MAX_NESTED_OBJECT_KEYS = 20; // Maximum keys in nested objects within arrays
+export const MAX_METADATA_NESTING_DEPTH = 1; // Maximum nesting depth for metadata objects
+
+// Custom event validation limits (backend - more flexible)
+export const MAX_CUSTOM_EVENT_KEYS_BACKEND = 50; // More keys allowed on backend
+export const MAX_CUSTOM_EVENT_ARRAY_SIZE_BACKEND = 100; // More items allowed on backend
+export const MAX_STRING_LENGTH_BACKEND = 2000; // Longer strings allowed on backend
+export const MAX_CUSTOM_EVENT_JSON_SIZE_BACKEND = 50 * 1024; // 50KB max on backend
+export const MAX_METADATA_NESTING_DEPTH_BACKEND = 2; // More nesting allowed on backend
 
 // Text content limits
 export const MAX_TEXT_LENGTH = 255; // For click tracking text content
 
 // Data sanitization limits
 export const MAX_STRING_LENGTH = 1000;
+export const MAX_STRING_LENGTH_IN_ARRAY = 500; // Strings within arrays are more limited
 export const MAX_ARRAY_LENGTH = 100;
 export const MAX_OBJECT_DEPTH = 3;
 

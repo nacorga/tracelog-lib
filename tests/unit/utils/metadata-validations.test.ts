@@ -399,9 +399,15 @@ describe('Metadata Validations - Type Support', () => {
       expect(result.valid).toBe(true);
 
       const sanitizedArray = result.sanitizedMetadata as Record<string, MetadataType>[];
-      expect(sanitizedArray[0].id).toContain('first');
-      expect(sanitizedArray[1].id).toContain('second');
-      expect(sanitizedArray[2].id).toContain('third');
+      const item0 = sanitizedArray[0];
+      const item1 = sanitizedArray[1];
+      const item2 = sanitizedArray[2];
+      expect(item0).toBeDefined();
+      expect(item1).toBeDefined();
+      expect(item2).toBeDefined();
+      expect(item0!.id).toContain('first');
+      expect(item1!.id).toContain('second');
+      expect(item2!.id).toContain('third');
     });
   });
 });

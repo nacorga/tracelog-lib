@@ -134,7 +134,9 @@ describe('PerformanceHandler', () => {
 
       (performanceHandler as any).observers = [failingObserver];
 
-      expect(() => performanceHandler.stopTracking()).not.toThrow();
+      expect(() => {
+        performanceHandler.stopTracking();
+      }).not.toThrow();
     });
   });
 
@@ -578,7 +580,9 @@ describe('PerformanceHandler', () => {
     });
 
     it('should handle stop before start', () => {
-      expect(() => performanceHandler.stopTracking()).not.toThrow();
+      expect(() => {
+        performanceHandler.stopTracking();
+      }).not.toThrow();
     });
 
     it('should handle missing performance API', () => {
