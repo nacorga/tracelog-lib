@@ -59,16 +59,16 @@ export class SessionHandler extends StateManager {
     return this.sessionManager !== null && !this.destroyed;
   }
 
-  private async cleanupSessionManager(): Promise<void> {
+  private cleanupSessionManager(): void {
     if (this.sessionManager) {
-      await this.sessionManager.stopTracking();
+      this.sessionManager.stopTracking();
       this.sessionManager.destroy();
       this.sessionManager = null;
     }
   }
 
-  async stopTracking(): Promise<void> {
-    await this.cleanupSessionManager();
+  stopTracking(): void {
+    this.cleanupSessionManager();
   }
 
   destroy(): void {

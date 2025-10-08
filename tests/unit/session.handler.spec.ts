@@ -166,15 +166,16 @@ describe('SessionHandler', () => {
       expect((sessionHandler as any).sessionManager).toBeNull();
     });
 
-    it('should not throw when stopping without starting', async () => {
+    it('should not throw when stopping without starting', () => {
       const freshHandler = new SessionHandler(storageManager, eventManager);
 
-      await expect(freshHandler.stopTracking()).resolves.not.toThrow();
+      expect(() => freshHandler.stopTracking()).not.toThrow();
     });
 
     it('should handle multiple stop calls gracefully', async () => {
-      await sessionHandler.stopTracking();
-      await expect(sessionHandler.stopTracking()).resolves.not.toThrow();
+      await sessionHandler.startTracking();
+      sessionHandler.stopTracking();
+      expect(() => sessionHandler.stopTracking()).not.toThrow();
     });
   });
 
@@ -290,10 +291,10 @@ describe('SessionHandler', () => {
       expect((sessionHandler as any).sessionManager).toBeNull();
     });
 
-    it('should not throw when sessionManager is null', async () => {
+    it('should not throw when sessionManager is null', () => {
       (sessionHandler as any).sessionManager = null;
 
-      await expect((sessionHandler as any).cleanupSessionManager()).resolves.not.toThrow();
+      expect(() => (sessionHandler as any).cleanupSessionManager()).not.toThrow();
     });
   });
 
@@ -387,7 +388,7 @@ describe('SessionHandler', () => {
       vi.spyOn(sessionHandler as any, 'get').mockReturnValue(null);
 
       // Should still be able to stop
-      await expect(sessionHandler.stopTracking()).resolves.not.toThrow();
+      expect(() => sessionHandler.stopTracking()).not.toThrow();
     });
 
     it('should maintain destroyed state after multiple operations', () => {

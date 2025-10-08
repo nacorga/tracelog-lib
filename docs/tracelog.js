@@ -1700,7 +1700,7 @@ class SessionManager extends StateManager {
       this.beforeUnloadHandler = null;
     }
   }
-  async endSession(reason) {
+  endSession(reason) {
     const sessionId = this.get("sessionId");
     if (!sessionId) {
       log("warn", "endSession called without active session", { data: { reason } });
@@ -1711,22 +1711,14 @@ class SessionManager extends StateManager {
       type: EventType.SESSION_END,
       session_end_reason: reason
     });
-    const finalize = () => {
-      this.broadcastSessionEnd(sessionId, reason);
-      this.resetSessionState(reason);
-    };
     const flushResult = this.eventManager.flushImmediatelySync();
-    if (flushResult) {
-      finalize();
-      return;
+    if (!flushResult) {
+      log("warn", "Sync flush failed during session end, events persisted for recovery", {
+        data: { reason, sessionId }
+      });
     }
-    try {
-      await this.eventManager.flushImmediately();
-      finalize();
-    } catch (error) {
-      log("warn", "Async flush failed during session end", { error });
-      finalize();
-    }
+    this.broadcastSessionEnd(sessionId, reason);
+    this.resetSessionState(reason);
   }
   resetSessionState(reason) {
     this.clearSessionTimeout();
@@ -1740,8 +1732,8 @@ class SessionManager extends StateManager {
     this.set("hasStartSession", false);
     this.isTracking = false;
   }
-  async stopTracking() {
-    await this.endSession("manual_stop");
+  stopTracking() {
+    this.endSession("manual_stop");
   }
   destroy() {
     this.clearSessionTimeout();
@@ -1794,15 +1786,15 @@ class SessionHandler extends StateManager {
   isActive() {
     return this.sessionManager !== null && !this.destroyed;
   }
-  async cleanupSessionManager() {
+  cleanupSessionManager() {
     if (this.sessionManager) {
-      await this.sessionManager.stopTracking();
+      this.sessionManager.stopTracking();
       this.sessionManager.destroy();
       this.sessionManager = null;
     }
   }
-  async stopTracking() {
-    await this.cleanupSessionManager();
+  stopTracking() {
+    this.cleanupSessionManager();
   }
   destroy() {
     if (this.destroyed) {
