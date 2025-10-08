@@ -320,8 +320,10 @@ test.describe('Event Queue Overflow', () => {
       const finalMemory = result.memorySnapshots[result.memorySnapshots.length - 1];
 
       // Memory shouldn't grow more than 10MB during test
-      const memoryGrowth = finalMemory - initialMemory;
-      expect(memoryGrowth).toBeLessThan(10 * 1024 * 1024);
+      if (finalMemory !== undefined && initialMemory !== undefined) {
+        const memoryGrowth = finalMemory - initialMemory;
+        expect(memoryGrowth).toBeLessThan(10 * 1024 * 1024);
+      }
     }
 
     // Test passed if no crashes occurred

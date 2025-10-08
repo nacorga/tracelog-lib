@@ -27,7 +27,9 @@ export class Emitter {
     const callbacks = this.listeners.get(event);
 
     if (callbacks) {
-      callbacks.forEach((callback) => callback(data));
+      callbacks.forEach((callback) => {
+        callback(data);
+      });
     }
   }
 

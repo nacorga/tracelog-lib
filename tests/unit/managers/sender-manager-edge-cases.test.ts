@@ -310,7 +310,9 @@ describe('SenderManager Edge Cases', () => {
       }
 
       // Should not throw or leak memory
-      expect(() => senderManager.stop()).not.toThrow();
+      expect(() => {
+        senderManager.stop();
+      }).not.toThrow();
     });
   });
 });

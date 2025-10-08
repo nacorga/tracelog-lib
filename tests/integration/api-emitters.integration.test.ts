@@ -40,12 +40,16 @@ describe('API Integration - Emitter Methods', () => {
     describe('Before Initialization', () => {
       it('should buffer listeners when called before init()', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).not.toThrow();
+        expect(() => {
+          TraceLog.on(EmitterEvent.EVENT, callback);
+        }).not.toThrow();
       });
 
       it('should buffer queue listeners before init()', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.on(EmitterEvent.QUEUE, callback)).not.toThrow();
+        expect(() => {
+          TraceLog.on(EmitterEvent.QUEUE, callback);
+        }).not.toThrow();
       });
     });
 
@@ -56,12 +60,16 @@ describe('API Integration - Emitter Methods', () => {
 
       it('should register event listener successfully', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).not.toThrow();
+        expect(() => {
+          TraceLog.on(EmitterEvent.EVENT, callback);
+        }).not.toThrow();
       });
 
       it('should register queue listener successfully', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.on(EmitterEvent.QUEUE, callback)).not.toThrow();
+        expect(() => {
+          TraceLog.on(EmitterEvent.QUEUE, callback);
+        }).not.toThrow();
       });
 
       it('should receive events when listener is registered', async () => {
@@ -151,7 +159,9 @@ describe('API Integration - Emitter Methods', () => {
     describe('Before Initialization', () => {
       it('should allow removing buffered listeners when called before init()', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).not.toThrow();
+        expect(() => {
+          TraceLog.off(EmitterEvent.EVENT, callback);
+        }).not.toThrow();
       });
     });
 
@@ -164,7 +174,9 @@ describe('API Integration - Emitter Methods', () => {
         const callback = vi.fn();
         TraceLog.on(EmitterEvent.EVENT, callback);
 
-        expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).not.toThrow();
+        expect(() => {
+          TraceLog.off(EmitterEvent.EVENT, callback);
+        }).not.toThrow();
       });
 
       it('should stop receiving events after unregistering', async () => {
@@ -203,7 +215,9 @@ describe('API Integration - Emitter Methods', () => {
 
       it('should handle unregistering non-existent listener', () => {
         const callback = vi.fn();
-        expect(() => TraceLog.off(EmitterEvent.EVENT, callback)).not.toThrow();
+        expect(() => {
+          TraceLog.off(EmitterEvent.EVENT, callback);
+        }).not.toThrow();
       });
 
       it('should handle unregistering same listener multiple times', () => {
@@ -246,7 +260,9 @@ describe('API Integration - Emitter Methods', () => {
       const callback = vi.fn();
 
       // Should be able to register listeners after re-init
-      expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).not.toThrow();
+      expect(() => {
+        TraceLog.on(EmitterEvent.EVENT, callback);
+      }).not.toThrow();
     });
   });
 
@@ -292,15 +308,21 @@ describe('API Integration - Emitter Methods', () => {
       const callback = vi.fn();
 
       // Registering a valid callback should not throw
-      expect(() => TraceLog.on(EmitterEvent.EVENT, callback)).not.toThrow();
+      expect(() => {
+        TraceLog.on(EmitterEvent.EVENT, callback);
+      }).not.toThrow();
     });
 
     it('should handle undefined callback', () => {
-      expect(() => TraceLog.on(EmitterEvent.EVENT, undefined as any)).not.toThrow();
+      expect(() => {
+        TraceLog.on(EmitterEvent.EVENT, undefined as any);
+      }).not.toThrow();
     });
 
     it('should handle null callback', () => {
-      expect(() => TraceLog.on(EmitterEvent.EVENT, null as any)).not.toThrow();
+      expect(() => {
+        TraceLog.on(EmitterEvent.EVENT, null as any);
+      }).not.toThrow();
     });
   });
 
@@ -313,7 +335,9 @@ describe('API Integration - Emitter Methods', () => {
       const callbacks = Array.from({ length: 100 }, () => vi.fn());
 
       expect(() => {
-        callbacks.forEach((callback) => TraceLog.on(EmitterEvent.EVENT, callback));
+        callbacks.forEach((callback) => {
+          TraceLog.on(EmitterEvent.EVENT, callback);
+        });
       }).not.toThrow();
     });
 

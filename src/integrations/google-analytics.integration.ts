@@ -77,8 +77,12 @@ export class GoogleAnalyticsIntegration extends StateManager {
       script.async = true;
       script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
 
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load Google Analytics script'));
+      script.onload = () => {
+        resolve();
+      };
+      script.onerror = () => {
+        reject(new Error('Failed to load Google Analytics script'));
+      };
 
       document.head.appendChild(script);
     });

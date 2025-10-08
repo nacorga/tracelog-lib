@@ -449,14 +449,18 @@ describe('Google Analytics Integration', () => {
           throw new Error('gtag error');
         });
 
-        expect(() => gaIntegration.trackEvent('test_event', { value: 1 })).not.toThrow();
+        expect(() => {
+          gaIntegration.trackEvent('test_event', { value: 1 });
+        }).not.toThrow();
       });
 
       it('should not throw when metadata processing fails', () => {
         const circularMetadata: any = { a: 1 };
         circularMetadata.self = circularMetadata;
 
-        expect(() => gaIntegration.trackEvent('test_event', circularMetadata)).not.toThrow();
+        expect(() => {
+          gaIntegration.trackEvent('test_event', circularMetadata);
+        }).not.toThrow();
       });
     });
   });
@@ -513,7 +517,9 @@ describe('Google Analytics Integration', () => {
     });
 
     it('should not throw when called without initialization', () => {
-      expect(() => gaIntegration.cleanup()).not.toThrow();
+      expect(() => {
+        gaIntegration.cleanup();
+      }).not.toThrow();
     });
 
     it('should be idempotent', async () => {

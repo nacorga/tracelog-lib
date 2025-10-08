@@ -199,7 +199,8 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
       expect(mockSendBeacon).toHaveBeenCalledWith('http://localhost:3000/collect', expect.any(Blob));
 
-      const blob = mockSendBeacon.mock.calls[0][1] as Blob;
+      const blob = mockSendBeacon.mock.calls[0]?.[1] as Blob;
+      expect(blob).toBeDefined();
       expect(blob.type).toBe('application/json');
     });
   });
@@ -230,7 +231,9 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
       // Should attempt recovery and call success callback
       expect(onSuccess).toHaveBeenCalled();
-      expect(onSuccess.mock.calls[0][0]).toBe(1); // event count
+      const eventCount = onSuccess.mock.calls[0]?.[0];
+      expect(eventCount).toBeDefined();
+      expect(eventCount).toBe(1); // event count
     });
 
     it('should skip recovery of expired events', async () => {

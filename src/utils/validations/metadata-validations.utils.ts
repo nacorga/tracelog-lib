@@ -4,6 +4,7 @@ import {
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
   MAX_STRING_LENGTH,
+  MAX_STRING_LENGTH_IN_ARRAY,
 } from '../../constants';
 import { MetadataType } from '../../types';
 import { sanitizeMetadata } from '../security/sanitize.utils';
@@ -115,10 +116,10 @@ const validateSingleMetadata = (
       }
 
       for (const item of value) {
-        if (typeof item === 'string' && item.length > 500) {
+        if (typeof item === 'string' && item.length > MAX_STRING_LENGTH_IN_ARRAY) {
           return {
             valid: false,
-            error: `${intro}: array property "${key}" contains strings that are too long (max 500 characters).`,
+            error: `${intro}: array property "${key}" contains strings that are too long (max ${MAX_STRING_LENGTH_IN_ARRAY} characters).`,
           };
         }
       }

@@ -31,9 +31,9 @@ beforeEach(() => {
     entries: vi.fn(() => mockHeaders.entries()),
     keys: vi.fn(() => mockHeaders.keys()),
     values: vi.fn(() => mockHeaders.values()),
-    forEach: vi.fn((callback: (value: string, key: string, headers: Map<string, string>) => void) =>
-      mockHeaders.forEach(callback),
-    ),
+    forEach: vi.fn((callback: (value: string, key: string, headers: Map<string, string>) => void) => {
+      mockHeaders.forEach(callback);
+    }),
   }));
 
   // Mock Request constructor for configuration loading

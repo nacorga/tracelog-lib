@@ -1,4 +1,10 @@
-import { MAX_ARRAY_LENGTH, MAX_OBJECT_DEPTH, MAX_STRING_LENGTH, XSS_PATTERNS } from '../../constants';
+import {
+  MAX_ARRAY_LENGTH,
+  MAX_OBJECT_DEPTH,
+  MAX_STRING_LENGTH,
+  MAX_NESTED_OBJECT_KEYS,
+  XSS_PATTERNS,
+} from '../../constants';
 import { MetadataType } from '../../types';
 import { log } from '../logging.utils';
 
@@ -100,7 +106,7 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
   if (typeof value === 'object') {
     const sanitizedObject: Record<string, unknown> = {};
     const entries = Object.entries(value);
-    const limitedEntries = entries.slice(0, 20);
+    const limitedEntries = entries.slice(0, MAX_NESTED_OBJECT_KEYS);
 
     // Silent object keys limit
     for (const [key, value_] of limitedEntries) {

@@ -137,7 +137,9 @@ describe('Basic Integration Tests', () => {
     test('should support async testing', async () => {
       const asyncOperation = async (): Promise<string> => {
         return new Promise((resolve) => {
-          setTimeout(() => resolve('completed'), 10);
+          setTimeout(() => {
+            resolve('completed');
+          }, 10);
         });
       };
 

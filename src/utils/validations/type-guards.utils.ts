@@ -1,4 +1,4 @@
-import { MAX_NESTED_OBJECT_KEYS } from '../../constants';
+import { MAX_NESTED_OBJECT_KEYS, MAX_METADATA_NESTING_DEPTH } from '../../constants';
 
 /**
  * Validates if an item in an array is a valid nested object
@@ -41,7 +41,7 @@ const isValidArrayItem = (item: unknown): boolean => {
  * Checks if an object contains only primitive fields, string arrays, arrays of flat objects,
  * or nested objects with primitive fields
  * @param object - The object to check
- * @param depth - Current nesting depth (default: 0, max: 1)
+ * @param depth - Current nesting depth (default: 0, max: MAX_METADATA_NESTING_DEPTH)
  * @returns True if the object contains only valid fields
  */
 export const isOnlyPrimitiveFields = (object: Record<string, unknown>, depth = 0): boolean => {
@@ -49,8 +49,7 @@ export const isOnlyPrimitiveFields = (object: Record<string, unknown>, depth = 0
     return false;
   }
 
-  // Allow only one level of nesting (depth 0 -> depth 1)
-  if (depth > 1) {
+  if (depth > MAX_METADATA_NESTING_DEPTH) {
     return false;
   }
 
