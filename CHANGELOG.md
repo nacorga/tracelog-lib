@@ -5,6 +5,35 @@
 
 
 
+
+## [0.8.1] - 2025-10-08
+
+### 🐛 Bug Fixes
+
+- Change setupTestState to synchronous calls in integration and unit tests ([f1863b4](../../commit/f1863b47aa0cd01c781d79ef59018b03f57d617c))
+- Add error handling for session end broadcast and update scroll handler configuration to include session timeout ([0ba37c7](../../commit/0ba37c7419af324df7506b485f8be23790546419))
+
+### ♻️ Refactoring
+
+- Convert async functions to synchronous in various handlers and tests for improved performance and consistency ([82c41f1](../../commit/82c41f108ae58295a3d76c983a482c21e54ac8d6))
+- Make endSession and stopTracking synchronous to improve session handling ([9f8ba0c](../../commit/9f8ba0c5c3afa170eed1c35b1ec499d245a5e173))
+- Enhance event handling and validation ([4d726f1](../../commit/4d726f14f9e7ab4a8805e05bdac51c74fc7c635f))
+
+### 🔧 Other Changes
+
+- Merge pull request #25 from nacorga/release/20251008.2 ([29888ad](../../commit/29888ad9abe3b70ea89d3d500bf409e13f0591d2))
+- Update CI test command to use thread pooling for improved performance ([e88bcfc](../../commit/e88bcfc49a6c8b82f37ead8be4a68c45fe357101))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.8.0...v0.8.1
+
+
 ## [0.8.0] - 2025-10-08
 
 ### ✨ Features
