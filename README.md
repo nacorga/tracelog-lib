@@ -162,11 +162,13 @@ Each event contains a base structure with type-specific data:
 - `page_url`: Current page URL
 - `timestamp`: Unix timestamp in milliseconds
 - `referrer`: Document referrer (optional)
+- `from_page_url`: Previous page URL (optional)
 - `utm`: UTM parameters (source, medium, campaign, term, content)
 
 **Event-specific data:**
 
 - **`PAGE_VIEW`**: Navigation tracking
+  - `page_view.referrer`: Page referrer
   - `page_view.title`: Page title
   - `page_view.pathname`: URL pathname
   - `page_view.search`: Query string
@@ -176,7 +178,7 @@ Each event contains a base structure with type-specific data:
   - `click_data.x/y`: Viewport coordinates
   - `click_data.relativeX/relativeY`: Element-relative position
   - `click_data.tag/id/class`: Element identifiers
-  - `click_data.text/href/title`: Element content
+  - `click_data.text/href/title/alt`: Element content
   - `click_data.role/ariaLabel`: Accessibility attributes
   - `click_data.dataAttributes`: Data attributes
 
