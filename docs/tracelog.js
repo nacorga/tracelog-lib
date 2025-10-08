@@ -2,7 +2,7 @@ const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
 const DUPLICATE_EVENT_THRESHOLD_MS = 500;
 const EVENT_SENT_INTERVAL_MS = 1e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
-const EVENT_EXPIRY_HOURS = 24;
+const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5e3;
@@ -99,6 +99,16 @@ var EmitterEvent = /* @__PURE__ */ ((EmitterEvent2) => {
   EmitterEvent2["QUEUE"] = "queue";
   return EmitterEvent2;
 })(EmitterEvent || {});
+class PermanentError extends Error {
+  constructor(message, statusCode) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = "PermanentError";
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, PermanentError);
+    }
+  }
+}
 var EventType = /* @__PURE__ */ ((EventType2) => {
   EventType2["PAGE_VIEW"] = "page_view";
   EventType2["CLICK"] = "click";
@@ -891,16 +901,29 @@ class SenderManager extends StateManager {
         log("warn", "Failed to persist events, attempting immediate send");
       }
     }
-    const success = await this.send(body);
-    if (success) {
-      this.clearPersistedEvents();
-      this.resetRetryState();
-      callbacks?.onSuccess?.(body.events.length, body.events, body);
-    } else {
-      this.scheduleRetry(body, callbacks);
-      callbacks?.onFailure?.();
+    try {
+      const success = await this.send(body);
+      if (success) {
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onSuccess?.(body.events.length, body.events, body);
+      } else {
+        this.scheduleRetry(body, callbacks);
+        callbacks?.onFailure?.();
+      }
+      return success;
+    } catch (error) {
+      if (error instanceof PermanentError) {
+        log("warn", "Permanent error, not retrying", {
+          data: { status: error.statusCode, message: error.message }
+        });
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onFailure?.();
+        return false;
+      }
+      throw error;
     }
-    return success;
   }
   async recoverPersistedEvents(callbacks) {
     try {
@@ -920,6 +943,15 @@ class SenderManager extends StateManager {
         callbacks?.onFailure?.();
       }
     } catch (error) {
+      if (error instanceof PermanentError) {
+        log("warn", "Permanent error during recovery, clearing persisted events", {
+          data: { status: error.statusCode, message: error.message }
+        });
+        this.clearPersistedEvents();
+        this.resetRetryState();
+        callbacks?.onFailure?.();
+        return;
+      }
       log("error", "Failed to recover persisted events", { error });
       this.clearPersistedEvents();
     }
@@ -950,6 +982,9 @@ class SenderManager extends StateManager {
       const response = await this.sendWithTimeout(url, payload);
       return response.ok;
     } catch (error) {
+      if (error instanceof PermanentError) {
+        throw error;
+      }
       log("error", "Send request failed", {
         error,
         data: {
@@ -975,6 +1010,13 @@ class SenderManager extends StateManager {
         }
       });
       if (!response.ok) {
+        const isPermanentError = response.status >= 400 && response.status < 500;
+        if (isPermanentError) {
+          log("error", `Permanent HTTP error, not retrying`, {
+            data: { status: response.status, statusText: response.statusText }
+          });
+          throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       return response;
@@ -1094,6 +1136,23 @@ class SenderManager extends StateManager {
           this.resetRetryState();
           originalCallbacks?.onSuccess?.(body.events.length);
         } else if (this.retryCount >= MAX_RETRIES) {
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onFailure?.();
+        } else {
+          this.scheduleRetry(body, originalCallbacks);
+        }
+      } catch (error) {
+        if (error instanceof PermanentError) {
+          log("warn", "Permanent error detected during retry, giving up", {
+            data: { status: error.statusCode, message: error.message }
+          });
+          this.clearPersistedEvents();
+          this.resetRetryState();
+          originalCallbacks?.onFailure?.();
+          return;
+        }
+        if (this.retryCount >= MAX_RETRIES) {
           this.clearPersistedEvents();
           this.resetRetryState();
           originalCallbacks?.onFailure?.();
@@ -3668,6 +3727,7 @@ export {
   IntegrationValidationError,
   Mode,
   PERFORMANCE_CONFIG,
+  PermanentError,
   SEGMENTATION_ANALYTICS,
   SESSION_ANALYTICS,
   SPECIAL_PAGE_URLS,

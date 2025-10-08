@@ -162,11 +162,13 @@ Each event contains a base structure with type-specific data:
 - `page_url`: Current page URL
 - `timestamp`: Unix timestamp in milliseconds
 - `referrer`: Document referrer (optional)
+- `from_page_url`: Previous page URL (optional)
 - `utm`: UTM parameters (source, medium, campaign, term, content)
 
 **Event-specific data:**
 
 - **`PAGE_VIEW`**: Navigation tracking
+  - `page_view.referrer`: Page referrer
   - `page_view.title`: Page title
   - `page_view.pathname`: URL pathname
   - `page_view.search`: Query string
@@ -176,7 +178,7 @@ Each event contains a base structure with type-specific data:
   - `click_data.x/y`: Viewport coordinates
   - `click_data.relativeX/relativeY`: Element-relative position
   - `click_data.tag/id/class`: Element identifiers
-  - `click_data.text/href/title`: Element content
+  - `click_data.text/href/title/alt`: Element content
   - `click_data.role/ariaLabel`: Accessibility attributes
   - `click_data.dataAttributes`: Data attributes
 
@@ -247,10 +249,25 @@ tracelog.init();
 console.log(tracelog.isInitialized()); // true
 ```
 
+## Error Handling & Retry Logic
+
+TraceLog automatically handles network errors with intelligent retry logic:
+
+- **Permanent errors (4xx)**: No retries - events are cleared immediately
+  - `400 Bad Request`, `403 Forbidden`, `404 Not Found` → Stop retrying
+  - Prevents infinite retry loops for configuration issues (e.g., excluded IPs, invalid projects)
+
+- **Temporary errors (5xx)**: Automatic retry with exponential backoff
+  - `500`, `502`, `503`, `504` → Retry up to 3 times (5s, 10s, 20s delays)
+  - Events persist in localStorage for recovery across page reloads
+
+- **Event expiry**: Persisted events expire after 2 hours to prevent stale data recovery
+
 ## Troubleshooting
 
 - **Session issues**: Check localStorage availability and session timeout
 - **Memory usage**: Reduce `sessionTimeout`, lower `samplingRate`, call `destroy()` on cleanup
+- **Events not sending**: Check browser console for `PermanentError` logs indicating 4xx errors
 - **CI failures**: Verify Playwright installation and Node.js ≥20
 
 ## Development & Contributing
