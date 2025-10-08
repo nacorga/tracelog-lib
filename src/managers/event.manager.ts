@@ -50,7 +50,7 @@ export class EventManager extends StateManager {
           }
         }
       },
-      onFailure: async () => {
+      onFailure: () => {
         log('warn', 'Failed to recover persisted events');
       },
     });
@@ -274,7 +274,7 @@ export class EventManager extends StateManager {
         this.removeProcessedEvents(eventIds);
         this.emitEventsQueue(body);
       },
-      onFailure: async () => {
+      onFailure: () => {
         log('warn', 'Events send failed, keeping in queue', {
           data: { eventCount: eventsToSend.length },
         });
@@ -411,7 +411,7 @@ export class EventManager extends StateManager {
   private startSendInterval(): void {
     this.sendIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
-        this.sendEventsQueue();
+        void this.sendEventsQueue();
       }
     }, EVENT_SENT_INTERVAL_MS);
   }

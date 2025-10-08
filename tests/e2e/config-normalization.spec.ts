@@ -7,7 +7,7 @@ const initTraceLog = async (page: Page, config: Config) => {
     const traceLog = window.__traceLogBridge!;
     await traceLog.init(projectConfig);
     const normalizedConfig = traceLog.get('config');
-    await traceLog.destroy();
+    traceLog.destroy();
     return normalizedConfig;
   }, config);
 };

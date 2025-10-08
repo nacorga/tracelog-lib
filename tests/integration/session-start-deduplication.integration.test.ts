@@ -47,15 +47,15 @@ describe('Integration - Session start deduplication', () => {
     sessionStorage.clear();
   });
 
-  test('should emit session_start only once for new session', async () => {
-    await sessionManager.startTracking();
+  test('should emit session_start only once for new session', () => {
+    sessionManager.startTracking();
 
     const sessionStartEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);
     expect(sessionStartEvents).toHaveLength(1);
   });
 
-  test('should NOT emit session_start when recovering session from localStorage', async () => {
-    await sessionManager.startTracking();
+  test('should NOT emit session_start when recovering session from localStorage', () => {
+    sessionManager.startTracking();
 
     const firstEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);
     expect(firstEvents).toHaveLength(1);
@@ -66,7 +66,7 @@ describe('Integration - Session start deduplication', () => {
 
     eventManager.clearTrackedEvents();
 
-    await newSessionManager.startTracking();
+    newSessionManager.startTracking();
 
     const secondEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);
     expect(secondEvents).toHaveLength(0);
@@ -74,10 +74,10 @@ describe('Integration - Session start deduplication', () => {
     newSessionManager.destroy();
   });
 
-  test('should emit new session_start after session expires', async () => {
+  test('should emit new session_start after session expires', () => {
     const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 
-    await sessionManager.startTracking();
+    sessionManager.startTracking();
 
     const firstEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);
     expect(firstEvents).toHaveLength(1);
@@ -94,7 +94,7 @@ describe('Integration - Session start deduplication', () => {
 
     eventManager.clearTrackedEvents();
 
-    await newSessionManager.startTracking();
+    newSessionManager.startTracking();
 
     const secondEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);
     expect(secondEvents).toHaveLength(1);
@@ -102,8 +102,8 @@ describe('Integration - Session start deduplication', () => {
     newSessionManager.destroy();
   });
 
-  test('should work correctly regardless of URL exclusions', async () => {
-    await sessionManager.startTracking();
+  test('should work correctly regardless of URL exclusions', () => {
+    sessionManager.startTracking();
 
     const sessionStartEvents = eventManager.getTrackedEvents().filter((e) => e.type === EventType.SESSION_START);
     expect(sessionStartEvents).toHaveLength(1);

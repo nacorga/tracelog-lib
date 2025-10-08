@@ -46,7 +46,7 @@ describe('Basic Integration Tests', () => {
 
     test('should mock fetch operations', () => {
       expect(() => {
-        fetch('https://test.com');
+        void fetch('https://test.com');
       }).not.toThrow();
     });
 
@@ -135,7 +135,7 @@ describe('Basic Integration Tests', () => {
     });
 
     test('should support async testing', async () => {
-      const asyncOperation = (): Promise<string> => {
+      const asyncOperation = async (): Promise<string> => {
         return new Promise((resolve) => {
           setTimeout(() => resolve('completed'), 10);
         });

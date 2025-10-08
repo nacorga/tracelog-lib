@@ -38,7 +38,7 @@ describe('API Security', () => {
       }).not.toThrow();
     });
 
-    it('should prevent overwriting existing instance', async () => {
+    it('should prevent overwriting existing instance', () => {
       const app1 = new App();
       const app2 = new App();
 
@@ -53,7 +53,7 @@ describe('API Security', () => {
       // afterEach will clean up
     });
 
-    it('should allow setting same instance multiple times', async () => {
+    it('should allow setting same instance multiple times', () => {
       const app = new App();
 
       __setAppInstance(app);

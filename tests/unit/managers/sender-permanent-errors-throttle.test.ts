@@ -94,7 +94,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
   it('should log different status codes independently', async () => {
     let callCount = 0;
 
-    mockFetch.mockImplementation(() => {
+    mockFetch.mockImplementation(async () => {
       callCount++;
       return Promise.resolve({
         ok: false,
@@ -149,7 +149,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
   it('should handle mixed permanent and temporary errors correctly', async () => {
     let callCount = 0;
 
-    mockFetch.mockImplementation(() => {
+    mockFetch.mockImplementation(async () => {
       callCount++;
       // First: 403 (permanent), Second: 500 (temporary)
       return Promise.resolve({

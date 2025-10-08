@@ -10,9 +10,9 @@ import { Emitter } from '../../src/utils';
 
 vi.mock('../../src/managers/sender.manager', () => {
   class MockSenderManager {
-    sendEventsQueue = vi.fn(async () => true);
+    sendEventsQueue = vi.fn(() => true);
     sendEventsQueueSync = vi.fn(() => true);
-    recoverPersistedEvents = vi.fn(async () => undefined);
+    recoverPersistedEvents = vi.fn(() => undefined);
     stop = vi.fn();
   }
 
@@ -127,14 +127,14 @@ export const cleanupTestState = (): void => {
 /**
  * Setup common test environment
  */
-export const setupTestEnvironment = async (
+export const setupTestEnvironment = (
   config?: Partial<Config>,
-): Promise<{
+): {
   config: Config;
   storageManager: StorageManager;
   eventManager: EventManager;
   sessionManager: SessionManager;
-}> => {
+} => {
   const testConfig = createTestConfig(config);
   setupTestState(testConfig);
 

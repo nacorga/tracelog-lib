@@ -16,10 +16,10 @@ describe('ScrollHandler - Retry Logic', () => {
   let scrollHandler: ScrollHandler;
   let mockEventManager: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    const testEnv = await setupTestEnvironment();
+    const testEnv = setupTestEnvironment();
     mockEventManager = testEnv.eventManager;
     document.body.innerHTML = '';
   });

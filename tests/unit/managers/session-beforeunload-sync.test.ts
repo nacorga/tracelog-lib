@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SessionManager } from '../../../src/managers/session.manager';
 import { EventManager } from '../../../src/managers/event.manager';
-import { StorageManager } from '../../../src/managers/storage.manager';
 import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 import { EventType, ScrollDirection } from '../../../src/types/event.types';
 
@@ -17,19 +16,16 @@ import { EventType, ScrollDirection } from '../../../src/types/event.types';
  * Fix: Made endSession() synchronous to ensure completion before unload
  */
 describe('SessionManager - beforeunload async bug fix', () => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let storageManager: StorageManager;
   let eventManager: EventManager;
   let sessionManager: SessionManager;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
     vi.clearAllTimers();
 
-    const testEnv = await setupTestEnvironment({});
+    const testEnv = setupTestEnvironment({});
     sessionManager = testEnv.sessionManager;
     eventManager = testEnv.eventManager;
-    storageManager = testEnv.storageManager;
   });
 
   afterEach(() => {
@@ -40,8 +36,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
   });
 
   describe('endSession() synchronous behavior', () => {
-    it('should complete synchronously without returning a promise', async () => {
-      await sessionManager.startTracking();
+    it('should complete synchronously without returning a promise', () => {
+      sessionManager.startTracking();
 
       // Get sessionId from state before calling endSession
       const sessionIdBefore = (sessionManager as any).get('sessionId');
@@ -59,8 +55,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
       expect(sessionIdAfter).toBeNull();
     });
 
-    it('should always finalize session state even if flush fails', async () => {
-      await sessionManager.startTracking();
+    it('should always finalize session state even if flush fails', () => {
+      sessionManager.startTracking();
 
       // Mock flush to fail
       vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(false);
@@ -74,8 +70,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
       expect(eventManager.flushImmediatelySync).toHaveBeenCalled();
     });
 
-    it('should broadcast session end even if flush fails', async () => {
-      await sessionManager.startTracking();
+    it('should broadcast session end even if flush fails', () => {
+      sessionManager.startTracking();
       const sessionIdBefore = (sessionManager as any).get('sessionId');
 
       // Mock flush to fail
@@ -91,8 +87,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
       expect(broadcastSpy).toHaveBeenCalledWith(sessionIdBefore, 'page_unload');
     });
 
-    it('should not await async operations in beforeunload handler', async () => {
-      await sessionManager.startTracking();
+    it('should not await async operations in beforeunload handler', () => {
+      sessionManager.startTracking();
 
       // This test ensures the beforeunload handler doesn't use await
       const handler = (sessionManager as any).beforeUnloadHandler;
@@ -109,8 +105,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
   });
 
   describe('beforeunload simulation', () => {
-    it('should handle fast page reload without losing events', async () => {
-      await sessionManager.startTracking();
+    it('should handle fast page reload without losing events', () => {
+      sessionManager.startTracking();
 
       // Track some events
       eventManager.track({
@@ -131,8 +127,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
       expect(eventManager.flushImmediatelySync).toHaveBeenCalled();
     });
 
-    it('should complete session cleanup before unload', async () => {
-      await sessionManager.startTracking();
+    it('should complete session cleanup before unload', () => {
+      sessionManager.startTracking();
       const sessionIdBefore = (sessionManager as any).get('sessionId');
       expect(sessionIdBefore).toBeTruthy();
 
@@ -151,8 +147,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
       expect(sessionIdAfter).toBeNull();
     });
 
-    it('should handle rapid reload without promise cancellation', async () => {
-      await sessionManager.startTracking();
+    it('should handle rapid reload without promise cancellation', () => {
+      sessionManager.startTracking();
       const sessionIdBefore = (sessionManager as any).get('sessionId');
       expect(sessionIdBefore).toBeTruthy();
 
@@ -185,8 +181,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
   });
 
   describe('stopTracking() synchronous behavior', () => {
-    it('should be synchronous after fix', async () => {
-      await sessionManager.startTracking();
+    it('should be synchronous after fix', () => {
+      sessionManager.startTracking();
 
       // stopTracking should now be synchronous (return void, not Promise)
       const result = sessionManager.stopTracking();
@@ -195,8 +191,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
       expect(result).not.toBeInstanceOf(Promise);
     });
 
-    it('should not throw when called synchronously', async () => {
-      await sessionManager.startTracking();
+    it('should not throw when called synchronously', () => {
+      sessionManager.startTracking();
 
       // Should complete without error
       expect(() => sessionManager.stopTracking()).not.toThrow();
@@ -207,8 +203,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
   });
 
   describe('cross-tab sync with synchronous endSession', () => {
-    it('should broadcast session end synchronously', async () => {
-      await sessionManager.startTracking();
+    it('should broadcast session end synchronously', () => {
+      sessionManager.startTracking();
       const sessionIdBefore = (sessionManager as any).get('sessionId');
 
       // Mock BroadcastChannel
@@ -231,8 +227,8 @@ describe('SessionManager - beforeunload async bug fix', () => {
       });
     });
 
-    it('should handle broadcast channel errors gracefully', async () => {
-      await sessionManager.startTracking();
+    it('should handle broadcast channel errors gracefully', () => {
+      sessionManager.startTracking();
 
       // Mock BroadcastChannel to throw
       (sessionManager as any).broadcastChannel = {

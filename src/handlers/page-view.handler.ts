@@ -55,7 +55,7 @@ export class PageViewHandler extends StateManager {
     };
   }
 
-  private readonly trackCurrentPage = async (): Promise<void> => {
+  private readonly trackCurrentPage = (): void => {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get('config').sensitiveQueryParams);
 

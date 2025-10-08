@@ -18,7 +18,7 @@ export interface TraceLogTestBridge {
   // Core App methods
   readonly initialized: boolean;
   init(config?: Config): Promise<void>;
-  destroy(): Promise<void>;
+  destroy(): void;
 
   // Core testing methods
   isInitializing(): boolean;

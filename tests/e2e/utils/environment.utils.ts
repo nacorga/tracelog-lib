@@ -48,9 +48,9 @@ export const navigateToPlayground = async (page: Page, options: PlaygroundNaviga
   await ensureTraceLogBridge(page);
 
   if (destroyExisting) {
-    await page.evaluate(async () => {
+    await page.evaluate(() => {
       if (window.__traceLogBridge?.initialized) {
-        await window.__traceLogBridge.destroy();
+        window.__traceLogBridge.destroy();
       }
     });
   }

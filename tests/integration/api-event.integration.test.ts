@@ -15,7 +15,7 @@ describe('API Integration - Event Method', () => {
     // Cleanup any existing instance
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     } catch {
@@ -26,7 +26,7 @@ describe('API Integration - Event Method', () => {
   afterEach(async () => {
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     } catch {
@@ -77,7 +77,7 @@ describe('API Integration - Event Method', () => {
 
     it('should accept custom event with nested metadata one level deep', async () => {
       // Re-initialize with QA mode enabled
-      await TraceLog.destroy();
+      TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
       await TraceLog.init();
 
@@ -192,7 +192,7 @@ describe('API Integration - Event Method', () => {
 
     it('should reject very large metadata objects (validation limit)', async () => {
       // Re-initialize with QA mode for strict validation
-      await TraceLog.destroy();
+      TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
       await TraceLog.init();
 
@@ -209,7 +209,7 @@ describe('API Integration - Event Method', () => {
 
     it('should reject deeply nested metadata (strict validation)', async () => {
       // Re-initialize with QA mode for strict validation
-      await TraceLog.destroy();
+      TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
       await TraceLog.init();
 
@@ -242,7 +242,7 @@ describe('API Integration - Event Method', () => {
 
     it('should reject metadata with circular references', async () => {
       // Re-initialize with QA mode for strict validation
-      await TraceLog.destroy();
+      TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
       await TraceLog.init();
 
@@ -271,7 +271,7 @@ describe('API Integration - Event Method', () => {
   describe('After Destroy', () => {
     it('should throw error when called after destroy()', async () => {
       await TraceLog.init();
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(() => TraceLog.event('test-event')).toThrow('TraceLog not initialized');
@@ -281,7 +281,7 @@ describe('API Integration - Event Method', () => {
       // First lifecycle
       await TraceLog.init();
       TraceLog.event('event1');
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Second lifecycle
@@ -316,7 +316,7 @@ describe('API Integration - Event Method', () => {
 
     it('should throw error for empty event name', async () => {
       // Re-initialize with QA mode for strict validation
-      await TraceLog.destroy();
+      TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
       await TraceLog.init();
 

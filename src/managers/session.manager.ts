@@ -163,7 +163,7 @@ export class SessionManager extends StateManager {
     return this.projectId;
   }
 
-  async startTracking(): Promise<void> {
+  startTracking(): void {
     if (this.isTracking) {
       log('warn', 'Session tracking already active');
       return;

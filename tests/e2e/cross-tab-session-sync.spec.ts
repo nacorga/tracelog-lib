@@ -183,9 +183,9 @@ test.describe('Cross-Tab Session Sync', () => {
     });
 
     // Destroy first tab (should broadcast session_end)
-    await page.evaluate(async () => {
+    await page.evaluate(() => {
       const traceLog = window.__traceLogBridge!;
-      await traceLog.destroy();
+      traceLog.destroy();
     });
 
     await new Promise((resolve) => setTimeout(resolve, 1000));

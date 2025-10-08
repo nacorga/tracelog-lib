@@ -12,9 +12,9 @@ describe('App Lifecycle Integration', () => {
     app = new App();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     if (app.initialized) {
-      await app.destroy();
+      app.destroy();
     }
   });
 
@@ -191,7 +191,7 @@ describe('App Lifecycle Integration', () => {
         writable: true,
       });
 
-      await app.destroy();
+      app.destroy();
       app = new App();
       await app.init();
 
@@ -200,11 +200,11 @@ describe('App Lifecycle Integration', () => {
       }).toThrow('[TraceLog] Custom event');
     });
 
-    it('should handle event after destroy gracefully', async () => {
+    it('should handle event after destroy gracefully', () => {
       const eventSpy = vi.fn();
       app.on(EmitterEvent.EVENT, eventSpy);
 
-      await app.destroy();
+      app.destroy();
 
       // sendCustomEvent should not throw, just silently ignore
       expect(() => app.sendCustomEvent('test_event')).not.toThrow();
@@ -266,19 +266,19 @@ describe('App Lifecycle Integration', () => {
   describe('Destroy and Cleanup', () => {
     it('should destroy successfully when initialized', async () => {
       await app.init();
-      await app.destroy();
+      app.destroy();
 
       expect(app.initialized).toBe(false);
     });
 
-    it('should not destroy if not initialized without force flag', async () => {
-      await app.destroy();
+    it('should not destroy if not initialized without force flag', () => {
+      app.destroy();
 
       expect(app.initialized).toBe(false);
     });
 
-    it('should force destroy even if not initialized', async () => {
-      await app.destroy(true);
+    it('should force destroy even if not initialized', () => {
+      app.destroy(true);
 
       expect(app.initialized).toBe(false);
     });
@@ -289,7 +289,7 @@ describe('App Lifecycle Integration', () => {
       app.on(EmitterEvent.EVENT, eventSpy);
 
       const callCountBeforeDestroy = eventSpy.mock.calls.length;
-      await app.destroy();
+      app.destroy();
 
       // Simulate click after destroy
       const clickEvent = new MouseEvent('click', { bubbles: true });
@@ -306,7 +306,7 @@ describe('App Lifecycle Integration', () => {
       app.on(EmitterEvent.EVENT, callback);
 
       const callsBeforeDestroy = callback.mock.calls.length;
-      await app.destroy();
+      app.destroy();
 
       app.sendCustomEvent('test');
 
@@ -317,7 +317,7 @@ describe('App Lifecycle Integration', () => {
     it('should complete destroy successfully', async () => {
       await app.init();
 
-      await app.destroy();
+      app.destroy();
 
       expect(app.initialized).toBe(false);
     });
@@ -328,7 +328,7 @@ describe('App Lifecycle Integration', () => {
       await app.init();
 
       // Force an error scenario by destroying
-      await expect(app.destroy()).resolves.not.toThrow();
+      expect(() => app.destroy()).not.toThrow();
     });
   });
 

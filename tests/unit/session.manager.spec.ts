@@ -62,10 +62,10 @@ describe('SessionManager', () => {
   });
 
   describe('Session Start', () => {
-    it('should start new session and track session_start', async () => {
+    it('should start new session and track session_start', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Verify session ID was set
       const sessionId = sessionManager['get']('sessionId');
@@ -78,7 +78,7 @@ describe('SessionManager', () => {
       });
     });
 
-    it('should NOT track session_start for recovered session', async () => {
+    it('should NOT track session_start for recovered session', () => {
       // Persist a valid session
       const validSessionId = 'recovered-session-123';
       sessionManager['saveStoredSession']({
@@ -88,7 +88,7 @@ describe('SessionManager', () => {
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Verify recovered session ID
       const sessionId = sessionManager['get']('sessionId');
@@ -100,13 +100,13 @@ describe('SessionManager', () => {
       });
     });
 
-    it('should not start tracking twice', async () => {
-      await sessionManager.startTracking();
+    it('should not start tracking twice', () => {
+      sessionManager.startTracking();
 
       const firstSessionId = sessionManager['get']('sessionId');
 
       // Try to start again
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const secondSessionId = sessionManager['get']('sessionId');
 
@@ -172,10 +172,10 @@ describe('SessionManager', () => {
   });
 
   describe('Session Timeout', () => {
-    it('should end session after inactivity timeout', async () => {
+    it('should end session after inactivity timeout', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
@@ -193,10 +193,10 @@ describe('SessionManager', () => {
       vi.useRealTimers();
     });
 
-    it('should reset timeout on user activity', async () => {
+    it('should reset timeout on user activity', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const initialSessionId = sessionManager['get']('sessionId');
 
@@ -216,10 +216,10 @@ describe('SessionManager', () => {
       vi.useRealTimers();
     });
 
-    it('should pause timeout when page is hidden', async () => {
+    it('should pause timeout when page is hidden', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Save original descriptor
       const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'hidden');
@@ -245,10 +245,10 @@ describe('SessionManager', () => {
       vi.useRealTimers();
     });
 
-    it('should resume timeout when page becomes visible', async () => {
+    it('should resume timeout when page becomes visible', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       // Save original descriptor
       const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'hidden');
@@ -277,8 +277,8 @@ describe('SessionManager', () => {
   });
 
   describe('Session Persistence', () => {
-    it('should persist session to localStorage', async () => {
-      await sessionManager.startTracking();
+    it('should persist session to localStorage', () => {
+      sessionManager.startTracking();
 
       const sessionId = sessionManager['get']('sessionId');
       const storageKey = `tlog:test-project:session`;
@@ -291,7 +291,7 @@ describe('SessionManager', () => {
     });
 
     it('should update lastActivity on activity reset', async () => {
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       const storageKey = `tlog:test-project:session`;
       const initialStored = storageManager.getItem(storageKey);
@@ -310,12 +310,12 @@ describe('SessionManager', () => {
   });
 
   describe('Session End', () => {
-    it('should end session on manual stop', async () => {
-      await sessionManager.startTracking();
+    it('should end session on manual stop', () => {
+      sessionManager.startTracking();
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      await sessionManager.stopTracking();
+      sessionManager.stopTracking();
 
       expect(trackSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -325,8 +325,8 @@ describe('SessionManager', () => {
       );
     });
 
-    it('should end session on page unload', async () => {
-      await sessionManager.startTracking();
+    it('should end session on page unload', () => {
+      sessionManager.startTracking();
 
       const trackSpy = vi.spyOn(eventManager, 'track');
 
@@ -341,30 +341,30 @@ describe('SessionManager', () => {
       );
     });
 
-    it('should clear session state after end', async () => {
-      await sessionManager.startTracking();
+    it('should clear session state after end', () => {
+      sessionManager.startTracking();
 
-      await sessionManager.stopTracking();
+      sessionManager.stopTracking();
 
       const sessionId = sessionManager['get']('sessionId');
       expect(sessionId).toBeNull();
     });
 
-    it('should clear storage after session end', async () => {
-      await sessionManager.startTracking();
+    it('should clear storage after session end', () => {
+      sessionManager.startTracking();
 
       const storageKey = `tlog:test-project:session`;
       expect(storageManager.getItem(storageKey)).not.toBeNull();
 
-      await sessionManager.stopTracking();
+      sessionManager.stopTracking();
 
       expect(storageManager.getItem(storageKey)).toBeNull();
     });
   });
 
   describe('Cleanup and Memory Management', () => {
-    it('should remove activity listeners on destroy', async () => {
-      await sessionManager.startTracking();
+    it('should remove activity listeners on destroy', () => {
+      sessionManager.startTracking();
 
       const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
 
@@ -375,8 +375,8 @@ describe('SessionManager', () => {
       expect(removeEventListenerSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
     });
 
-    it('should remove lifecycle listeners on destroy', async () => {
-      await sessionManager.startTracking();
+    it('should remove lifecycle listeners on destroy', () => {
+      sessionManager.startTracking();
 
       const removeDocListenerSpy = vi.spyOn(document, 'removeEventListener');
       const removeWinListenerSpy = vi.spyOn(window, 'removeEventListener');
@@ -387,10 +387,10 @@ describe('SessionManager', () => {
       expect(removeWinListenerSpy).toHaveBeenCalledWith('beforeunload', expect.any(Function));
     });
 
-    it('should clear session timeout on destroy', async () => {
+    it('should clear session timeout on destroy', () => {
       vi.useFakeTimers();
 
-      await sessionManager.startTracking();
+      sessionManager.startTracking();
 
       expect(sessionManager['sessionTimeoutId']).not.toBeNull();
 

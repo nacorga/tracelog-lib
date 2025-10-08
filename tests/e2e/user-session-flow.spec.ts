@@ -31,19 +31,19 @@ test.describe('User Session Flow', () => {
       let sessionData: any = null;
 
       // Listen for queue events
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
-      sessionData = window.__traceLogBridge!.getSessionData();
+      await window.__traceLogBridge.init();
+      sessionData = window.__traceLogBridge.getSessionData();
 
       // Simulate extended user activity over time
       const activities = ['page_visit', 'product_view', 'add_to_cart', 'checkout_start', 'form_fill', 'final_action'];
 
       for (let i = 0; i < activities.length; i++) {
-        window.__traceLogBridge!.sendCustomEvent(activities[i], {
+        window.__traceLogBridge.sendCustomEvent(activities[i], {
           step: i + 1,
           timestamp: Date.now(),
         });
@@ -51,7 +51,7 @@ test.describe('User Session Flow', () => {
       }
 
       // Trigger queue sending
-      window.__traceLogBridge!.sendCustomEvent('test_extended_session_complete', { trigger: 'end_session' });
+      window.__traceLogBridge.sendCustomEvent('test_extended_session_complete', { trigger: 'end_session' });
 
       // Wait for queue events
       const startTime = Date.now();
@@ -62,7 +62,7 @@ test.describe('User Session Flow', () => {
       return {
         sessionData,
         queueEvents,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 
@@ -119,23 +119,23 @@ test.describe('User Session Flow', () => {
       const queueEvents: any[] = [];
 
       // Listen for queue events
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
-      const sessionData = window.__traceLogBridge!.getSessionData();
+      await window.__traceLogBridge.init();
+      const sessionData = window.__traceLogBridge.getSessionData();
 
       // Generate validation activities
-      window.__traceLogBridge!.sendCustomEvent('session_validation', {
+      window.__traceLogBridge.sendCustomEvent('session_validation', {
         sessionId: sessionData?.id,
         isActive: sessionData?.isActive,
         timestamp: Date.now(),
       });
 
       // Trigger queue sending
-      window.__traceLogBridge!.sendCustomEvent('test_session_validation_complete', { trigger: 'end_validation' });
+      window.__traceLogBridge.sendCustomEvent('test_session_validation_complete', { trigger: 'end_validation' });
 
       // Wait for queue events
       const startTime = Date.now();
@@ -146,7 +146,7 @@ test.describe('User Session Flow', () => {
       return {
         sessionData,
         queueEvents,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 

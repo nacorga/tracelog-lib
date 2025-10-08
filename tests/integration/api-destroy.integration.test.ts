@@ -15,7 +15,7 @@ describe('API Integration - Destroy Flow', () => {
     // Cleanup any existing instance
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     } catch {
@@ -26,7 +26,7 @@ describe('API Integration - Destroy Flow', () => {
   afterEach(async () => {
     try {
       if (TraceLog.isInitialized()) {
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     } catch {
@@ -35,8 +35,8 @@ describe('API Integration - Destroy Flow', () => {
   });
 
   describe('Before Initialization', () => {
-    it('should throw error when called before init()', async () => {
-      await expect(TraceLog.destroy()).rejects.toThrow('App not initialized');
+    it('should throw error when called before init()', () => {
+      expect(() => TraceLog.destroy()).toThrow('App not initialized');
     });
   });
 
@@ -45,18 +45,18 @@ describe('API Integration - Destroy Flow', () => {
       await TraceLog.init();
     });
 
-    it('should destroy successfully', async () => {
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+    it('should destroy successfully', () => {
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
 
-    it('should set isInitialized to false after destroy', async () => {
+    it('should set isInitialized to false after destroy', () => {
       expect(TraceLog.isInitialized()).toBe(true);
-      await TraceLog.destroy();
+      TraceLog.destroy();
       expect(TraceLog.isInitialized()).toBe(false);
     });
 
     it('should prevent using event() after destroy', async () => {
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(() => TraceLog.event('test')).toThrow('TraceLog not initialized');
@@ -67,7 +67,7 @@ describe('API Integration - Destroy Flow', () => {
       TraceLog.event('event1');
       TraceLog.event('event2');
 
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // After destroy, should not be able to access anything
@@ -78,23 +78,20 @@ describe('API Integration - Destroy Flow', () => {
   describe('Multiple Destroy Calls', () => {
     it('should throw error on second destroy call', async () => {
       await TraceLog.init();
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      await expect(TraceLog.destroy()).rejects.toThrow('App not initialized');
+      expect(() => TraceLog.destroy()).toThrow('App not initialized');
     });
 
-    it('should throw error when destroy is in progress', async () => {
+    it('should handle multiple destroy calls gracefully (synchronous)', async () => {
       await TraceLog.init();
 
-      // Start destroy (don't await yet)
-      const firstDestroy = TraceLog.destroy();
+      // First destroy (synchronous)
+      TraceLog.destroy();
 
-      // Try to destroy again while first is in progress
-      await expect(TraceLog.destroy()).rejects.toThrow('Destroy operation already in progress');
-
-      // Wait for first destroy to complete
-      await firstDestroy;
+      // Subsequent destroy calls should throw since app is already destroyed
+      expect(() => TraceLog.destroy()).toThrow('App not initialized');
     });
   });
 
@@ -102,7 +99,7 @@ describe('API Integration - Destroy Flow', () => {
     it('should allow init after destroy', async () => {
       // First lifecycle
       await TraceLog.init();
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Second lifecycle
@@ -114,7 +111,7 @@ describe('API Integration - Destroy Flow', () => {
       // First lifecycle
       await TraceLog.init();
       TraceLog.event('event1');
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Second lifecycle
@@ -129,7 +126,7 @@ describe('API Integration - Destroy Flow', () => {
         TraceLog.event(`event-cycle-${i}`);
         expect(TraceLog.isInitialized()).toBe(true);
 
-        await TraceLog.destroy();
+        TraceLog.destroy();
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(TraceLog.isInitialized()).toBe(false);
       }
@@ -141,7 +138,7 @@ describe('API Integration - Destroy Flow', () => {
       await TraceLog.init();
 
       // Destroy should remove all event listeners
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // After destroy, DOM events should not trigger tracking
@@ -156,7 +153,7 @@ describe('API Integration - Destroy Flow', () => {
       await TraceLog.init();
 
       // Destroy should clear all timers
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // No timers should be running after destroy
@@ -167,7 +164,7 @@ describe('API Integration - Destroy Flow', () => {
       await TraceLog.init();
 
       // Destroy should remove storage listeners
-      await TraceLog.destroy();
+      TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Storage changes should not trigger anything
@@ -184,26 +181,26 @@ describe('API Integration - Destroy Flow', () => {
   describe('With Different Configurations', () => {
     it('should destroy when initialized with skip mode', async () => {
       await TraceLog.init();
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
 
     it('should destroy when initialized with empty config', async () => {
       await TraceLog.init();
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
 
     it('should destroy when initialized with global metadata', async () => {
       await TraceLog.init({
         globalMetadata: { version: '1.0.0' },
       });
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
 
     it('should destroy when initialized with custom timeout', async () => {
       await TraceLog.init({
         sessionTimeout: 60000,
       });
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
   });
 
@@ -217,21 +214,21 @@ describe('API Integration - Destroy Flow', () => {
       TraceLog.event('event3');
 
       // Destroy immediately without waiting for events to send
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
 
     it('should handle destroy immediately after init', async () => {
       await TraceLog.init();
 
       // Destroy right away
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
 
     it('should handle destroy without any events sent', async () => {
       await TraceLog.init();
 
       // Destroy without sending any custom events
-      await expect(TraceLog.destroy()).resolves.not.toThrow();
+      expect(() => TraceLog.destroy()).not.toThrow();
     });
   });
 });

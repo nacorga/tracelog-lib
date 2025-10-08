@@ -22,7 +22,7 @@ export class ClickHandler extends StateManager {
 
     this.clickHandler = (event: Event): void => {
       const mouseEvent = event as MouseEvent;
-      const target = mouseEvent.target as EventTarget | null;
+      const target = mouseEvent.target;
       const clickedElement =
         typeof HTMLElement !== 'undefined' && target instanceof HTMLElement
           ? target

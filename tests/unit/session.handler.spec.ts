@@ -81,25 +81,25 @@ describe('SessionHandler', () => {
   });
 
   describe('startTracking()', () => {
-    it('should create SessionManager instance', async () => {
-      await sessionHandler.startTracking();
+    it('should create SessionManager instance', () => {
+      sessionHandler.startTracking();
 
       expect((sessionHandler as any).sessionManager).not.toBeNull();
       expect((sessionHandler as any).sessionManager).toBeInstanceOf(SessionManager);
     });
 
-    it('should call startTracking on SessionManager', async () => {
-      await sessionHandler.startTracking();
+    it('should call startTracking on SessionManager', () => {
+      sessionHandler.startTracking();
 
       const sessionManagerInstance = (sessionHandler as any).sessionManager;
       expect(sessionManagerInstance.startTracking).toHaveBeenCalled();
     });
 
-    it('should not create duplicate SessionManager if already active', async () => {
-      await sessionHandler.startTracking();
+    it('should not create duplicate SessionManager if already active', () => {
+      sessionHandler.startTracking();
       const firstInstance = (sessionHandler as any).sessionManager;
 
-      await sessionHandler.startTracking();
+      sessionHandler.startTracking();
       const secondInstance = (sessionHandler as any).sessionManager;
 
       expect(firstInstance).toBe(secondInstance);
@@ -107,32 +107,36 @@ describe('SessionHandler', () => {
       expect(mockSessionManager.startTracking).toHaveBeenCalledTimes(1);
     });
 
-    it('should not start tracking when handler is destroyed', async () => {
+    it('should not start tracking when handler is destroyed', () => {
       (sessionHandler as any).destroyed = true;
 
-      await sessionHandler.startTracking();
+      sessionHandler.startTracking();
 
       expect((sessionHandler as any).sessionManager).toBeNull();
     });
 
-    it('should cleanup SessionManager on initialization error', async () => {
-      // Mock startTracking to fail
-      mockSessionManager.startTracking.mockRejectedValueOnce(new Error('Init failed'));
+    it('should cleanup SessionManager on initialization error', () => {
+      // Mock startTracking to throw (synchronous now)
+      mockSessionManager.startTracking.mockImplementationOnce(() => {
+        throw new Error('Init failed');
+      });
 
-      await expect(sessionHandler.startTracking()).rejects.toThrow('Init failed');
+      expect(() => sessionHandler.startTracking()).toThrow('Init failed');
 
       expect(mockSessionManager.destroy).toHaveBeenCalled();
       expect((sessionHandler as any).sessionManager).toBeNull();
     });
 
-    it('should handle cleanup errors during initialization failure', async () => {
-      // Mock startTracking to fail and destroy to throw
-      mockSessionManager.startTracking.mockRejectedValueOnce(new Error('Init failed'));
+    it('should handle cleanup errors during initialization failure', () => {
+      // Mock startTracking to throw and destroy to throw
+      mockSessionManager.startTracking.mockImplementationOnce(() => {
+        throw new Error('Init failed');
+      });
       mockSessionManager.destroy.mockImplementationOnce(() => {
         throw new Error('Cleanup failed');
       });
 
-      await expect(sessionHandler.startTracking()).rejects.toThrow('Init failed');
+      expect(() => sessionHandler.startTracking()).toThrow('Init failed');
 
       // Should not throw cleanup error, only original error
       expect((sessionHandler as any).sessionManager).toBeNull();
@@ -140,28 +144,28 @@ describe('SessionHandler', () => {
   });
 
   describe('stopTracking()', () => {
-    beforeEach(async () => {
-      await sessionHandler.startTracking();
+    beforeEach(() => {
+      sessionHandler.startTracking();
     });
 
-    it('should call stopTracking on SessionManager', async () => {
+    it('should call stopTracking on SessionManager', () => {
       const sessionManagerInstance = (sessionHandler as any).sessionManager;
 
-      await sessionHandler.stopTracking();
+      sessionHandler.stopTracking();
 
       expect(sessionManagerInstance.stopTracking).toHaveBeenCalled();
     });
 
-    it('should call destroy on SessionManager', async () => {
+    it('should call destroy on SessionManager', () => {
       const sessionManagerInstance = (sessionHandler as any).sessionManager;
 
-      await sessionHandler.stopTracking();
+      sessionHandler.stopTracking();
 
       expect(sessionManagerInstance.destroy).toHaveBeenCalled();
     });
 
-    it('should set sessionManager to null after cleanup', async () => {
-      await sessionHandler.stopTracking();
+    it('should set sessionManager to null after cleanup', () => {
+      sessionHandler.stopTracking();
 
       expect((sessionHandler as any).sessionManager).toBeNull();
     });
@@ -172,16 +176,16 @@ describe('SessionHandler', () => {
       expect(() => freshHandler.stopTracking()).not.toThrow();
     });
 
-    it('should handle multiple stop calls gracefully', async () => {
-      await sessionHandler.startTracking();
+    it('should handle multiple stop calls gracefully', () => {
+      sessionHandler.startTracking();
       sessionHandler.stopTracking();
       expect(() => sessionHandler.stopTracking()).not.toThrow();
     });
   });
 
   describe('destroy()', () => {
-    beforeEach(async () => {
-      await sessionHandler.startTracking();
+    beforeEach(() => {
+      sessionHandler.startTracking();
     });
 
     it('should call destroy on SessionManager', () => {
@@ -244,16 +248,16 @@ describe('SessionHandler', () => {
       expect(isActive).toBe(false);
     });
 
-    it('should return true when sessionManager exists and not destroyed', async () => {
-      await sessionHandler.startTracking();
+    it('should return true when sessionManager exists and not destroyed', () => {
+      sessionHandler.startTracking();
 
       const isActive = (sessionHandler as any).isActive();
 
       expect(isActive).toBe(true);
     });
 
-    it('should return false when handler is destroyed', async () => {
-      await sessionHandler.startTracking();
+    it('should return false when handler is destroyed', () => {
+      sessionHandler.startTracking();
       sessionHandler.destroy();
 
       const isActive = (sessionHandler as any).isActive();
@@ -261,8 +265,8 @@ describe('SessionHandler', () => {
       expect(isActive).toBe(false);
     });
 
-    it('should return false when sessionManager exists but handler is destroyed', async () => {
-      await sessionHandler.startTracking();
+    it('should return false when sessionManager exists but handler is destroyed', () => {
+      sessionHandler.startTracking();
       (sessionHandler as any).destroyed = true;
 
       const isActive = (sessionHandler as any).isActive();
@@ -272,8 +276,8 @@ describe('SessionHandler', () => {
   });
 
   describe('cleanupSessionManager() private method', () => {
-    beforeEach(async () => {
-      await sessionHandler.startTracking();
+    beforeEach(() => {
+      sessionHandler.startTracking();
     });
 
     it('should call stopTracking and destroy', async () => {
@@ -299,38 +303,38 @@ describe('SessionHandler', () => {
   });
 
   describe('Lifecycle Integration', () => {
-    it('should handle start -> stop -> start cycle', async () => {
+    it('should handle start -> stop -> start cycle', () => {
       // First cycle
-      await sessionHandler.startTracking();
+      sessionHandler.startTracking();
       expect((sessionHandler as any).sessionManager).not.toBeNull();
 
-      await sessionHandler.stopTracking();
+      sessionHandler.stopTracking();
       expect((sessionHandler as any).sessionManager).toBeNull();
 
       // Second cycle
-      await sessionHandler.startTracking();
+      sessionHandler.startTracking();
       expect((sessionHandler as any).sessionManager).not.toBeNull();
     });
 
-    it('should handle start -> destroy -> start attempt', async () => {
-      await sessionHandler.startTracking();
+    it('should handle start -> destroy -> start attempt', () => {
+      sessionHandler.startTracking();
       expect((sessionHandler as any).sessionManager).not.toBeNull();
 
       sessionHandler.destroy();
       expect((sessionHandler as any).destroyed).toBe(true);
 
       // Should not start after destroy - sessionManager stays null
-      await sessionHandler.startTracking();
+      sessionHandler.startTracking();
       expect((sessionHandler as any).sessionManager).toBeNull();
     });
 
-    it('should maintain state consistency across operations', async () => {
+    it('should maintain state consistency across operations', () => {
       // Start
-      await sessionHandler.startTracking();
+      sessionHandler.startTracking();
       expect((sessionHandler as any).isActive()).toBe(true);
 
       // Stop
-      await sessionHandler.stopTracking();
+      sessionHandler.stopTracking();
       expect((sessionHandler as any).isActive()).toBe(false);
 
       // Destroy
@@ -341,19 +345,23 @@ describe('SessionHandler', () => {
   });
 
   describe('Error Handling', () => {
-    it('should propagate SessionManager initialization errors', async () => {
+    it('should propagate SessionManager initialization errors', () => {
       const mockError = new Error('SessionManager init failed');
-      mockSessionManager.startTracking.mockRejectedValueOnce(mockError);
+      mockSessionManager.startTracking.mockImplementationOnce(() => {
+        throw mockError;
+      });
 
-      await expect(sessionHandler.startTracking()).rejects.toThrow('SessionManager init failed');
+      expect(() => sessionHandler.startTracking()).toThrow('SessionManager init failed');
     });
 
-    it('should log errors during initialization', async () => {
+    it('should log errors during initialization', () => {
       const mockError = new Error('Test error');
-      mockSessionManager.startTracking.mockRejectedValueOnce(mockError);
+      mockSessionManager.startTracking.mockImplementationOnce(() => {
+        throw mockError;
+      });
 
       try {
-        await sessionHandler.startTracking();
+        sessionHandler.startTracking();
       } catch {
         // Expected error
       }
@@ -362,10 +370,12 @@ describe('SessionHandler', () => {
       expect((sessionHandler as any).sessionManager).toBeNull();
     });
 
-    it('should handle non-Error exceptions', async () => {
-      mockSessionManager.startTracking.mockRejectedValueOnce('String error');
+    it('should handle non-Error exceptions', () => {
+      mockSessionManager.startTracking.mockImplementationOnce(() => {
+        throw 'String error';
+      });
 
-      await expect(sessionHandler.startTracking()).rejects.toBe('String error');
+      expect(() => sessionHandler.startTracking()).toThrow('String error');
     });
   });
 
@@ -381,8 +391,8 @@ describe('SessionHandler', () => {
       expect(true).toBe(true);
     });
 
-    it('should handle missing config during runtime', async () => {
-      await sessionHandler.startTracking();
+    it('should handle missing config during runtime', () => {
+      sessionHandler.startTracking();
 
       // Config becomes unavailable
       vi.spyOn(sessionHandler as any, 'get').mockReturnValue(null);

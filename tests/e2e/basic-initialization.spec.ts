@@ -50,9 +50,9 @@ test.describe('Basic Initialization', () => {
     // Wait for TraceLog bridge to be available
     await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
 
-    await page.evaluate(async () => {
+    await page.evaluate(() => {
       if (window.__traceLogBridge?.initialized) {
-        await window.__traceLogBridge.destroy();
+        window.__traceLogBridge.destroy();
       }
     });
 

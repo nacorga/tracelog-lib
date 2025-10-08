@@ -31,15 +31,15 @@ test.describe('User E-commerce Flow', () => {
       let sessionId: string | null = null;
 
       // Listen for queue events to capture custom events with session_id
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
+      await window.__traceLogBridge.init();
 
       // Get session ID
-      const sessionData = window.__traceLogBridge!.getSessionData();
+      const sessionData = window.__traceLogBridge.getSessionData();
       sessionId =
         sessionData && typeof sessionData === 'object' && 'id' in sessionData ? (sessionData.id as string) : null;
 
@@ -78,7 +78,7 @@ test.describe('User E-commerce Flow', () => {
       }
 
       // Send a trigger event to ensure queue is sent
-      window.__traceLogBridge!.sendCustomEvent('test_ecommerce_complete', { trigger: 'end_shopping' });
+      window.__traceLogBridge.sendCustomEvent('test_ecommerce_complete', { trigger: 'end_shopping' });
 
       // Wait for queue events
       const startTime = Date.now();
@@ -90,7 +90,7 @@ test.describe('User E-commerce Flow', () => {
         queueEvents,
         sessionId,
         addedProducts,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 
@@ -170,15 +170,15 @@ test.describe('User E-commerce Flow', () => {
       let sessionId: string | null = null;
 
       // Listen for queue events
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
+      await window.__traceLogBridge.init();
 
       // Get session ID
-      const sessionData = window.__traceLogBridge!.getSessionData();
+      const sessionData = window.__traceLogBridge.getSessionData();
       sessionId =
         sessionData && typeof sessionData === 'object' && 'id' in sessionData ? (sessionData.id as string) : null;
 
@@ -224,7 +224,7 @@ test.describe('User E-commerce Flow', () => {
       }
 
       // Send trigger event to ensure queue is sent
-      window.__traceLogBridge!.sendCustomEvent('test_contact_complete', { trigger: 'end_contact' });
+      window.__traceLogBridge.sendCustomEvent('test_contact_complete', { trigger: 'end_contact' });
 
       // Wait for queue events
       const startTime = Date.now();
@@ -236,7 +236,7 @@ test.describe('User E-commerce Flow', () => {
         queueEvents,
         sessionId,
         formData,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 
@@ -306,15 +306,15 @@ test.describe('User E-commerce Flow', () => {
       let sessionId: string | null = null;
 
       // Listen for queue events
-      window.__traceLogBridge!.on('queue', (data: any) => {
+      window.__traceLogBridge.on('queue', (data: any) => {
         queueEvents.push(data);
       });
 
       // Initialize TraceLog
-      await window.__traceLogBridge!.init();
+      await window.__traceLogBridge.init();
 
       // Get session ID
-      const sessionData = window.__traceLogBridge!.getSessionData();
+      const sessionData = window.__traceLogBridge.getSessionData();
       sessionId =
         sessionData && typeof sessionData === 'object' && 'id' in sessionData ? (sessionData.id as string) : null;
 
@@ -372,7 +372,7 @@ test.describe('User E-commerce Flow', () => {
       }
 
       // Send trigger event
-      window.__traceLogBridge!.sendCustomEvent('test_mixed_flow_complete', { trigger: 'end_mixed_flow' });
+      window.__traceLogBridge.sendCustomEvent('test_mixed_flow_complete', { trigger: 'end_mixed_flow' });
 
       // Wait for queue events
       const startTime = Date.now();
@@ -383,7 +383,7 @@ test.describe('User E-commerce Flow', () => {
       return {
         queueEvents,
         sessionId,
-        initialized: window.__traceLogBridge!.initialized,
+        initialized: window.__traceLogBridge.initialized,
       };
     });
 

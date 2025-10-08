@@ -45,7 +45,7 @@ test.describe('Metadata Array Support', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues };
     });
@@ -90,7 +90,7 @@ test.describe('Metadata Array Support', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues };
     });
@@ -149,7 +149,7 @@ test.describe('Metadata Array Support', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues };
     });
@@ -192,7 +192,7 @@ test.describe('Metadata Array Support', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues };
     });
@@ -231,7 +231,7 @@ test.describe('Metadata Array Support', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues };
     });
@@ -281,7 +281,7 @@ test.describe('Metadata Array Support', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return {
         queues,
@@ -333,7 +333,7 @@ test.describe('Metadata Array Support', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { queues };
     });

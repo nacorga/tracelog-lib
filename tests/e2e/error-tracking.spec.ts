@@ -53,7 +53,7 @@ test.describe('Error Tracking', () => {
       // Wait for error event to be processed
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { events, capturedCount: events.length };
     });
@@ -94,7 +94,7 @@ test.describe('Error Tracking', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { events, capturedCount: events.length };
     });
@@ -157,7 +157,7 @@ test.describe('Error Tracking', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { events };
     });
@@ -216,7 +216,7 @@ test.describe('Error Tracking', () => {
       }
 
       await new Promise((resolve) => setTimeout(resolve, 300));
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { capturedCount: events.length };
     });
@@ -254,7 +254,7 @@ test.describe('Error Tracking', () => {
       }
 
       await new Promise((resolve) => setTimeout(resolve, 300));
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { capturedCount: events.length };
     });
@@ -310,7 +310,7 @@ test.describe('Error Tracking', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { events, capturedCount: events.length };
     });
@@ -352,7 +352,7 @@ test.describe('Error Tracking', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      await traceLog.destroy();
+      traceLog.destroy();
 
       return { events, messageLength: events[0]?.error_data?.message?.length || 0 };
     });

@@ -19,10 +19,10 @@ describe('ClickHandler', () => {
   let mockElement: HTMLElement;
   let mockEventManager: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
 
-    const testEnv = await setupTestEnvironment();
+    const testEnv = setupTestEnvironment();
     mockEventManager = testEnv.eventManager;
     vi.spyOn(mockEventManager, 'track');
 
@@ -470,7 +470,7 @@ describe('ClickHandler', () => {
         }),
       });
 
-      const trackedCall = mockEventManager.track as any;
+      const trackedCall = mockEventManager.track;
       const clickData = trackedCall.mock.calls.find((call: any) => call[0].type === EventType.CLICK)[0].click_data;
       expect(clickData.text.length).toBeLessThanOrEqual(MAX_TEXT_LENGTH);
     });
@@ -496,7 +496,7 @@ describe('ClickHandler', () => {
       });
 
       // Should not have text property
-      const trackedCall = mockEventManager.track as any;
+      const trackedCall = mockEventManager.track;
       const clickData = trackedCall.mock.calls[0][0].click_data;
       expect(clickData.text).toBeUndefined();
     });
@@ -550,7 +550,7 @@ describe('ClickHandler', () => {
         }),
       });
 
-      const trackedCall = mockEventManager.track as any;
+      const trackedCall = mockEventManager.track;
       const clickData = trackedCall.mock.calls[0][0].click_data;
       expect(clickData.id).toBeUndefined();
       expect(clickData.class).toBeUndefined();

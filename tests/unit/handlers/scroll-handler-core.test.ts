@@ -16,10 +16,10 @@ describe('ScrollHandler - Core Functionality', () => {
   let scrollHandler: ScrollHandler;
   let mockEventManager: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    const testEnv = await setupTestEnvironment();
+    const testEnv = setupTestEnvironment();
     mockEventManager = testEnv.eventManager;
     vi.spyOn(mockEventManager, 'track');
     document.body.innerHTML = '';

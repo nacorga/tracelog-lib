@@ -16,7 +16,7 @@ export class SessionHandler extends StateManager {
     this.storageManager = storageManager;
   }
 
-  async startTracking(): Promise<void> {
+  startTracking(): void {
     if (this.isActive()) {
       return;
     }
@@ -36,7 +36,7 @@ export class SessionHandler extends StateManager {
 
     try {
       this.sessionManager = new SessionManager(this.storageManager, this.eventManager, projectId);
-      await this.sessionManager.startTracking();
+      this.sessionManager.startTracking();
 
       // Flush any events that were buffered during initialization
       this.eventManager.flushPendingEvents();

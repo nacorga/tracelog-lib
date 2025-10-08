@@ -43,7 +43,7 @@ export const init = async (config?: Config): Promise<void> => {
     try {
       // Attach buffered listeners BEFORE init() so they capture initial events
       pendingListeners.forEach(({ event, callback }) => {
-        instance.on(event, callback as EmitterCallback<EmitterMap[typeof event]>);
+        instance.on(event, callback);
       });
       pendingListeners.length = 0;
 
@@ -60,7 +60,7 @@ export const init = async (config?: Config): Promise<void> => {
       app = instance;
     } catch (error) {
       try {
-        await instance.destroy(true);
+        instance.destroy(true);
       } catch (cleanupError) {
         log('error', 'Failed to cleanup partially initialized app', { error: cleanupError });
       }
@@ -114,19 +114,19 @@ export const isInitialized = (): boolean => {
   return app !== null;
 };
 
-export const destroy = async (): Promise<void> => {
-  if (!app) {
-    throw new Error('[TraceLog] App not initialized');
-  }
-
+export const destroy = (): void => {
   if (isDestroying) {
     throw new Error('[TraceLog] Destroy operation already in progress');
+  }
+
+  if (!app) {
+    throw new Error('[TraceLog] App not initialized');
   }
 
   isDestroying = true;
 
   try {
-    await app.destroy();
+    app.destroy();
     app = null;
     isInitializing = false;
     pendingListeners.length = 0;

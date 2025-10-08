@@ -175,7 +175,7 @@ test.describe('Basic Custom Events', () => {
     expect(initResult.success).toBe(true);
 
     // Try to send custom event with invalid name
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(() => {
       try {
         // Try empty string
         window.__traceLogBridge!.sendCustomEvent('');
