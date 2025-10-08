@@ -1,4 +1,11 @@
-import { QUEUE_KEY, EVENT_EXPIRY_HOURS, MAX_RETRIES, RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '../constants';
+import {
+  QUEUE_KEY,
+  EVENT_EXPIRY_HOURS,
+  MAX_RETRIES,
+  RETRY_DELAY_MS,
+  REQUEST_TIMEOUT_MS,
+  PERMANENT_ERROR_LOG_THROTTLE_MS,
+} from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl, PermanentError } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
@@ -14,6 +21,7 @@ export class SenderManager extends StateManager {
   private retryTimeoutId: number | null = null;
   private retryCount = 0;
   private isRetrying = false;
+  private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
 
   constructor(storeManager: StorageManager) {
     super();
@@ -76,9 +84,7 @@ export class SenderManager extends StateManager {
     } catch (error) {
       // Permanent errors should not be retried
       if (error instanceof PermanentError) {
-        log('warn', 'Permanent error, not retrying', {
-          data: { status: error.statusCode, message: error.message },
-        });
+        this.logPermanentError('Permanent error, not retrying', error);
         this.clearPersistedEvents();
         this.resetRetryState();
         callbacks?.onFailure?.();
@@ -113,9 +119,7 @@ export class SenderManager extends StateManager {
     } catch (error) {
       // Permanent errors should clear persisted events immediately
       if (error instanceof PermanentError) {
-        log('warn', 'Permanent error during recovery, clearing persisted events', {
-          data: { status: error.statusCode, message: error.message },
-        });
+        this.logPermanentError('Permanent error during recovery, clearing persisted events', error);
         this.clearPersistedEvents();
         this.resetRetryState();
         callbacks?.onFailure?.();
@@ -200,9 +204,7 @@ export class SenderManager extends StateManager {
         const isPermanentError = response.status >= 400 && response.status < 500;
 
         if (isPermanentError) {
-          log('error', `Permanent HTTP error, not retrying`, {
-            data: { status: response.status, statusText: response.statusText },
-          });
+          // Note: Logging handled by caller with throttling to prevent spam
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
         }
 
@@ -365,9 +367,7 @@ export class SenderManager extends StateManager {
       } catch (error) {
         // If it's a permanent error, don't retry
         if (error instanceof PermanentError) {
-          log('warn', 'Permanent error detected during retry, giving up', {
-            data: { status: error.statusCode, message: error.message },
-          });
+          this.logPermanentError('Permanent error detected during retry, giving up', error);
           this.clearPersistedEvents();
           this.resetRetryState();
           originalCallbacks?.onFailure?.();
@@ -408,6 +408,22 @@ export class SenderManager extends StateManager {
     if (this.retryTimeoutId !== null) {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
+    }
+  }
+
+  private logPermanentError(context: string, error: PermanentError): void {
+    const now = Date.now();
+    const shouldLog =
+      !this.lastPermanentErrorLog ||
+      this.lastPermanentErrorLog.statusCode !== error.statusCode ||
+      now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
+
+    if (shouldLog) {
+      log('error', context, {
+        data: { status: error.statusCode, message: error.message },
+      });
+
+      this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
   }
 }
