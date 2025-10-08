@@ -7,6 +7,7 @@ import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
 vi.mock('../../../src/managers/sender.manager', () => ({
   SenderManager: vi.fn().mockImplementation(() => ({
     sendEventsQueue: vi.fn(),
+    sendEventsQueueSync: vi.fn(),
     recoverPersistedEvents: vi.fn(),
     stop: vi.fn(),
   })),

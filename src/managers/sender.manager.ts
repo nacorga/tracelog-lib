@@ -1,11 +1,4 @@
-import {
-  QUEUE_KEY,
-  EVENT_EXPIRY_HOURS,
-  MAX_RETRIES,
-  RETRY_DELAY_MS,
-  REQUEST_TIMEOUT_MS,
-  PERMANENT_ERROR_LOG_THROTTLE_MS,
-} from '../constants';
+import { QUEUE_KEY, EVENT_EXPIRY_HOURS, REQUEST_TIMEOUT_MS, PERMANENT_ERROR_LOG_THROTTLE_MS } from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl, PermanentError } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
@@ -18,9 +11,6 @@ interface SendCallbacks {
 
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
-  private retryTimeoutId: number | null = null;
-  private retryCount = 0;
-  private isRetrying = false;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
 
   constructor(storeManager: StorageManager) {
@@ -34,9 +24,8 @@ export class SenderManager extends StateManager {
   }
 
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
+    // Sync method uses sendBeacon for critical events (page unload, session end)
     if (this.shouldSkipSend()) {
-      this.resetRetryState();
-
       return true;
     }
 
@@ -50,49 +39,37 @@ export class SenderManager extends StateManager {
       return false;
     }
 
-    const success = this.sendQueueSyncInternal(body);
-
-    if (success) {
-      this.resetRetryState();
-    }
-
-    return success;
+    return this.sendQueueSyncInternal(body);
   }
 
   async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
-    if (!this.shouldSkipSend()) {
-      const persisted = this.persistEvents(body);
-
-      if (!persisted) {
-        log('warn', 'Failed to persist events, attempting immediate send');
-      }
-    }
-
+    // Async method uses fetch for proper error handling
     try {
       const success = await this.send(body);
 
       if (success) {
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onSuccess?.(body.events.length, body.events, body);
       } else {
-        this.scheduleRetry(body, callbacks);
+        // Network/server error - persist for later recovery
+        this.persistEvents(body);
         callbacks?.onFailure?.();
       }
 
       return success;
     } catch (error) {
-      // Permanent errors should not be retried
       if (error instanceof PermanentError) {
+        // 4xx errors - don't persist, don't retry
         this.logPermanentError('Permanent error, not retrying', error);
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onFailure?.();
         return false;
       }
 
-      // Re-throw unexpected errors
-      throw error;
+      // Other errors - persist for recovery
+      this.persistEvents(body);
+      callbacks?.onFailure?.();
+      return false;
     }
   }
 
@@ -110,38 +87,27 @@ export class SenderManager extends StateManager {
 
       if (success) {
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
       } else {
-        this.scheduleRetry(body, callbacks);
+        // Keep persisted, will retry on next page load
         callbacks?.onFailure?.();
       }
     } catch (error) {
-      // Permanent errors should clear persisted events immediately
       if (error instanceof PermanentError) {
+        // 4xx errors - clear and don't retry
         this.logPermanentError('Permanent error during recovery, clearing persisted events', error);
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onFailure?.();
         return;
       }
 
       log('error', 'Failed to recover persisted events', { error });
-      this.clearPersistedEvents();
+      // Keep persisted for next attempt
     }
   }
 
-  persistEventsForRecovery(body: BaseEventsQueueDto): boolean {
-    return this.persistEvents(body);
-  }
-
-  async sendEventsQueueAsync(body: BaseEventsQueueDto): Promise<boolean> {
-    return this.sendEventsQueue(body);
-  }
-
   stop(): void {
-    this.clearRetryTimeout();
-    this.resetRetryState();
+    // Reserved for future cleanup if needed
   }
 
   private async send(body: BaseEventsQueueDto): Promise<boolean> {
@@ -208,7 +174,7 @@ export class SenderManager extends StateManager {
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
         }
 
-        // 5xx or other errors - retry
+        // 5xx or other errors - will be persisted by caller
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
@@ -222,20 +188,23 @@ export class SenderManager extends StateManager {
     const { url, payload } = this.prepareRequest(body);
     const blob = new Blob([payload], { type: 'application/json' });
 
-    if (this.isSendBeaconAvailable()) {
-      const success = navigator.sendBeacon(url, blob);
-
-      if (success) {
-        return true;
-      }
-      log('warn', 'sendBeacon failed, persisting events for recovery');
-    } else {
+    if (!this.isSendBeaconAvailable()) {
       log('warn', 'sendBeacon not available, persisting events for recovery');
+      this.persistEvents(body);
+      return false;
     }
 
-    this.persistEventsForRecovery(body);
+    // sendBeacon only returns true/false without HTTP status codes
+    // true: browser accepted the request for sending
+    // false: request rejected (queue full, size limits, etc.)
+    const accepted = navigator.sendBeacon(url, blob);
 
-    return false;
+    if (!accepted) {
+      log('warn', 'sendBeacon rejected request, persisting events for recovery');
+      this.persistEvents(body);
+    }
+
+    return accepted;
   }
 
   private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
@@ -277,9 +246,7 @@ export class SenderManager extends StateManager {
     }
 
     const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
-    const isRecent = ageInHours < EVENT_EXPIRY_HOURS;
-
-    return isRecent;
+    return ageInHours < EVENT_EXPIRY_HOURS;
   }
 
   private createRecoveryBody(data: PersistedQueueData): BaseEventsQueueDto {
@@ -322,72 +289,6 @@ export class SenderManager extends StateManager {
     }
   }
 
-  private resetRetryState(): void {
-    this.retryCount = 0;
-    this.isRetrying = false;
-    this.clearRetryTimeout();
-  }
-
-  private scheduleRetry(body: BaseEventsQueueDto, originalCallbacks?: SendCallbacks): void {
-    if (this.retryTimeoutId !== null || this.isRetrying) {
-      return;
-    }
-
-    if (this.retryCount >= MAX_RETRIES) {
-      log('warn', 'Max retries reached, giving up', { data: { retryCount: this.retryCount } });
-      this.clearPersistedEvents();
-      this.resetRetryState();
-      originalCallbacks?.onFailure?.();
-      return;
-    }
-
-    const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount); // Exponential backoff
-
-    this.isRetrying = true;
-
-    this.retryTimeoutId = window.setTimeout(async () => {
-      this.retryTimeoutId = null;
-
-      this.retryCount++;
-
-      try {
-        const success = await this.send(body);
-
-        if (success) {
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onSuccess?.(body.events.length);
-        } else if (this.retryCount >= MAX_RETRIES) {
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onFailure?.();
-        } else {
-          this.scheduleRetry(body, originalCallbacks);
-        }
-      } catch (error) {
-        // If it's a permanent error, don't retry
-        if (error instanceof PermanentError) {
-          this.logPermanentError('Permanent error detected during retry, giving up', error);
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onFailure?.();
-          return;
-        }
-
-        // For other errors, continue normal retry flow
-        if (this.retryCount >= MAX_RETRIES) {
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onFailure?.();
-        } else {
-          this.scheduleRetry(body, originalCallbacks);
-        }
-      } finally {
-        this.isRetrying = false;
-      }
-    }, retryDelay);
-  }
-
   private shouldSkipSend(): boolean {
     return !this.get('collectApiUrl');
   }
@@ -402,13 +303,6 @@ export class SenderManager extends StateManager {
 
   private isSendBeaconAvailable(): boolean {
     return typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function';
-  }
-
-  private clearRetryTimeout(): void {
-    if (this.retryTimeoutId !== null) {
-      clearTimeout(this.retryTimeoutId);
-      this.retryTimeoutId = null;
-    }
   }
 
   private logPermanentError(context: string, error: PermanentError): void {

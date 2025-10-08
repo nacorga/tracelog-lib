@@ -256,32 +256,10 @@ describe('SenderManager Edge Cases', () => {
       expect(result2).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
-
-    it('should prevent concurrent retries for same request', async () => {
-      vi.useFakeTimers();
-
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
-
-      const body = createEventDto();
-
-      await senderManager.sendEventsQueue(body);
-
-      // isRetrying flag should prevent duplicate schedules
-      const isRetrying = (senderManager as any).isRetrying;
-      expect(isRetrying).toBe(true);
-
-      vi.useRealTimers();
-    });
   });
 
-  describe('Retry Mechanism Edge Cases', () => {
-    it('should clear persisted events after max retries', async () => {
-      vi.useFakeTimers();
-
+  describe('Failure Persistence', () => {
+    it('should persist events on network failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
@@ -293,76 +271,35 @@ describe('SenderManager Edge Cases', () => {
 
       await senderManager.sendEventsQueue(body, { onFailure });
 
-      // Fast-forward through all retries (MAX_RETRIES = 3)
-      for (let i = 0; i < 3; i++) {
-        vi.advanceTimersByTime(5000 * Math.pow(2, i));
-        await vi.runAllTimersAsync();
-      }
-
       expect(onFailure).toHaveBeenCalled();
 
-      vi.useRealTimers();
+      // Verify events were persisted
+      const storageKey = 'tlog:queue:anonymous';
+      const persisted = storageManager.getItem(storageKey);
+      expect(persisted).toBeTruthy();
     });
 
-    it('should reset retry count after successful send', async () => {
-      vi.useFakeTimers();
-
-      // First request fails
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
-
-      const body1 = createEventDto();
-      await senderManager.sendEventsQueue(body1);
-
-      // Retry succeeds
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      vi.advanceTimersByTime(1000);
-      await vi.runAllTimersAsync();
-
-      // New request should not have retry count from previous request
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const body2 = createEventDto();
-      const result = await senderManager.sendEventsQueue(body2);
-
-      expect(result).toBe(true);
-
-      vi.useRealTimers();
-    });
-
-    it('should stop retries when stop() is called', async () => {
-      vi.useFakeTimers();
+    it('should not persist on permanent errors (4xx)', async () => {
+      // Clear any previous persisted events
+      const storageKey = 'tlog:queue:anonymous';
+      storageManager.removeItem(storageKey);
 
       mockFetch.mockResolvedValue({
         ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
+        status: 403,
+        statusText: 'Forbidden',
       });
 
       const body = createEventDto();
-      await senderManager.sendEventsQueue(body);
+      const onFailure = vi.fn();
 
-      // Stop before retry happens
-      senderManager.stop();
+      await senderManager.sendEventsQueue(body, { onFailure });
 
-      vi.advanceTimersByTime(10000);
+      expect(onFailure).toHaveBeenCalled();
 
-      // No retry should have happened (only initial send)
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
+      // Verify events were NOT persisted (permanent error)
+      const persisted = storageManager.getItem(storageKey);
+      expect(persisted).toBeNull();
     });
   });
 

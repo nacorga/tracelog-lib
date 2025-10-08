@@ -12,9 +12,7 @@ vi.mock('../../src/managers/sender.manager', () => {
   class MockSenderManager {
     sendEventsQueue = vi.fn(async () => true);
     sendEventsQueueSync = vi.fn(() => true);
-    sendEventsQueueAsync = vi.fn(async () => true);
     recoverPersistedEvents = vi.fn(async () => undefined);
-    persistEventsForRecovery = vi.fn(() => true);
     stop = vi.fn();
   }
 

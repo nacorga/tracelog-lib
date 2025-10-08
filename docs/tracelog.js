@@ -4,8 +4,6 @@ const EVENT_SENT_INTERVAL_MS = 1e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 5e3;
 const REQUEST_TIMEOUT_MS = 1e4;
 const SIGNIFICANT_SCROLL_DELTA = 10;
 const MIN_SCROLL_DEPTH_CHANGE = 5;
@@ -260,6 +258,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
 const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
 const MAX_TRACKED_ERRORS = 50;
 const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
+const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const QA_MODE_PARAM = "tlog_mode";
 const QA_MODE_VALUE = "qa";
 const detectQaMode = () => {
@@ -643,8 +642,11 @@ const isValidArrayItem = (item) => {
   }
   return false;
 };
-const isOnlyPrimitiveFields = (object) => {
+const isOnlyPrimitiveFields = (object, depth = 0) => {
   if (typeof object !== "object" || object === null) {
+    return false;
+  }
+  if (depth > 1) {
     return false;
   }
   for (const value of Object.values(object)) {
@@ -669,6 +671,12 @@ const isOnlyPrimitiveFields = (object) => {
         if (!value.every((item) => isValidArrayItem(item))) {
           return false;
         }
+      }
+      continue;
+    }
+    if (type === "object" && depth === 0) {
+      if (!isOnlyPrimitiveFields(value, depth + 1)) {
+        return false;
       }
       continue;
     }
@@ -865,9 +873,7 @@ class StateManager {
 }
 class SenderManager extends StateManager {
   storeManager;
-  retryTimeoutId = null;
-  retryCount = 0;
-  isRetrying = false;
+  lastPermanentErrorLog = null;
   constructor(storeManager) {
     super();
     this.storeManager = storeManager;
@@ -878,7 +884,6 @@ class SenderManager extends StateManager {
   }
   sendEventsQueueSync(body) {
     if (this.shouldSkipSend()) {
-      this.resetRetryState();
       return true;
     }
     const config = this.get("config");
@@ -888,41 +893,29 @@ class SenderManager extends StateManager {
       });
       return false;
     }
-    const success = this.sendQueueSyncInternal(body);
-    if (success) {
-      this.resetRetryState();
-    }
-    return success;
+    return this.sendQueueSyncInternal(body);
   }
   async sendEventsQueue(body, callbacks) {
-    if (!this.shouldSkipSend()) {
-      const persisted = this.persistEvents(body);
-      if (!persisted) {
-        log("warn", "Failed to persist events, attempting immediate send");
-      }
-    }
     try {
       const success = await this.send(body);
       if (success) {
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onSuccess?.(body.events.length, body.events, body);
       } else {
-        this.scheduleRetry(body, callbacks);
+        this.persistEvents(body);
         callbacks?.onFailure?.();
       }
       return success;
     } catch (error) {
       if (error instanceof PermanentError) {
-        log("warn", "Permanent error, not retrying", {
-          data: { status: error.statusCode, message: error.message }
-        });
+        this.logPermanentError("Permanent error, not retrying", error);
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onFailure?.();
         return false;
       }
-      throw error;
+      this.persistEvents(body);
+      callbacks?.onFailure?.();
+      return false;
     }
   }
   async recoverPersistedEvents(callbacks) {
@@ -936,35 +929,21 @@ class SenderManager extends StateManager {
       const success = await this.send(body);
       if (success) {
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
       } else {
-        this.scheduleRetry(body, callbacks);
         callbacks?.onFailure?.();
       }
     } catch (error) {
       if (error instanceof PermanentError) {
-        log("warn", "Permanent error during recovery, clearing persisted events", {
-          data: { status: error.statusCode, message: error.message }
-        });
+        this.logPermanentError("Permanent error during recovery, clearing persisted events", error);
         this.clearPersistedEvents();
-        this.resetRetryState();
         callbacks?.onFailure?.();
         return;
       }
       log("error", "Failed to recover persisted events", { error });
-      this.clearPersistedEvents();
     }
   }
-  persistEventsForRecovery(body) {
-    return this.persistEvents(body);
-  }
-  async sendEventsQueueAsync(body) {
-    return this.sendEventsQueue(body);
-  }
   stop() {
-    this.clearRetryTimeout();
-    this.resetRetryState();
   }
   async send(body) {
     if (this.shouldSkipSend()) {
@@ -1012,9 +991,6 @@ class SenderManager extends StateManager {
       if (!response.ok) {
         const isPermanentError = response.status >= 400 && response.status < 500;
         if (isPermanentError) {
-          log("error", `Permanent HTTP error, not retrying`, {
-            data: { status: response.status, statusText: response.statusText }
-          });
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
         }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1027,17 +1003,17 @@ class SenderManager extends StateManager {
   sendQueueSyncInternal(body) {
     const { url, payload } = this.prepareRequest(body);
     const blob = new Blob([payload], { type: "application/json" });
-    if (this.isSendBeaconAvailable()) {
-      const success = navigator.sendBeacon(url, blob);
-      if (success) {
-        return true;
-      }
-      log("warn", "sendBeacon failed, persisting events for recovery");
-    } else {
+    if (!this.isSendBeaconAvailable()) {
       log("warn", "sendBeacon not available, persisting events for recovery");
+      this.persistEvents(body);
+      return false;
     }
-    this.persistEventsForRecovery(body);
-    return false;
+    const accepted = navigator.sendBeacon(url, blob);
+    if (!accepted) {
+      log("warn", "sendBeacon rejected request, persisting events for recovery");
+      this.persistEvents(body);
+    }
+    return accepted;
   }
   prepareRequest(body) {
     const enrichedBody = {
@@ -1070,8 +1046,7 @@ class SenderManager extends StateManager {
       return false;
     }
     const ageInHours = (Date.now() - data.timestamp) / (1e3 * 60 * 60);
-    const isRecent = ageInHours < EVENT_EXPIRY_HOURS;
-    return isRecent;
+    return ageInHours < EVENT_EXPIRY_HOURS;
   }
   createRecoveryBody(data) {
     return {
@@ -1108,62 +1083,6 @@ class SenderManager extends StateManager {
       log("warn", "Failed to clear persisted events", { error });
     }
   }
-  resetRetryState() {
-    this.retryCount = 0;
-    this.isRetrying = false;
-    this.clearRetryTimeout();
-  }
-  scheduleRetry(body, originalCallbacks) {
-    if (this.retryTimeoutId !== null || this.isRetrying) {
-      return;
-    }
-    if (this.retryCount >= MAX_RETRIES) {
-      log("warn", "Max retries reached, giving up", { data: { retryCount: this.retryCount } });
-      this.clearPersistedEvents();
-      this.resetRetryState();
-      originalCallbacks?.onFailure?.();
-      return;
-    }
-    const retryDelay = RETRY_DELAY_MS * Math.pow(2, this.retryCount);
-    this.isRetrying = true;
-    this.retryTimeoutId = window.setTimeout(async () => {
-      this.retryTimeoutId = null;
-      this.retryCount++;
-      try {
-        const success = await this.send(body);
-        if (success) {
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onSuccess?.(body.events.length);
-        } else if (this.retryCount >= MAX_RETRIES) {
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onFailure?.();
-        } else {
-          this.scheduleRetry(body, originalCallbacks);
-        }
-      } catch (error) {
-        if (error instanceof PermanentError) {
-          log("warn", "Permanent error detected during retry, giving up", {
-            data: { status: error.statusCode, message: error.message }
-          });
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onFailure?.();
-          return;
-        }
-        if (this.retryCount >= MAX_RETRIES) {
-          this.clearPersistedEvents();
-          this.resetRetryState();
-          originalCallbacks?.onFailure?.();
-        } else {
-          this.scheduleRetry(body, originalCallbacks);
-        }
-      } finally {
-        this.isRetrying = false;
-      }
-    }, retryDelay);
-  }
   shouldSkipSend() {
     return !this.get("collectApiUrl");
   }
@@ -1175,10 +1094,14 @@ class SenderManager extends StateManager {
   isSendBeaconAvailable() {
     return typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function";
   }
-  clearRetryTimeout() {
-    if (this.retryTimeoutId !== null) {
-      clearTimeout(this.retryTimeoutId);
-      this.retryTimeoutId = null;
+  logPermanentError(context, error) {
+    const now = Date.now();
+    const shouldLog = !this.lastPermanentErrorLog || this.lastPermanentErrorLog.statusCode !== error.statusCode || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
+    if (shouldLog) {
+      log("error", context, {
+        data: { status: error.statusCode, message: error.message }
+      });
+      this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
   }
 }

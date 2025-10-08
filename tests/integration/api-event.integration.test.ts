@@ -75,19 +75,20 @@ describe('API Integration - Event Method', () => {
       ).not.toThrow();
     });
 
-    it('should reject custom event with nested metadata (strict validation)', async () => {
+    it('should accept custom event with nested metadata one level deep', async () => {
       // Re-initialize with QA mode enabled
       await TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
       await TraceLog.init();
 
+      // Nested objects one level deep are allowed
       expect(() =>
         TraceLog.event('order-placed', {
           order: {
             total: 199.99,
           },
         } as any),
-      ).toThrow(/invalid types/i);
+      ).not.toThrow();
 
       sessionStorage.removeItem('tlog:qa_mode');
     });

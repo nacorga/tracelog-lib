@@ -80,7 +80,7 @@ describe('Event Validations', () => {
       });
     });
 
-    it('should reject nested objects in metadata (only primitives allowed)', () => {
+    it('should accept nested objects one level deep in metadata', () => {
       const metadata = {
         user: {
           id: 123,
@@ -94,9 +94,8 @@ describe('Event Validations', () => {
 
       const result = isEventValid('checkout', metadata);
 
-      // Nested objects are NOT allowed - only string, number, boolean, string arrays
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('invalid types');
+      // Nested objects ONE LEVEL deep are allowed
+      expect(result.valid).toBe(true);
     });
 
     it('should reject arrays of numbers in metadata (only string arrays allowed)', () => {

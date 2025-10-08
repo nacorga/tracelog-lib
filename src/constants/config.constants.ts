@@ -20,12 +20,10 @@ export const EVENT_EXPIRY_HOURS = 2;
 export const EVENT_PERSISTENCE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // ============================================================================
-// LIMITS & RETRIES
+// LIMITS & REQUESTS
 // ============================================================================
 
 export const MAX_EVENTS_QUEUE_LENGTH = 100;
-export const MAX_RETRIES = 3;
-export const RETRY_DELAY_MS = 5000;
 export const REQUEST_TIMEOUT_MS = 10000;
 export const MAX_METADATA_SIZE = 5000;
 
