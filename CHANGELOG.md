@@ -4,6 +4,33 @@
 
 
 
+
+## [0.8.0] - 2025-10-08
+
+### ✨ Features
+
+- Add permanent error logging throttle to SenderManager ([4d7c455](../../commit/4d7c4553bdc657c5f47878f45c647e8ab5b1aeb5))
+- Implement permanent error handling and retry logic ([986cdca](../../commit/986cdca7df7db31b424046f5a338d1920bbe0d54))
+
+### 📚 Documentation
+
+- Update README with new event data fields and descriptions ([d376987](../../commit/d376987f3ff9f74f98f6dc014d4b5e31e7cd5e04))
+
+### 🔧 Other Changes
+
+- Merge pull request #24 from nacorga/release/20251008.1 ([e1ec4a6](../../commit/e1ec4a6d2f86f4bdeb76b199418ae101758794fa))
+- Merge pull request #23 from nacorga/feature/request-error-handling ([b413678](../../commit/b413678940d5b26f4de5303cc2467e3a5da4aba4))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.7.3...v0.8.0
+
+
 ## [0.7.3] - 2025-10-07
 
 ### ♻️ Refactoring
