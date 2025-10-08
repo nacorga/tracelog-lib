@@ -27,6 +27,9 @@ export enum ErrorType {
 export interface ScrollData {
   depth: number;
   direction: ScrollDirection;
+  container_selector: string;
+  velocity: number;
+  max_depth_reached: number;
 }
 
 export interface ClickData {

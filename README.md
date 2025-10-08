@@ -145,7 +145,6 @@ await tracelog.init({
 - `samplingRate`: Event sampling rate 0-1 (default: 1.0)
 - `errorSampling`: Error sampling rate 0-1 (default: 1.0)
 - `sensitiveQueryParams`: Query params to remove from URLs
-- `scrollContainerSelectors`: Custom scroll containers
 - `integrations`:
   - `tracelog.projectId`: TraceLog SaaS
   - `custom.collectApiUrl`: Custom backend

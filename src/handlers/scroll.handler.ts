@@ -12,10 +12,12 @@ import { log } from '../utils';
 
 interface ScrollContainer {
   element: Window | HTMLElement;
+  selector: string;
   lastScrollPos: number;
   lastDepth: number;
   lastDirection: ScrollDirection;
   lastEventTime: number;
+  maxDepthReached: number;
   debounceTimer: number | null;
   listener: EventListener;
 }
@@ -38,15 +40,7 @@ export class ScrollHandler extends StateManager {
     this.limitWarningLogged = false;
     this.applyConfigOverrides();
     this.set('scrollEventCount', 0);
-
-    const raw = this.get('config').scrollContainerSelectors;
-    const selectors = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
-
-    if (selectors.length === 0) {
-      this.setupScrollContainer(window);
-    } else {
-      this.trySetupContainers(selectors, 0);
-    }
+    this.tryDetectScrollContainers(0);
   }
 
   stopTracking(): void {
@@ -65,39 +59,92 @@ export class ScrollHandler extends StateManager {
     this.limitWarningLogged = false;
   }
 
-  private trySetupContainers(selectors: string[], attempt: number): void {
-    const elements: HTMLElement[] = selectors
-      .map((sel) => this.safeQuerySelector(sel))
-      .filter(
-        (element): element is HTMLElement =>
-          element != null && typeof HTMLElement !== 'undefined' && element instanceof HTMLElement,
-      );
+  private tryDetectScrollContainers(attempt: number): void {
+    const elements = this.findScrollableElements();
 
     if (elements.length > 0) {
       for (const element of elements) {
-        const isAlreadyTracking = this.containers.some((c) => c.element === element);
-
-        if (!isAlreadyTracking) {
-          this.setupScrollContainer(element);
-        }
+        const selector = this.getElementSelector(element);
+        this.setupScrollContainer(element, selector);
       }
-
       return;
     }
 
     if (attempt < 5) {
       setTimeout(() => {
-        this.trySetupContainers(selectors, attempt + 1);
+        this.tryDetectScrollContainers(attempt + 1);
       }, 200);
       return;
     }
 
     if (this.containers.length === 0) {
-      this.setupScrollContainer(window);
+      this.setupScrollContainer(window, 'window');
     }
   }
 
-  private setupScrollContainer(element: Window | HTMLElement): void {
+  private findScrollableElements(): HTMLElement[] {
+    if (!document.body) {
+      return [];
+    }
+
+    const elements: HTMLElement[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (node) => {
+        const element = node as HTMLElement;
+
+        if (!element.isConnected || !element.offsetParent) {
+          return NodeFilter.FILTER_SKIP;
+        }
+
+        const style = getComputedStyle(element);
+        const hasScrollableStyle =
+          style.overflowY === 'auto' ||
+          style.overflowY === 'scroll' ||
+          style.overflow === 'auto' ||
+          style.overflow === 'scroll';
+
+        return hasScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+      },
+    });
+
+    let node: Node | null;
+    while ((node = walker.nextNode()) && elements.length < 10) {
+      const element = node as HTMLElement;
+      if (this.isElementScrollable(element)) {
+        elements.push(element);
+      }
+    }
+
+    return elements;
+  }
+
+  private getElementSelector(element: Window | HTMLElement): string {
+    if (element === window) {
+      return 'window';
+    }
+
+    const htmlElement = element as HTMLElement;
+
+    if (htmlElement.id) {
+      return `#${htmlElement.id}`;
+    }
+
+    if (htmlElement.className && typeof htmlElement.className === 'string') {
+      const firstClass = htmlElement.className.split(' ').filter((c) => c.trim())[0];
+      if (firstClass) {
+        return `.${firstClass}`;
+      }
+    }
+
+    return htmlElement.tagName.toLowerCase();
+  }
+
+  private setupScrollContainer(element: Window | HTMLElement, selector: string): void {
+    const alreadyTracking = this.containers.some((c) => c.element === element);
+    if (alreadyTracking) {
+      return;
+    }
+
     if (element !== window && !this.isElementScrollable(element as HTMLElement)) {
       return;
     }
@@ -123,16 +170,19 @@ export class ScrollHandler extends StateManager {
     };
 
     const initialScrollTop = this.getScrollTop(element);
+    const initialDepth = this.calculateScrollDepth(
+      initialScrollTop,
+      this.getScrollHeight(element),
+      this.getViewportHeight(element),
+    );
     const container: ScrollContainer = {
       element,
+      selector,
       lastScrollPos: initialScrollTop,
-      lastDepth: this.calculateScrollDepth(
-        initialScrollTop,
-        this.getScrollHeight(element),
-        this.getViewportHeight(element),
-      ),
+      lastDepth: initialDepth,
       lastDirection: ScrollDirection.DOWN,
       lastEventTime: 0,
+      maxDepthReached: initialDepth,
       debounceTimer: null,
       listener: handleScroll,
     };
@@ -146,7 +196,11 @@ export class ScrollHandler extends StateManager {
     }
   }
 
-  private processScrollEvent(container: ScrollContainer, scrollData: ScrollData, timestamp: number): void {
+  private processScrollEvent(
+    container: ScrollContainer,
+    scrollData: Omit<ScrollData, 'container_selector'>,
+    timestamp: number,
+  ): void {
     if (!this.shouldEmitScrollEvent(container, scrollData, timestamp)) {
       return;
     }
@@ -160,11 +214,18 @@ export class ScrollHandler extends StateManager {
 
     this.eventManager.track({
       type: EventType.SCROLL,
-      scroll_data: scrollData,
+      scroll_data: {
+        ...scrollData,
+        container_selector: container.selector,
+      },
     });
   }
 
-  private shouldEmitScrollEvent(container: ScrollContainer, scrollData: ScrollData, timestamp: number): boolean {
+  private shouldEmitScrollEvent(
+    container: ScrollContainer,
+    scrollData: Omit<ScrollData, 'container_selector'>,
+    timestamp: number,
+  ): boolean {
     if (this.hasReachedSessionLimit()) {
       this.logLimitOnce();
       return false;
@@ -239,9 +300,10 @@ export class ScrollHandler extends StateManager {
     return Math.min(100, Math.max(0, Math.floor((scrollTop / maxScrollTop) * 100)));
   }
 
-  private calculateScrollData(container: ScrollContainer): ScrollData | null {
-    const { element, lastScrollPos } = container;
+  private calculateScrollData(container: ScrollContainer): Omit<ScrollData, 'container_selector'> | null {
+    const { element, lastScrollPos, lastEventTime } = container;
     const scrollTop = this.getScrollTop(element);
+    const now = Date.now();
 
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
@@ -257,9 +319,21 @@ export class ScrollHandler extends StateManager {
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
 
+    const timeDelta = lastEventTime > 0 ? now - lastEventTime : 0;
+    const velocity = timeDelta > 0 ? Math.round((positionDelta / timeDelta) * 1000) : 0;
+
+    if (depth > container.maxDepthReached) {
+      container.maxDepthReached = depth;
+    }
+
     container.lastScrollPos = scrollTop;
 
-    return { depth, direction };
+    return {
+      depth,
+      direction,
+      velocity,
+      max_depth_reached: container.maxDepthReached,
+    };
   }
 
   private getScrollTop(element: Window | HTMLElement): number {
@@ -287,19 +361,5 @@ export class ScrollHandler extends StateManager {
     const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
 
     return hasScrollableOverflow && hasOverflowContent;
-  }
-
-  private safeQuerySelector(selector: string): HTMLElement | null {
-    try {
-      return document.querySelector(selector);
-    } catch (error) {
-      log('warn', 'Invalid CSS selector', {
-        error,
-        data: { selector },
-        showToClient: true,
-      });
-
-      return null;
-    }
   }
 }

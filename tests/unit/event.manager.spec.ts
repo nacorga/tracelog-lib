@@ -114,7 +114,13 @@ describe('EventManager', () => {
 
       eventManager.track({
         type: EventType.SCROLL,
-        scroll_data: { depth: 50, direction: 'down' as any },
+        scroll_data: {
+          depth: 50,
+          direction: 'down' as any,
+          container_selector: 'window',
+          velocity: 0,
+          max_depth_reached: 50,
+        },
       });
 
       expect(eventManager.getQueueLength()).toBe(2);

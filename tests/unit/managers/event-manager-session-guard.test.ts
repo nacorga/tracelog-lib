@@ -34,7 +34,13 @@ describe('EventManager - Session Guard', () => {
 
       eventManager.track({
         type: EventType.SCROLL,
-        scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
+        scroll_data: {
+          depth: 50,
+          direction: ScrollDirection.DOWN,
+          container_selector: 'window',
+          velocity: 0,
+          max_depth_reached: 50,
+        },
       });
 
       expect(eventManager.getQueueLength()).toBe(0);
@@ -134,7 +140,13 @@ describe('EventManager - Session Guard', () => {
     it('should process SCROLL events when sessionId is set', () => {
       eventManager.track({
         type: EventType.SCROLL,
-        scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
+        scroll_data: {
+          depth: 50,
+          direction: ScrollDirection.DOWN,
+          container_selector: 'window',
+          velocity: 0,
+          max_depth_reached: 50,
+        },
       });
 
       expect(eventManager.getQueueLength()).toBe(1);
@@ -252,7 +264,16 @@ describe('EventManager - Session Guard', () => {
 
       // Buffer different event types
       eventManager.track({ type: EventType.CLICK, click_data: { x: 10, y: 10, relativeX: 0.1, relativeY: 0.1 } });
-      eventManager.track({ type: EventType.SCROLL, scroll_data: { depth: 25, direction: ScrollDirection.DOWN } });
+      eventManager.track({
+        type: EventType.SCROLL,
+        scroll_data: {
+          depth: 25,
+          direction: ScrollDirection.DOWN,
+          container_selector: 'window',
+          velocity: 0,
+          max_depth_reached: 25,
+        },
+      });
       eventManager.track({ type: EventType.PAGE_VIEW, page_url: 'https://example.com/page' });
       eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 

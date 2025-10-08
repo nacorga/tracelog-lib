@@ -23,9 +23,7 @@ test.describe('Scroll Core Behavior', () => {
       document.body.innerHTML =
         '<div id="scroll-box" style="overflow: auto; height: 400px;"><div style="height: 2000px; background: linear-gradient(red, blue);"></div></div>';
 
-      await window.__traceLogBridge!.init({
-        scrollContainerSelectors: '#scroll-box',
-      });
+      await window.__traceLogBridge!.init({});
 
       window.__traceLogBridge!.on('event', (data: any) => {
         if (data.type === 'scroll') {
@@ -33,7 +31,7 @@ test.describe('Scroll Core Behavior', () => {
         }
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 1200));
 
       const container = document.querySelector('#scroll-box') as HTMLElement;
 

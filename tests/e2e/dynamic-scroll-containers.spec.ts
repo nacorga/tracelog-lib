@@ -20,9 +20,7 @@ test.describe('Dynamic Scroll Containers', () => {
 
       const events: any[] = [];
 
-      await window.__traceLogBridge!.init({
-        scrollContainerSelectors: '.delayed',
-      });
+      await window.__traceLogBridge!.init({});
 
       window.__traceLogBridge!.on('event', (data: any) => {
         if (data.type === 'scroll') {
@@ -35,7 +33,7 @@ test.describe('Dynamic Scroll Containers', () => {
       document.body.innerHTML +=
         '<div class="delayed" style="overflow: auto; height: 300px;"><div style="height: 2000px;"></div></div>';
 
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 900));
 
       const container = document.querySelector('.delayed') as HTMLElement;
       if (container) {
@@ -66,9 +64,7 @@ test.describe('Dynamic Scroll Containers', () => {
 
       const events: any[] = [];
 
-      await window.__traceLogBridge!.init({
-        scrollContainerSelectors: '.never-exists',
-      });
+      await window.__traceLogBridge!.init({});
 
       window.__traceLogBridge!.on('event', (data: any) => {
         if (data.type === 'scroll') {
@@ -76,7 +72,7 @@ test.describe('Dynamic Scroll Containers', () => {
         }
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1200));
 
       window.scrollTo(0, 500);
       window.dispatchEvent(new Event('scroll'));

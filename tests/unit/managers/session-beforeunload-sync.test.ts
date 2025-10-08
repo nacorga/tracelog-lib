@@ -159,7 +159,13 @@ describe('SessionManager - beforeunload async bug fix', () => {
       });
       eventManager.track({
         type: EventType.SCROLL,
-        scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
+        scroll_data: {
+          depth: 50,
+          direction: ScrollDirection.DOWN,
+          container_selector: 'window',
+          velocity: 0,
+          max_depth_reached: 50,
+        },
       });
       eventManager.track({ type: EventType.PAGE_VIEW });
 
