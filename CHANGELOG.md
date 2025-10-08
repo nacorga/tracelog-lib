@@ -7,6 +7,22 @@
 
 
 
+
+## [0.8.3] - 2025-10-08
+
+### ♻️ Refactoring
+
+- Remove backend custom event validation constants for clarity ([d805545](../../commit/d805545c214fa6f550857c845cb359a3a5fe7275))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.8.2...v0.8.3
+
+
 ## [0.8.2] - 2025-10-08
 
 ### ♻️ Refactoring
