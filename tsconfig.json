@@ -21,9 +21,11 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": false, // Can be too strict for some cases
+    "noUncheckedIndexedAccess": true, // Makes array[i] return T | undefined - safer
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": false, // Can be too strict
+    "allowUnusedLabels": false, // Detect unused labels
+    "allowUnreachableCode": false, // Detect unreachable code
 
     /* Module Resolution Options */
     "esModuleInterop": true,

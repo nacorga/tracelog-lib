@@ -209,8 +209,9 @@ describe('Event Flow Integration', () => {
         custom_event: { name: 'test' },
       });
 
-      const call = trackSpy.mock.calls[0][0];
-      const payload = eventManager['buildEventPayload'](call);
+      const call = trackSpy.mock.calls[0]?.[0];
+      expect(call).toBeDefined();
+      const payload = eventManager['buildEventPayload'](call!);
 
       expect(payload.page_url).toBe('https://example.com');
     });
@@ -315,8 +316,14 @@ describe('Event Flow Integration', () => {
       const payload = eventManager['buildEventsPayload']();
 
       // Events should be sorted by timestamp
-      expect(payload.events[0].timestamp).toBeLessThanOrEqual(payload.events[1].timestamp);
-      expect(payload.events[1].timestamp).toBeLessThanOrEqual(payload.events[2].timestamp);
+      const event0 = payload.events[0];
+      const event1 = payload.events[1];
+      const event2 = payload.events[2];
+      expect(event0).toBeDefined();
+      expect(event1).toBeDefined();
+      expect(event2).toBeDefined();
+      expect(event0!.timestamp).toBeLessThanOrEqual(event1!.timestamp);
+      expect(event1!.timestamp).toBeLessThanOrEqual(event2!.timestamp);
 
       vi.useRealTimers();
     });

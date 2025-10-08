@@ -195,10 +195,14 @@ describe('SessionManager - beforeunload async bug fix', () => {
       sessionManager.startTracking();
 
       // Should complete without error
-      expect(() => sessionManager.stopTracking()).not.toThrow();
+      expect(() => {
+        sessionManager.stopTracking();
+      }).not.toThrow();
 
       // Should be idempotent
-      expect(() => sessionManager.stopTracking()).not.toThrow();
+      expect(() => {
+        sessionManager.stopTracking();
+      }).not.toThrow();
     });
   });
 

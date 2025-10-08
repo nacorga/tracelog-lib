@@ -327,9 +327,10 @@ describe('ErrorHandler', () => {
         }),
       );
 
-      const call = trackSpy.mock.calls[0][0];
-      expect(call.error_data?.message).toContain('[REDACTED]');
-      expect(call.error_data?.message).not.toContain('test@example.com');
+      const call = trackSpy.mock.calls[0]?.[0];
+      expect(call).toBeDefined();
+      expect(call!.error_data?.message).toContain('[REDACTED]');
+      expect(call!.error_data?.message).not.toContain('test@example.com');
     });
   });
 
@@ -374,8 +375,9 @@ describe('ErrorHandler', () => {
 
       window.dispatchEvent(rejectionEvent);
 
-      const call = trackSpy.mock.calls[0][0];
-      expect(call.error_data?.message).toContain('Promise error message');
+      const call = trackSpy.mock.calls[0]?.[0];
+      expect(call).toBeDefined();
+      expect(call!.error_data?.message).toContain('Promise error message');
     });
 
     it('should handle rejection with object reason', () => {
@@ -409,8 +411,9 @@ describe('ErrorHandler', () => {
 
       window.dispatchEvent(rejectionEvent);
 
-      const call = trackSpy.mock.calls[0][0];
-      expect(call.error_data?.message).toBe('Unknown rejection');
+      const call = trackSpy.mock.calls[0]?.[0];
+      expect(call).toBeDefined();
+      expect(call!.error_data?.message).toBe('Unknown rejection');
     });
   });
 
@@ -440,7 +443,9 @@ describe('ErrorHandler', () => {
     });
 
     it('should not throw when stopping without starting', () => {
-      expect(() => errorHandler.stopTracking()).not.toThrow();
+      expect(() => {
+        errorHandler.stopTracking();
+      }).not.toThrow();
     });
   });
 });

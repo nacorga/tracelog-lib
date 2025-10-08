@@ -232,7 +232,9 @@ export class SessionManager extends StateManager {
   }
 
   private setupActivityListeners(): void {
-    this.activityHandler = (): void => this.resetSessionTimeout();
+    this.activityHandler = (): void => {
+      this.resetSessionTimeout();
+    };
 
     document.addEventListener('click', this.activityHandler, { passive: true });
     document.addEventListener('keydown', this.activityHandler, { passive: true });

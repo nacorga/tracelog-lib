@@ -151,7 +151,9 @@ export class SenderManager extends StateManager {
 
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(url, {

@@ -121,7 +121,9 @@ describe('SessionHandler', () => {
         throw new Error('Init failed');
       });
 
-      expect(() => sessionHandler.startTracking()).toThrow('Init failed');
+      expect(() => {
+        sessionHandler.startTracking();
+      }).toThrow('Init failed');
 
       expect(mockSessionManager.destroy).toHaveBeenCalled();
       expect((sessionHandler as any).sessionManager).toBeNull();
@@ -136,7 +138,9 @@ describe('SessionHandler', () => {
         throw new Error('Cleanup failed');
       });
 
-      expect(() => sessionHandler.startTracking()).toThrow('Init failed');
+      expect(() => {
+        sessionHandler.startTracking();
+      }).toThrow('Init failed');
 
       // Should not throw cleanup error, only original error
       expect((sessionHandler as any).sessionManager).toBeNull();
@@ -173,13 +177,17 @@ describe('SessionHandler', () => {
     it('should not throw when stopping without starting', () => {
       const freshHandler = new SessionHandler(storageManager, eventManager);
 
-      expect(() => freshHandler.stopTracking()).not.toThrow();
+      expect(() => {
+        freshHandler.stopTracking();
+      }).not.toThrow();
     });
 
     it('should handle multiple stop calls gracefully', () => {
       sessionHandler.startTracking();
       sessionHandler.stopTracking();
-      expect(() => sessionHandler.stopTracking()).not.toThrow();
+      expect(() => {
+        sessionHandler.stopTracking();
+      }).not.toThrow();
     });
   });
 
@@ -219,13 +227,17 @@ describe('SessionHandler', () => {
     it('should not throw when destroying without starting', () => {
       const freshHandler = new SessionHandler(storageManager, eventManager);
 
-      expect(() => freshHandler.destroy()).not.toThrow();
+      expect(() => {
+        freshHandler.destroy();
+      }).not.toThrow();
     });
 
     it('should handle multiple destroy calls gracefully', () => {
       sessionHandler.destroy();
 
-      expect(() => sessionHandler.destroy()).not.toThrow();
+      expect(() => {
+        sessionHandler.destroy();
+      }).not.toThrow();
     });
 
     it('should be idempotent', () => {
@@ -351,7 +363,9 @@ describe('SessionHandler', () => {
         throw mockError;
       });
 
-      expect(() => sessionHandler.startTracking()).toThrow('SessionManager init failed');
+      expect(() => {
+        sessionHandler.startTracking();
+      }).toThrow('SessionManager init failed');
     });
 
     it('should log errors during initialization', () => {
@@ -375,7 +389,9 @@ describe('SessionHandler', () => {
         throw 'String error';
       });
 
-      expect(() => sessionHandler.startTracking()).toThrow('String error');
+      expect(() => {
+        sessionHandler.startTracking();
+      }).toThrow('String error');
     });
   });
 
@@ -398,7 +414,9 @@ describe('SessionHandler', () => {
       vi.spyOn(sessionHandler as any, 'get').mockReturnValue(null);
 
       // Should still be able to stop
-      expect(() => sessionHandler.stopTracking()).not.toThrow();
+      expect(() => {
+        sessionHandler.stopTracking();
+      }).not.toThrow();
     });
 
     it('should maintain destroyed state after multiple operations', () => {

@@ -86,7 +86,9 @@ export class ScrollHandler extends StateManager {
     }
 
     if (attempt < 5) {
-      setTimeout(() => this.trySetupContainers(selectors, attempt + 1), 200);
+      setTimeout(() => {
+        this.trySetupContainers(selectors, attempt + 1);
+      }, 200);
       return;
     }
 

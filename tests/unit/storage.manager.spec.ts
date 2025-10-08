@@ -152,7 +152,9 @@ describe('StorageManager', () => {
       fallbackStorage.setItem('test_key', 'test_value');
 
       // Should not throw
-      expect(() => fallbackStorage.clear()).not.toThrow();
+      expect(() => {
+        fallbackStorage.clear();
+      }).not.toThrow();
     });
 
     it('should clear memory fallback storage', () => {
@@ -188,7 +190,9 @@ describe('StorageManager', () => {
       const fallbackStorage = new StorageManager();
 
       // Should not throw
-      expect(() => fallbackStorage.removeItem('test_key')).not.toThrow();
+      expect(() => {
+        fallbackStorage.removeItem('test_key');
+      }).not.toThrow();
     });
 
     it('should handle corrupted localStorage data', () => {

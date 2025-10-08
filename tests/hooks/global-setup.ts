@@ -42,7 +42,11 @@ function validateEnvironment(): void {
 
   // Check Node.js version
   const nodeVersion = process.version;
-  const majorVersion = parseInt(nodeVersion.substring(1).split('.')[0]);
+  const versionPart = nodeVersion.substring(1).split('.')[0];
+  if (!versionPart) {
+    throw new Error('Failed to parse Node.js version');
+  }
+  const majorVersion = parseInt(versionPart);
   if (majorVersion < 16) {
     throw new Error(`Node.js version ${nodeVersion} is not supported. Please use Node.js 16+`);
   }

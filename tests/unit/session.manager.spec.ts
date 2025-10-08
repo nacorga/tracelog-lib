@@ -55,7 +55,9 @@ describe('SessionManager', () => {
       const now = Date.now();
       const sessionId = sessionManager['generateSessionId']();
 
-      const timestamp = parseInt(sessionId.split('-')[0], 10);
+      const timestampStr = sessionId.split('-')[0];
+      expect(timestampStr).toBeDefined();
+      const timestamp = parseInt(timestampStr!, 10);
       expect(timestamp).toBeGreaterThanOrEqual(now);
       expect(timestamp).toBeLessThanOrEqual(now + 100);
     });
@@ -402,7 +404,9 @@ describe('SessionManager', () => {
     });
 
     it('should handle destroy when not tracking', () => {
-      expect(() => sessionManager.destroy()).not.toThrow();
+      expect(() => {
+        sessionManager.destroy();
+      }).not.toThrow();
     });
   });
 
