@@ -41,14 +41,14 @@ export const init = async (config?: Config): Promise<void> => {
     const instance = new App();
 
     try {
-      // Attach buffered listeners BEFORE init() so they capture initial events
       pendingListeners.forEach(({ event, callback }) => {
         instance.on(event, callback);
       });
+
       pendingListeners.length = 0;
 
-      // Wrap initialization with timeout using Promise.race
       const initPromise = instance.init(validatedConfig);
+
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
           reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
