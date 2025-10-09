@@ -31,6 +31,7 @@ export class ScrollHandler extends StateManager {
   private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   private windowScrollableCache: boolean | null = null;
+  private retryTimeoutId: number | null = null;
 
   constructor(eventManager: EventManager) {
     super();
@@ -46,6 +47,11 @@ export class ScrollHandler extends StateManager {
   }
 
   stopTracking(): void {
+    if (this.retryTimeoutId !== null) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
+    }
+
     for (const container of this.containers) {
       this.clearContainerTimer(container);
 
@@ -70,26 +76,32 @@ export class ScrollHandler extends StateManager {
         const selector = this.getElementSelector(element);
         this.setupScrollContainer(element, selector);
       }
+
       this.applyPrimaryScrollSelectorIfConfigured();
+
       return;
     }
 
     if (attempt < 5) {
-      setTimeout(() => {
+      this.retryTimeoutId = window.setTimeout(() => {
+        this.retryTimeoutId = null;
         this.tryDetectScrollContainers(attempt + 1);
       }, 200);
+
       return;
     }
 
     if (this.containers.length === 0) {
       this.setupScrollContainer(window, 'window');
     }
+
     this.applyPrimaryScrollSelectorIfConfigured();
   }
 
   private applyPrimaryScrollSelectorIfConfigured(): void {
     const config = this.get('config');
-    if (config.primaryScrollSelector) {
+
+    if (config?.primaryScrollSelector) {
       this.applyPrimaryScrollSelector(config.primaryScrollSelector);
     }
   }
@@ -100,6 +112,7 @@ export class ScrollHandler extends StateManager {
     }
 
     const elements: HTMLElement[] = [];
+
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
       acceptNode: (node) => {
         const element = node as HTMLElement;
@@ -120,8 +133,10 @@ export class ScrollHandler extends StateManager {
     });
 
     let node: Node | null;
+
     while ((node = walker.nextNode()) && elements.length < 10) {
       const element = node as HTMLElement;
+
       if (this.isElementScrollable(element)) {
         elements.push(element);
       }
@@ -143,6 +158,7 @@ export class ScrollHandler extends StateManager {
 
     if (htmlElement.className && typeof htmlElement.className === 'string') {
       const firstClass = htmlElement.className.split(' ').filter((c) => c.trim())[0];
+
       if (firstClass) {
         return `.${firstClass}`;
       }
@@ -163,6 +179,7 @@ export class ScrollHandler extends StateManager {
 
   private setupScrollContainer(element: Window | HTMLElement, selector: string): void {
     const alreadyTracking = this.containers.some((c) => c.element === element);
+
     if (alreadyTracking) {
       return;
     }
@@ -416,8 +433,7 @@ export class ScrollHandler extends StateManager {
     const targetAlreadyTracked = this.containers.some((c) => c.element === targetElement);
     if (!targetAlreadyTracked && targetElement instanceof HTMLElement) {
       if (this.isElementScrollable(targetElement)) {
-        const elementSelector = this.getElementSelector(targetElement);
-        this.setupScrollContainer(targetElement, elementSelector);
+        this.setupScrollContainer(targetElement, selector);
       }
     }
   }

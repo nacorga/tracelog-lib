@@ -2040,6 +2040,7 @@ class ScrollHandler extends StateManager {
   minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   windowScrollableCache = null;
+  retryTimeoutId = null;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -2051,6 +2052,10 @@ class ScrollHandler extends StateManager {
     this.tryDetectScrollContainers(0);
   }
   stopTracking() {
+    if (this.retryTimeoutId !== null) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
+    }
     for (const container of this.containers) {
       this.clearContainerTimer(container);
       if (container.element instanceof Window) {
@@ -2075,7 +2080,8 @@ class ScrollHandler extends StateManager {
       return;
     }
     if (attempt < 5) {
-      setTimeout(() => {
+      this.retryTimeoutId = window.setTimeout(() => {
+        this.retryTimeoutId = null;
         this.tryDetectScrollContainers(attempt + 1);
       }, 200);
       return;
@@ -2087,7 +2093,7 @@ class ScrollHandler extends StateManager {
   }
   applyPrimaryScrollSelectorIfConfigured() {
     const config = this.get("config");
-    if (config.primaryScrollSelector) {
+    if (config?.primaryScrollSelector) {
       this.applyPrimaryScrollSelector(config.primaryScrollSelector);
     }
   }
@@ -2328,8 +2334,7 @@ class ScrollHandler extends StateManager {
     const targetAlreadyTracked = this.containers.some((c2) => c2.element === targetElement);
     if (!targetAlreadyTracked && targetElement instanceof HTMLElement) {
       if (this.isElementScrollable(targetElement)) {
-        const elementSelector = this.getElementSelector(targetElement);
-        this.setupScrollContainer(targetElement, elementSelector);
+        this.setupScrollContainer(targetElement, selector);
       }
     }
   }
