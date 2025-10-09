@@ -71,6 +71,24 @@ export const validateAppConfig = (config?: Config): void => {
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE, 'config');
     }
   }
+
+  if (config.primaryScrollSelector !== undefined) {
+    if (typeof config.primaryScrollSelector !== 'string' || !config.primaryScrollSelector.trim()) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR, 'config');
+    }
+
+    // Validate CSS selector syntax (skip for 'window' special value)
+    if (config.primaryScrollSelector !== 'window') {
+      try {
+        document.querySelector(config.primaryScrollSelector);
+      } catch {
+        throw new AppConfigValidationError(
+          `${VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX}: "${config.primaryScrollSelector}"`,
+          'config',
+        );
+      }
+    }
+  }
 };
 
 /**

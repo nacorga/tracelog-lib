@@ -44,8 +44,22 @@ test.describe('Scroll Core Behavior', () => {
 
     expect(result.hasScrollData).toBe(true);
     if (result.events.length > 0) {
-      expect(result.events[0].scroll_data).toHaveProperty('depth');
-      expect(result.events[0].scroll_data).toHaveProperty('direction');
+      const scrollData = result.events[0].scroll_data;
+      // Verify all 6 scroll_data fields
+      expect(scrollData).toHaveProperty('depth');
+      expect(scrollData).toHaveProperty('direction');
+      expect(scrollData).toHaveProperty('container_selector');
+      expect(scrollData).toHaveProperty('is_primary');
+      expect(scrollData).toHaveProperty('velocity');
+      expect(scrollData).toHaveProperty('max_depth_reached');
+
+      // Type validation
+      expect(typeof scrollData.depth).toBe('number');
+      expect(['up', 'down']).toContain(scrollData.direction);
+      expect(typeof scrollData.container_selector).toBe('string');
+      expect(typeof scrollData.is_primary).toBe('boolean');
+      expect(typeof scrollData.velocity).toBe('number');
+      expect(typeof scrollData.max_depth_reached).toBe('number');
     }
   });
 });

@@ -13,6 +13,7 @@ import { log } from '../utils';
 interface ScrollContainer {
   element: Window | HTMLElement;
   selector: string;
+  isPrimary: boolean;
   lastScrollPos: number;
   lastDepth: number;
   lastDirection: ScrollDirection;
@@ -29,6 +30,7 @@ export class ScrollHandler extends StateManager {
   private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
+  private windowScrollableCache: boolean | null = null;
 
   constructor(eventManager: EventManager) {
     super();
@@ -57,6 +59,7 @@ export class ScrollHandler extends StateManager {
     this.containers.length = 0;
     this.set('scrollEventCount', 0);
     this.limitWarningLogged = false;
+    this.windowScrollableCache = null;
   }
 
   private tryDetectScrollContainers(attempt: number): void {
@@ -67,6 +70,7 @@ export class ScrollHandler extends StateManager {
         const selector = this.getElementSelector(element);
         this.setupScrollContainer(element, selector);
       }
+      this.applyPrimaryScrollSelectorIfConfigured();
       return;
     }
 
@@ -79,6 +83,14 @@ export class ScrollHandler extends StateManager {
 
     if (this.containers.length === 0) {
       this.setupScrollContainer(window, 'window');
+    }
+    this.applyPrimaryScrollSelectorIfConfigured();
+  }
+
+  private applyPrimaryScrollSelectorIfConfigured(): void {
+    const config = this.get('config');
+    if (config.primaryScrollSelector) {
+      this.applyPrimaryScrollSelector(config.primaryScrollSelector);
     }
   }
 
@@ -139,6 +151,16 @@ export class ScrollHandler extends StateManager {
     return htmlElement.tagName.toLowerCase();
   }
 
+  private determineIfPrimary(element: Window | HTMLElement): boolean {
+    // Window scrollable → window is primary
+    if (this.isWindowScrollable()) {
+      return element === window;
+    }
+
+    // Window not scrollable → first detected container is primary
+    return this.containers.length === 0;
+  }
+
   private setupScrollContainer(element: Window | HTMLElement, selector: string): void {
     const alreadyTracking = this.containers.some((c) => c.element === element);
     if (alreadyTracking) {
@@ -175,9 +197,11 @@ export class ScrollHandler extends StateManager {
       this.getScrollHeight(element),
       this.getViewportHeight(element),
     );
+    const isPrimary = this.determineIfPrimary(element);
     const container: ScrollContainer = {
       element,
       selector,
+      isPrimary,
       lastScrollPos: initialScrollTop,
       lastDepth: initialDepth,
       lastDirection: ScrollDirection.DOWN,
@@ -198,7 +222,7 @@ export class ScrollHandler extends StateManager {
 
   private processScrollEvent(
     container: ScrollContainer,
-    scrollData: Omit<ScrollData, 'container_selector'>,
+    scrollData: Omit<ScrollData, 'container_selector' | 'is_primary'>,
     timestamp: number,
   ): void {
     if (!this.shouldEmitScrollEvent(container, scrollData, timestamp)) {
@@ -217,13 +241,14 @@ export class ScrollHandler extends StateManager {
       scroll_data: {
         ...scrollData,
         container_selector: container.selector,
+        is_primary: container.isPrimary,
       },
     });
   }
 
   private shouldEmitScrollEvent(
     container: ScrollContainer,
-    scrollData: Omit<ScrollData, 'container_selector'>,
+    scrollData: Omit<ScrollData, 'container_selector' | 'is_primary'>,
     timestamp: number,
   ): boolean {
     if (this.hasReachedSessionLimit()) {
@@ -277,7 +302,12 @@ export class ScrollHandler extends StateManager {
   }
 
   private isWindowScrollable(): boolean {
-    return document.documentElement.scrollHeight > window.innerHeight;
+    if (this.windowScrollableCache !== null) {
+      return this.windowScrollableCache;
+    }
+
+    this.windowScrollableCache = document.documentElement.scrollHeight > window.innerHeight;
+    return this.windowScrollableCache;
   }
 
   private clearContainerTimer(container: ScrollContainer): void {
@@ -300,7 +330,9 @@ export class ScrollHandler extends StateManager {
     return Math.min(100, Math.max(0, Math.floor((scrollTop / maxScrollTop) * 100)));
   }
 
-  private calculateScrollData(container: ScrollContainer): Omit<ScrollData, 'container_selector'> | null {
+  private calculateScrollData(
+    container: ScrollContainer,
+  ): Omit<ScrollData, 'container_selector' | 'is_primary'> | null {
     const { element, lastScrollPos, lastEventTime } = container;
     const scrollTop = this.getScrollTop(element);
     const now = Date.now();
@@ -361,5 +393,36 @@ export class ScrollHandler extends StateManager {
     const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
 
     return hasScrollableOverflow && hasOverflowContent;
+  }
+
+  private applyPrimaryScrollSelector(selector: string): void {
+    let targetElement: Window | HTMLElement;
+
+    if (selector === 'window') {
+      targetElement = window;
+    } else {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        log('warn', `Selector "${selector}" did not match an HTMLElement`);
+        return;
+      }
+      targetElement = element;
+    }
+
+    this.containers.forEach((container) => {
+      this.updateContainerPrimary(container, container.element === targetElement);
+    });
+
+    const targetAlreadyTracked = this.containers.some((c) => c.element === targetElement);
+    if (!targetAlreadyTracked && targetElement instanceof HTMLElement) {
+      if (this.isElementScrollable(targetElement)) {
+        const elementSelector = this.getElementSelector(targetElement);
+        this.setupScrollContainer(targetElement, elementSelector);
+      }
+    }
+  }
+
+  private updateContainerPrimary(container: ScrollContainer, isPrimary: boolean): void {
+    container.isPrimary = isPrimary;
   }
 }

@@ -11,6 +11,8 @@ export interface Config {
   errorSampling?: number;
   /** Event sampling rate between 0 and 1. */
   samplingRate?: number;
+  /** CSS selector to manually override primary scroll container detection. */
+  primaryScrollSelector?: string;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

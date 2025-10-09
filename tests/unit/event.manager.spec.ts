@@ -118,6 +118,7 @@ describe('EventManager', () => {
           depth: 50,
           direction: 'down' as any,
           container_selector: 'window',
+          is_primary: true,
           velocity: 0,
           max_depth_reached: 50,
         },

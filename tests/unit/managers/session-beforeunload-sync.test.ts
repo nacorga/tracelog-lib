@@ -163,6 +163,7 @@ describe('SessionManager - beforeunload async bug fix', () => {
           depth: 50,
           direction: ScrollDirection.DOWN,
           container_selector: 'window',
+          is_primary: true,
           velocity: 0,
           max_depth_reached: 50,
         },

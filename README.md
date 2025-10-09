@@ -184,6 +184,23 @@ Each event contains a base structure with type-specific data:
 - **`SCROLL`**: Scroll engagement
   - `scroll_data.depth`: Scroll depth percentage (0-100)
   - `scroll_data.direction`: Scroll direction (up/down)
+  - `scroll_data.container_selector`: CSS selector identifying scroll container (e.g., `window`, `.mat-sidenav-content`, `#main`)
+  - `scroll_data.is_primary`: Whether this is the main scroll container (true for primary content, false for sidebars/modals)
+  - `scroll_data.velocity`: Scroll speed in pixels per second (for engagement analysis)
+  - `scroll_data.max_depth_reached`: Maximum scroll depth reached in current session (0-100)
+
+### Scroll Container Detection
+
+**Primary Container Logic**:
+- If `window` is scrollable → `window` is primary (`is_primary: true`)
+- If `window` NOT scrollable → First detected container is primary (e.g., `.mat-sidenav-content` in Angular Material)
+- All other containers are secondary (`is_primary: false`)
+
+**Important Notes**:
+- `is_primary` is calculated ONCE when container is detected
+- Does not re-calculate if layout changes dynamically during session
+- Pages without scroll: Window is marked primary but generates no events (scroll impossible)
+- Historical events maintain their original `is_primary` value for consistency
 
 - **`SESSION_START`**: Session initialization
   - No additional data
@@ -217,6 +234,67 @@ await tracelog.init();
 
 **Note**: Listeners are buffered if registered before `init()`, ensuring you don't miss initial events.
 
+**Filter scroll events by primary container:**
+```typescript
+tracelog.on('event', (event) => {
+  if (event.type === 'scroll') {
+    const { is_primary, container_selector, depth, velocity } = event.scroll_data;
+
+    if (is_primary) {
+      // Track main content engagement
+      console.log(`Primary scroll (${container_selector}): ${depth}%`);
+
+      // Identify engaged users (slow scroll = reading)
+      if (velocity < 500 && depth > 50) {
+        console.log('User is reading deeply');
+      }
+
+      // Identify bouncing users (fast scroll = scanning)
+      if (velocity > 2000) {
+        console.log('User is quickly scanning');
+      }
+    } else {
+      // Track auxiliary UI interaction
+      console.log(`Secondary scroll (${container_selector}): ${depth}%`);
+    }
+  }
+});
+```
+
+**Analytics queries example:**
+```typescript
+// In your analytics backend
+const primaryScrollEvents = events.filter(e =>
+  e.type === 'scroll' && e.scroll_data.is_primary
+);
+
+const avgPrimaryDepth = primaryScrollEvents.reduce((sum, e) =>
+  sum + e.scroll_data.depth, 0
+) / primaryScrollEvents.length;
+
+console.log(`Average primary content depth: ${avgPrimaryDepth}%`);
+```
+
+**TypeScript type helpers:**
+```typescript
+import { tracelog, isPrimaryScrollEvent, isSecondaryScrollEvent, EmitterEvent } from '@tracelog/lib';
+
+tracelog.on(EmitterEvent.EVENT, (event) => {
+  // Type guard provides type safety
+  if (isPrimaryScrollEvent(event)) {
+    // TypeScript knows event.scroll_data.is_primary === true
+    const depth = event.scroll_data.depth;
+    console.log(`Primary scroll depth: ${depth}%`);
+  }
+
+  if (isSecondaryScrollEvent(event)) {
+    // TypeScript knows event.scroll_data.is_primary === false
+    const selector = event.scroll_data.container_selector;
+    console.log(`Secondary UI scroll: ${selector}`);
+  }
+});
+```
+
 **Multiple integrations:**
 ```typescript
 await tracelog.init({
@@ -231,6 +309,32 @@ await tracelog.init({
 ```typescript
 window.__traceLogDisabled = true;
 ```
+
+### Manual Primary Container Selection
+
+For edge cases requiring manual override of automatic primary container detection:
+
+```typescript
+await tracelog.init({
+  primaryScrollSelector: '#custom-content' // Override auto-detection
+});
+
+// To mark window as primary:
+await tracelog.init({
+  primaryScrollSelector: 'window'
+});
+```
+
+**When to use**: In 99% of cases, automatic detection is sufficient. Use manual selection only when:
+- You need to override automatic detection for a specific business requirement
+- Your UI has multiple main content areas and you want to prioritize one
+
+**Important Notes:**
+- `primaryScrollSelector` is applied during `init()` and affects all subsequently detected containers
+- The selector is applied BEFORE automatic detection to ensure priority and avoid race conditions
+- If you call `init()` multiple times, only the LAST `primaryScrollSelector` will be active
+- To change primary container dynamically, call `destroy()` then `init()` with new selector
+- Calling `init()` does NOT clear previously detected containers unless `destroy()` is called first
 
 ## Compatibility
 

@@ -211,6 +211,7 @@ Tracks scroll depth, direction, velocity, and container identification across mu
     depth: 45,                      // Current scroll depth (0-100%)
     direction: 'down',              // 'up' | 'down'
     container_selector: 'window',   // CSS selector or 'window'
+    is_primary: true,               // Whether this is the main scroll container
     velocity: 1250,                 // Scroll velocity in px/s
     max_depth_reached: 67           // Maximum depth reached in this session (0-100%)
   }
@@ -233,6 +234,30 @@ Tracks scroll depth, direction, velocity, and container identification across mu
   - Priority order: ID selector (`#container`) > Class selector (`.content`) > Tag name (`main`)
   - Special value: `'window'` for viewport scrolling
   - Use case: Identify which content areas users engage with most
+
+- **`is_primary`**: Boolean indicating if this is the primary scroll container
+  - `true` if `window` is scrollable (traditional layout)
+  - `true` for first detected container if `window` is NOT scrollable (e.g., Angular Material sidenav)
+  - `false` for all secondary containers (sidebars, modals, panels)
+  - Use case: Filter analytics to focus on main content scroll vs auxiliary UI elements
+  - **Example queries**:
+    ```javascript
+    // Get only primary scroll events
+    db.events.find({
+      type: 'scroll',
+      'scroll_data.is_primary': true
+    })
+
+    // Compare primary vs secondary engagement
+    db.events.aggregate([
+      { $match: { type: 'scroll' } },
+      { $group: {
+          _id: '$scroll_data.is_primary',
+          avg_depth: { $avg: '$scroll_data.depth' },
+          avg_velocity: { $avg: '$scroll_data.velocity' }
+      }}
+    ])
+    ```
 
 **Container Selector Identification**:
 
@@ -262,6 +287,13 @@ The handler generates CSS selectors for each scrollable container using this pri
 5. Generates CSS selector for each detected container
 6. Retries up to 5 times with 200ms intervals for dynamically loaded content
 7. Falls back to window-only if no containers found after retries
+
+**Dynamic Changes**:
+- Container classification (`is_primary`) is determined at detection time
+- Does NOT automatically update if page layout changes (e.g., window becomes scrollable mid-session)
+- New containers detected after initial setup will be classified based on current state
+- This ensures consistent analytics data within a session
+- Historical events maintain their original `is_primary` value
 
 **Performance Optimizations**:
 - TreeWalker with early branch pruning

@@ -70,6 +70,8 @@ describe('ScrollHandler - Core Functionality', () => {
     expect(call.scroll_data.depth).toBeGreaterThan(0);
     expect(call.scroll_data.depth).toBeLessThanOrEqual(100);
     expect(call.scroll_data.container_selector).toBeDefined();
+    expect(call.scroll_data.is_primary).toBeDefined();
+    expect(typeof call.scroll_data.is_primary).toBe('boolean');
   });
 
   test('should detect scroll direction down', () => {
@@ -381,5 +383,79 @@ describe('ScrollHandler - Core Functionality', () => {
     const secondCall = mockEventManager.track.mock.calls[0][0];
     expect(secondCall.scroll_data.max_depth_reached).toBeLessThan(firstMaxDepth);
     expect(secondCall.scroll_data.max_depth_reached).toBe(secondCall.scroll_data.depth);
+  });
+
+  test('should mark first container as primary when window not scrollable', () => {
+    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 800, configurable: true });
+    Object.defineProperty(document.documentElement, 'clientHeight', { value: 800, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    document.body.innerHTML = `
+      <div id="main-container" style="overflow: auto; height: 400px;">
+        <div style="height: 1000px;"></div>
+      </div>
+      <div id="sidebar-container" style="overflow: auto; height: 300px;">
+        <div style="height: 800px;"></div>
+      </div>
+    `;
+
+    const mainContainer = document.getElementById('main-container') as HTMLElement;
+    const sidebarContainer = document.getElementById('sidebar-container') as HTMLElement;
+
+    Object.defineProperty(mainContainer, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(mainContainer, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(mainContainer, 'scrollTop', { value: 0, configurable: true, writable: true });
+    Object.defineProperty(mainContainer, 'offsetParent', { value: document.body, configurable: true });
+    mainContainer.getBoundingClientRect = vi.fn().mockReturnValue({
+      width: 600,
+      height: 400,
+      top: 0,
+      left: 0,
+      bottom: 400,
+      right: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    Object.defineProperty(sidebarContainer, 'scrollHeight', { value: 800, configurable: true });
+    Object.defineProperty(sidebarContainer, 'clientHeight', { value: 300, configurable: true });
+    Object.defineProperty(sidebarContainer, 'scrollTop', { value: 0, configurable: true, writable: true });
+    Object.defineProperty(sidebarContainer, 'offsetParent', { value: document.body, configurable: true });
+    sidebarContainer.getBoundingClientRect = vi.fn().mockReturnValue({
+      width: 200,
+      height: 300,
+      top: 0,
+      left: 650,
+      bottom: 300,
+      right: 850,
+      x: 650,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    scrollHandler = new ScrollHandler(mockEventManager);
+    scrollHandler['set']('config', { id: 'test' } as any);
+    scrollHandler.startTracking();
+
+    vi.advanceTimersByTime(1100);
+
+    mainContainer.scrollTop = 300;
+    mainContainer.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(300);
+
+    sidebarContainer.scrollTop = 200;
+    sidebarContainer.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(300);
+
+    expect(mockEventManager.track).toHaveBeenCalledTimes(2);
+
+    const mainCall = mockEventManager.track.mock.calls[0][0];
+    expect(mainCall.scroll_data.container_selector).toBe('#main-container');
+    expect(mainCall.scroll_data.is_primary).toBe(true);
+
+    const sidebarCall = mockEventManager.track.mock.calls[1][0];
+    expect(sidebarCall.scroll_data.container_selector).toBe('#sidebar-container');
+    expect(sidebarCall.scroll_data.is_primary).toBe(false);
   });
 });

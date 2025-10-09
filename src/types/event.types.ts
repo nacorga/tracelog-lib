@@ -28,8 +28,33 @@ export interface ScrollData {
   depth: number;
   direction: ScrollDirection;
   container_selector: string;
+  is_primary: boolean;
   velocity: number;
   max_depth_reached: number;
+}
+
+// Type helpers for primary/secondary scroll events
+export type PrimaryScrollEvent = EventData & {
+  type: EventType.SCROLL;
+  scroll_data: ScrollData & { is_primary: true };
+};
+
+export type SecondaryScrollEvent = EventData & {
+  type: EventType.SCROLL;
+  scroll_data: ScrollData & { is_primary: false };
+};
+
+// Type guard functions
+export function isPrimaryScrollEvent(event: EventData): event is PrimaryScrollEvent {
+  return (
+    event.type === EventType.SCROLL && 'scroll_data' in event && (event.scroll_data as ScrollData).is_primary === true
+  );
+}
+
+export function isSecondaryScrollEvent(event: EventData): event is SecondaryScrollEvent {
+  return (
+    event.type === EventType.SCROLL && 'scroll_data' in event && (event.scroll_data as ScrollData).is_primary === false
+  );
 }
 
 export interface ClickData {

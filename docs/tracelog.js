@@ -71,7 +71,9 @@ const VALIDATION_MESSAGES = {
   INVALID_CUSTOM_API_URL: "Custom API URL is required when integration is enabled",
   INVALID_GOOGLE_ANALYTICS_ID: "Google Analytics measurement ID is required when integration is enabled",
   INVALID_GLOBAL_METADATA: "Global metadata must be an object",
-  INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings"
+  INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings",
+  INVALID_PRIMARY_SCROLL_SELECTOR: "Primary scroll selector must be a non-empty string",
+  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: "Invalid CSS selector syntax for primaryScrollSelector"
 };
 const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
@@ -129,6 +131,12 @@ var ErrorType = /* @__PURE__ */ ((ErrorType2) => {
   ErrorType2["PROMISE_REJECTION"] = "promise_rejection";
   return ErrorType2;
 })(ErrorType || {});
+function isPrimaryScrollEvent(event2) {
+  return event2.type === "scroll" && "scroll_data" in event2 && event2.scroll_data.is_primary === true;
+}
+function isSecondaryScrollEvent(event2) {
+  return event2.type === "scroll" && "scroll_data" in event2 && event2.scroll_data.is_primary === false;
+}
 var Mode = /* @__PURE__ */ ((Mode2) => {
   Mode2["QA"] = "qa";
   return Mode2;
@@ -509,6 +517,21 @@ const validateAppConfig = (config) => {
   if (config.samplingRate !== void 0) {
     if (typeof config.samplingRate !== "number" || config.samplingRate < 0 || config.samplingRate > 1) {
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE, "config");
+    }
+  }
+  if (config.primaryScrollSelector !== void 0) {
+    if (typeof config.primaryScrollSelector !== "string" || !config.primaryScrollSelector.trim()) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR, "config");
+    }
+    if (config.primaryScrollSelector !== "window") {
+      try {
+        document.querySelector(config.primaryScrollSelector);
+      } catch {
+        throw new AppConfigValidationError(
+          `${VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX}: "${config.primaryScrollSelector}"`,
+          "config"
+        );
+      }
     }
   }
 };
@@ -2016,6 +2039,7 @@ class ScrollHandler extends StateManager {
   minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
+  windowScrollableCache = null;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -2038,6 +2062,7 @@ class ScrollHandler extends StateManager {
     this.containers.length = 0;
     this.set("scrollEventCount", 0);
     this.limitWarningLogged = false;
+    this.windowScrollableCache = null;
   }
   tryDetectScrollContainers(attempt) {
     const elements = this.findScrollableElements();
@@ -2046,6 +2071,7 @@ class ScrollHandler extends StateManager {
         const selector = this.getElementSelector(element);
         this.setupScrollContainer(element, selector);
       }
+      this.applyPrimaryScrollSelectorIfConfigured();
       return;
     }
     if (attempt < 5) {
@@ -2056,6 +2082,13 @@ class ScrollHandler extends StateManager {
     }
     if (this.containers.length === 0) {
       this.setupScrollContainer(window, "window");
+    }
+    this.applyPrimaryScrollSelectorIfConfigured();
+  }
+  applyPrimaryScrollSelectorIfConfigured() {
+    const config = this.get("config");
+    if (config.primaryScrollSelector) {
+      this.applyPrimaryScrollSelector(config.primaryScrollSelector);
     }
   }
   findScrollableElements() {
@@ -2099,6 +2132,12 @@ class ScrollHandler extends StateManager {
     }
     return htmlElement.tagName.toLowerCase();
   }
+  determineIfPrimary(element) {
+    if (this.isWindowScrollable()) {
+      return element === window;
+    }
+    return this.containers.length === 0;
+  }
   setupScrollContainer(element, selector) {
     const alreadyTracking = this.containers.some((c2) => c2.element === element);
     if (alreadyTracking) {
@@ -2127,9 +2166,11 @@ class ScrollHandler extends StateManager {
       this.getScrollHeight(element),
       this.getViewportHeight(element)
     );
+    const isPrimary = this.determineIfPrimary(element);
     const container = {
       element,
       selector,
+      isPrimary,
       lastScrollPos: initialScrollTop,
       lastDepth: initialDepth,
       lastDirection: ScrollDirection.DOWN,
@@ -2158,7 +2199,8 @@ class ScrollHandler extends StateManager {
       type: EventType.SCROLL,
       scroll_data: {
         ...scrollData,
-        container_selector: container.selector
+        container_selector: container.selector,
+        is_primary: container.isPrimary
       }
     });
   }
@@ -2203,7 +2245,11 @@ class ScrollHandler extends StateManager {
     this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
   isWindowScrollable() {
-    return document.documentElement.scrollHeight > window.innerHeight;
+    if (this.windowScrollableCache !== null) {
+      return this.windowScrollableCache;
+    }
+    this.windowScrollableCache = document.documentElement.scrollHeight > window.innerHeight;
+    return this.windowScrollableCache;
   }
   clearContainerTimer(container) {
     if (container.debounceTimer !== null) {
@@ -2263,6 +2309,32 @@ class ScrollHandler extends StateManager {
     const hasScrollableOverflow = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflowX === "auto" || style.overflowX === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
     const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
     return hasScrollableOverflow && hasOverflowContent;
+  }
+  applyPrimaryScrollSelector(selector) {
+    let targetElement;
+    if (selector === "window") {
+      targetElement = window;
+    } else {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        log("warn", `Selector "${selector}" did not match an HTMLElement`);
+        return;
+      }
+      targetElement = element;
+    }
+    this.containers.forEach((container) => {
+      this.updateContainerPrimary(container, container.element === targetElement);
+    });
+    const targetAlreadyTracked = this.containers.some((c2) => c2.element === targetElement);
+    if (!targetAlreadyTracked && targetElement instanceof HTMLElement) {
+      if (this.isElementScrollable(targetElement)) {
+        const elementSelector = this.getElementSelector(targetElement);
+        this.setupScrollContainer(targetElement, elementSelector);
+      }
+    }
+  }
+  updateContainerPrimary(container, isPrimary) {
+    container.isPrimary = isPrimary;
   }
 }
 class GoogleAnalyticsIntegration extends StateManager {
@@ -3658,6 +3730,8 @@ export {
   SpecialApiUrl,
   TEMPORAL_ANALYSIS,
   TraceLogValidationError,
+  isPrimaryScrollEvent,
+  isSecondaryScrollEvent,
   tracelog
 };
 //# sourceMappingURL=tracelog.esm.js.map
