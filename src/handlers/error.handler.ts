@@ -7,6 +7,7 @@ import {
   ERROR_SUPPRESSION_WINDOW_MS,
   MAX_TRACKED_ERRORS,
   MAX_TRACKED_ERRORS_HARD_LIMIT,
+  DEFAULT_ERROR_SAMPLING_RATE,
 } from '../constants/error.constants';
 
 /**
@@ -35,7 +36,7 @@ export class ErrorHandler extends StateManager {
 
   private shouldSample(): boolean {
     const config = this.get('config');
-    const samplingRate = config?.errorSampling ?? 0.1;
+    const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
   }
 

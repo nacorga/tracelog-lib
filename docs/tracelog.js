@@ -9,6 +9,7 @@ const SIGNIFICANT_SCROLL_DELTA = 10;
 const MIN_SCROLL_DEPTH_CHANGE = 5;
 const SCROLL_MIN_EVENT_INTERVAL_MS = 500;
 const MAX_SCROLL_EVENTS_PER_SESSION = 120;
+const DEFAULT_SAMPLING_RATE = 1;
 const RATE_LIMIT_WINDOW_MS = 1e3;
 const MAX_EVENTS_PER_SECOND = 200;
 const MAX_PENDING_EVENTS_BUFFER = 100;
@@ -267,6 +268,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
 const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
 const MAX_TRACKED_ERRORS = 50;
 const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
+const DEFAULT_ERROR_SAMPLING_RATE = 1;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const QA_MODE_PARAM = "tlog_mode";
 const QA_MODE_VALUE = "qa";
@@ -580,8 +582,8 @@ const validateAndNormalizeConfig = (config) => {
     sessionTimeout: config?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT,
     globalMetadata: config?.globalMetadata ?? {},
     sensitiveQueryParams: config?.sensitiveQueryParams ?? [],
-    errorSampling: config?.errorSampling ?? 1,
-    samplingRate: config?.samplingRate ?? 1
+    errorSampling: config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE,
+    samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -2901,7 +2903,7 @@ class ErrorHandler extends StateManager {
   }
   shouldSample() {
     const config = this.get("config");
-    const samplingRate = config?.errorSampling ?? 0.1;
+    const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
   }
   handleError = (event2) => {

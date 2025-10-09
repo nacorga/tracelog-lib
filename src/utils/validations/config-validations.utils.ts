@@ -2,8 +2,10 @@ import {
   MAX_SESSION_TIMEOUT_MS,
   MIN_SESSION_TIMEOUT_MS,
   DEFAULT_SESSION_TIMEOUT,
+  DEFAULT_SAMPLING_RATE,
   VALIDATION_MESSAGES,
 } from '../../constants';
+import { DEFAULT_ERROR_SAMPLING_RATE } from '../../constants/error.constants';
 import { Config } from '../../types';
 import {
   AppConfigValidationError,
@@ -172,8 +174,8 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     sessionTimeout: config?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT,
     globalMetadata: config?.globalMetadata ?? {},
     sensitiveQueryParams: config?.sensitiveQueryParams ?? [],
-    errorSampling: config?.errorSampling ?? 1,
-    samplingRate: config?.samplingRate ?? 1,
+    errorSampling: config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE,
+    samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
   };
 
   // Normalize integrations
