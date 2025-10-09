@@ -143,7 +143,7 @@ Captures JavaScript errors and unhandled promise rejections for debugging and mo
 - `window.addEventListener('unhandledrejection')` - Unhandled promise rejections
 
 **Key Features**:
-- **Sampling**: Configurable error sampling rate (default 10% - `errorSampling: 0.1`)
+- **Sampling**: Configurable error sampling rate (default 100% - `errorSampling: 1.0`)
 - **PII Sanitization**: Removes emails, phone numbers, credit cards, IBAN, API keys, Bearer tokens, and connection string passwords from error messages
 - **Message Limits**: Truncates messages to 500 characters max
 - **Rich Context**: Captures filename, line, column for JS errors
@@ -176,7 +176,7 @@ Captures JavaScript errors and unhandled promise rejections for debugging and mo
 ```javascript
 await tracelog.init({
   id: 'project-id',
-  errorSampling: 0.25  // Capture 25% of errors (default: 0.1 = 10%)
+  errorSampling: 0.25  // Capture 25% of errors (default: 1.0 = 100%)
 });
 ```
 

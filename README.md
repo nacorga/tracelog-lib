@@ -146,7 +146,7 @@ await tracelog.init({
 - `sessionTimeout`: Session timeout in ms (default: 900000 / 15 minutes, range: 30s - 24 hours)
 - `globalMetadata`: Metadata attached to all events
 - `samplingRate`: Event sampling rate 0-1 (default: 1.0)
-- `errorSampling`: Error sampling rate 0-1 (default: 0.1 / 10%)
+- `errorSampling`: Error sampling rate 0-1 (default: 1.0 / 100%)
 - `sensitiveQueryParams`: Query params to remove from URLs
 - `primaryScrollSelector`: Override automatic primary scroll container detection (e.g., `.mat-sidenav-content`, `window`)
 - `integrations`:
