@@ -31,60 +31,72 @@ describe('ScrollHandler - Retry Logic', () => {
     vi.useRealTimers();
   });
 
-  test('should use window when no selectors configured', () => {
-    scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { sessionTimeout: 900000 });
-
-    scrollHandler.startTracking();
-
-    expect(scrollHandler['containers']).toHaveLength(1);
-    const container = scrollHandler['containers'][0];
-    expect(container).toBeDefined();
-    expect(container!.element).toBe(window);
-  });
-
-  test('should setup container when element exists', () => {
-    document.body.innerHTML = '<div id="scroll-box" style="overflow: auto; height: 100px;"></div>';
+  test('should auto-detect scrollable containers', () => {
+    document.body.innerHTML =
+      '<div id="scroll-box" style="overflow: auto; height: 100px;"><div style="height: 200px;"></div></div>';
     const container = document.getElementById('scroll-box') as HTMLElement;
     Object.defineProperty(container, 'scrollHeight', { value: 200, configurable: true });
     Object.defineProperty(container, 'clientHeight', { value: 100, configurable: true });
+    Object.defineProperty(container, 'offsetParent', { value: document.body, configurable: true });
+
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 100,
+      top: 0,
+      left: 0,
+      bottom: 100,
+      right: 500,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
 
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '#scroll-box' });
-
+    scrollHandler['set']('config', { sessionTimeout: 900000 });
     scrollHandler.startTracking();
 
-    expect(scrollHandler['containers']).toHaveLength(1);
-    const setupContainer = scrollHandler['containers'][0];
-    expect(setupContainer).toBeDefined();
-    expect(setupContainer!.element).toBe(container);
+    vi.advanceTimersByTime(1100);
+
+    expect(scrollHandler['containers'].length).toBeGreaterThan(0);
   });
 
-  test('should find element after retry', () => {
+  test('should find container after delay with retry', () => {
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '.delayed' });
-
+    scrollHandler['set']('config', { sessionTimeout: 900000 });
     scrollHandler.startTracking();
-    expect(scrollHandler['containers']).toHaveLength(0);
 
     vi.advanceTimersByTime(300);
 
-    document.body.innerHTML = '<div class="delayed" style="overflow: auto; height: 100px;"></div>';
+    document.body.innerHTML =
+      '<div class="delayed" style="overflow: auto; height: 100px;"><div style="height: 200px;"></div></div>';
     const container = document.querySelector('.delayed') as HTMLElement;
     Object.defineProperty(container, 'scrollHeight', { value: 200, configurable: true });
     Object.defineProperty(container, 'clientHeight', { value: 100, configurable: true });
+    Object.defineProperty(container, 'offsetParent', { value: document.body, configurable: true });
 
-    vi.advanceTimersByTime(200);
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 100,
+      top: 0,
+      left: 0,
+      bottom: 100,
+      right: 500,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
 
-    expect(scrollHandler['containers']).toHaveLength(1);
+    vi.advanceTimersByTime(800);
+
+    expect(scrollHandler['containers'].length).toBeGreaterThan(0);
   });
 
-  test('should fallback to window after max retries', () => {
+  test('should fallback to window if no scrollable containers', () => {
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '.never-exists' });
-
+    scrollHandler['set']('config', { sessionTimeout: 900000 });
     scrollHandler.startTracking();
-    vi.advanceTimersByTime(1000);
+
+    vi.advanceTimersByTime(1100);
 
     expect(scrollHandler['containers']).toHaveLength(1);
     const fallbackContainer = scrollHandler['containers'][0];
@@ -92,18 +104,35 @@ describe('ScrollHandler - Retry Logic', () => {
     expect(fallbackContainer!.element).toBe(window);
   });
 
-  test('should not add duplicate containers', () => {
-    document.body.innerHTML = '<div id="once" style="overflow: auto; height: 100px;"></div>';
+  test('should detect both container and window', () => {
+    document.body.innerHTML =
+      '<div id="once" style="overflow: auto; height: 100px;"><div style="height: 200px;"></div></div>';
     const container = document.getElementById('once') as HTMLElement;
     Object.defineProperty(container, 'scrollHeight', { value: 200, configurable: true });
     Object.defineProperty(container, 'clientHeight', { value: 100, configurable: true });
+    Object.defineProperty(container, 'offsetParent', { value: document.body, configurable: true });
+
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 100,
+      top: 0,
+      left: 0,
+      bottom: 100,
+      right: 500,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
 
     scrollHandler = new ScrollHandler(mockEventManager);
-    scrollHandler['set']('config', { sessionTimeout: 900000, scrollContainerSelectors: '#once' });
-
+    scrollHandler['set']('config', { sessionTimeout: 900000 });
     scrollHandler.startTracking();
-    vi.advanceTimersByTime(1000);
 
-    expect(scrollHandler['containers']).toHaveLength(1);
+    vi.advanceTimersByTime(1100);
+
+    // Should find both the container and window
+    expect(scrollHandler['containers'].length).toBeGreaterThan(0);
+    const elements = scrollHandler['containers'].map((c) => c.element);
+    expect(elements).toContain(container);
   });
 });

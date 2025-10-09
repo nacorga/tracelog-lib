@@ -31,7 +31,6 @@ describe('Config Validations', () => {
         const config: Config = {
           sessionTimeout: 900000,
           globalMetadata: { version: '1.0' },
-          scrollContainerSelectors: ['.container'],
           sensitiveQueryParams: ['token', 'key'],
           errorSampling: 0.5,
         };
@@ -175,120 +174,6 @@ describe('Config Validations', () => {
       });
 
       it('should accept undefined metadata', () => {
-        const config: Config = {};
-        expect(() => {
-          validateAppConfig(config);
-        }).not.toThrow();
-      });
-    });
-
-    describe('Scroll Container Selectors Validation', () => {
-      it('should accept valid single selector', () => {
-        const config: Config = { scrollContainerSelectors: ['.container'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).not.toThrow();
-      });
-
-      it('should accept multiple valid selectors', () => {
-        const config: Config = {
-          scrollContainerSelectors: ['.container', '#main', '[data-scroll="true"]'],
-        };
-        expect(() => {
-          validateAppConfig(config);
-        }).not.toThrow();
-      });
-
-      it('should accept complex CSS selectors without child combinator', () => {
-        const config: Config = {
-          scrollContainerSelectors: [
-            '.container .nested',
-            '#main .content',
-            '[data-scroll="true"]',
-            'div:nth-child(2)',
-            '.parent + .sibling',
-            '.parent ~ .sibling',
-          ],
-        };
-        expect(() => {
-          validateAppConfig(config);
-        }).not.toThrow();
-      });
-
-      it('should reject selector with > character (XSS prevention)', () => {
-        const config: Config = { scrollContainerSelectors: ['.container > div'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject selector with < character (XSS prevention)', () => {
-        const config: Config = { scrollContainerSelectors: ['.container < div'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject empty string selector', () => {
-        const config: Config = { scrollContainerSelectors: [''] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject whitespace-only selector', () => {
-        const config: Config = { scrollContainerSelectors: ['   '] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject non-string selector', () => {
-        const config: Config = { scrollContainerSelectors: [123 as any] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject selector with potential XSS - script tag', () => {
-        const config: Config = { scrollContainerSelectors: ['<script>alert(1)</script>'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow('Invalid or potentially unsafe CSS selector');
-      });
-
-      it('should reject selector with potential XSS - event handler', () => {
-        const config: Config = { scrollContainerSelectors: ['div onclick=alert(1)'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject selector with unbalanced parentheses', () => {
-        const config: Config = { scrollContainerSelectors: ['div:nth-child(2'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject selector with unbalanced brackets', () => {
-        const config: Config = { scrollContainerSelectors: ['[data-scroll="true"'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should reject selector with invalid characters', () => {
-        const config: Config = { scrollContainerSelectors: ['div$invalid'] };
-        expect(() => {
-          validateAppConfig(config);
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should accept undefined selectors', () => {
         const config: Config = {};
         expect(() => {
           validateAppConfig(config);
@@ -717,7 +602,6 @@ describe('Config Validations', () => {
           sessionTimeout: 900000,
           errorSampling: 0.5,
           samplingRate: 0.8,
-          scrollContainerSelectors: ['.container'],
           integrations: {
             googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
           },
@@ -726,7 +610,6 @@ describe('Config Validations', () => {
         expect(normalized.sessionTimeout).toBe(900000);
         expect(normalized.errorSampling).toBe(0.5);
         expect(normalized.samplingRate).toBe(0.8);
-        expect(normalized.scrollContainerSelectors).toEqual(['.container']);
         expect(normalized.integrations).toEqual(config.integrations);
       });
     });

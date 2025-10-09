@@ -19,8 +19,10 @@ const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024;
 const MAX_CUSTOM_EVENT_KEYS = 10;
 const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
 const MAX_NESTED_OBJECT_KEYS = 20;
+const MAX_METADATA_NESTING_DEPTH = 1;
 const MAX_TEXT_LENGTH = 255;
 const MAX_STRING_LENGTH = 1e3;
+const MAX_STRING_LENGTH_IN_ARRAY = 500;
 const MAX_ARRAY_LENGTH = 100;
 const MAX_OBJECT_DEPTH = 3;
 const PRECISION_TWO_DECIMALS = 2;
@@ -68,9 +70,10 @@ const VALIDATION_MESSAGES = {
   INVALID_TRACELOG_PROJECT_ID: "TraceLog project ID is required when integration is enabled",
   INVALID_CUSTOM_API_URL: "Custom API URL is required when integration is enabled",
   INVALID_GOOGLE_ANALYTICS_ID: "Google Analytics measurement ID is required when integration is enabled",
-  INVALID_SCROLL_CONTAINER_SELECTORS: "Scroll container selectors must be valid CSS selectors",
   INVALID_GLOBAL_METADATA: "Global metadata must be an object",
-  INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings"
+  INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings",
+  INVALID_PRIMARY_SCROLL_SELECTOR: "Primary scroll selector must be a non-empty string",
+  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: "Invalid CSS selector syntax for primaryScrollSelector"
 };
 const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
@@ -128,6 +131,12 @@ var ErrorType = /* @__PURE__ */ ((ErrorType2) => {
   ErrorType2["PROMISE_REJECTION"] = "promise_rejection";
   return ErrorType2;
 })(ErrorType || {});
+function isPrimaryScrollEvent(event2) {
+  return event2.type === "scroll" && "scroll_data" in event2 && event2.scroll_data.is_primary === true;
+}
+function isSecondaryScrollEvent(event2) {
+  return event2.type === "scroll" && "scroll_data" in event2 && event2.scroll_data.is_primary === false;
+}
 var Mode = /* @__PURE__ */ ((Mode2) => {
   Mode2["QA"] = "qa";
   return Mode2;
@@ -443,7 +452,7 @@ const sanitizeValue = (value, depth = 0) => {
   if (typeof value === "object") {
     const sanitizedObject = {};
     const entries = Object.entries(value);
-    const limitedEntries = entries.slice(0, 20);
+    const limitedEntries = entries.slice(0, MAX_NESTED_OBJECT_KEYS);
     for (const [key, value_] of limitedEntries) {
       const sanitizedKey = sanitizeString(key);
       if (sanitizedKey) {
@@ -487,9 +496,6 @@ const validateAppConfig = (config) => {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_GLOBAL_METADATA, "config");
     }
   }
-  if (config.scrollContainerSelectors !== void 0) {
-    validateScrollContainerSelectors(config.scrollContainerSelectors);
-  }
   if (config.integrations) {
     validateIntegrations(config.integrations);
   }
@@ -513,54 +519,19 @@ const validateAppConfig = (config) => {
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE, "config");
     }
   }
-};
-const isValidCssSelectorSyntax = (selector) => {
-  if (selector.includes("<") || selector.includes(">") || /on\w+\s*=/i.test(selector)) {
-    return false;
-  }
-  const safePattern = /^[a-zA-Z0-9\-_#.[\]="':, >+~*()]+$/;
-  if (!safePattern.test(selector)) {
-    return false;
-  }
-  let parenthesesCount = 0;
-  for (const char of selector) {
-    if (char === "(") parenthesesCount++;
-    if (char === ")") parenthesesCount--;
-    if (parenthesesCount < 0) return false;
-  }
-  if (parenthesesCount !== 0) return false;
-  let bracketsCount = 0;
-  for (const char of selector) {
-    if (char === "[") bracketsCount++;
-    if (char === "]") bracketsCount--;
-    if (bracketsCount < 0) return false;
-  }
-  if (bracketsCount !== 0) return false;
-  return true;
-};
-const validateScrollContainerSelectors = (selectors) => {
-  const selectorsArray = Array.isArray(selectors) ? selectors : [selectors];
-  for (const selector of selectorsArray) {
-    if (typeof selector !== "string" || selector.trim() === "") {
-      log("error", "Invalid scroll container selector", {
-        showToClient: true,
-        data: {
-          selector,
-          type: typeof selector,
-          isEmpty: selector === "" || typeof selector === "string" && selector.trim() === ""
-        }
-      });
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, "config");
+  if (config.primaryScrollSelector !== void 0) {
+    if (typeof config.primaryScrollSelector !== "string" || !config.primaryScrollSelector.trim()) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR, "config");
     }
-    if (!isValidCssSelectorSyntax(selector)) {
-      log("error", "Invalid or potentially unsafe CSS selector", {
-        showToClient: true,
-        data: {
-          selector,
-          reason: "Failed security validation"
-        }
-      });
-      throw new AppConfigValidationError("Invalid or potentially unsafe CSS selector", "config");
+    if (config.primaryScrollSelector !== "window") {
+      try {
+        document.querySelector(config.primaryScrollSelector);
+      } catch {
+        throw new AppConfigValidationError(
+          `${VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX}: "${config.primaryScrollSelector}"`,
+          "config"
+        );
+      }
     }
   }
 };
@@ -646,7 +617,7 @@ const isOnlyPrimitiveFields = (object, depth = 0) => {
   if (typeof object !== "object" || object === null) {
     return false;
   }
-  if (depth > 1) {
+  if (depth > MAX_METADATA_NESTING_DEPTH) {
     return false;
   }
   for (const value of Object.values(object)) {
@@ -758,10 +729,10 @@ const validateSingleMetadata = (eventName, metadata, type) => {
         };
       }
       for (const item of value) {
-        if (typeof item === "string" && item.length > 500) {
+        if (typeof item === "string" && item.length > MAX_STRING_LENGTH_IN_ARRAY) {
           return {
             valid: false,
-            error: `${intro}: array property "${key}" contains strings that are too long (max 500 characters).`
+            error: `${intro}: array property "${key}" contains strings that are too long (max ${MAX_STRING_LENGTH_IN_ARRAY} characters).`
           };
         }
       }
@@ -852,7 +823,9 @@ class Emitter {
   emit(event2, data) {
     const callbacks = this.listeners.get(event2);
     if (callbacks) {
-      callbacks.forEach((callback) => callback(data));
+      callbacks.forEach((callback) => {
+        callback(data);
+      });
     }
   }
   removeAllListeners() {
@@ -976,7 +949,9 @@ class SenderManager extends StateManager {
   }
   async sendWithTimeout(url, payload) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -1133,7 +1108,7 @@ class EventManager extends StateManager {
           }
         }
       },
-      onFailure: async () => {
+      onFailure: () => {
         log("warn", "Failed to recover persisted events");
       }
     });
@@ -1308,7 +1283,7 @@ class EventManager extends StateManager {
         this.removeProcessedEvents(eventIds);
         this.emitEventsQueue(body);
       },
-      onFailure: async () => {
+      onFailure: () => {
         log("warn", "Events send failed, keeping in queue", {
           data: { eventCount: eventsToSend.length }
         });
@@ -1413,7 +1388,7 @@ class EventManager extends StateManager {
   startSendInterval() {
     this.sendIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
-        this.sendEventsQueue();
+        void this.sendEventsQueue();
       }
     }, EVENT_SENT_INTERVAL_MS);
   }
@@ -1605,7 +1580,7 @@ class SessionManager extends StateManager {
   getProjectId() {
     return this.projectId;
   }
-  async startTracking() {
+  startTracking() {
     if (this.isTracking) {
       log("warn", "Session tracking already active");
       return;
@@ -1661,7 +1636,9 @@ class SessionManager extends StateManager {
     }
   }
   setupActivityListeners() {
-    this.activityHandler = () => this.resetSessionTimeout();
+    this.activityHandler = () => {
+      this.resetSessionTimeout();
+    };
     document.addEventListener("click", this.activityHandler, { passive: true });
     document.addEventListener("keydown", this.activityHandler, { passive: true });
     document.addEventListener("scroll", this.activityHandler, { passive: true });
@@ -1758,7 +1735,7 @@ class SessionHandler extends StateManager {
     this.eventManager = eventManager;
     this.storageManager = storageManager;
   }
-  async startTracking() {
+  startTracking() {
     if (this.isActive()) {
       return;
     }
@@ -1773,7 +1750,7 @@ class SessionHandler extends StateManager {
     }
     try {
       this.sessionManager = new SessionManager(this.storageManager, this.eventManager, projectId);
-      await this.sessionManager.startTracking();
+      this.sessionManager.startTracking();
       this.eventManager.flushPendingEvents();
     } catch (error) {
       if (this.sessionManager) {
@@ -1851,7 +1828,7 @@ class PageViewHandler extends StateManager {
       this.trackCurrentPage();
     };
   }
-  trackCurrentPage = async () => {
+  trackCurrentPage = () => {
     const rawUrl = window.location.href;
     const normalizedUrl = normalizeUrl(rawUrl, this.get("config").sensitiveQueryParams);
     if (this.get("pageUrl") === normalizedUrl) {
@@ -2062,6 +2039,8 @@ class ScrollHandler extends StateManager {
   minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
+  windowScrollableCache = null;
+  retryTimeoutId = null;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -2070,15 +2049,13 @@ class ScrollHandler extends StateManager {
     this.limitWarningLogged = false;
     this.applyConfigOverrides();
     this.set("scrollEventCount", 0);
-    const raw = this.get("config").scrollContainerSelectors;
-    const selectors = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-    if (selectors.length === 0) {
-      this.setupScrollContainer(window);
-    } else {
-      this.trySetupContainers(selectors, 0);
-    }
+    this.tryDetectScrollContainers(0);
   }
   stopTracking() {
+    if (this.retryTimeoutId !== null) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
+    }
     for (const container of this.containers) {
       this.clearContainerTimer(container);
       if (container.element instanceof Window) {
@@ -2090,29 +2067,88 @@ class ScrollHandler extends StateManager {
     this.containers.length = 0;
     this.set("scrollEventCount", 0);
     this.limitWarningLogged = false;
+    this.windowScrollableCache = null;
   }
-  trySetupContainers(selectors, attempt) {
-    const elements = selectors.map((sel) => this.safeQuerySelector(sel)).filter(
-      (element) => element != null && typeof HTMLElement !== "undefined" && element instanceof HTMLElement
-    );
+  tryDetectScrollContainers(attempt) {
+    const elements = this.findScrollableElements();
     if (elements.length > 0) {
       for (const element of elements) {
-        const isAlreadyTracking = this.containers.some((c2) => c2.element === element);
-        if (!isAlreadyTracking) {
-          this.setupScrollContainer(element);
-        }
+        const selector = this.getElementSelector(element);
+        this.setupScrollContainer(element, selector);
       }
+      this.applyPrimaryScrollSelectorIfConfigured();
       return;
     }
     if (attempt < 5) {
-      setTimeout(() => this.trySetupContainers(selectors, attempt + 1), 200);
+      this.retryTimeoutId = window.setTimeout(() => {
+        this.retryTimeoutId = null;
+        this.tryDetectScrollContainers(attempt + 1);
+      }, 200);
       return;
     }
     if (this.containers.length === 0) {
-      this.setupScrollContainer(window);
+      this.setupScrollContainer(window, "window");
+    }
+    this.applyPrimaryScrollSelectorIfConfigured();
+  }
+  applyPrimaryScrollSelectorIfConfigured() {
+    const config = this.get("config");
+    if (config?.primaryScrollSelector) {
+      this.applyPrimaryScrollSelector(config.primaryScrollSelector);
     }
   }
-  setupScrollContainer(element) {
+  findScrollableElements() {
+    if (!document.body) {
+      return [];
+    }
+    const elements = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (node2) => {
+        const element = node2;
+        if (!element.isConnected || !element.offsetParent) {
+          return NodeFilter.FILTER_SKIP;
+        }
+        const style = getComputedStyle(element);
+        const hasScrollableStyle = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
+        return hasScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+      }
+    });
+    let node;
+    while ((node = walker.nextNode()) && elements.length < 10) {
+      const element = node;
+      if (this.isElementScrollable(element)) {
+        elements.push(element);
+      }
+    }
+    return elements;
+  }
+  getElementSelector(element) {
+    if (element === window) {
+      return "window";
+    }
+    const htmlElement = element;
+    if (htmlElement.id) {
+      return `#${htmlElement.id}`;
+    }
+    if (htmlElement.className && typeof htmlElement.className === "string") {
+      const firstClass = htmlElement.className.split(" ").filter((c2) => c2.trim())[0];
+      if (firstClass) {
+        return `.${firstClass}`;
+      }
+    }
+    return htmlElement.tagName.toLowerCase();
+  }
+  determineIfPrimary(element) {
+    if (this.isWindowScrollable()) {
+      return element === window;
+    }
+    return this.containers.length === 0;
+  }
+  setupScrollContainer(element, selector) {
+    const alreadyTracking = this.containers.some((c2) => c2.element === element);
+    if (alreadyTracking) {
+      return;
+    }
     if (element !== window && !this.isElementScrollable(element)) {
       return;
     }
@@ -2131,16 +2167,21 @@ class ScrollHandler extends StateManager {
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
     const initialScrollTop = this.getScrollTop(element);
+    const initialDepth = this.calculateScrollDepth(
+      initialScrollTop,
+      this.getScrollHeight(element),
+      this.getViewportHeight(element)
+    );
+    const isPrimary = this.determineIfPrimary(element);
     const container = {
       element,
+      selector,
+      isPrimary,
       lastScrollPos: initialScrollTop,
-      lastDepth: this.calculateScrollDepth(
-        initialScrollTop,
-        this.getScrollHeight(element),
-        this.getViewportHeight(element)
-      ),
+      lastDepth: initialDepth,
       lastDirection: ScrollDirection.DOWN,
       lastEventTime: 0,
+      maxDepthReached: initialDepth,
       debounceTimer: null,
       listener: handleScroll
     };
@@ -2162,7 +2203,11 @@ class ScrollHandler extends StateManager {
     this.set("scrollEventCount", currentCount + 1);
     this.eventManager.track({
       type: EventType.SCROLL,
-      scroll_data: scrollData
+      scroll_data: {
+        ...scrollData,
+        container_selector: container.selector,
+        is_primary: container.isPrimary
+      }
     });
   }
   shouldEmitScrollEvent(container, scrollData, timestamp) {
@@ -2206,7 +2251,11 @@ class ScrollHandler extends StateManager {
     this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
   isWindowScrollable() {
-    return document.documentElement.scrollHeight > window.innerHeight;
+    if (this.windowScrollableCache !== null) {
+      return this.windowScrollableCache;
+    }
+    this.windowScrollableCache = document.documentElement.scrollHeight > window.innerHeight;
+    return this.windowScrollableCache;
   }
   clearContainerTimer(container) {
     if (container.debounceTimer !== null) {
@@ -2225,8 +2274,9 @@ class ScrollHandler extends StateManager {
     return Math.min(100, Math.max(0, Math.floor(scrollTop / maxScrollTop * 100)));
   }
   calculateScrollData(container) {
-    const { element, lastScrollPos } = container;
+    const { element, lastScrollPos, lastEventTime } = container;
     const scrollTop = this.getScrollTop(element);
+    const now = Date.now();
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
       return null;
@@ -2238,8 +2288,18 @@ class ScrollHandler extends StateManager {
     const scrollHeight = this.getScrollHeight(element);
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
+    const timeDelta = lastEventTime > 0 ? now - lastEventTime : 0;
+    const velocity = timeDelta > 0 ? Math.round(positionDelta / timeDelta * 1e3) : 0;
+    if (depth > container.maxDepthReached) {
+      container.maxDepthReached = depth;
+    }
     container.lastScrollPos = scrollTop;
-    return { depth, direction };
+    return {
+      depth,
+      direction,
+      velocity,
+      max_depth_reached: container.maxDepthReached
+    };
   }
   getScrollTop(element) {
     return element instanceof Window ? window.scrollY : element.scrollTop;
@@ -2256,17 +2316,30 @@ class ScrollHandler extends StateManager {
     const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
     return hasScrollableOverflow && hasOverflowContent;
   }
-  safeQuerySelector(selector) {
-    try {
-      return document.querySelector(selector);
-    } catch (error) {
-      log("warn", "Invalid CSS selector", {
-        error,
-        data: { selector },
-        showToClient: true
-      });
-      return null;
+  applyPrimaryScrollSelector(selector) {
+    let targetElement;
+    if (selector === "window") {
+      targetElement = window;
+    } else {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        log("warn", `Selector "${selector}" did not match an HTMLElement`);
+        return;
+      }
+      targetElement = element;
     }
+    this.containers.forEach((container) => {
+      this.updateContainerPrimary(container, container.element === targetElement);
+    });
+    const targetAlreadyTracked = this.containers.some((c2) => c2.element === targetElement);
+    if (!targetAlreadyTracked && targetElement instanceof HTMLElement) {
+      if (this.isElementScrollable(targetElement)) {
+        this.setupScrollContainer(targetElement, selector);
+      }
+    }
+  }
+  updateContainerPrimary(container, isPrimary) {
+    container.isPrimary = isPrimary;
   }
 }
 class GoogleAnalyticsIntegration extends StateManager {
@@ -2323,8 +2396,12 @@ class GoogleAnalyticsIntegration extends StateManager {
       script.id = "tracelog-ga-script";
       script.async = true;
       script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Failed to load Google Analytics script"));
+      script.onload = () => {
+        resolve();
+      };
+      script.onerror = () => {
+        reject(new Error("Failed to load Google Analytics script"));
+      };
       document.head.appendChild(script);
     });
   }
@@ -2436,7 +2513,9 @@ class StorageManager {
           keysToRemove.push(key);
         }
       }
-      keysToRemove.forEach((key) => this.storage.removeItem(key));
+      keysToRemove.forEach((key) => {
+        this.storage.removeItem(key);
+      });
       this.fallbackStorage.clear();
     } catch (error) {
       log("error", "Failed to clear storage", { error });
@@ -2942,13 +3021,13 @@ class App extends StateManager {
       this.setupState(config);
       await this.setupIntegrations();
       this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
-      await this.initializeHandlers();
+      this.initializeHandlers();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log("warn", "Failed to recover persisted events", { error });
       });
       this.isInitialized = true;
     } catch (error) {
-      await this.destroy(true);
+      this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`);
     }
@@ -2978,19 +3057,18 @@ class App extends StateManager {
   off(event2, callback) {
     this.emitter.off(event2, callback);
   }
-  async destroy(force = false) {
+  destroy(force = false) {
     if (!this.isInitialized && !force) {
       return;
     }
     this.integrations.googleAnalytics?.cleanup();
-    const handlerCleanups = Object.values(this.handlers).filter(Boolean).map(async (handler) => {
+    Object.values(this.handlers).filter(Boolean).forEach((handler) => {
       try {
-        await handler.stopTracking();
+        handler.stopTracking();
       } catch (error) {
         log("warn", "Failed to stop tracking", { error });
       }
     });
-    await Promise.allSettled(handlerCleanups);
     if (this.suppressNextScrollTimer) {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
@@ -3031,12 +3109,12 @@ class App extends StateManager {
       }
     }
   }
-  async initializeHandlers() {
+  initializeHandlers() {
     this.handlers.session = new SessionHandler(
       this.managers.storage,
       this.managers.event
     );
-    await this.handlers.session.startTracking();
+    this.handlers.session.startTracking();
     const onPageView = () => {
       this.set("suppressNextScroll", true);
       if (this.suppressNextScrollTimer) {
@@ -3169,14 +3247,14 @@ class TestBridge extends App {
   getGoogleAnalytics() {
     return this.safeAccess(this.integrations?.googleAnalytics);
   }
-  async destroy(force = false) {
+  destroy(force = false) {
     if (!this.initialized && !force) {
       return;
     }
     this.ensureNotDestroying();
     this._isDestroying = true;
     try {
-      await super.destroy(force);
+      super.destroy(force);
       if (__setAppInstance) {
         __setAppInstance(null);
       }
@@ -3189,14 +3267,6 @@ class TestBridge extends App {
    */
   safeAccess(value) {
     return value ?? null;
-  }
-  /**
-   * Ensures the app is initialized, throws if not
-   */
-  ensureInitialized() {
-    if (!this.initialized) {
-      throw new Error("App not initialized");
-    }
   }
   /**
    * Ensures destroy operation is not in progress, throws if it is
@@ -3243,7 +3313,7 @@ const init = async (config) => {
       app = instance;
     } catch (error) {
       try {
-        await instance.destroy(true);
+        instance.destroy(true);
       } catch (cleanupError) {
         log("error", "Failed to cleanup partially initialized app", { error: cleanupError });
       }
@@ -3285,16 +3355,16 @@ const off = (event2, callback) => {
 const isInitialized = () => {
   return app !== null;
 };
-const destroy = async () => {
-  if (!app) {
-    throw new Error("[TraceLog] App not initialized");
-  }
+const destroy = () => {
   if (isDestroying) {
     throw new Error("[TraceLog] Destroy operation already in progress");
   }
+  if (!app) {
+    throw new Error("[TraceLog] App not initialized");
+  }
   isDestroying = true;
   try {
-    await app.destroy();
+    app.destroy();
     app = null;
     isInitializing = false;
     pendingListeners.length = 0;
@@ -3644,6 +3714,15 @@ export {
   INSIGHT_THRESHOLDS,
   InitializationTimeoutError,
   IntegrationValidationError,
+  MAX_ARRAY_LENGTH,
+  MAX_CUSTOM_EVENT_ARRAY_SIZE,
+  MAX_CUSTOM_EVENT_KEYS,
+  MAX_CUSTOM_EVENT_NAME_LENGTH,
+  MAX_CUSTOM_EVENT_STRING_SIZE,
+  MAX_METADATA_NESTING_DEPTH,
+  MAX_NESTED_OBJECT_KEYS,
+  MAX_STRING_LENGTH,
+  MAX_STRING_LENGTH_IN_ARRAY,
   Mode,
   PERFORMANCE_CONFIG,
   PermanentError,
@@ -3656,6 +3735,8 @@ export {
   SpecialApiUrl,
   TEMPORAL_ANALYSIS,
   TraceLogValidationError,
+  isPrimaryScrollEvent,
+  isSecondaryScrollEvent,
   tracelog
 };
 //# sourceMappingURL=tracelog.esm.js.map

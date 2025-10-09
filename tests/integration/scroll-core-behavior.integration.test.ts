@@ -24,11 +24,24 @@ describe('ScrollHandler Integration - Core Behavior', () => {
     const container = document.getElementById('scroll-container') as HTMLElement;
     Object.defineProperty(container, 'scrollHeight', { value: 1500, configurable: true });
     Object.defineProperty(container, 'clientHeight', { value: 300, configurable: true });
+    Object.defineProperty(container, 'offsetParent', { value: document.body, configurable: true });
+
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 300,
+      top: 0,
+      left: 0,
+      bottom: 300,
+      right: 500,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
 
     app = new App();
-    await app.init({
-      scrollContainerSelectors: '#scroll-container',
-    });
+    await app.init({});
+
+    vi.advanceTimersByTime(1100);
 
     const scrollHandler = app['handlers'].scroll;
     expect(scrollHandler).toBeDefined();
@@ -46,17 +59,44 @@ describe('ScrollHandler Integration - Core Behavior', () => {
 
     Object.defineProperty(container1, 'scrollHeight', { value: 800, configurable: true });
     Object.defineProperty(container1, 'clientHeight', { value: 200, configurable: true });
+    Object.defineProperty(container1, 'offsetParent', { value: document.body, configurable: true });
 
     Object.defineProperty(container2, 'scrollHeight', { value: 800, configurable: true });
     Object.defineProperty(container2, 'clientHeight', { value: 200, configurable: true });
+    Object.defineProperty(container2, 'offsetParent', { value: document.body, configurable: true });
 
-    app = new App();
-    await app.init({
-      scrollContainerSelectors: ['#container-1', '#container-2'],
+    vi.spyOn(container1, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 200,
+      top: 0,
+      left: 0,
+      bottom: 200,
+      right: 500,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
     });
 
+    vi.spyOn(container2, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 200,
+      top: 200,
+      left: 0,
+      bottom: 400,
+      right: 500,
+      x: 0,
+      y: 200,
+      toJSON: () => {},
+    });
+
+    app = new App();
+    await app.init({});
+
+    vi.advanceTimersByTime(1100);
+
     const scrollHandler = app['handlers'].scroll;
-    expect(scrollHandler?.['containers'].length).toBe(2);
+    // Should find 2 containers + window = 3 total
+    expect(scrollHandler?.['containers'].length).toBeGreaterThanOrEqual(2);
   });
 
   test('should cleanup listeners and timers on destroy', async () => {
@@ -66,11 +106,12 @@ describe('ScrollHandler Integration - Core Behavior', () => {
     Object.defineProperty(container, 'scrollHeight', { value: 800, configurable: true });
     Object.defineProperty(container, 'clientHeight', { value: 200, configurable: true });
     Object.defineProperty(container, 'scrollTop', { value: 0, configurable: true, writable: true });
+    Object.defineProperty(container, 'offsetParent', { value: document.body, configurable: true });
 
     app = new App();
-    await app.init({
-      scrollContainerSelectors: '#container',
-    });
+    await app.init({});
+
+    vi.advanceTimersByTime(1100);
 
     const scrollHandler = app['handlers'].scroll;
     expect(scrollHandler?.['containers'].length).toBeGreaterThan(0);

@@ -188,48 +188,130 @@ Captures Web Vitals and performance metrics using the `web-vitals` library with 
 
 ## ScrollHandler
 
-Tracks scroll depth and direction across multiple containers with debounced event handling and built-in guardrails.
+Tracks scroll depth, direction, velocity, and container identification across multiple scrollable elements using intelligent auto-detection with debounced event handling and built-in guardrails.
 
 **Events Generated**: `scroll`
 
 **Triggers**:
-- `scroll` events on window (default)
-- `scroll` events on custom containers via `scrollContainerSelectors`
+- `scroll` events on window (always tracked)
+- `scroll` events on automatically detected scrollable containers
 
 **Key Features**:
-- **Session Guardrails**: Ignores events once the per-session cap is reached and logs a single warning.
-- **Smart Filtering**: Skips non-scrollable elements and enforces significant movement + debounce.
+- **Automatic Container Detection**: Uses heuristic analysis to find and classify scrollable elements
+- **Intelligent Classification**: Distinguishes between main content, secondary containers, and window scroll
+- **Session Guardrails**: Ignores events once the per-session cap is reached and logs a single warning
+- **Smart Filtering**: Skips non-scrollable/invisible elements and enforces significant movement + debounce
+- **Retry System**: 5 attempts with 200ms intervals to handle dynamically loaded content (SPAs)
 
 **Event Data**:
 ```javascript
 {
   type: 'scroll',
   scroll_data: {
-    depth: 45,
-    direction: 'down'
+    depth: 45,                      // Current scroll depth (0-100%)
+    direction: 'down',              // 'up' | 'down'
+    container_selector: 'window',   // CSS selector or 'window'
+    is_primary: true,               // Whether this is the main scroll container
+    velocity: 1250,                 // Scroll velocity in px/s
+    max_depth_reached: 67           // Maximum depth reached in this session (0-100%)
   }
 }
-
 ```
 
-**Configuration**:
-```javascript
-await tracelog.init({
-  id: 'project-id',
-  scrollContainerSelectors: ['.main-content', '#sidebar'],
-});
-```
+**Analytics Fields**:
+- **`velocity`**: Scroll speed in pixels per second
+  - **Low (<500 px/s)**: Reading/engaged behavior
+  - **Medium (500-2000 px/s)**: Normal browsing
+  - **High (>2000 px/s)**: Scanning/bouncing behavior
+  - Use case: Identify truly engaged users vs. quick scanners
 
-**Smart Detection Logic**:
-1. Filters out non-scrollable elements (`overflow: hidden`, no content overflow)
-2. Falls back to `window` if no valid containers found
-3. Checks for significant movement (>10px) before processing
-4. Early return if window/container not actually scrollable
+- **`max_depth_reached`**: Highest scroll depth achieved in the current session
+  - Tracks peak engagement per container
+  - Resets on session end
+  - Use case: Content engagement funnels, drop-off analysis
+
+- **`container_selector`**: CSS selector identifying the scroll container
+  - Priority order: ID selector (`#container`) > Class selector (`.content`) > Tag name (`main`)
+  - Special value: `'window'` for viewport scrolling
+  - Use case: Identify which content areas users engage with most
+
+- **`is_primary`**: Boolean indicating if this is the primary scroll container
+  - `true` if `window` is scrollable (traditional layout)
+  - `true` for first detected container if `window` is NOT scrollable (e.g., Angular Material sidenav)
+  - `false` for all secondary containers (sidebars, modals, panels)
+  - Use case: Filter analytics to focus on main content scroll vs auxiliary UI elements
+  - **Example queries**:
+    ```javascript
+    // Get only primary scroll events
+    db.events.find({
+      type: 'scroll',
+      'scroll_data.is_primary': true
+    })
+
+    // Compare primary vs secondary engagement
+    db.events.aggregate([
+      { $match: { type: 'scroll' } },
+      { $group: {
+          _id: '$scroll_data.is_primary',
+          avg_depth: { $avg: '$scroll_data.depth' },
+          avg_velocity: { $avg: '$scroll_data.velocity' }
+      }}
+    ])
+    ```
+
+**Container Selector Identification**:
+
+The handler generates CSS selectors for each scrollable container using this priority:
+
+1. **ID Selector** (highest priority): `#main-content`
+   - Uses element's ID attribute if present
+   - Most specific and unique identifier
+
+2. **Class Selector**: `.mat-sidenav-content`
+   - Uses first class from element's className
+   - Useful for framework-specific containers (Angular Material, Bootstrap, etc.)
+
+3. **Tag Name** (fallback): `main`, `div`, `article`
+   - Uses element's tag name in lowercase
+   - Generic but always available
+
+4. **Window**: `'window'`
+   - Special identifier for viewport scrolling
+   - Always tracked
+
+**Auto-Detection Logic**:
+1. Searches DOM using TreeWalker for performance
+2. Pre-filters elements with `overflow: auto/scroll` CSS properties
+3. Validates visibility (connected to DOM, has dimensions, not hidden)
+4. Validates scrollability (content overflows container)
+5. Generates CSS selector for each detected container
+6. Retries up to 5 times with 200ms intervals for dynamically loaded content
+7. Falls back to window-only if no containers found after retries
+
+**Dynamic Changes**:
+- Container classification (`is_primary`) is determined at detection time
+- Does NOT automatically update if page layout changes (e.g., window becomes scrollable mid-session)
+- New containers detected after initial setup will be classified based on current state
+- This ensures consistent analytics data within a session
+- Historical events maintain their original `is_primary` value
+
+**Performance Optimizations**:
+- TreeWalker with early branch pruning
+- Limited to 10 containers per scan
+- Maximum 5 containers tracked simultaneously
+- 250ms debounce per container
 
 **Debouncing Strategy**:
 - Events debounced to 250ms to prevent spam
 - Each container has independent debounce timer
 - Timers properly cleaned up to prevent memory leaks
+
+**Framework Compatibility**:
+Works automatically with:
+- Angular Material (`mat-sidenav-content`, `mat-drawer-content`)
+- React/Vue custom scrollable containers
+- Semantic HTML5 (`<main>`, `[role="main"]`)
+- Any custom framework with scrollable elements
 
 ## SessionHandler
 

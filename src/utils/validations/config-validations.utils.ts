@@ -11,7 +11,6 @@ import {
   SamplingRateValidationError,
   IntegrationValidationError,
 } from '../../types/validation-error.types';
-import { log } from '../logging.utils';
 
 /**
  * Validates the app configuration object (before normalization)
@@ -45,10 +44,6 @@ export const validateAppConfig = (config?: Config): void => {
     }
   }
 
-  if (config.scrollContainerSelectors !== undefined) {
-    validateScrollContainerSelectors(config.scrollContainerSelectors);
-  }
-
   if (config.integrations) {
     validateIntegrations(config.integrations);
   }
@@ -76,79 +71,22 @@ export const validateAppConfig = (config?: Config): void => {
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE, 'config');
     }
   }
-};
 
-/**
- * Validates CSS selector syntax without executing querySelector (XSS prevention)
- * @param selector - CSS selector to validate
- * @returns True if the selector syntax is valid
- */
-const isValidCssSelectorSyntax = (selector: string): boolean => {
-  // Prevent dangerous characters that could indicate XSS attempts
-  if (selector.includes('<') || selector.includes('>') || /on\w+\s*=/i.test(selector)) {
-    return false;
-  }
-
-  // Safe CSS selector pattern - allows common selector syntax
-  const safePattern = /^[a-zA-Z0-9\-_#.[\]="':, >+~*()]+$/;
-  if (!safePattern.test(selector)) {
-    return false;
-  }
-
-  // Check for balanced parentheses
-  let parenthesesCount = 0;
-  for (const char of selector) {
-    if (char === '(') parenthesesCount++;
-    if (char === ')') parenthesesCount--;
-    if (parenthesesCount < 0) return false;
-  }
-  if (parenthesesCount !== 0) return false;
-
-  // Check for balanced square brackets
-  let bracketsCount = 0;
-  for (const char of selector) {
-    if (char === '[') bracketsCount++;
-    if (char === ']') bracketsCount--;
-    if (bracketsCount < 0) return false;
-  }
-  if (bracketsCount !== 0) return false;
-
-  return true;
-};
-
-/**
- * Validates scroll container selectors
- * @param selectors - CSS selectors to validate
- */
-const validateScrollContainerSelectors = (selectors: string | string[]): void => {
-  const selectorsArray = Array.isArray(selectors) ? selectors : [selectors];
-
-  for (const selector of selectorsArray) {
-    if (typeof selector !== 'string' || selector.trim() === '') {
-      log('error', 'Invalid scroll container selector', {
-        showToClient: true,
-        data: {
-          selector,
-          type: typeof selector,
-          isEmpty: selector === '' || (typeof selector === 'string' && selector.trim() === ''),
-        },
-      });
-
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SCROLL_CONTAINER_SELECTORS, 'config');
+  if (config.primaryScrollSelector !== undefined) {
+    if (typeof config.primaryScrollSelector !== 'string' || !config.primaryScrollSelector.trim()) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR, 'config');
     }
 
-    // Validate CSS selector syntax using regex-based validation (XSS prevention)
-    // This validates syntax WITHOUT executing document.querySelector()
-    if (!isValidCssSelectorSyntax(selector)) {
-      log('error', 'Invalid or potentially unsafe CSS selector', {
-        showToClient: true,
-        data: {
-          selector,
-          reason: 'Failed security validation',
-        },
-      });
-
-      throw new AppConfigValidationError('Invalid or potentially unsafe CSS selector', 'config');
+    // Validate CSS selector syntax (skip for 'window' special value)
+    if (config.primaryScrollSelector !== 'window') {
+      try {
+        document.querySelector(config.primaryScrollSelector);
+      } catch {
+        throw new AppConfigValidationError(
+          `${VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX}: "${config.primaryScrollSelector}"`,
+          'config',
+        );
+      }
     }
   }
 };

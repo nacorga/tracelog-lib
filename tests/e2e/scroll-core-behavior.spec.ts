@@ -23,9 +23,7 @@ test.describe('Scroll Core Behavior', () => {
       document.body.innerHTML =
         '<div id="scroll-box" style="overflow: auto; height: 400px;"><div style="height: 2000px; background: linear-gradient(red, blue);"></div></div>';
 
-      await window.__traceLogBridge!.init({
-        scrollContainerSelectors: '#scroll-box',
-      });
+      await window.__traceLogBridge!.init({});
 
       window.__traceLogBridge!.on('event', (data: any) => {
         if (data.type === 'scroll') {
@@ -33,7 +31,7 @@ test.describe('Scroll Core Behavior', () => {
         }
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 1200));
 
       const container = document.querySelector('#scroll-box') as HTMLElement;
 
@@ -46,8 +44,22 @@ test.describe('Scroll Core Behavior', () => {
 
     expect(result.hasScrollData).toBe(true);
     if (result.events.length > 0) {
-      expect(result.events[0].scroll_data).toHaveProperty('depth');
-      expect(result.events[0].scroll_data).toHaveProperty('direction');
+      const scrollData = result.events[0].scroll_data;
+      // Verify all 6 scroll_data fields
+      expect(scrollData).toHaveProperty('depth');
+      expect(scrollData).toHaveProperty('direction');
+      expect(scrollData).toHaveProperty('container_selector');
+      expect(scrollData).toHaveProperty('is_primary');
+      expect(scrollData).toHaveProperty('velocity');
+      expect(scrollData).toHaveProperty('max_depth_reached');
+
+      // Type validation
+      expect(typeof scrollData.depth).toBe('number');
+      expect(['up', 'down']).toContain(scrollData.direction);
+      expect(typeof scrollData.container_selector).toBe('string');
+      expect(typeof scrollData.is_primary).toBe('boolean');
+      expect(typeof scrollData.velocity).toBe('number');
+      expect(typeof scrollData.max_depth_reached).toBe('number');
     }
   });
 });

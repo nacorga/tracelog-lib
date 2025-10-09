@@ -34,7 +34,14 @@ describe('EventManager - Deduplication', () => {
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
+      scroll_data: {
+        depth: 50,
+        direction: ScrollDirection.DOWN,
+        container_selector: 'window',
+        is_primary: true,
+        velocity: 0,
+        max_depth_reached: 50,
+      },
     });
 
     expect(eventManager.getQueueLength()).toBe(2);
@@ -107,13 +114,27 @@ describe('EventManager - Deduplication', () => {
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
+      scroll_data: {
+        depth: 50,
+        direction: ScrollDirection.DOWN,
+        container_selector: 'window',
+        is_primary: true,
+        velocity: 0,
+        max_depth_reached: 50,
+      },
     });
 
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
+      scroll_data: {
+        depth: 50,
+        direction: ScrollDirection.DOWN,
+        container_selector: 'window',
+        is_primary: true,
+        velocity: 0,
+        max_depth_reached: 50,
+      },
     });
 
     expect(eventManager.getQueueLength()).toBe(1);
@@ -123,13 +144,27 @@ describe('EventManager - Deduplication', () => {
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 50, direction: ScrollDirection.DOWN },
+      scroll_data: {
+        depth: 50,
+        direction: ScrollDirection.DOWN,
+        container_selector: 'window',
+        is_primary: true,
+        velocity: 0,
+        max_depth_reached: 50,
+      },
     });
 
     eventManager.track({
       type: EventType.SCROLL,
       page_url: 'https://example.com',
-      scroll_data: { depth: 75, direction: ScrollDirection.DOWN },
+      scroll_data: {
+        depth: 75,
+        direction: ScrollDirection.DOWN,
+        container_selector: 'window',
+        is_primary: true,
+        velocity: 0,
+        max_depth_reached: 75,
+      },
     });
 
     expect(eventManager.getQueueLength()).toBe(2);

@@ -72,11 +72,8 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Check session BEFORE rate limiting to avoid consuming quota for buffered events
     if (!this.get('sessionId')) {
-      // Protect against unbounded buffer growth during initialization delays
       if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
-        // Drop oldest event (FIFO) to make room for new one
         this.pendingEventsBuffer.shift();
         log('warn', 'Pending events buffer full - dropping oldest event', {
           data: { maxBufferSize: MAX_PENDING_EVENTS_BUFFER },
@@ -98,12 +95,8 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Rate limiting check (except for critical events)
-    // Applied AFTER session check to only rate-limit processable events
     const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
     if (!isCriticalEvent && !this.checkRateLimit()) {
-      // Rate limit exceeded - drop event silently
-      // Logging would itself cause performance issues
       return;
     }
 
@@ -199,8 +192,6 @@ export class EventManager extends StateManager {
 
     const currentSessionId = this.get('sessionId');
     if (!currentSessionId) {
-      // Keep events in buffer for future retry - do NOT discard
-      // This prevents data loss during legitimate race conditions
       log('warn', 'Cannot flush pending events: session not initialized - keeping in buffer', {
         data: { bufferedEventCount: this.pendingEventsBuffer.length },
       });
@@ -208,11 +199,9 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Create copy before clearing to avoid infinite recursion
     const bufferedEvents = [...this.pendingEventsBuffer];
     this.pendingEventsBuffer = [];
 
-    // Process all buffered events now that session exists
     bufferedEvents.forEach((event) => {
       this.track(event);
     });
@@ -434,18 +423,15 @@ export class EventManager extends StateManager {
   private checkRateLimit(): boolean {
     const now = Date.now();
 
-    // Reset counter if window has expired
     if (now - this.rateLimitWindowStart > RATE_LIMIT_WINDOW_MS) {
       this.rateLimitCounter = 0;
       this.rateLimitWindowStart = now;
     }
 
-    // Check if limit exceeded
     if (this.rateLimitCounter >= MAX_EVENTS_PER_SECOND) {
       return false;
     }
 
-    // Increment counter
     this.rateLimitCounter++;
     return true;
   }
