@@ -25,9 +25,10 @@ This document outlines TraceLog's security guarantees, privacy protections, and 
 
 3. **Default URL Parameter Filtering**
    - Automatically remove sensitive query parameters from tracked URLs:
-     - `token`, `auth`, `key`, `session`, `reset`, `email`, `user`, `password`
+     - `token`, `auth`, `key`, `session`, `reset`, `password`
      - `api_key`, `apikey`, `secret`, `access_token`, `refresh_token`
      - `verification`, `code`, `otp`
+   - Common parameters like `email` and `user` are NOT filtered by default (legitimate use in confirmation links, attribution)
    - You can extend this list with custom parameters via `config.sensitiveQueryParams`
    - Full list: [`src/constants/config.constants.ts`](./src/constants/config.constants.ts)
 

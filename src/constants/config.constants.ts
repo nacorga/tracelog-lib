@@ -128,7 +128,6 @@ export const DEFAULT_SENSITIVE_QUERY_PARAMS = [
   'key',
   'session',
   'reset',
-  'email',
   'password',
   'api_key',
   'apikey',

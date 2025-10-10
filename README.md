@@ -457,7 +457,7 @@ TraceLog is designed with **privacy-first** principles. Key security guarantees:
 
 - **Input Value Protection**: NEVER captures values from `<input>`, `<textarea>`, or `<select>` elements
 - **PII Sanitization**: Automatically redacts emails, phone numbers, credit cards, and API keys from error messages and click text
-- **Default URL Filtering**: Removes sensitive query parameters (`token`, `auth`, `key`, `session`, `email`, `password`, etc.)
+- **Default URL Filtering**: Removes sensitive query parameters (`token`, `auth`, `key`, `session`, `password`, `api_key`, `secret`, etc.)
 - **Client-Side Controls**: All validation, sampling, and deduplication happen in the browser
 - **XSS Protection**: All metadata is sanitized against common XSS patterns
 

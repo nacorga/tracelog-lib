@@ -16,7 +16,7 @@ Tracks page navigation and route changes in single-page applications.
 
 **Key Features**:
 - **URL Normalization**: Filters sensitive query parameters before tracking
-  - **Default Protection**: Automatically removes 16 common sensitive params: `token`, `auth`, `key`, `session`, `reset`, `email`, `password`, `api_key`, `apikey`, `secret`, `access_token`, `refresh_token`, `verification`, `code`, `otp`
+  - **Default Protection**: Automatically removes 15 common sensitive params: `token`, `auth`, `key`, `session`, `reset`, `password`, `api_key`, `apikey`, `secret`, `access_token`, `refresh_token`, `verification`, `code`, `otp`
   - **Custom Parameters**: Extends defaults with user-provided `config.sensitiveQueryParams`
   - **Example**: `https://app.com/page?token=abc&user=john` → `https://app.com/page?user=john`
 - **SPA Navigation Detection**: Automatically patches `history.pushState()` and `history.replaceState()` to detect route changes
