@@ -121,6 +121,25 @@ export const INTERACTIVE_SELECTORS = [
 // UTM parameters for tracking
 export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 
+// Default sensitive query parameters to remove from URLs (privacy protection)
+export const DEFAULT_SENSITIVE_QUERY_PARAMS = [
+  'token',
+  'auth',
+  'key',
+  'session',
+  'reset',
+  'email',
+  'password',
+  'api_key',
+  'apikey',
+  'secret',
+  'access_token',
+  'refresh_token',
+  'verification',
+  'code',
+  'otp',
+] as const;
+
 // ============================================================================
 // ============================================================================
 // INITIALIZATION

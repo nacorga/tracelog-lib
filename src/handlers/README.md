@@ -15,7 +15,10 @@ Tracks page navigation and route changes in single-page applications.
 - History API calls (`pushState`, `replaceState`)
 
 **Key Features**:
-- **URL Normalization**: Filters sensitive query parameters before tracking (configurable via `config.sensitiveQueryParams`)
+- **URL Normalization**: Filters sensitive query parameters before tracking
+  - **Default Protection**: Automatically removes 16 common sensitive params: `token`, `auth`, `key`, `session`, `reset`, `email`, `password`, `api_key`, `apikey`, `secret`, `access_token`, `refresh_token`, `verification`, `code`, `otp`
+  - **Custom Parameters**: Extends defaults with user-provided `config.sensitiveQueryParams`
+  - **Example**: `https://app.com/page?token=abc&user=john` → `https://app.com/page?user=john`
 - **SPA Navigation Detection**: Automatically patches `history.pushState()` and `history.replaceState()` to detect route changes
 - **Deduplication**: Compares normalized URLs against last tracked URL to prevent consecutive duplicate events
 - **Lifecycle Callback**: Invokes `onTrack()` callback after each page view for session management integration
@@ -71,6 +74,8 @@ Captures mouse clicks and converts them into analytics events with element conte
 - Relative coordinates calculation (0-1 scale, 3 decimal precision, clamped)
 - Custom event tracking via `data-tlog-name` attributes
 - Text extraction with length limits (255 chars max) and priority logic
+- **PII Sanitization**: Automatically redacts emails, phone numbers, credit cards, API keys, and tokens from captured text
+- **Privacy Controls**: Respects `data-tlog-ignore` attribute to exclude sensitive elements from tracking
 
 **Text Extraction Priority**:
 1. Uses clicked element's text if within 255 character limit
@@ -125,12 +130,33 @@ Captures mouse clicks and converts them into analytics events with element conte
 2. If not, search ancestors for interactive elements
 3. Fallback to clicked element if no interactive parent found
 
+**Privacy & Security Features**:
+- **PII Sanitization**: Text content is sanitized using `PII_PATTERNS` before storage:
+  - Email addresses → `[REDACTED]`
+  - Phone numbers (US format) → `[REDACTED]`
+  - Credit card numbers → `[REDACTED]`
+  - API keys/tokens → `[REDACTED]`
+  - Bearer tokens → `[REDACTED]`
+  - IBAN numbers → `[REDACTED]`
+- **Element Exclusion**: Elements (or their parents) with `data-tlog-ignore` attribute are completely ignored
+  ```html
+  <!-- This button will NOT be tracked -->
+  <button data-tlog-ignore>Delete Account</button>
+
+  <!-- Children of ignored parents are also ignored -->
+  <div data-tlog-ignore>
+    <button>Submit Payment</button> <!-- NOT tracked -->
+  </div>
+  ```
+- **Input Value Protection**: NEVER captures `value` attribute from `<input>`, `<textarea>`, or `<select>` elements (only element metadata like tag, id, class)
+
 **Additional Implementation Details**:
 - **Coordinate Precision**: Relative coordinates use 3 decimal places (e.g., 0.123) and are clamped to [0, 1] range
 - **Text Node Handling**: If click target is a text node, uses parent element's HTML element
 - **Empty Attribute Filtering**: `dataAttributes` object is only included if at least one attribute is present
 - **Both Events Sent**: When clicking tracked elements (with `data-tlog-name`), BOTH custom AND click events are sent
 - **Error Resilience**: Invalid selectors in `INTERACTIVE_SELECTORS` are caught and skipped with warning logs
+- **Ignore Check**: Performed early in handler (before any processing) via `shouldIgnoreElement()` method
 
 ## ErrorHandler
 

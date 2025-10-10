@@ -449,6 +449,52 @@ npm run test:unit                           # Unit tests
 npm run test:e2e                            # E2E tests
 ```
 
+## Security & Privacy
+
+TraceLog is designed with **privacy-first** principles. Key security guarantees:
+
+### ✅ What We Protect
+
+- **Input Value Protection**: NEVER captures values from `<input>`, `<textarea>`, or `<select>` elements
+- **PII Sanitization**: Automatically redacts emails, phone numbers, credit cards, and API keys from error messages and click text
+- **Default URL Filtering**: Removes sensitive query parameters (`token`, `auth`, `key`, `session`, `email`, `password`, etc.)
+- **Client-Side Controls**: All validation, sampling, and deduplication happen in the browser
+- **XSS Protection**: All metadata is sanitized against common XSS patterns
+
+### 🛡️ Tools for You
+
+- **`data-tlog-ignore` Attribute**: Exclude sensitive UI elements from tracking
+  ```html
+  <!-- Payment form - completely ignored -->
+  <div data-tlog-ignore>
+    <input type="text" name="card_number">
+    <button>Pay Now</button>
+  </div>
+  ```
+
+- **Custom URL Parameters**: Extend default filtering with your own sensitive params
+  ```typescript
+  await tracelog.init({
+    sensitiveQueryParams: ['affiliate_id', 'promo_code'] // Merged with defaults
+  });
+  ```
+
+- **Conditional Sampling**: Adjust tracking based on user consent level
+  ```typescript
+  const samplingRate = userConsent === 'full' ? 1.0 : 0.1;
+  await tracelog.init({ samplingRate });
+  ```
+
+### 📋 Your Responsibilities
+
+- **GDPR Consent**: Initialize TraceLog ONLY after user consent, call `destroy()` on revoke
+- **Custom Event Data**: Sanitize PII before sending via `tracelog.event()`
+- **Sensitive Elements**: Mark admin/payment UI with `data-tlog-ignore`
+
+**📚 Read the full security guide:** [SECURITY.md](./SECURITY.md)
+
+---
+
 ## License
 
 MIT © TraceLog. See [LICENSE](LICENSE) file for details.

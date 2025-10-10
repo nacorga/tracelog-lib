@@ -1,4 +1,5 @@
 import { Config } from '../../types';
+import { DEFAULT_SENSITIVE_QUERY_PARAMS } from '../../constants';
 import { log } from '../logging.utils';
 
 /**
@@ -64,8 +65,9 @@ export const getCollectApiUrl = (config: Config): string => {
 
 /**
  * Normalizes a URL by removing sensitive query parameters
+ * Combines default sensitive parameters with custom ones provided by user
  * @param url - The URL to normalize
- * @param sensitiveQueryParams - Array of parameter names to remove
+ * @param sensitiveQueryParams - Array of parameter names to remove (merged with defaults)
  * @returns The normalized URL
  */
 export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): string => {
@@ -73,10 +75,13 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
 
+    // Merge default sensitive params with user-provided ones (deduped via Set)
+    const allSensitiveParams = [...new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
+
     let hasChanged = false;
     const removedParams: string[] = [];
 
-    sensitiveQueryParams.forEach((param) => {
+    allSensitiveParams.forEach((param) => {
       if (searchParams.has(param)) {
         searchParams.delete(param);
         hasChanged = true;
