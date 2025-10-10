@@ -5,6 +5,7 @@ import {
   RATE_LIMIT_WINDOW_MS,
   MAX_EVENTS_PER_SECOND,
   MAX_PENDING_EVENTS_BUFFER,
+  BATCH_SIZE_THRESHOLD,
 } from '../constants/config.constants';
 import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
@@ -396,6 +397,11 @@ export class EventManager extends StateManager {
 
     if (!this.sendIntervalId) {
       this.startSendInterval();
+    }
+
+    // Dynamic flush: Send immediately when batch size threshold is reached
+    if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
+      void this.sendEventsQueue();
     }
 
     this.handleGoogleAnalyticsIntegration(event);

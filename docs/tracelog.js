@@ -12,6 +12,7 @@ const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 const DEFAULT_SAMPLING_RATE = 1;
 const RATE_LIMIT_WINDOW_MS = 1e3;
 const MAX_EVENTS_PER_SECOND = 200;
+const BATCH_SIZE_THRESHOLD = 50;
 const MAX_PENDING_EVENTS_BUFFER = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
@@ -1407,6 +1408,9 @@ class EventManager extends StateManager {
     if (!this.sendIntervalId) {
       this.startSendInterval();
     }
+    if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
+      void this.sendEventsQueue();
+    }
     this.handleGoogleAnalyticsIntegration(event2);
   }
   startSendInterval() {
@@ -1813,11 +1817,13 @@ class SessionHandler extends StateManager {
     this.set("hasStartSession", false);
   }
 }
+const PAGE_VIEW_THROTTLE_MS = 1e3;
 class PageViewHandler extends StateManager {
   eventManager;
   onTrack;
   originalPushState;
   originalReplaceState;
+  lastPageViewTime = 0;
   constructor(eventManager, onTrack) {
     super();
     this.eventManager = eventManager;
@@ -1839,6 +1845,7 @@ class PageViewHandler extends StateManager {
     if (this.originalReplaceState) {
       window.history.replaceState = this.originalReplaceState;
     }
+    this.lastPageViewTime = 0;
   }
   patchHistory(method) {
     const original = window.history[method];
@@ -1858,6 +1865,12 @@ class PageViewHandler extends StateManager {
     if (this.get("pageUrl") === normalizedUrl) {
       return;
     }
+    const now = Date.now();
+    const throttleMs = this.get("config").pageViewThrottleMs ?? PAGE_VIEW_THROTTLE_MS;
+    if (now - this.lastPageViewTime < throttleMs) {
+      return;
+    }
+    this.lastPageViewTime = now;
     this.onTrack();
     const fromUrl = this.get("pageUrl");
     this.set("pageUrl", normalizedUrl);
@@ -1872,6 +1885,7 @@ class PageViewHandler extends StateManager {
   trackInitialPageView() {
     const normalizedUrl = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
     const pageViewData = this.extractPageViewData();
+    this.lastPageViewTime = Date.now();
     this.eventManager.track({
       type: EventType.PAGE_VIEW,
       page_url: normalizedUrl,
@@ -2388,22 +2402,22 @@ class ScrollHandler extends StateManager {
 }
 class ViewportHandler extends StateManager {
   eventManager;
+  trackedElements = /* @__PURE__ */ new Map();
   observer = null;
   mutationObserver = null;
   mutationDebounceTimer = null;
-  trackedElements = /* @__PURE__ */ new Map();
   config = null;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
   }
   /**
-   * Starts tracking viewport visibility for configured selectors
+   * Starts tracking viewport visibility for configured elements
    */
   startTracking() {
     const config = this.get("config");
     this.config = config.viewport ?? null;
-    if (!this.config?.selectors || this.config.selectors.length === 0) {
+    if (!this.config?.elements || this.config.elements.length === 0) {
       return;
     }
     const threshold = this.config.threshold ?? 0.5;
@@ -2450,13 +2464,13 @@ class ViewportHandler extends StateManager {
     this.trackedElements.clear();
   }
   /**
-   * Query and observe all elements matching configured selectors
+   * Query and observe all elements matching configured elements
    */
   observeElements() {
     if (!this.config || !this.observer) return;
-    for (const selector of this.config.selectors) {
+    for (const elementConfig of this.config.elements) {
       try {
-        const elements = document.querySelectorAll(selector);
+        const elements = document.querySelectorAll(elementConfig.selector);
         elements.forEach((element) => {
           if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
             return;
@@ -2466,14 +2480,16 @@ class ViewportHandler extends StateManager {
           }
           this.trackedElements.set(element, {
             element,
-            selector,
+            selector: elementConfig.selector,
+            id: elementConfig.id,
+            name: elementConfig.name,
             startTime: null,
             timeoutId: null
           });
           this.observer?.observe(element);
         });
       } catch (error) {
-        log("warn", `ViewportHandler: Invalid selector "${selector}"`, { error });
+        log("warn", `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
       }
     }
   }
@@ -2518,6 +2534,12 @@ class ViewportHandler extends StateManager {
       dwellTime,
       visibilityRatio
     };
+    if (tracked.id !== void 0) {
+      eventData.id = tracked.id;
+    }
+    if (tracked.name !== void 0) {
+      eventData.name = tracked.name;
+    }
     this.eventManager.track({
       type: EventType.VIEWPORT_VISIBLE,
       viewport_data: eventData
@@ -2991,11 +3013,11 @@ class PerformanceHandler extends StateManager {
         const value = Number(metric.value.toFixed(PRECISION_TWO_DECIMALS));
         this.sendVital({ type, value });
       };
-      onLCP(report("LCP"));
-      onCLS(report("CLS"));
-      onFCP(report("FCP"));
-      onTTFB(report("TTFB"));
-      onINP(report("INP"));
+      onLCP(report("LCP"), { reportAllChanges: false });
+      onCLS(report("CLS"), { reportAllChanges: false });
+      onFCP(report("FCP"), { reportAllChanges: false });
+      onTTFB(report("TTFB"), { reportAllChanges: false });
+      onINP(report("INP"), { reportAllChanges: false });
     } catch (error) {
       log("warn", "Failed to load web-vitals library, using fallback", { error });
       this.observeWebVitalsFallback();

@@ -16,6 +16,8 @@ export interface Config {
   primaryScrollSelector?: string;
   /** Viewport visibility tracking configuration. */
   viewport?: ViewportConfig;
+  /** Page view throttle duration in milliseconds to prevent rapid navigation spam. @default 1000 */
+  pageViewThrottleMs?: number;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

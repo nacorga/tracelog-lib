@@ -149,6 +149,7 @@ await tracelog.init({
 - `errorSampling`: Error sampling rate 0-1 (default: 1.0 / 100%)
 - `sensitiveQueryParams`: Query params to remove from URLs
 - `primaryScrollSelector`: Override automatic primary scroll container detection (e.g., `.mat-sidenav-content`, `window`)
+- `pageViewThrottleMs`: Throttle duration for PAGE_VIEW events to prevent rapid navigation spam (default: 1000ms)
 - `viewport`: Viewport visibility tracking configuration
   - `elements`: Array of element configs `{ selector, id?, name? }` with optional identifiers for analytics
   - `threshold`: Visibility threshold 0-1 (default: 0.5 = 50% visible)
