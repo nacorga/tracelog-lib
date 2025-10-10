@@ -1,4 +1,5 @@
 import { MetadataType } from './common.types';
+import { ViewportConfig } from './viewport.types';
 
 export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */
@@ -13,6 +14,8 @@ export interface Config {
   samplingRate?: number;
   /** CSS selector to manually override primary scroll container detection. */
   primaryScrollSelector?: string;
+  /** Viewport visibility tracking configuration. */
+  viewport?: ViewportConfig;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

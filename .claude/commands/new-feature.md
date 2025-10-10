@@ -52,6 +52,10 @@ The feature-orchestrator agent will guide you through:
 
 ### 4. Automated Implementation
 - Implements each task sequentially
+- **ALWAYS updates documentation** (CLAUDE.md requirement)
+  - README.md (config, events, examples)
+  - CHANGELOG.md (release notes)
+  - docs/ (architecture details)
 - Uses specialized agents:
   - test-guardian (coverage validation)
   - type-safety-enforcer (type checking)

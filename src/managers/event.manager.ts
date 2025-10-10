@@ -66,6 +66,7 @@ export class EventManager extends StateManager {
     web_vitals,
     error_data,
     session_end_reason,
+    viewport_data,
   }: Partial<EventData>): void {
     if (!type) {
       log('error', 'Event type is required - event will be ignored');
@@ -90,6 +91,7 @@ export class EventManager extends StateManager {
         web_vitals,
         error_data,
         session_end_reason,
+        viewport_data,
       });
 
       return;
@@ -114,6 +116,7 @@ export class EventManager extends StateManager {
       web_vitals,
       error_data,
       session_end_reason,
+      viewport_data,
     });
 
     if (!isCriticalEvent && !this.shouldSample()) {
@@ -316,6 +319,7 @@ export class EventManager extends StateManager {
       ...(data.web_vitals && { web_vitals: data.web_vitals }),
       ...(data.error_data && { error_data: data.error_data }),
       ...(data.session_end_reason && { session_end_reason: data.session_end_reason }),
+      ...(data.viewport_data && { viewport_data: data.viewport_data }),
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 

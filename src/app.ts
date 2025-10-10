@@ -5,6 +5,7 @@ import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
+import { ViewportHandler } from './handlers/viewport.handler';
 import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrl, detectQaMode, log } from './utils';
@@ -31,6 +32,7 @@ export class App extends StateManager {
     scroll?: ScrollHandler;
     performance?: PerformanceHandler;
     error?: ErrorHandler;
+    viewport?: ViewportHandler;
   } = {};
 
   protected integrations: {
@@ -208,5 +210,10 @@ export class App extends StateManager {
 
     this.handlers.error = new ErrorHandler(this.managers.event as EventManager);
     this.handlers.error.startTracking();
+
+    if (this.get('config').viewport) {
+      this.handlers.viewport = new ViewportHandler(this.managers.event as EventManager);
+      this.handlers.viewport.startTracking();
+    }
   }
 }

@@ -456,6 +456,106 @@ Works automatically with:
 - `SCROLL_MIN_EVENT_INTERVAL_MS`: 500ms (minimum time between events)
 - `MAX_SCROLL_EVENTS_PER_SESSION`: 120 (session cap)
 
+## ViewportHandler
+
+Tracks element visibility in the viewport using the IntersectionObserver API with configurable thresholds and minimum dwell time requirements.
+
+**Events Generated**: `VIEWPORT_VISIBLE`
+
+**Triggers**:
+- Elements become visible in viewport and meet minimum dwell time requirement
+- Uses IntersectionObserver API for efficient visibility detection
+- MutationObserver detects dynamically added elements matching configured selectors
+
+**Configuration Options**:
+- `viewport.selectors`: Array of CSS selectors for elements to track (e.g., `['.product-card', '[data-track-viewport]']`)
+- `viewport.threshold`: Visibility threshold 0-1 (default: 0.5 = 50% of element visible)
+- `viewport.minDwellTime`: Minimum time in milliseconds element must be visible (default: 1000ms)
+
+**Key Features**:
+- **IntersectionObserver-based**: Modern, performant visibility detection without scroll event listeners
+- **Configurable Threshold**: Fire events when elements are X% visible (0-1 range)
+- **Dwell Time Requirement**: Elements must remain visible for minimum duration before event fires
+- **Dynamic Element Support**: Automatically detects and tracks elements added to DOM after initialization
+- **Privacy Controls**: Respects `data-tlog-ignore` attribute to exclude sensitive elements
+- **Element Cleanup**: Automatically removes tracking for elements removed from DOM
+- **Debounced Mutation Handling**: Groups DOM mutations with 100ms debounce to reduce overhead
+- **Memory Management**: Cleans up all timers and observers on stopTracking()
+- **Browser Compatibility**: Gracefully degrades if IntersectionObserver not supported
+
+**Event Data**:
+```javascript
+{
+  type: 'VIEWPORT_VISIBLE',
+  viewport_data: {
+    selector: '.product-card',      // CSS selector that matched this element
+    dwellTime: 2147,                // Time element was visible in milliseconds
+    visibilityRatio: 0.87           // Visibility ratio (0-1) when event fired
+  }
+}
+```
+
+**Configuration Example**:
+```javascript
+await tracelog.init({
+  viewport: {
+    selectors: ['.product-card', '.cta-button', '[data-track-viewport]'],
+    threshold: 0.75,      // Element must be 75% visible
+    minDwellTime: 2000    // Must remain visible for 2 seconds
+  }
+});
+
+// Exclude specific elements
+<div class="product-card" data-tlog-ignore>Not tracked</div>
+```
+
+**Visibility Detection**:
+- Uses IntersectionObserver with configurable threshold
+- Fires timer when element enters viewport (isIntersecting: true)
+- Cancels timer if element leaves viewport before minDwellTime elapsed
+- Fires event after minDwellTime, then resets tracking state
+- Same element can trigger multiple events (if it leaves and re-enters viewport)
+
+**Dynamic Element Handling**:
+- MutationObserver watches document.body for added/removed nodes
+- Added nodes: Debounced re-scan (100ms) to detect new matching elements
+- Removed nodes: Immediate cleanup of tracking state and timers
+- Handles both direct removals and ancestor removals (cleanup descendants)
+
+**Element Selection Priority**:
+1. Searches for all elements matching configured selectors
+2. Skips elements with `data-tlog-ignore` attribute
+3. Skips elements already being tracked (prevents duplicates)
+4. Observes remaining elements with IntersectionObserver
+
+**Cleanup & Memory Management**:
+- Disconnects IntersectionObserver on stopTracking()
+- Disconnects MutationObserver on stopTracking()
+- Clears all pending visibility timers
+- Clears mutation debounce timer
+- Clears tracked elements map
+- No memory leaks from event listeners or observers
+
+**Browser Compatibility**:
+- Requires IntersectionObserver API (Chrome 51+, Firefox 55+, Safari 12.1+)
+- Requires MutationObserver API (all modern browsers)
+- Gracefully logs warning and skips tracking if APIs unavailable
+- Safe to use in SSR environments (checks document.body availability)
+
+**Performance Characteristics**:
+- No scroll event listeners (uses IntersectionObserver)
+- Efficient DOM queries with querySelectorAll
+- Debounced mutation handling prevents excessive re-scans
+- Single IntersectionObserver instance for all elements
+- Single MutationObserver instance for DOM changes
+
+**Use Cases**:
+- Product impression tracking (e-commerce)
+- Ad viewability measurement
+- Content engagement analysis
+- CTA visibility analytics
+- Below-the-fold interaction tracking
+
 ## SessionHandler
 
 Manages user session lifecycle through delegation to SessionManager with robust error handling and state management.

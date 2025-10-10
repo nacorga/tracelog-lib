@@ -440,10 +440,10 @@ const tasks = [
     status: "pending"
   },
 
-  // 9. Documentation
+  // 9. Documentation (REQUIRED - CLAUDE.md)
   {
-    content: "Update documentation",
-    activeForm: "Updating documentation",
+    content: "Update documentation (README.md, CHANGELOG.md, docs/)",
+    activeForm: "Updating documentation files",
     status: "pending"
   },
 
@@ -906,7 +906,80 @@ Validate: No PII leaks, recommend additional safeguards if needed
 - Agent action: Explain to user if necessary
 ```
 
-## Phase 5: Quality Validation
+## Phase 5: Documentation Updates (REQUIRED)
+
+**CRITICAL**: Per CLAUDE.md guidelines, ALL code changes MUST be accompanied by documentation updates.
+
+### Documentation Files to Check
+
+When implementing any feature, review and update these files as needed:
+
+1. **README.md** (User-facing documentation)
+   - Update if: New config options, new event types, new public API
+   - Sections to check: Configuration, Event Types, Usage Examples, API Reference
+
+2. **CHANGELOG.md** (Release notes)
+   - ALWAYS update with: Brief description of changes for next release
+   - Format: Follow existing conventional commit grouping (Features, Bug Fixes, etc.)
+
+3. **docs/README.md** (Detailed documentation)
+   - Update if: Architecture changes, new patterns, integration examples
+
+4. **CLAUDE.md** (LLM context, if major architectural change)
+   - Update if: New handler patterns, new manager patterns, significant architecture shift
+
+5. **Component-specific READMEs**
+   - Check: `src/handlers/README.md`, `src/managers/README.md`
+   - Update if: New handler/manager added or existing one significantly changed
+
+### Documentation Update Checklist
+
+Before marking documentation task complete, verify:
+
+```
+📝 Documentation Updated
+
+Required Updates:
+□ README.md - Configuration section (if config added)
+□ README.md - Event Types section (if event type added)
+□ README.md - Usage examples (if public API changed)
+□ CHANGELOG.md - Added entry for next release
+□ docs/README.md - Architecture details (if applicable)
+□ Component README (src/handlers/ or src/managers/)
+
+Verification:
+□ All new config options documented
+□ All new event types documented
+□ Code examples are accurate and tested
+□ Breaking changes clearly marked
+□ Migration guide included (if breaking change)
+```
+
+### Documentation Task Automation
+
+```typescript
+// When Task 9 (Documentation) is in_progress:
+
+1. Identify what changed:
+   - New config options? → Update README.md Config section
+   - New event type? → Update README.md Event Types section
+   - New handler/manager? → Update component README
+   - Any code change? → ALWAYS update CHANGELOG.md
+
+2. Update files:
+   - Use Edit tool to add/modify documentation
+   - Follow existing documentation style
+   - Include code examples where helpful
+
+3. Verify accuracy:
+   - Ensure examples match actual API
+   - Check links are not broken
+   - Validate code snippets are syntactically correct
+
+4. Mark complete only after ALL relevant docs updated
+```
+
+## Phase 6: Quality Validation
 
 Before marking feature complete, enforce ALL acceptance criteria.
 
@@ -916,6 +989,11 @@ Before marking feature complete, enforce ALL acceptance criteria.
 🔍 QUALITY VALIDATION
 
 Running comprehensive checks...
+
+0. Documentation Check (REQUIRED - CLAUDE.md)
+   Verify: README.md, CHANGELOG.md, docs/ updated
+   Status: [CHECKING...]
+   Result: [✅ DOCS UPDATED | ❌ MISSING UPDATES]
 
 1. Build Validation
    Command: npm run build:all
@@ -995,7 +1073,7 @@ Run `/fix` if lint/format issues, then retry validation.
 Ready to proceed to completion phase.
 ```
 
-## Phase 6: Completion & Summary
+## Phase 7: Completion & Summary
 
 Provide comprehensive summary and next steps.
 

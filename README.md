@@ -149,6 +149,10 @@ await tracelog.init({
 - `errorSampling`: Error sampling rate 0-1 (default: 1.0 / 100%)
 - `sensitiveQueryParams`: Query params to remove from URLs
 - `primaryScrollSelector`: Override automatic primary scroll container detection (e.g., `.mat-sidenav-content`, `window`)
+- `viewport`: Viewport visibility tracking configuration
+  - `selectors`: Array of CSS selectors for elements to track (e.g., `['.product-card', '[data-track-viewport]']`)
+  - `threshold`: Visibility threshold 0-1 (default: 0.5 = 50% visible)
+  - `minDwellTime`: Minimum time in ms element must be visible (default: 1000ms)
 - `integrations`:
   - `tracelog.projectId`: TraceLog SaaS
   - `custom.collectApiUrl`: Custom backend
@@ -233,6 +237,11 @@ Each event contains a base structure with type-specific data:
   - `error_data.message`: Error message
   - `error_data.filename/line/column`: Error location
 
+- **`VIEWPORT_VISIBLE`**: Element visibility tracking
+  - `viewport_data.selector`: CSS selector of visible element
+  - `viewport_data.dwellTime`: Time element was visible in ms
+  - `viewport_data.visibilityRatio`: Visibility ratio (0-1) when event fired
+
 ## Advanced
 
 **Event subscription:**
@@ -305,6 +314,28 @@ tracelog.on(EmitterEvent.EVENT, (event) => {
     console.log(`Secondary UI scroll: ${selector}`);
   }
 });
+```
+
+**Viewport visibility tracking:**
+```typescript
+await tracelog.init({
+  viewport: {
+    selectors: ['.product-card', '.cta-button', '[data-track-viewport]'],
+    threshold: 0.75,    // Fire when 75% visible
+    minDwellTime: 2000  // Must be visible for 2 seconds
+  }
+});
+
+// Listen for visibility events
+tracelog.on('event', (event) => {
+  if (event.type === 'VIEWPORT_VISIBLE') {
+    const { selector, dwellTime, visibilityRatio } = event.viewport_data;
+    console.log(`${selector} was ${(visibilityRatio * 100).toFixed(0)}% visible for ${dwellTime}ms`);
+  }
+});
+
+// Exclude specific elements with data-tlog-ignore attribute
+<div class="product-card" data-tlog-ignore>Won't be tracked</div>
 ```
 
 **Multiple integrations:**

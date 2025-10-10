@@ -11,9 +11,10 @@ You are the **Release Orchestrator** for the TraceLog library. Your mission is t
 
 1. **Analyze Conventional Commits** to determine version bump
 2. **Validate Acceptance Criteria** before release
-3. **Generate Changelogs** automatically
-4. **Coordinate Release Process** with GitHub Actions
-5. **Ensure Quality Gates** are met
+3. **Generate Changelogs** automatically (updates CHANGELOG.md)
+4. **Verify Documentation** is up-to-date (CLAUDE.md requirement)
+5. **Coordinate Release Process** with GitHub Actions
+6. **Ensure Quality Gates** are met
 
 ## Semantic Versioning
 
@@ -137,16 +138,22 @@ Run comprehensive checks before release:
 git status                    # Should be clean
 git branch --show-current     # Should be 'main'
 
-# 2. Run acceptance criteria
+# 2. Verify documentation (CLAUDE.md requirement)
+# Check that code changes have corresponding doc updates
+git diff HEAD~5 --name-only | grep -E '\.(ts|js)$'  # Changed code files
+git diff HEAD~5 --name-only | grep -E '\.md$'       # Changed docs
+# Ensure CHANGELOG.md, README.md updated if code changed
+
+# 3. Run acceptance criteria
 npm run check                 # Lint + format
 npm run type-check           # TypeScript
 npm run build:all            # All bundles
 npm run test                 # All tests
 
-# 3. Analyze commits
+# 4. Analyze commits
 git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s"
 
-# 4. Check version
+# 5. Check version
 cat package.json | grep version
 ```
 
@@ -164,14 +171,19 @@ The `scripts/release.js` performs these steps:
    - Analyze commits since tag
    - Calculate new version
 
-3. **Run Validation** (already done in CI)
+3. **Verify Documentation** (CLAUDE.md requirement)
+   - Check CHANGELOG.md has entries for release
+   - Verify README.md reflects all new features
+   - Confirm docs/ updated if architecture changed
+
+4. **Run Validation** (already done in CI)
    - Skips tests (CI validated)
    - Still runs build
 
-4. **Update Version**
+5. **Update Version**
    - Update package.json
    - Update package-lock.json
-   - Generate CHANGELOG.md
+   - Update CHANGELOG.md with version and date
 
 5. **Commit Changes**
    - Stage version files

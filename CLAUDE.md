@@ -3,6 +3,7 @@
 - TypeScript 5.7 strict mode enforced
 - Single dependency: `web-vitals` (runtime)
 - Dual ESM/CJS support required
+- **Documentation Updates Required**: When making code changes, ALWAYS update relevant documentation files (*.md) to keep them synchronized with code changes
 
 # Acceptance Criteria
 

@@ -68,7 +68,6 @@ const DEFAULT_SENSITIVE_QUERY_PARAMS = [
   "key",
   "session",
   "reset",
-  "email",
   "password",
   "api_key",
   "apikey",
@@ -137,6 +136,7 @@ var EventType = /* @__PURE__ */ ((EventType2) => {
   EventType2["CUSTOM"] = "custom";
   EventType2["WEB_VITALS"] = "web_vitals";
   EventType2["ERROR"] = "error";
+  EventType2["VIEWPORT_VISIBLE"] = "viewport_visible";
   return EventType2;
 })(EventType || {});
 var ScrollDirection = /* @__PURE__ */ ((ScrollDirection2) => {
@@ -1142,7 +1142,8 @@ class EventManager extends StateManager {
     custom_event,
     web_vitals,
     error_data,
-    session_end_reason
+    session_end_reason,
+    viewport_data
   }) {
     if (!type) {
       log("error", "Event type is required - event will be ignored");
@@ -1164,7 +1165,8 @@ class EventManager extends StateManager {
         custom_event,
         web_vitals,
         error_data,
-        session_end_reason
+        session_end_reason,
+        viewport_data
       });
       return;
     }
@@ -1184,7 +1186,8 @@ class EventManager extends StateManager {
       custom_event,
       web_vitals,
       error_data,
-      session_end_reason
+      session_end_reason,
+      viewport_data
     });
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
@@ -1345,6 +1348,7 @@ class EventManager extends StateManager {
       ...data.web_vitals && { web_vitals: data.web_vitals },
       ...data.error_data && { error_data: data.error_data },
       ...data.session_end_reason && { session_end_reason: data.session_end_reason },
+      ...data.viewport_data && { viewport_data: data.viewport_data },
       ...isSessionStart && getUTMParameters() && { utm: getUTMParameters() }
     };
     return payload;
@@ -1945,10 +1949,10 @@ class ClickHandler extends StateManager {
     }
   }
   shouldIgnoreElement(element) {
-    if (element.hasAttribute("data-tlog-ignore")) {
+    if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
       return true;
     }
-    const parent = element.closest("[data-tlog-ignore]");
+    const parent = element.closest(`[${HTML_DATA_ATTR_PREFIX}-ignore]`);
     return parent !== null;
   }
   findTrackingElement(element) {
@@ -2380,6 +2384,210 @@ class ScrollHandler extends StateManager {
   }
   updateContainerPrimary(container, isPrimary) {
     container.isPrimary = isPrimary;
+  }
+}
+class ViewportHandler extends StateManager {
+  eventManager;
+  observer = null;
+  mutationObserver = null;
+  mutationDebounceTimer = null;
+  trackedElements = /* @__PURE__ */ new Map();
+  config = null;
+  constructor(eventManager) {
+    super();
+    this.eventManager = eventManager;
+  }
+  /**
+   * Starts tracking viewport visibility for configured selectors
+   */
+  startTracking() {
+    const config = this.get("config");
+    this.config = config.viewport ?? null;
+    if (!this.config?.selectors || this.config.selectors.length === 0) {
+      return;
+    }
+    const threshold = this.config.threshold ?? 0.5;
+    const minDwellTime = this.config.minDwellTime ?? 1e3;
+    if (threshold < 0 || threshold > 1) {
+      log("warn", "ViewportHandler: Invalid threshold, must be between 0 and 1");
+      return;
+    }
+    if (minDwellTime < 0) {
+      log("warn", "ViewportHandler: Invalid minDwellTime, must be non-negative");
+      return;
+    }
+    if (typeof IntersectionObserver === "undefined") {
+      log("warn", "ViewportHandler: IntersectionObserver not supported in this browser");
+      return;
+    }
+    this.observer = new IntersectionObserver(this.handleIntersection, {
+      threshold
+    });
+    this.observeElements();
+    this.setupMutationObserver();
+  }
+  /**
+   * Stops tracking and cleans up resources
+   */
+  stopTracking() {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+      this.mutationObserver = null;
+    }
+    if (this.mutationDebounceTimer !== null) {
+      window.clearTimeout(this.mutationDebounceTimer);
+      this.mutationDebounceTimer = null;
+    }
+    for (const tracked of this.trackedElements.values()) {
+      if (tracked.timeoutId !== null) {
+        window.clearTimeout(tracked.timeoutId);
+      }
+    }
+    this.trackedElements.clear();
+  }
+  /**
+   * Query and observe all elements matching configured selectors
+   */
+  observeElements() {
+    if (!this.config || !this.observer) return;
+    for (const selector of this.config.selectors) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach((element) => {
+          if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
+            return;
+          }
+          if (this.trackedElements.has(element)) {
+            return;
+          }
+          this.trackedElements.set(element, {
+            element,
+            selector,
+            startTime: null,
+            timeoutId: null
+          });
+          this.observer?.observe(element);
+        });
+      } catch (error) {
+        log("warn", `ViewportHandler: Invalid selector "${selector}"`, { error });
+      }
+    }
+  }
+  /**
+   * Handles intersection events from IntersectionObserver
+   */
+  handleIntersection = (entries) => {
+    if (!this.config) return;
+    const minDwellTime = this.config.minDwellTime ?? 1e3;
+    for (const entry of entries) {
+      const tracked = this.trackedElements.get(entry.target);
+      if (!tracked) continue;
+      if (entry.isIntersecting) {
+        if (tracked.startTime === null) {
+          tracked.startTime = performance.now();
+          tracked.timeoutId = window.setTimeout(() => {
+            this.fireViewportEvent(tracked, entry.intersectionRatio);
+          }, minDwellTime);
+        }
+      } else {
+        if (tracked.startTime !== null) {
+          if (tracked.timeoutId !== null) {
+            window.clearTimeout(tracked.timeoutId);
+            tracked.timeoutId = null;
+          }
+          tracked.startTime = null;
+        }
+      }
+    }
+  };
+  /**
+   * Fires a viewport visible event
+   */
+  fireViewportEvent(tracked, visibilityRatio) {
+    if (tracked.startTime === null) return;
+    const dwellTime = Math.round(performance.now() - tracked.startTime);
+    if (tracked.element.hasAttribute("data-tlog-ignore")) {
+      return;
+    }
+    const eventData = {
+      selector: tracked.selector,
+      dwellTime,
+      visibilityRatio
+    };
+    this.eventManager.track({
+      type: EventType.VIEWPORT_VISIBLE,
+      viewport_data: eventData
+    });
+    tracked.startTime = null;
+    tracked.timeoutId = null;
+  }
+  /**
+   * Sets up MutationObserver to detect dynamically added elements
+   */
+  setupMutationObserver() {
+    if (!this.config || typeof MutationObserver === "undefined") {
+      return;
+    }
+    if (!document.body) {
+      log("warn", "ViewportHandler: document.body not available, skipping MutationObserver setup");
+      return;
+    }
+    this.mutationObserver = new MutationObserver((mutations) => {
+      let hasAddedNodes = false;
+      for (const mutation of mutations) {
+        if (mutation.type === "childList") {
+          if (mutation.addedNodes.length > 0) {
+            hasAddedNodes = true;
+          }
+          if (mutation.removedNodes.length > 0) {
+            this.cleanupRemovedNodes(mutation.removedNodes);
+          }
+        }
+      }
+      if (hasAddedNodes) {
+        if (this.mutationDebounceTimer !== null) {
+          window.clearTimeout(this.mutationDebounceTimer);
+        }
+        this.mutationDebounceTimer = window.setTimeout(() => {
+          this.observeElements();
+          this.mutationDebounceTimer = null;
+        }, 100);
+      }
+    });
+    this.mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+  /**
+   * Cleans up tracking for removed DOM nodes
+   */
+  cleanupRemovedNodes(removedNodes) {
+    removedNodes.forEach((node) => {
+      if (node.nodeType !== 1) return;
+      const element = node;
+      const tracked = this.trackedElements.get(element);
+      if (tracked) {
+        if (tracked.timeoutId !== null) {
+          window.clearTimeout(tracked.timeoutId);
+        }
+        this.observer?.unobserve(element);
+        this.trackedElements.delete(element);
+      }
+      const descendants = Array.from(this.trackedElements.keys()).filter((el) => element.contains(el));
+      descendants.forEach((el) => {
+        const descendantTracked = this.trackedElements.get(el);
+        if (descendantTracked && descendantTracked.timeoutId !== null) {
+          window.clearTimeout(descendantTracked.timeoutId);
+        }
+        this.observer?.unobserve(el);
+        this.trackedElements.delete(el);
+      });
+    });
   }
 }
 class GoogleAnalyticsIntegration extends StateManager {
@@ -3176,6 +3384,10 @@ class App extends StateManager {
     });
     this.handlers.error = new ErrorHandler(this.managers.event);
     this.handlers.error.startTracking();
+    if (this.get("config").viewport) {
+      this.handlers.viewport = new ViewportHandler(this.managers.event);
+      this.handlers.viewport.startTracking();
+    }
   }
 }
 class TestBridge extends App {

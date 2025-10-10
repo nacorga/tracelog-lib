@@ -52,6 +52,7 @@ window.tracelog.event('add_to_cart', {
 - Page views (SPA navigation with hash routing)
 - Clicks (buttons, links, nav items)
 - Scrolls (depth percentage)
+- Viewport visibility (elements entering viewport with dwell time)
 - Sessions (start/end with cross-tab sync)
 - Web Vitals (LCP, INP, CLS)
 - Errors (with stack traces)
@@ -75,7 +76,12 @@ await window.tracelog.init({
   globalMetadata: { env: 'playground', version: '2.0' },
   sensitiveQueryParams: ['token', 'api_key'],
   samplingRate: 1.0,
-  errorSampling: 1.0
+  errorSampling: 1.0,
+  viewport: {
+    selectors: ['.product-card', '.cta-button'],
+    threshold: 0.5,      // 50% visible
+    minDwellTime: 1000   // 1 second
+  }
 });
 ```
 
