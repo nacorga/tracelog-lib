@@ -7,6 +7,7 @@ import {
   ERROR_SUPPRESSION_WINDOW_MS,
   MAX_TRACKED_ERRORS,
   MAX_TRACKED_ERRORS_HARD_LIMIT,
+  DEFAULT_ERROR_SAMPLING_RATE,
 } from '../constants/error.constants';
 
 /**
@@ -35,7 +36,7 @@ export class ErrorHandler extends StateManager {
 
   private shouldSample(): boolean {
     const config = this.get('config');
-    const samplingRate = config?.errorSampling ?? 0.1;
+    const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
   }
 
@@ -92,12 +93,10 @@ export class ErrorHandler extends StateManager {
       return reason.stack ?? reason.message ?? reason.toString();
     }
 
-    // Handle objects with message property
     if (typeof reason === 'object' && 'message' in reason) {
       return String(reason.message);
     }
 
-    // Try to stringify objects
     try {
       return JSON.stringify(reason);
     } catch {
@@ -109,7 +108,6 @@ export class ErrorHandler extends StateManager {
     let sanitized = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + '...' : text;
 
     for (const pattern of PII_PATTERNS) {
-      // Create new regex instance to avoid global flag state issues
       const regex = new RegExp(pattern.source, pattern.flags);
       sanitized = sanitized.replace(regex, '[REDACTED]');
     }
@@ -130,7 +128,6 @@ export class ErrorHandler extends StateManager {
     this.recentErrors.set(key, now);
 
     if (this.recentErrors.size > MAX_TRACKED_ERRORS_HARD_LIMIT) {
-      // Hard limit exceeded, clearing all tracked errors
       this.recentErrors.clear();
       this.recentErrors.set(key, now);
 

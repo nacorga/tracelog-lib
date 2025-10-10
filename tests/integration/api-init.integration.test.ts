@@ -185,14 +185,6 @@ describe('API Integration - Init Flow', () => {
       expect(TraceLog.isInitialized()).toBe(true);
     });
 
-    it('should initialize with scrollContainerSelectors', async () => {
-      await TraceLog.init({
-        scrollContainerSelectors: ['.custom-scroll', '#main-content'],
-      });
-
-      expect(TraceLog.isInitialized()).toBe(true);
-    });
-
     it('should initialize with sensitiveQueryParams', async () => {
       await TraceLog.init({
         sensitiveQueryParams: ['token', 'api_key', 'session_id'],
@@ -203,7 +195,6 @@ describe('API Integration - Init Flow', () => {
 
     it('should handle empty arrays in config', async () => {
       await TraceLog.init({
-        scrollContainerSelectors: [],
         sensitiveQueryParams: [],
       });
 

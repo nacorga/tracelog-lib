@@ -73,7 +73,6 @@ npm run test:e2e           # Run E2E tests against playground
 await window.tracelog.init({
   sessionTimeout: 1800000,
   globalMetadata: { env: 'playground', version: '2.0' },
-  scrollContainerSelectors: ['.scrollable-container'],
   sensitiveQueryParams: ['token', 'api_key'],
   samplingRate: 1.0,
   errorSampling: 1.0

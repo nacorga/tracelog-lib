@@ -5,12 +5,15 @@ A lightweight TypeScript library for web analytics and user behavior tracking. A
 ## Features
 
 - **Zero-config tracking** - Automatically captures clicks, scrolls, page navigation, and web vitals out of the box.
-- **Cross-tab session management** - Maintains consistent user sessions across multiple browser tabs with automatic recovery.
+- **Cross-tab session management** - Maintains consistent user sessions across multiple browser tabs with BroadcastChannel API and automatic localStorage recovery.
 - **Client-only architecture** - Fully autonomous with optional backend integrations (TraceLog SaaS, custom API, Google Analytics).
-- **Privacy-first** - Built-in PII sanitization and client-side sampling controls.
+- **Privacy-first** - Built-in PII sanitization (emails, phone numbers, credit cards, API keys) and client-side sampling controls.
 - **Framework agnostic** - Works with vanilla JS, React, Vue, Angular, or any web application.
 - **Lightweight** - Only one dependency (`web-vitals`) with dual ESM/CJS support.
 - **Event-driven** - Real-time event subscription with `on()` and `off()` methods for custom integrations.
+- **Rate limiting** - Client-side rate limiting (200 events/second) with exemptions for critical events (SESSION_START/END).
+- **Event recovery** - Automatic recovery of persisted events from localStorage after crashes or network failures.
+- **Smart filtering** - Threshold-based web vitals reporting, deduplication (10px click precision), and intelligent queue management.
 
 ## Installation
 
@@ -140,17 +143,22 @@ await tracelog.init({
 - `destroy(): Promise<void>` - Clean up and remove listeners
 
 **Config (all optional):**
-- `sessionTimeout`: Session timeout in ms (default: 900000)
+- `sessionTimeout`: Session timeout in ms (default: 900000 / 15 minutes, range: 30s - 24 hours)
 - `globalMetadata`: Metadata attached to all events
 - `samplingRate`: Event sampling rate 0-1 (default: 1.0)
-- `errorSampling`: Error sampling rate 0-1 (default: 1.0)
+- `errorSampling`: Error sampling rate 0-1 (default: 1.0 / 100%)
 - `sensitiveQueryParams`: Query params to remove from URLs
-- `scrollContainerSelectors`: Custom scroll containers
+- `primaryScrollSelector`: Override automatic primary scroll container detection (e.g., `.mat-sidenav-content`, `window`)
 - `integrations`:
   - `tracelog.projectId`: TraceLog SaaS
   - `custom.collectApiUrl`: Custom backend
   - `custom.allowHttp`: Enable HTTP for testing
   - `googleAnalytics.measurementId`: GA4
+
+**📚 For detailed configuration and implementation, see:**
+- [Handlers Documentation](./src/handlers/README.md) - Event capture logic
+- [Managers Documentation](./src/managers/README.md) - Core components
+- [Listeners Documentation](./src/listeners/README.md) - Activity tracking
 
 ## Event Data Structure
 
@@ -185,20 +193,40 @@ Each event contains a base structure with type-specific data:
 - **`SCROLL`**: Scroll engagement
   - `scroll_data.depth`: Scroll depth percentage (0-100)
   - `scroll_data.direction`: Scroll direction (up/down)
+  - `scroll_data.container_selector`: CSS selector identifying scroll container (e.g., `window`, `.mat-sidenav-content`, `#main`)
+  - `scroll_data.is_primary`: Whether this is the main scroll container (true for primary content, false for sidebars/modals)
+  - `scroll_data.velocity`: Scroll speed in pixels per second (for engagement analysis)
+  - `scroll_data.max_depth_reached`: Maximum scroll depth reached in current session (0-100)
 
-- **`SESSION_START`**: Session initialization
-  - No additional data
+### Scroll Container Detection
 
-- **`SESSION_END`**: Session termination
-  - `session_end_reason`: Reason (timeout, manual, tab_close)
+**Primary Container Logic**:
+- If `window` is scrollable → `window` is primary (`is_primary: true`)
+- If `window` NOT scrollable → First detected container is primary (e.g., `.mat-sidenav-content` in Angular Material)
+- All other containers are secondary (`is_primary: false`)
+
+**Important Notes**:
+- `is_primary` is calculated ONCE when container is detected
+- Does not re-calculate if layout changes dynamically during session
+- Pages without scroll: Window is marked primary but generates no events (scroll impossible)
+- Historical events maintain their original `is_primary` value for consistency
+
+- **`SESSION_START`**: Session initialization (cross-tab synchronized)
+  - Session ID format: `{timestamp}-{9-char-base36}` (e.g., `1728488234567-kx9f2m1bq`)
+  - See [SessionManager docs](./src/managers/README.md#sessionmanager) for cross-tab sync details
+
+- **`SESSION_END`**: Session termination (synchronous flush before page unload)
+  - `session_end_reason`: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, or `tab_closed`
 
 - **`CUSTOM`**: Business-specific events
   - `custom_event.name`: Event name
   - `custom_event.metadata`: Custom data (any JSON-serializable value)
 
-- **`WEB_VITALS`**: Performance metrics
+- **`WEB_VITALS`**: Performance metrics (only sent when exceeding quality thresholds)
   - `web_vitals.type`: Metric type (LCP, CLS, INP, FCP, TTFB, LONG_TASK)
-  - `web_vitals.value`: Metric value in milliseconds
+  - `web_vitals.value`: Metric value in milliseconds or unitless (CLS)
+  - **Thresholds**: LCP >4000ms, FCP >1800ms, CLS >0.25, INP >200ms, TTFB >800ms, LONG_TASK >50ms
+  - See [PerformanceHandler docs](./src/handlers/README.md#performancehandler) for details
 
 - **`ERROR`**: JavaScript errors
   - `error_data.type`: Error type (js_error, promise_rejection)
@@ -218,6 +246,67 @@ await tracelog.init();
 
 **Note**: Listeners are buffered if registered before `init()`, ensuring you don't miss initial events.
 
+**Filter scroll events by primary container:**
+```typescript
+tracelog.on('event', (event) => {
+  if (event.type === 'scroll') {
+    const { is_primary, container_selector, depth, velocity } = event.scroll_data;
+
+    if (is_primary) {
+      // Track main content engagement
+      console.log(`Primary scroll (${container_selector}): ${depth}%`);
+
+      // Identify engaged users (slow scroll = reading)
+      if (velocity < 500 && depth > 50) {
+        console.log('User is reading deeply');
+      }
+
+      // Identify bouncing users (fast scroll = scanning)
+      if (velocity > 2000) {
+        console.log('User is quickly scanning');
+      }
+    } else {
+      // Track auxiliary UI interaction
+      console.log(`Secondary scroll (${container_selector}): ${depth}%`);
+    }
+  }
+});
+```
+
+**Analytics queries example:**
+```typescript
+// In your analytics backend
+const primaryScrollEvents = events.filter(e =>
+  e.type === 'scroll' && e.scroll_data.is_primary
+);
+
+const avgPrimaryDepth = primaryScrollEvents.reduce((sum, e) =>
+  sum + e.scroll_data.depth, 0
+) / primaryScrollEvents.length;
+
+console.log(`Average primary content depth: ${avgPrimaryDepth}%`);
+```
+
+**TypeScript type helpers:**
+```typescript
+import { tracelog, isPrimaryScrollEvent, isSecondaryScrollEvent, EmitterEvent } from '@tracelog/lib';
+
+tracelog.on(EmitterEvent.EVENT, (event) => {
+  // Type guard provides type safety
+  if (isPrimaryScrollEvent(event)) {
+    // TypeScript knows event.scroll_data.is_primary === true
+    const depth = event.scroll_data.depth;
+    console.log(`Primary scroll depth: ${depth}%`);
+  }
+
+  if (isSecondaryScrollEvent(event)) {
+    // TypeScript knows event.scroll_data.is_primary === false
+    const selector = event.scroll_data.container_selector;
+    console.log(`Secondary UI scroll: ${selector}`);
+  }
+});
+```
+
 **Multiple integrations:**
 ```typescript
 await tracelog.init({
@@ -232,6 +321,32 @@ await tracelog.init({
 ```typescript
 window.__traceLogDisabled = true;
 ```
+
+### Manual Primary Container Selection
+
+For edge cases requiring manual override of automatic primary container detection:
+
+```typescript
+await tracelog.init({
+  primaryScrollSelector: '#custom-content' // Override auto-detection
+});
+
+// To mark window as primary:
+await tracelog.init({
+  primaryScrollSelector: 'window'
+});
+```
+
+**When to use**: In 99% of cases, automatic detection is sufficient. Use manual selection only when:
+- You need to override automatic detection for a specific business requirement
+- Your UI has multiple main content areas and you want to prioritize one
+
+**Important Notes:**
+- `primaryScrollSelector` is applied during `init()` and affects all subsequently detected containers
+- The selector is applied BEFORE automatic detection to ensure priority and avoid race conditions
+- If you call `init()` multiple times, only the LAST `primaryScrollSelector` will be active
+- To change primary container dynamically, call `destroy()` then `init()` with new selector
+- Calling `init()` does NOT clear previously detected containers unless `destroy()` is called first
 
 ## Compatibility
 
@@ -268,13 +383,17 @@ TraceLog uses a hybrid sendBeacon/fetch strategy with intelligent error handling
 - **Permanent errors (4xx)**: Events are discarded immediately
   - `400 Bad Request`, `403 Forbidden`, `404 Not Found` → No persistence, no retry
   - Prevents infinite retry loops for configuration issues (e.g., excluded IPs, invalid projects)
+  - Throttled logging (1 log per status code per minute) to prevent console spam
 
 - **Temporary errors (5xx, network failures)**: Events persist in localStorage
   - `500`, `502`, `503`, `504` → Events saved for recovery on next page load
   - Network failures → Events persist and recover automatically
-  - No automatic in-session retries to avoid performance impact
+  - **No automatic in-session retries** to avoid performance impact and battery drain
+  - Recovery attempted on next page load via `recoverPersistedEvents()`
 
 - **Event expiry**: Persisted events expire after 2 hours to prevent stale data recovery
+
+See [SenderManager docs](./src/managers/README.md#sendermanager) for complete error handling details.
 
 ### sendBeacon Limitations
 
@@ -286,10 +405,19 @@ When using `sendBeacon` (page unload scenarios):
 
 ## Troubleshooting
 
-- **Session issues**: Check localStorage availability and session timeout
+- **Session issues**: Check localStorage availability and session timeout. See [SessionManager docs](./src/managers/README.md#sessionmanager)
 - **Memory usage**: Reduce `sessionTimeout`, lower `samplingRate`, call `destroy()` on cleanup
-- **Events not sending**: Check browser console for `PermanentError` logs indicating 4xx errors
+- **Events not sending**:
+  - Check browser console for `PermanentError` logs indicating 4xx errors
+  - Verify integration configuration (`projectId` or `collectApiUrl`)
+  - Check network tab for failed requests to `/collect` endpoint
+- **Rate limiting**: If events are being dropped, check console for rate limit warnings (200 events/second max)
+- **Scroll detection issues**: Use `primaryScrollSelector` to manually specify main content container
 - **CI failures**: Verify Playwright installation and Node.js ≥20
+
+**Detailed troubleshooting guides:**
+- [Handlers troubleshooting](./src/handlers/README.md) - Event capture issues
+- [Managers troubleshooting](./src/managers/README.md) - State, storage, and network issues
 
 ## Development & Contributing
 

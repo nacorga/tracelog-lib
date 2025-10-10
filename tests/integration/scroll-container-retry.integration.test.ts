@@ -21,9 +21,7 @@ describe('ScrollHandler Integration - Container Retry', () => {
   test('should find container after delay', async () => {
     app = new App();
 
-    await app.init({
-      scrollContainerSelectors: '.delayed',
-    });
+    await app.init({});
 
     vi.advanceTimersByTime(300);
 
@@ -32,8 +30,21 @@ describe('ScrollHandler Integration - Container Retry', () => {
     const container = document.querySelector('.delayed') as HTMLElement;
     Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true });
     Object.defineProperty(container, 'clientHeight', { value: 200, configurable: true });
+    Object.defineProperty(container, 'offsetParent', { value: document.body, configurable: true });
 
-    vi.advanceTimersByTime(300);
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 200,
+      top: 0,
+      left: 0,
+      bottom: 200,
+      right: 500,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    vi.advanceTimersByTime(800);
 
     const scrollHandler = app['handlers'].scroll;
     expect(scrollHandler?.['containers'].length).toBeGreaterThan(0);
@@ -42,9 +53,7 @@ describe('ScrollHandler Integration - Container Retry', () => {
   test('should fallback to window', async () => {
     app = new App();
 
-    await app.init({
-      scrollContainerSelectors: '.never-exists',
-    });
+    await app.init({});
 
     vi.advanceTimersByTime(1500);
 

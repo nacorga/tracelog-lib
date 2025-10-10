@@ -182,6 +182,8 @@ export const VALIDATION_MESSAGES = {
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
   INVALID_GLOBAL_METADATA: 'Global metadata must be an object',
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',
+  INVALID_PRIMARY_SCROLL_SELECTOR: 'Primary scroll selector must be a non-empty string',
+  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: 'Invalid CSS selector syntax for primaryScrollSelector',
 } as const;
 
 // ============================================================================

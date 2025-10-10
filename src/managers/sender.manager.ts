@@ -24,7 +24,6 @@ export class SenderManager extends StateManager {
   }
 
   sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
-    // Sync method uses sendBeacon for critical events (page unload, session end)
     if (this.shouldSkipSend()) {
       return true;
     }
@@ -43,7 +42,6 @@ export class SenderManager extends StateManager {
   }
 
   async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
-    // Async method uses fetch for proper error handling
     try {
       const success = await this.send(body);
 
@@ -51,7 +49,6 @@ export class SenderManager extends StateManager {
         this.clearPersistedEvents();
         callbacks?.onSuccess?.(body.events.length, body.events, body);
       } else {
-        // Network/server error - persist for later recovery
         this.persistEvents(body);
         callbacks?.onFailure?.();
       }
@@ -59,14 +56,12 @@ export class SenderManager extends StateManager {
       return success;
     } catch (error) {
       if (error instanceof PermanentError) {
-        // 4xx errors - don't persist, don't retry
         this.logPermanentError('Permanent error, not retrying', error);
         this.clearPersistedEvents();
         callbacks?.onFailure?.();
         return false;
       }
 
-      // Other errors - persist for recovery
       this.persistEvents(body);
       callbacks?.onFailure?.();
       return false;
@@ -89,12 +84,10 @@ export class SenderManager extends StateManager {
         this.clearPersistedEvents();
         callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
       } else {
-        // Keep persisted, will retry on next page load
         callbacks?.onFailure?.();
       }
     } catch (error) {
       if (error instanceof PermanentError) {
-        // 4xx errors - clear and don't retry
         this.logPermanentError('Permanent error during recovery, clearing persisted events', error);
         this.clearPersistedEvents();
         callbacks?.onFailure?.();
@@ -102,13 +95,10 @@ export class SenderManager extends StateManager {
       }
 
       log('error', 'Failed to recover persisted events', { error });
-      // Keep persisted for next attempt
     }
   }
 
-  stop(): void {
-    // Reserved for future cleanup if needed
-  }
+  stop(): void {}
 
   private async send(body: BaseEventsQueueDto): Promise<boolean> {
     if (this.shouldSkipSend()) {
@@ -132,7 +122,6 @@ export class SenderManager extends StateManager {
 
       return response.ok;
     } catch (error) {
-      // Re-throw PermanentError to be caught by caller
       if (error instanceof PermanentError) {
         throw error;
       }
@@ -168,15 +157,12 @@ export class SenderManager extends StateManager {
       });
 
       if (!response.ok) {
-        // 4xx errors are permanent client errors - don't retry
         const isPermanentError = response.status >= 400 && response.status < 500;
 
         if (isPermanentError) {
-          // Note: Logging handled by caller with throttling to prevent spam
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
         }
 
-        // 5xx or other errors - will be persisted by caller
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 

@@ -31,17 +31,29 @@ Captures touch-based interactions on mobile and touch-enabled devices.
 
 ## VisibilityListenerManager
 
-Monitors page visibility state and window focus for session lifecycle management.
+Monitors page visibility state and window focus for session lifecycle management with dual callback routing.
 
 **Events Tracked**: `visibilitychange`, `blur`, `focus`, `online`, `offline`
 
-**Purpose**: Tracks when users switch tabs, minimize windows, or lose network connectivity.
+**Purpose**: Tracks when users switch tabs, minimize windows, or lose network connectivity. Routes events to different callbacks based on whether they indicate user engagement or visibility changes.
 
 **Key Features**:
+- **Dual Callback Architecture**:
+  - `onActivity` callback: Triggered by `focus` and `online` events (positive user engagement)
+  - `onVisibilityChange` callback: Triggered by `visibilitychange`, `blur`, and `offline` events (visibility/connectivity changes)
 - Page Visibility API integration (`visibilitychange`)
 - Window focus/blur detection
-- Basic network status monitoring
+- Basic network status monitoring (`online`/`offline`)
 - Simplified v1 architecture (removed mobile-specific complexity)
+- Passive listeners for optimal performance
+
+**Callback Routing**:
+```typescript
+constructor(
+  onActivity: () => void,        // Called for: focus, online
+  onVisibilityChange: () => void // Called for: visibilitychange, blur, offline
+)
+```
 
 ## UnloadListenerManager
 
@@ -53,8 +65,9 @@ Detects page unload events for session termination and data persistence.
 
 **Key Features**:
 - Reliable unload detection across browsers
-- Graceful error handling
+- Throws errors on setup failure (fail-fast approach)
 - Essential for session boundary tracking
+- **Note**: Currently unused in production - SessionManager handles `beforeunload` directly
 
 ## MouseListenerManager
 
@@ -105,9 +118,11 @@ interface EventListenerManager {
 
 ### Error Handling Strategy
 
-- **Setup errors**: Logged but don't throw (graceful degradation)
-- **Cleanup errors**: Logged as warnings
-- **Consistent patterns**: All managers follow the same error handling approach for v1 reliability
+- **Setup errors**:
+  - **Critical managers** (Activity, Touch, Unload): Log error and throw to prevent incomplete initialization
+  - **Input/Visibility managers** (Mouse, Keyboard, Visibility): Log error with graceful degradation (no throw)
+- **Cleanup errors**: All managers log as warnings without throwing
+- **Rationale**: Critical activity detection failures should halt initialization, while input-specific failures allow partial functionality
 
 ### Performance Considerations
 

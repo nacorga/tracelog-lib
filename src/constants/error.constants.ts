@@ -70,7 +70,7 @@ export const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
  * Default error sampling rate
  * Controls what percentage of errors are actually reported
  */
-export const DEFAULT_ERROR_SAMPLING_RATE = 0.1; // 10% of errors
+export const DEFAULT_ERROR_SAMPLING_RATE = 1; // 100% of errors
 
 // ============================================================================
 // PERMANENT ERROR LOGGING

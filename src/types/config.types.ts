@@ -5,14 +5,14 @@ export interface Config {
   sessionTimeout?: number;
   /** Metadata appended to every tracked event. */
   globalMetadata?: Record<string, MetadataType>;
-  /** Selectors defining custom scroll containers to monitor. */
-  scrollContainerSelectors?: string | string[];
   /** Query parameters to remove before tracking URLs. */
   sensitiveQueryParams?: string[];
-  /** Error event sampling rate between 0 and 1. */
+  /** Error event sampling rate between 0 and 1. @default 1 */
   errorSampling?: number;
-  /** Event sampling rate between 0 and 1. */
+  /** Event sampling rate between 0 and 1. @default 1 */
   samplingRate?: number;
+  /** CSS selector to manually override primary scroll container detection. */
+  primaryScrollSelector?: string;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

@@ -39,10 +39,8 @@ export class PerformanceHandler extends StateManager {
   }
 
   private observeWebVitalsFallback(): void {
-    // TTFB - should be captured immediately as it's available from navigation timing
     this.reportTTFB();
 
-    // LCP
     this.safeObserve(
       'largest-contentful-paint',
       (list) => {
@@ -59,7 +57,6 @@ export class PerformanceHandler extends StateManager {
       true,
     );
 
-    // CLS (layout-shift)
     let clsValue = 0;
     let currentNavId = this.getNavigationId();
 
@@ -68,7 +65,6 @@ export class PerformanceHandler extends StateManager {
       (list) => {
         const navId = this.getNavigationId();
 
-        // Reset CLS on navigation change
         if (navId !== currentNavId) {
           clsValue = 0;
           currentNavId = navId;
@@ -90,7 +86,6 @@ export class PerformanceHandler extends StateManager {
       { type: 'layout-shift', buffered: true },
     );
 
-    // FCP
     this.safeObserve(
       'paint',
       (list) => {
@@ -104,7 +99,6 @@ export class PerformanceHandler extends StateManager {
       true,
     );
 
-    // INP via performance event timing (where supported)
     this.safeObserve(
       'event',
       (list) => {
