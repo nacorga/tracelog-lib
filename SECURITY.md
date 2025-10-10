@@ -321,22 +321,6 @@ npm run test:e2e -- error-tracking
 
 ---
 
-## 📞 Reporting Security Issues
-
-If you discover a security vulnerability in TraceLog:
-
-1. **DO NOT** open a public GitHub issue
-2. Email: [security contact - add your email]
-3. Include:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if available)
-
-We aim to respond within 48 hours and issue patches within 7 days for critical issues.
-
----
-
 ## 📚 Additional Resources
 
 - [GDPR Compliance Checklist](https://gdpr.eu/checklist/)
@@ -359,9 +343,3 @@ We aim to respond within 48 hours and issue patches within 7 days for critical i
 | **Data retention** | ✅ Client: 2hr auto-cleanup | Server: configure in backend |
 
 **Remember:** TraceLog is privacy-first by design, but **you** are ultimately responsible for GDPR/LOPD compliance in your application.
-
----
-
-**Last Updated:** 2025-01-10
-**Library Version:** 0.9.0+
-**License:** MIT
