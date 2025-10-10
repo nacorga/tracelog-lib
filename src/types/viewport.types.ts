@@ -44,6 +44,13 @@ export interface ViewportConfig {
    * @default 1000 (1 second)
    */
   minDwellTime?: number;
+
+  /**
+   * Cooldown period (ms) before same element can fire visibility event again
+   * Prevents repeated events from carousels, sticky headers, and scrolling patterns
+   * @default 60000 (60 seconds)
+   */
+  cooldownPeriod?: number;
 }
 
 /**

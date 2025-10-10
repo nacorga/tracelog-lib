@@ -1,4 +1,4 @@
-import { HTML_DATA_ATTR_PREFIX } from '../constants';
+import { HTML_DATA_ATTR_PREFIX, DEFAULT_VIEWPORT_COOLDOWN_PERIOD } from '../constants';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType } from '../types';
@@ -12,6 +12,7 @@ interface TrackedElement {
   name?: string;
   startTime: number | null;
   timeoutId: number | null;
+  lastFiredTime: number | null;
 }
 
 /**
@@ -134,6 +135,7 @@ export class ViewportHandler extends StateManager {
             name: elementConfig.name,
             startTime: null,
             timeoutId: null,
+            lastFiredTime: null,
           });
 
           this.observer?.observe(element);
@@ -193,6 +195,21 @@ export class ViewportHandler extends StateManager {
       return;
     }
 
+    // Check cooldown period to prevent repeated events from carousels/sticky elements
+    const cooldownPeriod = this.config?.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD;
+    const now = Date.now();
+    if (tracked.lastFiredTime !== null && now - tracked.lastFiredTime < cooldownPeriod) {
+      log('debug', 'ViewportHandler: Event suppressed by cooldown period', {
+        data: {
+          selector: tracked.selector,
+          cooldownRemaining: cooldownPeriod - (now - tracked.lastFiredTime),
+        },
+      });
+      tracked.startTime = null;
+      tracked.timeoutId = null;
+      return;
+    }
+
     const eventData: ViewportEventData = {
       selector: tracked.selector,
       dwellTime,
@@ -212,10 +229,10 @@ export class ViewportHandler extends StateManager {
       viewport_data: eventData,
     });
 
-    // Reset tracking state after firing event
-    // This allows the element to trigger again if it leaves and re-enters viewport
+    // Reset tracking state after firing event and record timestamp
     tracked.startTime = null;
     tracked.timeoutId = null;
+    tracked.lastFiredTime = now;
   }
 
   /**

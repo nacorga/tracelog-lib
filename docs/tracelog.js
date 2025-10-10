@@ -2,6 +2,8 @@ const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
 const DUPLICATE_EVENT_THRESHOLD_MS = 500;
 const EVENT_SENT_INTERVAL_MS = 1e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
+const DEFAULT_CLICK_THROTTLE_MS = 300;
+const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
@@ -12,6 +14,8 @@ const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 const DEFAULT_SAMPLING_RATE = 1;
 const RATE_LIMIT_WINDOW_MS = 1e3;
 const MAX_EVENTS_PER_SECOND = 200;
+const MAX_SAME_EVENT_PER_MINUTE = 60;
+const PER_EVENT_RATE_LIMIT_WINDOW_MS = 6e4;
 const BATCH_SIZE_THRESHOLD = 50;
 const MAX_PENDING_EVENTS_BUFFER = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
@@ -1112,6 +1116,7 @@ class EventManager extends StateManager {
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
+  perEventRateLimits = /* @__PURE__ */ new Map();
   constructor(storeManager, googleAnalytics = null, emitter = null) {
     super();
     this.googleAnalytics = googleAnalytics;
@@ -1176,6 +1181,12 @@ class EventManager extends StateManager {
       return;
     }
     const eventType = type;
+    if (eventType === EventType.CUSTOM && custom_event?.name) {
+      const maxSameEventPerMinute = this.get("config")?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
+      if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
+        return;
+      }
+    }
     const isSessionStart = eventType === EventType.SESSION_START;
     const currentPageUrl = page_url || this.get("pageUrl");
     const payload = this.buildEventPayload({
@@ -1231,6 +1242,7 @@ class EventManager extends StateManager {
     this.lastEventTime = 0;
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
+    this.perEventRateLimits.clear();
     this.dataSender.stop();
   }
   async flushImmediately() {
@@ -1442,6 +1454,28 @@ class EventManager extends StateManager {
       return false;
     }
     this.rateLimitCounter++;
+    return true;
+  }
+  /**
+   * Checks per-event-name rate limiting to prevent infinite loops in user code
+   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
+   */
+  checkPerEventRateLimit(eventName, maxSameEventPerMinute) {
+    const now = Date.now();
+    const timestamps = this.perEventRateLimits.get(eventName) ?? [];
+    const validTimestamps = timestamps.filter((ts) => now - ts < PER_EVENT_RATE_LIMIT_WINDOW_MS);
+    if (validTimestamps.length >= maxSameEventPerMinute) {
+      log("warn", "Per-event rate limit exceeded for custom event", {
+        data: {
+          eventName,
+          limit: maxSameEventPerMinute,
+          window: `${PER_EVENT_RATE_LIMIT_WINDOW_MS / 1e3}s`
+        }
+      });
+      return false;
+    }
+    validTimestamps.push(now);
+    this.perEventRateLimits.set(eventName, validTimestamps);
     return true;
   }
   removeProcessedEvents(eventIds) {
@@ -1913,6 +1947,7 @@ class PageViewHandler extends StateManager {
 class ClickHandler extends StateManager {
   eventManager;
   clickHandler;
+  lastClickTimes = /* @__PURE__ */ new Map();
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -1930,6 +1965,10 @@ class ClickHandler extends StateManager {
         return;
       }
       if (this.shouldIgnoreElement(clickedElement)) {
+        return;
+      }
+      const clickThrottleMs = this.get("config")?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS;
+      if (clickThrottleMs > 0 && !this.checkClickThrottle(clickedElement, clickThrottleMs)) {
         return;
       }
       const trackingElement = this.findTrackingElement(clickedElement);
@@ -1961,6 +2000,7 @@ class ClickHandler extends StateManager {
       window.removeEventListener("click", this.clickHandler, true);
       this.clickHandler = void 0;
     }
+    this.lastClickTimes.clear();
   }
   shouldIgnoreElement(element) {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
@@ -1968,6 +2008,63 @@ class ClickHandler extends StateManager {
     }
     const parent = element.closest(`[${HTML_DATA_ATTR_PREFIX}-ignore]`);
     return parent !== null;
+  }
+  /**
+   * Checks per-element click throttling to prevent double-clicks and rapid spam
+   * Returns true if the click should be tracked, false if throttled
+   */
+  checkClickThrottle(element, throttleMs) {
+    const signature = this.getElementSignature(element);
+    const now = Date.now();
+    const lastClickTime = this.lastClickTimes.get(signature);
+    if (lastClickTime !== void 0 && now - lastClickTime < throttleMs) {
+      log("debug", "ClickHandler: Click suppressed by throttle", {
+        data: {
+          signature,
+          throttleRemaining: throttleMs - (now - lastClickTime)
+        }
+      });
+      return false;
+    }
+    this.lastClickTimes.set(signature, now);
+    return true;
+  }
+  /**
+   * Creates a stable signature for an element to track throttling
+   * Priority: id > data-testid > data-tlog-name > DOM path
+   */
+  getElementSignature(element) {
+    if (element.id) {
+      return `#${element.id}`;
+    }
+    const testId = element.getAttribute("data-testid");
+    if (testId) {
+      return `[data-testid="${testId}"]`;
+    }
+    const tlogName = element.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
+    if (tlogName) {
+      return `[${HTML_DATA_ATTR_PREFIX}-name="${tlogName}"]`;
+    }
+    return this.getElementPath(element);
+  }
+  /**
+   * Generates a DOM path for an element (e.g., "body>div>button")
+   */
+  getElementPath(element) {
+    const path = [];
+    let current = element;
+    while (current && current !== document.body) {
+      let selector = current.tagName.toLowerCase();
+      if (current.className) {
+        const firstClass = current.className.split(" ")[0];
+        if (firstClass) {
+          selector += `.${firstClass}`;
+        }
+      }
+      path.unshift(selector);
+      current = current.parentElement;
+    }
+    return path.join(">") || "unknown";
   }
   findTrackingElement(element) {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-name`)) {
@@ -2484,7 +2581,8 @@ class ViewportHandler extends StateManager {
             id: elementConfig.id,
             name: elementConfig.name,
             startTime: null,
-            timeoutId: null
+            timeoutId: null,
+            lastFiredTime: null
           });
           this.observer?.observe(element);
         });
@@ -2529,6 +2627,19 @@ class ViewportHandler extends StateManager {
     if (tracked.element.hasAttribute("data-tlog-ignore")) {
       return;
     }
+    const cooldownPeriod = this.config?.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD;
+    const now = Date.now();
+    if (tracked.lastFiredTime !== null && now - tracked.lastFiredTime < cooldownPeriod) {
+      log("debug", "ViewportHandler: Event suppressed by cooldown period", {
+        data: {
+          selector: tracked.selector,
+          cooldownRemaining: cooldownPeriod - (now - tracked.lastFiredTime)
+        }
+      });
+      tracked.startTime = null;
+      tracked.timeoutId = null;
+      return;
+    }
     const eventData = {
       selector: tracked.selector,
       dwellTime,
@@ -2546,6 +2657,7 @@ class ViewportHandler extends StateManager {
     });
     tracked.startTime = null;
     tracked.timeoutId = null;
+    tracked.lastFiredTime = now;
   }
   /**
    * Sets up MutationObserver to detect dynamically added elements

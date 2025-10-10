@@ -6,6 +6,8 @@ import {
   MAX_EVENTS_PER_SECOND,
   MAX_PENDING_EVENTS_BUFFER,
   BATCH_SIZE_THRESHOLD,
+  MAX_SAME_EVENT_PER_MINUTE,
+  PER_EVENT_RATE_LIMIT_WINDOW_MS,
 } from '../constants/config.constants';
 import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
@@ -26,6 +28,7 @@ export class EventManager extends StateManager {
   private sendIntervalId: number | null = null;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
+  private readonly perEventRateLimits: Map<string, number[]> = new Map();
 
   constructor(
     storeManager: StorageManager,
@@ -104,6 +107,14 @@ export class EventManager extends StateManager {
     }
 
     const eventType = type as EventType;
+
+    // Per-event-name rate limiting for CUSTOM events to prevent infinite loops
+    if (eventType === EventType.CUSTOM && custom_event?.name) {
+      const maxSameEventPerMinute = this.get('config')?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
+      if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
+        return;
+      }
+    }
     const isSessionStart = eventType === EventType.SESSION_START;
 
     const currentPageUrl = (page_url as string) || this.get('pageUrl');
@@ -173,6 +184,7 @@ export class EventManager extends StateManager {
     this.lastEventTime = 0;
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
+    this.perEventRateLimits.clear();
 
     this.dataSender.stop();
   }
@@ -443,6 +455,35 @@ export class EventManager extends StateManager {
     }
 
     this.rateLimitCounter++;
+    return true;
+  }
+
+  /**
+   * Checks per-event-name rate limiting to prevent infinite loops in user code
+   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
+   */
+  private checkPerEventRateLimit(eventName: string, maxSameEventPerMinute: number): boolean {
+    const now = Date.now();
+    const timestamps = this.perEventRateLimits.get(eventName) ?? [];
+
+    // Remove timestamps older than the rate limit window (60 seconds)
+    const validTimestamps = timestamps.filter((ts) => now - ts < PER_EVENT_RATE_LIMIT_WINDOW_MS);
+
+    if (validTimestamps.length >= maxSameEventPerMinute) {
+      log('warn', 'Per-event rate limit exceeded for custom event', {
+        data: {
+          eventName,
+          limit: maxSameEventPerMinute,
+          window: `${PER_EVENT_RATE_LIMIT_WINDOW_MS / 1000}s`,
+        },
+      });
+      return false;
+    }
+
+    // Add current timestamp and update map
+    validTimestamps.push(now);
+    this.perEventRateLimits.set(eventName, validTimestamps);
+
     return true;
   }
 

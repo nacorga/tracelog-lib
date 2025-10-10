@@ -14,6 +14,9 @@ export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds
 // Throttling and debouncing
 export const SCROLL_DEBOUNCE_TIME_MS = 250;
 export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
+export const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1000; // 1 second throttle for page views
+export const DEFAULT_CLICK_THROTTLE_MS = 300; // 300ms throttle for clicks per element
+export const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 60000; // 60 seconds cooldown for viewport events
 
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 2;
@@ -40,6 +43,8 @@ export const MIN_SAMPLING_RATE = 0;
 export const MAX_SAMPLING_RATE = 1;
 export const RATE_LIMIT_WINDOW_MS = 1000; // 1 second window
 export const MAX_EVENTS_PER_SECOND = 200; // Maximum 200 events per second
+export const MAX_SAME_EVENT_PER_MINUTE = 60; // Maximum same custom event name per minute (prevents infinite loops)
+export const PER_EVENT_RATE_LIMIT_WINDOW_MS = 60000; // 60 second window for per-event-name rate limiting
 
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;

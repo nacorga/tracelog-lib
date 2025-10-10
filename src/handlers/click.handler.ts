@@ -1,4 +1,10 @@
-import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH, INTERACTIVE_SELECTORS, PII_PATTERNS } from '../constants';
+import {
+  HTML_DATA_ATTR_PREFIX,
+  MAX_TEXT_LENGTH,
+  INTERACTIVE_SELECTORS,
+  PII_PATTERNS,
+  DEFAULT_CLICK_THROTTLE_MS,
+} from '../constants';
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
@@ -8,6 +14,7 @@ export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;
 
   private clickHandler?: (event: Event) => void;
+  private readonly lastClickTimes: Map<string, number> = new Map();
 
   constructor(eventManager: EventManager) {
     super();
@@ -36,6 +43,12 @@ export class ClickHandler extends StateManager {
       }
 
       if (this.shouldIgnoreElement(clickedElement)) {
+        return;
+      }
+
+      // Throttle clicks per element to prevent double-clicks and spam
+      const clickThrottleMs = this.get('config')?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS;
+      if (clickThrottleMs > 0 && !this.checkClickThrottle(clickedElement, clickThrottleMs)) {
         return;
       }
 
@@ -75,6 +88,7 @@ export class ClickHandler extends StateManager {
       window.removeEventListener('click', this.clickHandler, true);
       this.clickHandler = undefined;
     }
+    this.lastClickTimes.clear();
   }
 
   private shouldIgnoreElement(element: HTMLElement): boolean {
@@ -85,6 +99,80 @@ export class ClickHandler extends StateManager {
     const parent = element.closest(`[${HTML_DATA_ATTR_PREFIX}-ignore]`);
 
     return parent !== null;
+  }
+
+  /**
+   * Checks per-element click throttling to prevent double-clicks and rapid spam
+   * Returns true if the click should be tracked, false if throttled
+   */
+  private checkClickThrottle(element: HTMLElement, throttleMs: number): boolean {
+    const signature = this.getElementSignature(element);
+    const now = Date.now();
+    const lastClickTime = this.lastClickTimes.get(signature);
+
+    if (lastClickTime !== undefined && now - lastClickTime < throttleMs) {
+      log('debug', 'ClickHandler: Click suppressed by throttle', {
+        data: {
+          signature,
+          throttleRemaining: throttleMs - (now - lastClickTime),
+        },
+      });
+      return false;
+    }
+
+    this.lastClickTimes.set(signature, now);
+    return true;
+  }
+
+  /**
+   * Creates a stable signature for an element to track throttling
+   * Priority: id > data-testid > data-tlog-name > DOM path
+   */
+  private getElementSignature(element: HTMLElement): string {
+    // Priority 1: Element ID (most stable)
+    if (element.id) {
+      return `#${element.id}`;
+    }
+
+    // Priority 2: data-testid (common in tests)
+    const testId = element.getAttribute('data-testid');
+    if (testId) {
+      return `[data-testid="${testId}"]`;
+    }
+
+    // Priority 3: data-tlog-name (our own tracking attribute)
+    const tlogName = element.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
+    if (tlogName) {
+      return `[${HTML_DATA_ATTR_PREFIX}-name="${tlogName}"]`;
+    }
+
+    // Priority 4: Generate DOM path as fallback
+    return this.getElementPath(element);
+  }
+
+  /**
+   * Generates a DOM path for an element (e.g., "body>div>button")
+   */
+  private getElementPath(element: HTMLElement): string {
+    const path: string[] = [];
+    let current: HTMLElement | null = element;
+
+    while (current && current !== document.body) {
+      let selector = current.tagName.toLowerCase();
+
+      // Add class if available (first class only for brevity)
+      if (current.className) {
+        const firstClass = current.className.split(' ')[0];
+        if (firstClass) {
+          selector += `.${firstClass}`;
+        }
+      }
+
+      path.unshift(selector);
+      current = current.parentElement;
+    }
+
+    return path.join('>') || 'unknown';
   }
 
   private findTrackingElement(element: HTMLElement): HTMLElement | undefined {
