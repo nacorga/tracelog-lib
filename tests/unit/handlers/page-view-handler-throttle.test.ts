@@ -58,7 +58,7 @@ describe('PageViewHandler - Throttling', () => {
           currentMockUrl = urlStr;
         }
       }
-      return originalPushState.call(this, data, unused, url);
+      originalPushState.call(this, data, unused, url);
     };
 
     const testEnv = setupTestEnvironment({});

@@ -57,7 +57,7 @@ describe('PageViewHandler', () => {
           currentTestUrl = urlStr;
         }
       }
-      return originalPushState.call(this, data, unused, url);
+      originalPushState.call(this, data, unused, url);
     };
 
     // Patch history.replaceState similarly
@@ -72,7 +72,7 @@ describe('PageViewHandler', () => {
           currentTestUrl = urlStr;
         }
       }
-      return originalReplaceState.call(this, data, unused, url);
+      originalReplaceState.call(this, data, unused, url);
     };
 
     Object.defineProperty(document, 'referrer', {
