@@ -8,6 +8,39 @@
 
 
 
+
+## [0.9.0] - 2025-10-10
+
+### ✨ Features
+
+- Add primary scroll container detection and validation for enhanced scroll event tracking ([cdb8a08](../../commit/cdb8a084a5cadaeb93831ff1f96e8aa0a9040ae6))
+
+### 📚 Documentation
+
+- Update error sampling rate in README files to reflect new default value ([642e6f8](../../commit/642e6f8de898873ec5ae68c184602f1bed15243f))
+- Update READMEs ([9271b45](../../commit/9271b45d5ef9d37e96898b8f9a0a145a35850da2))
+
+### ♻️ Refactoring
+
+- Implement retry mechanism for scroll container detection and improve configuration handling ([15248a7](../../commit/15248a773f90fe65b477da36d88eba672303192c))
+- Remove scrollContainerSelectors and enhance scroll handler for automatic detection ([c2b087f](../../commit/c2b087ffe74a78e2771a79b8b38c27af99fce7bd))
+
+### 🔧 Other Changes
+
+- Merge pull request #29 from nacorga/release/20251009.1 ([fe8918b](../../commit/fe8918babb75a8865744685159e2dcf9959a2487))
+- Clean up initialization logic in api.ts by removing comments and improving readability ([5a8a227](../../commit/5a8a2276426fe0e723c901ecb442834790f8eb9f))
+- Merge pull request #28 from nacorga/feature/auto-scroll ([8185254](../../commit/8185254cb0701f7361ca53ba1d21321ca62c3d42))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.8.3...v0.9.0
+
+
 ## [0.8.3] - 2025-10-08
 
 ### ♻️ Refactoring
