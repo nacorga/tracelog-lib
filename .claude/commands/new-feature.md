@@ -198,7 +198,7 @@ feat: add viewport visibility tracking
 🎯 Next Steps:
 1. Review: git diff
 2. Commit: git commit -m "[message above]"
-3. Optional: /release for new version
+3. Optional: npm run release:dry-run (see scripts/release.js)
 
 ═══════════════════════════════════════════════
 ```
@@ -291,9 +291,12 @@ If feature requires breaking changes, orchestrator will:
 
 After feature complete:
 - `/precommit` - Revalidate before commit (orchestrator already runs this)
-- `/release` - Prepare new release version
 - `/coverage` - Deep-dive into coverage details
 - `/perf` - Detailed bundle analysis
+
+For releases, use npm scripts directly:
+- `npm run release:dry-run` - Preview version bump
+- `npm run release:patch/minor/major` - Create release commit
 
 ## Related Agents
 
@@ -302,7 +305,6 @@ The orchestrator uses these agents (no need to call directly):
 - **type-safety-enforcer** - Type validation
 - **memory-leak-detector** - Leak prevention
 - **security-privacy-advisor** - Privacy review
-- **release-orchestrator** - (Post-commit) Versioning
 
 ---
 

@@ -1162,9 +1162,8 @@ Closes: #[issue-number] (if applicable)
    git commit -m "[paste commit message above]"
 
 3. Optional: Prepare Release
-   /release
-   OR
-   Claude, use release-orchestrator agent to prepare new version
+   npm run release:dry-run   # Preview version bump
+   npm run release:patch     # Create release commit (if ready)
 
 4. Optional: Push & CI
    git push origin [branch]
@@ -1297,7 +1296,6 @@ If fix unsuccessful, will ask for guidance.
 - **type-safety-enforcer**: Type checking
 - **memory-leak-detector**: Leak detection
 - **security-privacy-advisor**: Privacy review
-- **release-orchestrator**: (Post-commit) Release prep
 
 ### Use All Commands
 - `/precommit`: Final validation
@@ -1305,7 +1303,10 @@ If fix unsuccessful, will ask for guidance.
 - `/perf`: Bundle check
 - `/security-audit`: Privacy scan
 - `/fix`: Auto-fix issues
-- `/release`: (Optional) After commit
+
+For releases, use npm scripts directly:
+- `npm run release:dry-run` - Preview version bump
+- `npm run release:patch/minor/major` - Create release commit
 
 ### Respect Hooks
 - Pre-edit validation runs automatically

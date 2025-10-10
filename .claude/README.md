@@ -6,17 +6,15 @@ Comprehensive development automation pipeline for the TraceLog analytics library
 
 ```
 .claude/
-├── agents/                           # Custom subagents (6 total)
+├── agents/                           # Custom subagents (5 total)
 │   ├── feature-orchestrator.md       # 🎯 Interactive feature development manager
 │   ├── test-guardian.md              # Test coverage enforcer (90%+ requirement)
 │   ├── type-safety-enforcer.md       # TypeScript strict mode guardian
 │   ├── memory-leak-detector.md       # Browser memory leak analyzer
-│   ├── security-privacy-advisor.md   # GDPR/privacy compliance checker
-│   └── release-orchestrator.md       # Semantic versioning & release manager
-├── commands/                         # Custom slash commands (7 total)
+│   └── security-privacy-advisor.md   # GDPR/privacy compliance checker
+├── commands/                         # Custom slash commands (6 total)
 │   ├── new-feature.md                # 🎯 Start interactive feature development
 │   ├── precommit.md                  # Full acceptance criteria validation
-│   ├── release.md                    # Interactive release workflow
 │   ├── coverage.md                   # Test coverage analysis
 │   ├── perf.md                       # Bundle size & performance check
 │   ├── security-audit.md             # Security & privacy audit
@@ -246,32 +244,6 @@ Claude, use the security-privacy-advisor agent to run audit
 
 ---
 
-### 5. **release-orchestrator**
-
-**Purpose**: Semantic versioning and release automation
-
-**When to use**: When preparing a new release
-
-**Invocation**:
-```
-Claude, use the release-orchestrator agent to prepare release
-```
-
-**What it does**:
-- Analyzes conventional commits since last tag
-- Determines version bump (MAJOR/MINOR/PATCH)
-- Runs full acceptance criteria
-- Generates CHANGELOG.md
-- Creates version commit
-- Provides GitHub Actions next steps
-
-**Commit Analysis**:
-- `feat:` → MINOR bump
-- `fix:` → PATCH bump
-- `BREAKING CHANGE:` → MAJOR bump
-
----
-
 ## 🔧 Custom Slash Commands
 
 Quick commands for common development tasks.
@@ -363,29 +335,7 @@ Commit message: "feat: add viewport tracking..."
 
 ---
 
-### 2. **/release [patch|minor|major]**
-
-**Interactive release workflow with semantic versioning**
-
-```bash
-/release              # Automatic version bump based on commits
-/release patch        # Force patch: 0.8.3 → 0.8.4
-/release minor        # Force minor: 0.8.3 → 0.9.0
-/release major        # Force major: 0.8.3 → 1.0.0
-```
-
-**Process**:
-1. Validates on `main` branch
-2. Analyzes commits since last tag
-3. Determines version bump
-4. Runs acceptance criteria
-5. Updates `package.json`, `package-lock.json`, `CHANGELOG.md`
-6. Creates commit: `chore: release vX.Y.Z`
-7. GitHub Actions handles tag, publish, release
-
----
-
-### 3. **/coverage**
+### 2. **/coverage**
 
 **Generate and analyze test coverage report**
 
@@ -406,7 +356,7 @@ Commit message: "feat: add viewport tracking..."
 
 ---
 
-### 4. **/perf**
+### 3. **/perf**
 
 **Analyze bundle size and performance impact**
 
@@ -428,7 +378,7 @@ Commit message: "feat: add viewport tracking..."
 
 ---
 
-### 5. **/security-audit**
+### 4. **/security-audit**
 
 **Comprehensive security and privacy audit**
 
@@ -453,7 +403,7 @@ Commit message: "feat: add viewport tracking..."
 
 ---
 
-### 6. **/fix**
+### 5. **/fix**
 
 **Auto-fix all lint and format issues**
 
@@ -592,11 +542,6 @@ Enhanced permissions in `.claude/settings.local.json` allow automated operations
 - `npx vitest run:*`
 - `npx playwright:*`
 
-**Release**:
-- `npm run release:*`
-- `npm run changelog:*`
-- `node scripts/release.js:*`
-
 **Git (Read-only)**:
 - `git status`
 - `git log:*`
@@ -658,25 +603,6 @@ Enhanced permissions in `.claude/settings.local.json` allow automated operations
 - ✅ Lint passes (0 errors)
 - ✅ All tests pass
 
-### Preparing Release
-
-```bash
-/release
-```
-
-**OR** use release-orchestrator agent:
-```
-Claude, use the release-orchestrator agent to prepare v0.9.0
-```
-
-**Process**:
-1. Analyzes conventional commits
-2. Determines version bump
-3. Runs acceptance criteria
-4. Generates changelog
-5. Creates version commit
-6. GitHub Actions publishes
-
 ### Running Security Audit
 
 ```bash
@@ -737,26 +663,7 @@ git add .
 git commit -m "feat: add scroll retry mechanism"
 ```
 
-### Example 2: Preparing a Release
-
-```bash
-# 1. Use release command
-/release
-
-# Output shows:
-# - Commits since last tag: 4
-# - Recommended version: 0.9.0 (MINOR)
-# - Reason: New feature detected
-# - Acceptance criteria: ✅ All pass
-
-# 2. Review and proceed
-npm run release
-
-# 3. Push to trigger GitHub Actions
-git push origin main
-```
-
-### Example 3: Security Audit
+### Example 2: Security Audit
 
 ```bash
 # Run security audit
@@ -830,9 +737,8 @@ This Claude pipeline provides:
 1. **Automated Quality Enforcement**: No manual validation needed
 2. **Specialized Expertise**: Dedicated agents for testing, security, types
 3. **Fast Feedback**: Hooks catch issues immediately
-4. **Release Automation**: Semantic versioning with one command
-5. **Security Focus**: GDPR compliance built into workflow
-6. **Memory Safety**: Browser leak detection for long-running code
+4. **Security Focus**: GDPR compliance built into workflow
+5. **Memory Safety**: Browser leak detection for long-running code
 
 **Result**: Ship faster with higher confidence 🚀
 
