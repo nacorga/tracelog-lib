@@ -17,7 +17,7 @@ test.describe('Viewport Visibility Events', () => {
       try {
         await window.__traceLogBridge!.init({
           viewport: {
-            selectors: ['.hero'], // Target hero section
+            elements: [{ selector: '.hero' }], // Target hero section
             threshold: 0.5,
             minDwellTime: 1000,
           },
@@ -73,7 +73,7 @@ test.describe('Viewport Visibility Events', () => {
       try {
         await window.__traceLogBridge!.init({
           viewport: {
-            selectors: ['.quick-hide-element'], // Element that will be hidden quickly
+            elements: [{ selector: '.quick-hide-element' }], // Element that will be hidden quickly
             threshold: 0.5,
             minDwellTime: 2000, // 2 seconds
           },
@@ -129,7 +129,7 @@ test.describe('Viewport Visibility Events', () => {
       try {
         await window.__traceLogBridge!.init({
           viewport: {
-            selectors: ['.cta'],
+            elements: [{ selector: '.cta' }],
             threshold: 0.75, // 75% visible required
             minDwellTime: 1000,
           },
@@ -183,7 +183,7 @@ test.describe('Viewport Visibility Events', () => {
       try {
         await window.__traceLogBridge!.init({
           viewport: {
-            selectors: ['.hero', '.features'],
+            elements: [{ selector: '.hero' }, { selector: '.features' }],
             threshold: 0.5,
             minDwellTime: 500,
           },
@@ -229,7 +229,7 @@ test.describe('Viewport Visibility Events', () => {
       try {
         await window.__traceLogBridge!.init({
           viewport: {
-            selectors: ['.ignored-element'],
+            elements: [{ selector: '.ignored-element' }],
             threshold: 0.5,
             minDwellTime: 500,
           },
@@ -280,7 +280,7 @@ test.describe('Viewport Visibility Events', () => {
       try {
         await window.__traceLogBridge!.init({
           viewport: {
-            selectors: ['.retrigger-element'],
+            elements: [{ selector: '.retrigger-element' }],
             threshold: 0.5,
             minDwellTime: 500,
           },
@@ -367,5 +367,71 @@ test.describe('Viewport Visibility Events', () => {
 
     // No viewport events should be captured
     expect(capturedEvents.length).toBe(0);
+  });
+
+  test('should capture viewport events with identifiers for analytics', async ({ page }) => {
+    await navigateToPlayground(page);
+
+    // Initialize with element identifiers (analytics use case)
+    const initResult = await page.evaluate(async () => {
+      try {
+        await window.__traceLogBridge!.init({
+          viewport: {
+            elements: [
+              {
+                selector: '.hero',
+                id: 'homepage-hero',
+                name: 'Homepage Hero Banner',
+              },
+              {
+                selector: '.cta',
+                id: 'cta-button-primary',
+                name: 'Primary CTA Button',
+              },
+            ],
+            threshold: 0.5,
+            minDwellTime: 1000,
+          },
+        });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    expect(initResult.success).toBe(true);
+
+    // Wait for elements to be tracked and events captured
+    const capturedEvents = await page.evaluate(async () => {
+      const events: any[] = [];
+
+      // Listen for viewport events
+      window.__traceLogBridge!.on('event', (data: any) => {
+        if (data.type === 'viewport_visible') {
+          events.push(data);
+        }
+      });
+
+      // Wait for hero element (should already be visible)
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      return events;
+    });
+
+    // Should capture hero element with identifiers
+    expect(capturedEvents.length).toBeGreaterThan(0);
+
+    // Find hero event (hero section is visible on page load)
+    const heroEvent = capturedEvents.find((e) => e.viewport_data.selector === '.hero');
+    if (heroEvent) {
+      expect(heroEvent.viewport_data).toMatchObject({
+        selector: '.hero',
+        id: 'homepage-hero',
+        name: 'Homepage Hero Banner',
+        dwellTime: expect.any(Number),
+        visibilityRatio: expect.any(Number),
+      });
+      expect(heroEvent.viewport_data.dwellTime).toBeGreaterThanOrEqual(1000);
+    }
   });
 });

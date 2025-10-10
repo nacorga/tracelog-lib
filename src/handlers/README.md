@@ -468,7 +468,7 @@ Tracks element visibility in the viewport using the IntersectionObserver API wit
 - MutationObserver detects dynamically added elements matching configured selectors
 
 **Configuration Options**:
-- `viewport.selectors`: Array of CSS selectors for elements to track (e.g., `['.product-card', '[data-track-viewport]']`)
+- `viewport.elements`: Array of element configurations `{ selector, id?, name? }` with optional identifiers for analytics
 - `viewport.threshold`: Visibility threshold 0-1 (default: 0.5 = 50% of element visible)
 - `viewport.minDwellTime`: Minimum time in milliseconds element must be visible (default: 1000ms)
 
@@ -485,6 +485,7 @@ Tracks element visibility in the viewport using the IntersectionObserver API wit
 
 **Event Data**:
 ```javascript
+// Event without identifiers
 {
   type: 'VIEWPORT_VISIBLE',
   viewport_data: {
@@ -493,13 +494,54 @@ Tracks element visibility in the viewport using the IntersectionObserver API wit
     visibilityRatio: 0.87           // Visibility ratio (0-1) when event fired
   }
 }
+
+// Event with identifiers (for analytics)
+{
+  type: 'VIEWPORT_VISIBLE',
+  viewport_data: {
+    selector: '.cta-button',        // CSS selector
+    id: 'pricing-cta',              // Unique identifier for analytics (optional)
+    name: 'Pricing Page CTA',      // Human-readable name for dashboards (optional)
+    dwellTime: 2147,
+    visibilityRatio: 0.87
+  }
+}
 ```
 
 **Configuration Example**:
 ```javascript
+// Basic tracking (no identifiers)
 await tracelog.init({
   viewport: {
-    selectors: ['.product-card', '.cta-button', '[data-track-viewport]'],
+    elements: [
+      { selector: '.product-card' },
+      { selector: '.cta-button' }
+    ],
+    threshold: 0.75,
+    minDwellTime: 2000
+  }
+});
+
+// With analytics identifiers (recommended)
+await tracelog.init({
+  viewport: {
+    elements: [
+      {
+        selector: '.hero-banner',
+        id: 'homepage-hero',
+        name: 'Homepage Hero Banner'
+      },
+      {
+        selector: '.cta-button',
+        id: 'pricing-cta',
+        name: 'Pricing CTA Button'
+      },
+      {
+        selector: '.testimonial',
+        id: 'customer-testimonials'
+        // name is optional
+      }
+    ],
     threshold: 0.75,      // Element must be 75% visible
     minDwellTime: 2000    // Must remain visible for 2 seconds
   }
@@ -508,6 +550,13 @@ await tracelog.init({
 // Exclude specific elements
 <div class="product-card" data-tlog-ignore>Not tracked</div>
 ```
+
+**Analytics Benefits of Identifiers**:
+- **Clear Reporting**: "Pricing CTA" instead of ".cta-button" in dashboards
+- **Multi-Element Tracking**: Distinguish between multiple elements with the same selector
+- **Funnel Analysis**: Track specific CTAs through conversion funnels by ID
+- **Stable Tracking**: Identifiers survive CSS class refactoring
+- **Business Context**: Human-readable names for non-technical stakeholders
 
 **Visibility Detection**:
 - Uses IntersectionObserver with configurable threshold

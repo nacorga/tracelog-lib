@@ -71,7 +71,7 @@ describe('ViewportHandler', () => {
     // Set up basic state
     handler['set']('config', {
       viewport: {
-        selectors: ['.test-element'],
+        elements: [{ selector: '.test-element' }],
         threshold: 0.5,
         minDwellTime: 1000,
       },
@@ -136,8 +136,8 @@ describe('ViewportHandler', () => {
       document.body.removeChild(element2);
     });
 
-    it('should not start tracking when no selectors configured', () => {
-      handler['set']('config', { viewport: { selectors: [] } });
+    it('should not start tracking when no elements configured', () => {
+      handler['set']('config', { viewport: { elements: [] } });
       handler.startTracking();
 
       expect(global.IntersectionObserver).not.toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe('ViewportHandler', () => {
 
     it('should not start tracking when threshold is invalid', () => {
       handler['set']('config', {
-        viewport: { selectors: ['.test'], threshold: 1.5 },
+        viewport: { elements: [{ selector: '.test' }], threshold: 1.5 },
       });
       handler.startTracking();
 
@@ -161,7 +161,7 @@ describe('ViewportHandler', () => {
 
     it('should not start tracking when minDwellTime is negative', () => {
       handler['set']('config', {
-        viewport: { selectors: ['.test'], minDwellTime: -100 },
+        viewport: { elements: [{ selector: '.test' }], minDwellTime: -100 },
       });
       handler.startTracking();
 
@@ -170,7 +170,7 @@ describe('ViewportHandler', () => {
 
     it('should handle invalid selectors gracefully', () => {
       handler['set']('config', {
-        viewport: { selectors: ['[invalid', '.valid'] },
+        viewport: { elements: [{ selector: '[invalid' }, { selector: '.valid' }] },
       });
 
       const validElement = document.createElement('div');
@@ -439,7 +439,7 @@ describe('ViewportHandler', () => {
       handler.stopTracking();
       handler['set']('config', {
         viewport: {
-          selectors: ['.test-element'],
+          elements: [{ selector: '.test-element' }],
           threshold: 0.75,
           minDwellTime: 1000,
         },
@@ -457,7 +457,7 @@ describe('ViewportHandler', () => {
       handler.stopTracking();
       handler['set']('config', {
         viewport: {
-          selectors: ['.test-element'],
+          elements: [{ selector: '.test-element' }],
           minDwellTime: 1000,
         },
       });
@@ -476,7 +476,7 @@ describe('ViewportHandler', () => {
       handler.stopTracking();
       handler['set']('config', {
         viewport: {
-          selectors: ['.test-element'],
+          elements: [{ selector: '.test-element' }],
           threshold: 0.5,
           minDwellTime: 2000,
         },
@@ -506,7 +506,7 @@ describe('ViewportHandler', () => {
       handler.stopTracking();
       handler['set']('config', {
         viewport: {
-          selectors: ['.test-element'],
+          elements: [{ selector: '.test-element' }],
           threshold: 0.5,
         },
       });
@@ -628,6 +628,199 @@ describe('ViewportHandler', () => {
         writable: true,
         configurable: true,
       });
+    });
+  });
+
+  describe('element identifiers', () => {
+    it('should support new elements config format with identifiers', () => {
+      handler.stopTracking();
+      handler['set']('config', {
+        viewport: {
+          elements: [
+            { selector: '.hero', id: 'homepage-hero', name: 'Homepage Hero Banner' },
+            { selector: '.cta', id: 'pricing-cta' },
+          ],
+          threshold: 0.5,
+          minDwellTime: 1000,
+        },
+      });
+
+      const heroElement = document.createElement('div');
+      heroElement.className = 'hero';
+      document.body.appendChild(heroElement);
+
+      const ctaElement = document.createElement('div');
+      ctaElement.className = 'cta';
+      document.body.appendChild(ctaElement);
+
+      handler.startTracking();
+
+      expect(observerInstance?.['observedElements'].size).toBe(2);
+
+      // Cleanup
+      document.body.removeChild(heroElement);
+      document.body.removeChild(ctaElement);
+    });
+
+    it('should include id and name in viewport event when configured', () => {
+      handler.stopTracking();
+      handler['set']('config', {
+        viewport: {
+          elements: [{ selector: '.test-element', id: 'my-element', name: 'My Test Element' }],
+          threshold: 0.5,
+          minDwellTime: 1000,
+        },
+      });
+
+      const element = document.createElement('div');
+      element.className = 'test-element';
+      document.body.appendChild(element);
+
+      handler.startTracking();
+
+      observerInstance?.triggerIntersection([{ target: element, isIntersecting: true, intersectionRatio: 0.6 }]);
+      vi.advanceTimersByTime(1000);
+
+      expect(eventManager.track).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: EventType.VIEWPORT_VISIBLE,
+          viewport_data: expect.objectContaining({
+            selector: '.test-element',
+            id: 'my-element',
+            name: 'My Test Element',
+            dwellTime: 1000,
+            visibilityRatio: 0.6,
+          }),
+        }),
+      );
+
+      // Cleanup
+      document.body.removeChild(element);
+    });
+
+    it('should not include id/name in event when not configured', () => {
+      handler.stopTracking();
+      handler['set']('config', {
+        viewport: {
+          elements: [{ selector: '.test-element' }],
+          threshold: 0.5,
+          minDwellTime: 1000,
+        },
+      });
+
+      const element = document.createElement('div');
+      element.className = 'test-element';
+      document.body.appendChild(element);
+
+      handler.startTracking();
+
+      observerInstance?.triggerIntersection([{ target: element, isIntersecting: true, intersectionRatio: 0.6 }]);
+      vi.advanceTimersByTime(1000);
+
+      const trackCall = (eventManager.track as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+      expect(trackCall?.viewport_data.id).toBeUndefined();
+      expect(trackCall?.viewport_data.name).toBeUndefined();
+
+      // Cleanup
+      document.body.removeChild(element);
+    });
+
+    it('should support mixing elements with and without identifiers', () => {
+      handler.stopTracking();
+      handler['set']('config', {
+        viewport: {
+          elements: [{ selector: '.with-id', id: 'element-1', name: 'Element One' }, { selector: '.without-id' }],
+          threshold: 0.5,
+          minDwellTime: 1000,
+        },
+      });
+
+      const withId = document.createElement('div');
+      withId.className = 'with-id';
+      document.body.appendChild(withId);
+
+      const withoutId = document.createElement('div');
+      withoutId.className = 'without-id';
+      document.body.appendChild(withoutId);
+
+      handler.startTracking();
+
+      // Trigger both
+      observerInstance?.triggerIntersection([
+        { target: withId, isIntersecting: true, intersectionRatio: 0.6 },
+        { target: withoutId, isIntersecting: true, intersectionRatio: 0.7 },
+      ]);
+      vi.advanceTimersByTime(1000);
+
+      expect(eventManager.track).toHaveBeenCalledTimes(2);
+
+      // First call should have id/name
+      const firstCall = (eventManager.track as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+      expect(firstCall?.viewport_data.id).toBe('element-1');
+      expect(firstCall?.viewport_data.name).toBe('Element One');
+
+      // Second call should not have id/name
+      const secondCall = (eventManager.track as ReturnType<typeof vi.fn>).mock.calls[1]?.[0];
+      expect(secondCall?.viewport_data.id).toBeUndefined();
+      expect(secondCall?.viewport_data.name).toBeUndefined();
+
+      // Cleanup
+      document.body.removeChild(withId);
+      document.body.removeChild(withoutId);
+    });
+
+    it('should handle elements with only id (no name)', () => {
+      handler.stopTracking();
+      handler['set']('config', {
+        viewport: {
+          elements: [{ selector: '.test', id: 'test-id' }],
+          threshold: 0.5,
+          minDwellTime: 1000,
+        },
+      });
+
+      const element = document.createElement('div');
+      element.className = 'test';
+      document.body.appendChild(element);
+
+      handler.startTracking();
+
+      observerInstance?.triggerIntersection([{ target: element, isIntersecting: true, intersectionRatio: 0.6 }]);
+      vi.advanceTimersByTime(1000);
+
+      const trackCall = (eventManager.track as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+      expect(trackCall?.viewport_data.id).toBe('test-id');
+      expect(trackCall?.viewport_data.name).toBeUndefined();
+
+      // Cleanup
+      document.body.removeChild(element);
+    });
+
+    it('should handle elements with only name (no id)', () => {
+      handler.stopTracking();
+      handler['set']('config', {
+        viewport: {
+          elements: [{ selector: '.test', name: 'Test Name' }],
+          threshold: 0.5,
+          minDwellTime: 1000,
+        },
+      });
+
+      const element = document.createElement('div');
+      element.className = 'test';
+      document.body.appendChild(element);
+
+      handler.startTracking();
+
+      observerInstance?.triggerIntersection([{ target: element, isIntersecting: true, intersectionRatio: 0.6 }]);
+      vi.advanceTimersByTime(1000);
+
+      const trackCall = (eventManager.track as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+      expect(trackCall?.viewport_data.id).toBeUndefined();
+      expect(trackCall?.viewport_data.name).toBe('Test Name');
+
+      // Cleanup
+      document.body.removeChild(element);
     });
   });
 });

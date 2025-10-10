@@ -150,7 +150,7 @@ await tracelog.init({
 - `sensitiveQueryParams`: Query params to remove from URLs
 - `primaryScrollSelector`: Override automatic primary scroll container detection (e.g., `.mat-sidenav-content`, `window`)
 - `viewport`: Viewport visibility tracking configuration
-  - `selectors`: Array of CSS selectors for elements to track (e.g., `['.product-card', '[data-track-viewport]']`)
+  - `elements`: Array of element configs `{ selector, id?, name? }` with optional identifiers for analytics
   - `threshold`: Visibility threshold 0-1 (default: 0.5 = 50% visible)
   - `minDwellTime`: Minimum time in ms element must be visible (default: 1000ms)
 - `integrations`:
@@ -239,6 +239,8 @@ Each event contains a base structure with type-specific data:
 
 - **`VIEWPORT_VISIBLE`**: Element visibility tracking
   - `viewport_data.selector`: CSS selector of visible element
+  - `viewport_data.id`: Unique identifier for analytics (optional)
+  - `viewport_data.name`: Human-readable name for dashboards (optional)
   - `viewport_data.dwellTime`: Time element was visible in ms
   - `viewport_data.visibilityRatio`: Visibility ratio (0-1) when event fired
 
@@ -254,6 +256,56 @@ await tracelog.init();
 ```
 
 **Note**: Listeners are buffered if registered before `init()`, ensuring you don't miss initial events.
+
+**Viewport visibility tracking with analytics identifiers:**
+```typescript
+// Track key elements with business identifiers
+await tracelog.init({
+  viewport: {
+    elements: [
+      {
+        selector: '.hero-banner',
+        id: 'homepage-hero',
+        name: 'Homepage Hero Banner'
+      },
+      {
+        selector: '.cta-button',
+        id: 'pricing-cta',
+        name: 'Pricing Page CTA'
+      },
+      {
+        selector: '.testimonial',
+        id: 'customer-testimonials'
+      }
+    ],
+    threshold: 0.5,      // 50% visible
+    minDwellTime: 1000   // 1 second
+  }
+});
+
+// Analytics with identifiers
+tracelog.on('event', (event) => {
+  if (event.type === 'viewport_visible') {
+    const { id, name, selector, dwellTime, visibilityRatio } = event.viewport_data;
+
+    // Clear business context instead of CSS selectors
+    console.log(`${name || selector} viewed for ${dwellTime}ms`);
+    // → "Pricing Page CTA viewed for 2500ms"
+
+    // Easy funnel tracking
+    if (id === 'homepage-hero') {
+      trackFunnelStep('hero_viewed');
+    }
+
+    // Aggregate by identifier
+    analytics.track('element_viewed', {
+      element_id: id,
+      element_name: name,
+      visibility_ratio: visibilityRatio
+    });
+  }
+});
+```
 
 **Filter scroll events by primary container:**
 ```typescript

@@ -8,6 +8,8 @@ import { log } from '../utils';
 interface TrackedElement {
   element: Element;
   selector: string;
+  id?: string;
+  name?: string;
   startTime: number | null;
   timeoutId: number | null;
 }
@@ -30,14 +32,14 @@ export class ViewportHandler extends StateManager {
   }
 
   /**
-   * Starts tracking viewport visibility for configured selectors
+   * Starts tracking viewport visibility for configured elements
    */
   startTracking(): void {
     // Get viewport config from state
     const config = this.get('config');
     this.config = config.viewport ?? null;
 
-    if (!this.config?.selectors || this.config.selectors.length === 0) {
+    if (!this.config?.elements || this.config.elements.length === 0) {
       return;
     }
 
@@ -105,14 +107,14 @@ export class ViewportHandler extends StateManager {
   }
 
   /**
-   * Query and observe all elements matching configured selectors
+   * Query and observe all elements matching configured elements
    */
   private observeElements(): void {
     if (!this.config || !this.observer) return;
 
-    for (const selector of this.config.selectors) {
+    for (const elementConfig of this.config.elements) {
       try {
-        const elements = document.querySelectorAll(selector);
+        const elements = document.querySelectorAll(elementConfig.selector);
         elements.forEach((element) => {
           // Skip if element has data-tlog-ignore attribute
           if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
@@ -124,10 +126,12 @@ export class ViewportHandler extends StateManager {
             return;
           }
 
-          // Track and observe element
+          // Track and observe element with identifiers
           this.trackedElements.set(element, {
             element,
-            selector,
+            selector: elementConfig.selector,
+            id: elementConfig.id,
+            name: elementConfig.name,
             startTime: null,
             timeoutId: null,
           });
@@ -135,7 +139,7 @@ export class ViewportHandler extends StateManager {
           this.observer?.observe(element);
         });
       } catch (error) {
-        log('warn', `ViewportHandler: Invalid selector "${selector}"`, { error });
+        log('warn', `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
       }
     }
   }
@@ -194,6 +198,14 @@ export class ViewportHandler extends StateManager {
       dwellTime,
       visibilityRatio,
     };
+
+    // Include identifiers if configured
+    if (tracked.id !== undefined) {
+      eventData.id = tracked.id;
+    }
+    if (tracked.name !== undefined) {
+      eventData.name = tracked.name;
+    }
 
     this.eventManager.track({
       type: EventType.VIEWPORT_VISIBLE,

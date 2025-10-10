@@ -79,7 +79,7 @@ describe('Viewport Tracking Integration', () => {
 
       await app.init({
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 1000,
         },
@@ -127,7 +127,7 @@ describe('Viewport Tracking Integration', () => {
 
       await app.init({
         viewport: {
-          selectors: ['.cta'],
+          elements: [{ selector: '.cta' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -163,7 +163,7 @@ describe('Viewport Tracking Integration', () => {
       await app.init({
         samplingRate: 0,
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -193,7 +193,7 @@ describe('Viewport Tracking Integration', () => {
 
       await app.init({
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -245,7 +245,7 @@ describe('Viewport Tracking Integration', () => {
 
       await app.init({
         viewport: {
-          selectors: ['.hero', '.cta'],
+          elements: [{ selector: '.hero' }, { selector: '.cta' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -292,7 +292,7 @@ describe('Viewport Tracking Integration', () => {
 
       await app.init({
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -331,7 +331,7 @@ describe('Viewport Tracking Integration', () => {
 
       await app.init({
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 1000,
         },
@@ -366,7 +366,7 @@ describe('Viewport Tracking Integration', () => {
       // First init
       await app.init({
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -377,7 +377,7 @@ describe('Viewport Tracking Integration', () => {
       // Second init
       await app.init({
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -412,7 +412,7 @@ describe('Viewport Tracking Integration', () => {
           version: '1.0.0',
         },
         viewport: {
-          selectors: ['.hero'],
+          elements: [{ selector: '.hero' }],
           threshold: 0.5,
           minDwellTime: 500,
         },
@@ -435,6 +435,126 @@ describe('Viewport Tracking Integration', () => {
 
       // Cleanup
       document.body.removeChild(element);
+    });
+  });
+
+  describe('Element identifiers integration', () => {
+    it('should emit viewport events with identifiers when using elements config', async () => {
+      const heroElement = document.createElement('div');
+      heroElement.className = 'hero';
+      document.body.appendChild(heroElement);
+
+      const ctaElement = document.createElement('button');
+      ctaElement.className = 'cta';
+      document.body.appendChild(ctaElement);
+
+      await app.init({
+        viewport: {
+          elements: [
+            { selector: '.hero', id: 'homepage-hero', name: 'Homepage Hero Banner' },
+            { selector: '.cta', id: 'pricing-cta', name: 'Pricing CTA Button' },
+          ],
+          threshold: 0.5,
+          minDwellTime: 500,
+        },
+      });
+
+      const events: unknown[] = [];
+      app.on(EmitterEvent.EVENT, (event) => {
+        events.push(event);
+      });
+
+      // Trigger hero element first
+      observerInstance?.triggerIntersection([{ target: heroElement, isIntersecting: true, intersectionRatio: 0.6 }]);
+
+      vi.advanceTimersByTime(500);
+
+      // Trigger CTA element
+      observerInstance?.triggerIntersection([{ target: ctaElement, isIntersecting: true, intersectionRatio: 0.7 }]);
+
+      vi.advanceTimersByTime(500);
+
+      const viewportEvents = events.filter((e: any) => e.type === EventType.VIEWPORT_VISIBLE);
+      expect(viewportEvents.length).toBeGreaterThanOrEqual(2);
+
+      // Verify hero event has identifiers
+      const heroEvent = viewportEvents.find((e: any) => e.viewport_data.selector === '.hero') as any;
+      expect(heroEvent.viewport_data).toMatchObject({
+        selector: '.hero',
+        id: 'homepage-hero',
+        name: 'Homepage Hero Banner',
+        dwellTime: expect.any(Number),
+        visibilityRatio: 0.6,
+      });
+
+      // Verify CTA event has identifiers
+      const ctaEvent = viewportEvents.find((e: any) => e.viewport_data.selector === '.cta') as any;
+      expect(ctaEvent.viewport_data).toMatchObject({
+        selector: '.cta',
+        id: 'pricing-cta',
+        name: 'Pricing CTA Button',
+        dwellTime: expect.any(Number),
+        visibilityRatio: 0.7,
+      });
+
+      // Cleanup
+      document.body.removeChild(heroElement);
+      document.body.removeChild(ctaElement);
+    });
+
+    it('should support optional identifiers (only id or only name)', async () => {
+      const onlyIdElement = document.createElement('div');
+      onlyIdElement.className = 'only-id';
+      document.body.appendChild(onlyIdElement);
+
+      const onlyNameElement = document.createElement('div');
+      onlyNameElement.className = 'only-name';
+      document.body.appendChild(onlyNameElement);
+
+      await app.init({
+        viewport: {
+          elements: [
+            { selector: '.only-id', id: 'my-id' },
+            { selector: '.only-name', name: 'My Name' },
+          ],
+          threshold: 0.5,
+          minDwellTime: 500,
+        },
+      });
+
+      const events: unknown[] = [];
+      app.on(EmitterEvent.EVENT, (event) => {
+        events.push(event);
+      });
+
+      // Trigger only-id element first
+      observerInstance?.triggerIntersection([{ target: onlyIdElement, isIntersecting: true, intersectionRatio: 0.6 }]);
+
+      vi.advanceTimersByTime(500);
+
+      // Trigger only-name element
+      observerInstance?.triggerIntersection([
+        { target: onlyNameElement, isIntersecting: true, intersectionRatio: 0.7 },
+      ]);
+
+      vi.advanceTimersByTime(500);
+
+      const viewportEvents = events.filter((e: any) => e.type === EventType.VIEWPORT_VISIBLE);
+      expect(viewportEvents.length).toBeGreaterThanOrEqual(2);
+
+      // Only-id event
+      const onlyIdEvent = viewportEvents.find((e: any) => e.viewport_data.selector === '.only-id') as any;
+      expect(onlyIdEvent.viewport_data.id).toBe('my-id');
+      expect(onlyIdEvent.viewport_data.name).toBeUndefined();
+
+      // Only-name event
+      const onlyNameEvent = viewportEvents.find((e: any) => e.viewport_data.selector === '.only-name') as any;
+      expect(onlyNameEvent.viewport_data.id).toBeUndefined();
+      expect(onlyNameEvent.viewport_data.name).toBe('My Name');
+
+      // Cleanup
+      document.body.removeChild(onlyIdElement);
+      document.body.removeChild(onlyNameElement);
     });
   });
 });
