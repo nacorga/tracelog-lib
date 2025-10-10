@@ -1,7 +1,7 @@
 ---
 description: Analyze bundle size and performance impact of library builds
 allowed-tools: [Bash, Read, Glob]
-model: sonnet
+model: claude-sonnet-4-5
 ---
 
 # Performance & Bundle Size Analysis

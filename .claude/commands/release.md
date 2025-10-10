@@ -2,7 +2,7 @@
 description: Interactive release workflow with semantic versioning based on conventional commits
 argument-hint: [patch|minor|major] (optional)
 allowed-tools: [Bash, Read]
-model: sonnet
+model: claude-sonnet-4-5
 ---
 
 # Release Workflow

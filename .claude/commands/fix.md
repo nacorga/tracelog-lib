@@ -1,7 +1,7 @@
 ---
 description: Auto-fix all lint and format issues with verification
 allowed-tools: [Bash]
-model: sonnet
+model: claude-sonnet-4-5
 ---
 
 # Auto-Fix Code Quality Issues

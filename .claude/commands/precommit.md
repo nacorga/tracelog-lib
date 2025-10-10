@@ -1,7 +1,7 @@
 ---
 description: Run complete acceptance criteria validation (build + types + lint + tests)
 allowed-tools: [Bash, Read]
-model: sonnet
+model: claude-sonnet-4-5
 ---
 
 # Pre-Commit Validation

@@ -1,7 +1,7 @@
 ---
 description: Comprehensive security and privacy audit based on GDPR/LOPD requirements
 allowed-tools: [Bash, Read, Grep, Glob]
-model: sonnet
+model: claude-sonnet-4-5
 ---
 
 # Security & Privacy Audit

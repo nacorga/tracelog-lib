@@ -1,7 +1,7 @@
 ---
 description: Generate comprehensive test coverage report and analyze against 90% threshold
 allowed-tools: [Bash, Read, Glob]
-model: sonnet
+model: claude-sonnet-4-5
 ---
 
 # Test Coverage Analysis

@@ -2,7 +2,7 @@
 description: Start interactive feature development with requirements gathering, architecture planning, and automated implementation
 argument-hint: [brief feature description]
 allowed-tools: [Task, Read]
-model: sonnet
+model: claude-sonnet-4-5
 ---
 
 # New Feature Development
