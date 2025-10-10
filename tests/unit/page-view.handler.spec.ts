@@ -15,6 +15,9 @@ import { EventManager } from '../../src/managers/event.manager';
 import { StorageManager } from '../../src/managers/storage.manager';
 import { EventType } from '../../src/types';
 
+// Track current URL for mocking window.location.href
+let currentTestUrl = 'http://localhost:3000/';
+
 describe('PageViewHandler', () => {
   let pageViewHandler: PageViewHandler;
   let eventManager: EventManager;
@@ -23,11 +26,17 @@ describe('PageViewHandler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
 
-    // Reset DOM state
+    // Reset mock URL
+    currentTestUrl = 'http://localhost:3000/';
+
+    // Mock window.location.href to track URL changes
     Object.defineProperty(window, 'location', {
       value: {
-        href: 'http://localhost:3000/',
+        get href() {
+          return currentTestUrl;
+        },
         pathname: '/',
         search: '',
         hash: '',
@@ -35,6 +44,36 @@ describe('PageViewHandler', () => {
       writable: true,
       configurable: true,
     });
+
+    // Patch history.pushState to update our mock URL
+    const originalPushState = window.history.pushState;
+    window.history.pushState = function (data: any, unused: string, url?: string | URL | null) {
+      if (url) {
+        const urlStr = typeof url === 'string' ? url : url.toString();
+        if (urlStr.startsWith('/')) {
+          const origin = new URL(currentTestUrl).origin;
+          currentTestUrl = origin + urlStr;
+        } else {
+          currentTestUrl = urlStr;
+        }
+      }
+      return originalPushState.call(this, data, unused, url);
+    };
+
+    // Patch history.replaceState similarly
+    const originalReplaceState = window.history.replaceState;
+    window.history.replaceState = function (data: any, unused: string, url?: string | URL | null) {
+      if (url) {
+        const urlStr = typeof url === 'string' ? url : url.toString();
+        if (urlStr.startsWith('/')) {
+          const origin = new URL(currentTestUrl).origin;
+          currentTestUrl = origin + urlStr;
+        } else {
+          currentTestUrl = urlStr;
+        }
+      }
+      return originalReplaceState.call(this, data, unused, url);
+    };
 
     Object.defineProperty(document, 'referrer', {
       value: '',
@@ -58,7 +97,7 @@ describe('PageViewHandler', () => {
     const getSpy = vi.spyOn(pageViewHandler as any, 'get');
     getSpy.mockImplementation(((key: any) => {
       if (key === 'config') {
-        return { sensitiveQueryParams: [] };
+        return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
       }
       if (key === 'pageUrl') {
         return undefined;
@@ -74,6 +113,7 @@ describe('PageViewHandler', () => {
     if (pageViewHandler) {
       pageViewHandler.stopTracking();
     }
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -196,31 +236,22 @@ describe('PageViewHandler', () => {
       pageViewHandler.startTracking();
     });
 
-    it('should track page view on pushState', async () => {
+    it('should track page view on pushState', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
       trackSpy.mockClear(); // Clear initial page view
 
-      // Mock URL change
+      // Mock URL change - update getSpy to return current URL
       const getSpy = vi.spyOn(pageViewHandler as any, 'get');
       getSpy.mockImplementation(((key: any) => {
-        if (key === 'config') return { sensitiveQueryParams: [] };
+        if (key === 'config') return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
         if (key === 'pageUrl') return 'http://localhost:3000/';
         return undefined;
       }) as any);
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/new-page',
-          pathname: '/new-page',
-          search: '',
-          hash: '',
-        },
-        writable: true,
-        configurable: true,
-      });
+      // Advance time past throttle
+      vi.advanceTimersByTime(1100);
 
       window.history.pushState({}, '', '/new-page');
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(trackSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -229,57 +260,39 @@ describe('PageViewHandler', () => {
       );
     });
 
-    it('should track page view on replaceState', async () => {
+    it('should track page view on replaceState', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
       trackSpy.mockClear();
 
       const getSpy = vi.spyOn(pageViewHandler as any, 'get');
       getSpy.mockImplementation(((key: any) => {
-        if (key === 'config') return { sensitiveQueryParams: [] };
+        if (key === 'config') return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
         if (key === 'pageUrl') return 'http://localhost:3000/';
         return undefined;
       }) as any);
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/replaced',
-          pathname: '/replaced',
-          search: '',
-          hash: '',
-        },
-        writable: true,
-        configurable: true,
-      });
+      // Advance time past throttle
+      vi.advanceTimersByTime(1100);
 
       window.history.replaceState({}, '', '/replaced');
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(trackSpy).toHaveBeenCalled();
     });
 
-    it('should call onTrack callback on navigation', async () => {
+    it('should call onTrack callback on navigation', () => {
       onTrackCallback.mockClear();
 
       const getSpy = vi.spyOn(pageViewHandler as any, 'get');
       getSpy.mockImplementation(((key: any) => {
-        if (key === 'config') return { sensitiveQueryParams: [] };
+        if (key === 'config') return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
         if (key === 'pageUrl') return 'http://localhost:3000/';
         return undefined;
       }) as any);
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/page2',
-          pathname: '/page2',
-          search: '',
-          hash: '',
-        },
-        writable: true,
-        configurable: true,
-      });
+      // Advance time past throttle
+      vi.advanceTimersByTime(1100);
 
       window.history.pushState({}, '', '/page2');
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(onTrackCallback).toHaveBeenCalled();
     });
@@ -290,63 +303,51 @@ describe('PageViewHandler', () => {
       pageViewHandler.startTracking();
     });
 
-    it('should track page view on popstate event', async () => {
+    it('should track page view on popstate event', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
       trackSpy.mockClear();
 
       const getSpy = vi.spyOn(pageViewHandler as any, 'get');
       getSpy.mockImplementation(((key: any) => {
-        if (key === 'config') return { sensitiveQueryParams: [] };
+        if (key === 'config') return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
         if (key === 'pageUrl') return 'http://localhost:3000/';
         return undefined;
       }) as any);
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/back',
-          pathname: '/back',
-          search: '',
-          hash: '',
-        },
-        writable: true,
-        configurable: true,
-      });
+      // Advance time past throttle
+      vi.advanceTimersByTime(1100);
+
+      // Update current URL
+      currentTestUrl = 'http://localhost:3000/back';
 
       const popstateEvent = new PopStateEvent('popstate', { state: {} });
       window.dispatchEvent(popstateEvent);
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(trackSpy).toHaveBeenCalled();
     });
 
-    it('should track page view on hashchange event', async () => {
+    it('should track page view on hashchange event', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
       trackSpy.mockClear();
 
       const getSpy = vi.spyOn(pageViewHandler as any, 'get');
       getSpy.mockImplementation(((key: any) => {
-        if (key === 'config') return { sensitiveQueryParams: [] };
+        if (key === 'config') return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
         if (key === 'pageUrl') return 'http://localhost:3000/';
         return undefined;
       }) as any);
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/#section',
-          pathname: '/',
-          search: '',
-          hash: '#section',
-        },
-        writable: true,
-        configurable: true,
-      });
+      // Advance time past throttle
+      vi.advanceTimersByTime(1100);
+
+      // Update current URL
+      currentTestUrl = 'http://localhost:3000/#section';
 
       const hashchangeEvent = new HashChangeEvent('hashchange', {
         oldURL: 'http://localhost:3000/',
         newURL: 'http://localhost:3000/#section',
       });
       window.dispatchEvent(hashchangeEvent);
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(trackSpy).toHaveBeenCalled();
     });
@@ -392,14 +393,14 @@ describe('PageViewHandler', () => {
       pageViewHandler.startTracking();
     });
 
-    it('should not track duplicate page views for same URL', async () => {
+    it('should not track duplicate page views for same URL', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
       trackSpy.mockClear();
 
       // Mock that current page URL matches
       const getSpy = vi.spyOn(pageViewHandler as any, 'get');
       getSpy.mockImplementation(((key: any) => {
-        if (key === 'config') return { sensitiveQueryParams: [] };
+        if (key === 'config') return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
         if (key === 'pageUrl') return 'http://localhost:3000/';
         return undefined;
       }) as any);
@@ -407,7 +408,6 @@ describe('PageViewHandler', () => {
       // Try to track same page
       const popstateEvent = new PopStateEvent('popstate', { state: {} });
       window.dispatchEvent(popstateEvent);
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(trackSpy).not.toHaveBeenCalled();
     });
@@ -576,30 +576,21 @@ describe('PageViewHandler', () => {
       pageViewHandler.startTracking();
     });
 
-    it('should include from_page_url on navigation', async () => {
+    it('should include from_page_url on navigation', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
       trackSpy.mockClear();
 
       const getSpy = vi.spyOn(pageViewHandler as any, 'get');
       getSpy.mockImplementation(((key: any) => {
-        if (key === 'config') return { sensitiveQueryParams: [] };
+        if (key === 'config') return { sensitiveQueryParams: [], pageViewThrottleMs: 1000 };
         if (key === 'pageUrl') return 'http://localhost:3000/previous';
         return undefined;
       }) as any);
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/current',
-          pathname: '/current',
-          search: '',
-          hash: '',
-        },
-        writable: true,
-        configurable: true,
-      });
+      // Advance time past throttle
+      vi.advanceTimersByTime(1100);
 
       window.history.pushState({}, '', '/current');
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(trackSpy).toHaveBeenCalledWith(
         expect.objectContaining({

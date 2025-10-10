@@ -51,6 +51,13 @@ export interface ViewportConfig {
    * @default 60000 (60 seconds)
    */
   cooldownPeriod?: number;
+
+  /**
+   * Maximum number of elements to track simultaneously (Phase 3)
+   * Prevents memory/server issues with broad selectors
+   * @default 100
+   */
+  maxTrackedElements?: number;
 }
 
 /**

@@ -25,9 +25,11 @@ vi.mock('../../../src/utils/logging', () => ({
 describe('EventManager - Dynamic Queue Flush', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanupTestState();
   });
 
@@ -78,6 +80,9 @@ describe('EventManager - Dynamic Queue Flush', () => {
 
     const firstBatchCallCount = sendEventsQueueSpy.mock.calls.length;
     expect(firstBatchCallCount).toBeGreaterThanOrEqual(1);
+
+    // Advance timers to reset rate limit window (1 second)
+    vi.advanceTimersByTime(1100);
 
     // Second batch: reach BATCH_SIZE_THRESHOLD again
     for (let i = 0; i < BATCH_SIZE_THRESHOLD; i++) {
@@ -175,12 +180,19 @@ describe('EventManager - Dynamic Queue Flush', () => {
     const sendEventsQueueSpy = vi.spyOn(eventManager as any, 'sendEventsQueue');
 
     // Simulate rapid burst of 150 events (3x BATCH_SIZE_THRESHOLD)
-    for (let i = 0; i < BATCH_SIZE_THRESHOLD * 3; i++) {
-      eventManager.track({
-        type: EventType.CLICK,
-        page_url: `https://example.com/burst-${i}`,
-        click_data: { x: i, y: i, relativeX: i, relativeY: i },
-      });
+    // Split into batches to respect rate limiting
+    for (let batch = 0; batch < 3; batch++) {
+      for (let i = 0; i < BATCH_SIZE_THRESHOLD; i++) {
+        eventManager.track({
+          type: EventType.CLICK,
+          page_url: `https://example.com/burst-${batch * BATCH_SIZE_THRESHOLD + i}`,
+          click_data: { x: i, y: i, relativeX: i, relativeY: i },
+        });
+      }
+      // Advance time between batches to reset rate limit
+      if (batch < 2) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     // Should have triggered flush at least 3 times

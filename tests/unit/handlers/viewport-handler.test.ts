@@ -369,11 +369,14 @@ describe('ViewportHandler', () => {
       // Element leaves viewport
       observerInstance?.triggerIntersection([{ target: element, isIntersecting: false, intersectionRatio: 0 }]);
 
+      // Advance past cooldown period (60 seconds)
+      vi.advanceTimersByTime(60000);
+
       // Element re-enters viewport
-      vi.spyOn(performance, 'now').mockReturnValue(2000);
+      vi.spyOn(performance, 'now').mockReturnValue(62000);
       observerInstance?.triggerIntersection([{ target: element, isIntersecting: true, intersectionRatio: 0.7 }]);
 
-      vi.spyOn(performance, 'now').mockReturnValue(3000);
+      vi.spyOn(performance, 'now').mockReturnValue(63000);
       vi.advanceTimersByTime(1000);
 
       // Should fire event again

@@ -1,4 +1,8 @@
-import { HTML_DATA_ATTR_PREFIX, DEFAULT_VIEWPORT_COOLDOWN_PERIOD } from '../constants';
+import {
+  HTML_DATA_ATTR_PREFIX,
+  DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
+  DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS,
+} from '../constants';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType } from '../types';
@@ -113,18 +117,34 @@ export class ViewportHandler extends StateManager {
   private observeElements(): void {
     if (!this.config || !this.observer) return;
 
+    const maxTrackedElements = this.config.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS;
+    let totalTracked = this.trackedElements.size;
+
     for (const elementConfig of this.config.elements) {
       try {
         const elements = document.querySelectorAll(elementConfig.selector);
-        elements.forEach((element) => {
+
+        for (const element of Array.from(elements)) {
+          // Check max limit (Phase 3)
+          if (totalTracked >= maxTrackedElements) {
+            log('warn', 'ViewportHandler: Maximum tracked elements reached', {
+              data: {
+                limit: maxTrackedElements,
+                selector: elementConfig.selector,
+                message: 'Some elements will not be tracked. Consider more specific selectors.',
+              },
+            });
+            return; // Stop tracking more elements
+          }
+
           // Skip if element has data-tlog-ignore attribute
           if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
-            return;
+            continue;
           }
 
           // Skip if already tracked
           if (this.trackedElements.has(element)) {
-            return;
+            continue;
           }
 
           // Track and observe element with identifiers
@@ -139,11 +159,16 @@ export class ViewportHandler extends StateManager {
           });
 
           this.observer?.observe(element);
-        });
+          totalTracked++;
+        }
       } catch (error) {
         log('warn', `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
       }
     }
+
+    log('debug', 'ViewportHandler: Elements tracked', {
+      data: { count: totalTracked, limit: maxTrackedElements },
+    });
   }
 
   /**

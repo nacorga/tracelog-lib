@@ -13,18 +13,53 @@ vi.mock('../../../src/utils/logging', () => ({
   },
 }));
 
+// Track current URL for mocking window.location.href
+let currentMockUrl = 'http://localhost:3000/';
+
 vi.mock('../../../src/utils/network/url.utils', () => ({
   normalizeUrl: vi.fn((url: string) => url),
 }));
+
+// Mock window.location.href to track URL changes
+Object.defineProperty(window, 'location', {
+  value: {
+    ...window.location,
+    get href() {
+      return currentMockUrl;
+    },
+  },
+  writable: true,
+  configurable: true,
+});
 
 describe('PageViewHandler - Throttling', () => {
   let pageViewHandler: PageViewHandler;
   let mockEventManager: any;
   let onTrackSpy: ReturnType<typeof vi.fn>;
+  let originalPushState: typeof window.history.pushState;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+
+    // Reset mock URL
+    currentMockUrl = 'http://localhost:3000/';
+
+    // Patch history.pushState to update our mock URL
+    originalPushState = window.history.pushState;
+    window.history.pushState = function (data: any, unused: string, url?: string | URL | null) {
+      if (url) {
+        const urlStr = typeof url === 'string' ? url : url.toString();
+        // Handle relative URLs
+        if (urlStr.startsWith('/')) {
+          const origin = new URL(currentMockUrl).origin;
+          currentMockUrl = origin + urlStr;
+        } else {
+          currentMockUrl = urlStr;
+        }
+      }
+      return originalPushState.call(this, data, unused, url);
+    };
 
     const testEnv = setupTestEnvironment({});
     mockEventManager = testEnv.eventManager;
@@ -38,6 +73,8 @@ describe('PageViewHandler - Throttling', () => {
     pageViewHandler.stopTracking();
     cleanupTestState();
     vi.useRealTimers();
+    // Restore original pushState
+    window.history.pushState = originalPushState;
   });
 
   test('should allow initial page view without throttling', () => {

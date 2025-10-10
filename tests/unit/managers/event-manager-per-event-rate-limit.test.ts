@@ -59,6 +59,10 @@ describe('EventManager - Per-Event-Name Rate Limiting', () => {
         page_url: `https://example.com/page-${i}`,
         custom_event: { name: 'test_event', metadata: { count: i } },
       });
+      // Advance time every 50 events to avoid global rate limit (50 events/sec)
+      if (i === 49) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     // Only 60 should make it to the queue
@@ -75,6 +79,10 @@ describe('EventManager - Per-Event-Name Rate Limiting', () => {
         page_url: `https://example.com/a-${i}`,
         custom_event: { name: 'event_a' },
       });
+      // Advance time every 50 events to avoid global rate limit
+      if (i === 49) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     // Track 60 of event_b with different pages
@@ -84,6 +92,10 @@ describe('EventManager - Per-Event-Name Rate Limiting', () => {
         page_url: `https://example.com/b-${i}`,
         custom_event: { name: 'event_b' },
       });
+      // Advance time every 50 events to avoid global rate limit
+      if (i === 49) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     // Both should be tracked independently (120 total, limited by MAX_EVENTS_QUEUE_LENGTH)
@@ -100,6 +112,10 @@ describe('EventManager - Per-Event-Name Rate Limiting', () => {
         page_url: `https://example.com/page-${i}`,
         custom_event: { name: 'test_event' },
       });
+      // Advance time every 50 events to avoid global rate limit
+      if (i === 49) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     expect(eventManager.getQueueLength()).toBe(60);
@@ -136,6 +152,10 @@ describe('EventManager - Per-Event-Name Rate Limiting', () => {
         page_url: `https://example.com/page-${i}`,
         custom_event: { name: 'test_event' },
       });
+      // Advance time every 50 events to avoid global rate limit
+      if (i === 49) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     expect(eventManager.getQueueLength()).toBe(MAX_SAME_EVENT_PER_MINUTE);
@@ -185,6 +205,10 @@ describe('EventManager - Per-Event-Name Rate Limiting', () => {
         page_url: `https://example.com/page-${i}`,
         click_data: { x: i, y: i, relativeX: 0, relativeY: 0 },
       });
+      // Advance time every 50 events to avoid global rate limit
+      if (i === 49) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     expect(eventManager.getQueueLength()).toBe(100);

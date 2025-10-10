@@ -4,6 +4,7 @@ const EVENT_SENT_INTERVAL_MS = 1e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
 const DEFAULT_CLICK_THROTTLE_MS = 300;
 const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
+const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
@@ -13,9 +14,14 @@ const SCROLL_MIN_EVENT_INTERVAL_MS = 500;
 const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 const DEFAULT_SAMPLING_RATE = 1;
 const RATE_LIMIT_WINDOW_MS = 1e3;
-const MAX_EVENTS_PER_SECOND = 200;
+const MAX_EVENTS_PER_SECOND = 50;
 const MAX_SAME_EVENT_PER_MINUTE = 60;
 const PER_EVENT_RATE_LIMIT_WINDOW_MS = 6e4;
+const MAX_EVENTS_PER_SESSION = 1e3;
+const MAX_CLICKS_PER_SESSION = 500;
+const MAX_PAGE_VIEWS_PER_SESSION = 100;
+const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
+const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 const BATCH_SIZE_THRESHOLD = 50;
 const MAX_PENDING_EVENTS_BUFFER = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
@@ -32,6 +38,10 @@ const MAX_STRING_LENGTH_IN_ARRAY = 500;
 const MAX_ARRAY_LENGTH = 100;
 const MAX_OBJECT_DEPTH = 3;
 const PRECISION_TWO_DECIMALS = 2;
+const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024;
+const MAX_FINGERPRINTS = 1e3;
+const FINGERPRINT_CLEANUP_MULTIPLIER = 10;
+const MAX_FINGERPRINTS_HARD_LIMIT = 2e3;
 const HTML_DATA_ATTR_PREFIX = "data-tlog";
 const INTERACTIVE_SELECTORS = [
   "button",
@@ -291,6 +301,9 @@ const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
 const MAX_TRACKED_ERRORS = 50;
 const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
 const DEFAULT_ERROR_SAMPLING_RATE = 1;
+const ERROR_BURST_WINDOW_MS = 1e3;
+const ERROR_BURST_THRESHOLD = 10;
+const ERROR_BURST_BACKOFF_MS = 5e3;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const QA_MODE_PARAM = "tlog_mode";
 const QA_MODE_VALUE = "qa";
@@ -1002,6 +1015,17 @@ class SenderManager extends StateManager {
   }
   sendQueueSyncInternal(body) {
     const { url, payload } = this.prepareRequest(body);
+    if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
+      log("warn", "Payload exceeds sendBeacon limit, persisting for recovery", {
+        data: {
+          size: payload.length,
+          limit: MAX_BEACON_PAYLOAD_SIZE,
+          events: body.events.length
+        }
+      });
+      this.persistEvents(body);
+      return false;
+    }
     const blob = new Blob([payload], { type: "application/json" });
     if (!this.isSendBeaconAvailable()) {
       log("warn", "sendBeacon not available, persisting events for recovery");
@@ -1111,12 +1135,21 @@ class EventManager extends StateManager {
   emitter;
   eventsQueue = [];
   pendingEventsBuffer = [];
-  lastEventFingerprint = null;
-  lastEventTime = 0;
+  recentEventFingerprints = /* @__PURE__ */ new Map();
+  // Phase 3: LRU cache
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
   perEventRateLimits = /* @__PURE__ */ new Map();
+  sessionEventCounts = {
+    total: 0,
+    [EventType.CLICK]: 0,
+    [EventType.PAGE_VIEW]: 0,
+    [EventType.CUSTOM]: 0,
+    [EventType.VIEWPORT_VISIBLE]: 0,
+    [EventType.SCROLL]: 0
+  };
+  lastSessionId = null;
   constructor(storeManager, googleAnalytics = null, emitter = null) {
     super();
     this.googleAnalytics = googleAnalytics;
@@ -1155,7 +1188,8 @@ class EventManager extends StateManager {
       log("error", "Event type is required - event will be ignored");
       return;
     }
-    if (!this.get("sessionId")) {
+    const currentSessionId = this.get("sessionId");
+    if (!currentSessionId) {
       if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
         this.pendingEventsBuffer.shift();
         log("warn", "Pending events buffer full - dropping oldest event", {
@@ -1176,11 +1210,48 @@ class EventManager extends StateManager {
       });
       return;
     }
+    if (this.lastSessionId !== currentSessionId) {
+      this.lastSessionId = currentSessionId;
+      this.sessionEventCounts = {
+        total: 0,
+        [EventType.CLICK]: 0,
+        [EventType.PAGE_VIEW]: 0,
+        [EventType.CUSTOM]: 0,
+        [EventType.VIEWPORT_VISIBLE]: 0,
+        [EventType.SCROLL]: 0
+      };
+    }
     const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
     if (!isCriticalEvent && !this.checkRateLimit()) {
       return;
     }
     const eventType = type;
+    if (!isCriticalEvent) {
+      if (this.sessionEventCounts.total >= MAX_EVENTS_PER_SESSION) {
+        log("warn", "Session event limit reached", {
+          data: {
+            type: eventType,
+            total: this.sessionEventCounts.total,
+            limit: MAX_EVENTS_PER_SESSION
+          }
+        });
+        return;
+      }
+      const typeLimit = this.getTypeLimitForEvent(eventType);
+      if (typeLimit) {
+        const currentCount = this.sessionEventCounts[eventType];
+        if (currentCount !== void 0 && currentCount >= typeLimit) {
+          log("warn", "Session event type limit reached", {
+            data: {
+              type: eventType,
+              count: currentCount,
+              limit: typeLimit
+            }
+          });
+          return;
+        }
+      }
+    }
     if (eventType === EventType.CUSTOM && custom_event?.name) {
       const maxSameEventPerMinute = this.get("config")?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
       if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
@@ -1205,14 +1276,14 @@ class EventManager extends StateManager {
       return;
     }
     if (isSessionStart) {
-      const currentSessionId = this.get("sessionId");
-      if (!currentSessionId) {
+      const currentSessionId2 = this.get("sessionId");
+      if (!currentSessionId2) {
         log("error", "Session start event requires sessionId - event will be ignored");
         return;
       }
       if (this.get("hasStartSession")) {
         log("warn", "Duplicate session_start detected", {
-          data: { sessionId: currentSessionId }
+          data: { sessionId: currentSessionId2 }
         });
         return;
       }
@@ -1230,6 +1301,12 @@ class EventManager extends StateManager {
       return;
     }
     this.addToQueue(payload);
+    if (!isCriticalEvent) {
+      this.sessionEventCounts.total++;
+      if (this.sessionEventCounts[eventType] !== void 0) {
+        this.sessionEventCounts[eventType]++;
+      }
+    }
   }
   stop() {
     if (this.sendIntervalId) {
@@ -1238,11 +1315,19 @@ class EventManager extends StateManager {
     }
     this.eventsQueue = [];
     this.pendingEventsBuffer = [];
-    this.lastEventFingerprint = null;
-    this.lastEventTime = 0;
+    this.recentEventFingerprints.clear();
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
     this.perEventRateLimits.clear();
+    this.sessionEventCounts = {
+      total: 0,
+      [EventType.CLICK]: 0,
+      [EventType.PAGE_VIEW]: 0,
+      [EventType.CUSTOM]: 0,
+      [EventType.VIEWPORT_VISIBLE]: 0,
+      [EventType.SCROLL]: 0
+    };
+    this.lastSessionId = null;
     this.dataSender.stop();
   }
   async flushImmediately() {
@@ -1366,15 +1451,49 @@ class EventManager extends StateManager {
     };
     return payload;
   }
+  /**
+   * Checks if event is a duplicate using LRU cache (Phase 3)
+   * Tracks last 1000 event fingerprints instead of just the last one
+   */
   isDuplicateEvent(event2) {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event2);
-    if (this.lastEventFingerprint === fingerprint && now - this.lastEventTime < DUPLICATE_EVENT_THRESHOLD_MS) {
+    const lastSeen = this.recentEventFingerprints.get(fingerprint);
+    if (lastSeen && now - lastSeen < DUPLICATE_EVENT_THRESHOLD_MS) {
+      this.recentEventFingerprints.set(fingerprint, now);
       return true;
     }
-    this.lastEventFingerprint = fingerprint;
-    this.lastEventTime = now;
+    this.recentEventFingerprints.set(fingerprint, now);
+    if (this.recentEventFingerprints.size > MAX_FINGERPRINTS) {
+      this.pruneOldFingerprints();
+    }
+    if (this.recentEventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
+      this.recentEventFingerprints.clear();
+      this.recentEventFingerprints.set(fingerprint, now);
+      log("warn", "Event fingerprint cache exceeded hard limit, cleared", {
+        data: { hardLimit: MAX_FINGERPRINTS_HARD_LIMIT }
+      });
+    }
     return false;
+  }
+  /**
+   * Prunes old fingerprints from LRU cache (Phase 3)
+   * Removes entries older than 10x the duplicate threshold (5 seconds)
+   */
+  pruneOldFingerprints() {
+    const now = Date.now();
+    const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
+    for (const [fingerprint, timestamp] of this.recentEventFingerprints.entries()) {
+      if (now - timestamp > cutoff) {
+        this.recentEventFingerprints.delete(fingerprint);
+      }
+    }
+    log("debug", "Pruned old event fingerprints", {
+      data: {
+        remaining: this.recentEventFingerprints.size,
+        cutoffMs: cutoff
+      }
+    });
   }
   createEventFingerprint(event2) {
     let fingerprint = `${event2.type}_${event2.page_url}`;
@@ -1477,6 +1596,19 @@ class EventManager extends StateManager {
     validTimestamps.push(now);
     this.perEventRateLimits.set(eventName, validTimestamps);
     return true;
+  }
+  /**
+   * Gets the per-session limit for a specific event type (Phase 3)
+   */
+  getTypeLimitForEvent(type) {
+    const limits = {
+      [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
+      [EventType.PAGE_VIEW]: MAX_PAGE_VIEWS_PER_SESSION,
+      [EventType.CUSTOM]: MAX_CUSTOM_EVENTS_PER_SESSION,
+      [EventType.VIEWPORT_VISIBLE]: MAX_VIEWPORT_EVENTS_PER_SESSION,
+      [EventType.SCROLL]: MAX_SCROLL_EVENTS_PER_SESSION
+    };
+    return limits[type] ?? null;
   }
   removeProcessedEvents(eventIds) {
     const eventIdSet = new Set(eventIds);
@@ -2565,15 +2697,27 @@ class ViewportHandler extends StateManager {
    */
   observeElements() {
     if (!this.config || !this.observer) return;
+    const maxTrackedElements = this.config.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS;
+    let totalTracked = this.trackedElements.size;
     for (const elementConfig of this.config.elements) {
       try {
         const elements = document.querySelectorAll(elementConfig.selector);
-        elements.forEach((element) => {
-          if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
+        for (const element of Array.from(elements)) {
+          if (totalTracked >= maxTrackedElements) {
+            log("warn", "ViewportHandler: Maximum tracked elements reached", {
+              data: {
+                limit: maxTrackedElements,
+                selector: elementConfig.selector,
+                message: "Some elements will not be tracked. Consider more specific selectors."
+              }
+            });
             return;
           }
+          if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
+            continue;
+          }
           if (this.trackedElements.has(element)) {
-            return;
+            continue;
           }
           this.trackedElements.set(element, {
             element,
@@ -2585,11 +2729,15 @@ class ViewportHandler extends StateManager {
             lastFiredTime: null
           });
           this.observer?.observe(element);
-        });
+          totalTracked++;
+        }
       } catch (error) {
         log("warn", `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
       }
     }
+    log("debug", "ViewportHandler: Elements tracked", {
+      data: { count: totalTracked, limit: maxTrackedElements }
+    });
   }
   /**
    * Handles intersection events from IntersectionObserver
@@ -3268,6 +3416,9 @@ class PerformanceHandler extends StateManager {
 class ErrorHandler extends StateManager {
   eventManager;
   recentErrors = /* @__PURE__ */ new Map();
+  errorBurstCounter = 0;
+  burstWindowStart = 0;
+  burstBackoffUntil = 0;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -3280,8 +3431,34 @@ class ErrorHandler extends StateManager {
     window.removeEventListener("error", this.handleError);
     window.removeEventListener("unhandledrejection", this.handleRejection);
     this.recentErrors.clear();
+    this.errorBurstCounter = 0;
+    this.burstWindowStart = 0;
+    this.burstBackoffUntil = 0;
   }
+  /**
+   * Checks sampling rate and burst detection (Phase 3)
+   * Returns false if in cooldown period after burst detection
+   */
   shouldSample() {
+    const now = Date.now();
+    if (now < this.burstBackoffUntil) {
+      return false;
+    }
+    if (now - this.burstWindowStart > ERROR_BURST_WINDOW_MS) {
+      this.errorBurstCounter = 0;
+      this.burstWindowStart = now;
+    }
+    this.errorBurstCounter++;
+    if (this.errorBurstCounter > ERROR_BURST_THRESHOLD) {
+      this.burstBackoffUntil = now + ERROR_BURST_BACKOFF_MS;
+      log("warn", "Error burst detected - entering cooldown", {
+        data: {
+          errorsInWindow: this.errorBurstCounter,
+          cooldownMs: ERROR_BURST_BACKOFF_MS
+        }
+      });
+      return false;
+    }
     const config = this.get("config");
     const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;

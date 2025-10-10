@@ -17,6 +17,7 @@ export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
 export const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1000; // 1 second throttle for page views
 export const DEFAULT_CLICK_THROTTLE_MS = 300; // 300ms throttle for clicks per element
 export const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 60000; // 60 seconds cooldown for viewport events
+export const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100; // Maximum elements to track (Phase 3)
 
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 2;
@@ -42,9 +43,16 @@ export const DEFAULT_SAMPLING_RATE = 1;
 export const MIN_SAMPLING_RATE = 0;
 export const MAX_SAMPLING_RATE = 1;
 export const RATE_LIMIT_WINDOW_MS = 1000; // 1 second window
-export const MAX_EVENTS_PER_SECOND = 200; // Maximum 200 events per second
+export const MAX_EVENTS_PER_SECOND = 50; // Maximum 50 events per second (Phase 3: reduced from 200)
 export const MAX_SAME_EVENT_PER_MINUTE = 60; // Maximum same custom event name per minute (prevents infinite loops)
 export const PER_EVENT_RATE_LIMIT_WINDOW_MS = 60000; // 60 second window for per-event-name rate limiting
+
+// Per-session event caps (Phase 3)
+export const MAX_EVENTS_PER_SESSION = 1000;
+export const MAX_CLICKS_PER_SESSION = 500;
+export const MAX_PAGE_VIEWS_PER_SESSION = 100;
+export const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
+export const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
@@ -76,6 +84,9 @@ export const PRECISION_TWO_DECIMALS = 2 as const;
 
 // Sync XHR timeout
 export const SYNC_XHR_TIMEOUT_MS = 2000; // 2 seconds
+
+// sendBeacon payload size limit (Phase 3)
+export const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024; // 64KB browser limit
 
 // Event fingerprint management
 export const MAX_FINGERPRINTS = 1000; // Maximum fingerprints stored before cleanup
