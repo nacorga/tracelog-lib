@@ -7,17 +7,18 @@ Comprehensive development automation pipeline for the TraceLog analytics library
 ```
 .claude/
 ├── agents/                           # Custom subagents (5 total)
-│   ├── feature-orchestrator.md       # 🎯 Interactive feature development manager
+│   ├── feature-orchestrator.md       # Interactive feature development manager
 │   ├── test-guardian.md              # Test coverage enforcer (90%+ requirement)
 │   ├── type-safety-enforcer.md       # TypeScript strict mode guardian
 │   ├── memory-leak-detector.md       # Browser memory leak analyzer
 │   └── security-privacy-advisor.md   # GDPR/privacy compliance checker
-├── commands/                         # Custom slash commands (6 total)
-│   ├── new-feature.md                # 🎯 Start interactive feature development
+├── commands/                         # Custom slash commands (7 total)
+│   ├── new-feature.md                # Start interactive feature development
 │   ├── precommit.md                  # Full acceptance criteria validation
 │   ├── coverage.md                   # Test coverage analysis
 │   ├── perf.md                       # Bundle size & performance check
 │   ├── security-audit.md             # Security & privacy audit
+│   ├── compare-branch.md             # Branch comparison & pre-merge audit
 │   └── fix.md                        # Auto-fix lint/format issues
 ├── hooks/                            # Development lifecycle hooks (4 total)
 │   ├── pre-edit-validation.sh        # Validate types before editing
@@ -35,7 +36,7 @@ Comprehensive development automation pipeline for the TraceLog analytics library
 
 Specialized AI assistants for different development tasks.
 
-### 🎯 **feature-orchestrator** ⭐ NEW!
+### **feature-orchestrator**
 
 **Purpose**: Interactive project manager for complete feature development from idea to production-ready code
 
@@ -248,7 +249,7 @@ Claude, use the security-privacy-advisor agent to run audit
 
 Quick commands for common development tasks.
 
-### 🎯 **/new-feature [description]** ⭐ NEW!
+### **/new-feature [description]**
 
 **Start interactive feature development workflow**
 
@@ -403,7 +404,82 @@ Commit message: "feat: add viewport tracking..."
 
 ---
 
-### 5. **/fix**
+### 5. **/compare-branch [branch]**
+
+**Compare current branch with another branch and audit all changes**
+
+```bash
+/compare-branch
+# Prompts: "Which branch to compare against? (default: main)"
+
+/compare-branch develop
+# Compares current branch vs. develop
+
+/compare-branch feature/security
+# Compares current branch vs. feature/security
+```
+
+**What it does**:
+Comprehensive pre-merge audit that analyzes:
+
+1. **Change Analysis**
+   - Lists all modified/added/deleted files with stats
+   - Shows full git diff for code review
+   - Categorizes changes by type (core, types, config, tests, docs)
+
+2. **Quality Audit**
+   - Runs build, type-check, lint on changes
+   - Validates all acceptance criteria
+   - Checks test pass rate and coverage
+
+3. **Security Scan**
+   - Detects PII leaks in changes
+   - Scans for sensitive data patterns
+   - Reviews new dependencies
+   - Checks security-sensitive file modifications
+
+4. **Testing Analysis**
+   - Identifies missing tests for new/modified code
+   - Checks coverage gaps
+   - Validates 90%+ threshold
+
+5. **Performance Impact**
+   - Compares bundle size changes
+   - Detects memory leak patterns (unbalanced listeners)
+   - Reviews new timers/intervals
+
+6. **Breaking Changes**
+   - Detects API signature changes
+   - Identifies type modifications
+   - Flags configuration changes
+
+7. **Documentation Review**
+   - Checks if docs updated for changes
+   - Validates CHANGELOG.md entries
+
+**Output**:
+- **Risk Assessment**: Critical/High/Medium/Low categorized issues
+- **Merge Readiness Score**: 0-100 with clear decision (✅/⚠️/🔴)
+- **Blocking Issues**: Must-fix before merge
+- **Actionable Recommendations**: Specific fixes with time estimates
+- **Merge Decision**: Ready/Needs Work/Do Not Merge
+
+**Merge Decision Criteria**:
+- ✅ READY (85-100): All quality gates passed, 0 blockers
+- ⚠️ NEEDS WORK (60-84): 1-2 fixable blockers
+- 🔴 DO NOT MERGE (<60): Critical issues, breaking changes undocumented
+
+**When to use**: Before merging any branch to catch errors, security issues, breaking changes
+
+**Benefits**:
+- Comprehensive pre-merge validation
+- Catches issues before code review
+- Identifies missing tests and documentation
+- Prevents breaking changes from slipping through
+
+---
+
+### 6. **/fix**
 
 **Auto-fix all lint and format issues**
 
@@ -489,10 +565,11 @@ Automated validations and checks during development.
 
 ═══════════════════════════════════════════════
   💡 Quick Commands:
-     /precommit     - Run full validation
-     /coverage      - Check test coverage
+     /precommit      - Run full validation
+     /compare-branch - Compare & audit before merge
+     /coverage       - Check test coverage
      /security-audit - Run security scan
-     /fix           - Auto-fix code issues
+     /fix            - Auto-fix code issues
 ═══════════════════════════════════════════════
 ```
 
@@ -663,7 +740,47 @@ git add .
 git commit -m "feat: add scroll retry mechanism"
 ```
 
-### Example 2: Security Audit
+### Example 2: Branch Comparison Before Merge
+
+```bash
+# Check current branch before merging to main
+/compare-branch
+
+# Prompts: "Which branch to compare against? (default: main)"
+# Press Enter (uses 'main')
+
+# Output:
+# 📊 COMPARISON SUMMARY
+#    Current: feature/viewport-tracking
+#    Target:  main
+#    Commits: 8 ahead
+#    Files:   15 changed
+#
+# ✅ QUALITY AUDIT
+#    Build:    PASSED
+#    Types:    PASSED (0 errors)
+#    Tests:    PASSED (42/42)
+#    Coverage: 94.2%
+#
+# ⚠️  TESTING AUDIT
+#    🔴 Missing test update: src/managers/event.manager.ts
+#       Action: Update tests/unit/managers/event.test.ts
+#
+# 📊 MERGE READINESS: 78/100 - ⚠️ NEEDS WORK
+#    Blockers: 1 (missing test)
+#    Time to Ready: 30 minutes
+#
+# Next Action: Add tests for event.manager.ts changes
+
+# Fix the issue
+# Create/update tests...
+
+# Re-run comparison
+/compare-branch
+# Output: ✅ READY TO MERGE (Score: 95/100)
+```
+
+### Example 3: Security Audit
 
 ```bash
 # Run security audit
