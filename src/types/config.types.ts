@@ -1,4 +1,5 @@
 import { MetadataType } from './common.types';
+import { ViewportConfig } from './viewport.types';
 
 export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */
@@ -13,6 +14,14 @@ export interface Config {
   samplingRate?: number;
   /** CSS selector to manually override primary scroll container detection. */
   primaryScrollSelector?: string;
+  /** Viewport visibility tracking configuration. */
+  viewport?: ViewportConfig;
+  /** Page view throttle duration in milliseconds to prevent rapid navigation spam. @default 1000 */
+  pageViewThrottleMs?: number;
+  /** Click throttle duration in milliseconds to prevent double-clicks and rapid spam. @default 300 */
+  clickThrottleMs?: number;
+  /** Maximum number of same custom event name allowed per minute to prevent infinite loops. @default 60 */
+  maxSameEventPerMinute?: number;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

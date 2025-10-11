@@ -9,8 +9,11 @@ Core business logic components that handle analytics data processing, state mana
 **Core Functionality**:
 - **Event Tracking**: Captures user interactions (clicks, scrolls, page views, custom events, web vitals, errors)
 - **Queue Management**: Batches events and manages sending intervals (10-second intervals) to optimize network requests
-- **Deduplication**: Prevents duplicate events using fingerprint-based approach with configurable thresholds
-- **Rate Limiting**: Client-side rate limiting (200 events/second) with exemptions for critical events
+- **Deduplication**: Prevents duplicate events using LRU cache with 1000-entry fingerprint storage
+- **Rate Limiting**: Client-side rate limiting (50 events/second) with exemptions for critical events
+- **Per-Event Rate Limiting**: Prevents infinite loops with per-event-name limits (60/minute default)
+- **Per-Session Caps**: Configurable limits prevent runaway event generation (1000 total, type-specific limits)
+- **Dynamic Queue Flush**: Events sent immediately when batch threshold (50 events) is reached
 - **Pending Events Buffer**: Buffers up to 100 events before session initialization to prevent data loss
 - **Event Recovery**: Recovers persisted events from localStorage after crashes or network failures
 - **API Communication**: Coordinates with SenderManager for reliable event transmission
@@ -18,10 +21,15 @@ Core business logic components that handle analytics data processing, state mana
 - **Integration Support**: Forwards custom events to Google Analytics when configured
 
 **Key Features**:
-- **Fingerprint-based deduplication**: 10px coordinate precision for click events, 500ms time threshold
+- **LRU Cache Deduplication**: 1000-entry fingerprint cache with automatic cleanup
+  - 10px coordinate precision for click events, 500ms time threshold
+  - Prunes fingerprints older than 5 seconds automatically
 - **Smart queue overflow protection**: Fixed 100-event limit with priority preservation for SESSION_START/END
 - **Pending events buffer**: 100-event pre-session buffer with overflow protection
-- **Rate limiting**: 200 events/second with 1-second sliding window, critical events exempted
+- **Rate limiting**: 50 events/second with 1-second sliding window, critical events exempted
+- **Per-event-name rate limiting**: 60 same event name per minute (configurable via `maxSameEventPerMinute`)
+- **Per-session event caps**: Total 1000/session, Clicks 500, Page views 100, Custom 500, Viewport 200, Scroll 120
+- **Dynamic flush**: Immediate send when 50-event batch threshold reached
 - **Sampling support**: Client-side event sampling with configurable rate (0-1)
 - **Synchronous and asynchronous flushing**: Dual-mode for normal operation and page unload scenarios
 - **Event persistence recovery**: Automatic recovery from localStorage on initialization
@@ -58,6 +66,10 @@ Core business logic components that handle analytics data processing, state mana
 - No in-session retries - failed events persist for next-page-load recovery
 - Event expiration after 2 hours to prevent stale data recovery
 - Dual sending modes: async (`fetch`) and sync (`sendBeacon`)
+- **Payload Size Validation**: Checks 64KB browser limit before `sendBeacon()` call
+  - Persists oversized payloads for recovery instead of silent failure
+  - Prevents data loss at page unload with large event batches
+  - Configured via `MAX_BEACON_PAYLOAD_SIZE` constant
 - Permanent error throttling (1 log per status code per minute)
 - Request timeout (10 seconds) with AbortController
 - Sanitized error logging (domain masking for privacy)

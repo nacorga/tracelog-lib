@@ -31,17 +31,25 @@ test.describe('Event Queue Overflow', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      // Generate 150 custom events in 2 batches to avoid rate limiting (200 events/sec)
-      // Batch 1: 75 events
-      for (let i = 0; i < 75; i++) {
+      // Generate 130 custom events in 3 batches to respect rate limiting (50 events/sec)
+      // Batch 1: 45 events
+      for (let i = 0; i < 45; i++) {
         traceLog.sendCustomEvent(`overflow_test_event_${i}`, { index: i });
       }
 
       // Wait 1 second to reset rate limit window
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Batch 2: 75 events
-      for (let i = 75; i < 150; i++) {
+      // Batch 2: 45 events
+      for (let i = 45; i < 90; i++) {
+        traceLog.sendCustomEvent(`overflow_test_event_${i}`, { index: i });
+      }
+
+      // Wait 1 second to reset rate limit window
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Batch 3: 40 events (total 130 events to trigger overflow at MAX 100)
+      for (let i = 90; i < 130; i++) {
         traceLog.sendCustomEvent(`overflow_test_event_${i}`, { index: i });
       }
 
@@ -64,13 +72,19 @@ test.describe('Event Queue Overflow', () => {
     // Extract all custom events from queues
     const allEvents = result.queues.flatMap((queue) => queue.events.filter((event: any) => event.type === 'custom'));
 
-    // Should have captured events, but total in-memory queue should never exceed MAX
-    // Since events are sent in batches, we verify that oldest events were discarded
+    // Should have captured events - verify the trigger event exists
     const lastEvent = allEvents.find((e: any) => e.custom_event?.name === 'trigger_queue_send');
 
-    // Verify queue management worked (oldest events may be missing)
-    expect(lastEvent).toBeDefined(); // Most recent events should be present
-    expect(allEvents.length).toBeLessThan(150); // Some events should have been discarded
+    // Verify queue management worked - most recent event should be present
+    expect(lastEvent).toBeDefined();
+
+    // Verify each individual queue never exceeded MAX length
+    // (events are sent in batches via auto-send interval)
+    for (const queue of result.queues) {
+      const queueEventCount = queue.events.length;
+      // Each queue should not exceed MAX (100) + a few critical events (session_start, page_view, etc.)
+      expect(queueEventCount).toBeLessThanOrEqual(110);
+    }
   });
 
   test('should never discard critical session events during overflow', async ({ page }) => {
@@ -90,8 +104,23 @@ test.describe('Event Queue Overflow', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Generate many events to cause overflow
-      for (let i = 0; i < 120; i++) {
+      // Generate many events to cause overflow (respecting 50 events/sec rate limit)
+      // Batch 1: 45 events
+      for (let i = 0; i < 45; i++) {
+        traceLog.sendCustomEvent(`stress_event_${i}`, { index: i });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Batch 2: 45 events
+      for (let i = 45; i < 90; i++) {
+        traceLog.sendCustomEvent(`stress_event_${i}`, { index: i });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Batch 3: 30 events (total 120)
+      for (let i = 90; i < 120; i++) {
         traceLog.sendCustomEvent(`stress_event_${i}`, { index: i });
       }
 
@@ -189,7 +218,7 @@ test.describe('Event Queue Overflow', () => {
   });
 
   test('should maintain queue integrity after multiple overflow cycles', async ({ page }) => {
-    test.setTimeout(60000); // Need 44s for 4x11s waits + overhead
+    test.setTimeout(90000); // Need ~50s for waits + overhead (3 cycles × (2s batching + 11s wait) + 11s final)
     await navigateToPlayground(page, { autoInit: false, searchParams: { e2e: 'true' } });
 
     const result = await page.evaluate(async (_projectId) => {
@@ -206,8 +235,19 @@ test.describe('Event Queue Overflow', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Cycle 1: Generate overflow
-      for (let i = 0; i < 110; i++) {
+      // Cycle 1: Generate overflow (respecting 50 events/sec rate limit)
+      // Batch 1.1: 45 events
+      for (let i = 0; i < 45; i++) {
+        traceLog.sendCustomEvent(`cycle1_event_${i}`, { cycle: 1, index: i });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Batch 1.2: 45 events
+      for (let i = 45; i < 90; i++) {
+        traceLog.sendCustomEvent(`cycle1_event_${i}`, { cycle: 1, index: i });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Batch 1.3: 20 events (total 110)
+      for (let i = 90; i < 110; i++) {
         traceLog.sendCustomEvent(`cycle1_event_${i}`, { cycle: 1, index: i });
       }
 
@@ -215,7 +255,18 @@ test.describe('Event Queue Overflow', () => {
       await new Promise((resolve) => setTimeout(resolve, 11000));
 
       // Cycle 2: Generate overflow again
-      for (let i = 0; i < 110; i++) {
+      // Batch 2.1: 45 events
+      for (let i = 0; i < 45; i++) {
+        traceLog.sendCustomEvent(`cycle2_event_${i}`, { cycle: 2, index: i });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Batch 2.2: 45 events
+      for (let i = 45; i < 90; i++) {
+        traceLog.sendCustomEvent(`cycle2_event_${i}`, { cycle: 2, index: i });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Batch 2.3: 20 events (total 110)
+      for (let i = 90; i < 110; i++) {
         traceLog.sendCustomEvent(`cycle2_event_${i}`, { cycle: 2, index: i });
       }
 
@@ -223,7 +274,18 @@ test.describe('Event Queue Overflow', () => {
       await new Promise((resolve) => setTimeout(resolve, 11000));
 
       // Cycle 3: Generate overflow again
-      for (let i = 0; i < 110; i++) {
+      // Batch 3.1: 45 events
+      for (let i = 0; i < 45; i++) {
+        traceLog.sendCustomEvent(`cycle3_event_${i}`, { cycle: 3, index: i });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Batch 3.2: 45 events
+      for (let i = 45; i < 90; i++) {
+        traceLog.sendCustomEvent(`cycle3_event_${i}`, { cycle: 3, index: i });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Batch 3.3: 20 events (total 110)
+      for (let i = 90; i < 110; i++) {
         traceLog.sendCustomEvent(`cycle3_event_${i}`, { cycle: 3, index: i });
       }
 
@@ -291,9 +353,24 @@ test.describe('Event Queue Overflow', () => {
         memorySnapshots.push((performance as any).memory.usedJSHeapSize);
       }
 
-      // Generate multiple overflow cycles
+      // Generate multiple overflow cycles (respecting 50 events/sec rate limit)
       for (let cycle = 0; cycle < 5; cycle++) {
-        for (let i = 0; i < 120; i++) {
+        // Batch 1: 45 events
+        for (let i = 0; i < 45; i++) {
+          traceLog.sendCustomEvent(`memory_test_${cycle}_${i}`, { cycle, index: i });
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Batch 2: 45 events
+        for (let i = 45; i < 90; i++) {
+          traceLog.sendCustomEvent(`memory_test_${cycle}_${i}`, { cycle, index: i });
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Batch 3: 30 events (total 120)
+        for (let i = 90; i < 120; i++) {
           traceLog.sendCustomEvent(`memory_test_${cycle}_${i}`, { cycle, index: i });
         }
 

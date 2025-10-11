@@ -11,9 +11,8 @@ A lightweight TypeScript library for web analytics and user behavior tracking. A
 - **Framework agnostic** - Works with vanilla JS, React, Vue, Angular, or any web application.
 - **Lightweight** - Only one dependency (`web-vitals`) with dual ESM/CJS support.
 - **Event-driven** - Real-time event subscription with `on()` and `off()` methods for custom integrations.
-- **Rate limiting** - Client-side rate limiting (200 events/second) with exemptions for critical events (SESSION_START/END).
+- **Intelligent event management** - Rate limiting, throttling, and deduplication maintain data quality while optimizing performance.
 - **Event recovery** - Automatic recovery of persisted events from localStorage after crashes or network failures.
-- **Smart filtering** - Threshold-based web vitals reporting, deduplication (10px click precision), and intelligent queue management.
 
 ## Installation
 
@@ -143,12 +142,31 @@ await tracelog.init({
 - `destroy(): Promise<void>` - Clean up and remove listeners
 
 **Config (all optional):**
+
+**Session & Sampling:**
 - `sessionTimeout`: Session timeout in ms (default: 900000 / 15 minutes, range: 30s - 24 hours)
 - `globalMetadata`: Metadata attached to all events
 - `samplingRate`: Event sampling rate 0-1 (default: 1.0)
 - `errorSampling`: Error sampling rate 0-1 (default: 1.0 / 100%)
 - `sensitiveQueryParams`: Query params to remove from URLs
+
+**Event Rate Control:**
+- `pageViewThrottleMs`: Throttle rapid navigation (default: 1000ms / 1 second)
+- `clickThrottleMs`: Throttle clicks per element to prevent double-clicks (default: 300ms)
+- `maxSameEventPerMinute`: Max same custom event name per minute to prevent infinite loops (default: 60)
+
+**Scroll Tracking:**
 - `primaryScrollSelector`: Override automatic primary scroll container detection (e.g., `.mat-sidenav-content`, `window`)
+
+**Viewport Tracking:**
+- `viewport`: Viewport visibility tracking configuration
+  - `elements`: Array of element configs `{ selector, id?, name? }` with optional identifiers for analytics
+  - `threshold`: Visibility threshold 0-1 (default: 0.5 = 50% visible)
+  - `minDwellTime`: Minimum time in ms element must be visible (default: 1000ms)
+  - `cooldownPeriod`: Cooldown between re-triggers for same element (default: 60000ms / 60 seconds)
+  - `maxTrackedElements`: Maximum elements to track simultaneously (default: 100)
+
+**Integrations:**
 - `integrations`:
   - `tracelog.projectId`: TraceLog SaaS
   - `custom.collectApiUrl`: Custom backend
@@ -233,6 +251,13 @@ Each event contains a base structure with type-specific data:
   - `error_data.message`: Error message
   - `error_data.filename/line/column`: Error location
 
+- **`VIEWPORT_VISIBLE`**: Element visibility tracking
+  - `viewport_data.selector`: CSS selector of visible element
+  - `viewport_data.id`: Unique identifier for analytics (optional)
+  - `viewport_data.name`: Human-readable name for dashboards (optional)
+  - `viewport_data.dwellTime`: Time element was visible in ms
+  - `viewport_data.visibilityRatio`: Visibility ratio (0-1) when event fired
+
 ## Advanced
 
 **Event subscription:**
@@ -245,6 +270,56 @@ await tracelog.init();
 ```
 
 **Note**: Listeners are buffered if registered before `init()`, ensuring you don't miss initial events.
+
+**Viewport visibility tracking with analytics identifiers:**
+```typescript
+// Track key elements with business identifiers
+await tracelog.init({
+  viewport: {
+    elements: [
+      {
+        selector: '.hero-banner',
+        id: 'homepage-hero',
+        name: 'Homepage Hero Banner'
+      },
+      {
+        selector: '.cta-button',
+        id: 'pricing-cta',
+        name: 'Pricing Page CTA'
+      },
+      {
+        selector: '.testimonial',
+        id: 'customer-testimonials'
+      }
+    ],
+    threshold: 0.5,      // 50% visible
+    minDwellTime: 1000   // 1 second
+  }
+});
+
+// Analytics with identifiers
+tracelog.on('event', (event) => {
+  if (event.type === 'viewport_visible') {
+    const { id, name, selector, dwellTime, visibilityRatio } = event.viewport_data;
+
+    // Clear business context instead of CSS selectors
+    console.log(`${name || selector} viewed for ${dwellTime}ms`);
+    // → "Pricing Page CTA viewed for 2500ms"
+
+    // Easy funnel tracking
+    if (id === 'homepage-hero') {
+      trackFunnelStep('hero_viewed');
+    }
+
+    // Aggregate by identifier
+    analytics.track('element_viewed', {
+      element_id: id,
+      element_name: name,
+      visibility_ratio: visibilityRatio
+    });
+  }
+});
+```
 
 **Filter scroll events by primary container:**
 ```typescript
@@ -305,6 +380,28 @@ tracelog.on(EmitterEvent.EVENT, (event) => {
     console.log(`Secondary UI scroll: ${selector}`);
   }
 });
+```
+
+**Viewport visibility tracking:**
+```typescript
+await tracelog.init({
+  viewport: {
+    selectors: ['.product-card', '.cta-button', '[data-track-viewport]'],
+    threshold: 0.75,    // Fire when 75% visible
+    minDwellTime: 2000  // Must be visible for 2 seconds
+  }
+});
+
+// Listen for visibility events
+tracelog.on('event', (event) => {
+  if (event.type === 'VIEWPORT_VISIBLE') {
+    const { selector, dwellTime, visibilityRatio } = event.viewport_data;
+    console.log(`${selector} was ${(visibilityRatio * 100).toFixed(0)}% visible for ${dwellTime}ms`);
+  }
+});
+
+// Exclude specific elements with data-tlog-ignore attribute
+<div class="product-card" data-tlog-ignore>Won't be tracked</div>
 ```
 
 **Multiple integrations:**
@@ -411,7 +508,7 @@ When using `sendBeacon` (page unload scenarios):
   - Check browser console for `PermanentError` logs indicating 4xx errors
   - Verify integration configuration (`projectId` or `collectApiUrl`)
   - Check network tab for failed requests to `/collect` endpoint
-- **Rate limiting**: If events are being dropped, check console for rate limit warnings (200 events/second max)
+- **Rate limiting**: If events are being dropped, check console for rate limit warnings (50 events/second max)
 - **Scroll detection issues**: Use `primaryScrollSelector` to manually specify main content container
 - **CI failures**: Verify Playwright installation and Node.js ≥20
 

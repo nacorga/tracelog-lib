@@ -18,6 +18,7 @@ describe('ErrorHandler - Memory Leak Prevention', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
 
     storageManager = new StorageManager();
     eventManager = new EventManager(storageManager);
@@ -36,6 +37,7 @@ describe('ErrorHandler - Memory Leak Prevention', () => {
 
   afterEach(() => {
     errorHandler.stopTracking();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -61,13 +63,18 @@ describe('ErrorHandler - Memory Leak Prevention', () => {
   it('should maintain functionality after hitting hard limit', () => {
     errorHandler.startTracking();
 
-    // Exhaust the hard limit
+    // Exhaust the hard limit - send in batches to avoid burst detection (10 errors/sec limit)
     for (let i = 0; i < MAX_TRACKED_ERRORS_HARD_LIMIT + 20; i++) {
       const errorEvent = new ErrorEvent('error', {
         message: `Error ${i}`,
       });
 
       errorHandler['handleError'](errorEvent);
+
+      // Advance time every 10 errors to avoid burst detection
+      if (i % 10 === 9) {
+        vi.advanceTimersByTime(1100);
+      }
     }
 
     // New errors should still be tracked

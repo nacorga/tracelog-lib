@@ -1,5 +1,6 @@
 import { MetadataType } from './common.types';
 import { SessionEndReason } from './session.types';
+import { ViewportEventData } from './viewport.types';
 
 export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
 
@@ -12,6 +13,7 @@ export enum EventType {
   CUSTOM = 'custom',
   WEB_VITALS = 'web_vitals',
   ERROR = 'error',
+  VIEWPORT_VISIBLE = 'viewport_visible',
 }
 
 export enum ScrollDirection {
@@ -130,5 +132,6 @@ export interface EventData {
   page_view?: PageViewData;
   session_end_reason?: SessionEndReason;
   error_data?: ErrorData;
+  viewport_data?: ViewportEventData;
   utm?: UTM;
 }

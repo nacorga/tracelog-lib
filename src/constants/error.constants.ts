@@ -73,6 +73,28 @@ export const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
 export const DEFAULT_ERROR_SAMPLING_RATE = 1; // 100% of errors
 
 // ============================================================================
+// ERROR BURST DETECTION (Phase 3)
+// ============================================================================
+
+/**
+ * Time window for error burst detection in milliseconds
+ * Tracks unique errors within this window
+ */
+export const ERROR_BURST_WINDOW_MS = 1000; // 1 second
+
+/**
+ * Maximum number of unique errors allowed in burst window
+ * Exceeding this triggers a cooldown period
+ */
+export const ERROR_BURST_THRESHOLD = 10; // 10 unique errors
+
+/**
+ * Backoff period after burst detection in milliseconds
+ * No errors will be tracked during this cooldown
+ */
+export const ERROR_BURST_BACKOFF_MS = 5000; // 5 seconds
+
+// ============================================================================
 // PERMANENT ERROR LOGGING
 // ============================================================================
 

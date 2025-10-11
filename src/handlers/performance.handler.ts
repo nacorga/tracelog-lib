@@ -129,11 +129,11 @@ export class PerformanceHandler extends StateManager {
           this.sendVital({ type, value });
         };
 
-      onLCP(report('LCP'));
-      onCLS(report('CLS'));
-      onFCP(report('FCP'));
-      onTTFB(report('TTFB'));
-      onINP(report('INP'));
+      onLCP(report('LCP'), { reportAllChanges: false });
+      onCLS(report('CLS'), { reportAllChanges: false });
+      onFCP(report('FCP'), { reportAllChanges: false });
+      onTTFB(report('TTFB'), { reportAllChanges: false });
+      onINP(report('INP'), { reportAllChanges: false });
     } catch (error) {
       log('warn', 'Failed to load web-vitals library, using fallback', { error });
       this.observeWebVitalsFallback();
