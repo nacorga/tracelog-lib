@@ -21,9 +21,8 @@ Tracks page navigation and route changes in single-page applications.
   - **Example**: `https://app.com/page?token=abc&user=john` → `https://app.com/page?user=john`
 - **SPA Navigation Detection**: Automatically patches `history.pushState()` and `history.replaceState()` to detect route changes
 - **Deduplication**: Compares normalized URLs against last tracked URL to prevent consecutive duplicate events
-- **Throttling** ⚡ **v0.10.0**: Configurable throttle (default 1 second) prevents rapid navigation spam in SPAs
+- **Throttling**: Configurable throttle (default 1 second) prevents rapid navigation spam in SPAs
   - Configurable via `config.pageViewThrottleMs` (default: 1000ms)
-  - Reduces PAGE_VIEW events by 50-60% for high-frequency navigation apps
 - **Lifecycle Callback**: Invokes `onTrack()` callback after each page view for session management integration
 
 **Event Data**:
@@ -79,10 +78,9 @@ Captures mouse clicks and converts them into analytics events with element conte
 - Text extraction with length limits (255 chars max) and priority logic
 - **PII Sanitization**: Automatically redacts emails, phone numbers, credit cards, API keys, and tokens from captured text
 - **Privacy Controls**: Respects `data-tlog-ignore` attribute to exclude sensitive elements from tracking
-- **Click Throttling** ⚡ **v0.10.0**: Per-element throttle (default 300ms) prevents double-clicks and rapid spam
+- **Click Throttling**: Per-element throttle (default 300ms) prevents double-clicks and rapid spam
   - Configurable via `config.clickThrottleMs` (default: 300ms)
   - Uses stable element signatures (ID > data-testid > data-tlog-name > DOM path)
-  - Eliminates duplicate clicks by 60-80%
 
 **Text Extraction Priority**:
 1. Uses clicked element's text if within 255 character limit
@@ -180,7 +178,7 @@ Captures JavaScript errors and unhandled promise rejections for debugging and mo
 - **PII Sanitization**: Removes emails, phone numbers, credit cards, IBAN, API keys, Bearer tokens, and connection string passwords from error messages
 - **Message Limits**: Truncates messages to 500 characters max
 - **Rich Context**: Captures filename, line, column for JS errors
-- **Burst Detection** ⚡ **v0.10.0**: Detects error bursts (>10 errors/second) and triggers 5-second cooldown
+- **Burst Detection**: Detects error bursts (>10 errors/second) and triggers 5-second cooldown
   - Prevents error floods from overwhelming server
   - Automatic recovery after cooldown period
   - Configured via `ERROR_BURST_THRESHOLD` and `ERROR_BURST_BACKOFF_MS` constants
@@ -236,9 +234,8 @@ Captures Web Vitals and performance metrics using the `web-vitals` library with 
 - **CLS Input Filtering**: Ignores layout shifts caused by recent user input (not counted as poor UX)
 - **Precision Control**: All metrics use 2-decimal precision for consistency
 - **Long Task Throttling**: Maximum 1 long task event per second to prevent spam
-- **Final Values Only** ⚡ **v0.10.0**: All web vitals configured with `reportAllChanges: false`
-  - Only final metric values are sent (70-90% event reduction)
-  - Reduces WEB_VITALS events while maintaining data quality
+- **Final Values Only**: All web vitals configured with `reportAllChanges: false`
+  - Only final metric values are sent
   - Applied to LCP, CLS, FCP, TTFB, and INP
 
 **Metrics Captured**:
@@ -486,8 +483,8 @@ Tracks element visibility in the viewport using the IntersectionObserver API wit
 - `viewport.elements`: Array of element configurations `{ selector, id?, name? }` with optional identifiers for analytics
 - `viewport.threshold`: Visibility threshold 0-1 (default: 0.5 = 50% of element visible)
 - `viewport.minDwellTime`: Minimum time in milliseconds element must be visible (default: 1000ms)
-- `viewport.cooldownPeriod` ⚡ **v0.10.0**: Cooldown between re-triggers for same element (default: 60000ms / 60 seconds)
-- `viewport.maxTrackedElements` ⚡ **v0.10.0**: Maximum elements to track simultaneously (default: 100)
+- `viewport.cooldownPeriod`: Cooldown between re-triggers for same element (default: 60000ms / 60 seconds)
+- `viewport.maxTrackedElements`: Maximum elements to track simultaneously (default: 100)
 
 **Key Features**:
 - **IntersectionObserver-based**: Modern, performant visibility detection without scroll event listeners
@@ -499,10 +496,9 @@ Tracks element visibility in the viewport using the IntersectionObserver API wit
 - **Debounced Mutation Handling**: Groups DOM mutations with 100ms debounce to reduce overhead
 - **Memory Management**: Cleans up all timers and observers on stopTracking()
 - **Browser Compatibility**: Gracefully degrades if IntersectionObserver not supported
-- **Cooldown Period** ⚡ **v0.10.0**: Prevents re-triggering for carousels and sticky elements (60s default)
-  - Reduces viewport events by 75% for dynamic content areas
+- **Cooldown Period**: Prevents re-triggering for carousels and sticky elements (60s default)
   - Per-element tracking of last fired time
-- **Element Limit** ⚡ **v0.10.0**: Maximum 100 tracked elements to prevent memory/server issues
+- **Element Limit**: Maximum 100 tracked elements to prevent memory issues
   - Protects against broad selectors (e.g., `div`, `*`)
   - Warns when limit reached with actionable guidance
 

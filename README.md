@@ -11,22 +11,8 @@ A lightweight TypeScript library for web analytics and user behavior tracking. A
 - **Framework agnostic** - Works with vanilla JS, React, Vue, Angular, or any web application.
 - **Lightweight** - Only one dependency (`web-vitals`) with dual ESM/CJS support.
 - **Event-driven** - Real-time event subscription with `on()` and `off()` methods for custom integrations.
-- **Server load optimizations** ⚡ **New in v0.10.0** - Intelligent rate limiting, throttling, and deduplication reduce event volume by 75-80% while maintaining data quality.
+- **Intelligent event management** - Rate limiting, throttling, and deduplication maintain data quality while optimizing performance.
 - **Event recovery** - Automatic recovery of persisted events from localStorage after crashes or network failures.
-
-### 🚀 Server Load Optimizations (v0.10.0)
-
-TraceLog now includes comprehensive server load optimizations that reduce event volume by **75-80%**:
-
-- **Smart rate limiting**: 50 events/second global limit + per-event-name limits to prevent infinite loops
-- **Intelligent throttling**: PAGE_VIEW (1s), CLICK (300ms per element), VIEWPORT (60s cooldown)
-- **Improved deduplication**: LRU cache (1000 entries) catches interleaved duplicate events
-- **Per-session caps**: Configurable limits prevent runaway event generation
-- **Burst detection**: Error burst detection with automatic cooldown
-- **Web Vitals optimization**: Only final values sent (70-90% reduction)
-- **Dynamic queue flush**: Events sent immediately at batch threshold (50 events)
-
-All optimizations are **backward compatible** with sensible defaults. See [CHANGELOG.md](CHANGELOG.md#0100---2025-10-10) for details.
 
 ## Installation
 
@@ -164,7 +150,7 @@ await tracelog.init({
 - `errorSampling`: Error sampling rate 0-1 (default: 1.0 / 100%)
 - `sensitiveQueryParams`: Query params to remove from URLs
 
-**Server Load Optimizations (v0.10.0):**
+**Event Rate Control:**
 - `pageViewThrottleMs`: Throttle rapid navigation (default: 1000ms / 1 second)
 - `clickThrottleMs`: Throttle clicks per element to prevent double-clicks (default: 300ms)
 - `maxSameEventPerMinute`: Max same custom event name per minute to prevent infinite loops (default: 60)
@@ -177,8 +163,8 @@ await tracelog.init({
   - `elements`: Array of element configs `{ selector, id?, name? }` with optional identifiers for analytics
   - `threshold`: Visibility threshold 0-1 (default: 0.5 = 50% visible)
   - `minDwellTime`: Minimum time in ms element must be visible (default: 1000ms)
-  - `cooldownPeriod`: Cooldown between re-triggers for same element (default: 60000ms / 60 seconds) ⚡ New in v0.10.0
-  - `maxTrackedElements`: Maximum elements to track simultaneously (default: 100) ⚡ New in v0.10.0
+  - `cooldownPeriod`: Cooldown between re-triggers for same element (default: 60000ms / 60 seconds)
+  - `maxTrackedElements`: Maximum elements to track simultaneously (default: 100)
 
 **Integrations:**
 - `integrations`:
@@ -522,7 +508,7 @@ When using `sendBeacon` (page unload scenarios):
   - Check browser console for `PermanentError` logs indicating 4xx errors
   - Verify integration configuration (`projectId` or `collectApiUrl`)
   - Check network tab for failed requests to `/collect` endpoint
-- **Rate limiting**: If events are being dropped, check console for rate limit warnings (50 events/second max as of v0.10.0)
+- **Rate limiting**: If events are being dropped, check console for rate limit warnings (50 events/second max)
 - **Scroll detection issues**: Use `primaryScrollSelector` to manually specify main content container
 - **CI failures**: Verify Playwright installation and Node.js ≥20
 
