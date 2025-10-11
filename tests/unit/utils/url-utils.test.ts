@@ -4,11 +4,13 @@ import { Config } from '../../../src/types';
 
 describe('URL Utils', () => {
   describe('normalizeUrl', () => {
-    test('should return URL unchanged when no sensitive params provided', () => {
-      const url = 'https://test.com/page?user=john&id=123';
+    test('should apply default sensitive params even when no custom params provided', () => {
+      const url = 'https://test.com/page?user=john&id=123&token=secret';
       const result = normalizeUrl(url);
 
-      expect(result).toBe(url);
+      // Default params should be removed (e.g., 'token')
+      expect(result).toBe('https://test.com/page?user=john&id=123');
+      expect(result).not.toContain('token');
     });
 
     test('should remove sensitive query parameters', () => {
@@ -52,8 +54,8 @@ describe('URL Utils', () => {
     });
 
     test('should preserve URL pathname', () => {
-      const url = 'https://test.com/path/to/page?token=secret&user=john';
-      const result = normalizeUrl(url, ['token']);
+      const url = 'https://test.com/path/to/page?custom_param=secret&user=john';
+      const result = normalizeUrl(url, ['custom_param']);
 
       expect(result).toBe('https://test.com/path/to/page?user=john');
     });
@@ -66,17 +68,20 @@ describe('URL Utils', () => {
       expect(result).toBe(url);
     });
 
-    test('should handle empty sensitive params array', () => {
+    test('should apply default params even with empty custom params array', () => {
       const url = 'https://test.com/page?token=secret&user=john';
       const result = normalizeUrl(url, []);
 
-      expect(result).toBe(url);
+      // Default params (like 'token') should still be removed
+      expect(result).toBe('https://test.com/page?user=john');
+      expect(result).not.toContain('token');
     });
 
     test('should handle params that do not exist', () => {
-      const url = 'https://test.com/page?user=john';
-      const result = normalizeUrl(url, ['token', 'password']);
+      const url = 'https://test.com/page?user=john&custom_id=123';
+      const result = normalizeUrl(url, ['nonexistent_param']);
 
+      // No params should be removed (neither default nor custom match)
       expect(result).toBe(url);
     });
 
@@ -90,11 +95,21 @@ describe('URL Utils', () => {
 
     test('should handle multiple params with same name', () => {
       const url = 'https://test.com/page?id=1&id=2&token=secret';
-      const result = normalizeUrl(url, ['token']);
+      const result = normalizeUrl(url, []); // token is in defaults
 
       expect(result).toContain('id=1');
       expect(result).toContain('id=2');
       expect(result).not.toContain('token');
+    });
+
+    test('should merge custom params with defaults', () => {
+      const url = 'https://test.com/page?token=abc&custom_secret=xyz&user=john';
+      const result = normalizeUrl(url, ['custom_secret']);
+
+      // Both default ('token') and custom ('custom_secret') should be removed
+      expect(result).toBe('https://test.com/page?user=john');
+      expect(result).not.toContain('token');
+      expect(result).not.toContain('custom_secret');
     });
   });
 

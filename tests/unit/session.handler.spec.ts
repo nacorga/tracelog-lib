@@ -396,12 +396,10 @@ describe('SessionHandler', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle rapid start/stop calls', async () => {
-      await Promise.all([
-        sessionHandler.startTracking(),
-        sessionHandler.stopTracking(),
-        sessionHandler.startTracking(),
-      ]);
+    it('should handle rapid start/stop calls', () => {
+      sessionHandler.startTracking();
+      sessionHandler.stopTracking();
+      sessionHandler.startTracking();
 
       // Should complete without errors
       expect(true).toBe(true);

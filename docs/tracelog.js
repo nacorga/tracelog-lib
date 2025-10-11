@@ -62,6 +62,23 @@ const INTERACTIVE_SELECTORS = [
   '[tabindex="0"]'
 ];
 const UTM_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+const DEFAULT_SENSITIVE_QUERY_PARAMS = [
+  "token",
+  "auth",
+  "key",
+  "session",
+  "reset",
+  "email",
+  "password",
+  "api_key",
+  "apikey",
+  "secret",
+  "access_token",
+  "refresh_token",
+  "verification",
+  "code",
+  "otp"
+];
 const INITIALIZATION_TIMEOUT_MS = 1e4;
 const SCROLL_SUPPRESS_MULTIPLIER = 2;
 const VALIDATION_MESSAGES = {
@@ -379,9 +396,10 @@ const normalizeUrl = (url, sensitiveQueryParams = []) => {
   try {
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
+    const allSensitiveParams = [.../* @__PURE__ */ new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
     let hasChanged = false;
     const removedParams = [];
-    sensitiveQueryParams.forEach((param) => {
+    allSensitiveParams.forEach((param) => {
       if (searchParams.has(param)) {
         searchParams.delete(param);
         hasChanged = true;
@@ -1893,6 +1911,9 @@ class ClickHandler extends StateManager {
         log("warn", "Click target not found or not an element");
         return;
       }
+      if (this.shouldIgnoreElement(clickedElement)) {
+        return;
+      }
       const trackingElement = this.findTrackingElement(clickedElement);
       const relevantClickElement = this.getRelevantClickElement(clickedElement);
       const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);
@@ -1922,6 +1943,13 @@ class ClickHandler extends StateManager {
       window.removeEventListener("click", this.clickHandler, true);
       this.clickHandler = void 0;
     }
+  }
+  shouldIgnoreElement(element) {
+    if (element.hasAttribute("data-tlog-ignore")) {
+      return true;
+    }
+    const parent = element.closest("[data-tlog-ignore]");
+    return parent !== null;
   }
   findTrackingElement(element) {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-name`)) {
@@ -1991,19 +2019,29 @@ class ClickHandler extends StateManager {
       ...Object.keys(attributes).length > 0 && { dataAttributes: attributes }
     };
   }
+  sanitizeText(text) {
+    let sanitized = text;
+    for (const pattern of PII_PATTERNS) {
+      const regex = new RegExp(pattern.source, pattern.flags);
+      sanitized = sanitized.replace(regex, "[REDACTED]");
+    }
+    return sanitized;
+  }
   getRelevantText(clickedElement, relevantElement) {
     const clickedText = clickedElement.textContent?.trim() ?? "";
     const relevantText = relevantElement.textContent?.trim() ?? "";
     if (!clickedText && !relevantText) {
       return "";
     }
+    let finalText = "";
     if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
-      return clickedText;
+      finalText = clickedText;
+    } else if (relevantText.length <= MAX_TEXT_LENGTH) {
+      finalText = relevantText;
+    } else {
+      finalText = relevantText.slice(0, MAX_TEXT_LENGTH - 3) + "...";
     }
-    if (relevantText.length <= MAX_TEXT_LENGTH) {
-      return relevantText;
-    }
-    return relevantText.slice(0, MAX_TEXT_LENGTH - 3) + "...";
+    return this.sanitizeText(finalText);
   }
   extractElementAttributes(element) {
     const commonAttributes = [
