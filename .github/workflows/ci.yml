@@ -44,8 +44,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          rm -rf node_modules
-          npm ci
+          rm -rf node_modules package-lock.json
+          npm install
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
