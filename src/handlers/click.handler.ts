@@ -1,4 +1,4 @@
-import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH, INTERACTIVE_SELECTORS } from '../constants';
+import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH, INTERACTIVE_SELECTORS, PII_PATTERNS } from '../constants';
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
@@ -32,6 +32,10 @@ export class ClickHandler extends StateManager {
 
       if (!clickedElement) {
         log('warn', 'Click target not found or not an element');
+        return;
+      }
+
+      if (this.shouldIgnoreElement(clickedElement)) {
         return;
       }
 
@@ -73,6 +77,16 @@ export class ClickHandler extends StateManager {
     }
   }
 
+  private shouldIgnoreElement(element: HTMLElement): boolean {
+    if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
+      return true;
+    }
+
+    const parent = element.closest(`[${HTML_DATA_ATTR_PREFIX}-ignore]`);
+
+    return parent !== null;
+  }
+
   private findTrackingElement(element: HTMLElement): HTMLElement | undefined {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-name`)) {
       return element;
@@ -80,7 +94,7 @@ export class ClickHandler extends StateManager {
 
     const closest = element.closest(`[${HTML_DATA_ATTR_PREFIX}-name]`) as HTMLElement;
 
-    return closest || undefined;
+    return closest;
   }
 
   private getRelevantClickElement(element: HTMLElement): HTMLElement {
@@ -91,6 +105,7 @@ export class ClickHandler extends StateManager {
         }
 
         const parent = element.closest(selector) as HTMLElement;
+
         if (parent) {
           return parent;
         }
@@ -159,6 +174,17 @@ export class ClickHandler extends StateManager {
     };
   }
 
+  private sanitizeText(text: string): string {
+    let sanitized = text;
+
+    for (const pattern of PII_PATTERNS) {
+      const regex = new RegExp(pattern.source, pattern.flags);
+      sanitized = sanitized.replace(regex, '[REDACTED]');
+    }
+
+    return sanitized;
+  }
+
   private getRelevantText(clickedElement: HTMLElement, relevantElement: HTMLElement): string {
     const clickedText = clickedElement.textContent?.trim() ?? '';
     const relevantText = relevantElement.textContent?.trim() ?? '';
@@ -167,15 +193,17 @@ export class ClickHandler extends StateManager {
       return '';
     }
 
+    let finalText = '';
+
     if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
-      return clickedText;
+      finalText = clickedText;
+    } else if (relevantText.length <= MAX_TEXT_LENGTH) {
+      finalText = relevantText;
+    } else {
+      finalText = relevantText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
     }
 
-    if (relevantText.length <= MAX_TEXT_LENGTH) {
-      return relevantText;
-    }
-
-    return relevantText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
+    return this.sanitizeText(finalText);
   }
 
   private extractElementAttributes(element: HTMLElement): Record<string, string> {
