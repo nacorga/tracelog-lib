@@ -10,6 +10,57 @@
 
 
 
+
+## [0.11.0] - 2025-10-12
+
+### ✨ Features
+
+- Introduce comprehensive server load optimizations ([76ba104](../../commit/76ba1043e412ac133e5dc18b191ffafe0c8f152a))
+- Implement server load optimizations ([a2c19da](../../commit/a2c19da457fbfbfade72197aef7c03974b6f9e69))
+- Optimize server load critical fixes ([6191010](../../commit/6191010f1bc1b925919a1955add2f596a058f921))
+- Enhance viewport tracking with element identifiers for improved analytics ([8d7252a](../../commit/8d7252a953f42d3745b2a0dc3e5f84ee796f1be5))
+- Add viewport visibility tracking with IntersectionObserver support ([bc068f1](../../commit/bc068f1f961d84370c9fc2ce52e98cc5bb5d4fab))
+
+### 🐛 Bug Fixes
+
+- Remove unnecessary return statements in page view handler tests ([cae0bcd](../../commit/cae0bcdb68e70b4506372a2deba9d2a939046b26))
+
+### 🧪 Tests
+
+- Enhance E2E tests for click events, scroll handling, and performance metrics ([7e3ddd8](../../commit/7e3ddd8e2d73e29da8096f2194deb08c97ccf01e))
+
+### 📚 Documentation
+
+- Enhance playground README ([b4e1519](../../commit/b4e151952e5814c03a0816fbfb667ee309891bc5))
+- Update README to clarify features, installation, and usage examples for TraceLog library ([7cfdc34](../../commit/7cfdc34747609d0bb7d62a66d7fc2e62bf7c6117))
+- Update documentation for TraceLog features and configuration options ([90b7f2b](../../commit/90b7f2b86e57c91cd87ae04af6f8b7515db6bb91))
+
+### ♻️ Refactoring
+
+- Add viewport mutation debounce constant and refactor page view handler to use default throttle ([e87f26b](../../commit/e87f26b547fc808393c1b3c6bb4624406fcd7766))
+- Simplify event handling and improve test coverage for session management and scroll behavior ([b7446be](../../commit/b7446be64f8bafa0fdb1153e9f09d1cf92c5080a))
+- Add validation for new configuration options ([0c84db2](../../commit/0c84db2de6c4b75a1ccb7ed866d7ab141a69d85a))
+
+### 🔧 Other Changes
+
+- Merge pull request #33 from nacorga/release/20251012.1 ([887c428](../../commit/887c428361dccb68d21a0d48c9e9c82602fd1db3))
+- Merge pull request #32 from nacorga/feature/onviewport-event ([f8230c1](../../commit/f8230c16b65272b8972ccdf9c9d9d61077ea51f2))
+- Merge branch 'main' of github.com:nacorga/tracelog-lib into feature/onviewport-event ([90a26b5](../../commit/90a26b50aa2af89ea43e97a81c2c3fa74630d2f7))
+- Add branch comparison command for pre-merge audits and enhance README documentation ([5d08d1b](../../commit/5d08d1b92c85783db6493318aff0c214559b0daa))
+- Remove release-orchestrator agent and update release process documentation ([049cdba](../../commit/049cdba37fe32b67e32111c6dbb6e69f5277f7b9))
+- Update model references to claude-sonnet-4-5 across agents and commands ([2623ec4](../../commit/2623ec43d60f390dc5cc351d509f53e577fc8d8d))
+- Introduce comprehensive Claude development pipeline with agents, commands, and hooks for TraceLog library ([bc5b4fa](../../commit/bc5b4fa2b9f0dd386228ab006cef52771129b5e6))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.10.0...v0.11.0
+
+
 ## [0.10.0] - 2025-10-12
 
 ### ✨ Features
