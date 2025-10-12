@@ -7,6 +7,7 @@ const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1e3;
 const DEFAULT_CLICK_THROTTLE_MS = 300;
 const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
 const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
+const VIEWPORT_MUTATION_DEBOUNCE_MS = 100;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
@@ -1231,7 +1232,7 @@ class EventManager extends StateManager {
   eventsQueue = [];
   pendingEventsBuffer = [];
   recentEventFingerprints = /* @__PURE__ */ new Map();
-  // Phase 3: LRU cache
+  // Time-based deduplication cache
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
@@ -1547,8 +1548,8 @@ class EventManager extends StateManager {
     return payload;
   }
   /**
-   * Checks if event is a duplicate using LRU cache (Phase 3)
-   * Tracks last 1000 event fingerprints instead of just the last one
+   * Checks if event is a duplicate using time-based cache
+   * Tracks recent event fingerprints with timestamp-based cleanup
    */
   isDuplicateEvent(event2) {
     const now = Date.now();
@@ -1572,7 +1573,7 @@ class EventManager extends StateManager {
     return false;
   }
   /**
-   * Prunes old fingerprints from LRU cache (Phase 3)
+   * Prunes old fingerprints from cache based on timestamp
    * Removes entries older than 10x the duplicate threshold (5 seconds)
    */
   pruneOldFingerprints() {
@@ -2078,7 +2079,6 @@ class SessionHandler extends StateManager {
     this.set("hasStartSession", false);
   }
 }
-const PAGE_VIEW_THROTTLE_MS = 1e3;
 class PageViewHandler extends StateManager {
   eventManager;
   onTrack;
@@ -2127,7 +2127,7 @@ class PageViewHandler extends StateManager {
       return;
     }
     const now = Date.now();
-    const throttleMs = this.get("config").pageViewThrottleMs ?? PAGE_VIEW_THROTTLE_MS;
+    const throttleMs = this.get("config").pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS;
     if (now - this.lastPageViewTime < throttleMs) {
       return;
     }
@@ -2886,14 +2886,10 @@ class ViewportHandler extends StateManager {
     const eventData = {
       selector: tracked.selector,
       dwellTime,
-      visibilityRatio
+      visibilityRatio,
+      ...tracked.id !== void 0 && { id: tracked.id },
+      ...tracked.name !== void 0 && { name: tracked.name }
     };
-    if (tracked.id !== void 0) {
-      eventData.id = tracked.id;
-    }
-    if (tracked.name !== void 0) {
-      eventData.name = tracked.name;
-    }
     this.eventManager.track({
       type: EventType.VIEWPORT_VISIBLE,
       viewport_data: eventData
@@ -2932,7 +2928,7 @@ class ViewportHandler extends StateManager {
         this.mutationDebounceTimer = window.setTimeout(() => {
           this.observeElements();
           this.mutationDebounceTimer = null;
-        }, 100);
+        }, VIEWPORT_MUTATION_DEBOUNCE_MS);
       }
     });
     this.mutationObserver.observe(document.body, {

@@ -2,6 +2,7 @@ import {
   HTML_DATA_ATTR_PREFIX,
   DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
   DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS,
+  VIEWPORT_MUTATION_DEBOUNCE_MS,
 } from '../constants';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
@@ -239,15 +240,9 @@ export class ViewportHandler extends StateManager {
       selector: tracked.selector,
       dwellTime,
       visibilityRatio,
+      ...(tracked.id !== undefined && { id: tracked.id }),
+      ...(tracked.name !== undefined && { name: tracked.name }),
     };
-
-    // Include identifiers if configured
-    if (tracked.id !== undefined) {
-      eventData.id = tracked.id;
-    }
-    if (tracked.name !== undefined) {
-      eventData.name = tracked.name;
-    }
 
     this.eventManager.track({
       type: EventType.VIEWPORT_VISIBLE,
@@ -298,7 +293,7 @@ export class ViewportHandler extends StateManager {
         this.mutationDebounceTimer = window.setTimeout(() => {
           this.observeElements();
           this.mutationDebounceTimer = null;
-        }, 100); // 100ms debounce
+        }, VIEWPORT_MUTATION_DEBOUNCE_MS);
       }
     });
 

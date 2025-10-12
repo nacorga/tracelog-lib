@@ -15,14 +15,12 @@ import { EventManager } from '../../src/managers/event.manager';
 import { StorageManager } from '../../src/managers/storage.manager';
 import { EventType } from '../../src/types';
 
-// Track current URL for mocking window.location.href
-let currentTestUrl = 'http://localhost:3000/';
-
 describe('PageViewHandler', () => {
   let pageViewHandler: PageViewHandler;
   let eventManager: EventManager;
   let storageManager: StorageManager;
   let onTrackCallback: ReturnType<typeof vi.fn>;
+  let currentTestUrl: string;
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -32,7 +32,7 @@ export class EventManager extends StateManager {
 
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
-  private readonly recentEventFingerprints = new Map<string, number>(); // Phase 3: LRU cache
+  private readonly recentEventFingerprints = new Map<string, number>(); // Time-based deduplication cache
   private sendIntervalId: number | null = null;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
@@ -422,8 +422,8 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Checks if event is a duplicate using LRU cache (Phase 3)
-   * Tracks last 1000 event fingerprints instead of just the last one
+   * Checks if event is a duplicate using time-based cache
+   * Tracks recent event fingerprints with timestamp-based cleanup
    */
   private isDuplicateEvent(event: EventData): boolean {
     const now = Date.now();
@@ -458,7 +458,7 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Prunes old fingerprints from LRU cache (Phase 3)
+   * Prunes old fingerprints from cache based on timestamp
    * Removes entries older than 10x the duplicate threshold (5 seconds)
    */
   private pruneOldFingerprints(): void {

@@ -2,8 +2,7 @@ import { EventType, PageViewData } from '../types';
 import { normalizeUrl } from '../utils';
 import { StateManager } from '../managers/state.manager';
 import { EventManager } from '../managers/event.manager';
-
-const PAGE_VIEW_THROTTLE_MS = 1000;
+import { DEFAULT_PAGE_VIEW_THROTTLE_MS } from '../constants/config.constants';
 
 export class PageViewHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -70,7 +69,7 @@ export class PageViewHandler extends StateManager {
 
     // Throttle: Prevent rapid navigation spam
     const now = Date.now();
-    const throttleMs = this.get('config').pageViewThrottleMs ?? PAGE_VIEW_THROTTLE_MS;
+    const throttleMs = this.get('config').pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS;
 
     if (now - this.lastPageViewTime < throttleMs) {
       return;

@@ -18,6 +18,7 @@ export const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1000; // 1 second throttle for page
 export const DEFAULT_CLICK_THROTTLE_MS = 300; // 300ms throttle for clicks per element
 export const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 60000; // 60 seconds cooldown for viewport events
 export const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100; // Maximum elements to track (Phase 3)
+export const VIEWPORT_MUTATION_DEBOUNCE_MS = 100; // Debounce for mutation observer re-scanning
 
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 2;
