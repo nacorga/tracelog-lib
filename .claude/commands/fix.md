@@ -15,6 +15,9 @@ Automatically fix lint and format issues across the codebase.
 ## Verify Fixes
 
 !npm run check
+!npm run type-check
+!npm run build:all
+!npm run test
 
 ## Report Format
 
@@ -34,14 +37,17 @@ Format Fixes:
 
 === VERIFICATION ===
 
-Running check...
+Running acceptance criteria checks...
 
 Lint Status: [✅ PASSED | ❌ ERRORS REMAIN]
 Format Status: [✅ PASSED | ❌ ERRORS REMAIN]
+Type Check Status: [✅ PASSED | ❌ ERRORS REMAIN]
+Build Status: [✅ PASSED | ❌ ERRORS REMAIN]
+Test Status: [✅ PASSED | ❌ ERRORS REMAIN]
 
-[If passed:]
-✅ All code quality issues resolved
-✅ Codebase passes lint and format checks
+[If all passed:]
+✅ All acceptance criteria met
+✅ Codebase passes all quality checks
 
 [If errors remain:]
 ⚠️ Remaining Issues:
@@ -91,3 +97,10 @@ Fix remaining issues before committing
 - Some issues require manual intervention
 - Always review changes before committing
 - Re-run verification after manual fixes
+
+## IMPORTANT RESTRICTIONS
+
+**NEVER modify CHANGELOG.md**:
+- CHANGELOG.md is automatically updated via CI/CD workflows
+- Any changes to CHANGELOG.md will be overwritten
+- Do not include CHANGELOG.md in any auto-fix operations

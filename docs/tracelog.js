@@ -2,6 +2,8 @@ const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
 const DUPLICATE_EVENT_THRESHOLD_MS = 500;
 const EVENT_SENT_INTERVAL_MS = 1e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
+const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
+const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1e3;
 const DEFAULT_CLICK_THROTTLE_MS = 300;
 const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
 const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
@@ -105,7 +107,19 @@ const VALIDATION_MESSAGES = {
   INVALID_GLOBAL_METADATA: "Global metadata must be an object",
   INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings",
   INVALID_PRIMARY_SCROLL_SELECTOR: "Primary scroll selector must be a non-empty string",
-  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: "Invalid CSS selector syntax for primaryScrollSelector"
+  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: "Invalid CSS selector syntax for primaryScrollSelector",
+  INVALID_PAGE_VIEW_THROTTLE: "Page view throttle must be a non-negative number",
+  INVALID_CLICK_THROTTLE: "Click throttle must be a non-negative number",
+  INVALID_MAX_SAME_EVENT_PER_MINUTE: "Max same event per minute must be a positive number",
+  INVALID_VIEWPORT_CONFIG: "Viewport config must be an object",
+  INVALID_VIEWPORT_ELEMENTS: "Viewport elements must be a non-empty array",
+  INVALID_VIEWPORT_ELEMENT: "Each viewport element must have a valid selector string",
+  INVALID_VIEWPORT_ELEMENT_ID: "Viewport element id must be a non-empty string",
+  INVALID_VIEWPORT_ELEMENT_NAME: "Viewport element name must be a non-empty string",
+  INVALID_VIEWPORT_THRESHOLD: "Viewport threshold must be a number between 0 and 1",
+  INVALID_VIEWPORT_MIN_DWELL_TIME: "Viewport minDwellTime must be a non-negative number",
+  INVALID_VIEWPORT_COOLDOWN_PERIOD: "Viewport cooldownPeriod must be a non-negative number",
+  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number"
 };
 const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
@@ -572,6 +586,75 @@ const validateAppConfig = (config) => {
       }
     }
   }
+  if (config.pageViewThrottleMs !== void 0) {
+    if (typeof config.pageViewThrottleMs !== "number" || config.pageViewThrottleMs < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PAGE_VIEW_THROTTLE, "config");
+    }
+  }
+  if (config.clickThrottleMs !== void 0) {
+    if (typeof config.clickThrottleMs !== "number" || config.clickThrottleMs < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_CLICK_THROTTLE, "config");
+    }
+  }
+  if (config.maxSameEventPerMinute !== void 0) {
+    if (typeof config.maxSameEventPerMinute !== "number" || config.maxSameEventPerMinute <= 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_MAX_SAME_EVENT_PER_MINUTE, "config");
+    }
+  }
+  if (config.viewport !== void 0) {
+    validateViewportConfig(config.viewport);
+  }
+};
+const validateViewportConfig = (viewport) => {
+  if (typeof viewport !== "object" || viewport === null) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_CONFIG, "config");
+  }
+  if (!viewport.elements || !Array.isArray(viewport.elements)) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, "config");
+  }
+  if (viewport.elements.length === 0) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, "config");
+  }
+  const uniqueSelectors = /* @__PURE__ */ new Set();
+  for (const element of viewport.elements) {
+    if (!element.selector || typeof element.selector !== "string" || !element.selector.trim()) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT, "config");
+    }
+    const normalizedSelector = element.selector.trim();
+    if (uniqueSelectors.has(normalizedSelector)) {
+      throw new AppConfigValidationError(
+        `Duplicate viewport selector found: "${normalizedSelector}". Each selector should appear only once.`,
+        "config"
+      );
+    }
+    uniqueSelectors.add(normalizedSelector);
+    if (element.id !== void 0 && (typeof element.id !== "string" || !element.id.trim())) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_ID, "config");
+    }
+    if (element.name !== void 0 && (typeof element.name !== "string" || !element.name.trim())) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_NAME, "config");
+    }
+  }
+  if (viewport.threshold !== void 0) {
+    if (typeof viewport.threshold !== "number" || viewport.threshold < 0 || viewport.threshold > 1) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_THRESHOLD, "config");
+    }
+  }
+  if (viewport.minDwellTime !== void 0) {
+    if (typeof viewport.minDwellTime !== "number" || viewport.minDwellTime < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MIN_DWELL_TIME, "config");
+    }
+  }
+  if (viewport.cooldownPeriod !== void 0) {
+    if (typeof viewport.cooldownPeriod !== "number" || viewport.cooldownPeriod < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_COOLDOWN_PERIOD, "config");
+    }
+  }
+  if (viewport.maxTrackedElements !== void 0) {
+    if (typeof viewport.maxTrackedElements !== "number" || viewport.maxTrackedElements <= 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS, "config");
+    }
+  }
 };
 const validateIntegrations = (integrations) => {
   if (!integrations) {
@@ -619,12 +702,24 @@ const validateAndNormalizeConfig = (config) => {
     globalMetadata: config?.globalMetadata ?? {},
     sensitiveQueryParams: config?.sensitiveQueryParams ?? [],
     errorSampling: config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE,
-    samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE
+    samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
+    pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
+    clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
+    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
       ...normalizedConfig.integrations.custom,
       allowHttp: normalizedConfig.integrations.custom.allowHttp ?? false
+    };
+  }
+  if (normalizedConfig.viewport) {
+    normalizedConfig.viewport = {
+      ...normalizedConfig.viewport,
+      threshold: normalizedConfig.viewport.threshold ?? 0.5,
+      minDwellTime: normalizedConfig.viewport.minDwellTime ?? DEFAULT_VISIBILITY_TIMEOUT_MS,
+      cooldownPeriod: normalizedConfig.viewport.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
+      maxTrackedElements: normalizedConfig.viewport.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS
     };
   }
   return normalizedConfig;
@@ -2203,7 +2298,7 @@ class ClickHandler extends StateManager {
       return element;
     }
     const closest = element.closest(`[${HTML_DATA_ATTR_PREFIX}-name]`);
-    return closest || void 0;
+    return closest;
   }
   getRelevantClickElement(element) {
     for (const selector of INTERACTIVE_SELECTORS) {
@@ -4063,9 +4158,9 @@ const tracelog = {
   destroy
 };
 var e, o = -1, a = function(e3) {
-  addEventListener("pageshow", function(n) {
+  addEventListener("pageshow", (function(n) {
     n.persisted && (o = n.timeStamp, e3(n));
-  }, true);
+  }), true);
 }, c = function() {
   var e3 = self.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
   if (e3 && e3.responseStart > 0 && e3.responseStart < performance.now()) return e3;
@@ -4079,11 +4174,11 @@ var e, o = -1, a = function(e3) {
 }, s = function(e3, n, t) {
   try {
     if (PerformanceObserver.supportedEntryTypes.includes(e3)) {
-      var r = new PerformanceObserver(function(e4) {
-        Promise.resolve().then(function() {
+      var r = new PerformanceObserver((function(e4) {
+        Promise.resolve().then((function() {
           n(e4.getEntries());
-        });
-      });
+        }));
+      }));
       return r.observe(Object.assign({ type: e3, buffered: true }, t || {})), r;
     }
   } catch (e4) {
@@ -4091,20 +4186,20 @@ var e, o = -1, a = function(e3) {
 }, d = function(e3, n, t, r) {
   var i, o2;
   return function(a2) {
-    n.value >= 0 && (a2 || r) && ((o2 = n.value - (i || 0)) || void 0 === i) && (i = n.value, n.delta = o2, n.rating = function(e4, n2) {
+    n.value >= 0 && (a2 || r) && ((o2 = n.value - (i || 0)) || void 0 === i) && (i = n.value, n.delta = o2, n.rating = (function(e4, n2) {
       return e4 > n2[1] ? "poor" : e4 > n2[0] ? "needs-improvement" : "good";
-    }(n.value, t), e3(n));
+    })(n.value, t), e3(n));
   };
 }, l = function(e3) {
-  requestAnimationFrame(function() {
-    return requestAnimationFrame(function() {
+  requestAnimationFrame((function() {
+    return requestAnimationFrame((function() {
       return e3();
-    });
-  });
+    }));
+  }));
 }, p = function(e3) {
-  document.addEventListener("visibilitychange", function() {
+  document.addEventListener("visibilitychange", (function() {
     "hidden" === document.visibilityState && e3();
-  });
+  }));
 }, v = function(e3) {
   var n = false;
   return function() {
@@ -4119,52 +4214,52 @@ var e, o = -1, a = function(e3) {
 }, T = function() {
   removeEventListener("visibilitychange", g, true), removeEventListener("prerenderingchange", g, true);
 }, E = function() {
-  return m < 0 && (m = h(), y(), a(function() {
-    setTimeout(function() {
+  return m < 0 && (m = h(), y(), a((function() {
+    setTimeout((function() {
       m = h(), y();
-    }, 0);
-  })), { get firstHiddenTime() {
+    }), 0);
+  }))), { get firstHiddenTime() {
     return m;
   } };
 }, C = function(e3) {
-  document.prerendering ? addEventListener("prerenderingchange", function() {
+  document.prerendering ? addEventListener("prerenderingchange", (function() {
     return e3();
-  }, true) : e3();
+  }), true) : e3();
 }, b = [1800, 3e3], S = function(e3, n) {
-  n = n || {}, C(function() {
-    var t, r = E(), i = f("FCP"), o2 = s("paint", function(e4) {
-      e4.forEach(function(e5) {
+  n = n || {}, C((function() {
+    var t, r = E(), i = f("FCP"), o2 = s("paint", (function(e4) {
+      e4.forEach((function(e5) {
         "first-contentful-paint" === e5.name && (o2.disconnect(), e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries.push(e5), t(true)));
-      });
-    });
-    o2 && (t = d(e3, i, b, n.reportAllChanges), a(function(r2) {
-      i = f("FCP"), t = d(e3, i, b, n.reportAllChanges), l(function() {
-        i.value = performance.now() - r2.timeStamp, t(true);
-      });
+      }));
     }));
-  });
+    o2 && (t = d(e3, i, b, n.reportAllChanges), a((function(r2) {
+      i = f("FCP"), t = d(e3, i, b, n.reportAllChanges), l((function() {
+        i.value = performance.now() - r2.timeStamp, t(true);
+      }));
+    })));
+  }));
 }, L = [0.1, 0.25], w = function(e3, n) {
-  n = n || {}, S(v(function() {
+  n = n || {}, S(v((function() {
     var t, r = f("CLS", 0), i = 0, o2 = [], c2 = function(e4) {
-      e4.forEach(function(e5) {
+      e4.forEach((function(e5) {
         if (!e5.hadRecentInput) {
           var n2 = o2[0], t2 = o2[o2.length - 1];
           i && e5.startTime - t2.startTime < 1e3 && e5.startTime - n2.startTime < 5e3 ? (i += e5.value, o2.push(e5)) : (i = e5.value, o2 = [e5]);
         }
-      }), i > r.value && (r.value = i, r.entries = o2, t());
+      })), i > r.value && (r.value = i, r.entries = o2, t());
     }, u2 = s("layout-shift", c2);
-    u2 && (t = d(e3, r, L, n.reportAllChanges), p(function() {
+    u2 && (t = d(e3, r, L, n.reportAllChanges), p((function() {
       c2(u2.takeRecords()), t(true);
-    }), a(function() {
-      i = 0, r = f("CLS", 0), t = d(e3, r, L, n.reportAllChanges), l(function() {
+    })), a((function() {
+      i = 0, r = f("CLS", 0), t = d(e3, r, L, n.reportAllChanges), l((function() {
         return t();
-      });
-    }), setTimeout(t, 0));
-  }));
+      }));
+    })), setTimeout(t, 0));
+  })));
 }, A = 0, I = 1 / 0, P = 0, M = function(e3) {
-  e3.forEach(function(e4) {
+  e3.forEach((function(e4) {
     e4.interactionId && (I = Math.min(I, e4.interactionId), P = Math.max(P, e4.interactionId), A = P ? (P - I) / 7 + 1 : 0);
-  });
+  }));
 }, k = function() {
   return e ? A : performance.interactionCount || 0;
 }, F = function() {
@@ -4173,9 +4268,9 @@ var e, o = -1, a = function(e3) {
   var e3 = Math.min(D.length - 1, Math.floor((k() - R) / 50));
   return D[e3];
 }, H = [], q = function(e3) {
-  if (H.forEach(function(n2) {
+  if (H.forEach((function(n2) {
     return n2(e3);
-  }), e3.interactionId || "first-input" === e3.entryType) {
+  })), e3.interactionId || "first-input" === e3.entryType) {
     var n = D[D.length - 1], t = x.get(e3.interactionId);
     if (t || D.length < 10 || e3.duration > n.latency) {
       if (t) e3.duration > t.latency ? (t.entries = [e3], t.latency = e3.duration) : e3.duration === t.latency && e3.startTime === t.entries[0].startTime && t.entries.push(e3);
@@ -4183,71 +4278,71 @@ var e, o = -1, a = function(e3) {
         var r = { id: e3.interactionId, latency: e3.duration, entries: [e3] };
         x.set(r.id, r), D.push(r);
       }
-      D.sort(function(e4, n2) {
+      D.sort((function(e4, n2) {
         return n2.latency - e4.latency;
-      }), D.length > 10 && D.splice(10).forEach(function(e4) {
+      })), D.length > 10 && D.splice(10).forEach((function(e4) {
         return x.delete(e4.id);
-      });
+      }));
     }
   }
 }, O = function(e3) {
   var n = self.requestIdleCallback || self.setTimeout, t = -1;
   return e3 = v(e3), "hidden" === document.visibilityState ? e3() : (t = n(e3), p(e3)), t;
 }, N = [200, 500], j = function(e3, n) {
-  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (n = n || {}, C(function() {
+  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (n = n || {}, C((function() {
     var t;
     F();
     var r, i = f("INP"), o2 = function(e4) {
-      O(function() {
+      O((function() {
         e4.forEach(q);
         var n2 = B();
         n2 && n2.latency !== i.value && (i.value = n2.latency, i.entries = n2.entries, r());
-      });
+      }));
     }, c2 = s("event", o2, { durationThreshold: null !== (t = n.durationThreshold) && void 0 !== t ? t : 40 });
-    r = d(e3, i, N, n.reportAllChanges), c2 && (c2.observe({ type: "first-input", buffered: true }), p(function() {
+    r = d(e3, i, N, n.reportAllChanges), c2 && (c2.observe({ type: "first-input", buffered: true }), p((function() {
       o2(c2.takeRecords()), r(true);
-    }), a(function() {
+    })), a((function() {
       R = k(), D.length = 0, x.clear(), i = f("INP"), r = d(e3, i, N, n.reportAllChanges);
-    }));
-  }));
+    })));
+  })));
 }, _ = [2500, 4e3], z = {}, G = function(e3, n) {
-  n = n || {}, C(function() {
+  n = n || {}, C((function() {
     var t, r = E(), i = f("LCP"), o2 = function(e4) {
-      n.reportAllChanges || (e4 = e4.slice(-1)), e4.forEach(function(e5) {
+      n.reportAllChanges || (e4 = e4.slice(-1)), e4.forEach((function(e5) {
         e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries = [e5], t());
-      });
+      }));
     }, c2 = s("largest-contentful-paint", o2);
     if (c2) {
       t = d(e3, i, _, n.reportAllChanges);
-      var m2 = v(function() {
+      var m2 = v((function() {
         z[i.id] || (o2(c2.takeRecords()), c2.disconnect(), z[i.id] = true, t(true));
-      });
-      ["keydown", "click"].forEach(function(e4) {
-        addEventListener(e4, function() {
+      }));
+      ["keydown", "click"].forEach((function(e4) {
+        addEventListener(e4, (function() {
           return O(m2);
-        }, { once: true, capture: true });
-      }), p(m2), a(function(r2) {
-        i = f("LCP"), t = d(e3, i, _, n.reportAllChanges), l(function() {
+        }), { once: true, capture: true });
+      })), p(m2), a((function(r2) {
+        i = f("LCP"), t = d(e3, i, _, n.reportAllChanges), l((function() {
           i.value = performance.now() - r2.timeStamp, z[i.id] = true, t(true);
-        });
-      });
+        }));
+      }));
     }
-  });
+  }));
 }, J = [800, 1800], K = function e2(n) {
-  document.prerendering ? C(function() {
+  document.prerendering ? C((function() {
     return e2(n);
-  }) : "complete" !== document.readyState ? addEventListener("load", function() {
+  })) : "complete" !== document.readyState ? addEventListener("load", (function() {
     return e2(n);
-  }, true) : setTimeout(n, 0);
+  }), true) : setTimeout(n, 0);
 }, Q = function(e3, n) {
   n = n || {};
   var t = f("TTFB"), r = d(e3, t, J, n.reportAllChanges);
-  K(function() {
+  K((function() {
     var i = c();
-    i && (t.value = Math.max(i.responseStart - u(), 0), t.entries = [i], r(true), a(function() {
+    i && (t.value = Math.max(i.responseStart - u(), 0), t.entries = [i], r(true), a((function() {
       t = f("TTFB", 0), (r = d(e3, t, J, n.reportAllChanges))(true);
-    }));
-  });
+    })));
+  }));
 };
 const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,

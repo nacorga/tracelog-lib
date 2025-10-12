@@ -218,6 +218,18 @@ export const VALIDATION_MESSAGES = {
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',
   INVALID_PRIMARY_SCROLL_SELECTOR: 'Primary scroll selector must be a non-empty string',
   INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: 'Invalid CSS selector syntax for primaryScrollSelector',
+  INVALID_PAGE_VIEW_THROTTLE: 'Page view throttle must be a non-negative number',
+  INVALID_CLICK_THROTTLE: 'Click throttle must be a non-negative number',
+  INVALID_MAX_SAME_EVENT_PER_MINUTE: 'Max same event per minute must be a positive number',
+  INVALID_VIEWPORT_CONFIG: 'Viewport config must be an object',
+  INVALID_VIEWPORT_ELEMENTS: 'Viewport elements must be a non-empty array',
+  INVALID_VIEWPORT_ELEMENT: 'Each viewport element must have a valid selector string',
+  INVALID_VIEWPORT_ELEMENT_ID: 'Viewport element id must be a non-empty string',
+  INVALID_VIEWPORT_ELEMENT_NAME: 'Viewport element name must be a non-empty string',
+  INVALID_VIEWPORT_THRESHOLD: 'Viewport threshold must be a number between 0 and 1',
+  INVALID_VIEWPORT_MIN_DWELL_TIME: 'Viewport minDwellTime must be a non-negative number',
+  INVALID_VIEWPORT_COOLDOWN_PERIOD: 'Viewport cooldownPeriod must be a non-negative number',
+  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: 'Viewport maxTrackedElements must be a positive number',
 } as const;
 
 // ============================================================================
