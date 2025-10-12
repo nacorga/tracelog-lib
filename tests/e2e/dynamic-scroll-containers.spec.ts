@@ -33,7 +33,8 @@ test.describe('Dynamic Scroll Containers', () => {
       document.body.innerHTML +=
         '<div class="delayed" style="overflow: auto; height: 300px;"><div style="height: 2000px;"></div></div>';
 
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      // Wait for all retry attempts to complete (5 attempts × 200ms = 1000ms + buffer)
+      await new Promise((resolve) => setTimeout(resolve, 1200));
 
       const container = document.querySelector('.delayed') as HTMLElement;
       if (container) {
@@ -49,7 +50,14 @@ test.describe('Dynamic Scroll Containers', () => {
     });
 
     expect(result.containerExists).toBe(true);
-    expect(result.events.length).toBeGreaterThan(0);
+    expect(result.events.length).toBe(1);
+
+    // Verify scroll data structure for dynamic container
+    const scrollEvent = result.events[0];
+    expect(scrollEvent.scroll_data).toBeDefined();
+    expect(scrollEvent.scroll_data.container_selector).toBe('.delayed');
+    // is_primary is false when window is scrollable (which it is in playground)
+    expect(typeof scrollEvent.scroll_data.is_primary).toBe('boolean');
   });
 
   test('should fallback to window', async ({ page }) => {

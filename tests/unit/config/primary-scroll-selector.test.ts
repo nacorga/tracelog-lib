@@ -4,6 +4,11 @@ import { EmitterEvent, EventData, EventType } from '../../../src/types';
 
 describe('primaryScrollSelector config option', () => {
   beforeEach(() => {
+    // Ensure clean state before each test
+    if (tracelog.isInitialized()) {
+      tracelog.destroy();
+    }
+
     vi.useFakeTimers();
     document.body.innerHTML = `
       <div id="app-content" style="overflow: auto; height: 500px;">
@@ -56,10 +61,15 @@ describe('primaryScrollSelector config option', () => {
   });
 
   afterEach(() => {
-    if (tracelog.isInitialized()) {
-      tracelog.destroy();
+    try {
+      if (tracelog.isInitialized()) {
+        tracelog.destroy();
+      }
+    } catch {
+      // Ignore cleanup errors
     }
     document.body.innerHTML = '';
+    vi.clearAllMocks();
     vi.useRealTimers();
   });
 

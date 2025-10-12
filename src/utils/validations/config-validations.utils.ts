@@ -4,6 +4,12 @@ import {
   DEFAULT_SESSION_TIMEOUT,
   DEFAULT_SAMPLING_RATE,
   VALIDATION_MESSAGES,
+  DEFAULT_PAGE_VIEW_THROTTLE_MS,
+  DEFAULT_CLICK_THROTTLE_MS,
+  MAX_SAME_EVENT_PER_MINUTE,
+  DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
+  DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS,
+  DEFAULT_VISIBILITY_TIMEOUT_MS,
 } from '../../constants';
 import { DEFAULT_ERROR_SAMPLING_RATE } from '../../constants/error.constants';
 import { Config } from '../../types';
@@ -91,6 +97,103 @@ export const validateAppConfig = (config?: Config): void => {
       }
     }
   }
+
+  if (config.pageViewThrottleMs !== undefined) {
+    if (typeof config.pageViewThrottleMs !== 'number' || config.pageViewThrottleMs < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PAGE_VIEW_THROTTLE, 'config');
+    }
+  }
+
+  if (config.clickThrottleMs !== undefined) {
+    if (typeof config.clickThrottleMs !== 'number' || config.clickThrottleMs < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_CLICK_THROTTLE, 'config');
+    }
+  }
+
+  if (config.maxSameEventPerMinute !== undefined) {
+    if (typeof config.maxSameEventPerMinute !== 'number' || config.maxSameEventPerMinute <= 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_MAX_SAME_EVENT_PER_MINUTE, 'config');
+    }
+  }
+
+  if (config.viewport !== undefined) {
+    validateViewportConfig(config.viewport);
+  }
+};
+
+/**
+ * Validates viewport configuration
+ * @param viewport - Viewport configuration to validate
+ */
+const validateViewportConfig = (viewport: Config['viewport']): void => {
+  if (typeof viewport !== 'object' || viewport === null) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_CONFIG, 'config');
+  }
+
+  // Validate elements array
+  if (!viewport.elements || !Array.isArray(viewport.elements)) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, 'config');
+  }
+
+  if (viewport.elements.length === 0) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, 'config');
+  }
+
+  // Track unique selectors to detect duplicates
+  const uniqueSelectors = new Set<string>();
+
+  // Validate each element
+  for (const element of viewport.elements) {
+    if (!element.selector || typeof element.selector !== 'string' || !element.selector.trim()) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT, 'config');
+    }
+
+    // Check for duplicate selectors
+    const normalizedSelector = element.selector.trim();
+    if (uniqueSelectors.has(normalizedSelector)) {
+      throw new AppConfigValidationError(
+        `Duplicate viewport selector found: "${normalizedSelector}". Each selector should appear only once.`,
+        'config',
+      );
+    }
+    uniqueSelectors.add(normalizedSelector);
+
+    if (element.id !== undefined && (typeof element.id !== 'string' || !element.id.trim())) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_ID, 'config');
+    }
+
+    if (element.name !== undefined && (typeof element.name !== 'string' || !element.name.trim())) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_NAME, 'config');
+    }
+  }
+
+  // Validate threshold
+  if (viewport.threshold !== undefined) {
+    if (typeof viewport.threshold !== 'number' || viewport.threshold < 0 || viewport.threshold > 1) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_THRESHOLD, 'config');
+    }
+  }
+
+  // Validate minDwellTime
+  if (viewport.minDwellTime !== undefined) {
+    if (typeof viewport.minDwellTime !== 'number' || viewport.minDwellTime < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MIN_DWELL_TIME, 'config');
+    }
+  }
+
+  // Validate cooldownPeriod
+  if (viewport.cooldownPeriod !== undefined) {
+    if (typeof viewport.cooldownPeriod !== 'number' || viewport.cooldownPeriod < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_COOLDOWN_PERIOD, 'config');
+    }
+  }
+
+  // Validate maxTrackedElements
+  if (viewport.maxTrackedElements !== undefined) {
+    if (typeof viewport.maxTrackedElements !== 'number' || viewport.maxTrackedElements <= 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS, 'config');
+    }
+  }
 };
 
 /**
@@ -176,6 +279,9 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     sensitiveQueryParams: config?.sensitiveQueryParams ?? [],
     errorSampling: config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE,
     samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
+    pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
+    clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
+    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
   };
 
   // Normalize integrations
@@ -183,6 +289,17 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     normalizedConfig.integrations.custom = {
       ...normalizedConfig.integrations.custom,
       allowHttp: normalizedConfig.integrations.custom.allowHttp ?? false,
+    };
+  }
+
+  // Normalize viewport config
+  if (normalizedConfig.viewport) {
+    normalizedConfig.viewport = {
+      ...normalizedConfig.viewport,
+      threshold: normalizedConfig.viewport.threshold ?? 0.5,
+      minDwellTime: normalizedConfig.viewport.minDwellTime ?? DEFAULT_VISIBILITY_TIMEOUT_MS,
+      cooldownPeriod: normalizedConfig.viewport.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
+      maxTrackedElements: normalizedConfig.viewport.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS,
     };
   }
 

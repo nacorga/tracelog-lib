@@ -14,6 +14,10 @@ export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds
 // Throttling and debouncing
 export const SCROLL_DEBOUNCE_TIME_MS = 250;
 export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
+export const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1000; // 1 second throttle for page views
+export const DEFAULT_CLICK_THROTTLE_MS = 300; // 300ms throttle for clicks per element
+export const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 60000; // 60 seconds cooldown for viewport events
+export const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100; // Maximum elements to track (Phase 3)
 
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 2;
@@ -39,7 +43,16 @@ export const DEFAULT_SAMPLING_RATE = 1;
 export const MIN_SAMPLING_RATE = 0;
 export const MAX_SAMPLING_RATE = 1;
 export const RATE_LIMIT_WINDOW_MS = 1000; // 1 second window
-export const MAX_EVENTS_PER_SECOND = 200; // Maximum 200 events per second
+export const MAX_EVENTS_PER_SECOND = 50; // Maximum 50 events per second (Phase 3: reduced from 200)
+export const MAX_SAME_EVENT_PER_MINUTE = 60; // Maximum same custom event name per minute (prevents infinite loops)
+export const PER_EVENT_RATE_LIMIT_WINDOW_MS = 60000; // 60 second window for per-event-name rate limiting
+
+// Per-session event caps (Phase 3)
+export const MAX_EVENTS_PER_SESSION = 1000;
+export const MAX_CLICKS_PER_SESSION = 500;
+export const MAX_PAGE_VIEWS_PER_SESSION = 100;
+export const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
+export const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
@@ -71,6 +84,9 @@ export const PRECISION_TWO_DECIMALS = 2 as const;
 
 // Sync XHR timeout
 export const SYNC_XHR_TIMEOUT_MS = 2000; // 2 seconds
+
+// sendBeacon payload size limit (Phase 3)
+export const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024; // 64KB browser limit
 
 // Event fingerprint management
 export const MAX_FINGERPRINTS = 1000; // Maximum fingerprints stored before cleanup
@@ -202,6 +218,18 @@ export const VALIDATION_MESSAGES = {
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',
   INVALID_PRIMARY_SCROLL_SELECTOR: 'Primary scroll selector must be a non-empty string',
   INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: 'Invalid CSS selector syntax for primaryScrollSelector',
+  INVALID_PAGE_VIEW_THROTTLE: 'Page view throttle must be a non-negative number',
+  INVALID_CLICK_THROTTLE: 'Click throttle must be a non-negative number',
+  INVALID_MAX_SAME_EVENT_PER_MINUTE: 'Max same event per minute must be a positive number',
+  INVALID_VIEWPORT_CONFIG: 'Viewport config must be an object',
+  INVALID_VIEWPORT_ELEMENTS: 'Viewport elements must be a non-empty array',
+  INVALID_VIEWPORT_ELEMENT: 'Each viewport element must have a valid selector string',
+  INVALID_VIEWPORT_ELEMENT_ID: 'Viewport element id must be a non-empty string',
+  INVALID_VIEWPORT_ELEMENT_NAME: 'Viewport element name must be a non-empty string',
+  INVALID_VIEWPORT_THRESHOLD: 'Viewport threshold must be a number between 0 and 1',
+  INVALID_VIEWPORT_MIN_DWELL_TIME: 'Viewport minDwellTime must be a non-negative number',
+  INVALID_VIEWPORT_COOLDOWN_PERIOD: 'Viewport cooldownPeriod must be a non-negative number',
+  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: 'Viewport maxTrackedElements must be a positive number',
 } as const;
 
 // ============================================================================

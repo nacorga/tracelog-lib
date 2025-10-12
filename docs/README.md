@@ -52,6 +52,7 @@ window.tracelog.event('add_to_cart', {
 - Page views (SPA navigation with hash routing)
 - Clicks (buttons, links, nav items)
 - Scrolls (depth percentage)
+- Viewport visibility (elements entering viewport with dwell time)
 - Sessions (start/end with cross-tab sync)
 - Web Vitals (LCP, INP, CLS)
 - Errors (with stack traces)
@@ -69,13 +70,32 @@ npm run test:e2e           # Run E2E tests against playground
 ```
 
 ### Configuration Options
+
 ```javascript
 await window.tracelog.init({
+  // Session & Sampling
   sessionTimeout: 1800000,
   globalMetadata: { env: 'playground', version: '2.0' },
   sensitiveQueryParams: ['token', 'api_key'],
   samplingRate: 1.0,
-  errorSampling: 1.0
+  errorSampling: 1.0,
+
+  // Event Rate Control
+  pageViewThrottleMs: 1000,        // Throttle rapid navigation (default: 1s)
+  clickThrottleMs: 300,             // Throttle clicks per element (default: 300ms)
+  maxSameEventPerMinute: 60,        // Limit same custom event name (default: 60)
+
+  // Viewport Tracking
+  viewport: {
+    elements: [
+      { selector: '.hero', id: 'hero-section', name: 'Hero Banner' },
+      { selector: '.product-card', name: 'Product Cards' }
+    ],
+    threshold: 0.5,                  // Visibility threshold (50%)
+    minDwellTime: 1000,              // Minimum visible time (1s)
+    cooldownPeriod: 60000,           // Cooldown between triggers (60s)
+    maxTrackedElements: 100          // Maximum tracked elements
+  }
 });
 ```
 
@@ -122,6 +142,15 @@ npm run serve                # Start HTTP server
 ```
 
 ## Key Features
+
+### Intelligent Event Management
+- **Smart throttling**: PAGE_VIEW (1s), CLICK (300ms), VIEWPORT (60s cooldown)
+- **Per-event-name rate limiting**: Prevents infinite loops (60/minute configurable)
+- **Per-session caps**: Limits total events per session with type-specific thresholds
+- **Deduplication**: Fingerprint-based duplicate detection with LRU cache
+- **Dynamic queue flush**: Automatic batching with immediate send at threshold
+- **Web Vitals tracking**: Performance metrics with configurable thresholds
+- **Error monitoring**: Automatic burst detection with cooldown protection
 
 ### Production-First Design
 - Uses only public API (`window.tracelog`)
@@ -179,5 +208,5 @@ npm run docs:setup    # Rebuild library and copy to docs/
 
 ---
 
-**Last Updated**: January 2025
+**Last Updated**: October 2025
 **Compatibility**: Modern browsers (ES6+, Fetch API, LocalStorage)

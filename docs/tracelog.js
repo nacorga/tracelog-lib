@@ -2,6 +2,11 @@ const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
 const DUPLICATE_EVENT_THRESHOLD_MS = 500;
 const EVENT_SENT_INTERVAL_MS = 1e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
+const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
+const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1e3;
+const DEFAULT_CLICK_THROTTLE_MS = 300;
+const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
+const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
@@ -11,7 +16,15 @@ const SCROLL_MIN_EVENT_INTERVAL_MS = 500;
 const MAX_SCROLL_EVENTS_PER_SESSION = 120;
 const DEFAULT_SAMPLING_RATE = 1;
 const RATE_LIMIT_WINDOW_MS = 1e3;
-const MAX_EVENTS_PER_SECOND = 200;
+const MAX_EVENTS_PER_SECOND = 50;
+const MAX_SAME_EVENT_PER_MINUTE = 60;
+const PER_EVENT_RATE_LIMIT_WINDOW_MS = 6e4;
+const MAX_EVENTS_PER_SESSION = 1e3;
+const MAX_CLICKS_PER_SESSION = 500;
+const MAX_PAGE_VIEWS_PER_SESSION = 100;
+const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
+const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
+const BATCH_SIZE_THRESHOLD = 50;
 const MAX_PENDING_EVENTS_BUFFER = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
@@ -27,6 +40,10 @@ const MAX_STRING_LENGTH_IN_ARRAY = 500;
 const MAX_ARRAY_LENGTH = 100;
 const MAX_OBJECT_DEPTH = 3;
 const PRECISION_TWO_DECIMALS = 2;
+const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024;
+const MAX_FINGERPRINTS = 1e3;
+const FINGERPRINT_CLEANUP_MULTIPLIER = 10;
+const MAX_FINGERPRINTS_HARD_LIMIT = 2e3;
 const HTML_DATA_ATTR_PREFIX = "data-tlog";
 const INTERACTIVE_SELECTORS = [
   "button",
@@ -68,7 +85,6 @@ const DEFAULT_SENSITIVE_QUERY_PARAMS = [
   "key",
   "session",
   "reset",
-  "email",
   "password",
   "api_key",
   "apikey",
@@ -91,7 +107,19 @@ const VALIDATION_MESSAGES = {
   INVALID_GLOBAL_METADATA: "Global metadata must be an object",
   INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings",
   INVALID_PRIMARY_SCROLL_SELECTOR: "Primary scroll selector must be a non-empty string",
-  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: "Invalid CSS selector syntax for primaryScrollSelector"
+  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: "Invalid CSS selector syntax for primaryScrollSelector",
+  INVALID_PAGE_VIEW_THROTTLE: "Page view throttle must be a non-negative number",
+  INVALID_CLICK_THROTTLE: "Click throttle must be a non-negative number",
+  INVALID_MAX_SAME_EVENT_PER_MINUTE: "Max same event per minute must be a positive number",
+  INVALID_VIEWPORT_CONFIG: "Viewport config must be an object",
+  INVALID_VIEWPORT_ELEMENTS: "Viewport elements must be a non-empty array",
+  INVALID_VIEWPORT_ELEMENT: "Each viewport element must have a valid selector string",
+  INVALID_VIEWPORT_ELEMENT_ID: "Viewport element id must be a non-empty string",
+  INVALID_VIEWPORT_ELEMENT_NAME: "Viewport element name must be a non-empty string",
+  INVALID_VIEWPORT_THRESHOLD: "Viewport threshold must be a number between 0 and 1",
+  INVALID_VIEWPORT_MIN_DWELL_TIME: "Viewport minDwellTime must be a non-negative number",
+  INVALID_VIEWPORT_COOLDOWN_PERIOD: "Viewport cooldownPeriod must be a non-negative number",
+  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number"
 };
 const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
@@ -137,6 +165,7 @@ var EventType = /* @__PURE__ */ ((EventType2) => {
   EventType2["CUSTOM"] = "custom";
   EventType2["WEB_VITALS"] = "web_vitals";
   EventType2["ERROR"] = "error";
+  EventType2["VIEWPORT_VISIBLE"] = "viewport_visible";
   return EventType2;
 })(EventType || {});
 var ScrollDirection = /* @__PURE__ */ ((ScrollDirection2) => {
@@ -286,6 +315,9 @@ const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
 const MAX_TRACKED_ERRORS = 50;
 const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
 const DEFAULT_ERROR_SAMPLING_RATE = 1;
+const ERROR_BURST_WINDOW_MS = 1e3;
+const ERROR_BURST_THRESHOLD = 10;
+const ERROR_BURST_BACKOFF_MS = 5e3;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const QA_MODE_PARAM = "tlog_mode";
 const QA_MODE_VALUE = "qa";
@@ -554,6 +586,75 @@ const validateAppConfig = (config) => {
       }
     }
   }
+  if (config.pageViewThrottleMs !== void 0) {
+    if (typeof config.pageViewThrottleMs !== "number" || config.pageViewThrottleMs < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PAGE_VIEW_THROTTLE, "config");
+    }
+  }
+  if (config.clickThrottleMs !== void 0) {
+    if (typeof config.clickThrottleMs !== "number" || config.clickThrottleMs < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_CLICK_THROTTLE, "config");
+    }
+  }
+  if (config.maxSameEventPerMinute !== void 0) {
+    if (typeof config.maxSameEventPerMinute !== "number" || config.maxSameEventPerMinute <= 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_MAX_SAME_EVENT_PER_MINUTE, "config");
+    }
+  }
+  if (config.viewport !== void 0) {
+    validateViewportConfig(config.viewport);
+  }
+};
+const validateViewportConfig = (viewport) => {
+  if (typeof viewport !== "object" || viewport === null) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_CONFIG, "config");
+  }
+  if (!viewport.elements || !Array.isArray(viewport.elements)) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, "config");
+  }
+  if (viewport.elements.length === 0) {
+    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, "config");
+  }
+  const uniqueSelectors = /* @__PURE__ */ new Set();
+  for (const element of viewport.elements) {
+    if (!element.selector || typeof element.selector !== "string" || !element.selector.trim()) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT, "config");
+    }
+    const normalizedSelector = element.selector.trim();
+    if (uniqueSelectors.has(normalizedSelector)) {
+      throw new AppConfigValidationError(
+        `Duplicate viewport selector found: "${normalizedSelector}". Each selector should appear only once.`,
+        "config"
+      );
+    }
+    uniqueSelectors.add(normalizedSelector);
+    if (element.id !== void 0 && (typeof element.id !== "string" || !element.id.trim())) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_ID, "config");
+    }
+    if (element.name !== void 0 && (typeof element.name !== "string" || !element.name.trim())) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_NAME, "config");
+    }
+  }
+  if (viewport.threshold !== void 0) {
+    if (typeof viewport.threshold !== "number" || viewport.threshold < 0 || viewport.threshold > 1) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_THRESHOLD, "config");
+    }
+  }
+  if (viewport.minDwellTime !== void 0) {
+    if (typeof viewport.minDwellTime !== "number" || viewport.minDwellTime < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MIN_DWELL_TIME, "config");
+    }
+  }
+  if (viewport.cooldownPeriod !== void 0) {
+    if (typeof viewport.cooldownPeriod !== "number" || viewport.cooldownPeriod < 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_COOLDOWN_PERIOD, "config");
+    }
+  }
+  if (viewport.maxTrackedElements !== void 0) {
+    if (typeof viewport.maxTrackedElements !== "number" || viewport.maxTrackedElements <= 0) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS, "config");
+    }
+  }
 };
 const validateIntegrations = (integrations) => {
   if (!integrations) {
@@ -601,12 +702,24 @@ const validateAndNormalizeConfig = (config) => {
     globalMetadata: config?.globalMetadata ?? {},
     sensitiveQueryParams: config?.sensitiveQueryParams ?? [],
     errorSampling: config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE,
-    samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE
+    samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
+    pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
+    clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
+    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
       ...normalizedConfig.integrations.custom,
       allowHttp: normalizedConfig.integrations.custom.allowHttp ?? false
+    };
+  }
+  if (normalizedConfig.viewport) {
+    normalizedConfig.viewport = {
+      ...normalizedConfig.viewport,
+      threshold: normalizedConfig.viewport.threshold ?? 0.5,
+      minDwellTime: normalizedConfig.viewport.minDwellTime ?? DEFAULT_VISIBILITY_TIMEOUT_MS,
+      cooldownPeriod: normalizedConfig.viewport.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
+      maxTrackedElements: normalizedConfig.viewport.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS
     };
   }
   return normalizedConfig;
@@ -997,6 +1110,17 @@ class SenderManager extends StateManager {
   }
   sendQueueSyncInternal(body) {
     const { url, payload } = this.prepareRequest(body);
+    if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
+      log("warn", "Payload exceeds sendBeacon limit, persisting for recovery", {
+        data: {
+          size: payload.length,
+          limit: MAX_BEACON_PAYLOAD_SIZE,
+          events: body.events.length
+        }
+      });
+      this.persistEvents(body);
+      return false;
+    }
     const blob = new Blob([payload], { type: "application/json" });
     if (!this.isSendBeaconAvailable()) {
       log("warn", "sendBeacon not available, persisting events for recovery");
@@ -1106,11 +1230,21 @@ class EventManager extends StateManager {
   emitter;
   eventsQueue = [];
   pendingEventsBuffer = [];
-  lastEventFingerprint = null;
-  lastEventTime = 0;
+  recentEventFingerprints = /* @__PURE__ */ new Map();
+  // Phase 3: LRU cache
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
+  perEventRateLimits = /* @__PURE__ */ new Map();
+  sessionEventCounts = {
+    total: 0,
+    [EventType.CLICK]: 0,
+    [EventType.PAGE_VIEW]: 0,
+    [EventType.CUSTOM]: 0,
+    [EventType.VIEWPORT_VISIBLE]: 0,
+    [EventType.SCROLL]: 0
+  };
+  lastSessionId = null;
   constructor(storeManager, googleAnalytics = null, emitter = null) {
     super();
     this.googleAnalytics = googleAnalytics;
@@ -1142,13 +1276,15 @@ class EventManager extends StateManager {
     custom_event,
     web_vitals,
     error_data,
-    session_end_reason
+    session_end_reason,
+    viewport_data
   }) {
     if (!type) {
       log("error", "Event type is required - event will be ignored");
       return;
     }
-    if (!this.get("sessionId")) {
+    const currentSessionId = this.get("sessionId");
+    if (!currentSessionId) {
       if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
         this.pendingEventsBuffer.shift();
         log("warn", "Pending events buffer full - dropping oldest event", {
@@ -1164,15 +1300,59 @@ class EventManager extends StateManager {
         custom_event,
         web_vitals,
         error_data,
-        session_end_reason
+        session_end_reason,
+        viewport_data
       });
       return;
+    }
+    if (this.lastSessionId !== currentSessionId) {
+      this.lastSessionId = currentSessionId;
+      this.sessionEventCounts = {
+        total: 0,
+        [EventType.CLICK]: 0,
+        [EventType.PAGE_VIEW]: 0,
+        [EventType.CUSTOM]: 0,
+        [EventType.VIEWPORT_VISIBLE]: 0,
+        [EventType.SCROLL]: 0
+      };
     }
     const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
     if (!isCriticalEvent && !this.checkRateLimit()) {
       return;
     }
     const eventType = type;
+    if (!isCriticalEvent) {
+      if (this.sessionEventCounts.total >= MAX_EVENTS_PER_SESSION) {
+        log("warn", "Session event limit reached", {
+          data: {
+            type: eventType,
+            total: this.sessionEventCounts.total,
+            limit: MAX_EVENTS_PER_SESSION
+          }
+        });
+        return;
+      }
+      const typeLimit = this.getTypeLimitForEvent(eventType);
+      if (typeLimit) {
+        const currentCount = this.sessionEventCounts[eventType];
+        if (currentCount !== void 0 && currentCount >= typeLimit) {
+          log("warn", "Session event type limit reached", {
+            data: {
+              type: eventType,
+              count: currentCount,
+              limit: typeLimit
+            }
+          });
+          return;
+        }
+      }
+    }
+    if (eventType === EventType.CUSTOM && custom_event?.name) {
+      const maxSameEventPerMinute = this.get("config")?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
+      if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
+        return;
+      }
+    }
     const isSessionStart = eventType === EventType.SESSION_START;
     const currentPageUrl = page_url || this.get("pageUrl");
     const payload = this.buildEventPayload({
@@ -1184,20 +1364,21 @@ class EventManager extends StateManager {
       custom_event,
       web_vitals,
       error_data,
-      session_end_reason
+      session_end_reason,
+      viewport_data
     });
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
     }
     if (isSessionStart) {
-      const currentSessionId = this.get("sessionId");
-      if (!currentSessionId) {
+      const currentSessionId2 = this.get("sessionId");
+      if (!currentSessionId2) {
         log("error", "Session start event requires sessionId - event will be ignored");
         return;
       }
       if (this.get("hasStartSession")) {
         log("warn", "Duplicate session_start detected", {
-          data: { sessionId: currentSessionId }
+          data: { sessionId: currentSessionId2 }
         });
         return;
       }
@@ -1215,6 +1396,12 @@ class EventManager extends StateManager {
       return;
     }
     this.addToQueue(payload);
+    if (!isCriticalEvent) {
+      this.sessionEventCounts.total++;
+      if (this.sessionEventCounts[eventType] !== void 0) {
+        this.sessionEventCounts[eventType]++;
+      }
+    }
   }
   stop() {
     if (this.sendIntervalId) {
@@ -1223,10 +1410,19 @@ class EventManager extends StateManager {
     }
     this.eventsQueue = [];
     this.pendingEventsBuffer = [];
-    this.lastEventFingerprint = null;
-    this.lastEventTime = 0;
+    this.recentEventFingerprints.clear();
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
+    this.perEventRateLimits.clear();
+    this.sessionEventCounts = {
+      total: 0,
+      [EventType.CLICK]: 0,
+      [EventType.PAGE_VIEW]: 0,
+      [EventType.CUSTOM]: 0,
+      [EventType.VIEWPORT_VISIBLE]: 0,
+      [EventType.SCROLL]: 0
+    };
+    this.lastSessionId = null;
     this.dataSender.stop();
   }
   async flushImmediately() {
@@ -1345,19 +1541,54 @@ class EventManager extends StateManager {
       ...data.web_vitals && { web_vitals: data.web_vitals },
       ...data.error_data && { error_data: data.error_data },
       ...data.session_end_reason && { session_end_reason: data.session_end_reason },
+      ...data.viewport_data && { viewport_data: data.viewport_data },
       ...isSessionStart && getUTMParameters() && { utm: getUTMParameters() }
     };
     return payload;
   }
+  /**
+   * Checks if event is a duplicate using LRU cache (Phase 3)
+   * Tracks last 1000 event fingerprints instead of just the last one
+   */
   isDuplicateEvent(event2) {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event2);
-    if (this.lastEventFingerprint === fingerprint && now - this.lastEventTime < DUPLICATE_EVENT_THRESHOLD_MS) {
+    const lastSeen = this.recentEventFingerprints.get(fingerprint);
+    if (lastSeen && now - lastSeen < DUPLICATE_EVENT_THRESHOLD_MS) {
+      this.recentEventFingerprints.set(fingerprint, now);
       return true;
     }
-    this.lastEventFingerprint = fingerprint;
-    this.lastEventTime = now;
+    this.recentEventFingerprints.set(fingerprint, now);
+    if (this.recentEventFingerprints.size > MAX_FINGERPRINTS) {
+      this.pruneOldFingerprints();
+    }
+    if (this.recentEventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
+      this.recentEventFingerprints.clear();
+      this.recentEventFingerprints.set(fingerprint, now);
+      log("warn", "Event fingerprint cache exceeded hard limit, cleared", {
+        data: { hardLimit: MAX_FINGERPRINTS_HARD_LIMIT }
+      });
+    }
     return false;
+  }
+  /**
+   * Prunes old fingerprints from LRU cache (Phase 3)
+   * Removes entries older than 10x the duplicate threshold (5 seconds)
+   */
+  pruneOldFingerprints() {
+    const now = Date.now();
+    const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
+    for (const [fingerprint, timestamp] of this.recentEventFingerprints.entries()) {
+      if (now - timestamp > cutoff) {
+        this.recentEventFingerprints.delete(fingerprint);
+      }
+    }
+    log("debug", "Pruned old event fingerprints", {
+      data: {
+        remaining: this.recentEventFingerprints.size,
+        cutoffMs: cutoff
+      }
+    });
   }
   createEventFingerprint(event2) {
     let fingerprint = `${event2.type}_${event2.page_url}`;
@@ -1403,6 +1634,9 @@ class EventManager extends StateManager {
     if (!this.sendIntervalId) {
       this.startSendInterval();
     }
+    if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
+      void this.sendEventsQueue();
+    }
     this.handleGoogleAnalyticsIntegration(event2);
   }
   startSendInterval() {
@@ -1435,6 +1669,41 @@ class EventManager extends StateManager {
     }
     this.rateLimitCounter++;
     return true;
+  }
+  /**
+   * Checks per-event-name rate limiting to prevent infinite loops in user code
+   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
+   */
+  checkPerEventRateLimit(eventName, maxSameEventPerMinute) {
+    const now = Date.now();
+    const timestamps = this.perEventRateLimits.get(eventName) ?? [];
+    const validTimestamps = timestamps.filter((ts) => now - ts < PER_EVENT_RATE_LIMIT_WINDOW_MS);
+    if (validTimestamps.length >= maxSameEventPerMinute) {
+      log("warn", "Per-event rate limit exceeded for custom event", {
+        data: {
+          eventName,
+          limit: maxSameEventPerMinute,
+          window: `${PER_EVENT_RATE_LIMIT_WINDOW_MS / 1e3}s`
+        }
+      });
+      return false;
+    }
+    validTimestamps.push(now);
+    this.perEventRateLimits.set(eventName, validTimestamps);
+    return true;
+  }
+  /**
+   * Gets the per-session limit for a specific event type (Phase 3)
+   */
+  getTypeLimitForEvent(type) {
+    const limits = {
+      [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
+      [EventType.PAGE_VIEW]: MAX_PAGE_VIEWS_PER_SESSION,
+      [EventType.CUSTOM]: MAX_CUSTOM_EVENTS_PER_SESSION,
+      [EventType.VIEWPORT_VISIBLE]: MAX_VIEWPORT_EVENTS_PER_SESSION,
+      [EventType.SCROLL]: MAX_SCROLL_EVENTS_PER_SESSION
+    };
+    return limits[type] ?? null;
   }
   removeProcessedEvents(eventIds) {
     const eventIdSet = new Set(eventIds);
@@ -1809,11 +2078,13 @@ class SessionHandler extends StateManager {
     this.set("hasStartSession", false);
   }
 }
+const PAGE_VIEW_THROTTLE_MS = 1e3;
 class PageViewHandler extends StateManager {
   eventManager;
   onTrack;
   originalPushState;
   originalReplaceState;
+  lastPageViewTime = 0;
   constructor(eventManager, onTrack) {
     super();
     this.eventManager = eventManager;
@@ -1835,6 +2106,7 @@ class PageViewHandler extends StateManager {
     if (this.originalReplaceState) {
       window.history.replaceState = this.originalReplaceState;
     }
+    this.lastPageViewTime = 0;
   }
   patchHistory(method) {
     const original = window.history[method];
@@ -1854,6 +2126,12 @@ class PageViewHandler extends StateManager {
     if (this.get("pageUrl") === normalizedUrl) {
       return;
     }
+    const now = Date.now();
+    const throttleMs = this.get("config").pageViewThrottleMs ?? PAGE_VIEW_THROTTLE_MS;
+    if (now - this.lastPageViewTime < throttleMs) {
+      return;
+    }
+    this.lastPageViewTime = now;
     this.onTrack();
     const fromUrl = this.get("pageUrl");
     this.set("pageUrl", normalizedUrl);
@@ -1868,6 +2146,7 @@ class PageViewHandler extends StateManager {
   trackInitialPageView() {
     const normalizedUrl = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
     const pageViewData = this.extractPageViewData();
+    this.lastPageViewTime = Date.now();
     this.eventManager.track({
       type: EventType.PAGE_VIEW,
       page_url: normalizedUrl,
@@ -1895,6 +2174,7 @@ class PageViewHandler extends StateManager {
 class ClickHandler extends StateManager {
   eventManager;
   clickHandler;
+  lastClickTimes = /* @__PURE__ */ new Map();
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -1912,6 +2192,10 @@ class ClickHandler extends StateManager {
         return;
       }
       if (this.shouldIgnoreElement(clickedElement)) {
+        return;
+      }
+      const clickThrottleMs = this.get("config")?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS;
+      if (clickThrottleMs > 0 && !this.checkClickThrottle(clickedElement, clickThrottleMs)) {
         return;
       }
       const trackingElement = this.findTrackingElement(clickedElement);
@@ -1943,20 +2227,78 @@ class ClickHandler extends StateManager {
       window.removeEventListener("click", this.clickHandler, true);
       this.clickHandler = void 0;
     }
+    this.lastClickTimes.clear();
   }
   shouldIgnoreElement(element) {
-    if (element.hasAttribute("data-tlog-ignore")) {
+    if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
       return true;
     }
-    const parent = element.closest("[data-tlog-ignore]");
+    const parent = element.closest(`[${HTML_DATA_ATTR_PREFIX}-ignore]`);
     return parent !== null;
+  }
+  /**
+   * Checks per-element click throttling to prevent double-clicks and rapid spam
+   * Returns true if the click should be tracked, false if throttled
+   */
+  checkClickThrottle(element, throttleMs) {
+    const signature = this.getElementSignature(element);
+    const now = Date.now();
+    const lastClickTime = this.lastClickTimes.get(signature);
+    if (lastClickTime !== void 0 && now - lastClickTime < throttleMs) {
+      log("debug", "ClickHandler: Click suppressed by throttle", {
+        data: {
+          signature,
+          throttleRemaining: throttleMs - (now - lastClickTime)
+        }
+      });
+      return false;
+    }
+    this.lastClickTimes.set(signature, now);
+    return true;
+  }
+  /**
+   * Creates a stable signature for an element to track throttling
+   * Priority: id > data-testid > data-tlog-name > DOM path
+   */
+  getElementSignature(element) {
+    if (element.id) {
+      return `#${element.id}`;
+    }
+    const testId = element.getAttribute("data-testid");
+    if (testId) {
+      return `[data-testid="${testId}"]`;
+    }
+    const tlogName = element.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
+    if (tlogName) {
+      return `[${HTML_DATA_ATTR_PREFIX}-name="${tlogName}"]`;
+    }
+    return this.getElementPath(element);
+  }
+  /**
+   * Generates a DOM path for an element (e.g., "body>div>button")
+   */
+  getElementPath(element) {
+    const path = [];
+    let current = element;
+    while (current && current !== document.body) {
+      let selector = current.tagName.toLowerCase();
+      if (current.className) {
+        const firstClass = current.className.split(" ")[0];
+        if (firstClass) {
+          selector += `.${firstClass}`;
+        }
+      }
+      path.unshift(selector);
+      current = current.parentElement;
+    }
+    return path.join(">") || "unknown";
   }
   findTrackingElement(element) {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-name`)) {
       return element;
     }
     const closest = element.closest(`[${HTML_DATA_ATTR_PREFIX}-name]`);
-    return closest || void 0;
+    return closest;
   }
   getRelevantClickElement(element) {
     for (const selector of INTERACTIVE_SELECTORS) {
@@ -2382,6 +2724,249 @@ class ScrollHandler extends StateManager {
     container.isPrimary = isPrimary;
   }
 }
+class ViewportHandler extends StateManager {
+  eventManager;
+  trackedElements = /* @__PURE__ */ new Map();
+  observer = null;
+  mutationObserver = null;
+  mutationDebounceTimer = null;
+  config = null;
+  constructor(eventManager) {
+    super();
+    this.eventManager = eventManager;
+  }
+  /**
+   * Starts tracking viewport visibility for configured elements
+   */
+  startTracking() {
+    const config = this.get("config");
+    this.config = config.viewport ?? null;
+    if (!this.config?.elements || this.config.elements.length === 0) {
+      return;
+    }
+    const threshold = this.config.threshold ?? 0.5;
+    const minDwellTime = this.config.minDwellTime ?? 1e3;
+    if (threshold < 0 || threshold > 1) {
+      log("warn", "ViewportHandler: Invalid threshold, must be between 0 and 1");
+      return;
+    }
+    if (minDwellTime < 0) {
+      log("warn", "ViewportHandler: Invalid minDwellTime, must be non-negative");
+      return;
+    }
+    if (typeof IntersectionObserver === "undefined") {
+      log("warn", "ViewportHandler: IntersectionObserver not supported in this browser");
+      return;
+    }
+    this.observer = new IntersectionObserver(this.handleIntersection, {
+      threshold
+    });
+    this.observeElements();
+    this.setupMutationObserver();
+  }
+  /**
+   * Stops tracking and cleans up resources
+   */
+  stopTracking() {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+      this.mutationObserver = null;
+    }
+    if (this.mutationDebounceTimer !== null) {
+      window.clearTimeout(this.mutationDebounceTimer);
+      this.mutationDebounceTimer = null;
+    }
+    for (const tracked of this.trackedElements.values()) {
+      if (tracked.timeoutId !== null) {
+        window.clearTimeout(tracked.timeoutId);
+      }
+    }
+    this.trackedElements.clear();
+  }
+  /**
+   * Query and observe all elements matching configured elements
+   */
+  observeElements() {
+    if (!this.config || !this.observer) return;
+    const maxTrackedElements = this.config.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS;
+    let totalTracked = this.trackedElements.size;
+    for (const elementConfig of this.config.elements) {
+      try {
+        const elements = document.querySelectorAll(elementConfig.selector);
+        for (const element of Array.from(elements)) {
+          if (totalTracked >= maxTrackedElements) {
+            log("warn", "ViewportHandler: Maximum tracked elements reached", {
+              data: {
+                limit: maxTrackedElements,
+                selector: elementConfig.selector,
+                message: "Some elements will not be tracked. Consider more specific selectors."
+              }
+            });
+            return;
+          }
+          if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
+            continue;
+          }
+          if (this.trackedElements.has(element)) {
+            continue;
+          }
+          this.trackedElements.set(element, {
+            element,
+            selector: elementConfig.selector,
+            id: elementConfig.id,
+            name: elementConfig.name,
+            startTime: null,
+            timeoutId: null,
+            lastFiredTime: null
+          });
+          this.observer?.observe(element);
+          totalTracked++;
+        }
+      } catch (error) {
+        log("warn", `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
+      }
+    }
+    log("debug", "ViewportHandler: Elements tracked", {
+      data: { count: totalTracked, limit: maxTrackedElements }
+    });
+  }
+  /**
+   * Handles intersection events from IntersectionObserver
+   */
+  handleIntersection = (entries) => {
+    if (!this.config) return;
+    const minDwellTime = this.config.minDwellTime ?? 1e3;
+    for (const entry of entries) {
+      const tracked = this.trackedElements.get(entry.target);
+      if (!tracked) continue;
+      if (entry.isIntersecting) {
+        if (tracked.startTime === null) {
+          tracked.startTime = performance.now();
+          tracked.timeoutId = window.setTimeout(() => {
+            this.fireViewportEvent(tracked, entry.intersectionRatio);
+          }, minDwellTime);
+        }
+      } else {
+        if (tracked.startTime !== null) {
+          if (tracked.timeoutId !== null) {
+            window.clearTimeout(tracked.timeoutId);
+            tracked.timeoutId = null;
+          }
+          tracked.startTime = null;
+        }
+      }
+    }
+  };
+  /**
+   * Fires a viewport visible event
+   */
+  fireViewportEvent(tracked, visibilityRatio) {
+    if (tracked.startTime === null) return;
+    const dwellTime = Math.round(performance.now() - tracked.startTime);
+    if (tracked.element.hasAttribute("data-tlog-ignore")) {
+      return;
+    }
+    const cooldownPeriod = this.config?.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD;
+    const now = Date.now();
+    if (tracked.lastFiredTime !== null && now - tracked.lastFiredTime < cooldownPeriod) {
+      log("debug", "ViewportHandler: Event suppressed by cooldown period", {
+        data: {
+          selector: tracked.selector,
+          cooldownRemaining: cooldownPeriod - (now - tracked.lastFiredTime)
+        }
+      });
+      tracked.startTime = null;
+      tracked.timeoutId = null;
+      return;
+    }
+    const eventData = {
+      selector: tracked.selector,
+      dwellTime,
+      visibilityRatio
+    };
+    if (tracked.id !== void 0) {
+      eventData.id = tracked.id;
+    }
+    if (tracked.name !== void 0) {
+      eventData.name = tracked.name;
+    }
+    this.eventManager.track({
+      type: EventType.VIEWPORT_VISIBLE,
+      viewport_data: eventData
+    });
+    tracked.startTime = null;
+    tracked.timeoutId = null;
+    tracked.lastFiredTime = now;
+  }
+  /**
+   * Sets up MutationObserver to detect dynamically added elements
+   */
+  setupMutationObserver() {
+    if (!this.config || typeof MutationObserver === "undefined") {
+      return;
+    }
+    if (!document.body) {
+      log("warn", "ViewportHandler: document.body not available, skipping MutationObserver setup");
+      return;
+    }
+    this.mutationObserver = new MutationObserver((mutations) => {
+      let hasAddedNodes = false;
+      for (const mutation of mutations) {
+        if (mutation.type === "childList") {
+          if (mutation.addedNodes.length > 0) {
+            hasAddedNodes = true;
+          }
+          if (mutation.removedNodes.length > 0) {
+            this.cleanupRemovedNodes(mutation.removedNodes);
+          }
+        }
+      }
+      if (hasAddedNodes) {
+        if (this.mutationDebounceTimer !== null) {
+          window.clearTimeout(this.mutationDebounceTimer);
+        }
+        this.mutationDebounceTimer = window.setTimeout(() => {
+          this.observeElements();
+          this.mutationDebounceTimer = null;
+        }, 100);
+      }
+    });
+    this.mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+  /**
+   * Cleans up tracking for removed DOM nodes
+   */
+  cleanupRemovedNodes(removedNodes) {
+    removedNodes.forEach((node) => {
+      if (node.nodeType !== 1) return;
+      const element = node;
+      const tracked = this.trackedElements.get(element);
+      if (tracked) {
+        if (tracked.timeoutId !== null) {
+          window.clearTimeout(tracked.timeoutId);
+        }
+        this.observer?.unobserve(element);
+        this.trackedElements.delete(element);
+      }
+      const descendants = Array.from(this.trackedElements.keys()).filter((el) => element.contains(el));
+      descendants.forEach((el) => {
+        const descendantTracked = this.trackedElements.get(el);
+        if (descendantTracked && descendantTracked.timeoutId !== null) {
+          window.clearTimeout(descendantTracked.timeoutId);
+        }
+        this.observer?.unobserve(el);
+        this.trackedElements.delete(el);
+      });
+    });
+  }
+}
 class GoogleAnalyticsIntegration extends StateManager {
   isInitialized = false;
   async initialize() {
@@ -2783,11 +3368,11 @@ class PerformanceHandler extends StateManager {
         const value = Number(metric.value.toFixed(PRECISION_TWO_DECIMALS));
         this.sendVital({ type, value });
       };
-      onLCP(report("LCP"));
-      onCLS(report("CLS"));
-      onFCP(report("FCP"));
-      onTTFB(report("TTFB"));
-      onINP(report("INP"));
+      onLCP(report("LCP"), { reportAllChanges: false });
+      onCLS(report("CLS"), { reportAllChanges: false });
+      onFCP(report("FCP"), { reportAllChanges: false });
+      onTTFB(report("TTFB"), { reportAllChanges: false });
+      onINP(report("INP"), { reportAllChanges: false });
     } catch (error) {
       log("warn", "Failed to load web-vitals library, using fallback", { error });
       this.observeWebVitalsFallback();
@@ -2926,6 +3511,9 @@ class PerformanceHandler extends StateManager {
 class ErrorHandler extends StateManager {
   eventManager;
   recentErrors = /* @__PURE__ */ new Map();
+  errorBurstCounter = 0;
+  burstWindowStart = 0;
+  burstBackoffUntil = 0;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -2938,8 +3526,34 @@ class ErrorHandler extends StateManager {
     window.removeEventListener("error", this.handleError);
     window.removeEventListener("unhandledrejection", this.handleRejection);
     this.recentErrors.clear();
+    this.errorBurstCounter = 0;
+    this.burstWindowStart = 0;
+    this.burstBackoffUntil = 0;
   }
+  /**
+   * Checks sampling rate and burst detection (Phase 3)
+   * Returns false if in cooldown period after burst detection
+   */
   shouldSample() {
+    const now = Date.now();
+    if (now < this.burstBackoffUntil) {
+      return false;
+    }
+    if (now - this.burstWindowStart > ERROR_BURST_WINDOW_MS) {
+      this.errorBurstCounter = 0;
+      this.burstWindowStart = now;
+    }
+    this.errorBurstCounter++;
+    if (this.errorBurstCounter > ERROR_BURST_THRESHOLD) {
+      this.burstBackoffUntil = now + ERROR_BURST_BACKOFF_MS;
+      log("warn", "Error burst detected - entering cooldown", {
+        data: {
+          errorsInWindow: this.errorBurstCounter,
+          cooldownMs: ERROR_BURST_BACKOFF_MS
+        }
+      });
+      return false;
+    }
     const config = this.get("config");
     const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
@@ -3176,6 +3790,10 @@ class App extends StateManager {
     });
     this.handlers.error = new ErrorHandler(this.managers.event);
     this.handlers.error.startTracking();
+    if (this.get("config").viewport) {
+      this.handlers.viewport = new ViewportHandler(this.managers.event);
+      this.handlers.viewport.startTracking();
+    }
   }
 }
 class TestBridge extends App {
@@ -3540,9 +4158,9 @@ const tracelog = {
   destroy
 };
 var e, o = -1, a = function(e3) {
-  addEventListener("pageshow", function(n) {
+  addEventListener("pageshow", (function(n) {
     n.persisted && (o = n.timeStamp, e3(n));
-  }, true);
+  }), true);
 }, c = function() {
   var e3 = self.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
   if (e3 && e3.responseStart > 0 && e3.responseStart < performance.now()) return e3;
@@ -3556,11 +4174,11 @@ var e, o = -1, a = function(e3) {
 }, s = function(e3, n, t) {
   try {
     if (PerformanceObserver.supportedEntryTypes.includes(e3)) {
-      var r = new PerformanceObserver(function(e4) {
-        Promise.resolve().then(function() {
+      var r = new PerformanceObserver((function(e4) {
+        Promise.resolve().then((function() {
           n(e4.getEntries());
-        });
-      });
+        }));
+      }));
       return r.observe(Object.assign({ type: e3, buffered: true }, t || {})), r;
     }
   } catch (e4) {
@@ -3568,20 +4186,20 @@ var e, o = -1, a = function(e3) {
 }, d = function(e3, n, t, r) {
   var i, o2;
   return function(a2) {
-    n.value >= 0 && (a2 || r) && ((o2 = n.value - (i || 0)) || void 0 === i) && (i = n.value, n.delta = o2, n.rating = function(e4, n2) {
+    n.value >= 0 && (a2 || r) && ((o2 = n.value - (i || 0)) || void 0 === i) && (i = n.value, n.delta = o2, n.rating = (function(e4, n2) {
       return e4 > n2[1] ? "poor" : e4 > n2[0] ? "needs-improvement" : "good";
-    }(n.value, t), e3(n));
+    })(n.value, t), e3(n));
   };
 }, l = function(e3) {
-  requestAnimationFrame(function() {
-    return requestAnimationFrame(function() {
+  requestAnimationFrame((function() {
+    return requestAnimationFrame((function() {
       return e3();
-    });
-  });
+    }));
+  }));
 }, p = function(e3) {
-  document.addEventListener("visibilitychange", function() {
+  document.addEventListener("visibilitychange", (function() {
     "hidden" === document.visibilityState && e3();
-  });
+  }));
 }, v = function(e3) {
   var n = false;
   return function() {
@@ -3596,52 +4214,52 @@ var e, o = -1, a = function(e3) {
 }, T = function() {
   removeEventListener("visibilitychange", g, true), removeEventListener("prerenderingchange", g, true);
 }, E = function() {
-  return m < 0 && (m = h(), y(), a(function() {
-    setTimeout(function() {
+  return m < 0 && (m = h(), y(), a((function() {
+    setTimeout((function() {
       m = h(), y();
-    }, 0);
-  })), { get firstHiddenTime() {
+    }), 0);
+  }))), { get firstHiddenTime() {
     return m;
   } };
 }, C = function(e3) {
-  document.prerendering ? addEventListener("prerenderingchange", function() {
+  document.prerendering ? addEventListener("prerenderingchange", (function() {
     return e3();
-  }, true) : e3();
+  }), true) : e3();
 }, b = [1800, 3e3], S = function(e3, n) {
-  n = n || {}, C(function() {
-    var t, r = E(), i = f("FCP"), o2 = s("paint", function(e4) {
-      e4.forEach(function(e5) {
+  n = n || {}, C((function() {
+    var t, r = E(), i = f("FCP"), o2 = s("paint", (function(e4) {
+      e4.forEach((function(e5) {
         "first-contentful-paint" === e5.name && (o2.disconnect(), e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries.push(e5), t(true)));
-      });
-    });
-    o2 && (t = d(e3, i, b, n.reportAllChanges), a(function(r2) {
-      i = f("FCP"), t = d(e3, i, b, n.reportAllChanges), l(function() {
-        i.value = performance.now() - r2.timeStamp, t(true);
-      });
+      }));
     }));
-  });
+    o2 && (t = d(e3, i, b, n.reportAllChanges), a((function(r2) {
+      i = f("FCP"), t = d(e3, i, b, n.reportAllChanges), l((function() {
+        i.value = performance.now() - r2.timeStamp, t(true);
+      }));
+    })));
+  }));
 }, L = [0.1, 0.25], w = function(e3, n) {
-  n = n || {}, S(v(function() {
+  n = n || {}, S(v((function() {
     var t, r = f("CLS", 0), i = 0, o2 = [], c2 = function(e4) {
-      e4.forEach(function(e5) {
+      e4.forEach((function(e5) {
         if (!e5.hadRecentInput) {
           var n2 = o2[0], t2 = o2[o2.length - 1];
           i && e5.startTime - t2.startTime < 1e3 && e5.startTime - n2.startTime < 5e3 ? (i += e5.value, o2.push(e5)) : (i = e5.value, o2 = [e5]);
         }
-      }), i > r.value && (r.value = i, r.entries = o2, t());
+      })), i > r.value && (r.value = i, r.entries = o2, t());
     }, u2 = s("layout-shift", c2);
-    u2 && (t = d(e3, r, L, n.reportAllChanges), p(function() {
+    u2 && (t = d(e3, r, L, n.reportAllChanges), p((function() {
       c2(u2.takeRecords()), t(true);
-    }), a(function() {
-      i = 0, r = f("CLS", 0), t = d(e3, r, L, n.reportAllChanges), l(function() {
+    })), a((function() {
+      i = 0, r = f("CLS", 0), t = d(e3, r, L, n.reportAllChanges), l((function() {
         return t();
-      });
-    }), setTimeout(t, 0));
-  }));
+      }));
+    })), setTimeout(t, 0));
+  })));
 }, A = 0, I = 1 / 0, P = 0, M = function(e3) {
-  e3.forEach(function(e4) {
+  e3.forEach((function(e4) {
     e4.interactionId && (I = Math.min(I, e4.interactionId), P = Math.max(P, e4.interactionId), A = P ? (P - I) / 7 + 1 : 0);
-  });
+  }));
 }, k = function() {
   return e ? A : performance.interactionCount || 0;
 }, F = function() {
@@ -3650,9 +4268,9 @@ var e, o = -1, a = function(e3) {
   var e3 = Math.min(D.length - 1, Math.floor((k() - R) / 50));
   return D[e3];
 }, H = [], q = function(e3) {
-  if (H.forEach(function(n2) {
+  if (H.forEach((function(n2) {
     return n2(e3);
-  }), e3.interactionId || "first-input" === e3.entryType) {
+  })), e3.interactionId || "first-input" === e3.entryType) {
     var n = D[D.length - 1], t = x.get(e3.interactionId);
     if (t || D.length < 10 || e3.duration > n.latency) {
       if (t) e3.duration > t.latency ? (t.entries = [e3], t.latency = e3.duration) : e3.duration === t.latency && e3.startTime === t.entries[0].startTime && t.entries.push(e3);
@@ -3660,71 +4278,71 @@ var e, o = -1, a = function(e3) {
         var r = { id: e3.interactionId, latency: e3.duration, entries: [e3] };
         x.set(r.id, r), D.push(r);
       }
-      D.sort(function(e4, n2) {
+      D.sort((function(e4, n2) {
         return n2.latency - e4.latency;
-      }), D.length > 10 && D.splice(10).forEach(function(e4) {
+      })), D.length > 10 && D.splice(10).forEach((function(e4) {
         return x.delete(e4.id);
-      });
+      }));
     }
   }
 }, O = function(e3) {
   var n = self.requestIdleCallback || self.setTimeout, t = -1;
   return e3 = v(e3), "hidden" === document.visibilityState ? e3() : (t = n(e3), p(e3)), t;
 }, N = [200, 500], j = function(e3, n) {
-  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (n = n || {}, C(function() {
+  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (n = n || {}, C((function() {
     var t;
     F();
     var r, i = f("INP"), o2 = function(e4) {
-      O(function() {
+      O((function() {
         e4.forEach(q);
         var n2 = B();
         n2 && n2.latency !== i.value && (i.value = n2.latency, i.entries = n2.entries, r());
-      });
+      }));
     }, c2 = s("event", o2, { durationThreshold: null !== (t = n.durationThreshold) && void 0 !== t ? t : 40 });
-    r = d(e3, i, N, n.reportAllChanges), c2 && (c2.observe({ type: "first-input", buffered: true }), p(function() {
+    r = d(e3, i, N, n.reportAllChanges), c2 && (c2.observe({ type: "first-input", buffered: true }), p((function() {
       o2(c2.takeRecords()), r(true);
-    }), a(function() {
+    })), a((function() {
       R = k(), D.length = 0, x.clear(), i = f("INP"), r = d(e3, i, N, n.reportAllChanges);
-    }));
-  }));
+    })));
+  })));
 }, _ = [2500, 4e3], z = {}, G = function(e3, n) {
-  n = n || {}, C(function() {
+  n = n || {}, C((function() {
     var t, r = E(), i = f("LCP"), o2 = function(e4) {
-      n.reportAllChanges || (e4 = e4.slice(-1)), e4.forEach(function(e5) {
+      n.reportAllChanges || (e4 = e4.slice(-1)), e4.forEach((function(e5) {
         e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries = [e5], t());
-      });
+      }));
     }, c2 = s("largest-contentful-paint", o2);
     if (c2) {
       t = d(e3, i, _, n.reportAllChanges);
-      var m2 = v(function() {
+      var m2 = v((function() {
         z[i.id] || (o2(c2.takeRecords()), c2.disconnect(), z[i.id] = true, t(true));
-      });
-      ["keydown", "click"].forEach(function(e4) {
-        addEventListener(e4, function() {
+      }));
+      ["keydown", "click"].forEach((function(e4) {
+        addEventListener(e4, (function() {
           return O(m2);
-        }, { once: true, capture: true });
-      }), p(m2), a(function(r2) {
-        i = f("LCP"), t = d(e3, i, _, n.reportAllChanges), l(function() {
+        }), { once: true, capture: true });
+      })), p(m2), a((function(r2) {
+        i = f("LCP"), t = d(e3, i, _, n.reportAllChanges), l((function() {
           i.value = performance.now() - r2.timeStamp, z[i.id] = true, t(true);
-        });
-      });
+        }));
+      }));
     }
-  });
+  }));
 }, J = [800, 1800], K = function e2(n) {
-  document.prerendering ? C(function() {
+  document.prerendering ? C((function() {
     return e2(n);
-  }) : "complete" !== document.readyState ? addEventListener("load", function() {
+  })) : "complete" !== document.readyState ? addEventListener("load", (function() {
     return e2(n);
-  }, true) : setTimeout(n, 0);
+  }), true) : setTimeout(n, 0);
 }, Q = function(e3, n) {
   n = n || {};
   var t = f("TTFB"), r = d(e3, t, J, n.reportAllChanges);
-  K(function() {
+  K((function() {
     var i = c();
-    i && (t.value = Math.max(i.responseStart - u(), 0), t.entries = [i], r(true), a(function() {
+    i && (t.value = Math.max(i.responseStart - u(), 0), t.entries = [i], r(true), a((function() {
       t = f("TTFB", 0), (r = d(e3, t, J, n.reportAllChanges))(true);
-    }));
-  });
+    })));
+  }));
 };
 const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,

@@ -3,6 +3,8 @@
 - TypeScript 5.7 strict mode enforced
 - Single dependency: `web-vitals` (runtime)
 - Dual ESM/CJS support required
+- **Documentation Updates Required**: When making code changes, ALWAYS update relevant documentation files (*.md) to keep them synchronized with code changes
+- **Documentation Style**: Describe the CURRENT STATE only. Never reference version numbers, improvements, reductions, or use phrases like "New in vX.X.X", "⚡ vX.X.X", "Optimized", "Improved", or percentage improvements (e.g., "75% reduction"). Documentation should be timeless and factual about how things work NOW.
 
 # Acceptance Criteria
 

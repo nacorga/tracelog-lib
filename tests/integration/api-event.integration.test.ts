@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as TraceLog from '../../src/api';
+import { EmitterEvent, EventType } from '../../src/types';
 
 describe('API Integration - Event Method', () => {
   beforeEach(async () => {
@@ -53,88 +54,201 @@ describe('API Integration - Event Method', () => {
       await TraceLog.init();
     });
 
-    it('should send custom event with name only', () => {
-      expect(() => {
-        TraceLog.event('button-click');
-      }).not.toThrow();
+    it('should emit custom event with name only', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('button-click');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event).toBeDefined();
+      expect(event.custom_event.name).toBe('button-click');
+      expect(event.custom_event.metadata).toBeUndefined();
     });
 
-    it('should send custom event with string metadata', () => {
-      expect(() => {
-        TraceLog.event('purchase', { productId: 'abc123' });
-      }).not.toThrow();
+    it('should emit custom event with string metadata', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('purchase', { productId: 'abc123' });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('purchase');
+      expect(event.custom_event.metadata).toEqual({ productId: 'abc123' });
     });
 
-    it('should send custom event with number metadata', () => {
-      expect(() => {
-        TraceLog.event('purchase', { amount: 99.99 });
-      }).not.toThrow();
+    it('should emit custom event with number metadata', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('purchase', { amount: 99.99 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('purchase');
+      expect(event.custom_event.metadata).toEqual({ amount: 99.99 });
     });
 
-    it('should send custom event with boolean metadata', () => {
-      expect(() => {
-        TraceLog.event('feature-toggle', { enabled: true });
-      }).not.toThrow();
+    it('should emit custom event with boolean metadata', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('feature-toggle', { enabled: true });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('feature-toggle');
+      expect(event.custom_event.metadata).toEqual({ enabled: true });
     });
 
-    it('should send custom event with mixed metadata types', () => {
-      expect(() => {
-        TraceLog.event('checkout', {
-          productId: 'abc123',
-          quantity: 2,
-          isPremium: true,
-        });
-      }).not.toThrow();
+    it('should emit custom event with mixed metadata types', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('checkout', {
+        productId: 'abc123',
+        quantity: 2,
+        isPremium: true,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('checkout');
+      expect(event.custom_event.metadata).toEqual({
+        productId: 'abc123',
+        quantity: 2,
+        isPremium: true,
+      });
     });
 
-    it('should accept custom event with nested metadata one level deep', async () => {
+    it('should emit custom event with nested metadata one level deep', async () => {
       // Re-initialize with QA mode enabled
       TraceLog.destroy();
       sessionStorage.setItem('tlog:qa_mode', 'true');
       await TraceLog.init();
 
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
       // Nested objects one level deep are allowed
-      expect(() => {
-        TraceLog.event('order-placed', {
-          order: {
-            total: 199.99,
-          },
-        } as any);
-      }).not.toThrow();
+      TraceLog.event('order-placed', {
+        order: {
+          total: 199.99,
+        },
+      } as any);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('order-placed');
+      expect(event.custom_event.metadata).toEqual({
+        order: { total: 199.99 },
+      });
 
       sessionStorage.removeItem('tlog:qa_mode');
     });
 
-    it('should send custom event with array metadata', () => {
-      expect(() => {
-        TraceLog.event('cart-update', {
-          items: ['item1', 'item2', 'item3'],
-        });
-      }).not.toThrow();
+    it('should emit custom event with array metadata', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('cart-update', {
+        items: ['item1', 'item2', 'item3'],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('cart-update');
+      expect(event.custom_event.metadata).toEqual({
+        items: ['item1', 'item2', 'item3'],
+      });
     });
 
-    it('should send custom event with empty metadata object', () => {
-      expect(() => {
-        TraceLog.event('page-loaded', {});
-      }).not.toThrow();
+    it('should emit custom event with empty metadata object', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('page-loaded', {});
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('page-loaded');
+      expect(event.custom_event.metadata).toEqual({});
     });
 
-    it('should send custom event with null metadata values', () => {
-      expect(() => {
-        TraceLog.event('user-action', {
-          userId: null,
-          action: 'logout',
-        } as any);
-      }).not.toThrow();
+    it('should emit custom event with null metadata values', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('user-action', {
+        userId: null,
+        action: 'logout',
+      } as any);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('user-action');
+      expect(event.custom_event.metadata).toMatchObject({
+        action: 'logout',
+      });
     });
 
-    it('should send custom event with undefined metadata values', () => {
-      expect(() => {
-        TraceLog.event('form-submit', {
-          email: 'user@example.com',
-          phone: undefined,
-        } as any);
-      }).not.toThrow();
+    it('should emit custom event with undefined metadata values', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('form-submit', {
+        email: 'user@example.com',
+        phone: undefined,
+      } as any);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(eventCallback).toHaveBeenCalled();
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('form-submit');
+      expect(event.custom_event.metadata).toMatchObject({
+        email: 'user@example.com',
+      });
     });
   });
 
@@ -143,41 +257,77 @@ describe('API Integration - Event Method', () => {
       await TraceLog.init();
     });
 
-    it('should accept event name with letters only', () => {
-      expect(() => {
-        TraceLog.event('buttonclick');
-      }).not.toThrow();
+    it('should emit event with letters only in name', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('buttonclick');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('buttonclick');
     });
 
-    it('should accept event name with hyphens', () => {
-      expect(() => {
-        TraceLog.event('button-click');
-      }).not.toThrow();
+    it('should emit event with hyphens in name', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('button-click');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('button-click');
     });
 
-    it('should accept event name with underscores', () => {
-      expect(() => {
-        TraceLog.event('button_click');
-      }).not.toThrow();
+    it('should emit event with underscores in name', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('button_click');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('button_click');
     });
 
-    it('should accept event name with numbers', () => {
-      expect(() => {
-        TraceLog.event('event123');
-      }).not.toThrow();
+    it('should emit event with numbers in name', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('event123');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('event123');
     });
 
-    it('should accept event name with dots', () => {
-      expect(() => {
-        TraceLog.event('user.action.click');
-      }).not.toThrow();
+    it('should emit event with dots in name', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('user.action.click');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('user.action.click');
     });
 
-    it('should accept long event names', () => {
+    it('should emit event with long name', async () => {
       const longName = 'a'.repeat(100);
-      expect(() => {
-        TraceLog.event(longName);
-      }).not.toThrow();
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event(longName);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe(longName);
     });
   });
 
@@ -186,28 +336,59 @@ describe('API Integration - Event Method', () => {
       await TraceLog.init();
     });
 
-    it('should send multiple events in sequence', () => {
-      expect(() => {
-        TraceLog.event('event1');
-        TraceLog.event('event2');
-        TraceLog.event('event3');
-      }).not.toThrow();
+    it('should emit multiple events in sequence', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('event1');
+      TraceLog.event('event2');
+      TraceLog.event('event3');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBe(3);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('event1');
+      expect(customEvents[1]?.[0]?.custom_event?.name).toBe('event2');
+      expect(customEvents[2]?.[0]?.custom_event?.name).toBe('event3');
     });
 
-    it('should send same event multiple times', () => {
-      expect(() => {
-        TraceLog.event('repeat-event');
-        TraceLog.event('repeat-event');
-        TraceLog.event('repeat-event');
-      }).not.toThrow();
+    it('should emit same event multiple times with small delays', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('repeat-event', { count: 1 });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      TraceLog.event('repeat-event', { count: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      TraceLog.event('repeat-event', { count: 3 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThanOrEqual(1);
+      // Verify that the event name is correct
+      customEvents.forEach((call) => {
+        expect(call[0]!.custom_event!.name).toBe('repeat-event');
+        expect(call[0]!.custom_event!.metadata).toHaveProperty('count');
+      });
     });
 
-    it('should send events with different metadata', () => {
-      expect(() => {
-        TraceLog.event('action', { type: 'click' });
-        TraceLog.event('action', { type: 'scroll' });
-        TraceLog.event('action', { type: 'hover' });
-      }).not.toThrow();
+    it('should emit events with different metadata', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('action-click', { type: 'click' });
+      TraceLog.event('action-scroll', { type: 'scroll' });
+      TraceLog.event('action-hover', { type: 'hover' });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBe(3);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('action-click');
+      expect(customEvents[0]?.[0]?.custom_event?.metadata).toEqual({ type: 'click' });
+      expect(customEvents[1]?.[0]?.custom_event?.name).toBe('action-scroll');
+      expect(customEvents[1]?.[0]?.custom_event?.metadata).toEqual({ type: 'scroll' });
+      expect(customEvents[2]?.[0]?.custom_event?.name).toBe('action-hover');
+      expect(customEvents[2]?.[0]?.custom_event?.metadata).toEqual({ type: 'hover' });
     });
   });
 
@@ -258,14 +439,25 @@ describe('API Integration - Event Method', () => {
       sessionStorage.removeItem('tlog:qa_mode');
     });
 
-    it('should handle special characters in metadata values', () => {
-      expect(() => {
-        TraceLog.event('special-chars', {
-          text: '<script>alert("test")</script>',
-          emoji: '🚀 ✨ 🎉',
-          unicode: '你好世界',
-        });
-      }).not.toThrow();
+    it('should emit event with special characters in metadata values', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('special-chars', {
+        text: '<script>alert("test")</script>',
+        emoji: '🚀 ✨ 🎉',
+        unicode: '你好世界',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const metadata = customEvents[0]?.[0]?.custom_event?.metadata;
+      // Script tags are sanitized (security feature)
+      expect(metadata.text).toBeDefined();
+      expect(metadata.emoji).toBe('🚀 ✨ 🎉');
+      expect(metadata.unicode).toBe('你好世界');
     });
 
     it('should reject metadata with circular references', async () => {
@@ -285,16 +477,28 @@ describe('API Integration - Event Method', () => {
       sessionStorage.removeItem('tlog:qa_mode');
     });
 
-    it('should handle reasonable-sized flat metadata', () => {
-      expect(() => {
-        TraceLog.event('reasonable-event', {
-          key1: 'value1',
-          key2: 'value2',
-          key3: 123,
-          key4: true,
-          key5: ['a', 'b', 'c'],
-        });
-      }).not.toThrow();
+    it('should emit event with reasonable-sized flat metadata', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('reasonable-event', {
+        key1: 'value1',
+        key2: 'value2',
+        key3: 123,
+        key4: true,
+        key5: ['a', 'b', 'c'],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.metadata).toEqual({
+        key1: 'value1',
+        key2: 'value2',
+        key3: 123,
+        key4: true,
+        key5: ['a', 'b', 'c'],
+      });
     });
   });
 
@@ -309,7 +513,7 @@ describe('API Integration - Event Method', () => {
       }).toThrow('TraceLog not initialized');
     });
 
-    it('should work again after re-initialization', async () => {
+    it('should emit events again after re-initialization', async () => {
       // First lifecycle
       await TraceLog.init();
       TraceLog.event('event1');
@@ -318,14 +522,21 @@ describe('API Integration - Event Method', () => {
 
       // Second lifecycle
       await TraceLog.init();
-      expect(() => {
-        TraceLog.event('event2');
-      }).not.toThrow();
+
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('event2');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('event2');
     });
   });
 
   describe('Integration with Global Metadata', () => {
-    it('should send events with global metadata applied', async () => {
+    it('should emit events with global metadata applied', async () => {
       await TraceLog.init({
         globalMetadata: {
           appVersion: '1.0.0',
@@ -333,13 +544,27 @@ describe('API Integration - Event Method', () => {
         },
       });
 
-      // Event should include both event metadata and global metadata
-      expect(() => {
-        TraceLog.event('user-action', {
-          action: 'click',
-          target: 'button',
-        });
-      }).not.toThrow();
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('user-action', {
+        action: 'click',
+        target: 'button',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+
+      const event = customEvents[0]![0];
+      expect(event.custom_event.name).toBe('user-action');
+      expect(event.custom_event.metadata).toEqual({
+        action: 'click',
+        target: 'button',
+      });
+      // Global metadata is accessible via the event
+      expect(event).toHaveProperty('timestamp');
+      expect(event).toHaveProperty('type');
     });
   });
 
@@ -361,18 +586,28 @@ describe('API Integration - Event Method', () => {
       sessionStorage.removeItem('tlog:qa_mode');
     });
 
-    it('should accept whitespace-only event name (current behavior)', () => {
-      // Library currently accepts whitespace-only names
-      expect(() => {
-        TraceLog.event('   ');
-      }).not.toThrow();
+    it('should emit event with whitespace-only name', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('   ');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('   ');
     });
 
-    it('should accept event name with only special characters (current behavior)', () => {
-      // Library currently accepts special character-only names
-      expect(() => {
-        TraceLog.event('!!!');
-      }).not.toThrow();
+    it('should emit event with special characters only in name', async () => {
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      TraceLog.event('!!!');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
+      expect(customEvents.length).toBeGreaterThan(0);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('!!!');
     });
   });
 });

@@ -5,6 +5,18 @@ import {
   RATE_LIMIT_WINDOW_MS,
   MAX_EVENTS_PER_SECOND,
   MAX_PENDING_EVENTS_BUFFER,
+  BATCH_SIZE_THRESHOLD,
+  MAX_SAME_EVENT_PER_MINUTE,
+  PER_EVENT_RATE_LIMIT_WINDOW_MS,
+  MAX_EVENTS_PER_SESSION,
+  MAX_CLICKS_PER_SESSION,
+  MAX_PAGE_VIEWS_PER_SESSION,
+  MAX_CUSTOM_EVENTS_PER_SESSION,
+  MAX_VIEWPORT_EVENTS_PER_SESSION,
+  MAX_SCROLL_EVENTS_PER_SESSION,
+  MAX_FINGERPRINTS,
+  FINGERPRINT_CLEANUP_MULTIPLIER,
+  MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
 import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
@@ -20,11 +32,23 @@ export class EventManager extends StateManager {
 
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
-  private lastEventFingerprint: string | null = null;
-  private lastEventTime = 0;
+  private readonly recentEventFingerprints = new Map<string, number>(); // Phase 3: LRU cache
   private sendIntervalId: number | null = null;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
+  private readonly perEventRateLimits: Map<string, number[]> = new Map();
+  private sessionEventCounts: {
+    total: number;
+    [key: string]: number;
+  } = {
+    total: 0,
+    [EventType.CLICK]: 0,
+    [EventType.PAGE_VIEW]: 0,
+    [EventType.CUSTOM]: 0,
+    [EventType.VIEWPORT_VISIBLE]: 0,
+    [EventType.SCROLL]: 0,
+  };
+  private lastSessionId: string | null = null;
 
   constructor(
     storeManager: StorageManager,
@@ -66,13 +90,16 @@ export class EventManager extends StateManager {
     web_vitals,
     error_data,
     session_end_reason,
+    viewport_data,
   }: Partial<EventData>): void {
     if (!type) {
       log('error', 'Event type is required - event will be ignored');
       return;
     }
 
-    if (!this.get('sessionId')) {
+    const currentSessionId = this.get('sessionId');
+
+    if (!currentSessionId) {
       if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
         this.pendingEventsBuffer.shift();
         log('warn', 'Pending events buffer full - dropping oldest event', {
@@ -90,9 +117,23 @@ export class EventManager extends StateManager {
         web_vitals,
         error_data,
         session_end_reason,
+        viewport_data,
       });
 
       return;
+    }
+
+    // Reset session counters if session ID changed (Phase 3)
+    if (this.lastSessionId !== currentSessionId) {
+      this.lastSessionId = currentSessionId;
+      this.sessionEventCounts = {
+        total: 0,
+        [EventType.CLICK]: 0,
+        [EventType.PAGE_VIEW]: 0,
+        [EventType.CUSTOM]: 0,
+        [EventType.VIEWPORT_VISIBLE]: 0,
+        [EventType.SCROLL]: 0,
+      };
     }
 
     const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
@@ -101,6 +142,45 @@ export class EventManager extends StateManager {
     }
 
     const eventType = type as EventType;
+
+    // Per-session event caps (Phase 3) - skip for critical events
+    if (!isCriticalEvent) {
+      // Check total session limit
+      if (this.sessionEventCounts.total >= MAX_EVENTS_PER_SESSION) {
+        log('warn', 'Session event limit reached', {
+          data: {
+            type: eventType,
+            total: this.sessionEventCounts.total,
+            limit: MAX_EVENTS_PER_SESSION,
+          },
+        });
+        return;
+      }
+
+      // Check type-specific limits
+      const typeLimit = this.getTypeLimitForEvent(eventType);
+      if (typeLimit) {
+        const currentCount = this.sessionEventCounts[eventType];
+        if (currentCount !== undefined && currentCount >= typeLimit) {
+          log('warn', 'Session event type limit reached', {
+            data: {
+              type: eventType,
+              count: currentCount,
+              limit: typeLimit,
+            },
+          });
+          return;
+        }
+      }
+    }
+
+    // Per-event-name rate limiting for CUSTOM events to prevent infinite loops
+    if (eventType === EventType.CUSTOM && custom_event?.name) {
+      const maxSameEventPerMinute = this.get('config')?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
+      if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
+        return;
+      }
+    }
     const isSessionStart = eventType === EventType.SESSION_START;
 
     const currentPageUrl = (page_url as string) || this.get('pageUrl');
@@ -114,6 +194,7 @@ export class EventManager extends StateManager {
       web_vitals,
       error_data,
       session_end_reason,
+      viewport_data,
     });
 
     if (!isCriticalEvent && !this.shouldSample()) {
@@ -155,6 +236,14 @@ export class EventManager extends StateManager {
     }
 
     this.addToQueue(payload);
+
+    // Increment session counters (Phase 3) - only for non-critical events
+    if (!isCriticalEvent) {
+      this.sessionEventCounts.total++;
+      if (this.sessionEventCounts[eventType] !== undefined) {
+        this.sessionEventCounts[eventType]++;
+      }
+    }
   }
 
   stop(): void {
@@ -165,10 +254,19 @@ export class EventManager extends StateManager {
 
     this.eventsQueue = [];
     this.pendingEventsBuffer = [];
-    this.lastEventFingerprint = null;
-    this.lastEventTime = 0;
+    this.recentEventFingerprints.clear();
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
+    this.perEventRateLimits.clear();
+    this.sessionEventCounts = {
+      total: 0,
+      [EventType.CLICK]: 0,
+      [EventType.PAGE_VIEW]: 0,
+      [EventType.CUSTOM]: 0,
+      [EventType.VIEWPORT_VISIBLE]: 0,
+      [EventType.SCROLL]: 0,
+    };
+    this.lastSessionId = null;
 
     this.dataSender.stop();
   }
@@ -316,23 +414,69 @@ export class EventManager extends StateManager {
       ...(data.web_vitals && { web_vitals: data.web_vitals }),
       ...(data.error_data && { error_data: data.error_data }),
       ...(data.session_end_reason && { session_end_reason: data.session_end_reason }),
+      ...(data.viewport_data && { viewport_data: data.viewport_data }),
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 
     return payload;
   }
 
+  /**
+   * Checks if event is a duplicate using LRU cache (Phase 3)
+   * Tracks last 1000 event fingerprints instead of just the last one
+   */
   private isDuplicateEvent(event: EventData): boolean {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event);
 
-    if (this.lastEventFingerprint === fingerprint && now - this.lastEventTime < DUPLICATE_EVENT_THRESHOLD_MS) {
-      return true;
+    const lastSeen = this.recentEventFingerprints.get(fingerprint);
+
+    // Check if seen recently
+    if (lastSeen && now - lastSeen < DUPLICATE_EVENT_THRESHOLD_MS) {
+      this.recentEventFingerprints.set(fingerprint, now); // Update timestamp
+      return true; // Duplicate
     }
 
-    this.lastEventFingerprint = fingerprint;
-    this.lastEventTime = now;
+    // Add to cache
+    this.recentEventFingerprints.set(fingerprint, now);
+
+    // Cleanup if cache too large (soft limit)
+    if (this.recentEventFingerprints.size > MAX_FINGERPRINTS) {
+      this.pruneOldFingerprints();
+    }
+
+    // Hard limit: aggressive cleanup
+    if (this.recentEventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
+      this.recentEventFingerprints.clear();
+      this.recentEventFingerprints.set(fingerprint, now);
+      log('warn', 'Event fingerprint cache exceeded hard limit, cleared', {
+        data: { hardLimit: MAX_FINGERPRINTS_HARD_LIMIT },
+      });
+    }
+
     return false;
+  }
+
+  /**
+   * Prunes old fingerprints from LRU cache (Phase 3)
+   * Removes entries older than 10x the duplicate threshold (5 seconds)
+   */
+  private pruneOldFingerprints(): void {
+    const now = Date.now();
+    const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER; // 5 seconds
+
+    for (const [fingerprint, timestamp] of this.recentEventFingerprints.entries()) {
+      if (now - timestamp > cutoff) {
+        this.recentEventFingerprints.delete(fingerprint);
+      }
+    }
+
+    log('debug', 'Pruned old event fingerprints', {
+      data: {
+        remaining: this.recentEventFingerprints.size,
+        cutoffMs: cutoff,
+      },
+    });
   }
 
   private createEventFingerprint(event: EventData): string {
@@ -394,6 +538,11 @@ export class EventManager extends StateManager {
       this.startSendInterval();
     }
 
+    // Dynamic flush: Send immediately when batch size threshold is reached
+    if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
+      void this.sendEventsQueue();
+    }
+
     this.handleGoogleAnalyticsIntegration(event);
   }
 
@@ -434,6 +583,49 @@ export class EventManager extends StateManager {
 
     this.rateLimitCounter++;
     return true;
+  }
+
+  /**
+   * Checks per-event-name rate limiting to prevent infinite loops in user code
+   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
+   */
+  private checkPerEventRateLimit(eventName: string, maxSameEventPerMinute: number): boolean {
+    const now = Date.now();
+    const timestamps = this.perEventRateLimits.get(eventName) ?? [];
+
+    // Remove timestamps older than the rate limit window (60 seconds)
+    const validTimestamps = timestamps.filter((ts) => now - ts < PER_EVENT_RATE_LIMIT_WINDOW_MS);
+
+    if (validTimestamps.length >= maxSameEventPerMinute) {
+      log('warn', 'Per-event rate limit exceeded for custom event', {
+        data: {
+          eventName,
+          limit: maxSameEventPerMinute,
+          window: `${PER_EVENT_RATE_LIMIT_WINDOW_MS / 1000}s`,
+        },
+      });
+      return false;
+    }
+
+    // Add current timestamp and update map
+    validTimestamps.push(now);
+    this.perEventRateLimits.set(eventName, validTimestamps);
+
+    return true;
+  }
+
+  /**
+   * Gets the per-session limit for a specific event type (Phase 3)
+   */
+  private getTypeLimitForEvent(type: EventType): number | null {
+    const limits: Partial<Record<EventType, number>> = {
+      [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
+      [EventType.PAGE_VIEW]: MAX_PAGE_VIEWS_PER_SESSION,
+      [EventType.CUSTOM]: MAX_CUSTOM_EVENTS_PER_SESSION,
+      [EventType.VIEWPORT_VISIBLE]: MAX_VIEWPORT_EVENTS_PER_SESSION,
+      [EventType.SCROLL]: MAX_SCROLL_EVENTS_PER_SESSION,
+    };
+    return limits[type] ?? null;
   }
 
   private removeProcessedEvents(eventIds: string[]): void {

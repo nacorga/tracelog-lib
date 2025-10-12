@@ -1,6 +1,7 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { ErrorType, EventType } from '../types';
+import { log } from '../utils';
 import {
   PII_PATTERNS,
   MAX_ERROR_MESSAGE_LENGTH,
@@ -8,6 +9,9 @@ import {
   MAX_TRACKED_ERRORS,
   MAX_TRACKED_ERRORS_HARD_LIMIT,
   DEFAULT_ERROR_SAMPLING_RATE,
+  ERROR_BURST_WINDOW_MS,
+  ERROR_BURST_THRESHOLD,
+  ERROR_BURST_BACKOFF_MS,
 } from '../constants/error.constants';
 
 /**
@@ -17,6 +21,9 @@ import {
 export class ErrorHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly recentErrors = new Map<string, number>();
+  private errorBurstCounter = 0;
+  private burstWindowStart = 0;
+  private burstBackoffUntil = 0;
 
   constructor(eventManager: EventManager) {
     super();
@@ -32,9 +39,45 @@ export class ErrorHandler extends StateManager {
     window.removeEventListener('error', this.handleError);
     window.removeEventListener('unhandledrejection', this.handleRejection);
     this.recentErrors.clear();
+    this.errorBurstCounter = 0;
+    this.burstWindowStart = 0;
+    this.burstBackoffUntil = 0;
   }
 
+  /**
+   * Checks sampling rate and burst detection (Phase 3)
+   * Returns false if in cooldown period after burst detection
+   */
   private shouldSample(): boolean {
+    const now = Date.now();
+
+    // Check if in backoff period (Phase 3)
+    if (now < this.burstBackoffUntil) {
+      return false;
+    }
+
+    // Reset burst counter if window expired
+    if (now - this.burstWindowStart > ERROR_BURST_WINDOW_MS) {
+      this.errorBurstCounter = 0;
+      this.burstWindowStart = now;
+    }
+
+    // Increment burst counter
+    this.errorBurstCounter++;
+
+    // Trigger backoff if burst threshold exceeded
+    if (this.errorBurstCounter > ERROR_BURST_THRESHOLD) {
+      this.burstBackoffUntil = now + ERROR_BURST_BACKOFF_MS;
+      log('warn', 'Error burst detected - entering cooldown', {
+        data: {
+          errorsInWindow: this.errorBurstCounter,
+          cooldownMs: ERROR_BURST_BACKOFF_MS,
+        },
+      });
+      return false;
+    }
+
+    // Normal sampling logic
     const config = this.get('config');
     const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
