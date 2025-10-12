@@ -337,8 +337,8 @@ describe('API Integration - Emitter Methods', () => {
         }
         await TraceLog.init({
           integrations: {
-            custom: { collectApiUrl: 'https://test-api.example.com/collect' }
-          }
+            custom: { collectApiUrl: 'https://test-api.example.com/collect' },
+          },
         });
 
         const queueCallback = vi.fn();
@@ -347,7 +347,7 @@ describe('API Integration - Emitter Methods', () => {
         // Mock fetch to prevent actual network requests
         const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
           ok: true,
-          json: async () => ({}),
+          json: async () => Promise.resolve({}),
         } as Response);
 
         // Create multiple events to trigger queue flush
@@ -358,11 +358,20 @@ describe('API Integration - Emitter Methods', () => {
         // Advance time to trigger interval-based flush (10 seconds)
         await vi.advanceTimersByTimeAsync(10100);
 
+        // Wait for all pending promises and timers to complete
+        await vi.runAllTimersAsync();
+
+        // Switch to real timers briefly to allow async operations to settle
+        vi.useRealTimers();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        vi.useFakeTimers();
+
         // QUEUE callback should have been called
         expect(queueCallback).toHaveBeenCalled();
 
         // Verify queue data structure
-        const queueData = queueCallback.mock.calls[0][0];
+        const queueData = queueCallback.mock.calls[0]?.[0];
+        expect(queueData).toBeDefined();
         expect(queueData).toHaveProperty('events');
         expect(queueData).toHaveProperty('session_id');
         expect(queueData).toHaveProperty('user_id');
@@ -396,8 +405,8 @@ describe('API Integration - Emitter Methods', () => {
         }
         await TraceLog.init({
           integrations: {
-            custom: { collectApiUrl: 'https://test-api.example.com/collect' }
-          }
+            custom: { collectApiUrl: 'https://test-api.example.com/collect' },
+          },
         });
 
         const queueCallback = vi.fn();
@@ -405,7 +414,7 @@ describe('API Integration - Emitter Methods', () => {
 
         const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
           ok: true,
-          json: async () => ({}),
+          json: async () => Promise.resolve({}),
         } as Response);
 
         TraceLog.event('test-event');
@@ -414,7 +423,8 @@ describe('API Integration - Emitter Methods', () => {
 
         expect(queueCallback).toHaveBeenCalled();
 
-        const queueData = queueCallback.mock.calls[0][0];
+        const queueData = queueCallback.mock.calls[0]?.[0];
+        expect(queueData).toBeDefined();
 
         // session_id should be at queue level
         expect(queueData.session_id).toBeDefined();
@@ -447,8 +457,8 @@ describe('API Integration - Emitter Methods', () => {
             environment: 'test',
           },
           integrations: {
-            custom: { collectApiUrl: 'https://test-api.example.com/collect' }
-          }
+            custom: { collectApiUrl: 'https://test-api.example.com/collect' },
+          },
         });
 
         const queueCallback = vi.fn();
@@ -456,7 +466,7 @@ describe('API Integration - Emitter Methods', () => {
 
         const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
           ok: true,
-          json: async () => ({}),
+          json: async () => Promise.resolve({}),
         } as Response);
 
         TraceLog.event('test-event');
@@ -465,7 +475,8 @@ describe('API Integration - Emitter Methods', () => {
 
         expect(queueCallback).toHaveBeenCalled();
 
-        const queueData = queueCallback.mock.calls[0][0];
+        const queueData = queueCallback.mock.calls[0]?.[0];
+        expect(queueData).toBeDefined();
 
         // Global metadata should be in queue data
         expect(queueData.global_metadata).toBeDefined();
@@ -509,8 +520,8 @@ describe('API Integration - Emitter Methods', () => {
         }
         await TraceLog.init({
           integrations: {
-            custom: { collectApiUrl: 'https://test-api.example.com/collect' }
-          }
+            custom: { collectApiUrl: 'https://test-api.example.com/collect' },
+          },
         });
 
         const queueCallback = vi.fn();
@@ -518,7 +529,7 @@ describe('API Integration - Emitter Methods', () => {
 
         const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
           ok: true,
-          json: async () => ({}),
+          json: async () => Promise.resolve({}),
         } as Response);
 
         // Create multiple events rapidly

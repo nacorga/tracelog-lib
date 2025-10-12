@@ -65,7 +65,7 @@ describe('primaryScrollSelector config option', () => {
       if (tracelog.isInitialized()) {
         tracelog.destroy();
       }
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
     document.body.innerHTML = '';

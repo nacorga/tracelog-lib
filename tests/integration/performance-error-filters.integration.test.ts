@@ -4,15 +4,7 @@ import { PerformanceHandler } from '../../src/handlers/performance.handler';
 import { ErrorHandler } from '../../src/handlers/error.handler';
 import { resetGlobalState } from '../../src/managers/state.manager';
 import { Config, EventType } from '../../src/types';
-import {
-  WEB_VITALS_THRESHOLDS,
-  LONG_TASK_THROTTLE_MS,
-} from '../../src/constants/performance.constants';
-import {
-  ERROR_BURST_THRESHOLD,
-  ERROR_BURST_WINDOW_MS,
-  ERROR_BURST_BACKOFF_MS,
-} from '../../src/constants/error.constants';
+import { ERROR_BURST_WINDOW_MS, ERROR_BURST_BACKOFF_MS } from '../../src/constants/error.constants';
 
 class StubEventManager extends EventManager {
   events: EventType[] = [];
@@ -137,23 +129,16 @@ describe('Integration: Performance and Error Filters', () => {
       performance['sendVital']({ type: 'FCP', value: 2000 });
       performance['sendVital']({ type: 'INP', value: 250 });
 
-      expect(manager.events).toEqual([
-        EventType.WEB_VITALS,
-        EventType.WEB_VITALS,
-        EventType.WEB_VITALS,
-      ]);
+      expect(manager.events).toEqual([EventType.WEB_VITALS, EventType.WEB_VITALS, EventType.WEB_VITALS]);
     });
 
     it('should mix filtered and emitted vitals correctly', () => {
       performance['sendVital']({ type: 'LCP', value: 1200 }); // Filtered
       performance['sendVital']({ type: 'FCP', value: 2000 }); // Emitted
-      performance['sendVital']({ type: 'INP', value: 100 });  // Filtered
-      performance['sendVital']({ type: 'CLS', value: 0.3 });  // Emitted
+      performance['sendVital']({ type: 'INP', value: 100 }); // Filtered
+      performance['sendVital']({ type: 'CLS', value: 0.3 }); // Emitted
 
-      expect(manager.events).toEqual([
-        EventType.WEB_VITALS,
-        EventType.WEB_VITALS,
-      ]);
+      expect(manager.events).toEqual([EventType.WEB_VITALS, EventType.WEB_VITALS]);
     });
   });
 
@@ -162,22 +147,18 @@ describe('Integration: Performance and Error Filters', () => {
       errorHandler['set']('config', { errorSampling: 1 });
 
       for (let i = 0; i < 10; i++) {
-        errorHandler['handleError'](
-          new ErrorEvent('error', { message: `Error ${i}` })
-        );
+        errorHandler['handleError'](new ErrorEvent('error', { message: `Error ${i}` }));
       }
 
       // All 10 unique errors should be tracked
-      expect(manager.events.filter(e => e === EventType.ERROR).length).toBe(10);
+      expect(manager.events.filter((e) => e === EventType.ERROR).length).toBe(10);
     });
 
     it('should sample errors at 0% rate', () => {
       errorHandler['set']('config', { errorSampling: 0 });
 
       for (let i = 0; i < 10; i++) {
-        errorHandler['handleError'](
-          new ErrorEvent('error', { message: `Error ${i}` })
-        );
+        errorHandler['handleError'](new ErrorEvent('error', { message: `Error ${i}` }));
       }
 
       // No errors should be tracked
@@ -188,9 +169,9 @@ describe('Integration: Performance and Error Filters', () => {
       errorHandler['set']('config', { errorSampling: 0.5 });
 
       vi.spyOn(Math, 'random')
-        .mockReturnValueOnce(0.3)  // < 0.5, sampled
-        .mockReturnValueOnce(0.7)  // >= 0.5, not sampled
-        .mockReturnValueOnce(0.2)  // < 0.5, sampled
+        .mockReturnValueOnce(0.3) // < 0.5, sampled
+        .mockReturnValueOnce(0.7) // >= 0.5, not sampled
+        .mockReturnValueOnce(0.2) // < 0.5, sampled
         .mockReturnValueOnce(0.9); // >= 0.5, not sampled
 
       errorHandler['handleError'](new ErrorEvent('error', { message: 'Error 1' }));
@@ -199,7 +180,7 @@ describe('Integration: Performance and Error Filters', () => {
       errorHandler['handleError'](new ErrorEvent('error', { message: 'Error 4' }));
 
       // 2 out of 4 should be sampled
-      expect(manager.events.filter(e => e === EventType.ERROR).length).toBe(2);
+      expect(manager.events.filter((e) => e === EventType.ERROR).length).toBe(2);
     });
   });
 
@@ -218,11 +199,7 @@ describe('Integration: Performance and Error Filters', () => {
       errorHandler['handleError'](new ErrorEvent('error', { message: 'Error B' }));
       errorHandler['handleError'](new ErrorEvent('error', { message: 'Error C' }));
 
-      expect(manager.events).toEqual([
-        EventType.ERROR,
-        EventType.ERROR,
-        EventType.ERROR,
-      ]);
+      expect(manager.events).toEqual([EventType.ERROR, EventType.ERROR, EventType.ERROR]);
     });
 
     it('should track first occurrence then deduplicate repeats', () => {
@@ -244,12 +221,10 @@ describe('Integration: Performance and Error Filters', () => {
       try {
         // ERROR_BURST_THRESHOLD is 10, so 9 unique errors should be allowed
         for (let i = 0; i < 9; i++) {
-          errorHandler['handleError'](
-            new ErrorEvent('error', { message: `Error ${i}` })
-          );
+          errorHandler['handleError'](new ErrorEvent('error', { message: `Error ${i}` }));
         }
 
-        expect(manager.events.filter(e => e === EventType.ERROR).length).toBe(9);
+        expect(manager.events.filter((e) => e === EventType.ERROR).length).toBe(9);
       } finally {
         vi.useRealTimers();
       }
@@ -261,18 +236,14 @@ describe('Integration: Performance and Error Filters', () => {
       try {
         // Trigger burst: 10 unique errors in burst window
         for (let i = 0; i < 10; i++) {
-          errorHandler['handleError'](
-            new ErrorEvent('error', { message: `Error ${i}` })
-          );
+          errorHandler['handleError'](new ErrorEvent('error', { message: `Error ${i}` }));
         }
 
         // 11th error should be blocked by burst protection
-        errorHandler['handleError'](
-          new ErrorEvent('error', { message: 'Error 10' })
-        );
+        errorHandler['handleError'](new ErrorEvent('error', { message: 'Error 10' }));
 
         // Only 10 errors tracked (burst protection kicks in)
-        expect(manager.events.filter(e => e === EventType.ERROR).length).toBe(10);
+        expect(manager.events.filter((e) => e === EventType.ERROR).length).toBe(10);
       } finally {
         vi.useRealTimers();
       }
@@ -284,27 +255,21 @@ describe('Integration: Performance and Error Filters', () => {
       try {
         // Trigger burst
         for (let i = 0; i < 10; i++) {
-          errorHandler['handleError'](
-            new ErrorEvent('error', { message: `Burst ${i}` })
-          );
+          errorHandler['handleError'](new ErrorEvent('error', { message: `Burst ${i}` }));
         }
 
         // This should be blocked
-        errorHandler['handleError'](
-          new ErrorEvent('error', { message: 'Blocked' })
-        );
+        errorHandler['handleError'](new ErrorEvent('error', { message: 'Blocked' }));
 
-        expect(manager.events.filter(e => e === EventType.ERROR).length).toBe(10);
+        expect(manager.events.filter((e) => e === EventType.ERROR).length).toBe(10);
 
         // Advance past backoff period (5 seconds)
         vi.advanceTimersByTime(ERROR_BURST_BACKOFF_MS + 100);
 
         // Now errors should be tracked again
-        errorHandler['handleError'](
-          new ErrorEvent('error', { message: 'After backoff' })
-        );
+        errorHandler['handleError'](new ErrorEvent('error', { message: 'After backoff' }));
 
-        expect(manager.events.filter(e => e === EventType.ERROR).length).toBe(11);
+        expect(manager.events.filter((e) => e === EventType.ERROR).length).toBe(11);
       } finally {
         vi.useRealTimers();
       }
@@ -316,9 +281,7 @@ describe('Integration: Performance and Error Filters', () => {
       try {
         // Send 5 errors
         for (let i = 0; i < 5; i++) {
-          errorHandler['handleError'](
-            new ErrorEvent('error', { message: `Error ${i}` })
-          );
+          errorHandler['handleError'](new ErrorEvent('error', { message: `Error ${i}` }));
         }
 
         // Wait longer than burst window (1 second)
@@ -326,13 +289,11 @@ describe('Integration: Performance and Error Filters', () => {
 
         // Send 5 more errors (should not trigger burst since window reset)
         for (let i = 5; i < 10; i++) {
-          errorHandler['handleError'](
-            new ErrorEvent('error', { message: `Error ${i}` })
-          );
+          errorHandler['handleError'](new ErrorEvent('error', { message: `Error ${i}` }));
         }
 
         // All 10 should be tracked (no burst triggered)
-        expect(manager.events.filter(e => e === EventType.ERROR).length).toBe(10);
+        expect(manager.events.filter((e) => e === EventType.ERROR).length).toBe(10);
       } finally {
         vi.useRealTimers();
       }
@@ -344,7 +305,7 @@ describe('Integration: Performance and Error Filters', () => {
       errorHandler['set']('config', { errorSampling: 0.5 });
 
       vi.spyOn(Math, 'random')
-        .mockReturnValueOnce(0.3)  // Sampled
+        .mockReturnValueOnce(0.3) // Sampled
         .mockReturnValueOnce(0.7); // Not sampled
 
       errorHandler['handleError'](new ErrorEvent('error', { message: 'Error A' }));

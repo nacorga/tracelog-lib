@@ -30,7 +30,7 @@ describe('ScrollHandler Integration - Core Behavior', () => {
     id: string,
     scrollHeight: number,
     clientHeight: number,
-    scrollTop: number = 0
+    scrollTop = 0,
   ): HTMLElement {
     const div = document.createElement('div');
     div.id = id;
@@ -209,7 +209,7 @@ describe('ScrollHandler Integration - Core Behavior', () => {
       app = new App();
       await app.init({});
 
-      const trackSpy = vi.spyOn(app['managers'].event, 'track');
+      const trackSpy = vi.spyOn(app['managers'].event as any, 'track') as any;
 
       vi.advanceTimersByTime(1100);
 
@@ -221,17 +221,14 @@ describe('ScrollHandler Integration - Core Behavior', () => {
       }
 
       // Should not have emitted yet (debouncing)
-      expect(trackSpy).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: EventType.SCROLL })
-      );
+      const scrollCallsBefore = (trackSpy.mock.calls as any[]).filter((call) => call[0]?.type === EventType.SCROLL);
+      expect(scrollCallsBefore).toHaveLength(0);
 
       // Wait for debounce to complete
       vi.advanceTimersByTime(SCROLL_DEBOUNCE_TIME_MS);
 
       // Should emit only once with final position
-      const scrollCalls = trackSpy.mock.calls.filter(
-        (call) => call[0]?.type === EventType.SCROLL
-      );
+      const scrollCalls = (trackSpy.mock.calls as any[]).filter((call) => call[0]?.type === EventType.SCROLL);
       expect(scrollCalls).toHaveLength(1);
     });
 
@@ -324,7 +321,7 @@ describe('ScrollHandler Integration - Core Behavior', () => {
       app = new App();
       await app.init({});
 
-      const trackSpy = vi.spyOn(app['managers'].event, 'track');
+      const trackSpy = vi.spyOn(app['managers'].event as any, 'track') as any;
 
       vi.advanceTimersByTime(1100);
 
@@ -337,9 +334,7 @@ describe('ScrollHandler Integration - Core Behavior', () => {
       }
 
       // Should have tracked at most MAX_SCROLL_EVENTS_PER_SESSION events
-      const scrollCalls = trackSpy.mock.calls.filter(
-        (call) => call[0]?.type === EventType.SCROLL
-      );
+      const scrollCalls = (trackSpy.mock.calls as any[]).filter((call) => call[0]?.type === EventType.SCROLL);
 
       // The handler should enforce the limit
       expect(scrollCalls.length).toBeLessThanOrEqual(MAX_SCROLL_EVENTS_PER_SESSION);
@@ -395,8 +390,8 @@ describe('ScrollHandler Integration - Core Behavior', () => {
 
   describe('Primary Container Logic', () => {
     test('should set isPrimary flag for containers', async () => {
-      const container1 = createScrollableContainer('primary-container', 2000, 300);
-      const container2 = createScrollableContainer('secondary-container', 1500, 300);
+      createScrollableContainer('primary-container', 2000, 300);
+      createScrollableContainer('secondary-container', 1500, 300);
 
       app = new App();
       await app.init({});
@@ -416,10 +411,11 @@ describe('ScrollHandler Integration - Core Behavior', () => {
 
       // Verify primary container data structure
       const primary = primaryContainers![0];
+      expect(primary).toBeDefined();
       expect(primary).toHaveProperty('element');
       expect(primary).toHaveProperty('selector');
       expect(primary).toHaveProperty('isPrimary');
-      expect(primary.isPrimary).toBe(true);
+      expect(primary!.isPrimary).toBe(true);
     });
 
     test('should mark first element as primary when window is not scrollable', async () => {

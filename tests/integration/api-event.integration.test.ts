@@ -62,12 +62,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event).toBeDefined();
       expect(event.custom_event.name).toBe('button-click');
       expect(event.custom_event.metadata).toBeUndefined();
@@ -81,12 +79,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('purchase');
       expect(event.custom_event.metadata).toEqual({ productId: 'abc123' });
     });
@@ -99,12 +95,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('purchase');
       expect(event.custom_event.metadata).toEqual({ amount: 99.99 });
     });
@@ -117,12 +111,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('feature-toggle');
       expect(event.custom_event.metadata).toEqual({ enabled: true });
     });
@@ -139,12 +131,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('checkout');
       expect(event.custom_event.metadata).toEqual({
         productId: 'abc123',
@@ -171,12 +161,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('order-placed');
       expect(event.custom_event.metadata).toEqual({
         order: { total: 199.99 },
@@ -195,12 +183,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('cart-update');
       expect(event.custom_event.metadata).toEqual({
         items: ['item1', 'item2', 'item3'],
@@ -215,12 +201,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('page-loaded');
       expect(event.custom_event.metadata).toEqual({});
     });
@@ -236,12 +220,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('user-action');
       expect(event.custom_event.metadata).toMatchObject({
         action: 'logout',
@@ -259,12 +241,10 @@ describe('API Integration - Event Method', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(eventCallback).toHaveBeenCalled();
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('form-submit');
       expect(event.custom_event.metadata).toMatchObject({
         email: 'user@example.com',
@@ -284,11 +264,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('buttonclick');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('buttonclick');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('buttonclick');
     });
 
     it('should emit event with hyphens in name', async () => {
@@ -298,11 +276,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('button-click');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('button-click');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('button-click');
     });
 
     it('should emit event with underscores in name', async () => {
@@ -312,11 +288,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('button_click');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('button_click');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('button_click');
     });
 
     it('should emit event with numbers in name', async () => {
@@ -326,11 +300,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('event123');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('event123');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('event123');
     });
 
     it('should emit event with dots in name', async () => {
@@ -340,11 +312,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('user.action.click');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('user.action.click');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('user.action.click');
     });
 
     it('should emit event with long name', async () => {
@@ -355,11 +325,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event(longName);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe(longName);
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe(longName);
     });
   });
 
@@ -377,13 +345,11 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('event3');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBe(3);
-      expect(customEvents[0][0].custom_event.name).toBe('event1');
-      expect(customEvents[1][0].custom_event.name).toBe('event2');
-      expect(customEvents[2][0].custom_event.name).toBe('event3');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('event1');
+      expect(customEvents[1]?.[0]?.custom_event?.name).toBe('event2');
+      expect(customEvents[2]?.[0]?.custom_event?.name).toBe('event3');
     });
 
     it('should emit same event multiple times with small delays', async () => {
@@ -397,14 +363,12 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('repeat-event', { count: 3 });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThanOrEqual(1);
       // Verify that the event name is correct
       customEvents.forEach((call) => {
-        expect(call[0].custom_event.name).toBe('repeat-event');
-        expect(call[0].custom_event.metadata).toHaveProperty('count');
+        expect(call[0]!.custom_event!.name).toBe('repeat-event');
+        expect(call[0]!.custom_event!.metadata).toHaveProperty('count');
       });
     });
 
@@ -417,16 +381,14 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('action-hover', { type: 'hover' });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBe(3);
-      expect(customEvents[0][0].custom_event.name).toBe('action-click');
-      expect(customEvents[0][0].custom_event.metadata).toEqual({ type: 'click' });
-      expect(customEvents[1][0].custom_event.name).toBe('action-scroll');
-      expect(customEvents[1][0].custom_event.metadata).toEqual({ type: 'scroll' });
-      expect(customEvents[2][0].custom_event.name).toBe('action-hover');
-      expect(customEvents[2][0].custom_event.metadata).toEqual({ type: 'hover' });
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('action-click');
+      expect(customEvents[0]?.[0]?.custom_event?.metadata).toEqual({ type: 'click' });
+      expect(customEvents[1]?.[0]?.custom_event?.name).toBe('action-scroll');
+      expect(customEvents[1]?.[0]?.custom_event?.metadata).toEqual({ type: 'scroll' });
+      expect(customEvents[2]?.[0]?.custom_event?.name).toBe('action-hover');
+      expect(customEvents[2]?.[0]?.custom_event?.metadata).toEqual({ type: 'hover' });
     });
   });
 
@@ -488,12 +450,10 @@ describe('API Integration - Event Method', () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const metadata = customEvents[0][0].custom_event.metadata;
+      const metadata = customEvents[0]?.[0]?.custom_event?.metadata;
       // Script tags are sanitized (security feature)
       expect(metadata.text).toBeDefined();
       expect(metadata.emoji).toBe('🚀 ✨ 🎉');
@@ -530,11 +490,9 @@ describe('API Integration - Event Method', () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.metadata).toEqual({
+      expect(customEvents[0]?.[0]?.custom_event?.metadata).toEqual({
         key1: 'value1',
         key2: 'value2',
         key3: 123,
@@ -571,11 +529,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('event2');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('event2');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('event2');
     });
   });
 
@@ -597,12 +553,10 @@ describe('API Integration - Event Method', () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
 
-      const event = customEvents[0][0];
+      const event = customEvents[0]![0];
       expect(event.custom_event.name).toBe('user-action');
       expect(event.custom_event.metadata).toEqual({
         action: 'click',
@@ -639,11 +593,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('   ');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('   ');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('   ');
     });
 
     it('should emit event with special characters only in name', async () => {
@@ -653,11 +605,9 @@ describe('API Integration - Event Method', () => {
       TraceLog.event('!!!');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const customEvents = eventCallback.mock.calls.filter(
-        call => call[0]?.type === EventType.CUSTOM
-      );
+      const customEvents = eventCallback.mock.calls.filter((call) => call[0]?.type === EventType.CUSTOM);
       expect(customEvents.length).toBeGreaterThan(0);
-      expect(customEvents[0][0].custom_event.name).toBe('!!!');
+      expect(customEvents[0]?.[0]?.custom_event?.name).toBe('!!!');
     });
   });
 });

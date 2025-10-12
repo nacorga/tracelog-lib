@@ -8,24 +8,6 @@
 import type { Page } from '@playwright/test';
 
 /**
- * Wait times used across E2E tests
- */
-export const WAIT_TIMES = {
-  /** Time to wait for bridge initialization */
-  BRIDGE_INIT: 500,
-  /** Time to wait for events to be captured */
-  EVENT_CAPTURE: 500,
-  /** Queue send interval (10s) + buffer */
-  QUEUE_SEND: 12000,
-  /** Standard wait between user actions */
-  USER_ACTION: 300,
-  /** Wait for scroll debounce (250ms) + processing */
-  SCROLL_DEBOUNCE: 600,
-  /** Dynamic container retry window (5 attempts × 200ms + buffer) */
-  CONTAINER_RETRY: 1200,
-} as const;
-
-/**
  * Waits for the TraceLog bridge to be available on the page.
  * This should be called inside page.evaluate() context.
  *
@@ -66,7 +48,9 @@ export const waitForBridgeInternal = async (timeoutMs = 5000): Promise<void> => 
  * });
  * expect(result.success).toBe(true);
  */
-export const initializeTraceLogInternal = async (config: Record<string, unknown> = {}): Promise<{
+export const initializeTraceLogInternal = async (
+  config: Record<string, unknown> = {},
+): Promise<{
   success: boolean;
   error?: string;
   initialized?: boolean;
@@ -145,41 +129,38 @@ export async function initializeTraceLog(
   page: Page,
   config: Record<string, unknown> = {},
 ): Promise<{ success: boolean; error?: string; initialized?: boolean }> {
-  return await page.evaluate(
-    async (cfg) => {
-      // Wait for bridge
-      let elapsed = 0;
-      const interval = 100;
-      const timeout = 5000;
+  return await page.evaluate(async (cfg) => {
+    // Wait for bridge
+    let elapsed = 0;
+    const interval = 100;
+    const timeout = 5000;
 
-      while (!window.__traceLogBridge && elapsed < timeout) {
-        await new Promise((resolve) => setTimeout(resolve, interval));
-        elapsed += interval;
-      }
+    while (!window.__traceLogBridge && elapsed < timeout) {
+      await new Promise((resolve) => setTimeout(resolve, interval));
+      elapsed += interval;
+    }
 
-      if (!window.__traceLogBridge) {
-        return {
-          success: false,
-          error: 'TraceLog bridge not available',
-        };
-      }
+    if (!window.__traceLogBridge) {
+      return {
+        success: false,
+        error: 'TraceLog bridge not available',
+      };
+    }
 
-      // Initialize
-      try {
-        await window.__traceLogBridge.init(cfg);
-        return {
-          success: true,
-          initialized: window.__traceLogBridge.initialized,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: (error as Error).message,
-        };
-      }
-    },
-    config,
-  );
+    // Initialize
+    try {
+      await window.__traceLogBridge.init(cfg);
+      return {
+        success: true,
+        initialized: window.__traceLogBridge.initialized,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: (error as Error).message,
+      };
+    }
+  }, config);
 }
 
 /**
@@ -199,10 +180,7 @@ export async function initializeTraceLog(
  *   return queues;
  * });
  */
-export const waitForQueueEventsInternal = async (
-  queueEvents: any[],
-  timeoutMs = 12000,
-): Promise<void> => {
+export const waitForQueueEventsInternal = async (queueEvents: any[], timeoutMs = 12000): Promise<void> => {
   const startTime = Date.now();
   while (queueEvents.length === 0 && Date.now() - startTime < timeoutMs) {
     await new Promise((resolve) => setTimeout(resolve, 100));

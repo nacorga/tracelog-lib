@@ -244,9 +244,7 @@ describe('API Integration - Destroy Flow', () => {
       button.click();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const clickEventsBefore = eventCallback.mock.calls.filter(
-        call => call[0]?.type === 'click'
-      ).length;
+      const clickEventsBefore = eventCallback.mock.calls.filter((call) => call[0]?.type === 'click').length;
       expect(clickEventsBefore).toBeGreaterThan(0);
 
       // Destroy should remove click listeners

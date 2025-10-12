@@ -126,7 +126,7 @@ test.describe('Basic Click Events', () => {
     expect(capturedEvents.length).toBe(2);
 
     // Verify all are click events with proper structure
-    capturedEvents.forEach((event, index) => {
+    capturedEvents.forEach((event) => {
       expect(event.type).toBe('click');
       expect(event.timestamp).toBeDefined();
       expect(event.click_data).toBeDefined();

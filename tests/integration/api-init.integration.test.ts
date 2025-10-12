@@ -10,6 +10,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as TraceLog from '../../src/api';
 import type { Config } from '../../src/types';
+import { App } from '../../src/app';
+import { getGlobalState } from '../../src/managers/state.manager';
 
 describe('API Integration - Init Flow', () => {
   beforeEach(async () => {
@@ -271,6 +273,115 @@ describe('API Integration - Init Flow', () => {
     it('should handle "fail" project id (persistence test mode)', async () => {
       await TraceLog.init();
       expect(TraceLog.isInitialized()).toBe(true);
+    });
+  });
+
+  describe('State and Handler Verification', () => {
+    let app: App;
+
+    beforeEach(() => {
+      app = new App();
+    });
+
+    afterEach(() => {
+      if (app) {
+        try {
+          app.destroy(true);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    });
+
+    it('should initialize all required managers', async () => {
+      await app.init();
+
+      // Verify managers are initialized
+      const managers = (app as any).managers;
+      expect(managers).toBeDefined();
+      expect(managers.storage).toBeDefined();
+      expect(managers.event).toBeDefined();
+    });
+
+    it('should initialize all required handlers', async () => {
+      await app.init();
+
+      const handlers = (app as any).handlers;
+
+      expect(handlers).toBeDefined();
+      expect(handlers.session).toBeDefined();
+      expect(handlers.pageView).toBeDefined();
+      expect(handlers.click).toBeDefined();
+      expect(handlers.scroll).toBeDefined();
+      expect(handlers.performance).toBeDefined();
+      expect(handlers.error).toBeDefined();
+      // viewport handler is optional, only initialized if config.viewport is provided
+      expect(handlers.viewport).toBeUndefined();
+    });
+
+    it('should initialize viewport handler when viewport config is provided', async () => {
+      await app.init({
+        viewport: {
+          elements: [{ selector: '.test-element' }],
+        },
+      });
+
+      const handlers = (app as any).handlers;
+
+      expect(handlers.viewport).toBeDefined();
+    });
+
+    it('should have properly configured state after init', async () => {
+      const config: Config = {
+        sessionTimeout: 600000,
+        globalMetadata: { testKey: 'testValue' },
+      };
+
+      await app.init(config);
+
+      const state = getGlobalState();
+
+      expect(state).toBeDefined();
+      expect(state.config).toBeDefined();
+      expect(state.config?.sessionTimeout).toBe(600000);
+      expect(state.config?.globalMetadata).toEqual({ testKey: 'testValue' });
+    });
+
+    it('should not initialize Google Analytics when not configured', async () => {
+      await app.init();
+
+      const integrations = (app as any).integrations;
+
+      expect(integrations).toBeDefined();
+      expect(integrations.googleAnalytics).toBeUndefined();
+    });
+
+    it('should cleanup all handlers on destroy', async () => {
+      await app.init();
+
+      const handlersBefore = (app as any).handlers;
+
+      // Verify handlers exist before destroy
+      expect(handlersBefore.session).toBeDefined();
+      expect(handlersBefore.click).toBeDefined();
+
+      app.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // After destroy, app should not be initialized
+      expect(app.initialized).toBe(false);
+    });
+
+    it('should maintain state consistency across multiple init attempts', async () => {
+      await app.init({ sessionTimeout: 500000 });
+
+      // Attempting to init again should not change state
+      await app.init({ sessionTimeout: 700000 });
+
+      const state = getGlobalState();
+
+      // State should remain from first init
+      expect(state.config?.sessionTimeout).toBe(500000);
     });
   });
 });

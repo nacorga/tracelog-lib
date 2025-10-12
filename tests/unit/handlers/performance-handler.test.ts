@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import { PerformanceHandler } from '../../../src/handlers/performance.handler';
 import type { EventManager } from '../../../src/managers/event.manager';
-import { EventType } from '../../../src/types';
+import { EventType, WebVitalType } from '../../../src/types';
 import { WEB_VITALS_THRESHOLDS, LONG_TASK_THROTTLE_MS } from '../../../src/constants';
 
 describe('PerformanceHandler', () => {
@@ -40,14 +40,11 @@ describe('PerformanceHandler', () => {
       ['LONG_TASK', 50, 49, false],
       ['LONG_TASK', 50, 50, false],
       ['LONG_TASK', 50, 51, true],
-    ])(
-      'should handle %s threshold (%dms): value %d -> send=%s',
-      (type, threshold, value, shouldSend) => {
-        const result = handler['shouldSendVital'](type as any, value);
-        expect(result).toBe(shouldSend);
-        expect(WEB_VITALS_THRESHOLDS[type]).toBe(threshold);
-      },
-    );
+    ])('should handle %s threshold (%dms): value %d -> send=%s', (type, threshold, value, shouldSend) => {
+      const result = handler['shouldSendVital'](type as any, value);
+      expect(result).toBe(shouldSend);
+      expect(WEB_VITALS_THRESHOLDS[type as WebVitalType]).toBe(threshold);
+    });
 
     it('should reject invalid values (NaN, Infinity)', () => {
       expect(handler['shouldSendVital']('LCP', NaN)).toBe(false);
@@ -171,7 +168,9 @@ describe('PerformanceHandler', () => {
 
       handler['observers'].push(mockObs as any);
 
-      expect(() => handler.stopTracking()).not.toThrow();
+      expect(() => {
+        handler.stopTracking();
+      }).not.toThrow();
       expect(handler['observers'].length).toBe(0);
     });
 
