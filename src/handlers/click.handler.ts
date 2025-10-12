@@ -182,7 +182,7 @@ export class ClickHandler extends StateManager {
 
     const closest = element.closest(`[${HTML_DATA_ATTR_PREFIX}-name]`) as HTMLElement;
 
-    return closest || undefined;
+    return closest;
   }
 
   private getRelevantClickElement(element: HTMLElement): HTMLElement {
@@ -193,6 +193,7 @@ export class ClickHandler extends StateManager {
         }
 
         const parent = element.closest(selector) as HTMLElement;
+
         if (parent) {
           return parent;
         }
@@ -264,7 +265,6 @@ export class ClickHandler extends StateManager {
   private sanitizeText(text: string): string {
     let sanitized = text;
 
-    // Remove PII patterns (email, phone, credit card, etc.)
     for (const pattern of PII_PATTERNS) {
       const regex = new RegExp(pattern.source, pattern.flags);
       sanitized = sanitized.replace(regex, '[REDACTED]');
@@ -291,7 +291,6 @@ export class ClickHandler extends StateManager {
       finalText = relevantText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
     }
 
-    // Sanitize PII before returning
     return this.sanitizeText(finalText);
   }
 

@@ -9,6 +9,38 @@
 
 
 
+
+## [0.10.0] - 2025-10-12
+
+### ✨ Features
+
+- Implement PII protection and data-tlog-ignore functionality in code ([304322c](../../commit/304322c7f9a70c2e560f49a7b9b36674a7c14663))
+
+### 📚 Documentation
+
+- Update sensitive query parameters in documentation and constants to enhance security measures ([efa04fe](../../commit/efa04fecfcdb1371a7c3122c4d883831647de8e9))
+- Remove outdated security reporting guidelines from SECURITY.md ([6456893](../../commit/64568931f7c3326d953d98933b9d77f2b868bdad))
+
+### 🔧 Other Changes
+
+- Merge pull request #31 from nacorga/release/20251011.1 ([f1f0dda](../../commit/f1f0dda7526a48ea764e28dc815a41af96f4667b))
+- Streamline CI workflow by using npm ci for dependency installation ([0c764e6](../../commit/0c764e605ce4a5ea63f5e7492d1dea6d6a326bd2))
+- Update package-lock.json with dependency version upgrades and removals ([5e7dd76](../../commit/5e7dd76f048e74f82af8b1eb03de61a41cf560b2))
+- Update CI workflow to remove package-lock.json before installing dependencies ([b22a94d](../../commit/b22a94d239f25f0b8ef1857d91818e5854e9b9ee))
+- Clean up CI workflow by removing node_modules before installing dependencies ([f6f6a70](../../commit/f6f6a70822b50a0ef48166ef91aa494ba03e3c74))
+- Update package-lock.json ([423ea66](../../commit/423ea667ca520da6c0e50bee4637ea72399b1907))
+- Merge pull request #30 from nacorga/feature/security ([9df73d8](../../commit/9df73d8026afd2e735bda5d2342b6434e50016b9))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.9.0...v0.10.0
+
+
 ## [0.9.0] - 2025-10-10
 
 ### ✨ Features
