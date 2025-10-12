@@ -1,4 +1,10 @@
-import { QUEUE_KEY, EVENT_EXPIRY_HOURS, REQUEST_TIMEOUT_MS, PERMANENT_ERROR_LOG_THROTTLE_MS } from '../constants';
+import {
+  QUEUE_KEY,
+  EVENT_EXPIRY_HOURS,
+  REQUEST_TIMEOUT_MS,
+  PERMANENT_ERROR_LOG_THROTTLE_MS,
+  MAX_BEACON_PAYLOAD_SIZE,
+} from '../constants';
 import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl, PermanentError } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
@@ -174,6 +180,20 @@ export class SenderManager extends StateManager {
 
   private sendQueueSyncInternal(body: BaseEventsQueueDto): boolean {
     const { url, payload } = this.prepareRequest(body);
+
+    // Check payload size against 64KB browser limit (Phase 3)
+    if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
+      log('warn', 'Payload exceeds sendBeacon limit, persisting for recovery', {
+        data: {
+          size: payload.length,
+          limit: MAX_BEACON_PAYLOAD_SIZE,
+          events: body.events.length,
+        },
+      });
+      this.persistEvents(body);
+      return false;
+    }
+
     const blob = new Blob([payload], { type: 'application/json' });
 
     if (!this.isSendBeaconAvailable()) {

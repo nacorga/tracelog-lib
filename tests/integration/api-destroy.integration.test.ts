@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as TraceLog from '../../src/api';
+import { EmitterEvent } from '../../src/types';
 
 describe('API Integration - Destroy Flow', () => {
   beforeEach(async () => {
@@ -146,46 +147,189 @@ describe('API Integration - Destroy Flow', () => {
   });
 
   describe('Cleanup Verification', () => {
-    it('should cleanup event listeners', async () => {
+    it('should cleanup event listeners and not track events after destroy', async () => {
       await TraceLog.init();
 
-      // Destroy should remove all event listeners
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      // Verify listener works before destroy
+      TraceLog.event('test-before-destroy');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const callCountBefore = eventCallback.mock.calls.length;
+      expect(callCountBefore).toBeGreaterThan(0);
+
+      // Destroy should remove all event listeners (but may emit SESSION_END)
       TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
+      // Get call count after destroy (might include SESSION_END event)
+      const callCountAfterDestroy = eventCallback.mock.calls.length;
+
       // After destroy, DOM events should not trigger tracking
       const clickEvent = new MouseEvent('click', { bubbles: true });
-      document.dispatchEvent(clickEvent);
+      document.body.dispatchEvent(clickEvent);
 
-      // No errors should occur
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Event callback should not be called for new events after destroy
+      expect(eventCallback.mock.calls.length).toBe(callCountAfterDestroy);
       expect(TraceLog.isInitialized()).toBe(false);
     });
 
     it('should cleanup timers and intervals', async () => {
       await TraceLog.init();
 
-      // Destroy should clear all timers
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      // Trigger some events
+      TraceLog.event('test-event');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Destroy should clear all timers/intervals
       TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // No timers should be running after destroy
+      // Get call count after destroy
+      const callCountAfterDestroy = eventCallback.mock.calls.length;
+
+      // Wait a bit longer
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // No new events should be emitted (all timers cleared)
+      expect(eventCallback.mock.calls.length).toBe(callCountAfterDestroy);
       expect(TraceLog.isInitialized()).toBe(false);
     });
 
-    it('should cleanup storage listeners', async () => {
+    it('should cleanup storage listeners and not react to storage changes', async () => {
       await TraceLog.init();
+
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Destroy should remove storage listeners
       TraceLog.destroy();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
+      // Get call count after destroy
+      const callCountAfterDestroy = eventCallback.mock.calls.length;
+
       // Storage changes should not trigger anything
       const storageEvent = new StorageEvent('storage', {
-        key: 'test',
-        newValue: 'value',
+        key: '__tracelog_session',
+        newValue: JSON.stringify({ sessionId: 'new-session', userId: 'test-user' }),
       });
       window.dispatchEvent(storageEvent);
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // No new events should be emitted
+      expect(eventCallback.mock.calls.length).toBe(callCountAfterDestroy);
+      expect(TraceLog.isInitialized()).toBe(false);
+    });
+
+    it('should cleanup click handlers and not track clicks after destroy', async () => {
+      document.body.innerHTML = '<button id="test-button">Click me</button>';
+
+      await TraceLog.init();
+
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      // Click before destroy - should be tracked
+      const button = document.getElementById('test-button')!;
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const clickEventsBefore = eventCallback.mock.calls.filter((call) => call[0]?.type === 'click').length;
+      expect(clickEventsBefore).toBeGreaterThan(0);
+
+      // Destroy should remove click listeners
+      TraceLog.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Get call count after destroy
+      const callCountAfterDestroy = eventCallback.mock.calls.length;
+
+      // Click after destroy - should NOT be tracked
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // No new events should be emitted
+      expect(eventCallback.mock.calls.length).toBe(callCountAfterDestroy);
+      expect(TraceLog.isInitialized()).toBe(false);
+
+      document.body.innerHTML = '';
+    });
+
+    it('should cleanup scroll handlers and not track scrolls after destroy', async () => {
+      document.body.innerHTML = `
+        <div id="scrollable" style="overflow: auto; height: 200px;">
+          <div style="height: 1000px;"></div>
+        </div>
+      `;
+      const scrollContainer = document.getElementById('scrollable') as HTMLElement;
+
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, configurable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 200, configurable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, configurable: true, writable: true });
+      Object.defineProperty(scrollContainer, 'offsetParent', { value: document.body, configurable: true });
+
+      await TraceLog.init();
+
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      await new Promise((resolve) => setTimeout(resolve, 1200)); // Wait for scroll detection
+
+      // Destroy should remove scroll listeners
+      TraceLog.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Get call count after destroy
+      const callCountAfterDestroy = eventCallback.mock.calls.length;
+
+      // Scroll after destroy - should NOT be tracked
+      scrollContainer.scrollTop = 500;
+      scrollContainer.dispatchEvent(new Event('scroll'));
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // No new events should be emitted
+      expect(eventCallback.mock.calls.length).toBe(callCountAfterDestroy);
+      expect(TraceLog.isInitialized()).toBe(false);
+
+      document.body.innerHTML = '';
+    });
+
+    it('should cleanup visibility change handlers', async () => {
+      await TraceLog.init();
+
+      const eventCallback = vi.fn();
+      TraceLog.on(EmitterEvent.EVENT, eventCallback);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Destroy should remove visibility listeners
+      TraceLog.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Get call count after destroy
+      const callCountAfterDestroy = eventCallback.mock.calls.length;
+
+      // Visibility change after destroy - should NOT trigger events
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'hidden',
+        configurable: true,
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // No new events should be emitted
+      expect(eventCallback.mock.calls.length).toBe(callCountAfterDestroy);
       expect(TraceLog.isInitialized()).toBe(false);
     });
   });

@@ -22,7 +22,8 @@ describe('ClickHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    const testEnv = setupTestEnvironment();
+    // Disable click throttling for tests
+    const testEnv = setupTestEnvironment({ clickThrottleMs: 0 });
     mockEventManager = testEnv.eventManager;
     vi.spyOn(mockEventManager, 'track');
 
@@ -308,9 +309,7 @@ describe('ClickHandler', () => {
         { clientX: 110, clientY: 110, expectedRelX: 1, expectedRelY: 1 }, // Outside (clamped)
       ];
 
-      testCases.forEach((testCase) => {
-        vi.clearAllMocks();
-
+      testCases.forEach((testCase, index) => {
         const clickEvent = new MouseEvent('click', {
           clientX: testCase.clientX,
           clientY: testCase.clientY,
@@ -324,13 +323,18 @@ describe('ClickHandler', () => {
 
         mockElement.dispatchEvent(clickEvent);
 
-        expect(mockEventManager.track).toHaveBeenCalledWith({
-          type: EventType.CLICK,
-          click_data: expect.objectContaining({
-            relativeX: testCase.expectedRelX,
-            relativeY: testCase.expectedRelY,
+        // Check the call at the correct index (calls are accumulated)
+        const callIndex = index;
+        expect(mockEventManager.track).toHaveBeenNthCalledWith(
+          callIndex + 1,
+          expect.objectContaining({
+            type: EventType.CLICK,
+            click_data: expect.objectContaining({
+              relativeX: testCase.expectedRelX,
+              relativeY: testCase.expectedRelY,
+            }),
           }),
-        });
+        );
       });
     });
 

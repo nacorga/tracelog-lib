@@ -499,6 +499,374 @@ describe('Config Validations', () => {
         }).not.toThrow();
       });
     });
+
+    describe('Page View Throttle Validation', () => {
+      it('should accept valid pageViewThrottleMs', () => {
+        const config: Config = { pageViewThrottleMs: 1000 };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept pageViewThrottleMs of 0', () => {
+        const config: Config = { pageViewThrottleMs: 0 };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should reject negative pageViewThrottleMs', () => {
+        const config: Config = { pageViewThrottleMs: -100 };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Page view throttle must be a non-negative number');
+      });
+
+      it('should reject non-number pageViewThrottleMs', () => {
+        expect(() => {
+          validateAppConfig({ pageViewThrottleMs: '1000' as any });
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig({ pageViewThrottleMs: true as any });
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should accept undefined pageViewThrottleMs', () => {
+        const config: Config = {};
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+    });
+
+    describe('Click Throttle Validation', () => {
+      it('should accept valid clickThrottleMs', () => {
+        const config: Config = { clickThrottleMs: 300 };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept clickThrottleMs of 0', () => {
+        const config: Config = { clickThrottleMs: 0 };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should reject negative clickThrottleMs', () => {
+        const config: Config = { clickThrottleMs: -50 };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Click throttle must be a non-negative number');
+      });
+
+      it('should reject non-number clickThrottleMs', () => {
+        expect(() => {
+          validateAppConfig({ clickThrottleMs: '300' as any });
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig({ clickThrottleMs: false as any });
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should accept undefined clickThrottleMs', () => {
+        const config: Config = {};
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+    });
+
+    describe('Max Same Event Per Minute Validation', () => {
+      it('should accept valid maxSameEventPerMinute', () => {
+        const config: Config = { maxSameEventPerMinute: 60 };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should reject maxSameEventPerMinute of 0', () => {
+        const config: Config = { maxSameEventPerMinute: 0 };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Max same event per minute must be a positive number');
+      });
+
+      it('should reject negative maxSameEventPerMinute', () => {
+        const config: Config = { maxSameEventPerMinute: -10 };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should reject non-number maxSameEventPerMinute', () => {
+        expect(() => {
+          validateAppConfig({ maxSameEventPerMinute: '60' as any });
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig({ maxSameEventPerMinute: true as any });
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should accept undefined maxSameEventPerMinute', () => {
+        const config: Config = {};
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+    });
+
+    describe('Viewport Config Validation', () => {
+      it('should accept valid viewport config', () => {
+        const config: Config = {
+          viewport: {
+            elements: [{ selector: '.hero' }],
+            threshold: 0.5,
+            minDwellTime: 1000,
+            cooldownPeriod: 60000,
+            maxTrackedElements: 100,
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept viewport config with optional element properties', () => {
+        const config: Config = {
+          viewport: {
+            elements: [
+              { selector: '.hero', id: 'hero-1', name: 'Hero Banner' },
+              { selector: '.cta', id: 'cta-1' },
+              { selector: '.footer' },
+            ],
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should reject null viewport config', () => {
+        const config: Config = { viewport: null as any };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport config must be an object');
+      });
+
+      it('should reject viewport config with missing elements', () => {
+        const config: Config = { viewport: {} as any };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport elements must be a non-empty array');
+      });
+
+      it('should reject viewport config with empty elements array', () => {
+        const config: Config = { viewport: { elements: [] } };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport elements must be a non-empty array');
+      });
+
+      it('should reject viewport element with missing selector', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '' }] },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Each viewport element must have a valid selector string');
+      });
+
+      it('should reject viewport element with empty id', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero', id: '' }] },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport element id must be a non-empty string');
+      });
+
+      it('should reject viewport element with empty name', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero', name: '   ' }] },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport element name must be a non-empty string');
+      });
+
+      it('should reject viewport threshold below 0', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero' }], threshold: -0.1 },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport threshold must be a number between 0 and 1');
+      });
+
+      it('should reject viewport threshold above 1', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero' }], threshold: 1.1 },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should reject negative minDwellTime', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero' }], minDwellTime: -100 },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport minDwellTime must be a non-negative number');
+      });
+
+      it('should reject negative cooldownPeriod', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero' }], cooldownPeriod: -1000 },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport cooldownPeriod must be a non-negative number');
+      });
+
+      it('should reject maxTrackedElements of 0', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero' }], maxTrackedElements: 0 },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Viewport maxTrackedElements must be a positive number');
+      });
+
+      it('should reject negative maxTrackedElements', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero' }], maxTrackedElements: -10 },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should accept viewport config with only required properties', () => {
+        const config: Config = {
+          viewport: { elements: [{ selector: '.hero' }] },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept undefined viewport', () => {
+        const config: Config = {};
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should reject duplicate selectors in viewport elements', () => {
+        const config: Config = {
+          viewport: {
+            elements: [
+              { selector: '.hero' },
+              { selector: '.hero' }, // duplicate
+            ],
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Duplicate viewport selector found: ".hero"');
+      });
+
+      it('should reject duplicate selectors with different whitespace', () => {
+        const config: Config = {
+          viewport: {
+            elements: [
+              { selector: '  .hero  ' },
+              { selector: '.hero' }, // same after trim
+            ],
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Duplicate viewport selector found: ".hero"');
+      });
+
+      it('should reject duplicate selectors with different identifiers', () => {
+        const config: Config = {
+          viewport: {
+            elements: [
+              { selector: '.hero', id: 'hero-1', name: 'Hero Banner 1' },
+              { selector: '.hero', id: 'hero-2', name: 'Hero Banner 2' }, // duplicate selector
+            ],
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Duplicate viewport selector found: ".hero"');
+      });
+
+      it('should accept different selectors', () => {
+        const config: Config = {
+          viewport: {
+            elements: [{ selector: '.hero' }, { selector: '.cta' }, { selector: '#footer' }],
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+    });
   });
 
   describe('validateAndNormalizeConfig()', () => {
@@ -612,6 +980,91 @@ describe('Config Validations', () => {
         expect(normalized.samplingRate).toBe(0.8);
         expect(normalized.integrations).toEqual(config.integrations);
       });
+
+      it('should set default pageViewThrottleMs to 1000', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.pageViewThrottleMs).toBe(1000);
+      });
+
+      it('should preserve existing pageViewThrottleMs', () => {
+        const config: Config = { pageViewThrottleMs: 500 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.pageViewThrottleMs).toBe(500);
+      });
+
+      it('should preserve pageViewThrottleMs of 0', () => {
+        const config: Config = { pageViewThrottleMs: 0 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.pageViewThrottleMs).toBe(0);
+      });
+
+      it('should set default clickThrottleMs to 300', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.clickThrottleMs).toBe(300);
+      });
+
+      it('should preserve existing clickThrottleMs', () => {
+        const config: Config = { clickThrottleMs: 200 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.clickThrottleMs).toBe(200);
+      });
+
+      it('should preserve clickThrottleMs of 0', () => {
+        const config: Config = { clickThrottleMs: 0 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.clickThrottleMs).toBe(0);
+      });
+
+      it('should set default maxSameEventPerMinute to 60', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.maxSameEventPerMinute).toBe(60);
+      });
+
+      it('should preserve existing maxSameEventPerMinute', () => {
+        const config: Config = { maxSameEventPerMinute: 100 };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.maxSameEventPerMinute).toBe(100);
+      });
+
+      it('should normalize viewport config with defaults', () => {
+        const config: Config = {
+          viewport: {
+            elements: [{ selector: '.hero' }],
+          },
+        };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.viewport?.threshold).toBe(0.5);
+        expect(normalized.viewport?.minDwellTime).toBe(2000);
+        expect(normalized.viewport?.cooldownPeriod).toBe(60000);
+        expect(normalized.viewport?.maxTrackedElements).toBe(100);
+      });
+
+      it('should preserve existing viewport config values', () => {
+        const config: Config = {
+          viewport: {
+            elements: [{ selector: '.hero', id: 'hero-1' }],
+            threshold: 0.75,
+            minDwellTime: 1500,
+            cooldownPeriod: 30000,
+            maxTrackedElements: 50,
+          },
+        };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.viewport?.elements).toEqual([{ selector: '.hero', id: 'hero-1' }]);
+        expect(normalized.viewport?.threshold).toBe(0.75);
+        expect(normalized.viewport?.minDwellTime).toBe(1500);
+        expect(normalized.viewport?.cooldownPeriod).toBe(30000);
+        expect(normalized.viewport?.maxTrackedElements).toBe(50);
+      });
+
+      it('should not normalize viewport if not provided', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.viewport).toBeUndefined();
+      });
     });
 
     describe('Integration with validateAppConfig', () => {
@@ -621,6 +1074,22 @@ describe('Config Validations', () => {
         };
 
         expect(() => validateAndNormalizeConfig(config)).toThrow(SessionTimeoutValidationError);
+      });
+
+      it('should reject invalid pageViewThrottleMs before normalization', () => {
+        const config: Config = {
+          pageViewThrottleMs: -100,
+        };
+
+        expect(() => validateAndNormalizeConfig(config)).toThrow(AppConfigValidationError);
+      });
+
+      it('should reject invalid viewport config before normalization', () => {
+        const config: Config = {
+          viewport: { elements: [] },
+        };
+
+        expect(() => validateAndNormalizeConfig(config)).toThrow(AppConfigValidationError);
       });
     });
   });

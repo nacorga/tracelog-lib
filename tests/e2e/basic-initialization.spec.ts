@@ -43,12 +43,8 @@ test.describe('Basic Initialization', () => {
   });
 
   test('should handle duplicate initialization gracefully', async ({ page }) => {
-    // Navigate to playground
-    await page.goto('/?auto-init=false');
-    await page.waitForLoadState('networkidle');
-
-    // Wait for TraceLog bridge to be available
-    await page.waitForFunction(() => !!window.__traceLogBridge!, { timeout: 5000 });
+    // Navigate to playground using utility (CSP-safe)
+    await navigateToPlayground(page, { autoInit: false });
 
     await page.evaluate(() => {
       if (window.__traceLogBridge?.initialized) {

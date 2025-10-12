@@ -2,6 +2,7 @@ import { EventType, PageViewData } from '../types';
 import { normalizeUrl } from '../utils';
 import { StateManager } from '../managers/state.manager';
 import { EventManager } from '../managers/event.manager';
+import { DEFAULT_PAGE_VIEW_THROTTLE_MS } from '../constants/config.constants';
 
 export class PageViewHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -9,6 +10,7 @@ export class PageViewHandler extends StateManager {
 
   private originalPushState?: typeof window.history.pushState;
   private originalReplaceState?: typeof window.history.replaceState;
+  private lastPageViewTime = 0;
 
   constructor(eventManager: EventManager, onTrack: () => void) {
     super();
@@ -38,6 +40,8 @@ export class PageViewHandler extends StateManager {
     if (this.originalReplaceState) {
       window.history.replaceState = this.originalReplaceState;
     }
+
+    this.lastPageViewTime = 0;
   }
 
   private patchHistory(method: 'pushState' | 'replaceState'): void {
@@ -63,6 +67,16 @@ export class PageViewHandler extends StateManager {
       return;
     }
 
+    // Throttle: Prevent rapid navigation spam
+    const now = Date.now();
+    const throttleMs = this.get('config').pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS;
+
+    if (now - this.lastPageViewTime < throttleMs) {
+      return;
+    }
+
+    this.lastPageViewTime = now;
+
     this.onTrack();
 
     const fromUrl = this.get('pageUrl');
@@ -81,6 +95,8 @@ export class PageViewHandler extends StateManager {
   private trackInitialPageView(): void {
     const normalizedUrl = normalizeUrl(window.location.href, this.get('config').sensitiveQueryParams);
     const pageViewData = this.extractPageViewData();
+
+    this.lastPageViewTime = Date.now();
 
     this.eventManager.track({
       type: EventType.PAGE_VIEW,

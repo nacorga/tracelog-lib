@@ -530,7 +530,31 @@ async function initializeApp() {
       keysToRemove.forEach((key) => localStorage.removeItem(key));
 
       setupTraceLogListener(traceLog); // Setup listeners BEFORE init to capture initial events
-      await traceLog.init();
+
+      // Initialize TraceLog
+      await traceLog.init({
+        // Event Rate Control
+        pageViewThrottleMs: 1000,        // Throttle rapid navigation
+        clickThrottleMs: 300,             // Throttle clicks per element
+        maxSameEventPerMinute: 60,        // Limit same custom event name
+
+        // Session configuration
+        sessionTimeout: 15 * 60 * 1000,   // 15 minutes
+
+        // Viewport tracking
+        viewport: {
+          elements: [
+            { selector: '.hero', id: 'hero-section', name: 'Hero Banner' },
+            { selector: '.feature-card', id: 'features', name: 'Feature Cards' },
+            { selector: '.product-card', name: 'Product Cards' }
+          ],
+          threshold: 0.5,                  // Visibility threshold
+          minDwellTime: 1000,              // Minimum visible time
+          cooldownPeriod: 60000,           // Cooldown between triggers
+          maxTrackedElements: 100          // Maximum tracked elements
+        }
+      });
+
       updateQueueStatus('idle');
       return;
     }

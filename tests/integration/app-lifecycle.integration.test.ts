@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { App } from '../../src/app';
 import { Config, EventType, EmitterEvent } from '../../src/types';
+import { getGlobalState } from '../../src/managers/state.manager';
 
 describe('App Lifecycle Integration', () => {
   let app: App;
@@ -373,6 +374,103 @@ describe('App Lifecycle Integration', () => {
       // Should not throw even if there are internal issues
       await app.init(config);
       expect(app.initialized).toBe(true);
+    });
+  });
+
+  describe('State and Handler Management', () => {
+    it('should properly initialize all managers after init', async () => {
+      await app.init({});
+
+      const managers = (app as any).managers;
+
+      expect(managers.storage).toBeDefined();
+      expect(managers.event).toBeDefined();
+    });
+
+    it('should properly initialize core handlers after init', async () => {
+      await app.init({});
+
+      const handlers = (app as any).handlers;
+
+      expect(handlers.session).toBeDefined();
+      expect(handlers.pageView).toBeDefined();
+      expect(handlers.click).toBeDefined();
+      expect(handlers.scroll).toBeDefined();
+      expect(handlers.performance).toBeDefined();
+      expect(handlers.error).toBeDefined();
+    });
+
+    it('should persist config in global state after init', async () => {
+      const config: Config = {
+        sessionTimeout: 800000,
+        globalMetadata: { app: 'testApp', env: 'production' },
+        samplingRate: 0.75,
+      };
+
+      await app.init(config);
+
+      const state = getGlobalState();
+
+      expect(state.config).toBeDefined();
+      expect(state.config?.sessionTimeout).toBe(800000);
+      expect(state.config?.globalMetadata).toEqual({ app: 'testApp', env: 'production' });
+      expect(state.config?.samplingRate).toBe(0.75);
+    });
+
+    it('should initialize userId and sessionId in state', async () => {
+      await app.init({});
+
+      const state = getGlobalState();
+
+      expect(state.userId).toBeDefined();
+      expect(typeof state.userId).toBe('string');
+      expect(state.userId.length).toBeGreaterThan(0);
+
+      expect(state.sessionId).toBeDefined();
+      expect(typeof state.sessionId).toBe('string');
+      expect(state.sessionId!.length).toBeGreaterThan(0);
+    });
+
+    it('should cleanup handlers on destroy', async () => {
+      await app.init({});
+
+      const handlers = (app as any).handlers;
+      expect(handlers.session).toBeDefined();
+
+      app.destroy();
+
+      expect(app.initialized).toBe(false);
+    });
+
+    it('should preserve manager references after destroy', async () => {
+      await app.init({});
+
+      const managersBefore = (app as any).managers;
+      expect(managersBefore.storage).toBeDefined();
+      expect(managersBefore.event).toBeDefined();
+
+      app.destroy();
+
+      // Managers still exist but app is not initialized
+      const managersAfter = (app as any).managers;
+      expect(managersAfter).toBeDefined();
+      expect(app.initialized).toBe(false);
+    });
+
+    it('should track handler lifecycle correctly', async () => {
+      await app.init({});
+
+      const handlers = (app as any).handlers;
+
+      // All handlers should be defined after init
+      expect(handlers.session).toBeDefined();
+      expect(handlers.click).toBeDefined();
+      expect(handlers.scroll).toBeDefined();
+
+      app.destroy();
+
+      // After destroy, app should not be initialized
+      expect(app.initialized).toBe(false);
     });
   });
 });

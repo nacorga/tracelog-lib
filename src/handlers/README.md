@@ -21,6 +21,8 @@ Tracks page navigation and route changes in single-page applications.
   - **Example**: `https://app.com/page?token=abc&user=john` → `https://app.com/page?user=john`
 - **SPA Navigation Detection**: Automatically patches `history.pushState()` and `history.replaceState()` to detect route changes
 - **Deduplication**: Compares normalized URLs against last tracked URL to prevent consecutive duplicate events
+- **Throttling**: Configurable throttle (default 1 second) prevents rapid navigation spam in SPAs
+  - Configurable via `config.pageViewThrottleMs` (default: 1000ms)
 - **Lifecycle Callback**: Invokes `onTrack()` callback after each page view for session management integration
 
 **Event Data**:
@@ -76,6 +78,9 @@ Captures mouse clicks and converts them into analytics events with element conte
 - Text extraction with length limits (255 chars max) and priority logic
 - **PII Sanitization**: Automatically redacts emails, phone numbers, credit cards, API keys, and tokens from captured text
 - **Privacy Controls**: Respects `data-tlog-ignore` attribute to exclude sensitive elements from tracking
+- **Click Throttling**: Per-element throttle (default 300ms) prevents double-clicks and rapid spam
+  - Configurable via `config.clickThrottleMs` (default: 300ms)
+  - Uses stable element signatures (ID > data-testid > data-tlog-name > DOM path)
 
 **Text Extraction Priority**:
 1. Uses clicked element's text if within 255 character limit
@@ -173,6 +178,10 @@ Captures JavaScript errors and unhandled promise rejections for debugging and mo
 - **PII Sanitization**: Removes emails, phone numbers, credit cards, IBAN, API keys, Bearer tokens, and connection string passwords from error messages
 - **Message Limits**: Truncates messages to 500 characters max
 - **Rich Context**: Captures filename, line, column for JS errors
+- **Burst Detection**: Detects error bursts (>10 errors/second) and triggers 5-second cooldown
+  - Prevents error floods from overwhelming server
+  - Automatic recovery after cooldown period
+  - Configured via `ERROR_BURST_THRESHOLD` and `ERROR_BURST_BACKOFF_MS` constants
 
 **Event Data**:
 ```javascript
@@ -225,6 +234,9 @@ Captures Web Vitals and performance metrics using the `web-vitals` library with 
 - **CLS Input Filtering**: Ignores layout shifts caused by recent user input (not counted as poor UX)
 - **Precision Control**: All metrics use 2-decimal precision for consistency
 - **Long Task Throttling**: Maximum 1 long task event per second to prevent spam
+- **Final Values Only**: All web vitals configured with `reportAllChanges: false`
+  - Only final metric values are sent
+  - Applied to LCP, CLS, FCP, TTFB, and INP
 
 **Metrics Captured**:
 - **LCP** (Largest Contentful Paint): Main content loading time (threshold: >4000ms)
@@ -455,6 +467,162 @@ Works automatically with:
 - `MIN_SCROLL_DEPTH_CHANGE`: 5% (minimum depth change)
 - `SCROLL_MIN_EVENT_INTERVAL_MS`: 500ms (minimum time between events)
 - `MAX_SCROLL_EVENTS_PER_SESSION`: 120 (session cap)
+
+## ViewportHandler
+
+Tracks element visibility in the viewport using the IntersectionObserver API with configurable thresholds and minimum dwell time requirements.
+
+**Events Generated**: `VIEWPORT_VISIBLE`
+
+**Triggers**:
+- Elements become visible in viewport and meet minimum dwell time requirement
+- Uses IntersectionObserver API for efficient visibility detection
+- MutationObserver detects dynamically added elements matching configured selectors
+
+**Configuration Options**:
+- `viewport.elements`: Array of element configurations `{ selector, id?, name? }` with optional identifiers for analytics
+- `viewport.threshold`: Visibility threshold 0-1 (default: 0.5 = 50% of element visible)
+- `viewport.minDwellTime`: Minimum time in milliseconds element must be visible (default: 1000ms)
+- `viewport.cooldownPeriod`: Cooldown between re-triggers for same element (default: 60000ms / 60 seconds)
+- `viewport.maxTrackedElements`: Maximum elements to track simultaneously (default: 100)
+
+**Key Features**:
+- **IntersectionObserver-based**: Modern, performant visibility detection without scroll event listeners
+- **Configurable Threshold**: Fire events when elements are X% visible (0-1 range)
+- **Dwell Time Requirement**: Elements must remain visible for minimum duration before event fires
+- **Dynamic Element Support**: Automatically detects and tracks elements added to DOM after initialization
+- **Privacy Controls**: Respects `data-tlog-ignore` attribute to exclude sensitive elements
+- **Element Cleanup**: Automatically removes tracking for elements removed from DOM
+- **Debounced Mutation Handling**: Groups DOM mutations with 100ms debounce to reduce overhead
+- **Memory Management**: Cleans up all timers and observers on stopTracking()
+- **Browser Compatibility**: Gracefully degrades if IntersectionObserver not supported
+- **Cooldown Period**: Prevents re-triggering for carousels and sticky elements (60s default)
+  - Per-element tracking of last fired time
+- **Element Limit**: Maximum 100 tracked elements to prevent memory issues
+  - Protects against broad selectors (e.g., `div`, `*`)
+  - Warns when limit reached with actionable guidance
+
+**Event Data**:
+```javascript
+// Event without identifiers
+{
+  type: 'VIEWPORT_VISIBLE',
+  viewport_data: {
+    selector: '.product-card',      // CSS selector that matched this element
+    dwellTime: 2147,                // Time element was visible in milliseconds
+    visibilityRatio: 0.87           // Visibility ratio (0-1) when event fired
+  }
+}
+
+// Event with identifiers (for analytics)
+{
+  type: 'VIEWPORT_VISIBLE',
+  viewport_data: {
+    selector: '.cta-button',        // CSS selector
+    id: 'pricing-cta',              // Unique identifier for analytics (optional)
+    name: 'Pricing Page CTA',      // Human-readable name for dashboards (optional)
+    dwellTime: 2147,
+    visibilityRatio: 0.87
+  }
+}
+```
+
+**Configuration Example**:
+```javascript
+// Basic tracking (no identifiers)
+await tracelog.init({
+  viewport: {
+    elements: [
+      { selector: '.product-card' },
+      { selector: '.cta-button' }
+    ],
+    threshold: 0.75,
+    minDwellTime: 2000
+  }
+});
+
+// With analytics identifiers (recommended)
+await tracelog.init({
+  viewport: {
+    elements: [
+      {
+        selector: '.hero-banner',
+        id: 'homepage-hero',
+        name: 'Homepage Hero Banner'
+      },
+      {
+        selector: '.cta-button',
+        id: 'pricing-cta',
+        name: 'Pricing CTA Button'
+      },
+      {
+        selector: '.testimonial',
+        id: 'customer-testimonials'
+        // name is optional
+      }
+    ],
+    threshold: 0.75,      // Element must be 75% visible
+    minDwellTime: 2000    // Must remain visible for 2 seconds
+  }
+});
+
+// Exclude specific elements
+<div class="product-card" data-tlog-ignore>Not tracked</div>
+```
+
+**Analytics Benefits of Identifiers**:
+- **Clear Reporting**: "Pricing CTA" instead of ".cta-button" in dashboards
+- **Multi-Element Tracking**: Distinguish between multiple elements with the same selector
+- **Funnel Analysis**: Track specific CTAs through conversion funnels by ID
+- **Stable Tracking**: Identifiers survive CSS class refactoring
+- **Business Context**: Human-readable names for non-technical stakeholders
+
+**Visibility Detection**:
+- Uses IntersectionObserver with configurable threshold
+- Fires timer when element enters viewport (isIntersecting: true)
+- Cancels timer if element leaves viewport before minDwellTime elapsed
+- Fires event after minDwellTime, then resets tracking state
+- Same element can trigger multiple events (if it leaves and re-enters viewport)
+
+**Dynamic Element Handling**:
+- MutationObserver watches document.body for added/removed nodes
+- Added nodes: Debounced re-scan (100ms) to detect new matching elements
+- Removed nodes: Immediate cleanup of tracking state and timers
+- Handles both direct removals and ancestor removals (cleanup descendants)
+
+**Element Selection Priority**:
+1. Searches for all elements matching configured selectors
+2. Skips elements with `data-tlog-ignore` attribute
+3. Skips elements already being tracked (prevents duplicates)
+4. Observes remaining elements with IntersectionObserver
+
+**Cleanup & Memory Management**:
+- Disconnects IntersectionObserver on stopTracking()
+- Disconnects MutationObserver on stopTracking()
+- Clears all pending visibility timers
+- Clears mutation debounce timer
+- Clears tracked elements map
+- No memory leaks from event listeners or observers
+
+**Browser Compatibility**:
+- Requires IntersectionObserver API (Chrome 51+, Firefox 55+, Safari 12.1+)
+- Requires MutationObserver API (all modern browsers)
+- Gracefully logs warning and skips tracking if APIs unavailable
+- Safe to use in SSR environments (checks document.body availability)
+
+**Performance Characteristics**:
+- No scroll event listeners (uses IntersectionObserver)
+- Efficient DOM queries with querySelectorAll
+- Debounced mutation handling prevents excessive re-scans
+- Single IntersectionObserver instance for all elements
+- Single MutationObserver instance for DOM changes
+
+**Use Cases**:
+- Product impression tracking (e-commerce)
+- Ad viewability measurement
+- Content engagement analysis
+- CTA visibility analytics
+- Below-the-fold interaction tracking
 
 ## SessionHandler
 
