@@ -53,14 +53,15 @@ test.describe('Basic Click Events', () => {
       return events;
     });
 
-    // Verify click event was captured
-    expect(capturedEvents.length).toBeGreaterThan(0);
+    // Verify exactly one click event was captured
+    expect(capturedEvents.length).toBe(1);
 
     // Verify event structure
     const clickEvent = capturedEvents[0];
     expect(clickEvent.type).toBe('click');
     expect(clickEvent.timestamp).toBeDefined();
     expect(typeof clickEvent.timestamp).toBe('number');
+    expect(clickEvent.click_data).toBeDefined();
   });
 
   test('should capture multiple click events', async ({ page }) => {
@@ -102,8 +103,8 @@ test.describe('Basic Click Events', () => {
           }),
         );
 
-        // Wait between clicks
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        // Wait between clicks (must exceed click throttle of 300ms)
+        await new Promise((resolve) => setTimeout(resolve, 350));
 
         // Second click with different coordinates
         button.dispatchEvent(
@@ -121,14 +122,21 @@ test.describe('Basic Click Events', () => {
       return events;
     });
 
-    // Verify at least one event was captured (relaxed expectation)
-    expect(capturedEvents.length).toBeGreaterThan(0);
+    // Verify exactly 2 click events were captured (different coordinates avoid deduplication)
+    expect(capturedEvents.length).toBe(2);
 
-    // Verify all are click events
-    capturedEvents.forEach((event) => {
+    // Verify all are click events with proper structure
+    capturedEvents.forEach((event, index) => {
       expect(event.type).toBe('click');
       expect(event.timestamp).toBeDefined();
+      expect(event.click_data).toBeDefined();
     });
+
+    // Verify different coordinates were captured
+    expect(capturedEvents[0].click_data.x).toBe(100);
+    expect(capturedEvents[0].click_data.y).toBe(200);
+    expect(capturedEvents[1].click_data.x).toBe(150);
+    expect(capturedEvents[1].click_data.y).toBe(250);
   });
 
   test('should include click position data', async ({ page }) => {
@@ -176,14 +184,17 @@ test.describe('Basic Click Events', () => {
     });
 
     // Verify click event contains position data
-    expect(capturedEvents.length).toBeGreaterThan(0);
+    expect(capturedEvents.length).toBe(1);
 
     const clickEvent = capturedEvents[0];
     expect(clickEvent.type).toBe('click');
 
-    // Verify click data structure (click events should have click-specific data)
-    if (clickEvent.click) {
-      expect(typeof clickEvent.click).toBe('object');
-    }
+    // Verify click data structure (click events should have click_data field)
+    expect(clickEvent.click_data).toBeDefined();
+    expect(typeof clickEvent.click_data).toBe('object');
+    expect(clickEvent.click_data.x).toBe(150);
+    expect(clickEvent.click_data.y).toBe(250);
+    expect(typeof clickEvent.click_data.relativeX).toBe('number');
+    expect(typeof clickEvent.click_data.relativeY).toBe('number');
   });
 });

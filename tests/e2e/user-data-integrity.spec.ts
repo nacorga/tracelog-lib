@@ -59,8 +59,10 @@ test.describe('User Data Integrity', () => {
         { name: 'boolean_data', metadata: { flag: true, disabled: false }, shouldSucceed: true },
         { name: 'string_array', metadata: { tags: ['tag1', 'tag2', 'tag3'] }, shouldSucceed: true },
         { name: 'special_chars', metadata: { text: 'Test with special chars: àáâãäå çčđ' }, shouldSucceed: true },
+        // Valid: 1-level nesting is allowed (MAX_METADATA_NESTING_DEPTH = 1)
+        { name: 'one_level_nested', metadata: { user: { name: 'John', age: 30 } }, shouldSucceed: true },
         // Invalid cases (should be rejected by validation)
-        { name: 'nested_object', metadata: { nested: { deep: { value: 'test' } } }, shouldSucceed: false },
+        { name: 'two_level_nested', metadata: { nested: { deep: { value: 'test' } } }, shouldSucceed: false },
         { name: 'mixed_array', metadata: { items: [1, 2, 3], mixed: ['a', 1, true] }, shouldSucceed: false },
       ];
 
@@ -115,8 +117,9 @@ test.describe('User Data Integrity', () => {
     expect(dataIntegrityResult.successfulEvents).toContain('boolean_data');
     expect(dataIntegrityResult.successfulEvents).toContain('string_array');
     expect(dataIntegrityResult.successfulEvents).toContain('special_chars');
+    expect(dataIntegrityResult.successfulEvents).toContain('one_level_nested'); // 1-level nesting is valid
 
-    expect(dataIntegrityResult.rejectedEvents).toContain('nested_object');
+    expect(dataIntegrityResult.rejectedEvents).toContain('two_level_nested'); // renamed from nested_object
     expect(dataIntegrityResult.rejectedEvents).toContain('mixed_array');
 
     // Verify custom events were captured

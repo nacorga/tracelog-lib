@@ -162,9 +162,9 @@ test.describe('Cross-Tab Session Sync', () => {
       const traceLog = window.__traceLogBridge!;
       const receivedMessages: any[] = [];
 
-      // Mock BroadcastChannel if available
+      // Listen to correct BroadcastChannel (tlog:default:broadcast)
       if (typeof BroadcastChannel !== 'undefined') {
-        const channel = new BroadcastChannel('tracelog_session_default');
+        const channel = new BroadcastChannel('tlog:default:broadcast');
         channel.onmessage = (event) => {
           receivedMessages.push(event.data);
         };
