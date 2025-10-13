@@ -213,6 +213,13 @@ npm run test:coverage  # With coverage
 
 Chrome 60+, Firefox 55+, Safari 12+, Edge 79+
 
+## SSR/SSG Support
+
+Safe to import in SSR frameworks (Angular Universal, Next.js, Nuxt, SvelteKit). All methods silently no-op in Node.js environments.
+
+**Best practice**
+Register listeners AFTER init() in browser-only lifecycle hooks.
+
 ## Documentation
 
 - [Handlers](./src/handlers/README.md) - Event capture implementation
