@@ -24,7 +24,12 @@ describe('ScrollHandler - Scroll Container Detection', () => {
   });
 
   afterEach(() => {
+    if (scrollHandler) {
+      scrollHandler.stopTracking();
+    }
+
     vi.clearAllMocks();
+    vi.clearAllTimers();
   });
 
   describe('Window scroll detection', () => {

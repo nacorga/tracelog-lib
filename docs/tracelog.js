@@ -399,20 +399,30 @@ const isValidUrl = (url, allowHttp = false) => {
 };
 const getCollectApiUrl = (config) => {
   if (config.integrations?.tracelog?.projectId) {
-    const url = new URL(window.location.href);
-    const host = url.hostname;
-    const parts = host.split(".");
-    if (parts.length === 0) {
-      throw new Error("Invalid URL");
+    try {
+      const url = new URL(window.location.href);
+      const host = url.hostname;
+      if (!host || typeof host !== "string") {
+        throw new Error("Invalid hostname");
+      }
+      const parts = host.split(".");
+      if (!parts || !Array.isArray(parts) || parts.length === 0 || parts.length === 1 && parts[0] === "") {
+        throw new Error("Invalid hostname structure");
+      }
+      const projectId = config.integrations.tracelog.projectId;
+      const cleanDomain = parts.slice(-2).join(".");
+      if (!cleanDomain) {
+        throw new Error("Invalid domain");
+      }
+      const collectApiUrl2 = `https://${projectId}.${cleanDomain}/collect`;
+      const isValid = isValidUrl(collectApiUrl2);
+      if (!isValid) {
+        throw new Error("Invalid URL");
+      }
+      return collectApiUrl2;
+    } catch (error) {
+      throw new Error(`Invalid URL configuration: ${error instanceof Error ? error.message : String(error)}`);
     }
-    const projectId = config.integrations.tracelog.projectId;
-    const cleanDomain = parts.slice(-2).join(".");
-    const collectApiUrl2 = `https://${projectId}.${cleanDomain}/collect`;
-    const isValid = isValidUrl(collectApiUrl2);
-    if (!isValid) {
-      throw new Error("Invalid URL");
-    }
-    return collectApiUrl2;
   }
   const collectApiUrl = config.integrations?.custom?.collectApiUrl;
   if (collectApiUrl) {
@@ -426,6 +436,10 @@ const getCollectApiUrl = (config) => {
   return "";
 };
 const normalizeUrl = (url, sensitiveQueryParams = []) => {
+  if (!url || typeof url !== "string") {
+    log("warn", "Invalid URL provided to normalizeUrl", { data: { url: String(url) } });
+    return url || "";
+  }
   try {
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
@@ -446,7 +460,8 @@ const normalizeUrl = (url, sensitiveQueryParams = []) => {
     const result = urlObject.toString();
     return result;
   } catch (error) {
-    log("warn", "URL normalization failed, returning original", { error, data: { url: url.slice(0, 100) } });
+    const urlPreview = url && typeof url === "string" ? url.slice(0, 100) : String(url);
+    log("warn", "URL normalization failed, returning original", { error, data: { url: urlPreview } });
     return url;
   }
 };
@@ -2440,7 +2455,7 @@ class ScrollHandler extends StateManager {
     }
     for (const container of this.containers) {
       this.clearContainerTimer(container);
-      if (container.element instanceof Window) {
+      if (container.element === window) {
         window.removeEventListener("scroll", container.listener);
       } else {
         container.element.removeEventListener("scroll", container.listener);
@@ -2573,7 +2588,7 @@ class ScrollHandler extends StateManager {
     };
     container.listener = handleScroll;
     this.containers.push(container);
-    if (element instanceof Window) {
+    if (element === window) {
       window.addEventListener("scroll", handleScroll, { passive: true });
     } else {
       element.addEventListener("scroll", handleScroll, { passive: true });
@@ -2689,13 +2704,13 @@ class ScrollHandler extends StateManager {
     };
   }
   getScrollTop(element) {
-    return element instanceof Window ? window.scrollY : element.scrollTop;
+    return element === window ? window.scrollY : element.scrollTop;
   }
   getViewportHeight(element) {
-    return element instanceof Window ? window.innerHeight : element.clientHeight;
+    return element === window ? window.innerHeight : element.clientHeight;
   }
   getScrollHeight(element) {
-    return element instanceof Window ? document.documentElement.scrollHeight : element.scrollHeight;
+    return element === window ? document.documentElement.scrollHeight : element.scrollHeight;
   }
   isElementScrollable(element) {
     const style = getComputedStyle(element);

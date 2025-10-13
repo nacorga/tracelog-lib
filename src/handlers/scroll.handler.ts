@@ -55,10 +55,10 @@ export class ScrollHandler extends StateManager {
     for (const container of this.containers) {
       this.clearContainerTimer(container);
 
-      if (container.element instanceof Window) {
+      if (container.element === window) {
         window.removeEventListener('scroll', container.listener);
       } else {
-        container.element.removeEventListener('scroll', container.listener);
+        (container.element as HTMLElement).removeEventListener('scroll', container.listener);
       }
     }
 
@@ -241,10 +241,10 @@ export class ScrollHandler extends StateManager {
 
     this.containers.push(container);
 
-    if (element instanceof Window) {
+    if (element === window) {
       window.addEventListener('scroll', handleScroll, { passive: true });
     } else {
-      element.addEventListener('scroll', handleScroll, { passive: true });
+      (element as HTMLElement).addEventListener('scroll', handleScroll, { passive: true });
     }
   }
 
@@ -397,15 +397,15 @@ export class ScrollHandler extends StateManager {
   }
 
   private getScrollTop(element: Window | HTMLElement): number {
-    return element instanceof Window ? window.scrollY : element.scrollTop;
+    return element === window ? window.scrollY : (element as HTMLElement).scrollTop;
   }
 
   private getViewportHeight(element: Window | HTMLElement): number {
-    return element instanceof Window ? window.innerHeight : element.clientHeight;
+    return element === window ? window.innerHeight : (element as HTMLElement).clientHeight;
   }
 
   private getScrollHeight(element: Window | HTMLElement): number {
-    return element instanceof Window ? document.documentElement.scrollHeight : element.scrollHeight;
+    return element === window ? document.documentElement.scrollHeight : (element as HTMLElement).scrollHeight;
   }
 
   private isElementScrollable(element: HTMLElement): boolean {
