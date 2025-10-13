@@ -59,35 +59,3 @@ export interface ViewportConfig {
    */
   maxTrackedElements?: number;
 }
-
-/**
- * Data captured when element becomes visible
- */
-export interface ViewportEventData {
-  /**
-   * CSS selector that matched the element
-   */
-  selector: string;
-
-  /**
-   * Optional unique identifier for analytics (if configured)
-   * Helps distinguish between multiple elements with the same selector
-   */
-  id?: string;
-
-  /**
-   * Optional human-readable name (if configured)
-   * Useful for dashboards and reports
-   */
-  name?: string;
-
-  /**
-   * Actual time (ms) element was visible before event fired
-   */
-  dwellTime: number;
-
-  /**
-   * Actual visibility ratio when event fired (0-1)
-   */
-  visibilityRatio: number;
-}
