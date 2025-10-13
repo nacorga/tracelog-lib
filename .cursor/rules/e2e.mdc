@@ -9,7 +9,7 @@ alwaysApply: false
 
 ## 🎯 Core Requirements
 
-- **Testing Bridge**: `window.__traceLogBridge` auto-injected when `NODE_ENV=dev`
+- **Testing Bridge**: `window.__traceLogBridge` auto-injected when `NODE_ENV=development`
 - **Test Server**: Runs on `http://localhost:3000` serving `docs/` directory
 - **CSP-Safe**: Use `page.evaluate()` patterns, avoid `page.waitForFunction()`
 - **Cross-Browser**: Chromium + Mobile Chrome (CI), all browsers (local)
