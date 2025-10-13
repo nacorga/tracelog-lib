@@ -97,7 +97,7 @@ class V extends Error {
     super(e), this.errorCode = t, this.layer = r, this.name = this.constructor.name, Error.captureStackTrace && Error.captureStackTrace(this, this.constructor);
   }
 }
-class E extends V {
+class f extends V {
   constructor(e, t = "config") {
     super(e, "APP_CONFIG_INVALID", t);
   }
@@ -160,7 +160,7 @@ const Xe = () => {
   } catch (n) {
     return a("warn", "Device detection failed, defaulting to desktop", { error: n }), w.Desktop;
   }
-}, y = "tlog", Ee = `${y}:qa_mode`, ze = `${y}:uid`, Qe = (n) => n ? `${y}:${n}:queue` : `${y}:queue`, je = (n) => n ? `${y}:${n}:session` : `${y}:session`, Ye = (n) => n ? `${y}:${n}:broadcast` : `${y}:broadcast`, ye = {
+}, y = "tlog", fe = `${y}:qa_mode`, ze = `${y}:uid`, Qe = (n) => n ? `${y}:${n}:queue` : `${y}:queue`, je = (n) => n ? `${y}:${n}:session` : `${y}:session`, Ye = (n) => n ? `${y}:${n}:broadcast` : `${y}:broadcast`, ye = {
   LCP: 4e3,
   FCP: 1800,
   CLS: 0.25,
@@ -182,12 +182,12 @@ const Xe = () => {
   /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
   // Passwords in connection strings (protocol://user:password@host)
   /:\/\/[^:/]+:([^@]+)@/gi
-], fe = 500, ge = 5e3, x = 50, qe = x * 2, Le = 1, Ze = 1e3, Je = 10, me = 5e3, et = 6e4, Se = "tlog_mode", tt = "qa", rt = () => {
-  if (sessionStorage.getItem(Ee) === "true")
+], Ee = 500, ge = 5e3, x = 50, qe = x * 2, Le = 1, Ze = 1e3, Je = 10, me = 5e3, et = 6e4, Se = "tlog_mode", tt = "qa", rt = () => {
+  if (sessionStorage.getItem(fe) === "true")
     return !0;
   const e = new URLSearchParams(window.location.search), r = e.get(Se) === tt;
   if (r) {
-    sessionStorage.setItem(Ee, "true"), e.delete(Se);
+    sessionStorage.setItem(fe, "true"), e.delete(Se);
     const s = e.toString(), i = `${window.location.pathname}${s ? "?" + s : ""}${window.location.hash}`;
     try {
       window.history.replaceState({}, "", i);
@@ -310,18 +310,18 @@ const Xe = () => {
   }
 }, at = (n) => {
   if (n !== void 0 && (n === null || typeof n != "object"))
-    throw new E("Configuration must be an object", "config");
+    throw new f("Configuration must be an object", "config");
   if (n) {
     if (n.sessionTimeout !== void 0 && (typeof n.sessionTimeout != "number" || n.sessionTimeout < 3e4 || n.sessionTimeout > 864e5))
       throw new Ge(h.INVALID_SESSION_TIMEOUT, "config");
     if (n.globalMetadata !== void 0 && (typeof n.globalMetadata != "object" || n.globalMetadata === null))
-      throw new E(h.INVALID_GLOBAL_METADATA, "config");
+      throw new f(h.INVALID_GLOBAL_METADATA, "config");
     if (n.integrations && ct(n.integrations), n.sensitiveQueryParams !== void 0) {
       if (!Array.isArray(n.sensitiveQueryParams))
-        throw new E(h.INVALID_SENSITIVE_QUERY_PARAMS, "config");
+        throw new f(h.INVALID_SENSITIVE_QUERY_PARAMS, "config");
       for (const e of n.sensitiveQueryParams)
         if (typeof e != "string")
-          throw new E("All sensitive query params must be strings", "config");
+          throw new f("All sensitive query params must be strings", "config");
     }
     if (n.errorSampling !== void 0 && (typeof n.errorSampling != "number" || n.errorSampling < 0 || n.errorSampling > 1))
       throw new he(h.INVALID_ERROR_SAMPLING_RATE, "config");
@@ -329,55 +329,55 @@ const Xe = () => {
       throw new he(h.INVALID_SAMPLING_RATE, "config");
     if (n.primaryScrollSelector !== void 0) {
       if (typeof n.primaryScrollSelector != "string" || !n.primaryScrollSelector.trim())
-        throw new E(h.INVALID_PRIMARY_SCROLL_SELECTOR, "config");
+        throw new f(h.INVALID_PRIMARY_SCROLL_SELECTOR, "config");
       if (n.primaryScrollSelector !== "window")
         try {
           document.querySelector(n.primaryScrollSelector);
         } catch {
-          throw new E(
+          throw new f(
             `${h.INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX}: "${n.primaryScrollSelector}"`,
             "config"
           );
         }
     }
     if (n.pageViewThrottleMs !== void 0 && (typeof n.pageViewThrottleMs != "number" || n.pageViewThrottleMs < 0))
-      throw new E(h.INVALID_PAGE_VIEW_THROTTLE, "config");
+      throw new f(h.INVALID_PAGE_VIEW_THROTTLE, "config");
     if (n.clickThrottleMs !== void 0 && (typeof n.clickThrottleMs != "number" || n.clickThrottleMs < 0))
-      throw new E(h.INVALID_CLICK_THROTTLE, "config");
+      throw new f(h.INVALID_CLICK_THROTTLE, "config");
     if (n.maxSameEventPerMinute !== void 0 && (typeof n.maxSameEventPerMinute != "number" || n.maxSameEventPerMinute <= 0))
-      throw new E(h.INVALID_MAX_SAME_EVENT_PER_MINUTE, "config");
+      throw new f(h.INVALID_MAX_SAME_EVENT_PER_MINUTE, "config");
     n.viewport !== void 0 && lt(n.viewport);
   }
 }, lt = (n) => {
   if (typeof n != "object" || n === null)
-    throw new E(h.INVALID_VIEWPORT_CONFIG, "config");
+    throw new f(h.INVALID_VIEWPORT_CONFIG, "config");
   if (!n.elements || !Array.isArray(n.elements))
-    throw new E(h.INVALID_VIEWPORT_ELEMENTS, "config");
+    throw new f(h.INVALID_VIEWPORT_ELEMENTS, "config");
   if (n.elements.length === 0)
-    throw new E(h.INVALID_VIEWPORT_ELEMENTS, "config");
+    throw new f(h.INVALID_VIEWPORT_ELEMENTS, "config");
   const e = /* @__PURE__ */ new Set();
   for (const t of n.elements) {
     if (!t.selector || typeof t.selector != "string" || !t.selector.trim())
-      throw new E(h.INVALID_VIEWPORT_ELEMENT, "config");
+      throw new f(h.INVALID_VIEWPORT_ELEMENT, "config");
     const r = t.selector.trim();
     if (e.has(r))
-      throw new E(
+      throw new f(
         `Duplicate viewport selector found: "${r}". Each selector should appear only once.`,
         "config"
       );
     if (e.add(r), t.id !== void 0 && (typeof t.id != "string" || !t.id.trim()))
-      throw new E(h.INVALID_VIEWPORT_ELEMENT_ID, "config");
+      throw new f(h.INVALID_VIEWPORT_ELEMENT_ID, "config");
     if (t.name !== void 0 && (typeof t.name != "string" || !t.name.trim()))
-      throw new E(h.INVALID_VIEWPORT_ELEMENT_NAME, "config");
+      throw new f(h.INVALID_VIEWPORT_ELEMENT_NAME, "config");
   }
   if (n.threshold !== void 0 && (typeof n.threshold != "number" || n.threshold < 0 || n.threshold > 1))
-    throw new E(h.INVALID_VIEWPORT_THRESHOLD, "config");
+    throw new f(h.INVALID_VIEWPORT_THRESHOLD, "config");
   if (n.minDwellTime !== void 0 && (typeof n.minDwellTime != "number" || n.minDwellTime < 0))
-    throw new E(h.INVALID_VIEWPORT_MIN_DWELL_TIME, "config");
+    throw new f(h.INVALID_VIEWPORT_MIN_DWELL_TIME, "config");
   if (n.cooldownPeriod !== void 0 && (typeof n.cooldownPeriod != "number" || n.cooldownPeriod < 0))
-    throw new E(h.INVALID_VIEWPORT_COOLDOWN_PERIOD, "config");
+    throw new f(h.INVALID_VIEWPORT_COOLDOWN_PERIOD, "config");
   if (n.maxTrackedElements !== void 0 && (typeof n.maxTrackedElements != "number" || n.maxTrackedElements <= 0))
-    throw new E(h.INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS, "config");
+    throw new f(h.INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS, "config");
 }, ct = (n) => {
   if (n) {
     if (n.tracelog && (!n.tracelog.projectId || typeof n.tracelog.projectId != "string" || n.tracelog.projectId.trim() === ""))
@@ -535,7 +535,7 @@ const Xe = () => {
     valid: !0,
     sanitizedMetadata: r
   };
-}, Et = (n, e, t) => {
+}, ft = (n, e, t) => {
   if (Array.isArray(e)) {
     const r = [], s = `${t} "${n}" metadata error`;
     for (let i = 0; i < e.length; i++) {
@@ -559,7 +559,7 @@ const Xe = () => {
     };
   }
   return Ie(n, e, t);
-}, ft = (n, e) => {
+}, Et = (n, e) => {
   const t = ht(n);
   if (!t.valid)
     return a("error", "Event name validation failed", {
@@ -568,7 +568,7 @@ const Xe = () => {
     }), t;
   if (!e)
     return { valid: !0 };
-  const r = Et(n, e, "customEvent");
+  const r = ft(n, e, "customEvent");
   return r.valid || a("error", "Event metadata validation failed", {
     showToClient: !0,
     data: {
@@ -2470,7 +2470,7 @@ class Nt extends S {
     }
   }
   sanitize(e) {
-    let t = e.length > fe ? e.slice(0, fe) + "..." : e;
+    let t = e.length > Ee ? e.slice(0, Ee) + "..." : e;
     for (const r of le) {
       const s = new RegExp(r.source, r.flags);
       t = t.replace(s, "[REDACTED]");
@@ -2521,7 +2521,7 @@ class Rt extends S {
   sendCustomEvent(e, t) {
     if (!this.managers.event)
       return;
-    const { valid: r, error: s, sanitizedMetadata: i } = ft(e, t);
+    const { valid: r, error: s, sanitizedMetadata: i } = Et(e, t);
     if (!r) {
       if (this.get("mode") === D.QA)
         throw new Error(`[TraceLog] Custom event "${e}" validation failed: ${s}`);
@@ -2587,12 +2587,10 @@ class Rt extends S {
   }
 }
 const N = [];
-let f = null, b = !1, F = !1;
+let E = null, C = !1, F = !1;
 const Ot = async (n) => {
-  if (typeof window > "u" || typeof document > "u")
-    throw new Error("[TraceLog] This library can only be used in a browser environment");
-  if (!window.__traceLogDisabled && !f && !b) {
-    b = !0;
+  if (!(typeof window > "u" || typeof document > "u") && !window.__traceLogDisabled && !E && !C) {
+    C = !0;
     try {
       const e = ut(n ?? {}), t = new Rt();
       try {
@@ -2604,7 +2602,7 @@ const Ot = async (n) => {
             o(new Error("[TraceLog] Initialization timeout after 10000ms"));
           }, 1e4);
         });
-        await Promise.race([r, s]), f = t;
+        await Promise.race([r, s]), E = t;
       } catch (r) {
         try {
           t.destroy(!0);
@@ -2614,42 +2612,50 @@ const Ot = async (n) => {
         throw r;
       }
     } catch (e) {
-      throw f = null, e;
+      throw E = null, e;
     } finally {
-      b = !1;
+      C = !1;
     }
   }
-}, bt = (n, e) => {
-  if (!f)
-    throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
-  if (F)
-    throw new Error("[TraceLog] Cannot send events while TraceLog is being destroyed");
-  f.sendCustomEvent(n, e);
 }, Ct = (n, e) => {
-  if (!f || b) {
-    N.push({ event: n, callback: e });
-    return;
+  if (!(typeof window > "u" || typeof document > "u")) {
+    if (!E)
+      throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
+    if (F)
+      throw new Error("[TraceLog] Cannot send events while TraceLog is being destroyed");
+    E.sendCustomEvent(n, e);
   }
-  f.on(n, e);
+}, bt = (n, e) => {
+  if (!(typeof window > "u" || typeof document > "u")) {
+    if (!E || C) {
+      N.push({ event: n, callback: e });
+      return;
+    }
+    E.on(n, e);
+  }
 }, Pt = (n, e) => {
-  if (!f) {
-    const t = N.findIndex((r) => r.event === n && r.callback === e);
-    t !== -1 && N.splice(t, 1);
-    return;
+  if (!(typeof window > "u" || typeof document > "u")) {
+    if (!E) {
+      const t = N.findIndex((r) => r.event === n && r.callback === e);
+      t !== -1 && N.splice(t, 1);
+      return;
+    }
+    E.off(n, e);
   }
-  f.off(n, e);
-}, Dt = () => f !== null, Vt = () => {
-  if (F)
-    throw new Error("[TraceLog] Destroy operation already in progress");
-  if (!f)
-    throw new Error("[TraceLog] App not initialized");
-  F = !0;
-  try {
-    f.destroy(), f = null, b = !1, N.length = 0;
-  } catch (n) {
-    f = null, b = !1, N.length = 0, a("warn", "Error during destroy, forced cleanup completed", { error: n });
-  } finally {
-    F = !1;
+}, Dt = () => typeof window > "u" || typeof document > "u" ? !1 : E !== null, Vt = () => {
+  if (!(typeof window > "u" || typeof document > "u")) {
+    if (F)
+      throw new Error("[TraceLog] Destroy operation already in progress");
+    if (!E)
+      throw new Error("[TraceLog] App not initialized");
+    F = !0;
+    try {
+      E.destroy(), E = null, C = !1, N.length = 0;
+    } catch (n) {
+      E = null, C = !1, N.length = 0, a("warn", "Error during destroy, forced cleanup completed", { error: n });
+    } finally {
+      F = !1;
+    }
   }
 }, or = {
   WEB_VITALS_THRESHOLDS: ye
@@ -2698,14 +2704,14 @@ const Ot = async (n) => {
   LOW_ERROR_RATE_PERCENT: 1,
   HIGH_ERROR_RATE_PERCENT: 5,
   CRITICAL_ERROR_RATE_PERCENT: 10
-}, Er = {
+}, fr = {
   SHORT_TERM_TREND_HOURS: 24,
   MEDIUM_TERM_TREND_DAYS: 7,
   LONG_TERM_TREND_DAYS: 30,
   MIN_DATA_POINTS_FOR_TREND: 5,
   WEEKLY_PATTERN_MIN_WEEKS: 4,
   DAILY_PATTERN_MIN_DAYS: 14
-}, fr = {
+}, Er = {
   MIN_SEGMENT_SIZE: 10,
   MIN_COHORT_SIZE: 5,
   COHORT_ANALYSIS_DAYS: [1, 3, 7, 14, 30],
@@ -2730,13 +2736,13 @@ const Ot = async (n) => {
   PAGE_URL_UNKNOWN: "unknown"
 }, _r = {
   init: Ot,
-  event: bt,
-  on: Ct,
+  event: Ct,
+  on: bt,
   off: Pt,
   isInitialized: Dt,
   destroy: Vt
 };
-var re, Ne = -1, C = function(n) {
+var re, Ne = -1, b = function(n) {
   addEventListener("pageshow", (function(e) {
     e.persisted && (Ne = e.timeStamp, n(e));
   }), !0);
@@ -2792,7 +2798,7 @@ var re, Ne = -1, C = function(n) {
 }, kt = function() {
   removeEventListener("visibilitychange", W, !0), removeEventListener("prerenderingchange", W, !0);
 }, Re = function() {
-  return O < 0 && (O = ve(), Ae(), C((function() {
+  return O < 0 && (O = ve(), Ae(), b((function() {
     setTimeout((function() {
       O = ve(), Ae();
     }), 0);
@@ -2810,7 +2816,7 @@ var re, Ne = -1, C = function(n) {
         l.name === "first-contentful-paint" && (i.disconnect(), l.startTime < r.firstHiddenTime && (s.value = Math.max(l.startTime - B(), 0), s.entries.push(l), t(!0)));
       }));
     }));
-    i && (t = I(n, s, ne, e.reportAllChanges), C((function(o) {
+    i && (t = I(n, s, ne, e.reportAllChanges), b((function(o) {
       s = p("FCP"), t = I(n, s, ne, e.reportAllChanges), ue((function() {
         s.value = performance.now() - o.timeStamp, t(!0);
       }));
@@ -2828,22 +2834,22 @@ var re, Ne = -1, C = function(n) {
     }, l = k("layout-shift", o);
     l && (t = I(n, r, se, e.reportAllChanges), X((function() {
       o(l.takeRecords()), t(!0);
-    })), C((function() {
+    })), b((function() {
       s = 0, r = p("CLS", 0), t = I(n, r, se, e.reportAllChanges), ue((function() {
         return t();
       }));
     })), setTimeout(t, 0));
   })));
-}, be = 0, Y = 1 / 0, U = 0, Ht = function(n) {
+}, Ce = 0, Y = 1 / 0, U = 0, Ht = function(n) {
   n.forEach((function(e) {
-    e.interactionId && (Y = Math.min(Y, e.interactionId), U = Math.max(U, e.interactionId), be = U ? (U - Y) / 7 + 1 : 0);
+    e.interactionId && (Y = Math.min(Y, e.interactionId), U = Math.max(U, e.interactionId), Ce = U ? (U - Y) / 7 + 1 : 0);
   }));
-}, Ce = function() {
-  return re ? be : performance.interactionCount || 0;
+}, be = function() {
+  return re ? Ce : performance.interactionCount || 0;
 }, xt = function() {
   "interactionCount" in performance || re || (re = k("event", Ht, { type: "event", buffered: !0, durationThreshold: 0 }));
 }, T = [], G = /* @__PURE__ */ new Map(), Pe = 0, Ft = function() {
-  var n = Math.min(T.length - 1, Math.floor((Ce() - Pe) / 50));
+  var n = Math.min(T.length - 1, Math.floor((be() - Pe) / 50));
   return T[n];
 }, Gt = [], Wt = function(n) {
   if (Gt.forEach((function(s) {
@@ -2879,8 +2885,8 @@ var re, Ne = -1, C = function(n) {
     }, o = k("event", i, { durationThreshold: (t = e.durationThreshold) !== null && t !== void 0 ? t : 40 });
     r = I(n, s, ie, e.reportAllChanges), o && (o.observe({ type: "first-input", buffered: !0 }), X((function() {
       i(o.takeRecords()), r(!0);
-    })), C((function() {
-      Pe = Ce(), T.length = 0, G.clear(), s = p("INP"), r = I(n, s, ie, e.reportAllChanges);
+    })), b((function() {
+      Pe = be(), T.length = 0, G.clear(), s = p("INP"), r = I(n, s, ie, e.reportAllChanges);
     })));
   })));
 }, oe = [2500, 4e3], K = {}, Xt = function(n, e) {
@@ -2899,7 +2905,7 @@ var re, Ne = -1, C = function(n) {
         addEventListener(c, (function() {
           return De(l);
         }), { once: !0, capture: !0 });
-      })), X(l), C((function(c) {
+      })), X(l), b((function(c) {
         s = p("LCP"), t = I(n, s, oe, e.reportAllChanges), ue((function() {
           s.value = performance.now() - c.timeStamp, K[s.id] = !0, t(!0);
         }));
@@ -2917,7 +2923,7 @@ var re, Ne = -1, C = function(n) {
   var t = p("TTFB"), r = I(n, t, ae, e.reportAllChanges);
   $t((function() {
     var s = ce();
-    s && (t.value = Math.max(s.responseStart - B(), 0), t.entries = [s], r(!0), C((function() {
+    s && (t.value = Math.max(s.responseStart - B(), 0), t.entries = [s], r(!0), b((function() {
       t = p("TTFB", 0), (r = I(n, t, ae, e.reportAllChanges))(!0);
     })));
   }));
@@ -2938,7 +2944,7 @@ const Qt = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
 export {
   gr as ANALYTICS_QUERY_LIMITS,
   mr as ANOMALY_DETECTION,
-  E as AppConfigValidationError,
+  f as AppConfigValidationError,
   dr as CONTENT_ANALYTICS,
   ar as DATA_PROTECTION,
   ur as DEVICE_ANALYTICS,
@@ -2962,14 +2968,14 @@ export {
   D as Mode,
   or as PERFORMANCE_CONFIG,
   R as PermanentError,
-  fr as SEGMENTATION_ANALYTICS,
+  Er as SEGMENTATION_ANALYTICS,
   cr as SESSION_ANALYTICS,
   Sr as SPECIAL_PAGE_URLS,
   he as SamplingRateValidationError,
   H as ScrollDirection,
   Ge as SessionTimeoutValidationError,
   q as SpecialApiUrl,
-  Er as TEMPORAL_ANALYSIS,
+  fr as TEMPORAL_ANALYSIS,
   V as TraceLogValidationError,
   nr as isPrimaryScrollEvent,
   sr as isSecondaryScrollEvent,
