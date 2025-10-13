@@ -71,6 +71,10 @@ export class ScrollHandler extends StateManager {
   private tryDetectScrollContainers(attempt: number): void {
     const elements = this.findScrollableElements();
 
+    if (this.isWindowScrollable()) {
+      this.setupScrollContainer(window, 'window');
+    }
+
     if (elements.length > 0) {
       for (const element of elements) {
         const selector = this.getElementSelector(element);
@@ -122,13 +126,14 @@ export class ScrollHandler extends StateManager {
         }
 
         const style = getComputedStyle(element);
-        const hasScrollableStyle =
+
+        const hasVerticalScrollableStyle =
           style.overflowY === 'auto' ||
           style.overflowY === 'scroll' ||
           style.overflow === 'auto' ||
           style.overflow === 'scroll';
 
-        return hasScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        return hasVerticalScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       },
     });
 
@@ -188,6 +193,29 @@ export class ScrollHandler extends StateManager {
       return;
     }
 
+    const initialScrollTop = this.getScrollTop(element);
+
+    const initialDepth = this.calculateScrollDepth(
+      initialScrollTop,
+      this.getScrollHeight(element),
+      this.getViewportHeight(element),
+    );
+
+    const isPrimary = this.determineIfPrimary(element);
+
+    const container: ScrollContainer = {
+      element,
+      selector,
+      isPrimary,
+      lastScrollPos: initialScrollTop,
+      lastDepth: initialDepth,
+      lastDirection: ScrollDirection.DOWN,
+      lastEventTime: 0,
+      maxDepthReached: initialDepth,
+      debounceTimer: null,
+      listener: null as any, // Will be assigned after handleScroll is defined
+    };
+
     const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {
         return;
@@ -208,25 +236,8 @@ export class ScrollHandler extends StateManager {
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
 
-    const initialScrollTop = this.getScrollTop(element);
-    const initialDepth = this.calculateScrollDepth(
-      initialScrollTop,
-      this.getScrollHeight(element),
-      this.getViewportHeight(element),
-    );
-    const isPrimary = this.determineIfPrimary(element);
-    const container: ScrollContainer = {
-      element,
-      selector,
-      isPrimary,
-      lastScrollPos: initialScrollTop,
-      lastDepth: initialDepth,
-      lastDirection: ScrollDirection.DOWN,
-      lastEventTime: 0,
-      maxDepthReached: initialDepth,
-      debounceTimer: null,
-      listener: handleScroll,
-    };
+    // Assign the listener to the container
+    container.listener = handleScroll;
 
     this.containers.push(container);
 
@@ -399,17 +410,16 @@ export class ScrollHandler extends StateManager {
 
   private isElementScrollable(element: HTMLElement): boolean {
     const style = getComputedStyle(element);
-    const hasScrollableOverflow =
+
+    const hasVerticalScrollableOverflow =
       style.overflowY === 'auto' ||
       style.overflowY === 'scroll' ||
-      style.overflowX === 'auto' ||
-      style.overflowX === 'scroll' ||
       style.overflow === 'auto' ||
       style.overflow === 'scroll';
 
-    const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+    const hasVerticalOverflowContent = element.scrollHeight > element.clientHeight;
 
-    return hasScrollableOverflow && hasOverflowContent;
+    return hasVerticalScrollableOverflow && hasVerticalOverflowContent;
   }
 
   private applyPrimaryScrollSelector(selector: string): void {

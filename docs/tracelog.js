@@ -2453,6 +2453,9 @@ class ScrollHandler extends StateManager {
   }
   tryDetectScrollContainers(attempt) {
     const elements = this.findScrollableElements();
+    if (this.isWindowScrollable()) {
+      this.setupScrollContainer(window, "window");
+    }
     if (elements.length > 0) {
       for (const element of elements) {
         const selector = this.getElementSelector(element);
@@ -2491,8 +2494,8 @@ class ScrollHandler extends StateManager {
           return NodeFilter.FILTER_SKIP;
         }
         const style = getComputedStyle(element);
-        const hasScrollableStyle = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
-        return hasScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        const hasVerticalScrollableStyle = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
+        return hasVerticalScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       }
     });
     let node;
@@ -2534,20 +2537,6 @@ class ScrollHandler extends StateManager {
     if (element !== window && !this.isElementScrollable(element)) {
       return;
     }
-    const handleScroll = () => {
-      if (this.get("suppressNextScroll")) {
-        return;
-      }
-      this.clearContainerTimer(container);
-      container.debounceTimer = window.setTimeout(() => {
-        const scrollData = this.calculateScrollData(container);
-        if (scrollData) {
-          const now = Date.now();
-          this.processScrollEvent(container, scrollData, now);
-        }
-        container.debounceTimer = null;
-      }, SCROLL_DEBOUNCE_TIME_MS);
-    };
     const initialScrollTop = this.getScrollTop(element);
     const initialDepth = this.calculateScrollDepth(
       initialScrollTop,
@@ -2565,8 +2554,24 @@ class ScrollHandler extends StateManager {
       lastEventTime: 0,
       maxDepthReached: initialDepth,
       debounceTimer: null,
-      listener: handleScroll
+      listener: null
+      // Will be assigned after handleScroll is defined
     };
+    const handleScroll = () => {
+      if (this.get("suppressNextScroll")) {
+        return;
+      }
+      this.clearContainerTimer(container);
+      container.debounceTimer = window.setTimeout(() => {
+        const scrollData = this.calculateScrollData(container);
+        if (scrollData) {
+          const now = Date.now();
+          this.processScrollEvent(container, scrollData, now);
+        }
+        container.debounceTimer = null;
+      }, SCROLL_DEBOUNCE_TIME_MS);
+    };
+    container.listener = handleScroll;
     this.containers.push(container);
     if (element instanceof Window) {
       window.addEventListener("scroll", handleScroll, { passive: true });
@@ -2694,9 +2699,9 @@ class ScrollHandler extends StateManager {
   }
   isElementScrollable(element) {
     const style = getComputedStyle(element);
-    const hasScrollableOverflow = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflowX === "auto" || style.overflowX === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
-    const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
-    return hasScrollableOverflow && hasOverflowContent;
+    const hasVerticalScrollableOverflow = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
+    const hasVerticalOverflowContent = element.scrollHeight > element.clientHeight;
+    return hasVerticalScrollableOverflow && hasVerticalOverflowContent;
   }
   applyPrimaryScrollSelector(selector) {
     let targetElement;
@@ -4049,16 +4054,6 @@ const destroy = () => {
     isDestroying = false;
   }
 };
-if (typeof window !== "undefined" && typeof document !== "undefined") {
-  const injectTestingBridge = () => {
-    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
-  };
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", injectTestingBridge);
-  } else {
-    injectTestingBridge();
-  }
-}
 const __setAppInstance = (instance) => {
   if (instance !== null) {
     const hasRequiredMethods = typeof instance === "object" && "init" in instance && "destroy" in instance && "on" in instance && "off" in instance;
@@ -4071,6 +4066,16 @@ const __setAppInstance = (instance) => {
   }
   app = instance;
 };
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  const injectTestingBridge = () => {
+    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", injectTestingBridge);
+  } else {
+    injectTestingBridge();
+  }
+}
 const PERFORMANCE_CONFIG = {
   WEB_VITALS_THRESHOLDS
   // Business thresholds for performance analysis
