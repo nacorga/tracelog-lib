@@ -15,6 +15,7 @@ export default defineConfig({
     testTimeout: 30000, // 30 seconds for integration tests
     hookTimeout: 10000,
     teardownTimeout: 10000,
+    silent: true,
     pool: 'threads',
     poolOptions: {
       threads: {

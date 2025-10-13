@@ -179,16 +179,16 @@ var ErrorType = /* @__PURE__ */ ((ErrorType2) => {
   ErrorType2["PROMISE_REJECTION"] = "promise_rejection";
   return ErrorType2;
 })(ErrorType || {});
-function isPrimaryScrollEvent(event2) {
-  return event2.type === "scroll" && "scroll_data" in event2 && event2.scroll_data.is_primary === true;
-}
-function isSecondaryScrollEvent(event2) {
-  return event2.type === "scroll" && "scroll_data" in event2 && event2.scroll_data.is_primary === false;
-}
 var Mode = /* @__PURE__ */ ((Mode2) => {
   Mode2["QA"] = "qa";
   return Mode2;
 })(Mode || {});
+function isPrimaryScrollEvent(event2) {
+  return event2.type === EventType.SCROLL && "scroll_data" in event2 && event2.scroll_data.is_primary === true;
+}
+function isSecondaryScrollEvent(event2) {
+  return event2.type === EventType.SCROLL && "scroll_data" in event2 && event2.scroll_data.is_primary === false;
+}
 class TraceLogValidationError extends Error {
   constructor(message, errorCode, layer) {
     super(message);
@@ -3937,7 +3937,7 @@ let isInitializing = false;
 let isDestroying = false;
 const init = async (config) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
-    throw new Error("[TraceLog] This library can only be used in a browser environment");
+    return;
   }
   if (window.__traceLogDisabled) {
     return;
@@ -3981,6 +3981,9 @@ const init = async (config) => {
   }
 };
 const event = (name, metadata) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
   if (!app) {
     throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
   }
@@ -3990,6 +3993,9 @@ const event = (name, metadata) => {
   app.sendCustomEvent(name, metadata);
 };
 const on = (event2, callback) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
   if (!app || isInitializing) {
     pendingListeners.push({ event: event2, callback });
     return;
@@ -3997,6 +4003,9 @@ const on = (event2, callback) => {
   app.on(event2, callback);
 };
 const off = (event2, callback) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
   if (!app) {
     const index = pendingListeners.findIndex((l2) => l2.event === event2 && l2.callback === callback);
     if (index !== -1) {
@@ -4007,9 +4016,15 @@ const off = (event2, callback) => {
   app.off(event2, callback);
 };
 const isInitialized = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return false;
+  }
   return app !== null;
 };
 const destroy = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
   if (isDestroying) {
     throw new Error("[TraceLog] Destroy operation already in progress");
   }
@@ -4034,7 +4049,7 @@ const destroy = () => {
     isDestroying = false;
   }
 };
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && typeof document !== "undefined") {
   const injectTestingBridge = () => {
     window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
   };

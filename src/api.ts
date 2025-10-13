@@ -19,7 +19,7 @@ let isDestroying = false;
 
 export const init = async (config?: Config): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    throw new Error('[TraceLog] This library can only be used in a browser environment');
+    return;
   }
 
   if (window.__traceLogDisabled) {
@@ -76,6 +76,10 @@ export const init = async (config?: Config): Promise<void> => {
 };
 
 export const event = (name: string, metadata?: Record<string, MetadataType> | Record<string, MetadataType>[]): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
   if (!app) {
     throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
   }
@@ -88,6 +92,10 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
 };
 
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
   if (!app || isInitializing) {
     // Buffer listeners registered before or during init()
     pendingListeners.push({ event, callback } as PendingListener);
@@ -98,6 +106,10 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
 };
 
 export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
   if (!app) {
     // Remove from pending listeners if not yet initialized
     const index = pendingListeners.findIndex((l) => l.event === event && l.callback === callback);
@@ -111,10 +123,18 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
 };
 
 export const isInitialized = (): boolean => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
   return app !== null;
 };
 
 export const destroy = (): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
   if (isDestroying) {
     throw new Error('[TraceLog] Destroy operation already in progress');
   }
@@ -149,7 +169,7 @@ export const destroy = (): void => {
   }
 };
 
-if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined') {
+if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined' && typeof document !== 'undefined') {
   const injectTestingBridge = (): void => {
     window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
   };
