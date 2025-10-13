@@ -12,6 +12,30 @@
 
 
 
+
+## [0.11.2] - 2025-10-13
+
+### 🐛 Bug Fixes
+
+- Prevent API methods from executing in non-browser environments ([1178703](../../commit/11787036d33e09658658db226f209c912dc77ea1))
+
+### 🔧 Other Changes
+
+- Merge pull request #36 from nacorga/release/20251013.2 ([1a68e6c](../../commit/1a68e6ceb3932ebacec17ded7d6f616bec6eef57))
+- Add comprehensive review instructions for Copilot ([779c231](../../commit/779c23116f14e0d4a8f60fba07f74d2feba37067))
+- Merge pull request #35 from nacorga/feature/ssr-compatibility ([a8cd132](../../commit/a8cd132f600d739b6e600dcc5a51f41c21371f7f))
+- Enable silent mode in Vitest configurations and update API tests for SSR compatibility ([f091d48](../../commit/f091d4845ab72f2097eec31c0d3a08bb6bd3d659))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.11.1...v0.11.2
+
+
 ## [0.11.1] - 2025-10-13
 
 ### ♻️ Refactoring
