@@ -11,6 +11,27 @@
 
 
 
+
+## [0.11.1] - 2025-10-13
+
+### ♻️ Refactoring
+
+- Consolidate event types ([bd0d431](../../commit/bd0d431552f6b84ba0f7a71ae82cedb40c51aa50))
+
+### 🔧 Other Changes
+
+- Merge pull request #34 from nacorga/release/20251013.1 ([e48e1de](../../commit/e48e1deb1506ed1c4c4fd809e18366fc922d4933))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.11.0...v0.11.1
+
+
 ## [0.11.0] - 2025-10-12
 
 ### ✨ Features
