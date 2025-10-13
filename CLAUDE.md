@@ -176,14 +176,22 @@ const result = await page.evaluate(async () => {
 
 ## Build System
 
+### Build Tool: tsup
+
+The library uses [tsup](https://tsup.egoist.dev/) for bundling - a fast TypeScript bundler powered by esbuild.
+
 ### Output Structure
 ```
 dist/
-├── esm/           # TypeScript → ESM (tsconfig.esm.json)
-├── cjs/           # TypeScript → CommonJS (tsconfig.cjs.json)
-└── browser/       # Vite → Browser bundles
-    ├── tracelog.js       # IIFE format (window.tracelog)
-    └── tracelog.esm.js   # ES Module format
+├── public-api.js        # ESM bundle
+├── public-api.cjs       # CommonJS bundle
+├── public-api.d.ts      # TypeScript declarations (ESM)
+├── public-api.d.mts     # TypeScript declarations (CJS)
+├── public-api.js.map    # Source map (ESM)
+├── public-api.cjs.map   # Source map (CJS)
+└── browser/             # Vite → Browser bundles
+    ├── tracelog.js      # IIFE format (window.tracelog)
+    └── tracelog.esm.js  # ES Module format
 ```
 
 ### TypeScript Configuration
@@ -198,11 +206,9 @@ Target: ES2022, Lib: DOM + ES2022
 
 ### Build Process
 
-1. `npm run build:esm` → `dist/esm/` (imports)
-2. `npm run build:cjs` → `dist/cjs/` (require)
-3. `npm run build:browser` → `dist/browser/` (CDN/script tags)
-
-**Browser Build**: Vite bundles `src/public-api.ts` into IIFE + ESM formats with inline dynamic imports.
+1. `npm run build` → tsup bundles ESM + CJS (single files)
+2. `npm run build:browser` → Vite bundles for CDN/script tags
+3. `npm run build:all` → Complete build (tsup + browser)
 
 ## Testing Strategy
 
@@ -396,10 +402,9 @@ Release script (`scripts/release.js`):
 - `src/api.ts` - Public API entry point (`init`, `event`, `destroy`, `on`, `off`)
 - `src/app.ts` - Main orchestrator class
 - `src/public-api.ts` - Export aggregator (what gets bundled)
+- `tsup.config.ts` - tsup bundler configuration (ESM/CJS)
 - `vite.config.mjs` - Browser build configuration
 - `tsconfig.json` - Base TypeScript config (strict mode)
-- `tsconfig.esm.json` - ESM build config (module: "esnext")
-- `tsconfig.cjs.json` - CJS build config (module: "commonjs")
 
 ## Browser Compatibility
 

@@ -169,18 +169,6 @@ export const destroy = (): void => {
   }
 };
 
-if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined' && typeof document !== 'undefined') {
-  const injectTestingBridge = (): void => {
-    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectTestingBridge);
-  } else {
-    injectTestingBridge();
-  }
-}
-
 /**
  * Internal sync function - ONLY for TestBridge in development
  *
@@ -190,6 +178,10 @@ if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined' && typeof do
  * @internal
  */
 export const __setAppInstance = (instance: App | null): void => {
+  if (process.env.NODE_ENV !== 'dev') {
+    return;
+  }
+
   if (instance !== null) {
     const hasRequiredMethods =
       typeof instance === 'object' &&
@@ -210,3 +202,15 @@ export const __setAppInstance = (instance: App | null): void => {
 
   app = instance;
 };
+
+if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const injectTestingBridge = (): void => {
+    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectTestingBridge);
+  } else {
+    injectTestingBridge();
+  }
+}

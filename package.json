@@ -3,17 +3,20 @@
   "description": "JavaScript library for web analytics and real-time event tracking",
   "license": "MIT",
   "version": "0.11.2",
-  "main": "./dist/cjs/public-api.js",
-  "module": "./dist/esm/public-api.js",
-  "types": "./dist/esm/public-api.d.ts",
+  "main": "./dist/public-api.cjs",
+  "module": "./dist/public-api.js",
+  "types": "./dist/public-api.d.ts",
   "files": [
-    "dist/esm",
-    "dist/cjs",
-    "dist/browser"
+    "dist",
+    "!dist/browser"
   ],
   "exports": {
-    "import": "./dist/esm/public-api.js",
-    "require": "./dist/cjs/public-api.js"
+    ".": {
+      "types": "./dist/public-api.d.ts",
+      "import": "./dist/public-api.js",
+      "require": "./dist/public-api.cjs"
+    },
+    "./package.json": "./package.json"
   },
   "repository": {
     "type": "git",
@@ -27,16 +30,12 @@
     "access": "public"
   },
   "scripts": {
-    "build": "npx tsc",
-    "type-check": "npx tsc --noEmit",
-    "type-check:watch": "npx tsc --noEmit --watch",
-    "build:esm": "tsc -p tsconfig.esm.json",
-    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build": "tsup",
     "build:browser": "NODE_ENV=production vite build",
     "build:browser:dev": "NODE_ENV=dev vite build",
-    "build:all": "npm run build:esm && npm run build:cjs && npm run build:browser",
-    "build-ugly": "npm run build:all && find dist -name '*.js' -exec npx uglify-js {} -o {} --compress --mangle --toplevel \\;",
-    "build-ugly:win": "npm run build:all && Get-ChildItem -Path dist -Recurse -Filter *.js | ForEach-Object { npx uglify-js $_.FullName -o $_.FullName --compress --mangle --toplevel }",
+    "build:all": "npm run build && npm run build:browser",
+    "type-check": "npx tsc --noEmit",
+    "type-check:watch": "npx tsc --noEmit --watch",
     "lint": "npx eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "npx eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*{.ts,.js,.html,.css,.json,.md}\" \"scripts/**/*.js\"",
@@ -87,6 +86,7 @@
     "lint-staged": "^15.2.10",
     "prettier": "^3.4.2",
     "terser": "^5.44.0",
+    "tsup": "^8.5.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.36.0",
     "uglify-js": "^3.19.3",

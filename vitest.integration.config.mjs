@@ -1,10 +1,9 @@
 import { defineConfig } from 'vitest/config';
-import { resolve } from 'path';
-import { fileURLToPath, URL } from 'node:url';
-
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('dev'),
+  },
   test: {
     name: 'integration',
     globals: true,
@@ -12,7 +11,7 @@ export default defineConfig({
     setupFiles: ['./tests/vitest-setup.ts', './tests/setup.ts'],
     include: ['tests/integration/**/*.{test,spec}.ts'],
     exclude: ['node_modules/**', 'dist/**'],
-    testTimeout: 30000, // 30 seconds for integration tests
+    testTimeout: 30000,
     hookTimeout: 10000,
     teardownTimeout: 10000,
     silent: true,

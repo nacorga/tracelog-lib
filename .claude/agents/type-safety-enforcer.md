@@ -45,10 +45,8 @@ npm run type-check              # Run TypeScript compiler without emitting files
 npm run type-check:watch        # Watch mode for continuous type checking
 
 # Build (also performs type checking)
-npm run build                   # Build TypeScript (ESM output)
-npm run build:esm              # Build ESM bundle
-npm run build:cjs              # Build CJS bundle
-npm run build:all              # Build all bundles
+npm run build                   # Build with tsup (ESM + CJS)
+npm run build:all               # Build all bundles (includes browser)
 ```
 
 ## Type Error Pattern Recognition
@@ -156,7 +154,7 @@ Fix:
 
 3. **Declaration Files**
    - Validate exported types are correct
-   - Check `dist/esm/*.d.ts` files after build
+   - Check `dist/public-api.d.ts` file after build
 
 ## Type Guard Patterns
 

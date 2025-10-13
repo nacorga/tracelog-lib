@@ -52,6 +52,7 @@ module.exports = {
     '*.config.cjs',
     '*.config.mjs',
     '.eslintrc.cjs',
+    'tsup.config.ts',
     'playwright.config.ts',
     'vite.config.mjs',
     'vitest.config.ts',
