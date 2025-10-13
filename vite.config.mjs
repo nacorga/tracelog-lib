@@ -12,7 +12,7 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
   define: {
     'process.env.NODE_ENV': JSON.stringify(
-      process.env.NODE_ENV === 'dev' ? process.env.NODE_ENV : 'production'
+      process.env.NODE_ENV === 'development' ? process.env.NODE_ENV : 'production'
     ),
   },
   build: {
@@ -32,7 +32,7 @@ export default defineConfig({
           dir: 'dist/browser',
           inlineDynamicImports: true,
           extend: true,
-          sourcemap: process.env.NODE_ENV === 'dev' ? true : 'hidden',
+          sourcemap: process.env.NODE_ENV === 'development' ? true : 'hidden',
           footer: `
             if (typeof window !== 'undefined' && window.TraceLog?.tracelog) {
               window.tracelog = window.TraceLog.tracelog;
@@ -46,12 +46,12 @@ export default defineConfig({
           entryFileNames: 'tracelog.esm.js',
           dir: 'dist/browser',
           inlineDynamicImports: true,
-          sourcemap: process.env.NODE_ENV === 'dev' ? true : 'hidden',
+          sourcemap: process.env.NODE_ENV === 'development' ? true : 'hidden',
         },
       ],
     },
     target: 'es2022',
-    minify: process.env.NODE_ENV !== 'dev',
-    sourcemap: process.env.NODE_ENV === 'dev' ? true : 'hidden',
+    minify: process.env.NODE_ENV !== 'development',
+    sourcemap: process.env.NODE_ENV === 'development' ? true : 'hidden',
   },
 });

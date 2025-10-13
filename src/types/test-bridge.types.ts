@@ -12,7 +12,7 @@ import { State } from './state.types';
 
 /**
  * Testing bridge interface for E2E tests
- * Only available when NODE_ENV=dev
+ * Only available when NODE_ENV=development
  */
 export interface TraceLogTestBridge {
   // Core App methods

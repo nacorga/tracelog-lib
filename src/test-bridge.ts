@@ -27,7 +27,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
 
   override async init(config?: any): Promise<void> {
     // Guard: TestBridge should only be used in development
-    if (process.env.NODE_ENV !== 'dev') {
+    if (process.env.NODE_ENV !== 'development') {
       throw new Error('[TraceLog] TestBridge is only available in development mode');
     }
 

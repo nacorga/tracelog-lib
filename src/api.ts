@@ -152,7 +152,7 @@ export const destroy = (): void => {
     pendingListeners.length = 0;
 
     // Clear TestBridge reference in dev mode to prevent stale references
-    if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined' && window.__traceLogBridge) {
+    if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__traceLogBridge) {
       // Don't call destroy on bridge (would cause recursion), just clear reference
       window.__traceLogBridge = undefined as any;
     }
@@ -178,7 +178,7 @@ export const destroy = (): void => {
  * @internal
  */
 export const __setAppInstance = (instance: App | null): void => {
-  if (process.env.NODE_ENV !== 'dev') {
+  if (process.env.NODE_ENV !== 'development') {
     return;
   }
 
@@ -203,7 +203,7 @@ export const __setAppInstance = (instance: App | null): void => {
   app = instance;
 };
 
-if (process.env.NODE_ENV === 'dev' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {
   const injectTestingBridge = (): void => {
     window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
   };

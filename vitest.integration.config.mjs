@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   define: {
-    'process.env.NODE_ENV': JSON.stringify('dev'),
+    'process.env.NODE_ENV': JSON.stringify('development'),
   },
   test: {
     name: 'integration',

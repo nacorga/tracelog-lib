@@ -1,7 +1,7 @@
 export const formatLogMsg = (msg: string, error?: unknown): string => {
   if (error) {
     // In production, sanitize error messages to avoid exposing sensitive paths
-    if (process.env.NODE_ENV !== 'dev' && error instanceof Error) {
+    if (process.env.NODE_ENV !== 'development' && error instanceof Error) {
       // Remove file paths and line numbers from error messages
       const sanitizedMessage = error.message.replace(/\s+at\s+.*$/gm, '').replace(/\(.*?:\d+:\d+\)/g, '');
       return `[TraceLog] ${msg}: ${sanitizedMessage}`;
@@ -43,7 +43,7 @@ export const log = (
   //   - info: only if showToClient=true
   //   - warn: always logged (critical for debugging)
   //   - error: always logged
-  const isProduction = process.env.NODE_ENV !== 'dev';
+  const isProduction = process.env.NODE_ENV !== 'development';
 
   if (isProduction) {
     // Never log debug in production

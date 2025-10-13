@@ -161,7 +161,7 @@ await tracelog.init({
 
 ### Testing Bridge (E2E Only)
 
-E2E tests use `window.__traceLogBridge` injected when `NODE_ENV=dev`:
+E2E tests use `window.__traceLogBridge` injected when `NODE_ENV=development`:
 
 ```typescript
 // In Playwright tests
@@ -385,7 +385,7 @@ Release script (`scripts/release.js`):
 
 ## Environment Variables
 
-- `NODE_ENV=dev` - Enables test bridge, dev sourcemaps
+- `NODE_ENV=development` - Enables test bridge, dev sourcemaps
 - `NODE_ENV=production` - Minifies, excludes test bridge, hidden sourcemaps
 
 ## Documentation
