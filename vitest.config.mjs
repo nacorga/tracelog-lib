@@ -10,6 +10,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/vitest-setup.ts', './tests/setup.ts'],
     include: ['tests/unit/**/*.{test,spec}.ts'],
+    silent: true,
     pool: 'forks',
     poolOptions: {
       forks: {

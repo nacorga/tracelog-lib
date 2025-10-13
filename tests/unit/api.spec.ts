@@ -60,7 +60,7 @@ describe('Public API', () => {
       expect(App).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw error in non-browser environment', async () => {
+    it('should silently no-op in non-browser environment (SSR compatibility)', async () => {
       const originalWindow = global.window;
       const originalDocument = global.document;
 
@@ -71,11 +71,16 @@ describe('Public API', () => {
 
       const config = createTestConfig();
 
-      await expect(TraceLog.init(config)).rejects.toThrow('This library can only be used in a browser environment');
+      // Should not throw, just return early
+      await expect(TraceLog.init(config)).resolves.toBeUndefined();
 
       // Restore window and document
       global.window = originalWindow;
       global.document = originalDocument;
+
+      // Should not be initialized after SSR early return
+      expect(TraceLog.isInitialized()).toBe(false);
+      expect(App).not.toHaveBeenCalled();
     });
 
     it('should skip initialization when __traceLogDisabled is true', async () => {
@@ -141,7 +146,27 @@ describe('Public API', () => {
   });
 
   describe('event()', () => {
-    it('should throw error when not initialized', () => {
+    it('should silently no-op when not initialized (SSR compatibility)', () => {
+      const originalWindow = global.window;
+      const originalDocument = global.document;
+
+      // @ts-expect-error - Simulating non-browser environment
+      delete global.window;
+      // @ts-expect-error - Simulating non-browser environment
+      delete global.document;
+
+      // Should not throw, just return early
+      expect(() => {
+        TraceLog.event('test_event');
+      }).not.toThrow();
+
+      // Restore
+      global.window = originalWindow;
+      global.document = originalDocument;
+    });
+
+    it('should throw error when initialized but app is null', () => {
+      // In browser environment but not initialized
       expect(() => {
         TraceLog.event('test_event');
       }).toThrow('TraceLog not initialized. Please call init() first.');
@@ -151,40 +176,41 @@ describe('Public API', () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      // Get the mock instance that was created during init
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       TraceLog.event('test_event', { key: 'value' });
 
-      expect(mockAppInstance.sendCustomEvent).toHaveBeenCalledWith('test_event', { key: 'value' });
+      expect(mockAppInstance?.sendCustomEvent).toHaveBeenCalledWith('test_event', { key: 'value' });
     });
 
     it('should send custom event without metadata', async () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       TraceLog.event('test_event');
 
-      expect(mockAppInstance.sendCustomEvent).toHaveBeenCalledWith('test_event', undefined);
+      expect(mockAppInstance?.sendCustomEvent).toHaveBeenCalledWith('test_event', undefined);
     });
 
     it('should handle array metadata', async () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       const metadata = [{ item: 'value1' }, { item: 'value2' }];
       TraceLog.event('test_event', metadata as any);
 
-      expect(mockAppInstance.sendCustomEvent).toHaveBeenCalledWith('test_event', metadata);
+      expect(mockAppInstance?.sendCustomEvent).toHaveBeenCalledWith('test_event', metadata);
     });
 
     it('should rethrow errors from sendCustomEvent', async () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       const eventError = new Error('Event validation failed');
-      vi.mocked(mockAppInstance.sendCustomEvent).mockImplementationOnce(() => {
+      vi.mocked(mockAppInstance?.sendCustomEvent).mockImplementationOnce(() => {
         throw eventError;
       });
 
@@ -206,11 +232,11 @@ describe('Public API', () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       const callback = vi.fn();
       TraceLog.on(EmitterEvent.EVENT, callback);
 
-      expect(mockAppInstance.on).toHaveBeenCalledWith(EmitterEvent.EVENT, callback);
+      expect(mockAppInstance?.on).toHaveBeenCalledWith(EmitterEvent.EVENT, callback);
     });
   });
 
@@ -226,11 +252,11 @@ describe('Public API', () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       const callback = vi.fn();
       TraceLog.off(EmitterEvent.EVENT, callback);
 
-      expect(mockAppInstance.off).toHaveBeenCalledWith(EmitterEvent.EVENT, callback);
+      expect(mockAppInstance?.off).toHaveBeenCalledWith(EmitterEvent.EVENT, callback);
     });
   });
 
@@ -273,7 +299,26 @@ describe('Public API', () => {
   });
 
   describe('destroy()', () => {
-    it('should throw error when not initialized', () => {
+    it('should silently no-op when not initialized (SSR compatibility)', () => {
+      const originalWindow = global.window;
+      const originalDocument = global.document;
+
+      // @ts-expect-error - Simulating non-browser environment
+      delete global.window;
+      // @ts-expect-error - Simulating non-browser environment
+      delete global.document;
+
+      // Should not throw, just return early
+      expect(() => {
+        TraceLog.destroy();
+      }).not.toThrow();
+
+      // Restore
+      global.window = originalWindow;
+      global.document = originalDocument;
+    });
+
+    it('should throw error when in browser but not initialized', () => {
       expect(() => {
         TraceLog.destroy();
       }).toThrow('App not initialized');
@@ -283,10 +328,10 @@ describe('Public API', () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       TraceLog.destroy();
 
-      expect(mockAppInstance.destroy).toHaveBeenCalledTimes(1);
+      expect(mockAppInstance?.destroy).toHaveBeenCalledTimes(1);
       expect(TraceLog.isInitialized()).toBe(false);
     });
 
@@ -306,9 +351,9 @@ describe('Public API', () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
-      const mockAppInstance = new App();
+      const mockAppInstance = vi.mocked(App).mock.results[0]?.value;
       const destroyError = new Error('Destroy operation failed');
-      vi.mocked(mockAppInstance.destroy).mockImplementationOnce(() => {
+      vi.mocked(mockAppInstance?.destroy).mockImplementationOnce(() => {
         throw destroyError;
       });
 
