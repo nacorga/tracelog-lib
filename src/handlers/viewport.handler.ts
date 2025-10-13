@@ -6,8 +6,7 @@ import {
 } from '../constants';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { EventType } from '../types';
-import { ViewportConfig, ViewportEventData } from '../types/viewport.types';
+import { EventType, ViewportConfig, ViewportEventData } from '../types';
 import { log } from '../utils';
 
 interface TrackedElement {
