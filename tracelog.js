@@ -85,14 +85,13 @@ class R extends Error {
     super(e), this.statusCode = t, this.name = "PermanentError", Error.captureStackTrace && Error.captureStackTrace(this, R);
   }
 }
-var u = /* @__PURE__ */ ((n) => (n.PAGE_VIEW = "page_view", n.CLICK = "click", n.SCROLL = "scroll", n.SESSION_START = "session_start", n.SESSION_END = "session_end", n.CUSTOM = "custom", n.WEB_VITALS = "web_vitals", n.ERROR = "error", n.VIEWPORT_VISIBLE = "viewport_visible", n))(u || {}), H = /* @__PURE__ */ ((n) => (n.UP = "up", n.DOWN = "down", n))(H || {}), P = /* @__PURE__ */ ((n) => (n.JS_ERROR = "js_error", n.PROMISE_REJECTION = "promise_rejection", n))(P || {});
+var u = /* @__PURE__ */ ((n) => (n.PAGE_VIEW = "page_view", n.CLICK = "click", n.SCROLL = "scroll", n.SESSION_START = "session_start", n.SESSION_END = "session_end", n.CUSTOM = "custom", n.WEB_VITALS = "web_vitals", n.ERROR = "error", n.VIEWPORT_VISIBLE = "viewport_visible", n))(u || {}), H = /* @__PURE__ */ ((n) => (n.UP = "up", n.DOWN = "down", n))(H || {}), P = /* @__PURE__ */ ((n) => (n.JS_ERROR = "js_error", n.PROMISE_REJECTION = "promise_rejection", n))(P || {}), D = /* @__PURE__ */ ((n) => (n.QA = "qa", n))(D || {});
 function nr(n) {
-  return n.type === "scroll" && "scroll_data" in n && n.scroll_data.is_primary === !0;
+  return n.type === u.SCROLL && "scroll_data" in n && n.scroll_data.is_primary === !0;
 }
 function sr(n) {
-  return n.type === "scroll" && "scroll_data" in n && n.scroll_data.is_primary === !1;
+  return n.type === u.SCROLL && "scroll_data" in n && n.scroll_data.is_primary === !1;
 }
-var D = /* @__PURE__ */ ((n) => (n.QA = "qa", n))(D || {});
 class V extends Error {
   constructor(e, t, r) {
     super(e), this.errorCode = t, this.layer = r, this.name = this.constructor.name, Error.captureStackTrace && Error.captureStackTrace(this, this.constructor);
@@ -113,7 +112,7 @@ class he extends V {
     super(e, "SAMPLING_RATE_INVALID", t);
   }
 }
-class L extends V {
+class M extends V {
   constructor(e, t = "config") {
     super(e, "INTEGRATION_INVALID", t);
   }
@@ -183,7 +182,7 @@ const Xe = () => {
   /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
   // Passwords in connection strings (protocol://user:password@host)
   /:\/\/[^:/]+:([^@]+)@/gi
-], fe = 500, ge = 5e3, x = 50, qe = x * 2, Me = 1, Ze = 1e3, Je = 10, me = 5e3, et = 6e4, Se = "tlog_mode", tt = "qa", rt = () => {
+], fe = 500, ge = 5e3, x = 50, qe = x * 2, Le = 1, Ze = 1e3, Je = 10, me = 5e3, et = 6e4, Se = "tlog_mode", tt = "qa", rt = () => {
   if (sessionStorage.getItem(Ee) === "true")
     return !0;
   const e = new URLSearchParams(window.location.search), r = e.get(Se) === tt;
@@ -382,26 +381,26 @@ const Xe = () => {
 }, ct = (n) => {
   if (n) {
     if (n.tracelog && (!n.tracelog.projectId || typeof n.tracelog.projectId != "string" || n.tracelog.projectId.trim() === ""))
-      throw new L(h.INVALID_TRACELOG_PROJECT_ID, "config");
+      throw new M(h.INVALID_TRACELOG_PROJECT_ID, "config");
     if (n.custom) {
       if (!n.custom.collectApiUrl || typeof n.custom.collectApiUrl != "string" || n.custom.collectApiUrl.trim() === "")
-        throw new L(h.INVALID_CUSTOM_API_URL, "config");
+        throw new M(h.INVALID_CUSTOM_API_URL, "config");
       if (n.custom.allowHttp !== void 0 && typeof n.custom.allowHttp != "boolean")
-        throw new L("allowHttp must be a boolean", "config");
+        throw new M("allowHttp must be a boolean", "config");
       const e = n.custom.collectApiUrl.trim();
       if (!e.startsWith("http://") && !e.startsWith("https://"))
-        throw new L('Custom API URL must start with "http://" or "https://"', "config");
+        throw new M('Custom API URL must start with "http://" or "https://"', "config");
       if (!(n.custom.allowHttp ?? !1) && e.startsWith("http://"))
-        throw new L(
+        throw new M(
           "Custom API URL must use HTTPS in production. Set allowHttp: true in integration config to allow HTTP (not recommended)",
           "config"
         );
     }
     if (n.googleAnalytics) {
       if (!n.googleAnalytics.measurementId || typeof n.googleAnalytics.measurementId != "string" || n.googleAnalytics.measurementId.trim() === "")
-        throw new L(h.INVALID_GOOGLE_ANALYTICS_ID, "config");
+        throw new M(h.INVALID_GOOGLE_ANALYTICS_ID, "config");
       if (!n.googleAnalytics.measurementId.trim().match(/^(G-|UA-)/))
-        throw new L('Google Analytics measurement ID must start with "G-" or "UA-"', "config");
+        throw new M('Google Analytics measurement ID must start with "G-" or "UA-"', "config");
     }
   }
 }, ut = (n) => {
@@ -411,7 +410,7 @@ const Xe = () => {
     sessionTimeout: n?.sessionTimeout ?? 9e5,
     globalMetadata: n?.globalMetadata ?? {},
     sensitiveQueryParams: n?.sensitiveQueryParams ?? [],
-    errorSampling: n?.errorSampling ?? Me,
+    errorSampling: n?.errorSampling ?? Le,
     samplingRate: n?.samplingRate ?? 1,
     pageViewThrottleMs: n?.pageViewThrottleMs ?? 1e3,
     clickThrottleMs: n?.clickThrottleMs ?? 300,
@@ -444,7 +443,7 @@ const Xe = () => {
     return !0;
   }
   return !1;
-}, Le = (n, e = 0) => {
+}, Me = (n, e = 0) => {
   if (typeof n != "object" || n === null || e > 1)
     return !1;
   for (const t of Object.values(n)) {
@@ -463,7 +462,7 @@ const Xe = () => {
         continue;
       }
       if (r === "object" && e === 0) {
-        if (!Le(t, e + 1))
+        if (!Me(t, e + 1))
           return !1;
         continue;
       }
@@ -488,7 +487,7 @@ const Xe = () => {
   error: "Event name cannot be a reserved word"
 } : { valid: !0 }, Ie = (n, e, t) => {
   const r = ot(e), s = `${t} "${n}" metadata error`;
-  if (!Le(r))
+  if (!Me(r))
     return {
       valid: !1,
       error: `${s}: object has invalid types. Valid types are string, number, boolean or string arrays.`
@@ -868,11 +867,11 @@ class St extends S {
       [u.VIEWPORT_VISIBLE]: 0,
       [u.SCROLL]: 0
     });
-    const M = e === u.SESSION_START || e === u.SESSION_END;
-    if (!M && !this.checkRateLimit())
+    const L = e === u.SESSION_START || e === u.SESSION_END;
+    if (!L && !this.checkRateLimit())
       return;
     const m = e;
-    if (!M) {
+    if (!L) {
       if (this.sessionEventCounts.total >= 1e3) {
         a("warn", "Session event limit reached", {
           data: {
@@ -915,7 +914,7 @@ class St extends S {
       session_end_reason: d,
       viewport_data: _
     });
-    if (!(!M && !this.shouldSample())) {
+    if (!(!L && !this.shouldSample())) {
       if (Ve) {
         const A = this.get("sessionId");
         if (!A) {
@@ -938,7 +937,7 @@ class St extends S {
           }), this.emitEvent(z);
           return;
         }
-        this.addToQueue(z), M || (this.sessionEventCounts.total++, this.sessionEventCounts[m] !== void 0 && this.sessionEventCounts[m]++);
+        this.addToQueue(z), L || (this.sessionEventCounts.total++, this.sessionEventCounts[m] !== void 0 && this.sessionEventCounts[m]++);
       }
     }
   }
@@ -1783,7 +1782,7 @@ class At extends S {
     const { element: t, lastScrollPos: r, lastEventTime: s } = e, i = this.getScrollTop(t), o = Date.now(), l = Math.abs(i - r);
     if (l < 10 || t === window && !this.isWindowScrollable())
       return null;
-    const c = this.getViewportHeight(t), d = this.getScrollHeight(t), _ = this.getScrollDirection(i, r), g = this.calculateScrollDepth(i, d, c), M = s > 0 ? o - s : 0, m = M > 0 ? Math.round(l / M * 1e3) : 0;
+    const c = this.getViewportHeight(t), d = this.getScrollHeight(t), _ = this.getScrollDirection(i, r), g = this.calculateScrollDepth(i, d, c), L = s > 0 ? o - s : 0, m = L > 0 ? Math.round(l / L * 1e3) : 0;
     return g > e.maxDepthReached && (e.maxDepthReached = g), e.lastScrollPos = i, {
       depth: g,
       direction: _,
@@ -2040,7 +2039,7 @@ class yt extends S {
     `, document.head.appendChild(r);
   }
 }
-class Mt {
+class Lt {
   storage;
   sessionStorageRef;
   fallbackStorage = /* @__PURE__ */ new Map();
@@ -2218,7 +2217,7 @@ class Mt {
     this.fallbackSessionStorage.delete(e);
   }
 }
-class Lt extends S {
+class Mt extends S {
   eventManager;
   reportedByNav = /* @__PURE__ */ new Map();
   observers = [];
@@ -2427,7 +2426,7 @@ class Nt extends S {
           cooldownMs: me
         }
       }), !1;
-    const r = this.get("config")?.errorSampling ?? Me;
+    const r = this.get("config")?.errorSampling ?? Le;
     return Math.random() < r;
   }
   handleError = (e) => {
@@ -2507,7 +2506,7 @@ class Rt extends S {
   }
   async init(e = {}) {
     if (!this.isInitialized) {
-      this.managers.storage = new Mt();
+      this.managers.storage = new Lt();
       try {
         this.setupState(e), await this.setupIntegrations(), this.managers.event = new St(this.managers.storage, this.integrations.googleAnalytics, this.emitter), this.initializeHandlers(), await this.managers.event.recoverPersistedEvents().catch((t) => {
           a("warn", "Failed to recover persisted events", { error: t });
@@ -2582,7 +2581,7 @@ class Rt extends S {
         this.set("suppressNextScroll", !1);
       }, 500);
     };
-    this.handlers.pageView = new It(this.managers.event, e), this.handlers.pageView.startTracking(), this.handlers.click = new vt(this.managers.event), this.handlers.click.startTracking(), this.handlers.scroll = new At(this.managers.event), this.handlers.scroll.startTracking(), this.handlers.performance = new Lt(this.managers.event), this.handlers.performance.startTracking().catch((t) => {
+    this.handlers.pageView = new It(this.managers.event, e), this.handlers.pageView.startTracking(), this.handlers.click = new vt(this.managers.event), this.handlers.click.startTracking(), this.handlers.scroll = new At(this.managers.event), this.handlers.scroll.startTracking(), this.handlers.performance = new Mt(this.managers.event), this.handlers.performance.startTracking().catch((t) => {
       a("warn", "Failed to start performance tracking", { error: t });
     }), this.handlers.error = new Nt(this.managers.event), this.handlers.error.startTracking(), this.get("config").viewport && (this.handlers.viewport = new wt(this.managers.event), this.handlers.viewport.startTracking());
   }
@@ -2950,7 +2949,7 @@ export {
   u as EventType,
   hr as INSIGHT_THRESHOLDS,
   ir as InitializationTimeoutError,
-  L as IntegrationValidationError,
+  M as IntegrationValidationError,
   rr as MAX_ARRAY_LENGTH,
   qt as MAX_CUSTOM_EVENT_ARRAY_SIZE,
   Kt as MAX_CUSTOM_EVENT_KEYS,
