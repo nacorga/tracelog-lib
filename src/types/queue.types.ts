@@ -2,7 +2,7 @@ import { MetadataType } from './common.types';
 import { DeviceType } from './device.types';
 import { EventData } from './event.types';
 
-export interface BaseEventsQueueDto {
+export interface EventsQueue {
   user_id: string;
   session_id: string;
   device: DeviceType;
@@ -10,11 +10,9 @@ export interface BaseEventsQueueDto {
   global_metadata?: Record<string, MetadataType>;
 }
 
-export interface PersistedQueueData {
-  userId: string;
-  sessionId: string;
-  device: BaseEventsQueueDto['device'];
-  events: BaseEventsQueueDto['events'];
+/**
+ * Extended queue structure for localStorage persistence with expiration tracking.
+ */
+export interface PersistedEventsQueue extends EventsQueue {
   timestamp: number;
-  global_metadata?: BaseEventsQueueDto['global_metadata'];
 }

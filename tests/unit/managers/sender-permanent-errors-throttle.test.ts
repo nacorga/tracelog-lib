@@ -3,7 +3,7 @@ import { SenderManager } from '../../../src/managers/sender.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { PERMANENT_ERROR_LOG_THROTTLE_MS } from '../../../src/constants';
 import { DeviceType } from '../../../src/types';
-import type { BaseEventsQueueDto } from '../../../src/types';
+import type { EventsQueue } from '../../../src/types';
 import * as logUtils from '../../../src/utils/logging.utils';
 
 // Mock fetch globally
@@ -15,7 +15,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
   let storageManager: StorageManager;
   let logSpy: ReturnType<typeof vi.spyOn>;
 
-  const createEventDto = (): BaseEventsQueueDto => ({
+  const createEventDto = (): EventsQueue => ({
     user_id: 'user-123',
     session_id: 'session-456',
     device: DeviceType.Desktop,

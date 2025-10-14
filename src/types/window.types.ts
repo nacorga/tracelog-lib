@@ -9,7 +9,7 @@ declare global {
     __traceLogDisabled?: boolean;
     /**
      * Testing bridge for E2E tests
-     * Only available when NODE_ENV=dev
+     * Only available when NODE_ENV=development
      */
     __traceLogBridge?: TraceLogTestBridge;
   }

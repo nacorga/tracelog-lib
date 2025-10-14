@@ -693,8 +693,6 @@ body {
   transform: scale(1.1);
 }
 
-/* Removed .monitor-queue - now integrated in header */
-
 .monitor-events {
   flex: 1;
   overflow-y: auto;
@@ -880,6 +878,11 @@ body {
 .event-type-error {
   background: #fee2e2;
   color: #dc2626;
+}
+
+.event-type-viewport_visible {
+  background: #e0e7ff;
+  color: #4338ca;
 }
 
 .event-status-icon {

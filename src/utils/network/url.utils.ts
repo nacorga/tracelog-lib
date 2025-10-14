@@ -27,24 +27,38 @@ const isValidUrl = (url: string, allowHttp = false): boolean => {
  */
 export const getCollectApiUrl = (config: Config): string => {
   if (config.integrations?.tracelog?.projectId) {
-    const url = new URL(window.location.href);
-    const host = url.hostname;
-    const parts = host.split('.');
+    try {
+      const url = new URL(window.location.href);
+      const host = url.hostname;
 
-    if (parts.length === 0) {
-      throw new Error('Invalid URL');
+      if (!host || typeof host !== 'string') {
+        throw new Error('Invalid hostname');
+      }
+
+      const parts = host.split('.');
+
+      if (!parts || !Array.isArray(parts) || parts.length === 0 || (parts.length === 1 && parts[0] === '')) {
+        throw new Error('Invalid hostname structure');
+      }
+
+      const projectId = config.integrations.tracelog.projectId;
+      const cleanDomain = parts.slice(-2).join('.');
+
+      if (!cleanDomain) {
+        throw new Error('Invalid domain');
+      }
+
+      const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
+      const isValid = isValidUrl(collectApiUrl);
+
+      if (!isValid) {
+        throw new Error('Invalid URL');
+      }
+
+      return collectApiUrl;
+    } catch (error) {
+      throw new Error(`Invalid URL configuration: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    const projectId = config.integrations.tracelog.projectId;
-    const cleanDomain = parts.slice(-2).join('.');
-    const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
-    const isValid = isValidUrl(collectApiUrl);
-
-    if (!isValid) {
-      throw new Error('Invalid URL');
-    }
-
-    return collectApiUrl;
   }
 
   const collectApiUrl = config.integrations?.custom?.collectApiUrl;
@@ -71,6 +85,11 @@ export const getCollectApiUrl = (config: Config): string => {
  * @returns The normalized URL
  */
 export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): string => {
+  if (!url || typeof url !== 'string') {
+    log('warn', 'Invalid URL provided to normalizeUrl', { data: { url: String(url) } });
+    return url || '';
+  }
+
   try {
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
@@ -98,7 +117,8 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
 
     return result;
   } catch (error) {
-    log('warn', 'URL normalization failed, returning original', { error, data: { url: url.slice(0, 100) } });
+    const urlPreview = url && typeof url === 'string' ? url.slice(0, 100) : String(url);
+    log('warn', 'URL normalization failed, returning original', { error, data: { url: urlPreview } });
 
     return url;
   }

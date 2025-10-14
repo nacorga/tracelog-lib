@@ -19,7 +19,7 @@ describe('API Security', () => {
     });
 
     it('should be available in dev mode', () => {
-      // In dev mode (process.env.NODE_ENV === 'dev'), __setAppInstance should exist
+      // In dev mode (process.env.NODE_ENV === 'development'), __setAppInstance should exist
       expect(__setAppInstance).toBeDefined();
       expect(typeof __setAppInstance).toBe('function');
     });

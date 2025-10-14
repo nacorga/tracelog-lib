@@ -16,7 +16,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SenderManager } from '../../../src/managers/sender.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { DeviceType } from '../../../src/types';
-import type { BaseEventsQueueDto } from '../../../src/types';
+import type { EventsQueue } from '../../../src/types';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -26,7 +26,7 @@ describe('SenderManager Edge Cases', () => {
   let senderManager: SenderManager;
   let storageManager: StorageManager;
 
-  const createEventDto = (): BaseEventsQueueDto => ({
+  const createEventDto = (): EventsQueue => ({
     user_id: 'user-123',
     session_id: 'session-456',
     device: DeviceType.Desktop,
@@ -177,8 +177,8 @@ describe('SenderManager Edge Cases', () => {
       storageManager.setItem(
         storageKey,
         JSON.stringify({
-          userId: 'test-user',
-          sessionId: 'test-session',
+          user_id: 'test-user',
+          session_id: 'test-session',
           events: [{ type: 'CLICK' }],
           // Missing timestamp
         }),
@@ -199,8 +199,8 @@ describe('SenderManager Edge Cases', () => {
       storageManager.setItem(
         storageKey,
         JSON.stringify({
-          userId: 'test-user',
-          sessionId: 'test-session',
+          user_id: 'test-user',
+          session_id: 'test-session',
           events: [{ type: 'CLICK' }],
           timestamp: expiredTimestamp,
         }),
@@ -220,8 +220,8 @@ describe('SenderManager Edge Cases', () => {
       storageManager.setItem(
         storageKey,
         JSON.stringify({
-          userId: 'test-user',
-          sessionId: 'test-session',
+          user_id: 'test-user',
+          session_id: 'test-session',
           events: [], // Empty
           timestamp: Date.now(),
         }),

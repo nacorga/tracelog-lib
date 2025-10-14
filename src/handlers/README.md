@@ -81,6 +81,7 @@ Captures mouse clicks and converts them into analytics events with element conte
 - **Click Throttling**: Per-element throttle (default 300ms) prevents double-clicks and rapid spam
   - Configurable via `config.clickThrottleMs` (default: 300ms)
   - Uses stable element signatures (ID > data-testid > data-tlog-name > DOM path)
+  - **Memory Management**: TTL-based pruning (5-minute TTL) + LRU eviction (1000-entry limit) prevents memory leaks in long-running SPAs
 
 **Text Extraction Priority**:
 1. Uses clicked element's text if within 255 character limit
@@ -292,6 +293,7 @@ Captures Web Vitals and performance metrics using the `web-vitals` library with 
 - Metric types (LCP, FCP, INP, TTFB) only sent **once per navigation**
 - **CLS** sent multiple times as it accumulates, resets on navigation
 - **LONG_TASK** bypasses navigation deduplication, uses time-based throttling (1/second)
+- **Memory Management**: FIFO eviction keeps last 50 navigations (prevents memory leaks in long-running SPAs)
 - Deduplication map cleared when handler stops
 
 **TTFB Special Handling**:
@@ -440,7 +442,7 @@ The handler generates CSS selectors for each scrollable container using this pri
 - TreeWalker with early branch pruning
 - Limited to 10 containers per scan
 - 250ms debounce per container
-- Window scrollability result cached for performance
+- Window scrollability checked dynamically (no caching for accuracy with dynamic content)
 
 **Debouncing Strategy**:
 - Events debounced to 250ms to prevent spam
@@ -451,7 +453,6 @@ The handler generates CSS selectors for each scrollable container using this pri
 - Properly removes all event listeners on `stopTracking()`
 - Clears all debounce timers to prevent leaks
 - Resets scroll event counter and warning flags
-- Clears window scrollability cache
 - Cancels pending retry attempts
 
 **Framework Compatibility**:

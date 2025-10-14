@@ -120,10 +120,11 @@ jobs:
 
           # Verify build outputs
           required_files=(
-            "dist/esm/public-api.js"
-            "dist/esm/public-api.d.ts"
-            "dist/cjs/public-api.js"
+            "dist/public-api.js"
+            "dist/public-api.d.ts"
+            "dist/public-api.cjs"
             "dist/browser/tracelog.js"
+            "dist/browser/tracelog.esm.js"
           )
 
           for file in "${required_files[@]}"; do

@@ -8,6 +8,9 @@ const DEFAULT_CLICK_THROTTLE_MS = 300;
 const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
 const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
 const VIEWPORT_MUTATION_DEBOUNCE_MS = 100;
+const MAX_THROTTLE_CACHE_ENTRIES = 1e3;
+const THROTTLE_ENTRY_TTL_MS = 3e5;
+const THROTTLE_PRUNE_INTERVAL_MS = 3e4;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
@@ -295,6 +298,7 @@ const WEB_VITALS_THRESHOLDS = {
   LONG_TASK: 50
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
+const MAX_NAVIGATION_HISTORY = 50;
 const PII_PATTERNS = [
   // Email addresses
   /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
@@ -399,20 +403,30 @@ const isValidUrl = (url, allowHttp = false) => {
 };
 const getCollectApiUrl = (config) => {
   if (config.integrations?.tracelog?.projectId) {
-    const url = new URL(window.location.href);
-    const host = url.hostname;
-    const parts = host.split(".");
-    if (parts.length === 0) {
-      throw new Error("Invalid URL");
+    try {
+      const url = new URL(window.location.href);
+      const host = url.hostname;
+      if (!host || typeof host !== "string") {
+        throw new Error("Invalid hostname");
+      }
+      const parts = host.split(".");
+      if (!parts || !Array.isArray(parts) || parts.length === 0 || parts.length === 1 && parts[0] === "") {
+        throw new Error("Invalid hostname structure");
+      }
+      const projectId = config.integrations.tracelog.projectId;
+      const cleanDomain = parts.slice(-2).join(".");
+      if (!cleanDomain) {
+        throw new Error("Invalid domain");
+      }
+      const collectApiUrl2 = `https://${projectId}.${cleanDomain}/collect`;
+      const isValid = isValidUrl(collectApiUrl2);
+      if (!isValid) {
+        throw new Error("Invalid URL");
+      }
+      return collectApiUrl2;
+    } catch (error) {
+      throw new Error(`Invalid URL configuration: ${error instanceof Error ? error.message : String(error)}`);
     }
-    const projectId = config.integrations.tracelog.projectId;
-    const cleanDomain = parts.slice(-2).join(".");
-    const collectApiUrl2 = `https://${projectId}.${cleanDomain}/collect`;
-    const isValid = isValidUrl(collectApiUrl2);
-    if (!isValid) {
-      throw new Error("Invalid URL");
-    }
-    return collectApiUrl2;
   }
   const collectApiUrl = config.integrations?.custom?.collectApiUrl;
   if (collectApiUrl) {
@@ -426,6 +440,10 @@ const getCollectApiUrl = (config) => {
   return "";
 };
 const normalizeUrl = (url, sensitiveQueryParams = []) => {
+  if (!url || typeof url !== "string") {
+    log("warn", "Invalid URL provided to normalizeUrl", { data: { url: String(url) } });
+    return url || "";
+  }
   try {
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
@@ -446,7 +464,8 @@ const normalizeUrl = (url, sensitiveQueryParams = []) => {
     const result = urlObject.toString();
     return result;
   } catch (error) {
-    log("warn", "URL normalization failed, returning original", { error, data: { url: url.slice(0, 100) } });
+    const urlPreview = url && typeof url === "string" ? url.slice(0, 100) : String(url);
+    log("warn", "URL normalization failed, returning original", { error, data: { url: urlPreview } });
     return url;
   }
 };
@@ -1169,23 +1188,14 @@ class SenderManager extends StateManager {
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
   createRecoveryBody(data) {
-    return {
-      user_id: data.userId,
-      session_id: data.sessionId,
-      device: data.device,
-      events: data.events,
-      ...data.global_metadata && { global_metadata: data.global_metadata }
-    };
+    const { timestamp, ...queue } = data;
+    return queue;
   }
   persistEvents(body) {
     try {
       const persistedData = {
-        userId: body.user_id,
-        sessionId: body.session_id,
-        device: body.device,
-        events: body.events,
-        timestamp: Date.now(),
-        ...body.global_metadata && { global_metadata: body.global_metadata }
+        ...body,
+        timestamp: Date.now()
       };
       const storageKey = this.getQueueStorageKey();
       this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
@@ -2173,8 +2183,9 @@ class PageViewHandler extends StateManager {
 }
 class ClickHandler extends StateManager {
   eventManager;
-  clickHandler;
   lastClickTimes = /* @__PURE__ */ new Map();
+  clickHandler;
+  lastPruneTime = 0;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -2228,6 +2239,7 @@ class ClickHandler extends StateManager {
       this.clickHandler = void 0;
     }
     this.lastClickTimes.clear();
+    this.lastPruneTime = 0;
   }
   shouldIgnoreElement(element) {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
@@ -2243,6 +2255,7 @@ class ClickHandler extends StateManager {
   checkClickThrottle(element, throttleMs) {
     const signature = this.getElementSignature(element);
     const now = Date.now();
+    this.pruneThrottleCache(now);
     const lastClickTime = this.lastClickTimes.get(signature);
     if (lastClickTime !== void 0 && now - lastClickTime < throttleMs) {
       log("debug", "ClickHandler: Click suppressed by throttle", {
@@ -2255,6 +2268,37 @@ class ClickHandler extends StateManager {
     }
     this.lastClickTimes.set(signature, now);
     return true;
+  }
+  /**
+   * Prunes stale entries from the throttle cache to prevent memory leaks
+   * Uses TTL-based eviction (5 minutes) and enforces max size limit
+   * Called during checkClickThrottle with built-in rate limiting (every 30 seconds)
+   */
+  pruneThrottleCache(now) {
+    if (now - this.lastPruneTime < THROTTLE_PRUNE_INTERVAL_MS) {
+      return;
+    }
+    this.lastPruneTime = now;
+    const cutoff = now - THROTTLE_ENTRY_TTL_MS;
+    for (const [key, timestamp] of this.lastClickTimes.entries()) {
+      if (timestamp < cutoff) {
+        this.lastClickTimes.delete(key);
+      }
+    }
+    if (this.lastClickTimes.size > MAX_THROTTLE_CACHE_ENTRIES) {
+      const entries = Array.from(this.lastClickTimes.entries()).sort((a2, b2) => a2[1] - b2[1]);
+      const excessCount = this.lastClickTimes.size - MAX_THROTTLE_CACHE_ENTRIES;
+      const toDelete = entries.slice(0, excessCount);
+      for (const [key] of toDelete) {
+        this.lastClickTimes.delete(key);
+      }
+      log("debug", "ClickHandler: Pruned throttle cache", {
+        data: {
+          removed: toDelete.length,
+          remaining: this.lastClickTimes.size
+        }
+      });
+    }
   }
   /**
    * Creates a stable signature for an element to track throttling
@@ -2421,7 +2465,6 @@ class ScrollHandler extends StateManager {
   minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
-  windowScrollableCache = null;
   retryTimeoutId = null;
   constructor(eventManager) {
     super();
@@ -2440,7 +2483,7 @@ class ScrollHandler extends StateManager {
     }
     for (const container of this.containers) {
       this.clearContainerTimer(container);
-      if (container.element instanceof Window) {
+      if (container.element === window) {
         window.removeEventListener("scroll", container.listener);
       } else {
         container.element.removeEventListener("scroll", container.listener);
@@ -2449,10 +2492,12 @@ class ScrollHandler extends StateManager {
     this.containers.length = 0;
     this.set("scrollEventCount", 0);
     this.limitWarningLogged = false;
-    this.windowScrollableCache = null;
   }
   tryDetectScrollContainers(attempt) {
     const elements = this.findScrollableElements();
+    if (this.isWindowScrollable()) {
+      this.setupScrollContainer(window, "window");
+    }
     if (elements.length > 0) {
       for (const element of elements) {
         const selector = this.getElementSelector(element);
@@ -2491,8 +2536,8 @@ class ScrollHandler extends StateManager {
           return NodeFilter.FILTER_SKIP;
         }
         const style = getComputedStyle(element);
-        const hasScrollableStyle = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
-        return hasScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        const hasVerticalScrollableStyle = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
+        return hasVerticalScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       }
     });
     let node;
@@ -2534,20 +2579,6 @@ class ScrollHandler extends StateManager {
     if (element !== window && !this.isElementScrollable(element)) {
       return;
     }
-    const handleScroll = () => {
-      if (this.get("suppressNextScroll")) {
-        return;
-      }
-      this.clearContainerTimer(container);
-      container.debounceTimer = window.setTimeout(() => {
-        const scrollData = this.calculateScrollData(container);
-        if (scrollData) {
-          const now = Date.now();
-          this.processScrollEvent(container, scrollData, now);
-        }
-        container.debounceTimer = null;
-      }, SCROLL_DEBOUNCE_TIME_MS);
-    };
     const initialScrollTop = this.getScrollTop(element);
     const initialDepth = this.calculateScrollDepth(
       initialScrollTop,
@@ -2565,10 +2596,26 @@ class ScrollHandler extends StateManager {
       lastEventTime: 0,
       maxDepthReached: initialDepth,
       debounceTimer: null,
-      listener: handleScroll
+      listener: null
+      // Will be assigned after handleScroll is defined
     };
+    const handleScroll = () => {
+      if (this.get("suppressNextScroll")) {
+        return;
+      }
+      this.clearContainerTimer(container);
+      container.debounceTimer = window.setTimeout(() => {
+        const scrollData = this.calculateScrollData(container);
+        if (scrollData) {
+          const now = Date.now();
+          this.processScrollEvent(container, scrollData, now);
+        }
+        container.debounceTimer = null;
+      }, SCROLL_DEBOUNCE_TIME_MS);
+    };
+    container.listener = handleScroll;
     this.containers.push(container);
-    if (element instanceof Window) {
+    if (element === window) {
       window.addEventListener("scroll", handleScroll, { passive: true });
     } else {
       element.addEventListener("scroll", handleScroll, { passive: true });
@@ -2633,11 +2680,7 @@ class ScrollHandler extends StateManager {
     this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
   isWindowScrollable() {
-    if (this.windowScrollableCache !== null) {
-      return this.windowScrollableCache;
-    }
-    this.windowScrollableCache = document.documentElement.scrollHeight > window.innerHeight;
-    return this.windowScrollableCache;
+    return document.documentElement.scrollHeight > window.innerHeight;
   }
   clearContainerTimer(container) {
     if (container.debounceTimer !== null) {
@@ -2684,19 +2727,19 @@ class ScrollHandler extends StateManager {
     };
   }
   getScrollTop(element) {
-    return element instanceof Window ? window.scrollY : element.scrollTop;
+    return element === window ? window.scrollY : element.scrollTop;
   }
   getViewportHeight(element) {
-    return element instanceof Window ? window.innerHeight : element.clientHeight;
+    return element === window ? window.innerHeight : element.clientHeight;
   }
   getScrollHeight(element) {
-    return element instanceof Window ? document.documentElement.scrollHeight : element.scrollHeight;
+    return element === window ? document.documentElement.scrollHeight : element.scrollHeight;
   }
   isElementScrollable(element) {
     const style = getComputedStyle(element);
-    const hasScrollableOverflow = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflowX === "auto" || style.overflowX === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
-    const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
-    return hasScrollableOverflow && hasOverflowContent;
+    const hasVerticalScrollableOverflow = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
+    const hasVerticalOverflowContent = element.scrollHeight > element.clientHeight;
+    return hasVerticalScrollableOverflow && hasVerticalOverflowContent;
   }
   applyPrimaryScrollSelector(selector) {
     let targetElement;
@@ -3270,9 +3313,11 @@ class StorageManager {
 class PerformanceHandler extends StateManager {
   eventManager;
   reportedByNav = /* @__PURE__ */ new Map();
+  navigationHistory = [];
+  // FIFO queue for tracking navigation order
   observers = [];
-  lastLongTaskSentAt = 0;
   vitalThresholds = WEB_VITALS_THRESHOLDS;
+  lastLongTaskSentAt = 0;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -3291,6 +3336,7 @@ class PerformanceHandler extends StateManager {
     });
     this.observers.length = 0;
     this.reportedByNav.clear();
+    this.navigationHistory.length = 0;
   }
   observeWebVitalsFallback() {
     this.reportTTFB();
@@ -3420,6 +3466,13 @@ class PerformanceHandler extends StateManager {
       }
       if (!reportedForNav) {
         this.reportedByNav.set(navId, /* @__PURE__ */ new Set([sample.type]));
+        this.navigationHistory.push(navId);
+        if (this.navigationHistory.length > MAX_NAVIGATION_HISTORY) {
+          const oldestNav = this.navigationHistory.shift();
+          if (oldestNav) {
+            this.reportedByNav.delete(oldestNav);
+          }
+        }
       } else {
         reportedForNav.add(sample.type);
       }
@@ -4049,16 +4102,6 @@ const destroy = () => {
     isDestroying = false;
   }
 };
-if (typeof window !== "undefined" && typeof document !== "undefined") {
-  const injectTestingBridge = () => {
-    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
-  };
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", injectTestingBridge);
-  } else {
-    injectTestingBridge();
-  }
-}
 const __setAppInstance = (instance) => {
   if (instance !== null) {
     const hasRequiredMethods = typeof instance === "object" && "init" in instance && "destroy" in instance && "on" in instance && "off" in instance;
@@ -4071,6 +4114,16 @@ const __setAppInstance = (instance) => {
   }
   app = instance;
 };
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  const injectTestingBridge = () => {
+    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", injectTestingBridge);
+  } else {
+    injectTestingBridge();
+  }
+}
 const PERFORMANCE_CONFIG = {
   WEB_VITALS_THRESHOLDS
   // Business thresholds for performance analysis

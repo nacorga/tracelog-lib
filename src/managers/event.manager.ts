@@ -18,7 +18,7 @@ import {
   FINGERPRINT_CLEANUP_MULTIPLIER,
   MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
-import { BaseEventsQueueDto, EmitterEvent, EventData, EventType, Mode } from '../types';
+import { EventsQueue, EmitterEvent, EventData, EventType, Mode } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
@@ -369,7 +369,7 @@ export class EventManager extends StateManager {
     });
   }
 
-  private buildEventsPayload(): BaseEventsQueueDto {
+  private buildEventsPayload(): EventsQueue {
     const eventMap = new Map<string, EventData>();
     const order: string[] = [];
 
@@ -642,7 +642,7 @@ export class EventManager extends StateManager {
     }
   }
 
-  private emitEventsQueue(queue: BaseEventsQueueDto): void {
+  private emitEventsQueue(queue: EventsQueue): void {
     if (this.emitter) {
       this.emitter.emit(EmitterEvent.QUEUE, queue);
     }

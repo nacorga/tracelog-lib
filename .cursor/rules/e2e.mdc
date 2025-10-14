@@ -5,195 +5,411 @@ alwaysApply: false
 
 # E2E Testing Guide
 
+**Playwright-based end-to-end tests for TraceLog client library**
+
 ## 🎯 Core Requirements
 
-- **Project IDs**: Always use `SpecialProjectId` from `src/types/api.types.ts` for testing (special ids that automatically enables debug mode and full logging).
-  - Use `SpecialProjectId.HttpLocal` to allow http calls (based on window.location.origin) to load config and send events queues.
-  - Use `SpecialProjectId.HttpSkip` to skip http calls.
-  - Using `SpecialProjectId.HttpSkip` by default on `initializeTraceLog` method.
-- **Console Monitoring**: Required `createConsoleMonitor()` + `cleanup()`.
-- **Cross-Browser**: Must pass on Chromium, Firefox, WebKit, Mobile.
-- **Testing Bridge**: Auto-injected `window.__traceLogBridge` when `NODE_ENV=dev`.
-
-## 📝 Basic Test Structure
-
-```ts
-import { test, expect } from '@playwright/test';
-import { TestUtils } from '../utils';
-
-test('should validate behavior', async ({ page }) => {
-  const monitor = TestUtils.createConsoleMonitor(page);
-
-  try {
-    await TestUtils.navigateAndWaitForReady(page, '/');
-    const initResult = await TestUtils.initializeTraceLog(page);
-
-    expect(TestUtils.verifyInitializationResult(initResult).success).toBe(true);
-    expect(TestUtils.verifyNoTraceLogErrors(monitor.traceLogErrors)).toBe(true);
-
-    // Test-specific logic here
-
-  } finally {
-    monitor.cleanup(); // ALWAYS required
-  }
-});
-```
+- **Testing Bridge**: `window.__traceLogBridge` auto-injected when `NODE_ENV=development`
+- **Test Server**: Runs on `http://localhost:3000` serving `docs/` directory
+- **CSP-Safe**: Use `page.evaluate()` patterns, avoid `page.waitForFunction()`
+- **Cross-Browser**: Chromium + Mobile Chrome (CI), all browsers (local)
 
 ## 📁 File Organization
 
 ```
-tests/
-├── constants/[domain].constants.ts   # Test data constants
-├── utils/[domain].utils.ts           # Helper functions
-├── types/[domain].types.ts           # TypeScript types
-└── e2e/[domain]/test-name.spec.ts    # Test files
+tests/e2e/
+├── *.spec.ts                      # All test files (flat structure)
+└── utils/
+    ├── bridge.utils.ts            # Bridge interaction helpers
+    └── environment.utils.ts       # Navigation and setup helpers
 ```
 
-**Domains**: initialization, session-management, event-tracking, performance-tracking, error-tracking, user-management
+**Examples**: `basic-initialization.spec.ts`, `error-tracking.spec.ts`, `session-management.spec.ts`
 
-## 🛠️ Essential Patterns
+## 📝 Basic Test Structure
 
-### Initialization
-```ts
-const config = { id: 'test' }; // Auto debug mode + full logging
-const initResult = await TestUtils.initializeTraceLog(page, config);
-expect(initResult.success).toBe(true);
-```
+```typescript
+import { test, expect } from '@playwright/test';
+import { navigateToPlayground } from './utils/environment.utils';
 
-### Event Tracking
-```ts
-await TestUtils.trackCustomEvent(page, { name: 'test_event', metadata: { key: 'value' } });
-const events = await TestUtils.getTrackedEvents(page);
-const event = events.find((e: any) => e.type === 'CUSTOM');
-expect(event.custom_event.name).toBe('test_event');
-```
+test('should validate behavior', async ({ page }) => {
+  // 1. Navigate to test playground
+  await navigateToPlayground(page, { autoInit: false });
 
-### Session Management
-```ts
-await TestUtils.triggerUserActivity(page);
-await TestUtils.waitForSessionStart(page);
-const session = await TestUtils.getSessionData(page);
-expect((session as any).isActive).toBe(true);
-```
+  // 2. Initialize in browser context
+  const initResult = await page.evaluate(async () => {
+    try {
+      await window.__traceLogBridge!.init();
+      return {
+        success: true,
+        initialized: window.__traceLogBridge!.initialized
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: (error as Error).message
+      };
+    }
+  });
 
-### Event Capture
-```ts
-import { EventCapture, COMMON_FILTERS } from '../utils';
+  // 3. Verify initialization
+  expect(initResult.success).toBe(true);
+  expect(initResult.initialized).toBe(true);
 
-const eventCapture = new EventCapture();
-try {
-  await eventCapture.startCapture(page);
-  await TestUtils.initializeTraceLog(page);
-
-  const initEvent = await eventCapture.waitForEvent(COMMON_FILTERS.INITIALIZATION, 3000);
-  expect(initEvent.namespace).toBe('App');
-} finally {
-  await eventCapture.stopCapture();
-}
-```
-
-### Available Filters
-```ts
-COMMON_FILTERS.INITIALIZATION   // App initialization events
-COMMON_FILTERS.SESSION_START    // Session start events
-COMMON_FILTERS.CUSTOM_EVENT     // Custom event tracking
-COMMON_FILTERS.ERROR            // Error events
-```
-
-## 🔧 Environment Setup
-
-### Test Config Behavior
-
-#### Debug Logging
-
-**Output Method:**
-- `NODE_ENV=dev`: Events to `window`
-- Other: Browser console
-
-**Filtering:** Same mode-based filtering for both outputs.
-
-#### SpecialProjectId Usage
-
-Both force `debug` mode automatically:
-
-- `HttpSkip`: No HTTP calls, local config
-- `HttpLocal`: HTTP calls to localhost
-
-```ts
-// ✅ Correct
-await TraceLog.init({ id: SpecialProjectId.HttpSkip });
-
-// ❌ Wrong - mode not configurable
-await TraceLog.init({ id: 'test-id', mode: 'debug' });
-```
-
-#### Event Capture in Tests
-
-```ts
-// Listen for debug log events in E2E tests
-window.addEventListener('tracelog:log', (event) => {
-  // Event structure same as EventLogDispatch type
+  // 4. Test-specific logic...
 });
 ```
 
-### Network Simulation
-```ts
-// Block network requests
-await page.route('**/api/**', route => route.abort('failed'));
+## 🛠️ Available Utilities
 
-// Mock responses
-await page.route('**/config', route => route.fulfill({
-  status: 200,
-  body: JSON.stringify({ sampling: 0.5 })
-}));
+### Navigation (`environment.utils.ts`)
+
+```typescript
+import { navigateToPlayground } from './utils/environment.utils';
+
+// Navigate with options
+await navigateToPlayground(page, {
+  autoInit: false,              // Don't auto-init TraceLog
+  waitForBridge: true,          // Wait for bridge availability (default: true)
+  destroyExisting: true,        // Destroy existing instances (default: true)
+  searchParams: { e2e: 'true' } // Add query parameters
+});
 ```
 
-## ⚡ Best Practices
+### Bridge Initialization (`bridge.utils.ts`)
 
-### Timing
-```ts
-// GOOD: Wait for conditions
-await page.waitForFunction(() => window.__traceLogBridge?.isInitialized());
+```typescript
+import { initializeTraceLog } from './utils/bridge.utils';
 
-// BAD: Arbitrary timeouts
-await page.waitForTimeout(1000); // Flaky
-```
-
-### Error Testing
-```ts
-// Trigger JavaScript error
-await page.evaluate(() => {
-  throw new Error('Test error for error tracking');
+// Initialize with config
+const result = await initializeTraceLog(page, {
+  errorSampling: 1,
+  sessionTimeout: 60000,
+  integrations: {
+    custom: { collectApiUrl: 'http://localhost:8080/collect' }
+  }
 });
 
-// Wait for error capture
-const errorEvent = await eventCapture.waitForEvent(COMMON_FILTERS.ERROR, 3000);
+expect(result.success).toBe(true);
+expect(result.initialized).toBe(true);
 ```
 
-### Data Isolation
-```ts
-test.beforeEach(async ({ page }) => {
-  await page.evaluate(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-    window.__traceLogBridge?.destroy();
+## 🔌 Integration Modes
+
+### Local-Only Mode (No HTTP)
+```typescript
+// Standalone mode - no backend integration
+await page.evaluate(async () => {
+  await window.__traceLogBridge!.init();
+});
+```
+
+### Custom Backend Integration
+```typescript
+// With backend integration
+await page.evaluate(async () => {
+  await window.__traceLogBridge!.init({
+    integrations: {
+      custom: {
+        collectApiUrl: 'http://localhost:8080/collect',
+        allowHttp: true
+      }
+    }
   });
 });
 ```
 
+## 📊 Event Listening Patterns
+
+### Listen to Events
+```typescript
+const result = await page.evaluate(async () => {
+  const events: any[] = [];
+
+  // Listen for specific event type
+  window.__traceLogBridge!.on('event', (data: any) => {
+    if (data.type === 'custom') {
+      events.push(data);
+    }
+  });
+
+  // Trigger event
+  window.__traceLogBridge!.sendCustomEvent('purchase', { amount: 99.99 });
+
+  // Wait for event processing
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  return events;
+});
+
+expect(result).toHaveLength(1);
+expect(result[0].custom_event.name).toBe('purchase');
+```
+
+### Listen to Queue Events
+```typescript
+const result = await page.evaluate(async () => {
+  const queues: any[] = [];
+
+  // Queue events contain sessionId
+  window.__traceLogBridge!.on('queue', (data: any) => {
+    queues.push(data);
+  });
+
+  // Trigger events...
+
+  return queues;
+});
+
+// sessionId is in queue.session_id, NOT in individual events
+expect(result[0].session_id).toBeDefined();
+expect(result[0].events).toBeInstanceOf(Array);
+```
+
+## 🧪 Common Test Patterns
+
+### Custom Event Tracking
+```typescript
+test('should track custom events', async ({ page }) => {
+  await navigateToPlayground(page, { autoInit: false });
+
+  const result = await page.evaluate(async () => {
+    const events: any[] = [];
+
+    await window.__traceLogBridge!.init();
+
+    window.__traceLogBridge!.on('event', (data: any) => {
+      if (data.type === 'custom') events.push(data);
+    });
+
+    window.__traceLogBridge!.sendCustomEvent('test_event', {
+      key: 'value'
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return events;
+  });
+
+  expect(result).toHaveLength(1);
+  expect(result[0].custom_event.metadata.key).toBe('value');
+});
+```
+
+### Session Management
+```typescript
+test('should manage session lifecycle', async ({ page }) => {
+  await navigateToPlayground(page, { autoInit: false });
+
+  const sessionData = await page.evaluate(async () => {
+    await window.__traceLogBridge!.init();
+
+    // Get session data
+    return window.__traceLogBridge!.getSessionData();
+  });
+
+  expect(sessionData.sessionId).toBeDefined();
+  expect(sessionData.isActive).toBe(true);
+});
+```
+
+### Error Tracking
+```typescript
+test('should capture JavaScript errors', async ({ page }) => {
+  await navigateToPlayground(page, { autoInit: false });
+
+  const result = await page.evaluate(async () => {
+    const errors: any[] = [];
+
+    await window.__traceLogBridge!.init({ errorSampling: 1 });
+
+    window.__traceLogBridge!.on('event', (data: any) => {
+      if (data.type === 'error') errors.push(data);
+    });
+
+    // Trigger error
+    try {
+      throw new Error('Test error');
+    } catch (e) {
+      // Error handler will capture it
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return errors;
+  });
+
+  expect(result.length).toBeGreaterThan(0);
+});
+```
+
+### Network Request Validation
+```typescript
+test('should send events to backend', async ({ page }) => {
+  // Mock backend endpoint
+  await page.route('**/collect', route => {
+    route.fulfill({ status: 200, body: JSON.stringify({ ok: true }) });
+  });
+
+  await navigateToPlayground(page, { autoInit: false });
+
+  const sent = await page.evaluate(async () => {
+    await window.__traceLogBridge!.init({
+      integrations: {
+        custom: {
+          collectApiUrl: 'http://localhost:8080/collect',
+          allowHttp: true
+        }
+      }
+    });
+
+    window.__traceLogBridge!.sendCustomEvent('test', {});
+
+    // Wait for send
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return true;
+  });
+
+  expect(sent).toBe(true);
+});
+```
+
+## 🐛 QA Mode Testing
+
+```typescript
+test('should activate QA mode', async ({ page }) => {
+  // Navigate with QA mode parameter
+  await page.goto('http://localhost:3000?tlog_mode=qa');
+
+  const result = await page.evaluate(async () => {
+    await window.__traceLogBridge!.init();
+
+    // Custom events are logged but not sent in QA mode
+    window.__traceLogBridge!.sendCustomEvent('qa_test', { test: true });
+
+    return {
+      initialized: window.__traceLogBridge!.initialized
+    };
+  });
+
+  expect(result.initialized).toBe(true);
+});
+```
+
+## ⏱️ Timing & Waiting
+
+### Wait for Bridge (CSP-Safe)
+```typescript
+const result = await page.evaluate(async () => {
+  // Internal waiting pattern (CSP-safe)
+  let retries = 0;
+  while (!window.__traceLogBridge && retries < 50) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    retries++;
+  }
+
+  if (!window.__traceLogBridge) {
+    throw new Error('Bridge not available');
+  }
+
+  return { bridgeAvailable: true };
+});
+```
+
+### Wait for Events
+```typescript
+// Queue events: 10-12 second timeout
+await new Promise(resolve => setTimeout(resolve, 12000));
+
+// Regular events: 100-500ms usually sufficient
+await new Promise(resolve => setTimeout(resolve, 500));
+```
+
+## 🧹 Data Isolation
+
+```typescript
+test.beforeEach(async ({ page }) => {
+  await page.evaluate(() => {
+    // Clear storage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Destroy existing instance
+    if (window.__traceLogBridge?.initialized) {
+      window.__traceLogBridge.destroy();
+    }
+  });
+});
+```
+
+## 🌐 Network Simulation
+
+### Block Requests
+```typescript
+await page.route('**/collect', route => route.abort('failed'));
+```
+
+### Mock Responses
+```typescript
+await page.route('**/config', route => {
+  route.fulfill({
+    status: 200,
+    body: JSON.stringify({ samplingRate: 0.5 })
+  });
+});
+```
+
+## ⚙️ Playwright Configuration
+
+### Browser Support
+```typescript
+// CI: Chromium + Mobile Chrome only
+// Local: Chromium, Firefox, WebKit, Mobile Chrome, Mobile Safari
+```
+
+### Timeouts
+```typescript
+// CI: 45s test timeout
+// Local: 30s test timeout
+```
+
+### Test Server
+```typescript
+// Auto-starts via npm run serve
+// URL: http://localhost:3000
+// Reuses existing server in local dev
+```
+
 ## 🚫 Critical Don'ts
 
-- DON'T skip console monitoring cleanup
-- DON'T hardcode timeouts or test data
-- DON'T access `TraceLog._app` directly
-- DON'T test single browser only
-- DON'T use real PII in tests
-- DON'T assume timing - use proper waits
+- ❌ DON'T use `page.waitForFunction()` (CSP-blocked) - use `page.evaluate()` with internal waits
+- ❌ DON'T look for `sessionId` in individual events - it's in `queue.session_id`
+- ❌ DON'T use arbitrary timeouts - use conditions when possible
+- ❌ DON'T reference non-existent utilities (`TestUtils`, `EventCapture`, `COMMON_FILTERS`)
+- ❌ DON'T skip data isolation in `beforeEach` hooks
+- ❌ DON'T access `TraceLog._app` or internal APIs directly
 
-## ✅ Quality Gates
+## ✅ Best Practices
+
+- ✅ Use `navigateToPlayground()` for consistent setup
+- ✅ Use `page.evaluate()` for all in-browser operations
+- ✅ Use internal waiting patterns for CSP safety
+- ✅ Clear storage before each test
+- ✅ Check `queue.session_id` for session tracking
+- ✅ Use `{ autoInit: false }` for controlled initialization
+- ✅ Test both local-only and integration modes
+- ✅ Use descriptive test names and clear assertions
+
+## 🎯 Quality Gates
 
 ```bash
-npm run test:e2e        # 100% pass rate
-npm run check           # No lint/format errors
-npm run build:browser   # Must succeed
+npm run test:e2e              # All E2E tests must pass
+npm run test:coverage         # 90%+ coverage for core logic
+npm run check                 # No lint/format errors
+npm run build:browser         # Build must succeed
 ```
+
+## 📚 Additional Resources
+
+- [TESTING_GUIDE.md](../TESTING_GUIDE.md) - Comprehensive testing documentation
+- [bridge.utils.ts](./utils/bridge.utils.ts) - Bridge interaction helpers
+- [environment.utils.ts](./utils/environment.utils.ts) - Navigation helpers
+- [playwright.config.ts](../../playwright.config.ts) - Playwright configuration

@@ -432,4 +432,139 @@ describe('PerformanceHandler', () => {
       expect(WEB_VITALS_THRESHOLDS.LONG_TASK).toBe(50);
     });
   });
+
+  describe('Navigation History Limit (Memory Leak Prevention)', () => {
+    it('should limit reportedByNav entries to MAX_NAVIGATION_HISTORY', () => {
+      // Simulate 100 unique navigations (well beyond the 50 limit)
+      for (let i = 0; i < 100; i++) {
+        const navId = `nav-${i}`;
+        vi.spyOn(handler as any, 'getNavigationId').mockReturnValue(navId);
+
+        // Send a vital for this navigation
+        handler['sendVital']({ type: 'LCP', value: 5000 + i });
+      }
+
+      // Map size should not exceed MAX_NAVIGATION_HISTORY (50)
+      const mapSize = handler['reportedByNav'].size;
+      const historySize = handler['navigationHistory'].length;
+
+      expect(mapSize).toBe(50);
+      expect(historySize).toBe(50);
+    });
+
+    it('should use FIFO eviction (oldest navigation removed first)', () => {
+      // Add 51 navigations to trigger eviction
+      const navIds: string[] = [];
+      for (let i = 0; i < 51; i++) {
+        const navId = `nav-${i}`;
+        navIds.push(navId);
+        vi.spyOn(handler as any, 'getNavigationId').mockReturnValue(navId);
+        handler['sendVital']({ type: 'LCP', value: 5000 });
+      }
+
+      // First navigation (nav-0) should be evicted
+      expect(handler['reportedByNav'].has('nav-0')).toBe(false);
+
+      // Last 50 navigations should be present (nav-1 through nav-50)
+      expect(handler['reportedByNav'].has('nav-1')).toBe(true);
+      expect(handler['reportedByNav'].has('nav-50')).toBe(true);
+
+      // Navigation history should match
+      expect(handler['navigationHistory'][0]).toBe('nav-1');
+      expect(handler['navigationHistory'][49]).toBe('nav-50');
+    });
+
+    it('should maintain deduplication within navigation history window', () => {
+      const navId = 'nav-123';
+      vi.spyOn(handler as any, 'getNavigationId').mockReturnValue(navId);
+
+      // Send LCP twice for same navigation
+      handler['sendVital']({ type: 'LCP', value: 5000 });
+      handler['sendVital']({ type: 'LCP', value: 5100 });
+
+      // Only first LCP should be tracked
+      expect(trackSpy).toHaveBeenCalledTimes(1);
+      expect(trackSpy).toHaveBeenCalledWith({
+        type: EventType.WEB_VITALS,
+        web_vitals: { type: 'LCP', value: 5000 },
+      });
+    });
+
+    it('should allow same vital type after navigation eviction', () => {
+      // Fill up history with 50 navigations sending LCP
+      for (let i = 0; i < 50; i++) {
+        vi.spyOn(handler as any, 'getNavigationId').mockReturnValue(`nav-${i}`);
+        handler['sendVital']({ type: 'LCP', value: 5000 + i });
+      }
+
+      expect(trackSpy).toHaveBeenCalledTimes(50);
+      trackSpy.mockClear();
+
+      // Add 51st navigation (evicts nav-0)
+      vi.spyOn(handler as any, 'getNavigationId').mockReturnValue('nav-50');
+      handler['sendVital']({ type: 'LCP', value: 5050 });
+
+      expect(trackSpy).toHaveBeenCalledTimes(1);
+      expect(handler['reportedByNav'].size).toBe(50);
+    });
+
+    it('should clear navigation history on stopTracking', () => {
+      // Add some navigations
+      for (let i = 0; i < 10; i++) {
+        vi.spyOn(handler as any, 'getNavigationId').mockReturnValue(`nav-${i}`);
+        handler['sendVital']({ type: 'LCP', value: 5000 });
+      }
+
+      expect(handler['reportedByNav'].size).toBe(10);
+      expect(handler['navigationHistory'].length).toBe(10);
+
+      // Stop tracking
+      handler.stopTracking();
+
+      expect(handler['reportedByNav'].size).toBe(0);
+      expect(handler['navigationHistory'].length).toBe(0);
+    });
+
+    it('should handle multiple vitals per navigation correctly', () => {
+      const navId = 'nav-multi';
+      vi.spyOn(handler as any, 'getNavigationId').mockReturnValue(navId);
+
+      // Send all 5 vital types for same navigation
+      handler['sendVital']({ type: 'LCP', value: 5000 });
+      handler['sendVital']({ type: 'FCP', value: 2000 });
+      handler['sendVital']({ type: 'CLS', value: 0.3 });
+      handler['sendVital']({ type: 'INP', value: 250 });
+      handler['sendVital']({ type: 'TTFB', value: 900 });
+
+      // All 5 should be tracked
+      expect(trackSpy).toHaveBeenCalledTimes(5);
+
+      // But navigation history should only have one entry
+      expect(handler['navigationHistory'].length).toBe(1);
+      expect(handler['reportedByNav'].size).toBe(1);
+
+      // The Set should contain all 5 vital types
+      const vitalsForNav = handler['reportedByNav'].get(navId);
+      expect(vitalsForNav?.size).toBe(5);
+      expect(vitalsForNav?.has('LCP')).toBe(true);
+      expect(vitalsForNav?.has('FCP')).toBe(true);
+      expect(vitalsForNav?.has('CLS')).toBe(true);
+      expect(vitalsForNav?.has('INP')).toBe(true);
+      expect(vitalsForNav?.has('TTFB')).toBe(true);
+    });
+
+    it('should not add duplicate navigation IDs to history', () => {
+      const navId = 'nav-same';
+      vi.spyOn(handler as any, 'getNavigationId').mockReturnValue(navId);
+
+      // Send multiple vitals for same navigation
+      handler['sendVital']({ type: 'LCP', value: 5000 });
+      handler['sendVital']({ type: 'FCP', value: 2000 });
+      handler['sendVital']({ type: 'CLS', value: 0.3 });
+
+      // Navigation history should only have one entry (not duplicated)
+      expect(handler['navigationHistory'].length).toBe(1);
+      expect(handler['navigationHistory'][0]).toBe(navId);
+    });
+  });
 });

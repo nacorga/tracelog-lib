@@ -41,6 +41,13 @@ export const WEB_VITALS_THRESHOLDS: Record<WebVitalType, number> = {
 export const LONG_TASK_THROTTLE_MS = 1000;
 
 /**
+ * Maximum number of navigation history entries to keep in memory
+ * Prevents unbounded growth of reportedByNav Map in long-running SPAs
+ * Uses FIFO eviction when limit is exceeded
+ */
+export const MAX_NAVIGATION_HISTORY = 50;
+
+/**
  * Precision for performance metric values
  * All performance metrics are rounded to 2 decimal places
  */

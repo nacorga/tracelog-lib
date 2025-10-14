@@ -52,8 +52,8 @@ function validateEnvironment(): void {
   }
 
   // Validate NODE_ENV
-  if (process.env.NODE_ENV !== 'dev' && process.env.NODE_ENV !== 'development') {
-    console.warn('⚠️  NODE_ENV is not set to "dev" - some test features may not work correctly');
+  if (process.env.NODE_ENV !== 'development') {
+    console.warn('⚠️  NODE_ENV is not set to "development" - some test features may not work correctly');
   }
 
   // Check if playground server will be available

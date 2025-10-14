@@ -1,7 +1,12 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType } from '../types';
-import { LONG_TASK_THROTTLE_MS, PRECISION_TWO_DECIMALS, WEB_VITALS_THRESHOLDS } from '../constants';
+import {
+  LONG_TASK_THROTTLE_MS,
+  MAX_NAVIGATION_HISTORY,
+  PRECISION_TWO_DECIMALS,
+  WEB_VITALS_THRESHOLDS,
+} from '../constants';
 import { log } from '../utils';
 
 type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
@@ -9,11 +14,10 @@ type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: bo
 export class PerformanceHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly reportedByNav: Map<string, Set<string>> = new Map();
-
+  private readonly navigationHistory: string[] = []; // FIFO queue for tracking navigation order
   private readonly observers: PerformanceObserver[] = [];
-  private lastLongTaskSentAt = 0;
-
   private readonly vitalThresholds = WEB_VITALS_THRESHOLDS;
+  private lastLongTaskSentAt = 0;
 
   constructor(eventManager: EventManager) {
     super();
@@ -36,6 +40,7 @@ export class PerformanceHandler extends StateManager {
 
     this.observers.length = 0;
     this.reportedByNav.clear();
+    this.navigationHistory.length = 0;
   }
 
   private observeWebVitalsFallback(): void {
@@ -204,6 +209,15 @@ export class PerformanceHandler extends StateManager {
       // Initialize or update reported vitals for this navigation
       if (!reportedForNav) {
         this.reportedByNav.set(navId, new Set([sample.type]));
+        this.navigationHistory.push(navId);
+
+        // FIFO eviction: Remove oldest navigation when limit is exceeded
+        if (this.navigationHistory.length > MAX_NAVIGATION_HISTORY) {
+          const oldestNav = this.navigationHistory.shift();
+          if (oldestNav) {
+            this.reportedByNav.delete(oldestNav);
+          }
+        }
       } else {
         reportedForNav.add(sample.type);
       }

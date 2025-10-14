@@ -30,7 +30,6 @@ export class ScrollHandler extends StateManager {
   private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
-  private windowScrollableCache: boolean | null = null;
   private retryTimeoutId: number | null = null;
 
   constructor(eventManager: EventManager) {
@@ -55,21 +54,24 @@ export class ScrollHandler extends StateManager {
     for (const container of this.containers) {
       this.clearContainerTimer(container);
 
-      if (container.element instanceof Window) {
+      if (container.element === window) {
         window.removeEventListener('scroll', container.listener);
       } else {
-        container.element.removeEventListener('scroll', container.listener);
+        (container.element as HTMLElement).removeEventListener('scroll', container.listener);
       }
     }
 
     this.containers.length = 0;
     this.set('scrollEventCount', 0);
     this.limitWarningLogged = false;
-    this.windowScrollableCache = null;
   }
 
   private tryDetectScrollContainers(attempt: number): void {
     const elements = this.findScrollableElements();
+
+    if (this.isWindowScrollable()) {
+      this.setupScrollContainer(window, 'window');
+    }
 
     if (elements.length > 0) {
       for (const element of elements) {
@@ -122,13 +124,14 @@ export class ScrollHandler extends StateManager {
         }
 
         const style = getComputedStyle(element);
-        const hasScrollableStyle =
+
+        const hasVerticalScrollableStyle =
           style.overflowY === 'auto' ||
           style.overflowY === 'scroll' ||
           style.overflow === 'auto' ||
           style.overflow === 'scroll';
 
-        return hasScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        return hasVerticalScrollableStyle ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       },
     });
 
@@ -188,6 +191,29 @@ export class ScrollHandler extends StateManager {
       return;
     }
 
+    const initialScrollTop = this.getScrollTop(element);
+
+    const initialDepth = this.calculateScrollDepth(
+      initialScrollTop,
+      this.getScrollHeight(element),
+      this.getViewportHeight(element),
+    );
+
+    const isPrimary = this.determineIfPrimary(element);
+
+    const container: ScrollContainer = {
+      element,
+      selector,
+      isPrimary,
+      lastScrollPos: initialScrollTop,
+      lastDepth: initialDepth,
+      lastDirection: ScrollDirection.DOWN,
+      lastEventTime: 0,
+      maxDepthReached: initialDepth,
+      debounceTimer: null,
+      listener: null as any, // Will be assigned after handleScroll is defined
+    };
+
     const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {
         return;
@@ -208,32 +234,15 @@ export class ScrollHandler extends StateManager {
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
 
-    const initialScrollTop = this.getScrollTop(element);
-    const initialDepth = this.calculateScrollDepth(
-      initialScrollTop,
-      this.getScrollHeight(element),
-      this.getViewportHeight(element),
-    );
-    const isPrimary = this.determineIfPrimary(element);
-    const container: ScrollContainer = {
-      element,
-      selector,
-      isPrimary,
-      lastScrollPos: initialScrollTop,
-      lastDepth: initialDepth,
-      lastDirection: ScrollDirection.DOWN,
-      lastEventTime: 0,
-      maxDepthReached: initialDepth,
-      debounceTimer: null,
-      listener: handleScroll,
-    };
+    // Assign the listener to the container
+    container.listener = handleScroll;
 
     this.containers.push(container);
 
-    if (element instanceof Window) {
+    if (element === window) {
       window.addEventListener('scroll', handleScroll, { passive: true });
     } else {
-      element.addEventListener('scroll', handleScroll, { passive: true });
+      (element as HTMLElement).addEventListener('scroll', handleScroll, { passive: true });
     }
   }
 
@@ -319,12 +328,7 @@ export class ScrollHandler extends StateManager {
   }
 
   private isWindowScrollable(): boolean {
-    if (this.windowScrollableCache !== null) {
-      return this.windowScrollableCache;
-    }
-
-    this.windowScrollableCache = document.documentElement.scrollHeight > window.innerHeight;
-    return this.windowScrollableCache;
+    return document.documentElement.scrollHeight > window.innerHeight;
   }
 
   private clearContainerTimer(container: ScrollContainer): void {
@@ -386,30 +390,29 @@ export class ScrollHandler extends StateManager {
   }
 
   private getScrollTop(element: Window | HTMLElement): number {
-    return element instanceof Window ? window.scrollY : element.scrollTop;
+    return element === window ? window.scrollY : (element as HTMLElement).scrollTop;
   }
 
   private getViewportHeight(element: Window | HTMLElement): number {
-    return element instanceof Window ? window.innerHeight : element.clientHeight;
+    return element === window ? window.innerHeight : (element as HTMLElement).clientHeight;
   }
 
   private getScrollHeight(element: Window | HTMLElement): number {
-    return element instanceof Window ? document.documentElement.scrollHeight : element.scrollHeight;
+    return element === window ? document.documentElement.scrollHeight : (element as HTMLElement).scrollHeight;
   }
 
   private isElementScrollable(element: HTMLElement): boolean {
     const style = getComputedStyle(element);
-    const hasScrollableOverflow =
+
+    const hasVerticalScrollableOverflow =
       style.overflowY === 'auto' ||
       style.overflowY === 'scroll' ||
-      style.overflowX === 'auto' ||
-      style.overflowX === 'scroll' ||
       style.overflow === 'auto' ||
       style.overflow === 'scroll';
 
-    const hasOverflowContent = element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+    const hasVerticalOverflowContent = element.scrollHeight > element.clientHeight;
 
-    return hasScrollableOverflow && hasOverflowContent;
+    return hasVerticalScrollableOverflow && hasVerticalOverflowContent;
   }
 
   private applyPrimaryScrollSelector(selector: string): void {

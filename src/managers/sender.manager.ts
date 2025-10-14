@@ -5,13 +5,13 @@ import {
   PERMANENT_ERROR_LOG_THROTTLE_MS,
   MAX_BEACON_PAYLOAD_SIZE,
 } from '../constants';
-import { PersistedQueueData, BaseEventsQueueDto, SpecialApiUrl, PermanentError } from '../types';
+import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
 interface SendCallbacks {
-  onSuccess?: (eventCount?: number, events?: any[], body?: BaseEventsQueueDto) => void;
+  onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
   onFailure?: () => void;
 }
 
@@ -29,7 +29,7 @@ export class SenderManager extends StateManager {
     return QUEUE_KEY(userId);
   }
 
-  sendEventsQueueSync(body: BaseEventsQueueDto): boolean {
+  sendEventsQueueSync(body: EventsQueue): boolean {
     if (this.shouldSkipSend()) {
       return true;
     }
@@ -47,7 +47,7 @@ export class SenderManager extends StateManager {
     return this.sendQueueSyncInternal(body);
   }
 
-  async sendEventsQueue(body: BaseEventsQueueDto, callbacks?: SendCallbacks): Promise<boolean> {
+  async sendEventsQueue(body: EventsQueue, callbacks?: SendCallbacks): Promise<boolean> {
     try {
       const success = await this.send(body);
 
@@ -106,7 +106,7 @@ export class SenderManager extends StateManager {
 
   stop(): void {}
 
-  private async send(body: BaseEventsQueueDto): Promise<boolean> {
+  private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
@@ -178,7 +178,7 @@ export class SenderManager extends StateManager {
     }
   }
 
-  private sendQueueSyncInternal(body: BaseEventsQueueDto): boolean {
+  private sendQueueSyncInternal(body: EventsQueue): boolean {
     const { url, payload } = this.prepareRequest(body);
 
     // Check payload size against 64KB browser limit (Phase 3)
@@ -215,7 +215,7 @@ export class SenderManager extends StateManager {
     return accepted;
   }
 
-  private prepareRequest(body: BaseEventsQueueDto): { url: string; payload: string } {
+  private prepareRequest(body: EventsQueue): { url: string; payload: string } {
     // Enrich payload with metadata for sendBeacon() fallback
     // sendBeacon() doesn't send custom headers, so we include referer in payload
     const enrichedBody = {
@@ -232,7 +232,7 @@ export class SenderManager extends StateManager {
     };
   }
 
-  private getPersistedData(): PersistedQueueData | null {
+  private getPersistedData(): PersistedEventsQueue | null {
     try {
       const storageKey = this.getQueueStorageKey();
       const persistedDataString = this.storeManager.getItem(storageKey);
@@ -248,7 +248,7 @@ export class SenderManager extends StateManager {
     return null;
   }
 
-  private isDataRecent(data: PersistedQueueData): boolean {
+  private isDataRecent(data: PersistedEventsQueue): boolean {
     if (!data.timestamp || typeof data.timestamp !== 'number') {
       return false;
     }
@@ -257,25 +257,17 @@ export class SenderManager extends StateManager {
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
 
-  private createRecoveryBody(data: PersistedQueueData): BaseEventsQueueDto {
-    return {
-      user_id: data.userId,
-      session_id: data.sessionId,
-      device: data.device,
-      events: data.events,
-      ...(data.global_metadata && { global_metadata: data.global_metadata }),
-    };
+  private createRecoveryBody(data: PersistedEventsQueue): EventsQueue {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { timestamp, ...queue } = data;
+    return queue;
   }
 
-  private persistEvents(body: BaseEventsQueueDto): boolean {
+  private persistEvents(body: EventsQueue): boolean {
     try {
-      const persistedData: PersistedQueueData = {
-        userId: body.user_id,
-        sessionId: body.session_id,
-        device: body.device,
-        events: body.events,
+      const persistedData: PersistedEventsQueue = {
+        ...body,
         timestamp: Date.now(),
-        ...(body.global_metadata && { global_metadata: body.global_metadata }),
       };
 
       const storageKey = this.getQueueStorageKey();

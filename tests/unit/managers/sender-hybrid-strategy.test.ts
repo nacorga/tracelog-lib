@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { SenderManager } from '../../../src/managers/sender.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { StateManager } from '../../../src/managers/state.manager';
-import { BaseEventsQueueDto, EventType, DeviceType } from '../../../src/types';
+import { EventsQueue, EventType, DeviceType } from '../../../src/types';
 
 describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
   let senderManager: SenderManager;
@@ -10,7 +10,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let mockSendBeacon: ReturnType<typeof vi.fn>;
 
-  const createEventDto = (): BaseEventsQueueDto => ({
+  const createEventDto = (): EventsQueue => ({
     user_id: 'test-user',
     session_id: 'test-session',
     device: DeviceType.Desktop,
@@ -210,8 +210,8 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       // Simulate persisted events from previous session
       const storageKey = 'tlog:queue:test-user';
       const persistedData = {
-        userId: 'test-user',
-        sessionId: 'old-session',
+        user_id: 'test-user',
+        session_id: 'old-session',
         device: DeviceType.Desktop,
         events: [
           { id: 'test-1', type: EventType.CLICK, timestamp: Date.now(), click: { x: 1, y: 2, target: 'btn' } } as any,
@@ -241,8 +241,8 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       const expiredTimestamp = Date.now() - 3 * 60 * 60 * 1000; // 3 hours ago
 
       const persistedData = {
-        userId: 'test-user',
-        sessionId: 'old-session',
+        user_id: 'test-user',
+        session_id: 'old-session',
         device: DeviceType.Desktop,
         events: [
           { id: 'test-1', type: EventType.CLICK, timestamp: Date.now(), click: { x: 1, y: 2, target: 'btn' } } as any,
