@@ -1,5 +1,14 @@
 import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
+import { WebVitalType } from './event.types';
+
+/**
+ * Web Vitals filtering mode
+ * - 'all': Track all Web Vitals metrics (full analytics)
+ * - 'needs-improvement': Track metrics that need improvement or are poor (default, balanced)
+ * - 'poor': Track only poor metrics (minimal data)
+ */
+export type WebVitalsMode = 'all' | 'needs-improvement' | 'poor';
 
 export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */
@@ -22,6 +31,18 @@ export interface Config {
   clickThrottleMs?: number;
   /** Maximum number of same custom event name allowed per minute to prevent infinite loops. @default 60 */
   maxSameEventPerMinute?: number;
+  /**
+   * Web Vitals filtering mode. @default 'needs-improvement'
+   * - 'all': Track all metrics (good, needs-improvement, poor) - full trend analysis
+   * - 'needs-improvement': Track metrics that need improvement or are poor - balanced approach
+   * - 'poor': Track only poor metrics - minimal data, focus on problems
+   */
+  webVitalsMode?: WebVitalsMode;
+  /**
+   * Custom Web Vitals thresholds in milliseconds (except CLS which is unitless).
+   * Only applies when webVitalsMode is set. Overrides default thresholds for the selected mode.
+   */
+  webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

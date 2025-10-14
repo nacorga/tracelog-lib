@@ -50,22 +50,22 @@ describe('Integration: Performance and Error Filters', () => {
 
   describe('PerformanceHandler - Web Vitals Filtering', () => {
     it('should filter LCP below threshold', () => {
-      // LCP threshold is 4000ms
+      // LCP threshold is 2500ms (default needs-improvement mode)
       performance['sendVital']({ type: 'LCP', value: 1200 });
-      performance['sendVital']({ type: 'LCP', value: 3500 });
+      performance['sendVital']({ type: 'LCP', value: 2400 });
 
       expect(manager.events).toEqual([]);
     });
 
     it('should emit LCP above threshold', () => {
-      // LCP threshold is 4000ms
-      performance['sendVital']({ type: 'LCP', value: 4200 });
+      // LCP threshold is 2500ms (default needs-improvement mode)
+      performance['sendVital']({ type: 'LCP', value: 2600 });
 
       expect(manager.events).toEqual([EventType.WEB_VITALS]);
     });
 
     it('should filter FCP below threshold', () => {
-      // FCP threshold is 1800ms
+      // FCP threshold is 1800ms (default needs-improvement mode)
       performance['sendVital']({ type: 'FCP', value: 1000 });
       performance['sendVital']({ type: 'FCP', value: 1700 });
 
@@ -73,29 +73,29 @@ describe('Integration: Performance and Error Filters', () => {
     });
 
     it('should emit FCP above threshold', () => {
-      // FCP threshold is 1800ms
+      // FCP threshold is 1800ms (default needs-improvement mode)
       performance['sendVital']({ type: 'FCP', value: 2000 });
 
       expect(manager.events).toEqual([EventType.WEB_VITALS]);
     });
 
     it('should filter CLS below threshold', () => {
-      // CLS threshold is 0.25 (unitless)
-      performance['sendVital']({ type: 'CLS', value: 0.1 });
-      performance['sendVital']({ type: 'CLS', value: 0.24 });
+      // CLS threshold is 0.1 (default needs-improvement mode)
+      performance['sendVital']({ type: 'CLS', value: 0.05 });
+      performance['sendVital']({ type: 'CLS', value: 0.09 });
 
       expect(manager.events).toEqual([]);
     });
 
     it('should emit CLS above threshold', () => {
-      // CLS threshold is 0.25 (unitless)
-      performance['sendVital']({ type: 'CLS', value: 0.3 });
+      // CLS threshold is 0.1 (default needs-improvement mode)
+      performance['sendVital']({ type: 'CLS', value: 0.15 });
 
       expect(manager.events).toEqual([EventType.WEB_VITALS]);
     });
 
     it('should filter INP below threshold', () => {
-      // INP threshold is 200ms
+      // INP threshold is 200ms (default needs-improvement mode)
       performance['sendVital']({ type: 'INP', value: 100 });
       performance['sendVital']({ type: 'INP', value: 199 });
 
@@ -103,14 +103,14 @@ describe('Integration: Performance and Error Filters', () => {
     });
 
     it('should emit INP above threshold', () => {
-      // INP threshold is 200ms
+      // INP threshold is 200ms (default needs-improvement mode)
       performance['sendVital']({ type: 'INP', value: 250 });
 
       expect(manager.events).toEqual([EventType.WEB_VITALS]);
     });
 
     it('should filter TTFB below threshold', () => {
-      // TTFB threshold is 800ms
+      // TTFB threshold is 800ms (default needs-improvement mode)
       performance['sendVital']({ type: 'TTFB', value: 500 });
       performance['sendVital']({ type: 'TTFB', value: 799 });
 
@@ -118,14 +118,14 @@ describe('Integration: Performance and Error Filters', () => {
     });
 
     it('should emit TTFB above threshold', () => {
-      // TTFB threshold is 800ms
+      // TTFB threshold is 800ms (default needs-improvement mode)
       performance['sendVital']({ type: 'TTFB', value: 900 });
 
       expect(manager.events).toEqual([EventType.WEB_VITALS]);
     });
 
     it('should emit multiple different vitals above thresholds', () => {
-      performance['sendVital']({ type: 'LCP', value: 4200 });
+      performance['sendVital']({ type: 'LCP', value: 2600 });
       performance['sendVital']({ type: 'FCP', value: 2000 });
       performance['sendVital']({ type: 'INP', value: 250 });
 
@@ -136,7 +136,7 @@ describe('Integration: Performance and Error Filters', () => {
       performance['sendVital']({ type: 'LCP', value: 1200 }); // Filtered
       performance['sendVital']({ type: 'FCP', value: 2000 }); // Emitted
       performance['sendVital']({ type: 'INP', value: 100 }); // Filtered
-      performance['sendVital']({ type: 'CLS', value: 0.3 }); // Emitted
+      performance['sendVital']({ type: 'CLS', value: 0.15 }); // Emitted
 
       expect(manager.events).toEqual([EventType.WEB_VITALS, EventType.WEB_VITALS]);
     });

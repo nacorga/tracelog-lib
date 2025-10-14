@@ -5,7 +5,8 @@ import {
   LONG_TASK_THROTTLE_MS,
   MAX_NAVIGATION_HISTORY,
   PRECISION_TWO_DECIMALS,
-  WEB_VITALS_THRESHOLDS,
+  getWebVitalsThresholds,
+  DEFAULT_WEB_VITALS_MODE,
 } from '../constants';
 import { log } from '../utils';
 
@@ -16,12 +17,25 @@ export class PerformanceHandler extends StateManager {
   private readonly reportedByNav: Map<string, Set<string>> = new Map();
   private readonly navigationHistory: string[] = []; // FIFO queue for tracking navigation order
   private readonly observers: PerformanceObserver[] = [];
-  private readonly vitalThresholds = WEB_VITALS_THRESHOLDS;
+  private readonly vitalThresholds: Record<WebVitalType, number>;
   private lastLongTaskSentAt = 0;
 
   constructor(eventManager: EventManager) {
     super();
     this.eventManager = eventManager;
+
+    // Initialize thresholds from config or use defaults
+    const config = this.get('config');
+    const mode = config?.webVitalsMode ?? DEFAULT_WEB_VITALS_MODE;
+    this.vitalThresholds = getWebVitalsThresholds(mode);
+
+    // Apply custom thresholds if provided
+    if (config?.webVitalsThresholds) {
+      this.vitalThresholds = { ...this.vitalThresholds, ...config.webVitalsThresholds };
+      log('debug', 'PerformanceHandler: Using custom thresholds', { data: config.webVitalsThresholds });
+    }
+
+    log('debug', `PerformanceHandler: Web Vitals mode="${mode}"`, { data: this.vitalThresholds });
   }
 
   async startTracking(): Promise<void> {
