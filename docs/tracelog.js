@@ -290,6 +290,19 @@ const USER_ID_KEY = `${STORAGE_BASE_KEY}:uid`;
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
+const WEB_VITALS_GOOD_THRESHOLDS = {
+  LCP: 2500,
+  // Good: ≤ 2.5s
+  FCP: 1800,
+  // Good: ≤ 1.8s
+  CLS: 0.1,
+  // Good: ≤ 0.1
+  INP: 200,
+  // Good: ≤ 200ms
+  TTFB: 800,
+  // Good: ≤ 800ms
+  LONG_TASK: 50
+};
 const WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS = {
   LCP: 2500,
   // Needs improvement: > 2.5s (same as good boundary)
@@ -330,7 +343,6 @@ function getWebVitalsThresholds(mode = DEFAULT_WEB_VITALS_MODE) {
       return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
   }
 }
-const WEB_VITALS_THRESHOLDS = WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
 const PII_PATTERNS = [
@@ -3430,16 +3442,15 @@ class PerformanceHandler extends StateManager {
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
+    this.vitalThresholds = getWebVitalsThresholds(DEFAULT_WEB_VITALS_MODE);
+  }
+  async startTracking() {
     const config = this.get("config");
     const mode = config?.webVitalsMode ?? DEFAULT_WEB_VITALS_MODE;
     this.vitalThresholds = getWebVitalsThresholds(mode);
     if (config?.webVitalsThresholds) {
       this.vitalThresholds = { ...this.vitalThresholds, ...config.webVitalsThresholds };
-      log("debug", "PerformanceHandler: Using custom thresholds", { data: config.webVitalsThresholds });
     }
-    log("debug", `PerformanceHandler: Web Vitals mode="${mode}"`, { data: this.vitalThresholds });
-  }
-  async startTracking() {
     await this.initWebVitals();
     this.observeLongTasks();
   }
@@ -4241,14 +4252,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     injectTestingBridge();
   }
 }
-const PERFORMANCE_CONFIG = {
-  WEB_VITALS_THRESHOLDS
-  // Business thresholds for performance analysis
-};
-const DATA_PROTECTION = {
-  PII_PATTERNS
-  // Patterns for sensitive data protection
-};
 const ENGAGEMENT_THRESHOLDS = {
   LOW_ACTIVITY_EVENT_COUNT: 50,
   HIGH_ACTIVITY_EVENT_COUNT: 1e3,
@@ -4543,7 +4546,7 @@ export {
   ANOMALY_DETECTION,
   AppConfigValidationError,
   CONTENT_ANALYTICS,
-  DATA_PROTECTION,
+  DEFAULT_WEB_VITALS_MODE,
   DEVICE_ANALYTICS,
   DeviceType,
   ENGAGEMENT_THRESHOLDS,
@@ -4563,7 +4566,7 @@ export {
   MAX_STRING_LENGTH,
   MAX_STRING_LENGTH_IN_ARRAY,
   Mode,
-  PERFORMANCE_CONFIG,
+  PII_PATTERNS,
   PermanentError,
   SEGMENTATION_ANALYTICS,
   SESSION_ANALYTICS,
@@ -4574,6 +4577,10 @@ export {
   SpecialApiUrl,
   TEMPORAL_ANALYSIS,
   TraceLogValidationError,
+  WEB_VITALS_GOOD_THRESHOLDS,
+  WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
+  WEB_VITALS_POOR_THRESHOLDS,
+  getWebVitalsThresholds,
   isPrimaryScrollEvent,
   isSecondaryScrollEvent,
   tracelog
