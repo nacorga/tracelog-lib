@@ -14,6 +14,31 @@
 
 
 
+
+## [0.11.4] - 2025-10-14
+
+### ♻️ Refactoring
+
+- Introduce persistence throttle constant and improve scroll event time handling ([1d50f46](../../commit/1d50f468ff8fc5d4faadeae18870d88d418756a0))
+- Prevent infinite retry loops on API failures and enhance event persistence logic ([549c7ee](../../commit/549c7ee12ed577857814aff2cf896e383d13b996))
+- Simplify time delta calculation in scroll handler for improved readability ([52fb8cf](../../commit/52fb8cf77ddd9e0c0710be36e7a1d5693f03586d))
+- Enhance scroll handler to track first scroll event time and improve velocity calculation ([f653b40](../../commit/f653b40933c4a8d448beaeb5f08cef4e157d3463))
+
+### 🔧 Other Changes
+
+- Merge pull request #39 from nacorga/hotfix/20251014.1 ([19d5d6c](../../commit/19d5d6c59f638b16b5d619f1edb5b18356cefbd4))
+- Update package.json to include only 'dist' directory in files list ([0a8a72b](../../commit/0a8a72bf86f072e8c820c1558a950793aef16a31))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.11.3...v0.11.4
+
+
 ## [0.11.3] - 2025-10-14
 
 ### 🐛 Bug Fixes
