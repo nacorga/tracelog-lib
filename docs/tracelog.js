@@ -1000,6 +1000,7 @@ class StateManager {
 class SenderManager extends StateManager {
   storeManager;
   lastPermanentErrorLog = null;
+  recoveryInProgress = false;
   constructor(storeManager) {
     super();
     this.storeManager = storeManager;
@@ -1045,6 +1046,11 @@ class SenderManager extends StateManager {
     }
   }
   async recoverPersistedEvents(callbacks) {
+    if (this.recoveryInProgress) {
+      log("debug", "Recovery already in progress, skipping duplicate attempt");
+      return;
+    }
+    this.recoveryInProgress = true;
     try {
       const persistedData = this.getPersistedData();
       if (!persistedData || !this.isDataRecent(persistedData) || persistedData.events.length === 0) {
@@ -1067,6 +1073,8 @@ class SenderManager extends StateManager {
         return;
       }
       log("error", "Failed to recover persisted events", { error });
+    } finally {
+      this.recoveryInProgress = false;
     }
   }
   stop() {
@@ -1193,6 +1201,16 @@ class SenderManager extends StateManager {
   }
   persistEvents(body) {
     try {
+      const existing = this.getPersistedData();
+      if (existing && existing.timestamp) {
+        const timeSinceExisting = Date.now() - existing.timestamp;
+        if (timeSinceExisting < 1e3) {
+          log("debug", "Skipping persistence, another tab recently persisted events", {
+            data: { timeSinceExisting }
+          });
+          return true;
+        }
+      }
       const persistedData = {
         ...body,
         timestamp: Date.now()
@@ -1481,6 +1499,9 @@ class EventManager extends StateManager {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
+      } else {
+        this.removeProcessedEvents(eventIds);
+        this.clearSendInterval();
       }
       return success;
     } else {
@@ -1491,7 +1512,11 @@ class EventManager extends StateManager {
           this.emitEventsQueue(body);
         },
         onFailure: () => {
-          log("warn", "Async flush failed", {
+          this.removeProcessedEvents(eventIds);
+          if (this.eventsQueue.length === 0) {
+            this.clearSendInterval();
+          }
+          log("warn", "Async flush failed, removed from queue and persisted for recovery on next page load", {
             data: { eventCount: eventsToSend.length }
           });
         }
@@ -1511,7 +1536,11 @@ class EventManager extends StateManager {
         this.emitEventsQueue(body);
       },
       onFailure: () => {
-        log("warn", "Events send failed, keeping in queue", {
+        this.removeProcessedEvents(eventIds);
+        if (this.eventsQueue.length === 0) {
+          this.clearSendInterval();
+        }
+        log("warn", "Events send failed, removed from queue and persisted for recovery on next page load", {
           data: { eventCount: eventsToSend.length }
         });
       }
@@ -2465,7 +2494,7 @@ class ScrollHandler extends StateManager {
   minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
-  retryTimeoutId = null;
+  containerDiscoveryTimeoutId = null;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -2477,9 +2506,9 @@ class ScrollHandler extends StateManager {
     this.tryDetectScrollContainers(0);
   }
   stopTracking() {
-    if (this.retryTimeoutId !== null) {
-      clearTimeout(this.retryTimeoutId);
-      this.retryTimeoutId = null;
+    if (this.containerDiscoveryTimeoutId !== null) {
+      clearTimeout(this.containerDiscoveryTimeoutId);
+      this.containerDiscoveryTimeoutId = null;
     }
     for (const container of this.containers) {
       this.clearContainerTimer(container);
@@ -2507,8 +2536,8 @@ class ScrollHandler extends StateManager {
       return;
     }
     if (attempt < 5) {
-      this.retryTimeoutId = window.setTimeout(() => {
-        this.retryTimeoutId = null;
+      this.containerDiscoveryTimeoutId = window.setTimeout(() => {
+        this.containerDiscoveryTimeoutId = null;
         this.tryDetectScrollContainers(attempt + 1);
       }, 200);
       return;
@@ -2714,7 +2743,14 @@ class ScrollHandler extends StateManager {
     const scrollHeight = this.getScrollHeight(element);
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
-    const timeDelta = lastEventTime > 0 ? now - lastEventTime : container.firstScrollEventTime !== null ? now - container.firstScrollEventTime : SCROLL_DEBOUNCE_TIME_MS;
+    let timeDelta;
+    if (lastEventTime > 0) {
+      timeDelta = now - lastEventTime;
+    } else if (container.firstScrollEventTime !== null) {
+      timeDelta = now - container.firstScrollEventTime;
+    } else {
+      timeDelta = SCROLL_DEBOUNCE_TIME_MS;
+    }
     const velocity = Math.round(positionDelta / timeDelta * 1e3);
     if (depth > container.maxDepthReached) {
       container.maxDepthReached = depth;

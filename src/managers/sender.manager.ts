@@ -18,6 +18,7 @@ interface SendCallbacks {
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
+  private recoveryInProgress = false;
 
   constructor(storeManager: StorageManager) {
     super();
@@ -75,6 +76,13 @@ export class SenderManager extends StateManager {
   }
 
   async recoverPersistedEvents(callbacks?: SendCallbacks): Promise<void> {
+    if (this.recoveryInProgress) {
+      log('debug', 'Recovery already in progress, skipping duplicate attempt');
+      return;
+    }
+
+    this.recoveryInProgress = true;
+
     try {
       const persistedData = this.getPersistedData();
 
@@ -101,6 +109,8 @@ export class SenderManager extends StateManager {
       }
 
       log('error', 'Failed to recover persisted events', { error });
+    } finally {
+      this.recoveryInProgress = false;
     }
   }
 
@@ -265,12 +275,27 @@ export class SenderManager extends StateManager {
 
   private persistEvents(body: EventsQueue): boolean {
     try {
+      const existing = this.getPersistedData();
+
+      if (existing && existing.timestamp) {
+        const timeSinceExisting = Date.now() - existing.timestamp;
+
+        if (timeSinceExisting < 1000) {
+          log('debug', 'Skipping persistence, another tab recently persisted events', {
+            data: { timeSinceExisting },
+          });
+
+          return true;
+        }
+      }
+
       const persistedData: PersistedEventsQueue = {
         ...body,
         timestamp: Date.now(),
       };
 
       const storageKey = this.getQueueStorageKey();
+
       this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
 
       return !!this.storeManager.getItem(storageKey);

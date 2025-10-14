@@ -200,10 +200,7 @@ export const SCROLL_SUPPRESS_MULTIPLIER = 2;
 // NETWORK TIMING
 // ============================================================================
 
-export const RETRY_BACKOFF_INITIAL = 1000; // 1 second
-export const RETRY_BACKOFF_MAX = 30_000; // 30 seconds
 export const RATE_LIMIT_INTERVAL = 1000; // 1 second
-export const MAX_RETRY_ATTEMPTS = 10;
 
 // ============================================================================
 // VALIDATION

@@ -31,7 +31,7 @@ export class ScrollHandler extends StateManager {
   private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
-  private retryTimeoutId: number | null = null;
+  private containerDiscoveryTimeoutId: number | null = null;
 
   constructor(eventManager: EventManager) {
     super();
@@ -47,9 +47,9 @@ export class ScrollHandler extends StateManager {
   }
 
   stopTracking(): void {
-    if (this.retryTimeoutId !== null) {
-      clearTimeout(this.retryTimeoutId);
-      this.retryTimeoutId = null;
+    if (this.containerDiscoveryTimeoutId !== null) {
+      clearTimeout(this.containerDiscoveryTimeoutId);
+      this.containerDiscoveryTimeoutId = null;
     }
 
     for (const container of this.containers) {
@@ -86,8 +86,8 @@ export class ScrollHandler extends StateManager {
     }
 
     if (attempt < 5) {
-      this.retryTimeoutId = window.setTimeout(() => {
-        this.retryTimeoutId = null;
+      this.containerDiscoveryTimeoutId = window.setTimeout(() => {
+        this.containerDiscoveryTimeoutId = null;
         this.tryDetectScrollContainers(attempt + 1);
       }, 200);
 
