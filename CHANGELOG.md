@@ -15,6 +15,22 @@
 
 
 
+
+## [0.11.5] - 2025-10-14
+
+### 📚 Documentation
+
+- Updated documentation to reflect error handling and recovery logic for event persistence ([b3fef2e](../../commit/b3fef2e21b19e373b042ae5b2f4dc4f17cb658f7))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.11.4...v0.11.5
+
+
 ## [0.11.4] - 2025-10-14
 
 ### ♻️ Refactoring
