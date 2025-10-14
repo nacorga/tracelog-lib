@@ -1,7 +1,5 @@
-import { WEB_VITALS_THRESHOLDS } from './constants/performance.constants';
-import { PII_PATTERNS } from './constants/error.constants';
-
 export {
+  PII_PATTERNS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
   MAX_CUSTOM_EVENT_KEYS,
@@ -11,15 +9,12 @@ export {
   MAX_STRING_LENGTH,
   MAX_STRING_LENGTH_IN_ARRAY,
   MAX_ARRAY_LENGTH,
+  WEB_VITALS_GOOD_THRESHOLDS,
+  WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
+  WEB_VITALS_POOR_THRESHOLDS,
+  DEFAULT_WEB_VITALS_MODE,
+  getWebVitalsThresholds,
 } from './constants';
-
-export const PERFORMANCE_CONFIG = {
-  WEB_VITALS_THRESHOLDS, // Business thresholds for performance analysis
-} as const;
-
-export const DATA_PROTECTION = {
-  PII_PATTERNS, // Patterns for sensitive data protection
-} as const;
 
 export const ENGAGEMENT_THRESHOLDS = {
   LOW_ACTIVITY_EVENT_COUNT: 50,

@@ -75,12 +75,6 @@ export function getWebVitalsThresholds(mode: WebVitalsMode = DEFAULT_WEB_VITALS_
   }
 }
 
-/**
- * Legacy export for backward compatibility
- * @deprecated Use getWebVitalsThresholds() instead
- */
-export const WEB_VITALS_THRESHOLDS = WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
-
 // ============================================================================
 // PERFORMANCE MONITORING LIMITS
 // ============================================================================
