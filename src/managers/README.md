@@ -61,19 +61,26 @@ Core business logic components that handle analytics data processing, state mana
 - **Permanent Error Detection**: Identifies 4xx errors as unrecoverable to prevent retry loops
 - **Synchronous Support**: Uses `navigator.sendBeacon()` for page unload scenarios
 - **Recovery on Next Load**: Automatically recovers persisted events when page reloads
+- **Recovery Guard**: Prevents concurrent recovery attempts during rapid navigation
 
 **Key Features**:
-- No in-session retries - failed events persist for next-page-load recovery
-- Event expiration after 2 hours to prevent stale data recovery
-- Dual sending modes: async (`fetch`) and sync (`sendBeacon`)
+- **No in-session retries** - Events removed from queue immediately after send failure
+  - Prevents infinite retry loops during API outages (critical fix)
+  - Failed events persist to localStorage for next-page-load recovery
+  - Dramatically reduces server load and network traffic during failures
+- **Multi-tab protection** - Checks for recent persistence by other tabs (1-second window)
+  - Prevents data loss when multiple tabs fail simultaneously
+  - Last-write-wins protection via timestamp validation
+- **Event expiration** - Persisted events expire after 2 hours to prevent stale data recovery
+- **Dual sending modes**: Async (`fetch`) and sync (`sendBeacon`)
 - **Payload Size Validation**: Checks 64KB browser limit before `sendBeacon()` call
   - Persists oversized payloads for recovery instead of silent failure
   - Prevents data loss at page unload with large event batches
   - Configured via `MAX_BEACON_PAYLOAD_SIZE` constant
-- Permanent error throttling (1 log per status code per minute)
-- Request timeout (10 seconds) with AbortController
-- Sanitized error logging (domain masking for privacy)
-- Test mode support for QA scenarios
+- **Permanent error throttling** - 1 log per status code per minute
+- **Request timeout** - 10 seconds with AbortController
+- **Sanitized error logging** - Domain masking for privacy
+- **Test mode support** - QA scenarios and mock failures
 
 ## SessionManager
 

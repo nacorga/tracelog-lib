@@ -184,12 +184,22 @@ window.__traceLogDisabled = true;
 
 [Full Security Guide →](./SECURITY.md)
 
-## Error Handling
+## Error Handling & Reliability
 
-- **4xx errors** - Events discarded (no retry)
-- **5xx/network errors** - Events persist in localStorage for next-page recovery
-- **Page unload** - Uses `sendBeacon()` for reliable delivery
-- **Event expiry** - Persisted events expire after 2 hours
+TraceLog uses a **persistence-based recovery model** with no in-session retries:
+
+- **Success (2xx)** - Events sent immediately, queue cleared
+- **Permanent errors (4xx)** - Events discarded immediately (invalid data won't succeed on retry)
+- **Temporary errors (5xx/network)** - Events removed from queue and persisted to localStorage
+- **Recovery** - Persisted events automatically recovered and retried on next page load
+- **Expiration** - Persisted events expire after 2 hours
+- **Page unload** - Uses `sendBeacon()` for synchronous delivery of session end events
+
+**Why no in-session retries?**
+- Prevents infinite retry loops during API outages
+- Reduces server load and network traffic during failures
+- Better battery life on mobile devices
+- Natural recovery on page navigation (common in SPAs)
 
 ## Debug
 

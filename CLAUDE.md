@@ -155,9 +155,12 @@ await tracelog.init({
 - Sent every 10 seconds OR when 50-event threshold reached
 - Uses `navigator.sendBeacon()` for page unload (synchronous)
 - Uses `fetch()` for normal operation (asynchronous)
+- **NO in-session retries** - Events removed from queue immediately after send attempt
 - Failed events persist in localStorage for next-page recovery
-- 4xx errors = permanent failure (no retry)
-- 5xx/network errors = persist for recovery
+- 4xx errors = permanent failure (cleared, not persisted)
+- 5xx/network errors = removed from queue + persisted for next-page recovery
+- Recovery guard prevents concurrent recovery attempts during rapid navigation
+- Multi-tab protection prevents data loss when multiple tabs fail simultaneously (1s window)
 
 ### Testing Bridge (E2E Only)
 
