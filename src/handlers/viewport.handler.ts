@@ -190,7 +190,8 @@ export class ViewportHandler extends StateManager {
 
           // Set timer to fire event after minDwellTime
           tracked.timeoutId = window.setTimeout(() => {
-            this.fireViewportEvent(tracked, entry.intersectionRatio);
+            const visibilityRatio = Math.round(entry.intersectionRatio * 100) / 100;
+            this.fireViewportEvent(tracked, visibilityRatio);
           }, minDwellTime);
         }
       } else {
