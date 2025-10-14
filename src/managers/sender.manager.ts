@@ -4,6 +4,7 @@ import {
   REQUEST_TIMEOUT_MS,
   PERMANENT_ERROR_LOG_THROTTLE_MS,
   MAX_BEACON_PAYLOAD_SIZE,
+  PERSISTENCE_THROTTLE_MS,
 } from '../constants';
 import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError } from '../types';
 import { log } from '../utils';
@@ -280,7 +281,7 @@ export class SenderManager extends StateManager {
       if (existing && existing.timestamp) {
         const timeSinceExisting = Date.now() - existing.timestamp;
 
-        if (timeSinceExisting < 1000) {
+        if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
           log('debug', 'Skipping persistence, another tab recently persisted events', {
             data: { timeSinceExisting },
           });

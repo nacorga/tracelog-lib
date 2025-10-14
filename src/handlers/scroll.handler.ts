@@ -221,7 +221,9 @@ export class ScrollHandler extends StateManager {
         return;
       }
 
-      container.firstScrollEventTime ??= Date.now();
+      if (container.firstScrollEventTime === null) {
+        container.firstScrollEventTime = Date.now();
+      }
 
       this.clearContainerTimer(container);
 
