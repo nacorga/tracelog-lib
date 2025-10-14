@@ -7,8 +7,7 @@
   "module": "./dist/public-api.js",
   "types": "./dist/public-api.d.ts",
   "files": [
-    "dist",
-    "!dist/browser"
+    "dist"
   ],
   "exports": {
     ".": {

@@ -28,6 +28,7 @@ export const THROTTLE_PRUNE_INTERVAL_MS = 30000; // 30 seconds interval for cach
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 2;
 export const EVENT_PERSISTENCE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
+export const PERSISTENCE_THROTTLE_MS = 1000; // 1 second throttle for cross-tab persistence coordination
 
 // ============================================================================
 // LIMITS & REQUESTS
@@ -200,10 +201,7 @@ export const SCROLL_SUPPRESS_MULTIPLIER = 2;
 // NETWORK TIMING
 // ============================================================================
 
-export const RETRY_BACKOFF_INITIAL = 1000; // 1 second
-export const RETRY_BACKOFF_MAX = 30_000; // 30 seconds
 export const RATE_LIMIT_INTERVAL = 1000; // 1 second
-export const MAX_RETRY_ATTEMPTS = 10;
 
 // ============================================================================
 // VALIDATION

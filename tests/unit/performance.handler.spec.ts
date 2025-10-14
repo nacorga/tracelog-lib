@@ -423,37 +423,33 @@ describe('PerformanceHandler', () => {
       expect(result).toBe(false);
     });
 
-    it('should disconnect observer when once flag is true', async () => {
+    it('should disconnect observer when once flag is true', () => {
       const disconnectSpy = vi.fn();
+      let observerCallback: any;
+
       global.PerformanceObserver = vi.fn().mockImplementation((callback) => {
+        observerCallback = callback;
         const observer = {
           observe: vi.fn(),
           disconnect: disconnectSpy,
         };
-
-        // Immediately call callback to simulate entry detection
-        setTimeout(() => {
-          callback(
-            {
-              getEntries: () => [{ name: 'test', startTime: 100 }],
-            },
-            observer,
-          );
-        }, 0);
-
         return observer;
       }) as any;
 
       const callback = vi.fn();
       (performanceHandler as any).safeObserve('paint', callback, { type: 'paint' }, true);
 
-      // Wait for async callback
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          expect(disconnectSpy).toHaveBeenCalled();
-          resolve(undefined);
-        }, 10);
-      });
+      // Manually trigger the observer callback
+      const mockObserver = { disconnect: disconnectSpy };
+      observerCallback(
+        {
+          getEntries: () => [{ name: 'test', startTime: 100 }],
+        },
+        mockObserver,
+      );
+
+      // Verify disconnect was called immediately (synchronously within the callback)
+      expect(disconnectSpy).toHaveBeenCalled();
     });
 
     it('should handle callback errors gracefully', () => {

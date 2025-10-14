@@ -250,26 +250,31 @@ describe('ScrollHandler - Core Functionality', () => {
 
     vi.advanceTimersByTime(1100);
 
-    // First scroll - velocity should be 0 (no time reference)
+    // First scroll - velocity calculated from actual time since scroll event fired
     container.scrollTop = 100;
-    container.dispatchEvent(new Event('scroll'));
-    vi.advanceTimersByTime(300);
+    container.dispatchEvent(new Event('scroll')); // firstScrollEventTime captured here
+    vi.advanceTimersByTime(250); // Debounce fires after 250ms
 
     expect(mockEventManager.track).toHaveBeenCalled();
     let call = mockEventManager.track.mock.calls[0][0];
-    expect(call.scroll_data.velocity).toBe(0);
+    expect(call.scroll_data.velocity).toBeGreaterThan(0);
+    // Velocity = 100px / 250ms = 400 px/s
+    expect(call.scroll_data.velocity).toBe(400);
 
     mockEventManager.track.mockClear();
 
-    // Second scroll after 1 second - velocity should be calculated
+    // Second scroll after 1 second - velocity calculated from time since last event
     vi.advanceTimersByTime(1000);
     container.scrollTop = 300; // 200px in 1s = 200 px/s
     container.dispatchEvent(new Event('scroll'));
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(250);
 
     expect(mockEventManager.track).toHaveBeenCalled();
     call = mockEventManager.track.mock.calls[0][0];
     expect(call.scroll_data.velocity).toBeGreaterThan(0);
+    // Velocity should be approximately 200 px/s (may vary slightly due to timer precision)
+    expect(call.scroll_data.velocity).toBeGreaterThanOrEqual(150);
+    expect(call.scroll_data.velocity).toBeLessThanOrEqual(250);
   });
 
   test('should track max_depth_reached correctly', () => {

@@ -328,6 +328,9 @@ export class EventManager extends StateManager {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
+      } else {
+        this.removeProcessedEvents(eventIds);
+        this.clearSendInterval();
       }
 
       return success;
@@ -339,7 +342,13 @@ export class EventManager extends StateManager {
           this.emitEventsQueue(body);
         },
         onFailure: () => {
-          log('warn', 'Async flush failed', {
+          this.removeProcessedEvents(eventIds);
+
+          if (this.eventsQueue.length === 0) {
+            this.clearSendInterval();
+          }
+
+          log('warn', 'Async flush failed, removed from queue and persisted for recovery on next page load', {
             data: { eventCount: eventsToSend.length },
           });
         },
@@ -362,7 +371,13 @@ export class EventManager extends StateManager {
         this.emitEventsQueue(body);
       },
       onFailure: () => {
-        log('warn', 'Events send failed, keeping in queue', {
+        this.removeProcessedEvents(eventIds);
+
+        if (this.eventsQueue.length === 0) {
+          this.clearSendInterval();
+        }
+
+        log('warn', 'Events send failed, removed from queue and persisted for recovery on next page load', {
           data: { eventCount: eventsToSend.length },
         });
       },

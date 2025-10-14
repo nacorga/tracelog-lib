@@ -18,6 +18,7 @@ interface ScrollContainer {
   lastDepth: number;
   lastDirection: ScrollDirection;
   lastEventTime: number;
+  firstScrollEventTime: number | null;
   maxDepthReached: number;
   debounceTimer: number | null;
   listener: EventListener;
@@ -30,7 +31,7 @@ export class ScrollHandler extends StateManager {
   private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
-  private retryTimeoutId: number | null = null;
+  private containerDiscoveryTimeoutId: number | null = null;
 
   constructor(eventManager: EventManager) {
     super();
@@ -46,9 +47,9 @@ export class ScrollHandler extends StateManager {
   }
 
   stopTracking(): void {
-    if (this.retryTimeoutId !== null) {
-      clearTimeout(this.retryTimeoutId);
-      this.retryTimeoutId = null;
+    if (this.containerDiscoveryTimeoutId !== null) {
+      clearTimeout(this.containerDiscoveryTimeoutId);
+      this.containerDiscoveryTimeoutId = null;
     }
 
     for (const container of this.containers) {
@@ -85,8 +86,8 @@ export class ScrollHandler extends StateManager {
     }
 
     if (attempt < 5) {
-      this.retryTimeoutId = window.setTimeout(() => {
-        this.retryTimeoutId = null;
+      this.containerDiscoveryTimeoutId = window.setTimeout(() => {
+        this.containerDiscoveryTimeoutId = null;
         this.tryDetectScrollContainers(attempt + 1);
       }, 200);
 
@@ -209,14 +210,19 @@ export class ScrollHandler extends StateManager {
       lastDepth: initialDepth,
       lastDirection: ScrollDirection.DOWN,
       lastEventTime: 0,
+      firstScrollEventTime: null,
       maxDepthReached: initialDepth,
       debounceTimer: null,
-      listener: null as any, // Will be assigned after handleScroll is defined
+      listener: null as any,
     };
 
     const handleScroll = (): void => {
       if (this.get('suppressNextScroll')) {
         return;
+      }
+
+      if (container.firstScrollEventTime === null) {
+        container.firstScrollEventTime = Date.now();
       }
 
       this.clearContainerTimer(container);
@@ -234,7 +240,6 @@ export class ScrollHandler extends StateManager {
       }, SCROLL_DEBOUNCE_TIME_MS);
     };
 
-    // Assign the listener to the container
     container.listener = handleScroll;
 
     this.containers.push(container);
@@ -372,8 +377,17 @@ export class ScrollHandler extends StateManager {
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
 
-    const timeDelta = lastEventTime > 0 ? now - lastEventTime : 0;
-    const velocity = timeDelta > 0 ? Math.round((positionDelta / timeDelta) * 1000) : 0;
+    let timeDelta: number;
+
+    if (lastEventTime > 0) {
+      timeDelta = now - lastEventTime;
+    } else if (container.firstScrollEventTime !== null) {
+      timeDelta = now - container.firstScrollEventTime;
+    } else {
+      timeDelta = SCROLL_DEBOUNCE_TIME_MS;
+    }
+
+    const velocity = Math.round((positionDelta / timeDelta) * 1000);
 
     if (depth > container.maxDepthReached) {
       container.maxDepthReached = depth;

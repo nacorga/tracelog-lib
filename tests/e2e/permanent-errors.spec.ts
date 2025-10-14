@@ -53,7 +53,7 @@ test.describe('Permanent Errors E2E', () => {
       // Send custom event
       window.__traceLogBridge.sendCustomEvent('test_403', { value: 'test' });
 
-      // Wait for initial send + potential retries (15s = 3x retry delay)
+      // Wait to verify NO retries are attempted (system should only send once)
       await new Promise((resolve) => setTimeout(resolve, 15000));
 
       return {
@@ -101,7 +101,7 @@ test.describe('Permanent Errors E2E', () => {
 
       window.__traceLogBridge!.sendCustomEvent('test_404', { data: 'value' });
 
-      // Wait for initial send + potential retries
+      // Wait to verify NO retries are attempted
       await new Promise((resolve) => setTimeout(resolve, 15000));
     });
 
