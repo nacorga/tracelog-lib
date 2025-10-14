@@ -119,6 +119,53 @@ export const validateAppConfig = (config?: Config): void => {
   if (config.viewport !== undefined) {
     validateViewportConfig(config.viewport);
   }
+
+  if (config.webVitalsMode !== undefined) {
+    // Type check first
+    if (typeof config.webVitalsMode !== 'string') {
+      throw new AppConfigValidationError(
+        `Invalid webVitalsMode type: ${typeof config.webVitalsMode}. Must be a string`,
+        'config',
+      );
+    }
+
+    const validModes = ['all', 'needs-improvement', 'poor'];
+    if (!validModes.includes(config.webVitalsMode)) {
+      throw new AppConfigValidationError(
+        `Invalid webVitalsMode: "${config.webVitalsMode}". Must be one of: ${validModes.join(', ')}`,
+        'config',
+      );
+    }
+  }
+
+  if (config.webVitalsThresholds !== undefined) {
+    // Type check: must be object and not null or array
+    if (
+      typeof config.webVitalsThresholds !== 'object' ||
+      config.webVitalsThresholds === null ||
+      Array.isArray(config.webVitalsThresholds)
+    ) {
+      throw new AppConfigValidationError('webVitalsThresholds must be an object', 'config');
+    }
+
+    const validKeys = ['LCP', 'FCP', 'CLS', 'INP', 'TTFB', 'LONG_TASK'];
+    for (const [key, value] of Object.entries(config.webVitalsThresholds)) {
+      if (!validKeys.includes(key)) {
+        throw new AppConfigValidationError(
+          `Invalid Web Vitals threshold key: "${key}". Must be one of: ${validKeys.join(', ')}`,
+          'config',
+        );
+      }
+
+      // Validate value is a valid number (not NaN, Infinity, negative, or non-number)
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        throw new AppConfigValidationError(
+          `Invalid Web Vitals threshold value for ${key}: ${value}. Must be a non-negative finite number`,
+          'config',
+        );
+      }
+    }
+  }
 };
 
 /**

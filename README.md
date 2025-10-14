@@ -83,6 +83,13 @@ await tracelog.init({
   // Privacy
   sensitiveQueryParams: ['token'], // Merged with defaults
 
+  // Web Vitals filtering (controls which performance metrics are tracked)
+  webVitalsMode: 'needs-improvement',  // 'all' | 'needs-improvement' | 'poor' (default: 'needs-improvement')
+  webVitalsThresholds: {               // Optional: override default thresholds
+    LCP: 3000,  // Custom threshold in milliseconds
+    FCP: 2000
+  },
+
   // Integrations
   integrations: {
     tracelog: { projectId: 'your-id' },
@@ -163,6 +170,44 @@ tracelog.on('event', (event) => {
   }
 });
 ```
+
+### Web Vitals Filtering
+```typescript
+// Default: Track metrics needing improvement or worse (balanced approach)
+await tracelog.init({
+  webVitalsMode: 'needs-improvement'
+});
+
+// Track all metrics (for full trend analysis and P75 calculations)
+await tracelog.init({
+  webVitalsMode: 'all'
+});
+
+// Track only poor metrics (minimize data volume)
+await tracelog.init({
+  webVitalsMode: 'poor'
+});
+
+// Custom thresholds (fine-grained control)
+await tracelog.init({
+  webVitalsMode: 'needs-improvement',
+  webVitalsThresholds: {
+    LCP: 3000,  // Stricter than default 2500ms
+    FCP: 2500,  // Stricter than default 1800ms
+    CLS: 0.15   // Stricter than default 0.1
+  }
+});
+```
+
+**Threshold Reference (Core Web Vitals standards):**
+
+| Metric | 'all' | 'needs-improvement' (default) | 'poor' |
+|--------|-------|-------------------------------|--------|
+| LCP | Track all | > 2500ms | > 4000ms |
+| FCP | Track all | > 1800ms | > 3000ms |
+| CLS | Track all | > 0.1 | > 0.25 |
+| INP | Track all | > 200ms | > 500ms |
+| TTFB | Track all | > 800ms | > 1800ms |
 
 ### Global Disable
 ```typescript

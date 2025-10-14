@@ -4,31 +4,76 @@
  */
 
 import { WebVitalType } from '../types';
+import type { WebVitalsMode } from '../types/config.types';
 
 // ============================================================================
 // WEB VITALS THRESHOLDS
 // ============================================================================
 
 /**
- * Web Vitals thresholds in milliseconds (except CLS which is unitless)
- * These define the minimum values required to report a web vital metric
- *
- * Based on Core Web Vitals standards:
- * - LCP (Largest Contentful Paint): 4000ms threshold (poor threshold)
- * - FCP (First Contentful Paint): 1800ms threshold (good threshold)
- * - CLS (Cumulative Layout Shift): 0.25 threshold (unitless, needs improvement threshold)
- * - INP (Interaction to Next Paint): 200ms threshold (good threshold)
- * - TTFB (Time to First Byte): 800ms threshold (good/needs improvement boundary, aligned with Web Vitals standard)
- * - LONG_TASK: 50ms threshold for long task detection
+ * Web Vitals "good" thresholds (75th percentile boundaries)
+ * Metrics below or equal to these values are considered good performance.
+ * Reference: https://web.dev/articles/vitals
  */
-export const WEB_VITALS_THRESHOLDS: Record<WebVitalType, number> = {
-  LCP: 4000,
-  FCP: 1800,
-  CLS: 0.25,
-  INP: 200,
-  TTFB: 800,
+export const WEB_VITALS_GOOD_THRESHOLDS: Record<WebVitalType, number> = {
+  LCP: 2500, // Good: ≤ 2.5s
+  FCP: 1800, // Good: ≤ 1.8s
+  CLS: 0.1, // Good: ≤ 0.1
+  INP: 200, // Good: ≤ 200ms
+  TTFB: 800, // Good: ≤ 800ms
   LONG_TASK: 50,
 } as const;
+
+/**
+ * Web Vitals "needs improvement" thresholds
+ * Metrics exceeding these values need attention but aren't critically poor.
+ * Reference: https://web.dev/articles/vitals
+ */
+export const WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS: Record<WebVitalType, number> = {
+  LCP: 2500, // Needs improvement: > 2.5s (same as good boundary)
+  FCP: 1800, // Needs improvement: > 1.8s
+  CLS: 0.1, // Needs improvement: > 0.1
+  INP: 200, // Needs improvement: > 200ms
+  TTFB: 800, // Needs improvement: > 800ms
+  LONG_TASK: 50,
+} as const;
+
+/**
+ * Web Vitals "poor" thresholds
+ * Metrics exceeding these values indicate poor performance requiring immediate attention.
+ * Reference: https://web.dev/articles/vitals
+ */
+export const WEB_VITALS_POOR_THRESHOLDS: Record<WebVitalType, number> = {
+  LCP: 4000, // Poor: > 4s
+  FCP: 3000, // Poor: > 3s
+  CLS: 0.25, // Poor: > 0.25
+  INP: 500, // Poor: > 500ms
+  TTFB: 1800, // Poor: > 1800ms
+  LONG_TASK: 50,
+} as const;
+
+/**
+ * Default Web Vitals mode
+ * 'needs-improvement' provides balanced approach - captures metrics that need attention
+ * while filtering out good performance (reduces noise and costs)
+ */
+export const DEFAULT_WEB_VITALS_MODE: WebVitalsMode = 'needs-improvement';
+
+/**
+ * Get Web Vitals thresholds for the specified mode
+ */
+export function getWebVitalsThresholds(mode: WebVitalsMode = DEFAULT_WEB_VITALS_MODE): Record<WebVitalType, number> {
+  switch (mode) {
+    case 'all':
+      return { LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0, LONG_TASK: 0 }; // Track everything
+    case 'needs-improvement':
+      return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
+    case 'poor':
+      return WEB_VITALS_POOR_THRESHOLDS;
+    default:
+      return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
+  }
+}
 
 // ============================================================================
 // PERFORMANCE MONITORING LIMITS
