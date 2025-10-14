@@ -2594,15 +2594,16 @@ class ScrollHandler extends StateManager {
       lastDepth: initialDepth,
       lastDirection: ScrollDirection.DOWN,
       lastEventTime: 0,
+      firstScrollEventTime: null,
       maxDepthReached: initialDepth,
       debounceTimer: null,
       listener: null
-      // Will be assigned after handleScroll is defined
     };
     const handleScroll = () => {
       if (this.get("suppressNextScroll")) {
         return;
       }
+      container.firstScrollEventTime ??= Date.now();
       this.clearContainerTimer(container);
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
@@ -2713,8 +2714,8 @@ class ScrollHandler extends StateManager {
     const scrollHeight = this.getScrollHeight(element);
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
-    const timeDelta = lastEventTime > 0 ? now - lastEventTime : 0;
-    const velocity = timeDelta > 0 ? Math.round(positionDelta / timeDelta * 1e3) : 0;
+    const timeDelta = lastEventTime > 0 ? now - lastEventTime : container.firstScrollEventTime !== null ? now - container.firstScrollEventTime : SCROLL_DEBOUNCE_TIME_MS;
+    const velocity = Math.round(positionDelta / timeDelta * 1e3);
     if (depth > container.maxDepthReached) {
       container.maxDepthReached = depth;
     }
@@ -2890,7 +2891,8 @@ class ViewportHandler extends StateManager {
         if (tracked.startTime === null) {
           tracked.startTime = performance.now();
           tracked.timeoutId = window.setTimeout(() => {
-            this.fireViewportEvent(tracked, entry.intersectionRatio);
+            const visibilityRatio = Math.round(entry.intersectionRatio * 100) / 100;
+            this.fireViewportEvent(tracked, visibilityRatio);
           }, minDwellTime);
         }
       } else {
