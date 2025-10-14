@@ -375,12 +375,15 @@ export class ScrollHandler extends StateManager {
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
 
-    const timeDelta =
-      lastEventTime > 0
-        ? now - lastEventTime
-        : container.firstScrollEventTime !== null
-          ? now - container.firstScrollEventTime
-          : SCROLL_DEBOUNCE_TIME_MS;
+    let timeDelta: number;
+
+    if (lastEventTime > 0) {
+      timeDelta = now - lastEventTime;
+    } else if (container.firstScrollEventTime !== null) {
+      timeDelta = now - container.firstScrollEventTime;
+    } else {
+      timeDelta = SCROLL_DEBOUNCE_TIME_MS;
+    }
 
     const velocity = Math.round((positionDelta / timeDelta) * 1000);
 
