@@ -1,5 +1,5 @@
 import { EventData } from './event.types';
-import { BaseEventsQueueDto } from './queue.types';
+import { EventsQueue } from './queue.types';
 
 export type EmitterCallback<T = any> = (data: T) => void;
 
@@ -10,5 +10,5 @@ export enum EmitterEvent {
 
 export interface EmitterMap {
   [EmitterEvent.EVENT]: EventData;
-  [EmitterEvent.QUEUE]: BaseEventsQueueDto;
+  [EmitterEvent.QUEUE]: EventsQueue;
 }

@@ -6,6 +6,7 @@ import {
   DEFAULT_CLICK_THROTTLE_MS,
   MAX_THROTTLE_CACHE_ENTRIES,
   THROTTLE_ENTRY_TTL_MS,
+  THROTTLE_PRUNE_INTERVAL_MS,
 } from '../constants';
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
@@ -137,9 +138,7 @@ export class ClickHandler extends StateManager {
    * Called during checkClickThrottle with built-in rate limiting (every 30 seconds)
    */
   private pruneThrottleCache(now: number): void {
-    // Rate limit pruning itself (run at most once per 30 seconds)
-    const PRUNE_INTERVAL_MS = 30000;
-    if (now - this.lastPruneTime < PRUNE_INTERVAL_MS) {
+    if (now - this.lastPruneTime < THROTTLE_PRUNE_INTERVAL_MS) {
       return;
     }
 

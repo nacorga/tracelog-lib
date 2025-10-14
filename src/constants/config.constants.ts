@@ -23,6 +23,7 @@ export const VIEWPORT_MUTATION_DEBOUNCE_MS = 100; // Debounce for mutation obser
 // Click throttle cache limits
 export const MAX_THROTTLE_CACHE_ENTRIES = 1000; // Maximum element signatures to track
 export const THROTTLE_ENTRY_TTL_MS = 300000; // 5 minutes TTL for throttle entries
+export const THROTTLE_PRUNE_INTERVAL_MS = 30000; // 30 seconds interval for cache pruning
 
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 2;

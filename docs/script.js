@@ -448,9 +448,9 @@ function setupTraceLogListener(traceLog) {
     updateQueueStatus('collecting');
   });
 
-  // Queue events - when events are sent or processed (BaseEventsQueueDto)
+  // Queue events - when events are sent or processed (EventsQueue)
   traceLog.on('queue', (data) => {
-    // data is a BaseEventsQueueDto: { user_id, session_id, device, events, global_metadata? }
+    // data is a EventsQueue: { user_id, session_id, device, events, global_metadata? }
     const eventCount = data.events ? data.events.length : 0;
     console.log('📤 TraceLog Queue:', data);
 

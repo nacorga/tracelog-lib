@@ -10,6 +10,7 @@ const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
 const VIEWPORT_MUTATION_DEBOUNCE_MS = 100;
 const MAX_THROTTLE_CACHE_ENTRIES = 1e3;
 const THROTTLE_ENTRY_TTL_MS = 3e5;
+const THROTTLE_PRUNE_INTERVAL_MS = 3e4;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
@@ -1187,23 +1188,14 @@ class SenderManager extends StateManager {
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
   createRecoveryBody(data) {
-    return {
-      user_id: data.userId,
-      session_id: data.sessionId,
-      device: data.device,
-      events: data.events,
-      ...data.global_metadata && { global_metadata: data.global_metadata }
-    };
+    const { timestamp, ...queue } = data;
+    return queue;
   }
   persistEvents(body) {
     try {
       const persistedData = {
-        userId: body.user_id,
-        sessionId: body.session_id,
-        device: body.device,
-        events: body.events,
-        timestamp: Date.now(),
-        ...body.global_metadata && { global_metadata: body.global_metadata }
+        ...body,
+        timestamp: Date.now()
       };
       const storageKey = this.getQueueStorageKey();
       this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
@@ -2283,8 +2275,7 @@ class ClickHandler extends StateManager {
    * Called during checkClickThrottle with built-in rate limiting (every 30 seconds)
    */
   pruneThrottleCache(now) {
-    const PRUNE_INTERVAL_MS = 3e4;
-    if (now - this.lastPruneTime < PRUNE_INTERVAL_MS) {
+    if (now - this.lastPruneTime < THROTTLE_PRUNE_INTERVAL_MS) {
       return;
     }
     this.lastPruneTime = now;
