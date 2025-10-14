@@ -13,6 +13,43 @@
 
 
 
+
+## [0.11.3] - 2025-10-14
+
+### 🐛 Bug Fixes
+
+- Scroll container detection ([396020b](../../commit/396020b6c81f1bffdaeb0ef4d6c58430e5a6e229))
+
+### 📚 Documentation
+
+- Update CLAUDE.md and cursor rules ([a1f010c](../../commit/a1f010caf4c07fc57d024169db04132fb5f5baac))
+
+### ♻️ Refactoring
+
+- Improve viewport event firing by rounding intersection ratio ([0952d67](../../commit/0952d6798e99b27603e6a0e6cab97aa68ccb2741))
+- Rename BaseEventsQueueDto to EventsQueue and update related references ([e63bf90](../../commit/e63bf90887e4f3823afdb5971ee50a6ce2b33ee0))
+- Handlers improves ([7819759](../../commit/781975956a4f5c844f600b61cec395ea1d1b5f44))
+- Remove window scrollable cache and enhance dynamic detection of scroll state ([436ec8a](../../commit/436ec8a0eeb1c165b9b8590b8278cd3dea83520d))
+- Enhance URL validation and scroll handler logic ([9227b36](../../commit/9227b3612432a6786b5f84557e4dd5fe4a8f0159))
+
+### 🔧 Other Changes
+
+- Merge pull request #38 from nacorga/release/20251013.3 ([e2d70bb](../../commit/e2d70bba42a440fc287b128af041ce98e2409c28))
+- Update CI workflow to include new build output files ([dae8f57](../../commit/dae8f5773b1d91501a1ada6ce1fb3828a5194d06))
+- Merge pull request #37 from nacorga/feature/tsup ([92338d9](../../commit/92338d9a252f6623e7d443cf8b05fe53a4764086))
+- Standardize NODE_ENV usage from 'dev' to 'development' across the codebase ([14b5621](../../commit/14b5621311e973c098f8eb22bf86f2ed6ce374ac))
+- Migrate to tsup for bundling and update build scripts ([26e2758](../../commit/26e2758422ec85e57de4417225c0ecae708c396f))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.11.2...v0.11.3
+
+
 ## [0.11.2] - 2025-10-13
 
 ### 🐛 Bug Fixes
