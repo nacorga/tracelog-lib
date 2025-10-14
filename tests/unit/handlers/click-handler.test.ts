@@ -584,4 +584,181 @@ describe('ClickHandler', () => {
       expect(mockEventManager.track).toHaveBeenCalled();
     });
   });
+
+  describe('Throttle Cache Pruning (Memory Leak Prevention)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      // Set config with clickThrottleMs to enable throttling
+      (clickHandler as any).set('config', { clickThrottleMs: 300 });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    test('should prune old entries after TTL expires', () => {
+      clickHandler.startTracking();
+
+      // Create 10 unique elements and click them
+      for (let i = 0; i < 10; i++) {
+        const element = document.createElement('button');
+        element.id = `button-${i}`;
+        document.body.appendChild(element);
+
+        const clickEvent = new MouseEvent('click', { bubbles: true });
+        Object.defineProperty(clickEvent, 'target', { value: element });
+        element.dispatchEvent(clickEvent);
+      }
+
+      // Verify all entries are in cache
+      expect((clickHandler as any).lastClickTimes.size).toBe(10);
+
+      // Fast-forward 6 minutes (beyond 5-minute TTL + 30s prune interval)
+      vi.advanceTimersByTime(6 * 60 * 1000);
+
+      // Click a new element to trigger pruning
+      const newElement = document.createElement('button');
+      newElement.id = 'new-button';
+      document.body.appendChild(newElement);
+      const clickEvent = new MouseEvent('click', { bubbles: true });
+      Object.defineProperty(clickEvent, 'target', { value: newElement });
+      newElement.dispatchEvent(clickEvent);
+
+      // Old entries should be pruned, only new element remains
+      expect((clickHandler as any).lastClickTimes.size).toBe(1);
+      expect((clickHandler as any).lastClickTimes.has('#new-button')).toBe(true);
+    });
+
+    test('should enforce max cache size limit (1000 entries)', () => {
+      clickHandler.startTracking();
+
+      // Create 1050 unique elements (beyond MAX_THROTTLE_CACHE_ENTRIES)
+      for (let i = 0; i < 1050; i++) {
+        const element = document.createElement('button');
+        element.id = `button-${i}`;
+        document.body.appendChild(element);
+
+        const clickEvent = new MouseEvent('click', { bubbles: true });
+        Object.defineProperty(clickEvent, 'target', { value: element });
+        element.dispatchEvent(clickEvent);
+
+        // Advance time by 31 seconds every 100 clicks to trigger pruning
+        if (i % 100 === 0) {
+          vi.advanceTimersByTime(31 * 1000);
+        }
+      }
+
+      // Cache should not exceed MAX_THROTTLE_CACHE_ENTRIES
+      expect((clickHandler as any).lastClickTimes.size).toBeLessThanOrEqual(1000);
+    });
+
+    test('should use LRU eviction (oldest entries removed first)', () => {
+      clickHandler.startTracking();
+
+      // Add 1001 entries to trigger eviction
+      const elementIds: string[] = [];
+      for (let i = 0; i < 1001; i++) {
+        const element = document.createElement('button');
+        element.id = `button-${i}`;
+        elementIds.push(`#button-${i}`);
+        document.body.appendChild(element);
+
+        const clickEvent = new MouseEvent('click', { bubbles: true });
+        Object.defineProperty(clickEvent, 'target', { value: element });
+        element.dispatchEvent(clickEvent);
+
+        // Trigger pruning check every 50 clicks
+        if (i % 50 === 0) {
+          vi.advanceTimersByTime(31 * 1000);
+        }
+      }
+
+      // First element should be evicted (LRU)
+      expect((clickHandler as any).lastClickTimes.has(elementIds[0])).toBe(false);
+
+      // Most recent elements should still be present
+      const lastIndex = elementIds.length - 1;
+      expect((clickHandler as any).lastClickTimes.has(elementIds[lastIndex])).toBe(true);
+    });
+
+    test('should rate-limit pruning (once per 30 seconds)', () => {
+      clickHandler.startTracking();
+
+      // Create an element and click it
+      const element = document.createElement('button');
+      element.id = 'test-button';
+      document.body.appendChild(element);
+
+      const clickEvent = new MouseEvent('click', { bubbles: true });
+      Object.defineProperty(clickEvent, 'target', { value: element });
+
+      // Click multiple times within 30 seconds
+      element.dispatchEvent(clickEvent);
+      vi.advanceTimersByTime(10 * 1000); // 10 seconds
+      element.dispatchEvent(clickEvent);
+      vi.advanceTimersByTime(10 * 1000); // 20 seconds total
+      element.dispatchEvent(clickEvent);
+
+      // Pruning should only run once (lastPruneTime prevents re-runs)
+      const lastPruneTime = (clickHandler as any).lastPruneTime;
+      expect(lastPruneTime).toBeGreaterThan(0);
+
+      // Fast-forward 31 seconds to allow next prune
+      vi.advanceTimersByTime(31 * 1000);
+      element.dispatchEvent(clickEvent);
+
+      // lastPruneTime should be updated
+      const newPruneTime = (clickHandler as any).lastPruneTime;
+      expect(newPruneTime).toBeGreaterThan(lastPruneTime);
+    });
+
+    test('should clear cache and reset prune time on stopTracking', () => {
+      clickHandler.startTracking();
+
+      // Add some entries
+      for (let i = 0; i < 5; i++) {
+        const element = document.createElement('button');
+        element.id = `button-${i}`;
+        document.body.appendChild(element);
+
+        const clickEvent = new MouseEvent('click', { bubbles: true });
+        Object.defineProperty(clickEvent, 'target', { value: element });
+        element.dispatchEvent(clickEvent);
+      }
+
+      expect((clickHandler as any).lastClickTimes.size).toBe(5);
+      expect((clickHandler as any).lastPruneTime).toBeGreaterThan(0);
+
+      // Stop tracking
+      clickHandler.stopTracking();
+
+      expect((clickHandler as any).lastClickTimes.size).toBe(0);
+      expect((clickHandler as any).lastPruneTime).toBe(0);
+    });
+
+    test('should maintain throttling within cache window', () => {
+      clickHandler.startTracking();
+
+      const element = document.createElement('button');
+      element.id = 'throttled-button';
+      document.body.appendChild(element);
+
+      const clickEvent = new MouseEvent('click', { bubbles: true });
+      Object.defineProperty(clickEvent, 'target', { value: element });
+
+      // First click should be tracked
+      element.dispatchEvent(clickEvent);
+      expect(mockEventManager.track).toHaveBeenCalledTimes(1);
+
+      // Second click within throttle window (300ms) should be suppressed
+      vi.advanceTimersByTime(200);
+      element.dispatchEvent(clickEvent);
+      expect(mockEventManager.track).toHaveBeenCalledTimes(1); // Still 1
+
+      // Third click after throttle window should be tracked
+      vi.advanceTimersByTime(150); // Total 350ms
+      element.dispatchEvent(clickEvent);
+      expect(mockEventManager.track).toHaveBeenCalledTimes(2);
+    });
+  });
 });

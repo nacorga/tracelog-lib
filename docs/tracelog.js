@@ -8,6 +8,8 @@ const DEFAULT_CLICK_THROTTLE_MS = 300;
 const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
 const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
 const VIEWPORT_MUTATION_DEBOUNCE_MS = 100;
+const MAX_THROTTLE_CACHE_ENTRIES = 1e3;
+const THROTTLE_ENTRY_TTL_MS = 3e5;
 const EVENT_EXPIRY_HOURS = 2;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
@@ -295,6 +297,7 @@ const WEB_VITALS_THRESHOLDS = {
   LONG_TASK: 50
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
+const MAX_NAVIGATION_HISTORY = 50;
 const PII_PATTERNS = [
   // Email addresses
   /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
@@ -2188,8 +2191,9 @@ class PageViewHandler extends StateManager {
 }
 class ClickHandler extends StateManager {
   eventManager;
-  clickHandler;
   lastClickTimes = /* @__PURE__ */ new Map();
+  clickHandler;
+  lastPruneTime = 0;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -2243,6 +2247,7 @@ class ClickHandler extends StateManager {
       this.clickHandler = void 0;
     }
     this.lastClickTimes.clear();
+    this.lastPruneTime = 0;
   }
   shouldIgnoreElement(element) {
     if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
@@ -2258,6 +2263,7 @@ class ClickHandler extends StateManager {
   checkClickThrottle(element, throttleMs) {
     const signature = this.getElementSignature(element);
     const now = Date.now();
+    this.pruneThrottleCache(now);
     const lastClickTime = this.lastClickTimes.get(signature);
     if (lastClickTime !== void 0 && now - lastClickTime < throttleMs) {
       log("debug", "ClickHandler: Click suppressed by throttle", {
@@ -2270,6 +2276,38 @@ class ClickHandler extends StateManager {
     }
     this.lastClickTimes.set(signature, now);
     return true;
+  }
+  /**
+   * Prunes stale entries from the throttle cache to prevent memory leaks
+   * Uses TTL-based eviction (5 minutes) and enforces max size limit
+   * Called during checkClickThrottle with built-in rate limiting (every 30 seconds)
+   */
+  pruneThrottleCache(now) {
+    const PRUNE_INTERVAL_MS = 3e4;
+    if (now - this.lastPruneTime < PRUNE_INTERVAL_MS) {
+      return;
+    }
+    this.lastPruneTime = now;
+    const cutoff = now - THROTTLE_ENTRY_TTL_MS;
+    for (const [key, timestamp] of this.lastClickTimes.entries()) {
+      if (timestamp < cutoff) {
+        this.lastClickTimes.delete(key);
+      }
+    }
+    if (this.lastClickTimes.size > MAX_THROTTLE_CACHE_ENTRIES) {
+      const entries = Array.from(this.lastClickTimes.entries()).sort((a2, b2) => a2[1] - b2[1]);
+      const excessCount = this.lastClickTimes.size - MAX_THROTTLE_CACHE_ENTRIES;
+      const toDelete = entries.slice(0, excessCount);
+      for (const [key] of toDelete) {
+        this.lastClickTimes.delete(key);
+      }
+      log("debug", "ClickHandler: Pruned throttle cache", {
+        data: {
+          removed: toDelete.length,
+          remaining: this.lastClickTimes.size
+        }
+      });
+    }
   }
   /**
    * Creates a stable signature for an element to track throttling
@@ -2436,7 +2474,6 @@ class ScrollHandler extends StateManager {
   minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
-  windowScrollableCache = null;
   retryTimeoutId = null;
   constructor(eventManager) {
     super();
@@ -2464,7 +2501,6 @@ class ScrollHandler extends StateManager {
     this.containers.length = 0;
     this.set("scrollEventCount", 0);
     this.limitWarningLogged = false;
-    this.windowScrollableCache = null;
   }
   tryDetectScrollContainers(attempt) {
     const elements = this.findScrollableElements();
@@ -2653,11 +2689,7 @@ class ScrollHandler extends StateManager {
     this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
   isWindowScrollable() {
-    if (this.windowScrollableCache !== null) {
-      return this.windowScrollableCache;
-    }
-    this.windowScrollableCache = document.documentElement.scrollHeight > window.innerHeight;
-    return this.windowScrollableCache;
+    return document.documentElement.scrollHeight > window.innerHeight;
   }
   clearContainerTimer(container) {
     if (container.debounceTimer !== null) {
@@ -3290,9 +3322,11 @@ class StorageManager {
 class PerformanceHandler extends StateManager {
   eventManager;
   reportedByNav = /* @__PURE__ */ new Map();
+  navigationHistory = [];
+  // FIFO queue for tracking navigation order
   observers = [];
-  lastLongTaskSentAt = 0;
   vitalThresholds = WEB_VITALS_THRESHOLDS;
+  lastLongTaskSentAt = 0;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -3311,6 +3345,7 @@ class PerformanceHandler extends StateManager {
     });
     this.observers.length = 0;
     this.reportedByNav.clear();
+    this.navigationHistory.length = 0;
   }
   observeWebVitalsFallback() {
     this.reportTTFB();
@@ -3440,6 +3475,13 @@ class PerformanceHandler extends StateManager {
       }
       if (!reportedForNav) {
         this.reportedByNav.set(navId, /* @__PURE__ */ new Set([sample.type]));
+        this.navigationHistory.push(navId);
+        if (this.navigationHistory.length > MAX_NAVIGATION_HISTORY) {
+          const oldestNav = this.navigationHistory.shift();
+          if (oldestNav) {
+            this.reportedByNav.delete(oldestNav);
+          }
+        }
       } else {
         reportedForNav.add(sample.type);
       }

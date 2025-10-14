@@ -20,6 +20,10 @@ export const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 60000; // 60 seconds cooldown fo
 export const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100; // Maximum elements to track (Phase 3)
 export const VIEWPORT_MUTATION_DEBOUNCE_MS = 100; // Debounce for mutation observer re-scanning
 
+// Click throttle cache limits
+export const MAX_THROTTLE_CACHE_ENTRIES = 1000; // Maximum element signatures to track
+export const THROTTLE_ENTRY_TTL_MS = 300000; // 5 minutes TTL for throttle entries
+
 // Event expiry
 export const EVENT_EXPIRY_HOURS = 2;
 export const EVENT_PERSISTENCE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours

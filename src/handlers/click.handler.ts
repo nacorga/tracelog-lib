@@ -4,6 +4,8 @@ import {
   INTERACTIVE_SELECTORS,
   PII_PATTERNS,
   DEFAULT_CLICK_THROTTLE_MS,
+  MAX_THROTTLE_CACHE_ENTRIES,
+  THROTTLE_ENTRY_TTL_MS,
 } from '../constants';
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
@@ -12,9 +14,9 @@ import { log } from '../utils';
 
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;
-
-  private clickHandler?: (event: Event) => void;
   private readonly lastClickTimes: Map<string, number> = new Map();
+  private clickHandler?: (event: Event) => void;
+  private lastPruneTime = 0;
 
   constructor(eventManager: EventManager) {
     super();
@@ -89,6 +91,7 @@ export class ClickHandler extends StateManager {
       this.clickHandler = undefined;
     }
     this.lastClickTimes.clear();
+    this.lastPruneTime = 0;
   }
 
   private shouldIgnoreElement(element: HTMLElement): boolean {
@@ -108,6 +111,10 @@ export class ClickHandler extends StateManager {
   private checkClickThrottle(element: HTMLElement, throttleMs: number): boolean {
     const signature = this.getElementSignature(element);
     const now = Date.now();
+
+    // Prune cache periodically to prevent unbounded growth
+    this.pruneThrottleCache(now);
+
     const lastClickTime = this.lastClickTimes.get(signature);
 
     if (lastClickTime !== undefined && now - lastClickTime < throttleMs) {
@@ -122,6 +129,48 @@ export class ClickHandler extends StateManager {
 
     this.lastClickTimes.set(signature, now);
     return true;
+  }
+
+  /**
+   * Prunes stale entries from the throttle cache to prevent memory leaks
+   * Uses TTL-based eviction (5 minutes) and enforces max size limit
+   * Called during checkClickThrottle with built-in rate limiting (every 30 seconds)
+   */
+  private pruneThrottleCache(now: number): void {
+    // Rate limit pruning itself (run at most once per 30 seconds)
+    const PRUNE_INTERVAL_MS = 30000;
+    if (now - this.lastPruneTime < PRUNE_INTERVAL_MS) {
+      return;
+    }
+
+    this.lastPruneTime = now;
+    const cutoff = now - THROTTLE_ENTRY_TTL_MS;
+
+    // Remove entries older than TTL
+    for (const [key, timestamp] of this.lastClickTimes.entries()) {
+      if (timestamp < cutoff) {
+        this.lastClickTimes.delete(key);
+      }
+    }
+
+    // Enforce max size limit (LRU eviction)
+    if (this.lastClickTimes.size > MAX_THROTTLE_CACHE_ENTRIES) {
+      const entries = Array.from(this.lastClickTimes.entries()).sort((a, b) => a[1] - b[1]); // Sort by timestamp (oldest first)
+
+      const excessCount = this.lastClickTimes.size - MAX_THROTTLE_CACHE_ENTRIES;
+      const toDelete = entries.slice(0, excessCount);
+
+      for (const [key] of toDelete) {
+        this.lastClickTimes.delete(key);
+      }
+
+      log('debug', 'ClickHandler: Pruned throttle cache', {
+        data: {
+          removed: toDelete.length,
+          remaining: this.lastClickTimes.size,
+        },
+      });
+    }
   }
 
   /**
