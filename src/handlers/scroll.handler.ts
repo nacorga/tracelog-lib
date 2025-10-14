@@ -30,7 +30,6 @@ export class ScrollHandler extends StateManager {
   private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
   private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
   private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
-  private windowScrollableCache: boolean | null = null;
   private retryTimeoutId: number | null = null;
 
   constructor(eventManager: EventManager) {
@@ -65,7 +64,6 @@ export class ScrollHandler extends StateManager {
     this.containers.length = 0;
     this.set('scrollEventCount', 0);
     this.limitWarningLogged = false;
-    this.windowScrollableCache = null;
   }
 
   private tryDetectScrollContainers(attempt: number): void {
@@ -330,12 +328,7 @@ export class ScrollHandler extends StateManager {
   }
 
   private isWindowScrollable(): boolean {
-    if (this.windowScrollableCache !== null) {
-      return this.windowScrollableCache;
-    }
-
-    this.windowScrollableCache = document.documentElement.scrollHeight > window.innerHeight;
-    return this.windowScrollableCache;
+    return document.documentElement.scrollHeight > window.innerHeight;
   }
 
   private clearContainerTimer(container: ScrollContainer): void {

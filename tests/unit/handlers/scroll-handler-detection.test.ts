@@ -81,6 +81,40 @@ describe('ScrollHandler - Scroll Container Detection', () => {
       expect(containers[0].selector).toBe('window');
       expect(containers[0].element).toBe(window);
     });
+
+    it('should detect window scroll dynamically when content loads after initialization', () => {
+      Object.defineProperty(document.documentElement, 'scrollHeight', { value: 500, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+      scrollHandler.startTracking();
+
+      const containersBefore = (scrollHandler as any).containers as any[];
+      const hasWindowBefore = containersBefore.some((c: any) => c.selector === 'window');
+
+      expect(hasWindowBefore).toBe(false);
+
+      Object.defineProperty(document.documentElement, 'scrollHeight', { value: 2000, configurable: true });
+
+      const isScrollableNow = (scrollHandler as any).isWindowScrollable();
+
+      expect(isScrollableNow).toBe(true);
+    });
+
+    it('should re-detect window scroll state when content shrinks', () => {
+      Object.defineProperty(document.documentElement, 'scrollHeight', { value: 2000, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+      scrollHandler.startTracking();
+
+      const isScrollableInitially = (scrollHandler as any).isWindowScrollable();
+      expect(isScrollableInitially).toBe(true);
+
+      Object.defineProperty(document.documentElement, 'scrollHeight', { value: 500, configurable: true });
+
+      const isScrollableAfterShrink = (scrollHandler as any).isWindowScrollable();
+
+      expect(isScrollableAfterShrink).toBe(false);
+    });
   });
 
   describe('Vertical vs Horizontal scroll detection', () => {
