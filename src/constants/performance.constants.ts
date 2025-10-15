@@ -62,7 +62,7 @@ export const DEFAULT_WEB_VITALS_MODE: WebVitalsMode = 'needs-improvement';
 /**
  * Get Web Vitals thresholds for the specified mode
  */
-export function getWebVitalsThresholds(mode: WebVitalsMode = DEFAULT_WEB_VITALS_MODE): Record<WebVitalType, number> {
+export const getWebVitalsThresholds = (mode: WebVitalsMode = DEFAULT_WEB_VITALS_MODE): Record<WebVitalType, number> => {
   switch (mode) {
     case 'all':
       return { LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0, LONG_TASK: 0 }; // Track everything
@@ -73,7 +73,7 @@ export function getWebVitalsThresholds(mode: WebVitalsMode = DEFAULT_WEB_VITALS_
     default:
       return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
   }
-}
+};
 
 // ============================================================================
 // PERFORMANCE MONITORING LIMITS
