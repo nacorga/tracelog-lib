@@ -489,8 +489,35 @@ Sessions sync across tabs via BroadcastChannel:
 
 ### QA Mode
 
-Add `?tlog_mode=qa` to URL:
+**Activation/Deactivation via URL:**
+```bash
+# Activate
+?tlog_mode=qa
+
+# Deactivate
+?tlog_mode=qa_off
+```
+
+**Programmatic API:**
+```typescript
+tracelog.setQaMode(true);   // Enable
+tracelog.setQaMode(false);  // Disable
+```
+
+**Features:**
 - Custom events logged to console (not sent to backend)
 - Strict validation (throws errors instead of silent failures)
 - Events still emitted to `on('event')` listeners
+- State persisted in sessionStorage across page reloads
+- URL param auto-cleaned after detection
 - Useful for manual testing and debugging
+
+**Usage:**
+```typescript
+// Via URL
+http://localhost:3000?tlog_mode=qa
+
+// Via code
+await tracelog.init();
+tracelog.setQaMode(true);
+tracelog.event('test', { key: 'value' }); // Logged to console

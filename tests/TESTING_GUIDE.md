@@ -19,13 +19,33 @@ npm run fix                      # Auto-fix issues
 
 ## QA Mode for Testing
 
-**Auto-Detection**: `?tlog_mode=qa`
+QA mode provides enhanced debugging for both manual and automated testing.
+
+### Activation/Deactivation
+
+**Via URL:**
+```bash
+# Activate
+?tlog_mode=qa
+
+# Deactivate
+?tlog_mode=qa_off
+```
+
+**Programmatic API:**
+```typescript
+// Enable QA mode
+tracelog.setQaMode(true);
+
+// Disable QA mode
+tracelog.setQaMode(false);
+```
 
 ### How It Works
-1. **URL Detection**: Library checks for `?tlog_mode=qa` query parameter on init
-2. **Persistence**: Stores mode in sessionStorage (`tlog:qa_mode`)
+1. **URL Detection**: Library checks for `?tlog_mode=qa` or `?tlog_mode=qa_off` on page load
+2. **Persistence**: Stores state in sessionStorage (`tlog:qa_mode`)
 3. **URL Cleanup**: Removes query param using `history.replaceState()`
-4. **Visual Feedback**: Console log with orange badge when activated
+4. **Visual Feedback**: Console log with colored badge (orange=active, gray=disabled)
 
 ### Effects When Active
 - **Custom events displayed in console** instead of being sent to server
@@ -36,21 +56,38 @@ npm run fix                      # Auto-fix issues
 - Useful for both manual debugging and automated E2E testing
 
 ### E2E Testing Patterns
+
+**Activate via URL:**
 ```typescript
-// Activate QA mode via URL
+// Method 1: URL parameter
 await page.goto('http://localhost:3000?tlog_mode=qa');
 
-// Or navigate after page load
+// Method 2: Navigate after load
 await page.goto('http://localhost:3000');
 await page.evaluate(() => {
-  window.location.href = window.location.href + '?tlog_mode=qa';
+  const url = new URL(window.location.href);
+  url.searchParams.set('tlog_mode', 'qa');
+  window.location.href = url.toString();
 });
 ```
 
-### Manual Deactivation
+**Activate programmatically:**
 ```typescript
-import { disableQaMode } from '@tracelog/lib';
-disableQaMode(); // Removes from sessionStorage
+await page.goto('http://localhost:3000');
+await page.evaluate(() => {
+  window.tracelog.setQaMode(true);
+});
+```
+
+**Deactivate in tests:**
+```typescript
+// Via URL
+await page.goto('http://localhost:3000?tlog_mode=qa_off');
+
+// Via code
+await page.evaluate(() => {
+  window.tracelog.setQaMode(false);
+});
 ```
 
 ## Test Failure Triage

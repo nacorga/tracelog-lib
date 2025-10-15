@@ -1,51 +1,94 @@
-import { QA_MODE_KEY } from '../../constants';
+import {
+  QA_MODE_KEY,
+  QA_MODE_URL_PARAM,
+  QA_MODE_ENABLE_VALUE,
+  QA_MODE_DISABLE_VALUE,
+  LOG_STYLE_ACTIVE,
+  LOG_STYLE_DISABLED,
+} from '../../constants';
 import { log } from '../logging.utils';
 
-const QA_MODE_PARAM = 'tlog_mode';
-const QA_MODE_VALUE = 'qa';
-
 /**
- * Detects if QA mode should be active based on URL query parameter or sessionStorage
- *
- * Detection flow:
- * 1. Check if already active in sessionStorage
- * 2. Check for ?tlog_mode=qa query parameter
- * 3. If found in URL:
- *    - Persist to sessionStorage
- *    - Clean param from URL
+ * Detects QA mode from URL parameter or sessionStorage
  *
  * @returns True if QA mode is active, false otherwise
  */
 export const detectQaMode = (): boolean => {
-  const stored = sessionStorage.getItem(QA_MODE_KEY);
-
-  if (stored === 'true') {
-    return true;
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
   }
 
-  const params = new URLSearchParams(window.location.search);
-  const modeParam = params.get(QA_MODE_PARAM);
-  const isQaMode = modeParam === QA_MODE_VALUE;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get(QA_MODE_URL_PARAM);
+    const storedState = sessionStorage.getItem(QA_MODE_KEY);
 
-  if (isQaMode) {
-    sessionStorage.setItem(QA_MODE_KEY, 'true');
+    let newState: boolean | null = null;
 
-    params.delete(QA_MODE_PARAM);
+    if (urlParam === QA_MODE_ENABLE_VALUE) {
+      newState = true;
+      sessionStorage.setItem(QA_MODE_KEY, 'true');
 
-    const newSearch = params.toString();
-    const newUrl = `${window.location.pathname}${newSearch ? '?' + newSearch : ''}${window.location.hash}`;
+      log('info', 'QA Mode ACTIVE', {
+        showToClient: true,
+        style: LOG_STYLE_ACTIVE,
+      });
+    } else if (urlParam === QA_MODE_DISABLE_VALUE) {
+      newState = false;
+      sessionStorage.removeItem(QA_MODE_KEY);
 
-    try {
-      window.history.replaceState({}, '', newUrl);
-    } catch (error) {
-      log('warn', 'History API not available, cannot replace URL', { error });
+      log('info', 'QA Mode DISABLED', {
+        showToClient: true,
+        style: LOG_STYLE_DISABLED,
+      });
     }
 
-    console.log(
-      '%c[TraceLog] QA Mode ACTIVE',
-      'background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;',
-    );
+    if (urlParam === QA_MODE_ENABLE_VALUE || urlParam === QA_MODE_DISABLE_VALUE) {
+      try {
+        params.delete(QA_MODE_URL_PARAM);
+
+        const search = params.toString();
+        const url = window.location.pathname + (search ? '?' + search : '') + window.location.hash;
+
+        window.history.replaceState({}, '', url);
+      } catch {
+        // Continue without cleaning URL
+      }
+    }
+
+    return newState ?? storedState === 'true';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Set QA mode state programmatically
+ *
+ * @param enabled - True to enable, false to disable
+ */
+export const setQaMode = (enabled: boolean): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
   }
 
-  return isQaMode;
+  try {
+    if (enabled) {
+      sessionStorage.setItem(QA_MODE_KEY, 'true');
+
+      log('info', 'QA Mode ENABLED', {
+        showToClient: true,
+        style: LOG_STYLE_ACTIVE,
+      });
+    } else {
+      sessionStorage.removeItem(QA_MODE_KEY);
+
+      log('info', 'QA Mode DISABLED', {
+        showToClient: true,
+        style: LOG_STYLE_DISABLED,
+      });
+    }
+  } catch {
+    log('warn', 'Cannot set QA mode: sessionStorage unavailable');
+  }
 };
