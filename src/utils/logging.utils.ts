@@ -1,12 +1,27 @@
 export const formatLogMsg = (msg: string, error?: unknown): string => {
   if (error) {
-    // In production, sanitize error messages to avoid exposing sensitive paths
     if (process.env.NODE_ENV !== 'development' && error instanceof Error) {
-      // Remove file paths and line numbers from error messages
       const sanitizedMessage = error.message.replace(/\s+at\s+.*$/gm, '').replace(/\(.*?:\d+:\d+\)/g, '');
       return `[TraceLog] ${msg}: ${sanitizedMessage}`;
     }
-    return `[TraceLog] ${msg}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+
+    if (error instanceof Error) {
+      return `[TraceLog] ${msg}: ${error.message}`;
+    }
+
+    if (typeof error === 'string') {
+      return `[TraceLog] ${msg}: ${error}`;
+    }
+
+    if (typeof error === 'object') {
+      try {
+        return `[TraceLog] ${msg}: ${JSON.stringify(error)}`;
+      } catch {
+        return `[TraceLog] ${msg}: [Unable to serialize error]`;
+      }
+    }
+
+    return `[TraceLog] ${msg}: ${String(error)}`;
   }
 
   return `[TraceLog] ${msg}`;
@@ -51,20 +66,29 @@ export const log = (
     }
   }
 
-  const styledMsg = style !== undefined && style !== '' ? `%c${formattedMsg}` : formattedMsg;
-  const logArgs: unknown[] = style !== undefined && style !== '' ? [styledMsg, style] : [styledMsg];
+  const hasStyle = style !== undefined && style !== '';
+  const styledMsg = hasStyle ? `%c${formattedMsg}` : formattedMsg;
 
   if (data !== undefined) {
     const sanitizedData = isProduction ? sanitizeLogData(data) : data;
-    logArgs.push(sanitizedData);
-  }
 
-  console[method](...logArgs);
+    if (hasStyle) {
+      console[method](styledMsg, style, sanitizedData);
+    } else {
+      console[method](styledMsg, sanitizedData);
+    }
+  } else {
+    if (hasStyle) {
+      console[method](styledMsg, style);
+    } else {
+      console[method](styledMsg);
+    }
+  }
 };
 
 /**
  * Sanitizes log data in production to prevent sensitive information leakage
- * Simple approach: redact sensitive keys only
+ * Recursively redacts sensitive keys and deep clones objects to preserve expandability
  */
 const sanitizeLogData = (data: Record<string, unknown>): Record<string, unknown> => {
   const sanitized: Record<string, unknown> = {};
@@ -75,6 +99,17 @@ const sanitizeLogData = (data: Record<string, unknown>): Record<string, unknown>
 
     if (sensitiveKeys.some((sensitiveKey) => lowerKey.includes(sensitiveKey))) {
       sanitized[key] = '[REDACTED]';
+      continue;
+    }
+
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      sanitized[key] = sanitizeLogData(value as Record<string, unknown>);
+    } else if (Array.isArray(value)) {
+      sanitized[key] = value.map((item) =>
+        item !== null && typeof item === 'object' && !Array.isArray(item)
+          ? sanitizeLogData(item as Record<string, unknown>)
+          : item,
+      );
     } else {
       sanitized[key] = value;
     }
