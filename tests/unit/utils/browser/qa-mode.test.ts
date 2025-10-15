@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { detectQaMode } from '../../../../src/utils/browser/qa-mode.utils';
+import { detectQaMode, setQaMode } from '../../../../src/utils/browser/qa-mode.utils';
 import { QA_MODE_KEY } from '../../../../src/constants';
 
 describe('QA Mode Detection', () => {
@@ -196,6 +196,204 @@ describe('QA Mode Detection', () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(
         expect.stringContaining('[TraceLog] QA Mode ACTIVE'),
+        expect.any(String),
+      );
+    });
+
+    it('should detect qa_off value and disable QA mode', () => {
+      // First activate QA mode
+      sessionStorage.setItem(QA_MODE_KEY, 'true');
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa_off',
+          pathname: '/',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const isQaMode = detectQaMode();
+
+      expect(isQaMode).toBe(false);
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+    });
+
+    it('should remove from sessionStorage when ?tlog_mode=qa_off', () => {
+      sessionStorage.setItem(QA_MODE_KEY, 'true');
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa_off',
+          pathname: '/page',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      detectQaMode();
+
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+    });
+
+    it('should log DISABLED message when deactivating', () => {
+      const consoleLogSpy = vi.spyOn(console, 'log');
+      sessionStorage.setItem(QA_MODE_KEY, 'true');
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa_off',
+          pathname: '/',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      detectQaMode();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[TraceLog] QA Mode DISABLED'),
+        expect.any(String),
+      );
+    });
+
+    it('should clean URL param after detecting qa_off value', () => {
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa_off',
+          pathname: '/test',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      detectQaMode();
+
+      expect(replaceStateSpy).toHaveBeenCalledWith({}, '', '/test');
+    });
+
+    it('should handle activation → deactivation → activation cycle', () => {
+      // Activate
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa',
+          pathname: '/',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      expect(detectQaMode()).toBe(true);
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBe('true');
+
+      // Deactivate
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa_off',
+          pathname: '/',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      expect(detectQaMode()).toBe(false);
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+
+      // Activate again
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa',
+          pathname: '/',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      expect(detectQaMode()).toBe(true);
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBe('true');
+    });
+
+    it('should preserve state across multiple detectQaMode() calls without URL params', () => {
+      // Activate via URL
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?tlog_mode=qa',
+          pathname: '/',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      expect(detectQaMode()).toBe(true);
+
+      // Subsequent calls without URL param should preserve state
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '',
+          pathname: '/',
+          hash: '',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      expect(detectQaMode()).toBe(true);
+      expect(detectQaMode()).toBe(true);
+    });
+  });
+
+  describe('setQaMode', () => {
+    it('should activate QA mode when passed true', () => {
+      setQaMode(true);
+
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBe('true');
+    });
+
+    it('should deactivate QA mode when passed false', () => {
+      sessionStorage.setItem(QA_MODE_KEY, 'true');
+
+      setQaMode(false);
+
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+    });
+
+    it('should log ENABLED message when activating', () => {
+      const consoleLogSpy = vi.spyOn(console, 'log');
+
+      setQaMode(true);
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[TraceLog] QA Mode ENABLED'),
+        expect.any(String),
+      );
+    });
+
+    it('should log DISABLED message when deactivating', () => {
+      const consoleLogSpy = vi.spyOn(console, 'log');
+
+      setQaMode(false);
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[TraceLog] QA Mode DISABLED'),
         expect.any(String),
       );
     });

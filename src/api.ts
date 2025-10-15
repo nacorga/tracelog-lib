@@ -1,6 +1,6 @@
 import { App } from './app';
 import { MetadataType, Config, EmitterCallback, EmitterMap } from './types';
-import { log, validateAndNormalizeConfig } from './utils';
+import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
@@ -201,6 +201,14 @@ export const __setAppInstance = (instance: App | null): void => {
   }
 
   app = instance;
+};
+
+export const setQaMode = (enabled: boolean): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  setQaModeUtil(enabled);
 };
 
 if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {

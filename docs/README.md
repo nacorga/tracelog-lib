@@ -173,26 +173,50 @@ await tracelog.init({
 
 ## QA Mode
 
-Enable debug mode with URL parameter for enhanced development experience:
+Enable debug mode for enhanced development and testing experience.
 
-```javascript
-// Add ?tlog_mode=qa to URL
-// http://localhost:3000?tlog_mode=qa
+### Activation Methods
+
+#### Via URL Parameter
+```bash
+# Activate QA mode
+http://localhost:3000?tlog_mode=qa
+
+# Deactivate QA mode
+http://localhost:3000?tlog_mode=qa_off
 ```
 
-**QA Mode Features:**
-- All events logged to browser console
-- Custom event validation errors thrown (instead of silent fail)
-- Detailed error messages for debugging
-- Session state visible in console
+#### Programmatic API
+```javascript
+// Enable QA mode
+tracelog.setQaMode(true);
+```
 
-**Usage:**
+### QA Mode Features
+- ✅ **Console Logging**: All events logged to browser console
+- ✅ **Strict Validation**: Errors thrown instead of silent failures
+- ✅ **Detailed Errors**: Enhanced error messages for debugging
+- ✅ **Session State**: Session info visible in console
+- ✅ **Persistent**: State saved in sessionStorage across page reloads
+- ✅ **URL Cleanup**: Query parameter auto-removed from URL after detection
+
+### Common Use Cases
+
+**Development Testing:**
 ```bash
-# Start playground in QA mode
+# Open playground in QA mode
 open http://localhost:3000?tlog_mode=qa
 
-# Or add to any URL
-http://localhost:3000#productos?tlog_mode=qa
+# Disable after testing
+open http://localhost:3000?tlog_mode=qa_off
+```
+
+**Console Testing:**
+```javascript
+// From browser console
+tracelog.setQaMode(true);
+tracelog.event('test_event', { foo: 'bar' });
+// Event will be logged to console
 ```
 
 ## Files

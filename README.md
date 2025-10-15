@@ -11,6 +11,12 @@ Lightweight web analytics library for tracking user behavior. Works standalone o
 - **Event-driven** - Subscribe via `on()`/`off()` for real-time events
 - **Lightweight** - Single dependency (`web-vitals`), 15KB gzipped
 
+## Live Demo
+
+[https://nacorga.github.io/tracelog-lib](https://nacorga.github.io/tracelog-lib)
+
+---
+
 ## Installation
 
 ### NPM (Recommended)
@@ -51,236 +57,256 @@ await tracelog.init({
 ## Quick Start
 
 ```typescript
-// Basic initialization
+// 1. Initialize (standalone mode - no backend required)
 await tracelog.init();
 
-// Custom events
-tracelog.event('product_viewed', {
-  productId: 'abc-123',
-  price: 299.99
+// 2. Track custom events
+tracelog.event('button_clicked', {
+  buttonId: 'signup-cta',
+  source: 'homepage'
 });
 
-// Subscribe to events
+// 3. Subscribe to events (real-time)
 tracelog.on('event', (event) => {
   console.log(event.type, event);
 });
 
-// Cleanup
-await tracelog.destroy();
+// 4. Cleanup (on consent revoke or app unmount)
+tracelog.destroy();
 ```
 
+**That's it!** TraceLog now automatically tracks:
+- Page views & navigation (including SPA routes)
+- Click interactions
+- Scroll behavior
+- User sessions
+- Web Vitals (LCP, INP, CLS, FCP, TTFB)
+- JavaScript errors
+
+---
+
+## Core API
+
+| Method | Description |
+|--------|-------------|
+| `init(config?)` | Initialize tracking (see [Configuration](#configuration)) |
+| `event(name, metadata?)` | Track custom events |
+| `on(event, callback)` | Subscribe to events (`'event'` or `'queue'`) |
+| `off(event, callback)` | Unsubscribe from events |
+| `isInitialized()` | Check initialization status |
+| `setQaMode(enabled)` | Enable/disable QA mode (console logging) |
+| `destroy()` | Stop tracking and cleanup |
+
+**→ [Complete API Reference](./API_REFERENCE.md)**
+
+---
+
 ## Configuration
+
+All configuration is **optional**. TraceLog works out-of-the-box with sensible defaults.
 
 ```typescript
 await tracelog.init({
   // Session
-  sessionTimeout: 900000,          // 15 min (default)
-
-  // Sampling
-  samplingRate: 1.0,               // 100% (default)
-  errorSampling: 1.0,              // 100% (default)
+  sessionTimeout: 900000,  // 15 min (default)
 
   // Privacy
-  sensitiveQueryParams: ['token'], // Merged with defaults
+  samplingRate: 1.0,               // 100% (default)
+  sensitiveQueryParams: ['token'], // Add to defaults
 
-  // Web Vitals filtering (controls which performance metrics are tracked)
-  webVitalsMode: 'needs-improvement',  // 'all' | 'needs-improvement' | 'poor' (default: 'needs-improvement')
-  webVitalsThresholds: {               // Optional: override default thresholds
-    LCP: 3000,  // Custom threshold in milliseconds
-    FCP: 2000
-  },
-
-  // Integrations
+  // Integrations (pick one or none)
   integrations: {
-    tracelog: { projectId: 'your-id' },
-    custom: { collectApiUrl: 'https://api.example.com/collect' },
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    tracelog: { projectId: 'your-id' },              // TraceLog SaaS
+    custom: { collectApiUrl: 'https://api.com' },    // Custom backend
+    googleAnalytics: { measurementId: 'G-XXXXXX' }   // GA4 forwarding
   },
 
-  // Viewport tracking
+  // Web Vitals filtering
+  webVitalsMode: 'needs-improvement',  // 'all' | 'needs-improvement' | 'poor'
+
+  // Viewport tracking (element visibility)
   viewport: {
-    elements: [
-      { selector: '.cta-button', id: 'pricing-cta', name: 'Pricing CTA' }
-    ],
+    elements: [{ selector: '.cta', id: 'hero-cta' }],
     threshold: 0.5,      // 50% visible
     minDwellTime: 1000   // 1 second
   }
 });
 ```
 
-### Methods
+**→ [Full Configuration Guide](./API_REFERENCE.md#configuration)**
 
-- `init(config?)` - Initialize tracking
-- `event(name, metadata?)` - Send custom event
-- `on(event, callback)` - Subscribe to events
-- `off(event, callback)` - Unsubscribe
-- `destroy()` - Cleanup
+---
 
-## Event Types
+## Automatic Event Types
 
-All events include: `id`, `type`, `page_url`, `timestamp`, `sessionId`, `utm`
+TraceLog captures these events automatically (no code required):
 
-| Type | Data Fields |
-|------|-------------|
-| `PAGE_VIEW` | `page_view.{title, pathname, referrer}` |
-| `CLICK` | `click_data.{x, y, tag, id, text, href}` |
-| `SCROLL` | `scroll_data.{depth, direction, velocity, is_primary}` |
-| `SESSION_START` | Session initialization |
-| `SESSION_END` | `session_end_reason` |
-| `CUSTOM` | `custom_event.{name, metadata}` |
-| `WEB_VITALS` | `web_vitals.{type, value}` (LCP, CLS, INP, FCP, TTFB) |
-| `ERROR` | `error_data.{type, message, filename, line}` |
-| `VIEWPORT_VISIBLE` | `viewport_data.{selector, dwellTime, visibilityRatio}` |
+| Event Type | What It Tracks |
+|------------|----------------|
+| `PAGE_VIEW` | Navigation, SPA route changes |
+| `CLICK` | User interactions with elements |
+| `SCROLL` | Scroll depth, velocity, engagement |
+| `SESSION_START` | New session creation |
+| `SESSION_END` | Session termination (timeout, page unload) |
+| `WEB_VITALS` | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) |
+| `ERROR` | JavaScript errors, promise rejections |
+| `VIEWPORT_VISIBLE` | Element visibility (requires `viewport` config) |
 
-## Examples
-
-### Event Subscription
+**Custom Events:**
 ```typescript
-// Register BEFORE init() to catch initial events
-tracelog.on('event', (event) => {
-  console.log(event.type, event);
+tracelog.event('purchase_completed', {
+  orderId: 'ord-123',
+  total: 99.99,
+  currency: 'USD'
 });
+```
 
-tracelog.on('queue', (batch) => {
-  console.log('Queued:', batch.events.length);
-});
+**→ [Event Types Reference](./API_REFERENCE.md#event-types)**
 
+---
+
+## Integration Modes
+
+TraceLog supports multiple integration modes. Choose what fits your needs:
+
+### 1. Standalone (No Backend)
+```typescript
 await tracelog.init();
-```
 
-### Privacy Controls
-```typescript
-// Exclude sensitive elements
-<div data-tlog-ignore>
-  <input type="password">
-</div>
-
-// Filter URL params
-await tracelog.init({
-  sensitiveQueryParams: ['affiliate_id', 'promo'],
-  samplingRate: 0.5  // Track 50% of users
-});
-```
-
-### Filter Primary Scroll
-```typescript
+// Consume events locally
 tracelog.on('event', (event) => {
-  if (event.type === 'scroll' && event.scroll_data.is_primary) {
-    console.log('Main content scroll:', event.scroll_data.depth);
+  myAnalytics.track(event);
+});
+```
+
+### 2. TraceLog SaaS
+```typescript
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' }
   }
 });
 ```
 
-### Web Vitals Filtering
+### 3. Custom Backend
 ```typescript
-// Default: Track metrics needing improvement or worse (balanced approach)
 await tracelog.init({
-  webVitalsMode: 'needs-improvement'
-});
-
-// Track all metrics (for full trend analysis and P75 calculations)
-await tracelog.init({
-  webVitalsMode: 'all'
-});
-
-// Track only poor metrics (minimize data volume)
-await tracelog.init({
-  webVitalsMode: 'poor'
-});
-
-// Custom thresholds (fine-grained control)
-await tracelog.init({
-  webVitalsMode: 'needs-improvement',
-  webVitalsThresholds: {
-    LCP: 3000,  // Stricter than default 2500ms
-    FCP: 2500,  // Stricter than default 1800ms
-    CLS: 0.15   // Stricter than default 0.1
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      allowHttp: false  // Only true for local testing
+    }
   }
 });
 ```
 
-**Threshold Reference (Core Web Vitals standards):**
-
-| Metric | 'all' | 'needs-improvement' (default) | 'poor' |
-|--------|-------|-------------------------------|--------|
-| LCP | Track all | > 2500ms | > 4000ms |
-| FCP | Track all | > 1800ms | > 3000ms |
-| CLS | Track all | > 0.1 | > 0.25 |
-| INP | Track all | > 200ms | > 500ms |
-| TTFB | Track all | > 800ms | > 1800ms |
-
-### Global Disable
+### 4. Google Analytics
 ```typescript
-window.__traceLogDisabled = true;
+await tracelog.init({
+  integrations: {
+    googleAnalytics: { measurementId: 'G-XXXXXX' }
+  }
+});
 ```
+
+**→ [Integration Setup Guide](./API_REFERENCE.md#integration-configuration)**
+
+---
 
 ## Privacy & Security
 
-- **PII Sanitization** - Auto-redacts emails, phones, credit cards, API keys
-- **Input Protection** - Never captures input/textarea/select values
-- **URL Filtering** - Removes sensitive query params (token, auth, key, password, etc.)
-- **Element Exclusion** - Use `data-tlog-ignore` attribute
-- **Client-Side Controls** - All validation/sampling happens in browser
+TraceLog is **privacy-first** by design:
+
+- ✅ **PII Sanitization** - Auto-redacts emails, phones, credit cards, API keys
+- ✅ **Input Protection** - Never captures `<input>`, `<textarea>`, `<select>` values
+- ✅ **URL Filtering** - Removes sensitive query params (15 defaults + custom)
+- ✅ **Element Exclusion** - Use `data-tlog-ignore` to exclude sensitive areas
+- ✅ **Client-Side Controls** - All sampling and validation happens in browser
+
+**Example:**
+```html
+<!-- Exclude sensitive forms -->
+<div data-tlog-ignore>
+  <input type="password" name="password">
+  <input type="text" name="credit_card">
+</div>
+```
 
 **Your Responsibilities:**
-- Get user consent before calling `init()` (GDPR)
-- Sanitize custom event metadata
+- Get user consent before calling `init()` (GDPR/CCPA)
+- Sanitize custom event metadata (avoid PII)
 - Call `destroy()` on consent revoke
 
-[Full Security Guide →](./SECURITY.md)
+**→ [Complete Security Guide](./SECURITY.md)**
 
-## Error Handling & Reliability
+---
 
-TraceLog uses a **persistence-based recovery model** with no in-session retries:
+## QA Mode
 
-- **Success (2xx)** - Events sent immediately, queue cleared
-- **Permanent errors (4xx)** - Events discarded immediately (invalid data won't succeed on retry)
-- **Temporary errors (5xx/network)** - Events removed from queue and persisted to localStorage
-- **Recovery** - Persisted events automatically recovered and retried on next page load
-- **Expiration** - Persisted events expire after 2 hours
-- **Page unload** - Uses `sendBeacon()` for synchronous delivery of session end events
+Enable QA mode for debugging and development:
 
-**Why no in-session retries?**
-- Prevents infinite retry loops during API outages
-- Reduces server load and network traffic during failures
-- Better battery life on mobile devices
-- Natural recovery on page navigation (common in SPAs)
+### URL Activation
+```bash
+# Enable
+?tlog_mode=qa
 
-## Debug
-
-Enable QA mode: `?tlog_mode=qa`
-
-```typescript
-console.log(tracelog.isInitialized()); // true
+# Disable
+?tlog_mode=qa_off
 ```
+
+### Programmatic API
+```typescript
+tracelog.setQaMode(true);   // Enable
+tracelog.setQaMode(false);  // Disable
+```
+
+**Features:**
+- Custom events logged to browser console
+- Strict validation (throws errors instead of warnings)
+- Session state visible in console
+- Persistent across page reloads (sessionStorage)
+
+**→ [QA Mode Documentation](./API_REFERENCE.md#setqamodeenabled-boolean-void)**
+
+---
+
+## Browser Support
+
+- Chrome 60+
+- Firefox 55+
+- Safari 12+
+- Edge 79+
+
+**SSR/SSG Compatible:** Safe to import in Angular Universal, Next.js, Nuxt, SvelteKit (no-ops in Node.js).
+
+---
 
 ## Development
 
 ```bash
-npm install
-npm run build:all      # ESM + CJS + Browser
-npm run check          # Lint + format
-npm run test           # All tests
-npm run test:coverage  # With coverage
+npm install              # Install dependencies
+npm run build:all        # Build ESM + CJS + Browser bundles
+npm run check            # Lint + format validation
+npm run test             # Run all tests
+npm run test:coverage    # Generate coverage report
 ```
 
-## Browser Support
+**→ [Contributing Guide](./CONTRIBUTING.md)**
 
-Chrome 60+, Firefox 55+, Safari 12+, Edge 79+
-
-## SSR/SSG Support
-
-Safe to import in SSR frameworks (Angular Universal, Next.js, Nuxt, SvelteKit). All methods silently no-op in Node.js environments.
-
-**Best practice**
-Register listeners AFTER init() in browser-only lifecycle hooks.
+---
 
 ## Documentation
 
-- [Handlers](./src/handlers/README.md) - Event capture implementation
-- [Managers](./src/managers/README.md) - Core components
-- [Security](./SECURITY.md) - Privacy & security guide
-- [Changelog](./CHANGELOG.md) - Release history
+| Document | Description |
+|----------|-------------|
+| **[API Reference](./API_REFERENCE.md)** | Complete API documentation with all methods, config options, and event types |
+| **[Best Practices](./BEST_PRACTICES.md)** | Patterns, anti-patterns, and optimization tips |
+| **[Security Guide](./SECURITY.md)** | Privacy, GDPR compliance, and security best practices |
+| **[Changelog](./CHANGELOG.md)** | Release history and migration guides |
+| **[Handlers](./src/handlers/README.md)** | Event capture implementation details |
+| **[Managers](./src/managers/README.md)** | Core component architecture |
+
+---
 
 ## License
 
