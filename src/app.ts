@@ -75,7 +75,15 @@ export class App extends StateManager {
       return;
     }
 
-    const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
+    let normalizedMetadata = metadata;
+
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+      if (Object.getPrototypeOf(metadata) !== Object.prototype) {
+        normalizedMetadata = Object.assign({}, metadata);
+      }
+    }
+
+    const { valid, error, sanitizedMetadata } = isEventValid(name, normalizedMetadata);
 
     if (!valid) {
       if (this.get('mode') === Mode.QA) {

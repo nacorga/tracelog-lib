@@ -187,12 +187,12 @@ var Mode = /* @__PURE__ */ ((Mode2) => {
   Mode2["QA"] = "qa";
   return Mode2;
 })(Mode || {});
-function isPrimaryScrollEvent(event2) {
+const isPrimaryScrollEvent = (event2) => {
   return event2.type === EventType.SCROLL && "scroll_data" in event2 && event2.scroll_data.is_primary === true;
-}
-function isSecondaryScrollEvent(event2) {
+};
+const isSecondaryScrollEvent = (event2) => {
   return event2.type === EventType.SCROLL && "scroll_data" in event2 && event2.scroll_data.is_primary === false;
-}
+};
 class TraceLogValidationError extends Error {
   constructor(message, errorCode, layer) {
     super(message);
@@ -232,18 +232,42 @@ class InitializationTimeoutError extends TraceLogValidationError {
 }
 const formatLogMsg = (msg, error) => {
   if (error) {
-    return `[TraceLog] ${msg}: ${error instanceof Error ? error.message : "Unknown error"}`;
+    if (error instanceof Error) {
+      return `[TraceLog] ${msg}: ${error.message}`;
+    }
+    if (typeof error === "string") {
+      return `[TraceLog] ${msg}: ${error}`;
+    }
+    if (typeof error === "object") {
+      try {
+        return `[TraceLog] ${msg}: ${JSON.stringify(error)}`;
+      } catch {
+        return `[TraceLog] ${msg}: [Unable to serialize error]`;
+      }
+    }
+    return `[TraceLog] ${msg}: ${String(error)}`;
   }
   return `[TraceLog] ${msg}`;
 };
 const log = (type, msg, extra) => {
-  const { error, data, showToClient = false } = extra ?? {};
+  const { error, data, showToClient = false, style } = extra ?? {};
   const formattedMsg = error ? formatLogMsg(msg, error) : `[TraceLog] ${msg}`;
   const method = type === "error" ? "error" : type === "warn" ? "warn" : "log";
+  const hasStyle = style !== void 0 && style !== "";
+  const styledMsg = hasStyle ? `%c${formattedMsg}` : formattedMsg;
   if (data !== void 0) {
-    console[method](formattedMsg, data);
+    const sanitizedData = data;
+    if (hasStyle) {
+      console[method](styledMsg, style, sanitizedData);
+    } else {
+      console[method](styledMsg, sanitizedData);
+    }
   } else {
-    console[method](formattedMsg);
+    if (hasStyle) {
+      console[method](styledMsg, style);
+    } else {
+      console[method](styledMsg);
+    }
   }
 };
 let coarsePointerQuery;
@@ -284,9 +308,14 @@ const getDeviceType = () => {
     return DeviceType.Desktop;
   }
 };
+const LOG_STYLE_ACTIVE = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
+const LOG_STYLE_DISABLED = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
 const STORAGE_BASE_KEY = "tlog";
 const QA_MODE_KEY = `${STORAGE_BASE_KEY}:qa_mode`;
 const USER_ID_KEY = `${STORAGE_BASE_KEY}:uid`;
+const QA_MODE_URL_PARAM = "tlog_mode";
+const QA_MODE_ENABLE_VALUE = "qa";
+const QA_MODE_DISABLE_VALUE = "qa_off";
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
@@ -330,7 +359,7 @@ const WEB_VITALS_POOR_THRESHOLDS = {
   LONG_TASK: 50
 };
 const DEFAULT_WEB_VITALS_MODE = "needs-improvement";
-function getWebVitalsThresholds(mode = DEFAULT_WEB_VITALS_MODE) {
+const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
   switch (mode) {
     case "all":
       return { LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0, LONG_TASK: 0 };
@@ -342,7 +371,7 @@ function getWebVitalsThresholds(mode = DEFAULT_WEB_VITALS_MODE) {
     default:
       return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
   }
-}
+};
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
 const PII_PATTERNS = [
@@ -370,32 +399,65 @@ const ERROR_BURST_WINDOW_MS = 1e3;
 const ERROR_BURST_THRESHOLD = 10;
 const ERROR_BURST_BACKOFF_MS = 5e3;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
-const QA_MODE_PARAM = "tlog_mode";
-const QA_MODE_VALUE = "qa";
 const detectQaMode = () => {
-  const stored = sessionStorage.getItem(QA_MODE_KEY);
-  if (stored === "true") {
-    return true;
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return false;
   }
-  const params = new URLSearchParams(window.location.search);
-  const modeParam = params.get(QA_MODE_PARAM);
-  const isQaMode = modeParam === QA_MODE_VALUE;
-  if (isQaMode) {
-    sessionStorage.setItem(QA_MODE_KEY, "true");
-    params.delete(QA_MODE_PARAM);
-    const newSearch = params.toString();
-    const newUrl = `${window.location.pathname}${newSearch ? "?" + newSearch : ""}${window.location.hash}`;
-    try {
-      window.history.replaceState({}, "", newUrl);
-    } catch (error) {
-      log("warn", "History API not available, cannot replace URL", { error });
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get(QA_MODE_URL_PARAM);
+    const storedState = sessionStorage.getItem(QA_MODE_KEY);
+    let newState = null;
+    if (urlParam === QA_MODE_ENABLE_VALUE) {
+      newState = true;
+      sessionStorage.setItem(QA_MODE_KEY, "true");
+      log("info", "QA Mode ACTIVE", {
+        showToClient: true,
+        style: LOG_STYLE_ACTIVE
+      });
+    } else if (urlParam === QA_MODE_DISABLE_VALUE) {
+      newState = false;
+      sessionStorage.removeItem(QA_MODE_KEY);
+      log("info", "QA Mode DISABLED", {
+        showToClient: true,
+        style: LOG_STYLE_DISABLED
+      });
     }
-    console.log(
-      "%c[TraceLog] QA Mode ACTIVE",
-      "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;"
-    );
+    if (urlParam === QA_MODE_ENABLE_VALUE || urlParam === QA_MODE_DISABLE_VALUE) {
+      try {
+        params.delete(QA_MODE_URL_PARAM);
+        const search = params.toString();
+        const url = window.location.pathname + (search ? "?" + search : "") + window.location.hash;
+        window.history.replaceState({}, "", url);
+      } catch {
+      }
+    }
+    return newState ?? storedState === "true";
+  } catch {
+    return false;
   }
-  return isQaMode;
+};
+const setQaMode$1 = (enabled) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  try {
+    if (enabled) {
+      sessionStorage.setItem(QA_MODE_KEY, "true");
+      log("info", "QA Mode ENABLED", {
+        showToClient: true,
+        style: LOG_STYLE_ACTIVE
+      });
+    } else {
+      sessionStorage.removeItem(QA_MODE_KEY);
+      log("info", "QA Mode DISABLED", {
+        showToClient: true,
+        style: LOG_STYLE_DISABLED
+      });
+    }
+  } catch {
+    log("warn", "Cannot set QA mode: sessionStorage unavailable");
+  }
 };
 const getUTMParameters = () => {
   const urlParams = new URLSearchParams(window.location.search);
@@ -1498,9 +1560,12 @@ class EventManager extends StateManager {
       return;
     }
     if (this.get("mode") === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
-      console.log("[TraceLog] Event", {
-        name: custom_event.name,
-        ...custom_event.metadata && { metadata: custom_event.metadata }
+      log("info", "Event", {
+        showToClient: true,
+        data: {
+          name: custom_event.name,
+          ...custom_event.metadata && { metadata: custom_event.metadata }
+        }
       });
       this.emitEvent(payload);
       return;
@@ -3867,7 +3932,13 @@ class App extends StateManager {
     if (!this.managers.event) {
       return;
     }
-    const { valid, error, sanitizedMetadata } = isEventValid(name, metadata);
+    let normalizedMetadata = metadata;
+    if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+      if (Object.getPrototypeOf(metadata) !== Object.prototype) {
+        normalizedMetadata = Object.assign({}, metadata);
+      }
+    }
+    const { valid, error, sanitizedMetadata } = isEventValid(name, normalizedMetadata);
     if (!valid) {
       if (this.get("mode") === Mode.QA) {
         throw new Error(`[TraceLog] Custom event "${name}" validation failed: ${error}`);
@@ -4242,6 +4313,12 @@ const __setAppInstance = (instance) => {
   }
   app = instance;
 };
+const setQaMode = (enabled) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  setQaMode$1(enabled);
+};
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   const injectTestingBridge = () => {
     window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
@@ -4269,23 +4346,10 @@ const SESSION_ANALYTICS = {
   SHORT_SESSION_THRESHOLD_MS: 30 * 1e3,
   MEDIUM_SESSION_THRESHOLD_MS: 5 * 60 * 1e3,
   LONG_SESSION_THRESHOLD_MS: 30 * 60 * 1e3,
-  MAX_REALISTIC_SESSION_DURATION_MS: 8 * 60 * 60 * 1e3
+  MAX_REALISTIC_SESSION_DURATION_MS: 8 * 60 * 60 * 1e3,
   // Filter outliers
-};
-const DEVICE_ANALYTICS = {
-  MOBILE_MAX_WIDTH: 768,
-  TABLET_MAX_WIDTH: 1024,
-  MOBILE_PERFORMANCE_FACTOR: 1.5,
-  // Mobile typically 1.5x slower
-  TABLET_PERFORMANCE_FACTOR: 1.2
-};
-const CONTENT_ANALYTICS = {
-  MIN_TEXT_LENGTH_FOR_ANALYSIS: 10,
-  MIN_CLICKS_FOR_HOT_ELEMENT: 10,
-  // Popular element threshold
-  MIN_SCROLL_COMPLETION_PERCENT: 80,
-  // Page consumption threshold
-  MIN_TIME_ON_PAGE_FOR_READ_MS: 15 * 1e3
+  MIN_EVENTS_FOR_DURATION: 2
+  // Minimum events required to calculate session duration
 };
 const INSIGHT_THRESHOLDS = {
   SIGNIFICANT_CHANGE_PERCENT: 20,
@@ -4298,20 +4362,6 @@ const INSIGHT_THRESHOLDS = {
   HIGH_ERROR_RATE_PERCENT: 5,
   CRITICAL_ERROR_RATE_PERCENT: 10
 };
-const TEMPORAL_ANALYSIS = {
-  SHORT_TERM_TREND_HOURS: 24,
-  MEDIUM_TERM_TREND_DAYS: 7,
-  LONG_TERM_TREND_DAYS: 30,
-  MIN_DATA_POINTS_FOR_TREND: 5,
-  WEEKLY_PATTERN_MIN_WEEKS: 4,
-  DAILY_PATTERN_MIN_DAYS: 14
-};
-const SEGMENTATION_ANALYTICS = {
-  MIN_SEGMENT_SIZE: 10,
-  MIN_COHORT_SIZE: 5,
-  COHORT_ANALYSIS_DAYS: [1, 3, 7, 14, 30],
-  MIN_FUNNEL_EVENTS: 20
-};
 const ANALYTICS_QUERY_LIMITS = {
   DEFAULT_EVENTS_LIMIT: 5,
   DEFAULT_SESSIONS_LIMIT: 5,
@@ -4320,14 +4370,6 @@ const ANALYTICS_QUERY_LIMITS = {
   MAX_TIME_RANGE_DAYS: 365,
   ANALYTICS_BATCH_SIZE: 1e3
   // For historical analysis
-};
-const ANOMALY_DETECTION = {
-  ANOMALY_THRESHOLD_SIGMA: 2.5,
-  STRONG_ANOMALY_THRESHOLD_SIGMA: 3,
-  TRAFFIC_DROP_ALERT_PERCENT: -30,
-  TRAFFIC_SPIKE_ALERT_PERCENT: 200,
-  MIN_BASELINE_DAYS: 7,
-  MIN_EVENTS_FOR_ANOMALY_DETECTION: 50
 };
 const SPECIAL_PAGE_URLS = {
   PAGE_URL_EXCLUDED: "excluded",
@@ -4339,7 +4381,8 @@ const tracelog = {
   on,
   off,
   isInitialized,
-  destroy
+  destroy,
+  setQaMode
 };
 var e, o = -1, a = function(e3) {
   addEventListener("pageshow", (function(n) {
@@ -4543,11 +4586,9 @@ const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePro
 }, Symbol.toStringTag, { value: "Module" }));
 export {
   ANALYTICS_QUERY_LIMITS,
-  ANOMALY_DETECTION,
   AppConfigValidationError,
-  CONTENT_ANALYTICS,
+  DEFAULT_SESSION_TIMEOUT,
   DEFAULT_WEB_VITALS_MODE,
-  DEVICE_ANALYTICS,
   DeviceType,
   ENGAGEMENT_THRESHOLDS,
   EmitterEvent,
@@ -4568,14 +4609,12 @@ export {
   Mode,
   PII_PATTERNS,
   PermanentError,
-  SEGMENTATION_ANALYTICS,
   SESSION_ANALYTICS,
   SPECIAL_PAGE_URLS,
   SamplingRateValidationError,
   ScrollDirection,
   SessionTimeoutValidationError,
   SpecialApiUrl,
-  TEMPORAL_ANALYSIS,
   TraceLogValidationError,
   WEB_VITALS_GOOD_THRESHOLDS,
   WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
