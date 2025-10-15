@@ -16,6 +16,35 @@
 
 
 
+
+## [0.12.0] - 2025-10-15
+
+### ✨ Features
+
+- Add configurable web vitals filtering modes and thresholds ([a24183a](../../commit/a24183a5249666e97e612b74abdbdd886108ae3f))
+
+### ♻️ Refactoring
+
+- Convert function declarations to arrow functions for consistency in performance and state management modules ([658eef9](../../commit/658eef90bf2b3091140ceabbd55dc62ecd660c9a))
+- Streamline performance handler initialization and threshold management ([fff3051](../../commit/fff3051e85baedba7b8c34ce79888aa4dbc96a2b))
+- Remove legacy web vitals thresholds and update exports for performance constants ([400f6f9](../../commit/400f6f91f6dbfacef90d5dc4cd62ef844b242799))
+
+### 🔧 Other Changes
+
+- Merge pull request #41 from nacorga/release/20251014.1 ([b9da718](../../commit/b9da718475e7e1bc09a94259cd4506e8770f4951))
+- Merge pull request #40 from nacorga/feature/performance-config ([244f5da](../../commit/244f5da7a1da7a98fddcee41eec40deded975c19))
+- Introduce web vitals good thresholds and update performance handler to utilize them ([7a09b8d](../../commit/7a09b8db2da7a69733e767a4fabf315cd9995590))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.11.5...v0.12.0
+
+
 ## [0.11.5] - 2025-10-14
 
 ### 📚 Documentation
