@@ -17,6 +17,35 @@
 
 
 
+
+## [0.12.1] - 2025-10-15
+
+### 📚 Documentation
+
+- Update README with enhanced quick start guide, core API details, and privacy features for TraceLog ([d46062f](../../commit/d46062fc32050eb36dfd2bb3806e1990181022a4))
+- Add comprehensive API reference and best practices documentation for TraceLog ([cd735b4](../../commit/cd735b4ac97a29d5f77177c53a0c3c160813f632))
+
+### ♻️ Refactoring
+
+- Enhance logging utility to improve error message handling and data sanitization ([4a77456](../../commit/4a7745626a07325ce4e04c8212752824de3d6f2b))
+- Improve QA mode handling with new logging styles and URL parameter management ([4b1d8a8](../../commit/4b1d8a8d254a8c6c2e4d7cd81e27a88faf6f070b))
+- Enhance QA mode with programmatic API and URL activation for improved debugging and testing ([6a2ee6b](../../commit/6a2ee6ba8f443f4aa34a12c6f61dad18d616ae59))
+
+### 🔧 Other Changes
+
+- Merge pull request #43 from nacorga/release/20251015.1 ([58cc240](../../commit/58cc240a0dd76c71bd72a0fd16d335a1ba9df537))
+- Merge pull request #42 from nacorga/refactor/qa-mode ([7c29c04](../../commit/7c29c0462d790511cfc801340dea4d6809b28f8b))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.12.0...v0.12.1
+
+
 ## [0.12.0] - 2025-10-15
 
 ### ✨ Features
