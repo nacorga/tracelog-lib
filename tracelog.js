@@ -72,7 +72,7 @@ const f = {
   INVALID_VIEWPORT_MIN_DWELL_TIME: "Viewport minDwellTime must be a non-negative number",
   INVALID_VIEWPORT_COOLDOWN_PERIOD: "Viewport cooldownPeriod must be a non-negative number",
   INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number"
-}, Qe = [
+}, je = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
   /javascript:/gi,
   /on\w+\s*=/gi,
@@ -98,7 +98,7 @@ class h extends k {
     super(e, "APP_CONFIG_INVALID", t);
   }
 }
-class je extends k {
+class Qe extends k {
   constructor(e, t = "config") {
     super(e, "SESSION_TIMEOUT_INVALID", t);
   }
@@ -351,7 +351,7 @@ const Ye = () => {
   let e = s;
   s.length > 1e3 && (e = s.slice(0, Math.max(0, 1e3)));
   let t = 0;
-  for (const n of Qe) {
+  for (const n of je) {
     const i = e;
     e = e.replace(n, ""), i !== e && t++;
   }
@@ -399,7 +399,7 @@ const Ye = () => {
     throw new h("Configuration must be an object", "config");
   if (s) {
     if (s.sessionTimeout !== void 0 && (typeof s.sessionTimeout != "number" || s.sessionTimeout < 3e4 || s.sessionTimeout > 864e5))
-      throw new je(f.INVALID_SESSION_TIMEOUT, "config");
+      throw new Qe(f.INVALID_SESSION_TIMEOUT, "config");
     if (s.globalMetadata !== void 0 && (typeof s.globalMetadata != "object" || s.globalMetadata === null))
       throw new h(f.INVALID_GLOBAL_METADATA, "config");
     if (s.integrations && St(s.integrations), s.sensitiveQueryParams !== void 0) {
@@ -1006,12 +1006,12 @@ class At extends T {
       }
       const y = this.getTypeLimitForEvent(S);
       if (y) {
-        const j = this.sessionEventCounts[S];
-        if (j !== void 0 && j >= y) {
+        const Q = this.sessionEventCounts[S];
+        if (Q !== void 0 && Q >= y) {
           a("warn", "Session event type limit reached", {
             data: {
               type: S,
-              count: j,
+              count: Q,
               limit: y
             }
           });
@@ -1024,7 +1024,7 @@ class At extends T {
       if (!this.checkPerEventRateLimit(o.name, y))
         return;
     }
-    const We = S === u.SESSION_START, Be = t || this.get("pageUrl"), Q = this.buildEventPayload({
+    const We = S === u.SESSION_START, Be = t || this.get("pageUrl"), j = this.buildEventPayload({
       type: S,
       page_url: Be,
       from_page_url: r,
@@ -1051,7 +1051,7 @@ class At extends T {
         }
         this.set("hasStartSession", !0);
       }
-      if (!this.isDuplicateEvent(Q)) {
+      if (!this.isDuplicateEvent(j)) {
         if (this.get("mode") === V.QA && S === u.CUSTOM && o) {
           a("info", "Event", {
             showToClient: !0,
@@ -1059,10 +1059,10 @@ class At extends T {
               name: o.name,
               ...o.metadata && { metadata: o.metadata }
             }
-          }), this.emitEvent(Q);
+          }), this.emitEvent(j);
           return;
         }
-        this.addToQueue(Q), v || (this.sessionEventCounts.total++, this.sessionEventCounts[S] !== void 0 && this.sessionEventCounts[S]++);
+        this.addToQueue(j), v || (this.sessionEventCounts.total++, this.sessionEventCounts[S] !== void 0 && this.sessionEventCounts[S]++);
       }
     }
   }
@@ -2685,17 +2685,19 @@ class Ut extends T {
   sendCustomEvent(e, t) {
     if (!this.managers.event)
       return;
-    const { valid: r, error: n, sanitizedMetadata: i } = vt(e, t);
-    if (!r) {
+    let r = t;
+    t && typeof t == "object" && !Array.isArray(t) && Object.getPrototypeOf(t) !== Object.prototype && (r = Object.assign({}, t));
+    const { valid: n, error: i, sanitizedMetadata: o } = vt(e, r);
+    if (!n) {
       if (this.get("mode") === V.QA)
-        throw new Error(`[TraceLog] Custom event "${e}" validation failed: ${n}`);
+        throw new Error(`[TraceLog] Custom event "${e}" validation failed: ${i}`);
       return;
     }
     this.managers.event.track({
       type: u.CUSTOM,
       custom_event: {
         name: e,
-        ...i && { metadata: i }
+        ...o && { metadata: o }
       }
     });
   }
@@ -2971,14 +2973,14 @@ var ie, Ve = -1, O = function(s) {
       }));
     })), setTimeout(t, 0));
   })));
-}, He = 0, Y = 1 / 0, H = 0, Qt = function(s) {
+}, He = 0, Y = 1 / 0, H = 0, jt = function(s) {
   s.forEach((function(e) {
     e.interactionId && (Y = Math.min(Y, e.interactionId), H = Math.max(H, e.interactionId), He = H ? (H - Y) / 7 + 1 : 0);
   }));
 }, xe = function() {
   return ie ? He : performance.interactionCount || 0;
-}, jt = function() {
-  "interactionCount" in performance || ie || (ie = U("event", Qt, { type: "event", buffered: !0, durationThreshold: 0 }));
+}, Qt = function() {
+  "interactionCount" in performance || ie || (ie = U("event", jt, { type: "event", buffered: !0, durationThreshold: 0 }));
 }, p = [], W = /* @__PURE__ */ new Map(), Fe = 0, Kt = function() {
   var s = Math.min(p.length - 1, Math.floor((xe() - Fe) / 50));
   return p[s];
@@ -3006,7 +3008,7 @@ var ie, Ve = -1, O = function(s) {
 }, le = [200, 500], Zt = function(s, e) {
   "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (e = e || {}, z((function() {
     var t;
-    jt();
+    Qt();
     var r, n = _("INP"), i = function(l) {
       Ge((function() {
         l.forEach(qt);
@@ -3101,7 +3103,7 @@ export {
   Ir as SPECIAL_PAGE_URLS,
   Ee as SamplingRateValidationError,
   x as ScrollDirection,
-  je as SessionTimeoutValidationError,
+  Qe as SessionTimeoutValidationError,
   Z as SpecialApiUrl,
   k as TraceLogValidationError,
   mr as WEB_VITALS_GOOD_THRESHOLDS,
