@@ -13,9 +13,12 @@ export {
   WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
   WEB_VITALS_POOR_THRESHOLDS,
   DEFAULT_WEB_VITALS_MODE,
+  DEFAULT_SESSION_TIMEOUT,
   getWebVitalsThresholds,
 } from './constants';
 
+// Backend-only constants - kept for backwards compatibility
+// TODO: Move these to their respective backend projects (tracelog-api, tracelog-middleware)
 export const ENGAGEMENT_THRESHOLDS = {
   LOW_ACTIVITY_EVENT_COUNT: 50,
   HIGH_ACTIVITY_EVENT_COUNT: 1000,
@@ -32,20 +35,7 @@ export const SESSION_ANALYTICS = {
   MEDIUM_SESSION_THRESHOLD_MS: 5 * 60 * 1000,
   LONG_SESSION_THRESHOLD_MS: 30 * 60 * 1000,
   MAX_REALISTIC_SESSION_DURATION_MS: 8 * 60 * 60 * 1000, // Filter outliers
-} as const;
-
-export const DEVICE_ANALYTICS = {
-  MOBILE_MAX_WIDTH: 768,
-  TABLET_MAX_WIDTH: 1024,
-  MOBILE_PERFORMANCE_FACTOR: 1.5, // Mobile typically 1.5x slower
-  TABLET_PERFORMANCE_FACTOR: 1.2,
-} as const;
-
-export const CONTENT_ANALYTICS = {
-  MIN_TEXT_LENGTH_FOR_ANALYSIS: 10,
-  MIN_CLICKS_FOR_HOT_ELEMENT: 10, // Popular element threshold
-  MIN_SCROLL_COMPLETION_PERCENT: 80, // Page consumption threshold
-  MIN_TIME_ON_PAGE_FOR_READ_MS: 15 * 1000,
+  MIN_EVENTS_FOR_DURATION: 2, // Minimum events required to calculate session duration
 } as const;
 
 export const INSIGHT_THRESHOLDS = {
@@ -59,22 +49,6 @@ export const INSIGHT_THRESHOLDS = {
   CRITICAL_ERROR_RATE_PERCENT: 10,
 } as const;
 
-export const TEMPORAL_ANALYSIS = {
-  SHORT_TERM_TREND_HOURS: 24,
-  MEDIUM_TERM_TREND_DAYS: 7,
-  LONG_TERM_TREND_DAYS: 30,
-  MIN_DATA_POINTS_FOR_TREND: 5,
-  WEEKLY_PATTERN_MIN_WEEKS: 4,
-  DAILY_PATTERN_MIN_DAYS: 14,
-} as const;
-
-export const SEGMENTATION_ANALYTICS = {
-  MIN_SEGMENT_SIZE: 10,
-  MIN_COHORT_SIZE: 5,
-  COHORT_ANALYSIS_DAYS: [1, 3, 7, 14, 30],
-  MIN_FUNNEL_EVENTS: 20,
-} as const;
-
 export const ANALYTICS_QUERY_LIMITS = {
   DEFAULT_EVENTS_LIMIT: 5,
   DEFAULT_SESSIONS_LIMIT: 5,
@@ -82,15 +56,6 @@ export const ANALYTICS_QUERY_LIMITS = {
   MAX_EVENTS_FOR_DEEP_ANALYSIS: 10000,
   MAX_TIME_RANGE_DAYS: 365,
   ANALYTICS_BATCH_SIZE: 1000, // For historical analysis
-} as const;
-
-export const ANOMALY_DETECTION = {
-  ANOMALY_THRESHOLD_SIGMA: 2.5,
-  STRONG_ANOMALY_THRESHOLD_SIGMA: 3.0,
-  TRAFFIC_DROP_ALERT_PERCENT: -30,
-  TRAFFIC_SPIKE_ALERT_PERCENT: 200,
-  MIN_BASELINE_DAYS: 7,
-  MIN_EVENTS_FOR_ANOMALY_DETECTION: 50,
 } as const;
 
 export const SPECIAL_PAGE_URLS = {

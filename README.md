@@ -246,11 +246,54 @@ TraceLog uses a **persistence-based recovery model** with no in-session retries:
 - Better battery life on mobile devices
 - Natural recovery on page navigation (common in SPAs)
 
-## Debug
+## QA Mode
 
-Enable QA mode: `?tlog_mode=qa`
+Enable QA mode for enhanced debugging and development experience.
+
+### Activation via URL
+
+```bash
+# Activate QA mode
+?tlog_mode=qa
+
+# Deactivate QA mode
+?tlog_mode=qa_off
+```
+
+### Programmatic API
 
 ```typescript
+// Enable QA mode
+tracelog.setQaMode(true);
+
+// Disable QA mode
+tracelog.setQaMode(false);
+```
+
+### Features
+
+- ✅ **Console Logging**: All events logged to browser console
+- ✅ **Strict Validation**: Errors thrown instead of silent failures
+- ✅ **Detailed Errors**: Enhanced error messages for debugging
+- ✅ **Session State**: Session info visible in console
+- ✅ **Persistent**: State saved in sessionStorage across page reloads
+
+### Example
+
+```typescript
+// Initialize TraceLog
+await tracelog.init();
+
+// Activate QA mode
+tracelog.setQaMode(true);
+
+// Send custom event (will be logged to console)
+tracelog.event('button_click', { label: 'Subscribe' });
+
+// Deactivate QA mode
+tracelog.setQaMode(false);
+
+// Check initialization
 console.log(tracelog.isInitialized()); // true
 ```
 

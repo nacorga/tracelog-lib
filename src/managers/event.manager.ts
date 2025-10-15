@@ -225,9 +225,12 @@ export class EventManager extends StateManager {
     }
 
     if (this.get('mode') === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
-      console.log('[TraceLog] Event', {
-        name: custom_event.name,
-        ...(custom_event.metadata && { metadata: custom_event.metadata }),
+      log('info', 'Event', {
+        showToClient: true,
+        data: {
+          name: custom_event.name,
+          ...(custom_event.metadata && { metadata: custom_event.metadata }),
+        },
       });
 
       this.emitEvent(payload);
