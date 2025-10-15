@@ -11,6 +11,10 @@ Lightweight web analytics library for tracking user behavior. Works standalone o
 - **Event-driven** - Subscribe via `on()`/`off()` for real-time events
 - **Lightweight** - Single dependency (`web-vitals`), 15KB gzipped
 
+## Live Demo
+
+See TraceLog in action: [https://nacorga.github.io/tracelog-lib](https://nacorga.github.io/tracelog-lib)
+
 ## Installation
 
 ### NPM (Recommended)
@@ -320,6 +324,8 @@ Register listeners AFTER init() in browser-only lifecycle hooks.
 
 ## Documentation
 
+- [Best Practices](./BEST_PRACTICES.md) - Best practices & common patterns
+- [API Reference](./API_REFERENCE.md) - Complete API documentation
 - [Handlers](./src/handlers/README.md) - Event capture implementation
 - [Managers](./src/managers/README.md) - Core components
 - [Security](./SECURITY.md) - Privacy & security guide
