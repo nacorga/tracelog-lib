@@ -254,4 +254,133 @@ test.describe('Basic Custom Events', () => {
     // Final uniqueness check
     expect(eventIds.size).toBe(10);
   });
+
+  test('should handle DOMStringMap metadata (element.dataset)', async ({ page }) => {
+    await navigateToPlayground(page);
+
+    // Initialize TraceLog
+    const initResult = await page.evaluate(async () => {
+      try {
+        await window.__traceLogBridge!.init();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    expect(initResult.success).toBe(true);
+
+    // Create element with dataset and send custom event
+    const capturedEvents = await page.evaluate(async () => {
+      const events: any[] = [];
+
+      // Listen for custom events
+      window.__traceLogBridge!.on('event', (data: any) => {
+        if (data.type === 'custom') {
+          events.push(data);
+        }
+      });
+
+      // Create a button element with data attributes
+      const button = document.createElement('button');
+      button.setAttribute('data-category', 'clementines');
+      button.setAttribute('data-product-id', '123');
+      button.setAttribute('data-price', '9.99');
+      document.body.appendChild(button);
+
+      // Send custom event with DOMStringMap (button.dataset)
+      window.__traceLogBridge!.sendCustomEvent('click_accelerators_categories', button.dataset as any);
+
+      // Clean up
+      button.remove();
+
+      // Wait for event to be captured
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      return events;
+    });
+
+    // Verify custom event was captured
+    expect(capturedEvents.length).toBeGreaterThan(0);
+
+    // Verify event structure with DOMStringMap metadata converted to plain object
+    const customEvent = capturedEvents[0];
+    expect(customEvent.type).toBe('custom');
+    expect(customEvent.custom_event.name).toBe('click_accelerators_categories');
+    expect(customEvent.custom_event.metadata).toBeDefined();
+    expect(customEvent.custom_event.metadata.category).toBe('clementines');
+    expect(customEvent.custom_event.metadata.productId).toBe('123');
+    expect(customEvent.custom_event.metadata.price).toBe('9.99');
+  });
+
+  test('should handle mixed object types (plain object, DOMStringMap, null)', async ({ page }) => {
+    await navigateToPlayground(page);
+
+    // Initialize TraceLog
+    const initResult = await page.evaluate(async () => {
+      try {
+        await window.__traceLogBridge!.init();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    expect(initResult.success).toBe(true);
+
+    // Test different metadata types
+    const results = await page.evaluate(async () => {
+      const events: any[] = [];
+
+      // Listen for custom events
+      window.__traceLogBridge!.on('event', (data: any) => {
+        if (data.type === 'custom') {
+          events.push(data);
+        }
+      });
+
+      // 1. Plain object - should work as before
+      window.__traceLogBridge!.sendCustomEvent('plain_object', { key: 'value' });
+
+      // 2. DOMStringMap - should be converted
+      const element = document.createElement('div');
+      element.setAttribute('data-test', 'value');
+      window.__traceLogBridge!.sendCustomEvent('dom_string_map', element.dataset as any);
+
+      // 3. No metadata - should work
+      window.__traceLogBridge!.sendCustomEvent('no_metadata');
+
+      // 4. Array metadata - should work
+      window.__traceLogBridge!.sendCustomEvent('array_metadata', [{ item: 1 }, { item: 2 }]);
+
+      // Wait for events to be captured
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      return events;
+    });
+
+    // Verify all events were captured
+    expect(results.length).toBe(4);
+
+    // Verify plain object
+    const plainEvent = results.find((e) => e.custom_event.name === 'plain_object');
+    expect(plainEvent).toBeDefined();
+    expect(plainEvent.custom_event.metadata).toEqual({ key: 'value' });
+
+    // Verify DOMStringMap was converted
+    const domEvent = results.find((e) => e.custom_event.name === 'dom_string_map');
+    expect(domEvent).toBeDefined();
+    expect(domEvent.custom_event.metadata).toEqual({ test: 'value' });
+
+    // Verify no metadata
+    const noMetadataEvent = results.find((e) => e.custom_event.name === 'no_metadata');
+    expect(noMetadataEvent).toBeDefined();
+    expect(noMetadataEvent.custom_event.metadata).toBeUndefined();
+
+    // Verify array metadata
+    const arrayEvent = results.find((e) => e.custom_event.name === 'array_metadata');
+    expect(arrayEvent).toBeDefined();
+    expect(Array.isArray(arrayEvent.custom_event.metadata)).toBe(true);
+    expect(arrayEvent.custom_event.metadata).toHaveLength(2);
+  });
 });
