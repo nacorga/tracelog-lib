@@ -218,7 +218,7 @@ await tracelog.init({
 
 ## PerformanceHandler
 
-Captures Web Vitals and performance metrics using the `web-vitals` library with fallback to native Performance Observer API. **Only reports metrics that exceed configured quality thresholds** to focus on problematic performance issues.
+Captures Web Vitals and performance metrics using the `web-vitals` library with fallback to native Performance Observer API. **Configurable filtering** modes allow tracking all metrics, metrics needing improvement, or only poor metrics.
 
 **Events Generated**: `web_vitals`
 
@@ -227,8 +227,30 @@ Captures Web Vitals and performance metrics using the `web-vitals` library with 
 - **Fallback**: Performance Observer API when web-vitals fails to load
 - **Hybrid**: Long tasks always use Performance Observer (PerformanceObserver 'longtask')
 
+**Configuration Options**:
+```javascript
+await tracelog.init({
+  webVitalsMode: 'needs-improvement',  // 'all' | 'needs-improvement' | 'poor'
+  webVitalsThresholds: {               // Optional: override default thresholds
+    LCP: 3000,  // Custom threshold in milliseconds
+    FCP: 2000,
+    // ... other metrics
+  }
+});
+```
+
 **Key Features**:
-- **Threshold Filtering**: Only sends metrics exceeding quality thresholds (e.g., LCP > 4000ms, TTFB > 800ms)
+- **Configurable Filtering Modes** (via `webVitalsMode`):
+  - `'all'`: Track all metrics (good, needs-improvement, poor) - full trend analysis, calculate P75 percentiles
+  - `'needs-improvement'` **(default)**: Track metrics > good threshold - balanced approach, reduces noise
+  - `'poor'`: Track only poor metrics - minimal data, focus on critical issues only
+- **Threshold Reference** (Core Web Vitals standards from web.dev):
+  - **'needs-improvement' mode** (default thresholds):
+    - LCP > 2500ms, FCP > 1800ms, CLS > 0.1, INP > 200ms, TTFB > 800ms
+  - **'poor' mode** (critical performance issues):
+    - LCP > 4000ms, FCP > 3000ms, CLS > 0.25, INP > 500ms, TTFB > 1800ms
+  - **'all' mode**: No filtering (threshold = 0), tracks every metric value
+- **Custom Thresholds**: Override defaults via `webVitalsThresholds` config for fine-grained control
 - **Dual Strategy**: Uses web-vitals library with native Performance Observer fallback
 - **Deduplication**: Prevents duplicate metrics per navigation using unique Navigation IDs (except CLS and LONG_TASK)
 - **CLS Accumulation**: Cumulative Layout Shift accumulates within navigation, resets on navigation change
@@ -240,23 +262,23 @@ Captures Web Vitals and performance metrics using the `web-vitals` library with 
   - Applied to LCP, CLS, FCP, TTFB, and INP
 
 **Metrics Captured**:
-- **LCP** (Largest Contentful Paint): Main content loading time (threshold: >4000ms)
-- **CLS** (Cumulative Layout Shift): Visual stability score (threshold: >0.25)
-- **FCP** (First Contentful Paint): Initial rendering time (threshold: >1800ms)
-- **TTFB** (Time to First Byte): Server response time (threshold: >800ms)
-- **INP** (Interaction to Next Paint): Responsiveness measure (threshold: >200ms)
-- **LONG_TASK**: Tasks blocking main thread (threshold: >50ms, throttled to 1/second)
+- **LCP** (Largest Contentful Paint): Main content loading time
+- **CLS** (Cumulative Layout Shift): Visual stability score (unitless)
+- **FCP** (First Contentful Paint): Initial rendering time
+- **TTFB** (Time to First Byte): Server response time
+- **INP** (Interaction to Next Paint): Responsiveness measure
+- **LONG_TASK**: Tasks blocking main thread (>50ms, throttled to 1/second)
 
-**Quality Thresholds**:
+**Default Thresholds by Mode**:
 ```javascript
-{
-  LCP: 4000,      // milliseconds - "poor" threshold
-  FCP: 1800,      // milliseconds - "good" threshold
-  CLS: 0.25,      // unitless - "needs improvement" threshold
-  INP: 200,       // milliseconds - "good" threshold
-  TTFB: 800,      // milliseconds - "good/needs improvement" boundary
-  LONG_TASK: 50   // milliseconds - standard long task definition
-}
+// 'all' mode: Track everything
+{ LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0, LONG_TASK: 0 }
+
+// 'needs-improvement' mode (default): Track metrics needing attention
+{ LCP: 2500, FCP: 1800, CLS: 0.1, INP: 200, TTFB: 800, LONG_TASK: 50 }
+
+// 'poor' mode: Track only critical issues
+{ LCP: 4000, FCP: 3000, CLS: 0.25, INP: 500, TTFB: 1800, LONG_TASK: 50 }
 ```
 
 **Event Data**:

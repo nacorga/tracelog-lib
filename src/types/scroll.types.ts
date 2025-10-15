@@ -10,14 +10,14 @@ export type SecondaryScrollEvent = EventData & {
   scroll_data: ScrollData & { is_primary: false };
 };
 
-export function isPrimaryScrollEvent(event: EventData): event is PrimaryScrollEvent {
+export const isPrimaryScrollEvent = (event: EventData): event is PrimaryScrollEvent => {
   return (
     event.type === EventType.SCROLL && 'scroll_data' in event && (event.scroll_data as ScrollData).is_primary === true
   );
-}
+};
 
-export function isSecondaryScrollEvent(event: EventData): event is SecondaryScrollEvent {
+export const isSecondaryScrollEvent = (event: EventData): event is SecondaryScrollEvent => {
   return (
     event.type === EventType.SCROLL && 'scroll_data' in event && (event.scroll_data as ScrollData).is_primary === false
   );
-}
+};

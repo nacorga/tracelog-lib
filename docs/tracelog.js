@@ -12,6 +12,7 @@ const MAX_THROTTLE_CACHE_ENTRIES = 1e3;
 const THROTTLE_ENTRY_TTL_MS = 3e5;
 const THROTTLE_PRUNE_INTERVAL_MS = 3e4;
 const EVENT_EXPIRY_HOURS = 2;
+const PERSISTENCE_THROTTLE_MS = 1e3;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 1e4;
 const SIGNIFICANT_SCROLL_DELTA = 10;
@@ -289,14 +290,59 @@ const USER_ID_KEY = `${STORAGE_BASE_KEY}:uid`;
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
-const WEB_VITALS_THRESHOLDS = {
-  LCP: 4e3,
+const WEB_VITALS_GOOD_THRESHOLDS = {
+  LCP: 2500,
+  // Good: ≤ 2.5s
   FCP: 1800,
-  CLS: 0.25,
+  // Good: ≤ 1.8s
+  CLS: 0.1,
+  // Good: ≤ 0.1
   INP: 200,
+  // Good: ≤ 200ms
   TTFB: 800,
+  // Good: ≤ 800ms
   LONG_TASK: 50
 };
+const WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS = {
+  LCP: 2500,
+  // Needs improvement: > 2.5s (same as good boundary)
+  FCP: 1800,
+  // Needs improvement: > 1.8s
+  CLS: 0.1,
+  // Needs improvement: > 0.1
+  INP: 200,
+  // Needs improvement: > 200ms
+  TTFB: 800,
+  // Needs improvement: > 800ms
+  LONG_TASK: 50
+};
+const WEB_VITALS_POOR_THRESHOLDS = {
+  LCP: 4e3,
+  // Poor: > 4s
+  FCP: 3e3,
+  // Poor: > 3s
+  CLS: 0.25,
+  // Poor: > 0.25
+  INP: 500,
+  // Poor: > 500ms
+  TTFB: 1800,
+  // Poor: > 1800ms
+  LONG_TASK: 50
+};
+const DEFAULT_WEB_VITALS_MODE = "needs-improvement";
+function getWebVitalsThresholds(mode = DEFAULT_WEB_VITALS_MODE) {
+  switch (mode) {
+    case "all":
+      return { LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0, LONG_TASK: 0 };
+    // Track everything
+    case "needs-improvement":
+      return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
+    case "poor":
+      return WEB_VITALS_POOR_THRESHOLDS;
+    default:
+      return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
+  }
+}
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
 const PII_PATTERNS = [
@@ -623,6 +669,41 @@ const validateAppConfig = (config) => {
   }
   if (config.viewport !== void 0) {
     validateViewportConfig(config.viewport);
+  }
+  if (config.webVitalsMode !== void 0) {
+    if (typeof config.webVitalsMode !== "string") {
+      throw new AppConfigValidationError(
+        `Invalid webVitalsMode type: ${typeof config.webVitalsMode}. Must be a string`,
+        "config"
+      );
+    }
+    const validModes = ["all", "needs-improvement", "poor"];
+    if (!validModes.includes(config.webVitalsMode)) {
+      throw new AppConfigValidationError(
+        `Invalid webVitalsMode: "${config.webVitalsMode}". Must be one of: ${validModes.join(", ")}`,
+        "config"
+      );
+    }
+  }
+  if (config.webVitalsThresholds !== void 0) {
+    if (typeof config.webVitalsThresholds !== "object" || config.webVitalsThresholds === null || Array.isArray(config.webVitalsThresholds)) {
+      throw new AppConfigValidationError("webVitalsThresholds must be an object", "config");
+    }
+    const validKeys = ["LCP", "FCP", "CLS", "INP", "TTFB", "LONG_TASK"];
+    for (const [key, value] of Object.entries(config.webVitalsThresholds)) {
+      if (!validKeys.includes(key)) {
+        throw new AppConfigValidationError(
+          `Invalid Web Vitals threshold key: "${key}". Must be one of: ${validKeys.join(", ")}`,
+          "config"
+        );
+      }
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        throw new AppConfigValidationError(
+          `Invalid Web Vitals threshold value for ${key}: ${value}. Must be a non-negative finite number`,
+          "config"
+        );
+      }
+    }
   }
 };
 const validateViewportConfig = (viewport) => {
@@ -1204,7 +1285,7 @@ class SenderManager extends StateManager {
       const existing = this.getPersistedData();
       if (existing && existing.timestamp) {
         const timeSinceExisting = Date.now() - existing.timestamp;
-        if (timeSinceExisting < 1e3) {
+        if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
           log("debug", "Skipping persistence, another tab recently persisted events", {
             data: { timeSinceExisting }
           });
@@ -2632,7 +2713,9 @@ class ScrollHandler extends StateManager {
       if (this.get("suppressNextScroll")) {
         return;
       }
-      container.firstScrollEventTime ??= Date.now();
+      if (container.firstScrollEventTime === null) {
+        container.firstScrollEventTime = Date.now();
+      }
       this.clearContainerTimer(container);
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
@@ -3354,13 +3437,20 @@ class PerformanceHandler extends StateManager {
   navigationHistory = [];
   // FIFO queue for tracking navigation order
   observers = [];
-  vitalThresholds = WEB_VITALS_THRESHOLDS;
+  vitalThresholds;
   lastLongTaskSentAt = 0;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
+    this.vitalThresholds = getWebVitalsThresholds(DEFAULT_WEB_VITALS_MODE);
   }
   async startTracking() {
+    const config = this.get("config");
+    const mode = config?.webVitalsMode ?? DEFAULT_WEB_VITALS_MODE;
+    this.vitalThresholds = getWebVitalsThresholds(mode);
+    if (config?.webVitalsThresholds) {
+      this.vitalThresholds = { ...this.vitalThresholds, ...config.webVitalsThresholds };
+    }
     await this.initWebVitals();
     this.observeLongTasks();
   }
@@ -4162,14 +4252,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     injectTestingBridge();
   }
 }
-const PERFORMANCE_CONFIG = {
-  WEB_VITALS_THRESHOLDS
-  // Business thresholds for performance analysis
-};
-const DATA_PROTECTION = {
-  PII_PATTERNS
-  // Patterns for sensitive data protection
-};
 const ENGAGEMENT_THRESHOLDS = {
   LOW_ACTIVITY_EVENT_COUNT: 50,
   HIGH_ACTIVITY_EVENT_COUNT: 1e3,
@@ -4464,7 +4546,7 @@ export {
   ANOMALY_DETECTION,
   AppConfigValidationError,
   CONTENT_ANALYTICS,
-  DATA_PROTECTION,
+  DEFAULT_WEB_VITALS_MODE,
   DEVICE_ANALYTICS,
   DeviceType,
   ENGAGEMENT_THRESHOLDS,
@@ -4484,7 +4566,7 @@ export {
   MAX_STRING_LENGTH,
   MAX_STRING_LENGTH_IN_ARRAY,
   Mode,
-  PERFORMANCE_CONFIG,
+  PII_PATTERNS,
   PermanentError,
   SEGMENTATION_ANALYTICS,
   SESSION_ANALYTICS,
@@ -4495,6 +4577,10 @@ export {
   SpecialApiUrl,
   TEMPORAL_ANALYSIS,
   TraceLogValidationError,
+  WEB_VITALS_GOOD_THRESHOLDS,
+  WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
+  WEB_VITALS_POOR_THRESHOLDS,
+  getWebVitalsThresholds,
   isPrimaryScrollEvent,
   isSecondaryScrollEvent,
   tracelog

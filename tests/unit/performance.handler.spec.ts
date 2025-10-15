@@ -176,13 +176,13 @@ describe('PerformanceHandler', () => {
     it('should track valid FCP value', () => {
       const trackSpy = vi.spyOn(eventManager, 'track');
 
-      (performanceHandler as any).trackWebVital('FCP', 1800.25);
+      (performanceHandler as any).trackWebVital('FCP', 3100.25);
 
       expect(trackSpy).toHaveBeenCalledWith({
         type: EventType.WEB_VITALS,
         web_vitals: {
           type: 'FCP',
-          value: 1800.25,
+          value: 3100.25,
         },
       });
     });
@@ -270,7 +270,7 @@ describe('PerformanceHandler', () => {
 
       (performanceHandler as any).sendVital({ type: 'LCP', value: 2500 });
       (performanceHandler as any).sendVital({ type: 'CLS', value: 0.1 });
-      (performanceHandler as any).sendVital({ type: 'FCP', value: 1800 });
+      (performanceHandler as any).sendVital({ type: 'FCP', value: 3100 });
 
       expect(trackSpy).toHaveBeenCalledTimes(3);
     });

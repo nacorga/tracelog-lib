@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import { PerformanceHandler } from '../../../src/handlers/performance.handler';
 import type { EventManager } from '../../../src/managers/event.manager';
 import { EventType, WebVitalType } from '../../../src/types';
-import { WEB_VITALS_THRESHOLDS, LONG_TASK_THROTTLE_MS } from '../../../src/constants';
+import { LONG_TASK_THROTTLE_MS } from '../../../src/constants';
 
 describe('PerformanceHandler', () => {
   let handler: PerformanceHandler;
@@ -22,12 +22,13 @@ describe('PerformanceHandler', () => {
 
   describe('Threshold Validation', () => {
     it.each([
-      ['LCP', 4000, 3999, false],
-      ['LCP', 4000, 4000, false],
-      ['LCP', 4000, 4001, true],
-      ['CLS', 0.25, 0.24, false],
-      ['CLS', 0.25, 0.25, false],
-      ['CLS', 0.25, 0.26, true],
+      // Default mode is 'needs-improvement' so these are the thresholds used
+      ['LCP', 2500, 2499, false],
+      ['LCP', 2500, 2500, false],
+      ['LCP', 2500, 2501, true],
+      ['CLS', 0.1, 0.09, false],
+      ['CLS', 0.1, 0.1, false],
+      ['CLS', 0.1, 0.11, true],
       ['INP', 200, 199, false],
       ['INP', 200, 200, false],
       ['INP', 200, 201, true],
@@ -43,7 +44,7 @@ describe('PerformanceHandler', () => {
     ])('should handle %s threshold (%dms): value %d -> send=%s', (type, threshold, value, shouldSend) => {
       const result = handler['shouldSendVital'](type as any, value);
       expect(result).toBe(shouldSend);
-      expect(WEB_VITALS_THRESHOLDS[type as WebVitalType]).toBe(threshold);
+      expect(handler['vitalThresholds'][type as WebVitalType]).toBe(threshold);
     });
 
     it('should reject invalid values (NaN, Infinity)', () => {
@@ -380,10 +381,10 @@ describe('PerformanceHandler', () => {
       vi.spyOn(handler as any, 'getNavigationId').mockReturnValue('nav-123');
 
       handler['sendVital']({ type: 'LCP', value: 5000 });
-      handler['sendVital']({ type: 'FCP', value: 2000 });
+      handler['sendVital']({ type: 'FCP', value: 3500 });
       handler['sendVital']({ type: 'CLS', value: 0.3 });
-      handler['sendVital']({ type: 'INP', value: 250 });
-      handler['sendVital']({ type: 'TTFB', value: 900 });
+      handler['sendVital']({ type: 'INP', value: 550 });
+      handler['sendVital']({ type: 'TTFB', value: 2000 });
 
       expect(trackSpy).toHaveBeenCalledTimes(5);
     });
@@ -412,24 +413,24 @@ describe('PerformanceHandler', () => {
     });
 
     it('should handle sendVital with boundary threshold values', () => {
-      // Exactly at threshold - should NOT send
-      handler['sendVital']({ type: 'LCP', value: 4000 });
+      // Exactly at threshold - should NOT send (default is needs-improvement mode with LCP threshold of 2500)
+      handler['sendVital']({ type: 'LCP', value: 2500 });
       expect(trackSpy).not.toHaveBeenCalled();
 
       // Just above threshold - should send
-      handler['sendVital']({ type: 'LCP', value: 4000.01 });
+      handler['sendVital']({ type: 'LCP', value: 2500.01 });
       expect(trackSpy).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('Threshold Constants Verification', () => {
-    it('should have correct threshold values', () => {
-      expect(WEB_VITALS_THRESHOLDS.LCP).toBe(4000);
-      expect(WEB_VITALS_THRESHOLDS.FCP).toBe(1800);
-      expect(WEB_VITALS_THRESHOLDS.CLS).toBe(0.25);
-      expect(WEB_VITALS_THRESHOLDS.INP).toBe(200);
-      expect(WEB_VITALS_THRESHOLDS.TTFB).toBe(800);
-      expect(WEB_VITALS_THRESHOLDS.LONG_TASK).toBe(50);
+    it('should have correct threshold values (default needs-improvement mode)', () => {
+      expect(handler['vitalThresholds'].LCP).toBe(2500);
+      expect(handler['vitalThresholds'].FCP).toBe(1800);
+      expect(handler['vitalThresholds'].CLS).toBe(0.1);
+      expect(handler['vitalThresholds'].INP).toBe(200);
+      expect(handler['vitalThresholds'].TTFB).toBe(800);
+      expect(handler['vitalThresholds'].LONG_TASK).toBe(50);
     });
   });
 
