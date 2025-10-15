@@ -18,6 +18,27 @@
 
 
 
+
+## [0.12.2] - 2025-10-15
+
+### ♻️ Refactoring
+
+- Streamline event handling and enhance metadata processing for custom events ([1108005](../../commit/11080055560b63739f50f5876d15f3e72f9ec58a))
+
+### 🔧 Other Changes
+
+- Merge pull request #44 from nacorga/hotfix/20251015.1 ([c77d134](../../commit/c77d1347ab4fa8a78f943b848c91c661d5aa14d9))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.12.1...v0.12.2
+
+
 ## [0.12.1] - 2025-10-15
 
 ### 📚 Documentation
