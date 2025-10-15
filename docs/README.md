@@ -184,9 +184,6 @@ http://localhost:3000?tlog_mode=qa
 
 # Deactivate QA mode
 http://localhost:3000?tlog_mode=qa_off
-
-# Works with any URL
-http://localhost:3000#productos?tlog_mode=qa
 ```
 
 #### Programmatic API

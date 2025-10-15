@@ -4,6 +4,7 @@ import {
   QA_MODE_ENABLE_VALUE,
   QA_MODE_DISABLE_VALUE,
   LOG_STYLE_ACTIVE,
+  LOG_STYLE_DISABLED,
 } from '../../constants';
 import { log } from '../logging.utils';
 
@@ -13,6 +14,10 @@ import { log } from '../logging.utils';
  * @returns True if QA mode is active, false otherwise
  */
 export const detectQaMode = (): boolean => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
   try {
     const params = new URLSearchParams(window.location.search);
     const urlParam = params.get(QA_MODE_URL_PARAM);
@@ -31,6 +36,11 @@ export const detectQaMode = (): boolean => {
     } else if (urlParam === QA_MODE_DISABLE_VALUE) {
       newState = false;
       sessionStorage.removeItem(QA_MODE_KEY);
+
+      log('info', 'QA Mode DISABLED', {
+        showToClient: true,
+        style: LOG_STYLE_DISABLED,
+      });
     }
 
     if (urlParam === QA_MODE_ENABLE_VALUE || urlParam === QA_MODE_DISABLE_VALUE) {
@@ -58,6 +68,10 @@ export const detectQaMode = (): boolean => {
  * @param enabled - True to enable, false to disable
  */
 export const setQaMode = (enabled: boolean): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
   try {
     if (enabled) {
       sessionStorage.setItem(QA_MODE_KEY, 'true');
@@ -68,6 +82,11 @@ export const setQaMode = (enabled: boolean): void => {
       });
     } else {
       sessionStorage.removeItem(QA_MODE_KEY);
+
+      log('info', 'QA Mode DISABLED', {
+        showToClient: true,
+        style: LOG_STYLE_DISABLED,
+      });
     }
   } catch {
     log('warn', 'Cannot set QA mode: sessionStorage unavailable');

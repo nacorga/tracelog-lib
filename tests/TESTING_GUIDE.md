@@ -65,7 +65,9 @@ await page.goto('http://localhost:3000?tlog_mode=qa');
 // Method 2: Navigate after load
 await page.goto('http://localhost:3000');
 await page.evaluate(() => {
-  window.location.href = window.location.href + '?tlog_mode=qa';
+  const url = new URL(window.location.href);
+  url.searchParams.set('tlog_mode', 'qa');
+  window.location.href = url.toString();
 });
 ```
 
