@@ -1,6 +1,7 @@
 import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
 import { WebVitalType } from './event.types';
+import { DisabledEventType } from '../constants/disabled-events.constants';
 
 /**
  * Web Vitals filtering mode
@@ -9,12 +10,6 @@ import { WebVitalType } from './event.types';
  * - 'poor': Track only poor metrics (minimal data)
  */
 export type WebVitalsMode = 'all' | 'needs-improvement' | 'poor';
-
-/**
- * Event types that can be disabled from auto-tracking
- * Note: Core events (PAGE_VIEW, CLICK, SESSION_*) cannot be disabled as they are essential for analytics
- */
-export type DisabledEventType = 'scroll' | 'web_vitals' | 'error';
 
 export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */

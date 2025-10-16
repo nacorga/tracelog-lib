@@ -145,16 +145,16 @@ await tracelog.init({
 
 TraceLog captures these events automatically (no code required):
 
-| Event Type | What It Tracks | Can Disable? |
-|------------|----------------|--------------|
-| `PAGE_VIEW` | Navigation, SPA route changes | ❌ Core event |
-| `CLICK` | User interactions with elements | ❌ Core event |
-| `SESSION_START` | New session creation | ❌ Core event |
-| `SESSION_END` | Session termination (timeout, page unload) | ❌ Core event |
-| `SCROLL` | Scroll depth, velocity, engagement | ✅ Optional |
-| `WEB_VITALS` | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) | ✅ Optional |
-| `ERROR` | JavaScript errors, promise rejections | ✅ Optional |
-| `VIEWPORT_VISIBLE` | Element visibility (requires `viewport` config) | Via config |
+| Event Type        | What It Tracks                              | Can Disable?   |
+|-------------------|---------------------------------------------|----------------|
+| `page_view`       | Navigation, SPA route changes               | ❌ Core event  |
+| `click`           | User interactions with elements             | ❌ Core event  |
+| `session_start`   | New session creation                        | ❌ Core event  |
+| `session_end`     | Session termination (timeout, page unload)  | ❌ Core event  |
+| `scroll`          | Scroll depth, velocity, engagement          | ✅ Optional    |
+| `web_vitals`      | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) | ✅ Optional    |
+| `error`           | JavaScript errors, promise rejections       | ✅ Optional    |
+| `viewport_visible`| Element visibility (requires `viewport` config) | Via config |
 
 **Disabling Optional Events:**
 

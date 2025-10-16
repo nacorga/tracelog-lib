@@ -12,6 +12,7 @@ import {
   DEFAULT_VISIBILITY_TIMEOUT_MS,
 } from '../../constants';
 import { DEFAULT_ERROR_SAMPLING_RATE } from '../../constants/error.constants';
+import { DISABLEABLE_EVENT_TYPES } from '../../constants/disabled-events.constants';
 import { Config } from '../../types';
 import {
   AppConfigValidationError,
@@ -125,7 +126,6 @@ export const validateAppConfig = (config?: Config): void => {
       throw new AppConfigValidationError('disabledEvents must be an array', 'config');
     }
 
-    const validEventTypes = ['scroll', 'web_vitals', 'error'] as const;
     const uniqueEvents = new Set<string>();
 
     for (const eventType of config.disabledEvents) {
@@ -133,9 +133,9 @@ export const validateAppConfig = (config?: Config): void => {
         throw new AppConfigValidationError('All disabled event types must be strings', 'config');
       }
 
-      if (!validEventTypes.includes(eventType as any)) {
+      if (!DISABLEABLE_EVENT_TYPES.includes(eventType as any)) {
         throw new AppConfigValidationError(
-          `Invalid disabled event type: "${eventType}". Must be one of: ${validEventTypes.join(', ')}`,
+          `Invalid disabled event type: "${eventType}". Must be one of: ${DISABLEABLE_EVENT_TYPES.join(', ')}`,
           'config',
         );
       }
