@@ -292,6 +292,7 @@ interface Config {
   sensitiveQueryParams?: string[];
   errorSampling?: number;
   samplingRate?: number;
+  disabledEvents?: Array<'scroll' | 'web_vitals' | 'error'>;
   primaryScrollSelector?: string;
   viewport?: ViewportConfig;
   pageViewThrottleMs?: number;
@@ -372,6 +373,40 @@ await tracelog.init({
   errorSampling: 0.1  // Track 10% of errors
 });
 ```
+
+#### `disabledEvents`
+- **Type:** `Array<'scroll' | 'web_vitals' | 'error'>`
+- **Default:** `[]` (all events enabled)
+- **Description:** Disable specific auto-tracked event types. Core events (`PAGE_VIEW`, `CLICK`, `SESSION_*`) cannot be disabled as they are essential for analytics.
+
+```typescript
+// Disable scroll tracking only
+await tracelog.init({
+  disabledEvents: ['scroll']
+});
+
+// Disable multiple event types
+await tracelog.init({
+  disabledEvents: ['scroll', 'web_vitals', 'error']
+});
+
+// Default behavior (all events enabled)
+await tracelog.init({
+  disabledEvents: []
+});
+```
+
+**Use Cases:**
+- Reduce bandwidth and backend costs by eliminating high-frequency events
+- Already using dedicated error tracking (Sentry, Datadog)
+- Performance optimization on complex pages with heavy scroll interaction
+- Minimize data collection for privacy compliance
+- Only need core analytics (page views, clicks, sessions)
+
+**Impact:**
+- `'scroll'`: No scroll depth, velocity, or engagement data
+- `'web_vitals'`: No Core Web Vitals (LCP, INP, CLS, FCP, TTFB, LONG_TASK)
+- `'error'`: No JavaScript errors or promise rejection tracking
 
 ---
 

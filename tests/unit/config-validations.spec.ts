@@ -867,6 +867,123 @@ describe('Config Validations', () => {
         }).not.toThrow();
       });
     });
+
+    describe('Disabled Events Validation', () => {
+      it('should accept valid disabledEvents array', () => {
+        const config: Config = {
+          disabledEvents: ['scroll', 'web_vitals', 'error'],
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept empty disabledEvents array', () => {
+        const config: Config = {
+          disabledEvents: [],
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept partial disabledEvents', () => {
+        const config: Config = {
+          disabledEvents: ['scroll'],
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should reject non-array disabledEvents', () => {
+        const config: Config = {
+          disabledEvents: 'scroll' as any,
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('disabledEvents must be an array');
+      });
+
+      it('should reject null disabledEvents', () => {
+        const config: Config = {
+          disabledEvents: null as any,
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('disabledEvents must be an array');
+      });
+
+      it('should reject object disabledEvents', () => {
+        const config: Config = {
+          disabledEvents: { scroll: true } as any,
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('disabledEvents must be an array');
+      });
+
+      it('should reject invalid event type', () => {
+        const config: Config = {
+          disabledEvents: ['invalid_event' as any],
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Invalid disabled event type: "invalid_event"');
+      });
+
+      it('should reject non-string event types', () => {
+        const config: Config = {
+          disabledEvents: [123 as any],
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('All disabled event types must be strings');
+      });
+
+      it('should reject duplicate event types', () => {
+        const config: Config = {
+          disabledEvents: ['scroll', 'web_vitals', 'scroll'],
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow(AppConfigValidationError);
+        expect(() => {
+          validateAppConfig(config);
+        }).toThrow('Duplicate disabled event type found: "scroll"');
+      });
+
+      it('should accept undefined disabledEvents', () => {
+        const config: Config = {};
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept all valid event types', () => {
+        const config: Config = {
+          disabledEvents: ['scroll', 'web_vitals', 'error'],
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+    });
   });
 
   describe('validateAndNormalizeConfig()', () => {
@@ -1064,6 +1181,38 @@ describe('Config Validations', () => {
         const config: Config = {};
         const normalized = validateAndNormalizeConfig(config);
         expect(normalized.viewport).toBeUndefined();
+      });
+    });
+
+    describe('Disabled Events Normalization', () => {
+      it('should set default disabledEvents to empty array', () => {
+        const config: Config = {};
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.disabledEvents).toEqual([]);
+      });
+
+      it('should preserve existing disabledEvents', () => {
+        const config: Config = {
+          disabledEvents: ['scroll', 'web_vitals'],
+        };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.disabledEvents).toEqual(['scroll', 'web_vitals']);
+      });
+
+      it('should preserve empty disabledEvents array', () => {
+        const config: Config = {
+          disabledEvents: [],
+        };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.disabledEvents).toEqual([]);
+      });
+
+      it('should preserve all disabled event types', () => {
+        const config: Config = {
+          disabledEvents: ['scroll', 'web_vitals', 'error'],
+        };
+        const normalized = validateAndNormalizeConfig(config);
+        expect(normalized.disabledEvents).toEqual(['scroll', 'web_vitals', 'error']);
       });
     });
 

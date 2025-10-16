@@ -230,6 +230,10 @@ window.__traceLogBridge!.getSessionData();
 - Queue events timeout: 10-12 seconds
 - **Key**: `sessionId` in `queue.session_id`, NOT individual events
 - QA mode: Use `?tlog_mode=qa` URL parameter
+- **Event Type Casing**: Always use lowercase with underscores (`'click'`, `'page_view'`, `'session_start'`)
+  - Source of truth: `src/types/event.types.ts` EventType enum
+- **Scroll Suppression**: Wait 600ms after init before testing scroll (500ms suppression + 100ms buffer)
+- **Event Timing**: Init-time events need listener registered BEFORE init, post-init events AFTER init
 
 ### ❌ Avoid
 - `page.waitForFunction()` (CSP-blocked)

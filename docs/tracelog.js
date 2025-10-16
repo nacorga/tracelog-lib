@@ -732,6 +732,31 @@ const validateAppConfig = (config) => {
   if (config.viewport !== void 0) {
     validateViewportConfig(config.viewport);
   }
+  if (config.disabledEvents !== void 0) {
+    if (!Array.isArray(config.disabledEvents)) {
+      throw new AppConfigValidationError("disabledEvents must be an array", "config");
+    }
+    const validEventTypes = ["scroll", "web_vitals", "error"];
+    const uniqueEvents = /* @__PURE__ */ new Set();
+    for (const eventType of config.disabledEvents) {
+      if (typeof eventType !== "string") {
+        throw new AppConfigValidationError("All disabled event types must be strings", "config");
+      }
+      if (!validEventTypes.includes(eventType)) {
+        throw new AppConfigValidationError(
+          `Invalid disabled event type: "${eventType}". Must be one of: ${validEventTypes.join(", ")}`,
+          "config"
+        );
+      }
+      if (uniqueEvents.has(eventType)) {
+        throw new AppConfigValidationError(
+          `Duplicate disabled event type found: "${eventType}". Each event type should appear only once.`,
+          "config"
+        );
+      }
+      uniqueEvents.add(eventType);
+    }
+  }
   if (config.webVitalsMode !== void 0) {
     if (typeof config.webVitalsMode !== "string") {
       throw new AppConfigValidationError(
@@ -868,7 +893,8 @@ const validateAndNormalizeConfig = (config) => {
     samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
-    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE
+    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
+    disabledEvents: config?.disabledEvents ?? []
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -4012,6 +4038,8 @@ class App extends StateManager {
     }
   }
   initializeHandlers() {
+    const config = this.get("config");
+    const disabledEvents = config.disabledEvents ?? [];
     this.handlers.session = new SessionHandler(
       this.managers.storage,
       this.managers.event
@@ -4030,15 +4058,21 @@ class App extends StateManager {
     this.handlers.pageView.startTracking();
     this.handlers.click = new ClickHandler(this.managers.event);
     this.handlers.click.startTracking();
-    this.handlers.scroll = new ScrollHandler(this.managers.event);
-    this.handlers.scroll.startTracking();
-    this.handlers.performance = new PerformanceHandler(this.managers.event);
-    this.handlers.performance.startTracking().catch((error) => {
-      log("warn", "Failed to start performance tracking", { error });
-    });
-    this.handlers.error = new ErrorHandler(this.managers.event);
-    this.handlers.error.startTracking();
-    if (this.get("config").viewport) {
+    if (!disabledEvents.includes("scroll")) {
+      this.handlers.scroll = new ScrollHandler(this.managers.event);
+      this.handlers.scroll.startTracking();
+    }
+    if (!disabledEvents.includes("web_vitals")) {
+      this.handlers.performance = new PerformanceHandler(this.managers.event);
+      this.handlers.performance.startTracking().catch((error) => {
+        log("warn", "Failed to start performance tracking", { error });
+      });
+    }
+    if (!disabledEvents.includes("error")) {
+      this.handlers.error = new ErrorHandler(this.managers.event);
+      this.handlers.error.startTracking();
+    }
+    if (config.viewport) {
       this.handlers.viewport = new ViewportHandler(this.managers.event);
       this.handlers.viewport.startTracking();
     }
