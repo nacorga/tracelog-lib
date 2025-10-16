@@ -10,6 +10,12 @@ import { WebVitalType } from './event.types';
  */
 export type WebVitalsMode = 'all' | 'needs-improvement' | 'poor';
 
+/**
+ * Event types that can be disabled from auto-tracking
+ * Note: Core events (PAGE_VIEW, CLICK, SESSION_*) cannot be disabled as they are essential for analytics
+ */
+export type DisabledEventType = 'scroll' | 'web_vitals' | 'error';
+
 export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */
   sessionTimeout?: number;
@@ -43,6 +49,18 @@ export interface Config {
    * Only applies when webVitalsMode is set. Overrides default thresholds for the selected mode.
    */
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
+  /**
+   * Event types to disable from auto-tracking.
+   * Core events (PAGE_VIEW, CLICK, SESSION_*) cannot be disabled as they are essential for analytics.
+   * @default []
+   * @example
+   * // Disable scroll tracking only
+   * disabledEvents: ['scroll']
+   * @example
+   * // Disable performance and error tracking
+   * disabledEvents: ['web_vitals', 'error']
+   */
+  disabledEvents?: DisabledEventType[];
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

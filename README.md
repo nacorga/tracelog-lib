@@ -114,6 +114,10 @@ await tracelog.init({
   samplingRate: 1.0,               // 100% (default)
   sensitiveQueryParams: ['token'], // Add to defaults
 
+  // Event Control
+  disabledEvents: ['scroll'],  // Disable specific auto-tracked events
+                                // Options: 'scroll', 'web_vitals', 'error'
+
   // Integrations (pick one or none)
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
@@ -141,16 +145,38 @@ await tracelog.init({
 
 TraceLog captures these events automatically (no code required):
 
-| Event Type | What It Tracks |
-|------------|----------------|
-| `PAGE_VIEW` | Navigation, SPA route changes |
-| `CLICK` | User interactions with elements |
-| `SCROLL` | Scroll depth, velocity, engagement |
-| `SESSION_START` | New session creation |
-| `SESSION_END` | Session termination (timeout, page unload) |
-| `WEB_VITALS` | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) |
-| `ERROR` | JavaScript errors, promise rejections |
-| `VIEWPORT_VISIBLE` | Element visibility (requires `viewport` config) |
+| Event Type | What It Tracks | Can Disable? |
+|------------|----------------|--------------|
+| `PAGE_VIEW` | Navigation, SPA route changes | ❌ Core event |
+| `CLICK` | User interactions with elements | ❌ Core event |
+| `SESSION_START` | New session creation | ❌ Core event |
+| `SESSION_END` | Session termination (timeout, page unload) | ❌ Core event |
+| `SCROLL` | Scroll depth, velocity, engagement | ✅ Optional |
+| `WEB_VITALS` | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) | ✅ Optional |
+| `ERROR` | JavaScript errors, promise rejections | ✅ Optional |
+| `VIEWPORT_VISIBLE` | Element visibility (requires `viewport` config) | Via config |
+
+**Disabling Optional Events:**
+
+You can disable specific auto-tracked events to reduce data volume or improve performance:
+
+```typescript
+// Disable scroll tracking only
+await tracelog.init({
+  disabledEvents: ['scroll']
+});
+
+// Disable multiple event types
+await tracelog.init({
+  disabledEvents: ['scroll', 'web_vitals', 'error']
+});
+```
+
+**Use Cases:**
+- Reduce bandwidth and backend costs
+- Already using Sentry/Datadog for errors
+- Performance optimization on complex pages
+- Minimize data collection for privacy compliance
 
 **Custom Events:**
 ```typescript
