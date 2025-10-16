@@ -1,7 +1,7 @@
 import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
 import { WebVitalType } from './event.types';
-import { DisabledEventType } from '../constants/disabled-events.constants';
+import { DisabledEventType } from '../constants';
 
 /**
  * Web Vitals filtering mode

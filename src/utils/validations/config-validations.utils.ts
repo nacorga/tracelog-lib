@@ -10,16 +10,16 @@ import {
   DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
   DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS,
   DEFAULT_VISIBILITY_TIMEOUT_MS,
+  DEFAULT_ERROR_SAMPLING_RATE,
+  DISABLEABLE_EVENT_TYPES,
 } from '../../constants';
-import { DEFAULT_ERROR_SAMPLING_RATE } from '../../constants/error.constants';
-import { DISABLEABLE_EVENT_TYPES } from '../../constants/disabled-events.constants';
-import { Config } from '../../types';
 import {
+  Config,
   AppConfigValidationError,
   SessionTimeoutValidationError,
   SamplingRateValidationError,
   IntegrationValidationError,
-} from '../../types/validation-error.types';
+} from '../../types';
 
 /**
  * Validates the app configuration object (before normalization)
