@@ -134,6 +134,7 @@ When reviewing E2E tests:
 - [ ] Use `page.waitForTimeout()` or built-in Playwright waiters
 - [ ] Test in QA mode: `?tlog_mode=qa` URL parameter
 - [ ] Verify cleanup: Check event listeners removed after destroy
+- [ ] **CRITICAL**: Follow E2E patterns in `tests/TESTING_GUIDE.md`
 
 ## Memory Leak Detection
 

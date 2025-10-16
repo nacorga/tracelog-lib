@@ -232,6 +232,31 @@ await tracelog.init({
 
 ## Performance
 
+### ✅ DO: Disable unnecessary event types
+
+```typescript
+// Already using Sentry for errors? Disable error tracking
+await tracelog.init({
+  disabledEvents: ['error']
+});
+
+// High-frequency scrolls causing performance issues?
+await tracelog.init({
+  disabledEvents: ['scroll']
+});
+
+// Only need core analytics (page views, clicks, sessions)?
+await tracelog.init({
+  disabledEvents: ['scroll', 'web_vitals', 'error']
+});
+```
+
+**Benefits:**
+- Reduces client-side processing overhead
+- Lower bandwidth usage
+- Fewer backend costs
+- Faster page performance on complex applications
+
 ### ✅ DO: Use sampling for high-traffic sites
 
 ```typescript

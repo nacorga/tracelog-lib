@@ -1,6 +1,7 @@
 import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
 import { WebVitalType } from './event.types';
+import { DisabledEventType } from '../constants';
 
 /**
  * Web Vitals filtering mode
@@ -43,6 +44,18 @@ export interface Config {
    * Only applies when webVitalsMode is set. Overrides default thresholds for the selected mode.
    */
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
+  /**
+   * Event types to disable from auto-tracking.
+   * Core events (PAGE_VIEW, CLICK, SESSION_*) cannot be disabled as they are essential for analytics.
+   * @default []
+   * @example
+   * // Disable scroll tracking only
+   * disabledEvents: ['scroll']
+   * @example
+   * // Disable performance and error tracking
+   * disabledEvents: ['web_vitals', 'error']
+   */
+  disabledEvents?: DisabledEventType[];
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

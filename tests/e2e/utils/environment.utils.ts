@@ -19,7 +19,23 @@ const serializeValue = (value: string | boolean | number): string => {
 };
 
 export const ensureTraceLogBridge = async (page: Page): Promise<void> => {
-  await page.waitForFunction(() => Boolean(window.__traceLogBridge), { timeout: DEFAULT_TIMEOUT_MS });
+  // CSP-safe: Use page.evaluate with internal wait instead of page.waitForFunction
+  const bridgeAvailable = await page.evaluate(async (timeoutMs) => {
+    let retries = 0;
+    const intervalMs = 100;
+    const maxRetries = Math.ceil(timeoutMs / intervalMs);
+
+    while (!window.__traceLogBridge && retries < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      retries++;
+    }
+
+    return Boolean(window.__traceLogBridge);
+  }, DEFAULT_TIMEOUT_MS);
+
+  if (!bridgeAvailable) {
+    throw new Error(`TraceLog bridge not available after ${DEFAULT_TIMEOUT_MS}ms`);
+  }
 };
 
 export const navigateToPlayground = async (page: Page, options: PlaygroundNavigationOptions = {}): Promise<void> => {

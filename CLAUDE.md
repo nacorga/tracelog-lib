@@ -111,6 +111,7 @@ this.getState() // Full state snapshot
 ### Client-Side Controls
 
 **Everything happens in the browser** - no backend required:
+- Event Control (`disabledEvents` - disable specific auto-tracked events)
 - Sampling (`samplingRate`, `errorSampling`)
 - Deduplication (LRU cache with 1000-entry fingerprints)
 - Rate limiting (50 events/sec, per-event-name limits)
@@ -146,6 +147,12 @@ await tracelog.init({
   integrations: {
     googleAnalytics: { measurementId: 'G-XXXXXX' }
   }
+});
+
+// 5. With Event Control (disable optional events)
+await tracelog.init({
+  disabledEvents: ['scroll', 'web_vitals', 'error']
+  // Core events (PAGE_VIEW, CLICK, SESSION) still tracked
 });
 ```
 
@@ -238,6 +245,7 @@ Target: ES2022, Lib: DOM + ES2022
 - ✅ Use `page.evaluate()` with internal waits
 - ✅ Clear localStorage/sessionStorage in `beforeEach`
 - ✅ Check `queue.session_id` (NOT in individual events)
+- ✅ MUST follow E2E patterns in [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md)
 
 ## Security & Privacy
 
@@ -351,9 +359,11 @@ All handlers implement:
 - ❌ DON'T call init() in SSR (typeof window check required)
 
 ### Testing
-- ❌ DON'T use `page.waitForFunction()` in E2E tests
+- ❌ DON'T use `page.waitForFunction()` in E2E tests (CSP-blocked)
 - ❌ DON'T skip data isolation in test beforeEach hooks
 - ❌ DON'T access internal APIs (_app, etc.) in tests
+- ❌ DON'T use uppercase event types in filters (use lowercase: `'click'` not `'CLICK'`)
+- ❌ DON'T ignore [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) patterns - they prevent common E2E failures
 
 ## File Naming Conventions
 
