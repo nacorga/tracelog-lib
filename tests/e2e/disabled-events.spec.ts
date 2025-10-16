@@ -37,8 +37,8 @@ test.describe('Disabled Events Configuration', () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       return {
-        scrollEvents: events.filter((e) => e.type === 'SCROLL'),
-        hasOtherEvents: events.some((e) => e.type !== 'SCROLL'),
+        scrollEvents: events.filter((e) => e.type === 'scroll'),
+        hasOtherEvents: events.some((e) => e.type !== 'scroll'),
       };
     });
 
@@ -68,7 +68,7 @@ test.describe('Disabled Events Configuration', () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       return {
-        webVitalsEvents: events.filter((e) => e.type === 'WEB_VITALS'),
+        webVitalsEvents: events.filter((e) => e.type === 'web_vitals'),
         totalEvents: events.length,
       };
     });
@@ -111,7 +111,7 @@ test.describe('Disabled Events Configuration', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       return {
-        errorEvents: events.filter((e) => e.type === 'ERROR'),
+        errorEvents: events.filter((e) => e.type === 'error'),
         totalEvents: events.length,
       };
     });
