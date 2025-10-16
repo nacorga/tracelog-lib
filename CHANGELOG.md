@@ -19,6 +19,41 @@
 
 
 
+
+## [1.0.0] - 2025-10-16
+
+### ⚠️ BREAKING CHANGES
+
+- Feat!: major bump ([2507824](../../commit/2507824c78f5d1c89c2a495a90af363df3987c14))
+
+### ✨ Features
+
+- Add support for disabling specific auto-tracked events to enhance performance and privacy ([986e207](../../commit/986e207f6a19e704685772b22f507d18375dadca))
+
+### 🐛 Bug Fixes
+
+- Standardize event type casing in disabled events tests for consistency ([64c2cec](../../commit/64c2cec69695380aeb58688e39e51c7c86cf45cf))
+
+### ♻️ Refactoring
+
+- Add error and disabled events constants to improve configuration management ([8e0add2](../../commit/8e0add21d106cdea196ac9f96572be58fceedada))
+- Standardize event type casing in documentation and constants for consistency ([84b25a9](../../commit/84b25a90ffaeeec89ecaf01426d11b05356c7e92))
+
+### 🔧 Other Changes
+
+- Merge pull request #46 from nacorga/release/20251016.1 ([44e4445](../../commit/44e44458183786147b6a43779b1f1395469d37a8))
+- Merge pull request #45 from nacorga/feature/disabled-events ([163ce9b](../../commit/163ce9b8032292ff4d9d7bf98820b68fcea86982))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v0.12.2...v1.0.0
+
+
 ## [0.12.2] - 2025-10-15
 
 ### ♻️ Refactoring
