@@ -21,11 +21,17 @@ const isValidUrl = (url: string, allowHttp = false): boolean => {
 };
 
 /**
- * Generates an API URL based on project ID and current domain
- * @param id - The project ID
- * @returns The generated API URL
+ * Generates API URLs for all configured integrations
+ * @param config - The configuration object
+ * @returns Object containing URLs for each integration (empty string if not configured)
  */
-export const getCollectApiUrl = (config: Config): string => {
+export const getCollectApiUrls = (config: Config): { saas: string; custom: string } => {
+  const result = {
+    saas: '',
+    custom: '',
+  };
+
+  // TraceLog SaaS URL generation
   if (config.integrations?.tracelog?.projectId) {
     try {
       const url = new URL(window.location.href);
@@ -48,33 +54,38 @@ export const getCollectApiUrl = (config: Config): string => {
         throw new Error('Invalid domain');
       }
 
-      const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
-      const isValid = isValidUrl(collectApiUrl);
+      const saasUrl = `https://${projectId}.${cleanDomain}/collect`;
+      const isValid = isValidUrl(saasUrl);
 
       if (!isValid) {
-        throw new Error('Invalid URL');
+        throw new Error('Invalid TraceLog SaaS URL');
       }
 
-      return collectApiUrl;
+      result.saas = saasUrl;
     } catch (error) {
-      throw new Error(`Invalid URL configuration: ${error instanceof Error ? error.message : String(error)}`);
+      log('error', 'Failed to generate TraceLog SaaS URL', {
+        error,
+        data: { projectId: config.integrations.tracelog.projectId },
+      });
+
+      result.saas = '';
     }
   }
 
-  const collectApiUrl = config.integrations?.custom?.collectApiUrl;
-
-  if (collectApiUrl) {
-    const allowHttp = config.integrations?.custom?.allowHttp ?? false;
-    const isValid = isValidUrl(collectApiUrl, allowHttp);
+  if (config.integrations?.custom?.collectApiUrl) {
+    const customUrl = config.integrations.custom.collectApiUrl;
+    const allowHttp = config.integrations.custom.allowHttp ?? false;
+    const isValid = isValidUrl(customUrl, allowHttp);
 
     if (!isValid) {
-      throw new Error('Invalid URL');
+      log('error', 'Invalid custom collectApiUrl', { data: { url: customUrl } });
+      result.custom = '';
+    } else {
+      result.custom = customUrl;
     }
-
-    return collectApiUrl;
   }
 
-  return '';
+  return result;
 };
 
 /**

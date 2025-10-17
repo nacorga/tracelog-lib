@@ -77,8 +77,3 @@ export interface Config {
     };
   };
 }
-
-export enum SpecialApiUrl {
-  Localhost = 'localhost:8080',
-  Fail = 'localhost:9999',
-}

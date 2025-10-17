@@ -1,5 +1,5 @@
 import { App } from './app';
-import { MetadataType, Config, EmitterCallback, EmitterMap } from './types';
+import { MetadataType, Config, EmitterCallback, EmitterMap, EventData, EventsQueue, TransformerHook } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
@@ -209,6 +209,41 @@ export const setQaMode = (enabled: boolean): void => {
   }
 
   setQaModeUtil(enabled);
+};
+
+export const setTransformer = (
+  hook: TransformerHook,
+  fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null,
+): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot set transformers while TraceLog is being destroyed');
+  }
+
+  app.setTransformer(hook, fn);
+};
+
+export const removeTransformer = (hook: TransformerHook): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    return;
+  }
+
+  if (isDestroying) {
+    return;
+  }
+
+  app.removeTransformer(hook);
 };
 
 if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {

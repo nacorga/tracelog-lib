@@ -6,9 +6,9 @@ import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
-import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
+import { Config, EventType, EmitterCallback, EmitterMap, Mode, EventData, EventsQueue, TransformerHook } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrl, detectQaMode, log } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrls, detectQaMode, log } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -110,6 +110,72 @@ export class App extends StateManager {
     this.emitter.off(event, callback);
   }
 
+  setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void {
+    if (typeof fn !== 'function') {
+      throw new Error(`setTransformer: ${hook} must be a function`);
+    }
+
+    if (fn.constructor.name === 'AsyncFunction') {
+      throw new Error(`setTransformer: ${hook} must be synchronous (not async)`);
+    }
+
+    const config = this.get('config');
+    const transformers = this.get('transformers');
+    const hasCustom = Boolean(config.integrations?.custom?.collectApiUrl);
+    const hasGA = Boolean(config.integrations?.googleAnalytics?.measurementId);
+
+    if (!hasCustom && !hasGA) {
+      log('warn', `setTransformer('${hook}') has no effect - no custom backend or Google Analytics configured`);
+      return;
+    }
+
+    const updated = { ...transformers };
+
+    if (hook === 'beforeSend') {
+      if (hasCustom) {
+        updated.custom = { ...updated.custom, beforeSend: fn as (event: EventData) => EventData | null };
+      }
+
+      if (hasGA) {
+        updated.googleAnalytics = {
+          ...updated.googleAnalytics,
+          beforeSend: fn as (event: EventData) => EventData | null,
+        };
+      }
+    }
+
+    if (hook === 'beforeBatch') {
+      if (hasCustom) {
+        updated.custom = { ...updated.custom, beforeBatch: fn as (queue: EventsQueue) => EventsQueue | null };
+      }
+    }
+
+    this.set('transformers', updated);
+  }
+
+  removeTransformer(hook: TransformerHook): void {
+    const transformers = this.get('transformers');
+    const updated = { ...transformers };
+
+    if (hook === 'beforeSend') {
+      if (updated.custom !== undefined) {
+        delete updated.custom.beforeSend;
+      }
+
+      if (updated.googleAnalytics !== undefined) {
+        delete updated.googleAnalytics.beforeSend;
+      }
+    }
+
+    if (hook === 'beforeBatch') {
+      if (updated.custom !== undefined) {
+        delete updated.custom.beforeBatch;
+      }
+    }
+
+    this.set('transformers', updated);
+  }
+
   destroy(force = false): void {
     if (!this.isInitialized && !force) {
       return;
@@ -152,14 +218,16 @@ export class App extends StateManager {
     const userId = UserManager.getId(this.managers.storage as StorageManager);
     this.set('userId', userId);
 
-    const collectApiUrl = getCollectApiUrl(config);
-    this.set('collectApiUrl', collectApiUrl);
+    const collectApiUrls = getCollectApiUrls(config);
+    this.set('collectApiUrls', collectApiUrls);
 
     const device = getDeviceType();
     this.set('device', device);
 
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);
+
+    this.set('transformers', {});
 
     const mode = detectQaMode() ? Mode.QA : undefined;
 
