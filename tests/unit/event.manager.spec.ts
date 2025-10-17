@@ -227,7 +227,10 @@ describe('EventManager', () => {
     });
 
     it('should discard oldest events when overflow occurs', () => {
-      // Add many events
+      // Mock sendEventsQueue to prevent auto-flush from clearing the queue
+      vi.spyOn(eventManager as any, 'sendEventsQueue').mockResolvedValue(undefined);
+
+      // Add many events (bypassing auto-flush by mocking send)
       for (let i = 0; i < 110; i++) {
         eventManager.track({
           type: EventType.CUSTOM,

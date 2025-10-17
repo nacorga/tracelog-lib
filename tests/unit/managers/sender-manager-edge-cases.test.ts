@@ -43,7 +43,7 @@ describe('SenderManager Edge Cases', () => {
     // Setup minimal state
     vi.spyOn(senderManager as any, 'get').mockImplementation((key: unknown) => {
       if (key === 'config') return { id: 'test-project' };
-      if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
+      if (key === 'collectApiUrls') return { saas: '', custom: 'http://localhost:3000/collect' };
       if (key === 'userId') return 'anonymous';
       return null;
     });
@@ -67,7 +67,7 @@ describe('SenderManager Edge Cases', () => {
       const body = createEventDto();
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
-      await senderManager.sendEventsQueue(body);
+      await senderManager.sendEventsQueue({ custom: body });
 
       expect(clearTimeoutSpy).toHaveBeenCalled();
 
@@ -82,7 +82,7 @@ describe('SenderManager Edge Cases', () => {
       const body = createEventDto();
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
-      await senderManager.sendEventsQueue(body);
+      await senderManager.sendEventsQueue({ custom: body });
 
       expect(clearTimeoutSpy).toHaveBeenCalled();
 
@@ -99,7 +99,7 @@ describe('SenderManager Edge Cases', () => {
       });
 
       const body = createEventDto();
-      const result = await senderManager.sendEventsQueue(body);
+      const result = await senderManager.sendEventsQueue({ custom: body });
 
       expect(result).toBe(false);
     });
@@ -112,7 +112,7 @@ describe('SenderManager Edge Cases', () => {
       });
 
       const body = createEventDto();
-      const result = await senderManager.sendEventsQueue(body);
+      const result = await senderManager.sendEventsQueue({ custom: body });
 
       expect(result).toBe(false);
     });
@@ -125,7 +125,7 @@ describe('SenderManager Edge Cases', () => {
       });
 
       const body = createEventDto();
-      const result = await senderManager.sendEventsQueue(body);
+      const result = await senderManager.sendEventsQueue({ custom: body });
 
       expect(result).toBe(false);
     });
@@ -138,7 +138,7 @@ describe('SenderManager Edge Cases', () => {
       });
 
       const body = createEventDto();
-      const result = await senderManager.sendEventsQueue(body);
+      const result = await senderManager.sendEventsQueue({ custom: body });
 
       expect(result).toBe(false);
     });
@@ -151,7 +151,7 @@ describe('SenderManager Edge Cases', () => {
       });
 
       const body = createEventDto();
-      const result = await senderManager.sendEventsQueue(body);
+      const result = await senderManager.sendEventsQueue({ custom: body });
 
       // Should return false due to error
       expect(result).toBe(false);
@@ -248,8 +248,8 @@ describe('SenderManager Edge Cases', () => {
       const body2 = createEventDto();
 
       const [result1, result2] = await Promise.all([
-        senderManager.sendEventsQueue(body1),
-        senderManager.sendEventsQueue(body2),
+        senderManager.sendEventsQueue({ custom: body1 }),
+        senderManager.sendEventsQueue({ custom: body2 }),
       ]);
 
       expect(result1).toBe(true);
@@ -269,7 +269,7 @@ describe('SenderManager Edge Cases', () => {
       const body = createEventDto();
       const onFailure = vi.fn();
 
-      await senderManager.sendEventsQueue(body, { onFailure });
+      await senderManager.sendEventsQueue({ custom: body }, { onFailure });
 
       expect(onFailure).toHaveBeenCalled();
 
@@ -293,7 +293,7 @@ describe('SenderManager Edge Cases', () => {
       const body = createEventDto();
       const onFailure = vi.fn();
 
-      await senderManager.sendEventsQueue(body, { onFailure });
+      await senderManager.sendEventsQueue({ custom: body }, { onFailure });
 
       expect(onFailure).toHaveBeenCalled();
 

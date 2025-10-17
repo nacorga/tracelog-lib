@@ -6,7 +6,7 @@ import {
   MAX_BEACON_PAYLOAD_SIZE,
   PERSISTENCE_THROTTLE_MS,
 } from '../constants';
-import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError } from '../types';
+import { PersistedEventsQueue, EventsQueue, PermanentError } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -18,6 +18,7 @@ interface SendCallbacks {
 
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
+
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
 
@@ -31,48 +32,140 @@ export class SenderManager extends StateManager {
     return QUEUE_KEY(userId);
   }
 
-  sendEventsQueueSync(body: EventsQueue): boolean {
+  sendEventsQueueSync(payloads: { saas?: EventsQueue; custom?: EventsQueue }): boolean {
     if (this.shouldSkipSend()) {
       return true;
     }
 
-    const config = this.get('config');
+    const urls = this.get('collectApiUrls');
+    const destinations = this.buildDestinationMap(urls, payloads);
 
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log('warn', 'Fail mode: simulating network failure (sync)', {
-        data: { events: body.events.length },
-      });
+    const results = destinations.map(({ url, payload }) => this.sendQueueSyncInternal(url, payload));
+    const anySuccess = results.some((result) => result);
 
-      return false;
+    if (!anySuccess) {
+      const firstPayload = payloads.saas ?? payloads.custom;
+
+      if (firstPayload) {
+        this.persistEvents(firstPayload);
+      }
     }
 
-    return this.sendQueueSyncInternal(body);
+    return anySuccess;
   }
 
-  async sendEventsQueue(body: EventsQueue, callbacks?: SendCallbacks): Promise<boolean> {
-    try {
-      const success = await this.send(body);
+  async sendEventsQueue(
+    payloads: { saas?: EventsQueue; custom?: EventsQueue },
+    callbacks?: SendCallbacks,
+  ): Promise<boolean> {
+    const urls = this.get('collectApiUrls');
+    const destinations = this.buildDestinationMap(urls, payloads);
 
-      if (success) {
-        this.clearPersistedEvents();
-        callbacks?.onSuccess?.(body.events.length, body.events, body);
-      } else {
-        this.persistEvents(body);
-        callbacks?.onFailure?.();
+    if (destinations.length === 0) {
+      this.handleNoDestinations(payloads, callbacks);
+      return true;
+    }
+
+    const results = await Promise.allSettled(
+      destinations.map(async ({ name, url, payload }) => this.sendToDestination(name, url, payload)),
+    );
+
+    const successCount = results.filter((r) => r.status === 'fulfilled' && r.value.success).length;
+    const anySuccess = successCount > 0;
+
+    this.handleSendResults(anySuccess, successCount, destinations.length, payloads, callbacks);
+
+    return anySuccess;
+  }
+
+  private buildDestinationMap(
+    urls: { saas: string; custom: string },
+    payloads: { saas?: EventsQueue; custom?: EventsQueue },
+  ): Array<{ name: string; url: string; payload: EventsQueue }> {
+    const destinations: Array<{ name: string; url: string; payload: EventsQueue }> = [];
+
+    if (urls.saas && payloads.saas) {
+      destinations.push({ name: 'saas', url: urls.saas, payload: payloads.saas });
+    }
+
+    if (urls.custom && payloads.custom) {
+      destinations.push({ name: 'custom', url: urls.custom, payload: payloads.custom });
+    }
+
+    return destinations;
+  }
+
+  private handleNoDestinations(
+    payloads: { saas?: EventsQueue; custom?: EventsQueue },
+    callbacks?: SendCallbacks,
+  ): void {
+    const firstPayload = payloads.saas ?? payloads.custom;
+
+    if (firstPayload) {
+      callbacks?.onSuccess?.(firstPayload.events.length, firstPayload.events, firstPayload);
+    }
+  }
+
+  private handleSendResults(
+    anySuccess: boolean,
+    successCount: number,
+    totalCount: number,
+    payloads: { saas?: EventsQueue; custom?: EventsQueue },
+    callbacks?: SendCallbacks,
+  ): void {
+    if (anySuccess) {
+      log('info', 'Events sent successfully', {
+        data: { successful: successCount, total: totalCount },
+      });
+
+      this.clearPersistedEvents();
+
+      const firstPayload = payloads.saas ?? payloads.custom;
+
+      if (firstPayload) {
+        callbacks?.onSuccess?.(firstPayload.events.length, firstPayload.events, firstPayload);
+      }
+    } else {
+      log('warn', 'All destinations failed, persisting for recovery', {
+        data: { destinations: totalCount },
+      });
+
+      const firstPayload = payloads.saas ?? payloads.custom;
+
+      if (firstPayload) {
+        this.persistEvents(firstPayload);
       }
 
-      return success;
+      callbacks?.onFailure?.();
+    }
+  }
+
+  private async sendToDestination(
+    destination: string,
+    url: string,
+    payload: EventsQueue,
+  ): Promise<{ destination: string; success: boolean }> {
+    try {
+      const success = await this.send(url, payload);
+
+      if (!success) {
+        log('warn', `Failed to send to ${destination}`, {
+          data: { url: this.maskUrl(url) },
+        });
+      }
+
+      return { destination, success };
     } catch (error) {
       if (error instanceof PermanentError) {
-        this.logPermanentError('Permanent error, not retrying', error);
-        this.clearPersistedEvents();
-        callbacks?.onFailure?.();
-        return false;
+        this.logPermanentError(`Permanent error for ${destination}`, error);
+      } else {
+        log('error', `Error sending to ${destination}`, {
+          error,
+          data: { url: this.maskUrl(url) },
+        });
       }
 
-      this.persistEvents(body);
-      callbacks?.onFailure?.();
-      return false;
+      return { destination, success: false };
     }
   }
 
@@ -92,20 +185,20 @@ export class SenderManager extends StateManager {
         return;
       }
 
-      const body = this.createRecoveryBody(persistedData);
-      const success = await this.send(body);
+      const { ...body } = persistedData;
+      const payloads = { saas: body, custom: body };
+      const success = await this.sendEventsQueue(payloads, callbacks);
 
-      if (success) {
-        this.clearPersistedEvents();
-        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
-      } else {
+      if (!success) {
         callbacks?.onFailure?.();
       }
     } catch (error) {
       if (error instanceof PermanentError) {
         this.logPermanentError('Permanent error during recovery, clearing persisted events', error);
         this.clearPersistedEvents();
+
         callbacks?.onFailure?.();
+
         return;
       }
 
@@ -115,24 +208,12 @@ export class SenderManager extends StateManager {
     }
   }
 
-  stop(): void {}
-
-  private async send(body: EventsQueue): Promise<boolean> {
+  private async send(url: string, body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
 
-    const config = this.get('config');
-
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log('warn', 'Fail mode: simulating network failure', {
-        data: { events: body.events.length },
-      });
-
-      return false;
-    }
-
-    const { url, payload } = this.prepareRequest(body);
+    const payload = this.preparePayload(body);
 
     try {
       const response = await this.sendWithTimeout(url, payload);
@@ -147,7 +228,7 @@ export class SenderManager extends StateManager {
         error,
         data: {
           events: body.events.length,
-          url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+          url: this.maskUrl(url),
         },
       });
 
@@ -157,6 +238,7 @@ export class SenderManager extends StateManager {
 
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
+
     const timeoutId = setTimeout(() => {
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
@@ -189,46 +271,40 @@ export class SenderManager extends StateManager {
     }
   }
 
-  private sendQueueSyncInternal(body: EventsQueue): boolean {
-    const { url, payload } = this.prepareRequest(body);
+  private sendQueueSyncInternal(url: string, body: EventsQueue): boolean {
+    const payload = this.preparePayload(body);
 
-    // Check payload size against 64KB browser limit (Phase 3)
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
-      log('warn', 'Payload exceeds sendBeacon limit, persisting for recovery', {
+      log('warn', 'Payload exceeds sendBeacon limit', {
         data: {
           size: payload.length,
           limit: MAX_BEACON_PAYLOAD_SIZE,
           events: body.events.length,
         },
       });
-      this.persistEvents(body);
+
       return false;
     }
 
     const blob = new Blob([payload], { type: 'application/json' });
 
     if (!this.isSendBeaconAvailable()) {
-      log('warn', 'sendBeacon not available, persisting events for recovery');
-      this.persistEvents(body);
+      log('warn', 'sendBeacon not available');
       return false;
     }
 
-    // sendBeacon only returns true/false without HTTP status codes
-    // true: browser accepted the request for sending
-    // false: request rejected (queue full, size limits, etc.)
     const accepted = navigator.sendBeacon(url, blob);
 
     if (!accepted) {
-      log('warn', 'sendBeacon rejected request, persisting events for recovery');
-      this.persistEvents(body);
+      log('warn', 'sendBeacon rejected request', {
+        data: { url: this.maskUrl(url) },
+      });
     }
 
     return accepted;
   }
 
-  private prepareRequest(body: EventsQueue): { url: string; payload: string } {
-    // Enrich payload with metadata for sendBeacon() fallback
-    // sendBeacon() doesn't send custom headers, so we include referer in payload
+  private preparePayload(body: EventsQueue): string {
     const enrichedBody = {
       ...body,
       _metadata: {
@@ -237,10 +313,7 @@ export class SenderManager extends StateManager {
       },
     };
 
-    return {
-      url: this.get('collectApiUrl'),
-      payload: JSON.stringify(enrichedBody),
-    };
+    return JSON.stringify(enrichedBody);
   }
 
   private getPersistedData(): PersistedEventsQueue | null {
@@ -266,12 +339,6 @@ export class SenderManager extends StateManager {
 
     const ageInHours = (Date.now() - data.timestamp) / (1000 * 60 * 60);
     return ageInHours < EVENT_EXPIRY_HOURS;
-  }
-
-  private createRecoveryBody(data: PersistedEventsQueue): EventsQueue {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { timestamp, ...queue } = data;
-    return queue;
   }
 
   private persistEvents(body: EventsQueue): boolean {
@@ -302,6 +369,7 @@ export class SenderManager extends StateManager {
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
       log('warn', 'Failed to persist events', { error });
+
       return false;
     }
   }
@@ -316,7 +384,17 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    return !this.get('collectApiUrl');
+    const urls = this.get('collectApiUrls');
+    return !urls.saas && !urls.custom;
+  }
+
+  private maskUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.protocol}//${parsed.hostname}/***`;
+    } catch {
+      return '[INVALID URL]';
+    }
   }
 
   private async simulateSuccessfulSend(): Promise<boolean> {

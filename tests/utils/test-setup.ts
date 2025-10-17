@@ -7,6 +7,7 @@ import { Config } from '../../src/types';
 import { DEFAULT_SESSION_TIMEOUT } from '../../src/constants';
 import { GoogleAnalyticsIntegration } from '../../src/integrations/google-analytics.integration';
 import { Emitter } from '../../src/utils';
+import { getCollectApiUrls } from '../../src/utils/network/url.utils';
 
 vi.mock('../../src/managers/sender.manager', () => {
   class MockSenderManager {
@@ -77,17 +78,25 @@ export const setupTestState = (config: Config = createTestConfig()): void => {
     setConfig(config: Config): void {
       this.set('config', config);
     }
+    setCollectApiUrls(urls: { saas: string; custom: string }): void {
+      this.set('collectApiUrls', urls);
+    }
     setPageUrl(url: string): void {
       this.set('pageUrl', url);
     }
     setSessionId(id: string): void {
       this.set('sessionId', id);
     }
+    setTransformers(transformers: any): void {
+      this.set('transformers', transformers);
+    }
   })();
 
   tempStateManager.setConfig(config);
+  tempStateManager.setCollectApiUrls(getCollectApiUrls(config));
   tempStateManager.setPageUrl('https://example.com');
   tempStateManager.setSessionId('test-session');
+  tempStateManager.setTransformers({});
 };
 
 /**
@@ -129,6 +138,7 @@ export const cleanupTestState = (): void => {
  */
 export const setupTestEnvironment = (
   config?: Partial<Config>,
+  emitter?: Emitter | null,
 ): {
   config: Config;
   storageManager: StorageManager;
@@ -139,7 +149,7 @@ export const setupTestEnvironment = (
   setupTestState(testConfig);
 
   const storageManager = createMockStorageManager();
-  const eventManager = createTestEventManager(storageManager);
+  const eventManager = createTestEventManager(storageManager, null, emitter !== undefined ? emitter : null);
   const sessionManager = createTestSessionManager(storageManager, eventManager, 'default');
 
   return {

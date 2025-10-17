@@ -18,6 +18,7 @@ let currentMockUrl = 'http://localhost:3000/';
 
 vi.mock('../../../src/utils/network/url.utils', () => ({
   normalizeUrl: vi.fn((url: string) => url),
+  getCollectApiUrls: vi.fn(() => ({ saas: '', custom: '' })),
 }));
 
 // Mock window.location.href to track URL changes

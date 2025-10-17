@@ -29,6 +29,12 @@ describe('Session Lifecycle Integration', () => {
       createTestConfig({
         sessionTimeout: 15 * 60 * 1000,
         samplingRate: 1,
+        integrations: {
+          custom: {
+            collectApiUrl: 'http://localhost:3000/collect',
+            allowHttp: true,
+          },
+        },
       }),
     );
     storageManager = new StorageManager();
@@ -381,9 +387,11 @@ describe('Session Lifecycle Integration', () => {
         custom_event: { name: 'test_with_session' },
       });
 
-      const payload = eventManager['buildEventsPayload']();
+      const payloads = eventManager['buildEventsPayloads']();
+      const payload = payloads.saas ?? payloads.custom;
 
-      expect(payload.session_id).toBe(sessionId);
+      expect(payload).toBeDefined();
+      expect(payload!.session_id).toBe(sessionId);
     });
 
     it('should prevent event sending without session ID', () => {

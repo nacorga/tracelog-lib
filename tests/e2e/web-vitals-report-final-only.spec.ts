@@ -104,8 +104,6 @@ test.describe('Web Vitals Final-Only Reporting', () => {
 
     // Should report LCP only once (final value)
     expect(lcpEvents.length).toBeLessThanOrEqual(1);
-
-    console.log('LCP events captured:', lcpEvents.length);
   });
 
   test('should report final INP value, not every interaction', async ({ page }) => {
@@ -151,7 +149,5 @@ test.describe('Web Vitals Final-Only Reporting', () => {
     // With reportAllChanges: false, INP should not report after every interaction
     // Should report final value or not at all
     expect(inpEvents.length).toBeLessThanOrEqual(1);
-
-    console.log('INP events captured:', inpEvents.length);
   });
 });

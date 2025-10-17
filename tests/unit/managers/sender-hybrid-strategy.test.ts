@@ -30,7 +30,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
     // Mock global state
     const mockGet = vi.fn((key: string) => {
-      if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
+      if (key === 'collectApiUrls') return { saas: '', custom: 'http://localhost:3000/collect' };
       if (key === 'userId') return 'test-user';
       return undefined;
     });
@@ -62,7 +62,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       });
 
       const body = createEventDto();
-      const result = await senderManager.sendEventsQueue(body);
+      const result = await senderManager.sendEventsQueue({ custom: body });
 
       expect(result).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -80,7 +80,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       storageManager.removeItem(storageKey);
 
       const body = createEventDto();
-      const result = await senderManager.sendEventsQueue(body);
+      const result = await senderManager.sendEventsQueue({ custom: body });
 
       expect(result).toBe(false);
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -99,7 +99,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
       const body = createEventDto();
       const onFailure = vi.fn();
-      const result = await senderManager.sendEventsQueue(body, { onFailure });
+      const result = await senderManager.sendEventsQueue({ custom: body }, { onFailure });
 
       expect(result).toBe(false);
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -112,7 +112,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
       const body = createEventDto();
       const onFailure = vi.fn();
-      const result = await senderManager.sendEventsQueue(body, { onFailure });
+      const result = await senderManager.sendEventsQueue({ custom: body }, { onFailure });
 
       expect(result).toBe(false);
       expect(onFailure).toHaveBeenCalled();
@@ -130,7 +130,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       const onFailure = vi.fn();
       const body = createEventDto();
 
-      await senderManager.sendEventsQueue(body, { onSuccess, onFailure });
+      await senderManager.sendEventsQueue({ custom: body }, { onSuccess, onFailure });
 
       expect(onSuccess).toHaveBeenCalledWith(1, body.events, body);
       expect(onFailure).not.toHaveBeenCalled();
@@ -147,7 +147,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       const onFailure = vi.fn();
       const body = createEventDto();
 
-      await senderManager.sendEventsQueue(body, { onSuccess, onFailure });
+      await senderManager.sendEventsQueue({ custom: body }, { onSuccess, onFailure });
 
       expect(onSuccess).not.toHaveBeenCalled();
       expect(onFailure).toHaveBeenCalled();
@@ -159,7 +159,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       mockSendBeacon.mockReturnValue(true);
 
       const body = createEventDto();
-      const result = senderManager.sendEventsQueueSync(body);
+      const result = senderManager.sendEventsQueueSync({ custom: body });
 
       expect(result).toBe(true);
       expect(mockSendBeacon).toHaveBeenCalledTimes(1);
@@ -170,7 +170,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       mockSendBeacon.mockReturnValue(false);
 
       const body = createEventDto();
-      const result = senderManager.sendEventsQueueSync(body);
+      const result = senderManager.sendEventsQueueSync({ custom: body });
 
       expect(result).toBe(false);
       expect(mockSendBeacon).toHaveBeenCalledTimes(1);
@@ -185,7 +185,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       });
 
       const body = createEventDto();
-      const result = senderManager.sendEventsQueueSync(body);
+      const result = senderManager.sendEventsQueueSync({ custom: body });
 
       expect(result).toBe(false);
       // Events are persisted internally for recovery
@@ -195,7 +195,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       mockSendBeacon.mockReturnValue(true);
 
       const body = createEventDto();
-      senderManager.sendEventsQueueSync(body);
+      senderManager.sendEventsQueueSync({ custom: body });
 
       expect(mockSendBeacon).toHaveBeenCalledWith('http://localhost:3000/collect', expect.any(Blob));
 
@@ -270,13 +270,17 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       });
 
       const body = createEventDto();
-      await senderManager.sendEventsQueue(body);
+      await senderManager.sendEventsQueue({ custom: body });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       // Advance time by 30 seconds (old retry would have triggered)
+      // NOTE: Don't use runAllTimersAsync() as it can cause infinite loops
+      // when there are pending async operations that schedule new timers
       vi.advanceTimersByTime(30000);
-      await vi.runAllTimersAsync();
+
+      // Small delay to let any pending microtasks resolve
+      await Promise.resolve();
 
       // Should still be only 1 call (no retries)
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -290,7 +294,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       mockSendBeacon.mockReturnValue(false);
 
       const body = createEventDto();
-      senderManager.sendEventsQueueSync(body);
+      senderManager.sendEventsQueueSync({ custom: body });
 
       expect(mockSendBeacon).toHaveBeenCalledTimes(1);
 
@@ -301,6 +305,106 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       expect(mockSendBeacon).toHaveBeenCalledTimes(1);
 
       vi.useRealTimers();
+    });
+  });
+
+  describe('Multi-Destination Parallel Sending', () => {
+    it('should send to both SaaS and Custom destinations in parallel', async () => {
+      // Mock both SaaS and Custom URLs
+      const mockGet = vi.fn((key: string) => {
+        if (key === 'collectApiUrls')
+          return {
+            saas: 'https://project-id.example.com/collect',
+            custom: 'http://localhost:3000/collect',
+          };
+        if (key === 'userId') return 'test-user';
+        return undefined;
+      });
+      (StateManager.prototype as any).get = mockGet;
+
+      // Mock fetch: first call (SaaS) succeeds, second call (Custom) fails
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+        });
+
+      const saasBody = createEventDto();
+      const customBody = createEventDto();
+      const result = await senderManager.sendEventsQueue({ saas: saasBody, custom: customBody });
+
+      // Should return true because SaaS succeeded (even though Custom failed)
+      expect(result).toBe(true);
+
+      // Should have attempted both destinations
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // Verify SaaS URL was called
+      const saasCall = mockFetch.mock.calls.find((call) => call[0].includes('project-id.example.com'));
+      expect(saasCall).toBeDefined();
+
+      // Verify Custom URL was called
+      const customCall = mockFetch.mock.calls.find((call) => call[0].includes('localhost:3000'));
+      expect(customCall).toBeDefined();
+    });
+
+    it('should return false only when ALL destinations fail', async () => {
+      // Mock both destinations
+      const mockGet = vi.fn((key: string) => {
+        if (key === 'collectApiUrls')
+          return {
+            saas: 'https://project-id.example.com/collect',
+            custom: 'http://localhost:3000/collect',
+          };
+        if (key === 'userId') return 'test-user';
+        return undefined;
+      });
+      (StateManager.prototype as any).get = mockGet;
+
+      // Mock fetch: both fail
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      const saasBody = createEventDto();
+      const customBody = createEventDto();
+      const result = await senderManager.sendEventsQueue({ saas: saasBody, custom: customBody });
+
+      // Should return false because ALL destinations failed
+      expect(result).toBe(false);
+
+      // Should have attempted both destinations
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should succeed with only one destination configured', async () => {
+      // Mock only Custom URL (no SaaS)
+      const mockGet = vi.fn((key: string) => {
+        if (key === 'collectApiUrls') return { saas: '', custom: 'http://localhost:3000/collect' };
+        if (key === 'userId') return 'test-user';
+        return undefined;
+      });
+      (StateManager.prototype as any).get = mockGet;
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const body = createEventDto();
+      const result = await senderManager.sendEventsQueue({ custom: body });
+
+      expect(result).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 });

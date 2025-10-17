@@ -607,6 +607,143 @@ await tracelog.init({
 
 ---
 
+### Event Transformers (Runtime Methods)
+
+TraceLog provides runtime methods to dynamically transform events before they're sent to integrations. Transformers are set **after initialization** and can be updated at any time.
+
+**Important:** Transformers are **integration-specific** to protect TraceLog SaaS schema integrity:
+
+| Integration | beforeSend | beforeBatch |
+|-------------|-----------|-------------|
+| **TraceLog SaaS** | ❌ Silently ignored | ❌ Silently ignored |
+| **Custom Backend** | ✅ Applies | ✅ Applies |
+| **Google Analytics** | ✅ Applies | ❌ N/A |
+
+#### `setTransformer(hook, fn)`
+
+**Signature:**
+```typescript
+setTransformer(hook: 'beforeSend' | 'beforeBatch', fn: Function): void
+```
+
+**Parameters:**
+- `hook`: Transformer type
+  - `'beforeSend'` - Transform per-event before sending (applies to Custom Backend + Google Analytics)
+  - `'beforeBatch'` - Transform entire batch before sending (applies to Custom Backend only)
+- `fn`: Synchronous transformer function
+  - `beforeSend`: `(event: EventData) => EventData | null`
+  - `beforeBatch`: `(queue: EventsQueue) => EventsQueue | null`
+
+**Transformer Rules:**
+1. **Synchronous Only** - No `async`/`await` allowed (library validates and throws error)
+2. **Performance** - Keep execution under 10ms (warnings logged if >50ms)
+3. **Error Handling** - Errors caught automatically, original event used as fallback
+4. **Return `null`** - Filters event from batch or cancels entire batch send
+5. **Pre-fetch Data** - Fetch auth tokens/context BEFORE init, use in synchronous transformers
+
+**Examples:**
+
+```typescript
+// Example 1: Pre-fetch async data (RECOMMENDED PATTERN)
+const authToken = await getAuthToken();  // Pre-fetch async data
+const userId = await getCurrentUserId();
+
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// Use pre-fetched data in synchronous transformers
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,
+  auth_token: authToken,    // Use pre-fetched data
+  user_id: userId
+}));
+
+// Example 2: Update transformers dynamically
+setInterval(() => {
+  const newToken = getRefreshedToken();  // Sync getter
+  tracelog.setTransformer('beforeBatch', (queue) => ({
+    ...queue,
+    auth: { token: newToken }
+  }));
+}, 3600000); // Every hour
+
+// Example 3: Filter events per integration
+tracelog.setTransformer('beforeSend', (event) => {
+  // Exclude scroll events from custom backend only
+  if (event.type === 'scroll') return null;
+
+  return {
+    ...event,
+    custom_field: 'custom_value'
+  };
+});
+
+// Example 4: Conditional batch sends
+tracelog.setTransformer('beforeBatch', (queue) => {
+  // Cancel send if offline (events stay queued for next attempt)
+  if (!navigator.onLine) return null;
+
+  return {
+    ...queue,
+    batch_metadata: { app_version: '1.0.0' }
+  };
+});
+
+// Example 5: A/B test different strategies
+if (abTestVariant === 'detailed') {
+  tracelog.setTransformer('beforeSend', (event) => ({
+    ...event,
+    detailed_context: getDetailedContext()  // Sync getter
+  }));
+}
+```
+
+**Throws:**
+- `Error` - If TraceLog not initialized
+- `AppConfigValidationError` - If function is async or invalid
+
+**Notes:**
+- Transformers apply to **all configured integrations** (Custom Backend + Google Analytics)
+- TraceLog SaaS integration silently ignores transformers (schema protection)
+- Use `removeTransformer()` to disable transformation
+
+#### `removeTransformer(hook)`
+
+Remove a runtime transformer.
+
+**Signature:**
+```typescript
+removeTransformer(hook: 'beforeSend' | 'beforeBatch'): void
+```
+
+**Parameters:**
+- `hook`: Transformer type to remove (`'beforeSend'` or `'beforeBatch'`)
+
+**Example:**
+```typescript
+// Disable transformers for admin users
+if (user.role === 'admin') {
+  tracelog.removeTransformer('beforeSend');
+  tracelog.removeTransformer('beforeBatch');
+}
+
+// Remove when user logs out
+function handleLogout() {
+  tracelog.removeTransformer('beforeSend');
+  tracelog.removeTransformer('beforeBatch');
+  tracelog.destroy();
+}
+```
+
+**Notes:**
+- Silent no-op if not initialized
+- Removes transformer from all applicable integrations
+
+---
+
 ## Event Types
 
 All events share base properties plus type-specific data.

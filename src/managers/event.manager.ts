@@ -18,7 +18,7 @@ import {
   FINGERPRINT_CLEANUP_MULTIPLIER,
   MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
-import { EventsQueue, EmitterEvent, EventData, EventType, Mode } from '../types';
+import { EventsQueue, EmitterEvent, EventData, EventType, Mode, MetadataType } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
@@ -29,14 +29,16 @@ export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
   private readonly dataSender: SenderManager;
   private readonly emitter: Emitter | null;
+  private readonly recentEventFingerprints = new Map<string, number>();
+  private readonly perEventRateLimits: Map<string, number[]> = new Map();
 
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
-  private readonly recentEventFingerprints = new Map<string, number>(); // Time-based deduplication cache
   private sendIntervalId: number | null = null;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
-  private readonly perEventRateLimits: Map<string, number[]> = new Map();
+  private lastSessionId: string | null = null;
+
   private sessionEventCounts: {
     total: number;
     [key: string]: number;
@@ -48,7 +50,6 @@ export class EventManager extends StateManager {
     [EventType.VIEWPORT_VISIBLE]: 0,
     [EventType.SCROLL]: 0,
   };
-  private lastSessionId: string | null = null;
 
   constructor(
     storeManager: StorageManager,
@@ -123,7 +124,6 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Reset session counters if session ID changed (Phase 3)
     if (this.lastSessionId !== currentSessionId) {
       this.lastSessionId = currentSessionId;
       this.sessionEventCounts = {
@@ -143,9 +143,7 @@ export class EventManager extends StateManager {
 
     const eventType = type as EventType;
 
-    // Per-session event caps (Phase 3) - skip for critical events
     if (!isCriticalEvent) {
-      // Check total session limit
       if (this.sessionEventCounts.total >= MAX_EVENTS_PER_SESSION) {
         log('warn', 'Session event limit reached', {
           data: {
@@ -154,11 +152,12 @@ export class EventManager extends StateManager {
             limit: MAX_EVENTS_PER_SESSION,
           },
         });
+
         return;
       }
 
-      // Check type-specific limits
       const typeLimit = this.getTypeLimitForEvent(eventType);
+
       if (typeLimit) {
         const currentCount = this.sessionEventCounts[eventType];
         if (currentCount !== undefined && currentCount >= typeLimit) {
@@ -174,15 +173,15 @@ export class EventManager extends StateManager {
       }
     }
 
-    // Per-event-name rate limiting for CUSTOM events to prevent infinite loops
     if (eventType === EventType.CUSTOM && custom_event?.name) {
       const maxSameEventPerMinute = this.get('config')?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
+
       if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
         return;
       }
     }
-    const isSessionStart = eventType === EventType.SESSION_START;
 
+    const isSessionStart = eventType === EventType.SESSION_START;
     const currentPageUrl = (page_url as string) || this.get('pageUrl');
     const payload = this.buildEventPayload({
       type: eventType,
@@ -240,9 +239,9 @@ export class EventManager extends StateManager {
 
     this.addToQueue(payload);
 
-    // Increment session counters (Phase 3) - only for non-critical events
     if (!isCriticalEvent) {
       this.sessionEventCounts.total++;
+
       if (this.sessionEventCounts[eventType] !== undefined) {
         this.sessionEventCounts[eventType]++;
       }
@@ -270,8 +269,6 @@ export class EventManager extends StateManager {
       [EventType.SCROLL]: 0,
     };
     this.lastSessionId = null;
-
-    this.dataSender.stop();
   }
 
   async flushImmediately(): Promise<boolean> {
@@ -320,17 +317,18 @@ export class EventManager extends StateManager {
       return isSync ? true : Promise.resolve(true);
     }
 
-    const body = this.buildEventsPayload();
+    const payloads = this.buildEventsPayloads();
+
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
 
     if (isSync) {
-      const success = this.dataSender.sendEventsQueueSync(body);
+      const success = this.dataSender.sendEventsQueueSync(payloads);
 
       if (success) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
-        this.emitEventsQueue(body);
+        this.emitEventsQueue(payloads.saas ?? payloads.custom!);
       } else {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
@@ -338,11 +336,11 @@ export class EventManager extends StateManager {
 
       return success;
     } else {
-      return this.dataSender.sendEventsQueue(body, {
+      return this.dataSender.sendEventsQueue(payloads, {
         onSuccess: () => {
           this.removeProcessedEvents(eventIds);
           this.clearSendInterval();
-          this.emitEventsQueue(body);
+          this.emitEventsQueue(payloads.saas ?? payloads.custom!);
         },
         onFailure: () => {
           this.removeProcessedEvents(eventIds);
@@ -364,14 +362,15 @@ export class EventManager extends StateManager {
       return;
     }
 
-    const body = this.buildEventsPayload();
+    const payloads = this.buildEventsPayloads();
+
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
 
-    await this.dataSender.sendEventsQueue(body, {
+    await this.dataSender.sendEventsQueue(payloads, {
       onSuccess: () => {
         this.removeProcessedEvents(eventIds);
-        this.emitEventsQueue(body);
+        this.emitEventsQueue(payloads.saas ?? payloads.custom!);
       },
       onFailure: () => {
         this.removeProcessedEvents(eventIds);
@@ -387,22 +386,44 @@ export class EventManager extends StateManager {
     });
   }
 
-  private buildEventsPayload(): EventsQueue {
+  private buildEventsPayloads(): { saas?: EventsQueue; custom?: EventsQueue } {
+    const urls = this.get('collectApiUrls');
+    const payloads: { saas?: EventsQueue; custom?: EventsQueue } = {};
+    const baseQueue = this.buildBaseQueue();
+
+    if (urls.saas) {
+      payloads.saas = baseQueue;
+    }
+
+    if (urls.custom) {
+      const transformed = this.applyCustomTransformers(baseQueue);
+
+      if (transformed) {
+        payloads.custom = transformed;
+      }
+    }
+
+    if (!urls.saas && !urls.custom) {
+      payloads.custom = baseQueue;
+    }
+
+    return payloads;
+  }
+
+  private buildBaseQueue(): EventsQueue {
     const eventMap = new Map<string, EventData>();
     const order: string[] = [];
 
     for (const event of this.eventsQueue) {
-      const signature = this.createEventSignature(event);
-
+      const signature = this.createEventFingerprint(event);
       if (!eventMap.has(signature)) {
         order.push(signature);
       }
-
       eventMap.set(signature, event);
     }
 
     const events = order
-      .map((signature) => eventMap.get(signature))
+      .map((sig) => eventMap.get(sig))
       .filter((event): event is EventData => Boolean(event))
       .sort((a, b) => a.timestamp - b.timestamp);
 
@@ -413,6 +434,16 @@ export class EventManager extends StateManager {
       events,
       ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
     };
+  }
+
+  private applyCustomTransformers(queue: EventsQueue): EventsQueue | null {
+    const transformedEvents = queue.events
+      .map((event) => this.applyBeforeSend(event, 'custom'))
+      .filter((event): event is EventData => event !== null);
+
+    const transformedQueue = { ...queue, events: transformedEvents };
+
+    return this.applyBeforeBatch(transformedQueue);
   }
 
   private buildEventPayload(data: Partial<EventData>): EventData {
@@ -439,31 +470,24 @@ export class EventManager extends StateManager {
     return payload;
   }
 
-  /**
-   * Checks if event is a duplicate using time-based cache
-   * Tracks recent event fingerprints with timestamp-based cleanup
-   */
   private isDuplicateEvent(event: EventData): boolean {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event);
 
     const lastSeen = this.recentEventFingerprints.get(fingerprint);
 
-    // Check if seen recently
     if (lastSeen && now - lastSeen < DUPLICATE_EVENT_THRESHOLD_MS) {
-      this.recentEventFingerprints.set(fingerprint, now); // Update timestamp
-      return true; // Duplicate
+      this.recentEventFingerprints.set(fingerprint, now);
+
+      return true;
     }
 
-    // Add to cache
     this.recentEventFingerprints.set(fingerprint, now);
 
-    // Cleanup if cache too large (soft limit)
     if (this.recentEventFingerprints.size > MAX_FINGERPRINTS) {
       this.pruneOldFingerprints();
     }
 
-    // Hard limit: aggressive cleanup
     if (this.recentEventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
       this.recentEventFingerprints.clear();
       this.recentEventFingerprints.set(fingerprint, now);
@@ -475,26 +499,15 @@ export class EventManager extends StateManager {
     return false;
   }
 
-  /**
-   * Prunes old fingerprints from cache based on timestamp
-   * Removes entries older than 10x the duplicate threshold (5 seconds)
-   */
   private pruneOldFingerprints(): void {
     const now = Date.now();
-    const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER; // 5 seconds
+    const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
 
     for (const [fingerprint, timestamp] of this.recentEventFingerprints.entries()) {
       if (now - timestamp > cutoff) {
         this.recentEventFingerprints.delete(fingerprint);
       }
     }
-
-    log('debug', 'Pruned old event fingerprints', {
-      data: {
-        remaining: this.recentEventFingerprints.size,
-        cutoffMs: cutoff,
-      },
-    });
   }
 
   private createEventFingerprint(event: EventData): string {
@@ -525,14 +538,10 @@ export class EventManager extends StateManager {
     return fingerprint;
   }
 
-  private createEventSignature(event: EventData): string {
-    return this.createEventFingerprint(event);
-  }
-
   private addToQueue(event: EventData): void {
-    this.eventsQueue.push(event);
-
     this.emitEvent(event);
+
+    this.eventsQueue.push(event);
 
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
       const nonCriticalIndex = this.eventsQueue.findIndex(
@@ -556,7 +565,6 @@ export class EventManager extends StateManager {
       this.startSendInterval();
     }
 
-    // Dynamic flush: Send immediately when batch size threshold is reached
     if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
       void this.sendEventsQueue();
     }
@@ -578,7 +586,23 @@ export class EventManager extends StateManager {
         return;
       }
 
-      this.googleAnalytics.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
+      const transformedEvent = this.applyBeforeSend(event, 'googleAnalytics');
+
+      if (!transformedEvent) {
+        return;
+      }
+
+      const eventName =
+        (transformedEvent as EventData & { event_name?: string }).event_name ||
+        transformedEvent.custom_event?.name ||
+        '';
+
+      const metadata =
+        (transformedEvent as EventData & { metadata?: Record<string, MetadataType> }).metadata ||
+        transformedEvent.custom_event?.metadata ||
+        {};
+
+      this.googleAnalytics.trackEvent(eventName, metadata);
     }
   }
 
@@ -603,15 +627,9 @@ export class EventManager extends StateManager {
     return true;
   }
 
-  /**
-   * Checks per-event-name rate limiting to prevent infinite loops in user code
-   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
-   */
   private checkPerEventRateLimit(eventName: string, maxSameEventPerMinute: number): boolean {
     const now = Date.now();
     const timestamps = this.perEventRateLimits.get(eventName) ?? [];
-
-    // Remove timestamps older than the rate limit window (60 seconds)
     const validTimestamps = timestamps.filter((ts) => now - ts < PER_EVENT_RATE_LIMIT_WINDOW_MS);
 
     if (validTimestamps.length >= maxSameEventPerMinute) {
@@ -625,16 +643,13 @@ export class EventManager extends StateManager {
       return false;
     }
 
-    // Add current timestamp and update map
     validTimestamps.push(now);
+
     this.perEventRateLimits.set(eventName, validTimestamps);
 
     return true;
   }
 
-  /**
-   * Gets the per-session limit for a specific event type (Phase 3)
-   */
   private getTypeLimitForEvent(type: EventType): number | null {
     const limits: Partial<Record<EventType, number>> = {
       [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
@@ -663,6 +678,89 @@ export class EventManager extends StateManager {
   private emitEventsQueue(queue: EventsQueue): void {
     if (this.emitter) {
       this.emitter.emit(EmitterEvent.QUEUE, queue);
+    }
+  }
+
+  private applyBeforeSend(event: EventData, integration: 'custom' | 'googleAnalytics'): EventData | null {
+    const transformers = this.get('transformers');
+    const transformer =
+      integration === 'custom' ? transformers.custom?.beforeSend : transformers.googleAnalytics?.beforeSend;
+
+    return this.executeTransformer(transformer, event, {
+      hook: 'beforeSend',
+      integration,
+      context: { eventType: event.type },
+    });
+  }
+
+  private applyBeforeBatch(queue: EventsQueue): EventsQueue | null {
+    const hasCustomIntegration = Boolean(this.get('config').integrations?.custom?.collectApiUrl);
+    if (!hasCustomIntegration) {
+      return queue;
+    }
+
+    const transformer = this.get('transformers').custom?.beforeBatch;
+    return this.executeTransformer(transformer, queue, {
+      hook: 'beforeBatch',
+      integration: 'custom',
+      context: { eventCount: queue.events.length },
+    });
+  }
+
+  private executeTransformer<T>(
+    transformer: ((data: T) => T | null) | undefined,
+    data: T,
+    options: {
+      hook: 'beforeSend' | 'beforeBatch';
+      integration: 'custom' | 'googleAnalytics';
+      context: Record<string, unknown>;
+    },
+  ): T | null {
+    if (!transformer) {
+      return data;
+    }
+
+    try {
+      const startTime = performance.now();
+      const result = transformer(data);
+      const duration = performance.now() - startTime;
+
+      if (duration > 50) {
+        log('warn', `Slow ${options.integration} ${options.hook} transformer detected`, {
+          data: {
+            executionTimeMs: Math.round(duration),
+            threshold: 50,
+            integration: options.integration,
+            hook: options.hook,
+            ...options.context,
+          },
+        });
+      }
+
+      if (result === null) {
+        const message =
+          options.hook === 'beforeBatch'
+            ? `${options.integration} batch send cancelled by ${options.hook} transformer`
+            : `Event excluded from ${options.integration} by ${options.hook} transformer`;
+
+        log(options.hook === 'beforeBatch' ? 'warn' : 'debug', message, {
+          data: { integration: options.integration, hook: options.hook, ...options.context },
+        });
+      }
+
+      return result;
+    } catch (error) {
+      const fallbackType = options.hook === 'beforeBatch' ? 'queue' : 'event';
+      log('warn', `${options.integration} ${options.hook} transformer error, using original ${fallbackType}`, {
+        data: {
+          integration: options.integration,
+          hook: options.hook,
+          error: error instanceof Error ? error.message : String(error),
+          ...options.context,
+        },
+      });
+
+      return data;
     }
   }
 }

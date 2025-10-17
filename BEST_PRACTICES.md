@@ -390,6 +390,248 @@ await tracelog.init({
 
 ---
 
+## Event Transformers
+
+### ✅ DO: Use runtime methods for dynamic state
+
+```typescript
+// Update auth token when it refreshes
+setInterval(() => {
+  tracelog.setTransformer('beforeBatch', (queue) => ({
+    ...queue,
+    auth: { token: getRefreshedToken() }
+  }));
+}, 3600000); // Every hour
+
+// Update user context when state changes
+function onUserLogin(user) {
+  tracelog.setTransformer('beforeSend', (event) => ({
+    ...event,
+    user_id: user.id,
+    tier: user.subscriptionTier
+  }));
+}
+
+// Remove transformers for admin users
+function onAdminLogin() {
+  tracelog.removeTransformer('beforeSend');
+  tracelog.removeTransformer('beforeBatch');
+}
+```
+
+### ❌ DON'T: Re-initialize to update transformers
+
+```typescript
+// BAD - Re-initializing destroys session and loses data
+function onUserLogin(user) {
+  tracelog.destroy();
+  await tracelog.init(); // ❌ Loses session
+  // Then set transformer...
+}
+
+// GOOD - Use runtime methods to update transformers
+function onUserLogin(user) {
+  tracelog.setTransformer('beforeSend', (event) => ({
+    ...event,
+    user_id: user.id,
+    tier: user.subscriptionTier
+  }));
+}
+
+// GOOD - Update without losing session/state
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  auth: { token: getRefreshedToken() }
+}));
+```
+
+### ✅ DO: Pre-fetch async data before setting transformers
+
+```typescript
+// GOOD - Fetch async data first, then use in synchronous transformer
+const authToken = await getAuthToken();
+const userId = await getCurrentUserId();
+
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// Set transformer with pre-fetched data
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  auth: { token: authToken },    // ✅ Use pre-fetched data
+  user_id: userId                 // ✅ Synchronous access
+}));
+
+// BAD - Async transformer (will throw validation error)
+tracelog.setTransformer('beforeBatch', async (queue) => {  // ❌ Async not allowed
+  const token = await getAuthToken();
+  return { ...queue, token };
+});
+```
+
+### ✅ DO: Keep transformers fast (<10ms)
+
+```typescript
+// GOOD - Simple field mapping
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,
+  event_name: event.type,              // Fast
+  timestamp_iso: new Date(event.timestamp).toISOString()
+}));
+
+// BAD - Heavy computation
+tracelog.setTransformer('beforeSend', (event) => {
+  // ❌ Expensive operation blocks event processing
+  const complexHash = computeExpensiveHash(event);
+  const aiPrediction = runLocalMLModel(event);
+  return { ...event, hash: complexHash, prediction: aiPrediction };
+});
+```
+
+### ✅ DO: Use beforeSend to filter events per integration
+
+```typescript
+// Exclude scroll events from custom backend only
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+tracelog.setTransformer('beforeSend', (event) => {
+  // Filter scroll and web_vitals from custom backend
+  // (TraceLog SaaS and local listeners still receive them)
+  if (event.type === 'scroll' || event.type === 'web_vitals') {
+    return null;
+  }
+  return event;
+});
+
+tracelog.on('event', (event) => {
+  // Receives all events including scroll and web_vitals
+  console.log('Event:', event.type);
+});
+```
+
+### ✅ DO: Use conditional batch cancellation wisely
+
+```typescript
+// Cancel send during offline/QA/admin sessions
+tracelog.setTransformer('beforeBatch', (queue) => {
+  // Offline: Keep events queued for next attempt
+  if (!navigator.onLine) {
+    return null; // Events stay in queue
+  }
+
+  // Admin users: Don't send to analytics
+  if (isAdminUser()) {
+    return null; // Skip analytics for admins
+  }
+
+  // QA mode: Don't pollute production data
+  if (window.location.search.includes('qa_mode=true')) {
+    return null;
+  }
+
+  return queue;
+});
+```
+
+### ✅ DO: Handle transformer errors gracefully
+
+```typescript
+// Transformers auto-catch errors and use original event
+tracelog.setTransformer('beforeSend', (event) => {
+  try {
+    // Your transformation logic
+    return transformEvent(event);
+  } catch (error) {
+    // Optional: Log error for debugging
+    console.warn('Transformer error:', error);
+    // Returning original event on error is automatic
+    // but you can also return null to exclude this event
+    return event;
+  }
+});
+```
+
+### ❌ DON'T: Mutate event objects
+
+```typescript
+// BAD - Mutates original event
+tracelog.setTransformer('beforeSend', (event) => {
+  event.custom_field = 'value'; // ❌ Mutation
+  return event;
+});
+
+// GOOD - Return new object
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,                    // ✅ Spread operator
+  custom_field: 'value'
+}));
+```
+
+### ❌ DON'T: Expect transformers to modify TraceLog SaaS events
+
+```typescript
+// Transformers are silently ignored for TraceLog SaaS (schema protection)
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' }  // TraceLog SaaS
+  }
+});
+
+// This transformer will NOT affect TraceLog SaaS events
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,
+  custom_field: 'value'  // ❌ Ignored for TraceLog SaaS
+}));
+
+// GOOD - Use disabledEvents config to control what's sent to TraceLog SaaS
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' }
+  },
+  disabledEvents: ['scroll', 'web_vitals']  // ✅ Controls SaaS event collection
+});
+```
+
+### ✅ DO: Apply transformers to multiple integrations
+
+```typescript
+// Multiple integrations with shared transformations
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' },
+    googleAnalytics: { measurementId: 'G-XXXXXX' }
+  }
+});
+
+// Transformers apply to both Custom Backend and Google Analytics
+tracelog.setTransformer('beforeSend', (event) => {
+  // Custom backend receives this transformation
+  if (event.type === 'custom' && event.custom_event) {
+    return {
+      event_name: event.custom_event.name,
+      event_data: event.custom_event.metadata,
+      timestamp: event.timestamp
+    };
+  }
+  return event;
+});
+
+// Batch-level auth for custom backend only
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  auth: { token: getAuthToken() }
+}));
+```
+
+---
+
 ## Testing & QA
 
 ### ✅ DO: Use QA mode for debugging

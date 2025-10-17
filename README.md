@@ -118,11 +118,12 @@ await tracelog.init({
   disabledEvents: ['scroll'],  // Disable specific auto-tracked events
                                 // Options: 'scroll', 'web_vitals', 'error'
 
-  // Integrations (pick one or none)
+  // Integrations (use one, multiple, or none)
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
     custom: { collectApiUrl: 'https://api.com' },    // Custom backend
     googleAnalytics: { measurementId: 'G-XXXXXX' }   // GA4 forwarding
+    // Note: tracelog + custom can work simultaneously (events sent to both)
   },
 
   // Web Vitals filtering
@@ -226,7 +227,23 @@ await tracelog.init({
 });
 ```
 
-### 4. Google Analytics
+### 4. Multiple Destinations (Simultaneous Sending)
+```typescript
+// Send events to BOTH TraceLog SaaS AND your custom backend
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project' },      // → Sent to TraceLog
+    custom: { collectApiUrl: 'https://api.com' }  // → Sent to your API
+  }
+});
+
+// Events are sent to both destinations in parallel
+// - If either succeeds, events are marked as delivered
+// - Failed events are persisted for next-page recovery
+// - Transformers only apply to custom backend (TraceLog schema protected)
+```
+
+### 5. Google Analytics
 ```typescript
 await tracelog.init({
   integrations: {
@@ -236,6 +253,86 @@ await tracelog.init({
 ```
 
 **→ [Integration Setup Guide](./API_REFERENCE.md#integration-configuration)**
+
+---
+
+## Event Transformers
+
+Transform events before sending to integrations using runtime methods. Perfect for adding authentication, field mapping, or filtering events per integration.
+
+```typescript
+// Pre-fetch async data before init
+const authToken = await getAuthToken();
+const userId = await getCurrentUserId();
+
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// Set transformers after init
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,
+  event_name: event.type,
+  user_id: userId,
+  auth_token: authToken
+}));
+
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  batch_metadata: { app_version: '1.0.0' }
+}));
+```
+
+**Integration Support:**
+
+| Integration | beforeSend | beforeBatch |
+|-------------|-----------|-------------|
+| TraceLog SaaS | ❌ Silently ignored | ❌ Silently ignored |
+| Custom Backend | ✅ Applies | ✅ Applies |
+| Google Analytics | ✅ Applies | ❌ N/A |
+
+**Rules:**
+- **Synchronous only** - No `async`/`await` (library validates and throws error)
+- **Fast execution** - Target <10ms, warnings logged if >50ms
+- **Error safe** - Automatic error catching, original event used as fallback
+- **Return `null`** - Filters event from batch or cancels entire batch send
+- **Pre-fetch data** - Fetch auth tokens/context BEFORE init, use in synchronous transformers
+
+**→ [Complete Transformers Guide](./API_REFERENCE.md#event-transformers-runtime-methods)**
+**→ [Transformer Best Practices](./BEST_PRACTICES.md#event-transformers)**
+**→ [Transformer Security](./SECURITY.md#4-event-transformer-security)**
+
+### Dynamic Transformer Updates
+
+Update transformers at runtime without re-initialization:
+
+```typescript
+// Update auth token when it refreshes
+setInterval(() => {
+  tracelog.setTransformer('beforeBatch', (queue) => ({
+    ...queue,
+    auth: { token: getRefreshedToken() }
+  }));
+}, 3600000); // Every hour
+
+// Disable transformers for admin users
+if (user.role === 'admin') {
+  tracelog.removeTransformer('beforeSend');
+  tracelog.removeTransformer('beforeBatch');
+}
+
+// A/B test transformer strategies
+if (abTestVariant === 'detailed') {
+  tracelog.setTransformer('beforeSend', (event) => ({
+    ...event,
+    detailed_metadata: getDetailedContext()
+  }));
+}
+```
+
+**→ [Runtime Transformer API](./API_REFERENCE.md#runtime-transformers)**
 
 ---
 

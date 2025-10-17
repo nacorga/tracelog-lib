@@ -28,6 +28,10 @@ export interface TraceLogTestBridge {
   on(event: string, callback: (data: any) => void): void;
   off(event: string, callback: (data: any) => void): void;
 
+  // Transformer methods
+  setTransformer(hook: 'beforeSend' | 'beforeBatch', fn: (data: any) => any | null): void;
+  removeTransformer(hook: 'beforeSend' | 'beforeBatch'): void;
+
   // Session management
   getSessionData(): Record<string, unknown> | null;
   setSessionTimeout(timeout: number): void;

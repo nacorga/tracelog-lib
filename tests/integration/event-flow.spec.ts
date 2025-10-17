@@ -30,6 +30,12 @@ describe('Event Flow Integration', () => {
         samplingRate: 1,
         sensitiveQueryParams: [],
         sessionTimeout: 900000,
+        integrations: {
+          custom: {
+            collectApiUrl: 'http://localhost:3000/collect',
+            allowHttp: true,
+          },
+        },
       }),
     );
 
@@ -283,12 +289,14 @@ describe('Event Flow Integration', () => {
         custom_event: { name: 'test_event' },
       });
 
-      const payload = eventManager['buildEventsPayload']();
+      const payloads = eventManager['buildEventsPayloads']();
+      const payload = payloads.saas ?? payloads.custom;
 
-      expect(payload.events.length).toBe(3);
-      expect(payload.session_id).toBe('test-session');
-      expect(payload.user_id).toBeUndefined();
-      expect(payload.device).toBeUndefined();
+      expect(payload).toBeDefined();
+      expect(payload!.events.length).toBe(3);
+      expect(payload!.session_id).toBe('test-session');
+      expect(payload!.user_id).toBeUndefined();
+      expect(payload!.device).toBeUndefined();
     });
 
     it('should sort events by timestamp in queue', () => {
@@ -313,12 +321,14 @@ describe('Event Flow Integration', () => {
         custom_event: { name: 'third' },
       });
 
-      const payload = eventManager['buildEventsPayload']();
+      const payloads = eventManager['buildEventsPayloads']();
+      const payload = payloads.saas ?? payloads.custom;
 
+      expect(payload).toBeDefined();
       // Events should be sorted by timestamp
-      const event0 = payload.events[0];
-      const event1 = payload.events[1];
-      const event2 = payload.events[2];
+      const event0 = payload!.events[0];
+      const event1 = payload!.events[1];
+      const event2 = payload!.events[2];
       expect(event0).toBeDefined();
       expect(event1).toBeDefined();
       expect(event2).toBeDefined();
@@ -340,11 +350,13 @@ describe('Event Flow Integration', () => {
         custom_event: { name: 'duplicate_event' },
       });
 
-      const payload = eventManager['buildEventsPayload']();
+      const payloads = eventManager['buildEventsPayloads']();
+      const payload = payloads.saas ?? payloads.custom;
 
-      // Should keep only one (deduplication in buildEventsPayload)
-      const duplicateEvents = payload.events.filter(
-        (e) => e.type === EventType.CUSTOM && e.custom_event?.name === 'duplicate_event',
+      expect(payload).toBeDefined();
+      // Should keep only one (deduplication in buildEventsPayloads)
+      const duplicateEvents = payload!.events.filter(
+        (e: any) => e.type === EventType.CUSTOM && e.custom_event?.name === 'duplicate_event',
       );
 
       expect(duplicateEvents.length).toBe(1);
@@ -361,6 +373,12 @@ describe('Event Flow Integration', () => {
             environment: 'production',
             version: '1.0.0',
           },
+          integrations: {
+            custom: {
+              collectApiUrl: 'http://localhost:3000/collect',
+              allowHttp: true,
+            },
+          },
         }),
       );
 
@@ -369,11 +387,13 @@ describe('Event Flow Integration', () => {
         custom_event: { name: 'test' },
       });
 
-      const payload = eventManager['buildEventsPayload']();
+      const payloads = eventManager['buildEventsPayloads']();
+      const payload = payloads.saas ?? payloads.custom;
 
-      expect(payload.global_metadata).toBeDefined();
-      expect(payload.global_metadata?.environment).toBe('production');
-      expect(payload.global_metadata?.version).toBe('1.0.0');
+      expect(payload).toBeDefined();
+      expect(payload!.global_metadata).toBeDefined();
+      expect(payload!.global_metadata?.environment).toBe('production');
+      expect(payload!.global_metadata?.version).toBe('1.0.0');
     });
 
     it('should omit global metadata when not configured', () => {
@@ -382,9 +402,11 @@ describe('Event Flow Integration', () => {
         custom_event: { name: 'test' },
       });
 
-      const payload = eventManager['buildEventsPayload']();
+      const payloads = eventManager['buildEventsPayloads']();
+      const payload = payloads.saas ?? payloads.custom;
 
-      expect(payload.global_metadata).toBeUndefined();
+      expect(payload).toBeDefined();
+      expect(payload!.global_metadata).toBeUndefined();
     });
   });
 

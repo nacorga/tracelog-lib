@@ -29,9 +29,16 @@ describe('EventManager - No Infinite Retry Loops', () => {
     const mockGet = vi.fn((key: string) => {
       if (key === 'sessionId') return 'test-session-123';
       if (key === 'userId') return 'test-user-456';
-      if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
+      if (key === 'collectApiUrls') return { saas: '', custom: 'http://localhost:3000/collect' };
       if (key === 'device') return DeviceType.Desktop;
       if (key === 'pageUrl') return 'http://localhost:3000/test';
+      if (key === 'transformers') return {};
+      if (key === 'config')
+        return {
+          integrations: {
+            custom: { collectApiUrl: 'http://localhost:3000/collect' },
+          },
+        };
       return undefined;
     });
     (StateManager.prototype as any).get = mockGet;

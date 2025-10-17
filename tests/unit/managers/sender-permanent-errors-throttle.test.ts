@@ -37,7 +37,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
     // Setup minimal state for SenderManager
     vi.spyOn(senderManager as any, 'get').mockImplementation((key: unknown) => {
       if (key === 'config') return { id: 'test-project' };
-      if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
+      if (key === 'collectApiUrls') return { saas: '', custom: 'http://localhost:3000/collect' };
       if (key === 'userId') return 'anonymous';
       return null;
     });
@@ -56,7 +56,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
     });
 
     const body = createEventDto();
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     // First error should be logged
     expect(logSpy).toHaveBeenCalledWith(
@@ -78,12 +78,12 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
     const body = createEventDto();
 
     // First call - should log
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     const firstCallCount = logSpy.mock.calls.filter((call) => call[1]?.toString().includes('Permanent error')).length;
 
     // Second call immediately after - should NOT log (throttled)
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     const secondCallCount = logSpy.mock.calls.filter((call) => call[1]?.toString().includes('Permanent error')).length;
 
@@ -106,10 +106,10 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
     const body = createEventDto();
 
     // First error: 403
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     // Second error: 404 (different status)
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     // Both should be logged (different status codes)
     const permanentErrorLogs = logSpy.mock.calls.filter((call) => call[1]?.toString().includes('Permanent error'));
@@ -128,7 +128,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
     const body = createEventDto();
 
     // First error - should log
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     const initialLogCount = logSpy.mock.calls.filter((call) => call[1]?.toString().includes('Permanent error')).length;
 
@@ -136,7 +136,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
     vi.advanceTimersByTime(PERMANENT_ERROR_LOG_THROTTLE_MS + 1000);
 
     // Second error after throttle expires - should log again
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     const finalLogCount = logSpy.mock.calls.filter((call) => call[1]?.toString().includes('Permanent error')).length;
 
@@ -162,10 +162,10 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
     const body = createEventDto();
 
     // First: permanent error
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     // Second: temporary error (should NOT use permanent error log)
-    await senderManager.sendEventsQueue(body);
+    await senderManager.sendEventsQueue({ custom: body });
 
     const permanentErrorLogs = logSpy.mock.calls.filter((call) => call[1]?.toString().includes('Permanent error'));
 
@@ -184,7 +184,7 @@ describe('SenderManager - Permanent Error Log Throttling', () => {
 
     // Send 5 events rapidly
     for (let i = 0; i < 5; i++) {
-      await senderManager.sendEventsQueue(body);
+      await senderManager.sendEventsQueue({ custom: body });
     }
 
     const permanentErrorLogs = logSpy.mock.calls.filter((call) => call[1]?.toString().includes('Permanent error'));

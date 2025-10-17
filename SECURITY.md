@@ -176,7 +176,123 @@ tracelog.event('user_registered', {
 
 ---
 
-### 4. **Conditional Sampling Based on Consent**
+### 4. **Event Transformer Security**
+
+Event transformers provide powerful customization but require careful security consideration:
+
+**⚠️ CRITICAL: Transformers Run Before Backend Send**
+
+Transformers execute **before** data leaves your application. Any sensitive data you add via transformers will be transmitted to backends.
+
+**✅ GOOD: Safe Transformer Patterns**
+
+```typescript
+// Fetch auth tokens securely (from memory, not localStorage)
+const authToken = await getAuthTokenFromMemory();
+
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// Set transformer with pre-fetched secure data
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  auth: {
+    token: authToken,  // Safe: API token (pre-fetched)
+    timestamp: Date.now()
+  },
+  context: {
+    app_version: '1.0.0',  // Safe: non-sensitive
+    environment: 'production'  // Safe: non-sensitive
+  }
+}));
+```
+
+**❌ BAD: Insecure Transformer Patterns**
+
+```typescript
+// DON'T DO THIS - Adds PII before backend send
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,
+  user_email: getCurrentUserEmail(),  // ❌ PII leak
+  user_phone: getUserPhone(),         // ❌ PII leak
+  ip_address: getUserIP()             // ❌ PII leak
+}));
+
+// DON'T DO THIS - Exposes credentials
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  auth: {
+    api_key: localStorage.getItem('api_key'),  // ❌ Exposed secret
+    password: getPassword()                     // ❌ Critical leak
+  }
+}));
+```
+
+**Transformer Security Guidelines:**
+
+1. **Never add PII** - Do not inject email, phone, address, or other personally identifiable information
+2. **Never expose secrets** - Do not include passwords, private keys, or sensitive API credentials
+3. **Sanitize transformed data** - Apply same PII sanitization you would to custom events
+4. **Use hashed IDs** - If adding user identifiers, hash them first (SHA-256 + salt)
+5. **Validate returned data** - Ensure transformers don't accidentally expose `localStorage`, `sessionStorage`, or global variables
+6. **Limit transformer access** - Only pass pre-fetched, sanitized data to transformers
+
+**Example: Secure User Context Transformer**
+
+```typescript
+// Pre-fetch and sanitize data BEFORE init
+const userContext = {
+  userId: await hashUserId(user.id),  // Hashed, not raw
+  sessionId: generateSecureSessionId(),
+  tier: user.subscriptionTier,        // Non-sensitive
+  cohort: user.abTestCohort           // Non-sensitive
+};
+
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// Set transformer with pre-sanitized data
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  user_context: userContext  // Pre-sanitized data only
+}));
+```
+
+**⚠️ Integration-Specific Transformer Rules:**
+
+| Integration | beforeSend | beforeBatch | Security Note |
+|-------------|-----------|-------------|---------------|
+| **TraceLog SaaS** | ❌ Silently ignored | ❌ Silently ignored | Schema protected, transformers ignored |
+| **Custom Backend** | ✅ Allowed | ✅ Allowed | Full control = full responsibility |
+| **Google Analytics** | ✅ Allowed | ❌ N/A | GA receives transformed data |
+
+**Testing Transformer Security:**
+
+```typescript
+// Test transformer output in QA mode
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+tracelog.setTransformer('beforeBatch', (queue) => {
+  console.log('📦 Batch before send:', queue);  // Inspect in DevTools
+  return queue;
+});
+
+// Verify NO sensitive data in console output
+```
+
+---
+
+### 5. **Conditional Sampling Based on Consent**
 
 Different users may have different consent levels. Adjust sampling accordingly:
 
@@ -237,6 +353,8 @@ Before deploying TraceLog to production (especially e-commerce):
 - [ ] **Sensitive elements marked** - All payment/admin UI has `data-tlog-ignore`
 - [ ] **Custom events sanitized** - No PII in `tracelog.event()` metadata
 - [ ] **URL params configured** - Application-specific sensitive params added to config
+- [ ] **Transformers reviewed** - No PII or secrets added in `beforeSend`/`beforeBatch` hooks
+- [ ] **Transformer output inspected** - Verified payload in DevTools Network tab or QA mode
 
 ### Testing
 
@@ -343,6 +461,7 @@ npm run test:e2e -- error-tracking
 | **Consent management** | ❌ Not handled | Implement before init() |
 | **Sensitive UI elements** | ✅ `data-tlog-ignore` support | Mark all sensitive elements |
 | **Custom event data** | ❌ Not sanitized | Sanitize before sending |
+| **Event transformers** | ❌ Not sanitized | Never add PII/secrets in transformers |
 | **Data retention** | ✅ Client: 2hr auto-cleanup | Server: configure in backend |
 
 **Remember:** TraceLog is privacy-first by design, but **you** are ultimately responsible for GDPR/LOPD compliance in your application.
