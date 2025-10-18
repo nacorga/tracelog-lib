@@ -38,12 +38,11 @@ describe('SenderManager Edge Cases', () => {
     mockFetch.mockReset();
 
     storageManager = new StorageManager();
-    senderManager = new SenderManager(storageManager);
+    senderManager = new SenderManager(storageManager, 'custom', 'http://localhost:3000/collect');
 
     // Setup minimal state
     vi.spyOn(senderManager as any, 'get').mockImplementation((key: unknown) => {
       if (key === 'config') return { id: 'test-project' };
-      if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
       if (key === 'userId') return 'anonymous';
       return null;
     });
@@ -160,7 +159,7 @@ describe('SenderManager Edge Cases', () => {
 
   describe('Invalid Persisted Data Recovery', () => {
     it('should handle corrupted JSON in persisted data', async () => {
-      const storageKey = 'tlog:queue:anonymous';
+      const storageKey = 'tlog:queue:anonymous:custom';
       storageManager.setItem(storageKey, 'invalid-json{{{');
 
       const onSuccess = vi.fn();
@@ -173,7 +172,7 @@ describe('SenderManager Edge Cases', () => {
     });
 
     it('should ignore persisted data without timestamp', async () => {
-      const storageKey = 'tlog:queue:anonymous';
+      const storageKey = 'tlog:queue:anonymous:custom';
       storageManager.setItem(
         storageKey,
         JSON.stringify({
@@ -193,7 +192,7 @@ describe('SenderManager Edge Cases', () => {
     });
 
     it('should ignore expired persisted data', async () => {
-      const storageKey = 'tlog:queue:anonymous';
+      const storageKey = 'tlog:queue:anonymous:custom';
       const expiredTimestamp = Date.now() - 25 * 60 * 60 * 1000; // 25 hours ago
 
       storageManager.setItem(
@@ -215,7 +214,7 @@ describe('SenderManager Edge Cases', () => {
     });
 
     it('should ignore persisted data with empty events array', async () => {
-      const storageKey = 'tlog:queue:anonymous';
+      const storageKey = 'tlog:queue:anonymous:custom';
 
       storageManager.setItem(
         storageKey,
@@ -274,14 +273,14 @@ describe('SenderManager Edge Cases', () => {
       expect(onFailure).toHaveBeenCalled();
 
       // Verify events were persisted
-      const storageKey = 'tlog:queue:anonymous';
+      const storageKey = 'tlog:queue:anonymous:custom';
       const persisted = storageManager.getItem(storageKey);
       expect(persisted).toBeTruthy();
     });
 
     it('should not persist on permanent errors (4xx)', async () => {
       // Clear any previous persisted events
-      const storageKey = 'tlog:queue:anonymous';
+      const storageKey = 'tlog:queue:anonymous:custom';
       storageManager.removeItem(storageKey);
 
       mockFetch.mockResolvedValue({

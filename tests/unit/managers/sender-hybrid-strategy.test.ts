@@ -26,11 +26,10 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
   beforeEach(() => {
     storageManager = new StorageManager();
-    senderManager = new SenderManager(storageManager);
+    senderManager = new SenderManager(storageManager, 'custom', 'http://localhost:3000/collect');
 
     // Mock global state
     const mockGet = vi.fn((key: string) => {
-      if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
       if (key === 'userId') return 'test-user';
       return undefined;
     });
@@ -76,7 +75,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
         statusText: 'Forbidden',
       });
 
-      const storageKey = 'tlog:queue:test-user';
+      const storageKey = 'tlog:queue:test-user:custom';
       storageManager.removeItem(storageKey);
 
       const body = createEventDto();
@@ -208,7 +207,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
   describe('Event Recovery from Persistence', () => {
     it('should recover persisted events on successful send', async () => {
       // Simulate persisted events from previous session
-      const storageKey = 'tlog:queue:test-user';
+      const storageKey = 'tlog:queue:test-user:custom';
       const persistedData = {
         user_id: 'test-user',
         session_id: 'old-session',
@@ -237,7 +236,7 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
     });
 
     it('should skip recovery of expired events', async () => {
-      const storageKey = 'tlog:queue:test-user';
+      const storageKey = 'tlog:queue:test-user:custom';
       const expiredTimestamp = Date.now() - 3 * 60 * 60 * 1000; // 3 hours ago
 
       const persistedData = {

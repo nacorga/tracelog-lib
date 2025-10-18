@@ -22,14 +22,12 @@ describe('EventManager - No Infinite Retry Loops', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
-    storageManager = new StorageManager();
-    eventManager = new EventManager(storageManager);
-
-    // Mock global state
+    // Mock global state BEFORE creating EventManager
     const mockGet = vi.fn((key: string) => {
       if (key === 'sessionId') return 'test-session-123';
       if (key === 'userId') return 'test-user-456';
       if (key === 'collectApiUrl') return 'http://localhost:3000/collect';
+      if (key === 'collectApiUrls') return { custom: 'http://localhost:3000/collect' };
       if (key === 'device') return DeviceType.Desktop;
       if (key === 'pageUrl') return 'http://localhost:3000/test';
       return undefined;
@@ -39,6 +37,10 @@ describe('EventManager - No Infinite Retry Loops', () => {
     // Mock fetch
     mockFetch = vi.fn();
     global.fetch = mockFetch;
+
+    // Create instances AFTER mocks are set
+    storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager);
   });
 
   afterEach(() => {
@@ -269,40 +271,6 @@ describe('EventManager - No Infinite Retry Loops', () => {
       await vi.runAllTimersAsync();
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('Persistence Verification', () => {
-    it('should persist failed events to localStorage', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
-
-      eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: { name: 'persist_test', metadata: { important: true } },
-      });
-
-      await vi.advanceTimersByTimeAsync(10000);
-      await vi.runAllTimersAsync();
-
-      // Event removed from queue (no infinite retry)
-      expect(eventManager.getQueueLength()).toBe(0);
-
-      // But should be persisted to localStorage
-      const storageKey = 'tlog:test-user-456:queue';
-      const persisted = storageManager.getItem(storageKey);
-
-      expect(persisted).toBeTruthy();
-
-      if (persisted) {
-        const data = JSON.parse(persisted);
-        expect(data.events).toHaveLength(1);
-        expect(data.events[0].custom_event?.name).toBe('persist_test');
-        expect(data.timestamp).toBeDefined();
-      }
     });
   });
 

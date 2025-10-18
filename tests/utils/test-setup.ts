@@ -83,11 +83,15 @@ export const setupTestState = (config: Config = createTestConfig()): void => {
     setSessionId(id: string): void {
       this.set('sessionId', id);
     }
+    setCollectApiUrls(urls: { saas?: string; custom?: string }): void {
+      this.set('collectApiUrls', urls);
+    }
   })();
 
   tempStateManager.setConfig(config);
   tempStateManager.setPageUrl('https://example.com');
   tempStateManager.setSessionId('test-session');
+  tempStateManager.setCollectApiUrls({}); // Empty by default (standalone mode)
 };
 
 /**

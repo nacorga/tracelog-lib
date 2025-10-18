@@ -605,6 +605,38 @@ await tracelog.init({
 - Forwards custom events to GA4 via `gtag()` (requires gtag.js loaded)
 - Does not forward automatic events (clicks, scrolls, etc.)
 
+#### Multi-Integration (TraceLog SaaS + Custom Backend)
+
+**New in v1.1.0:** You can now configure **multiple integrations simultaneously**. Events are sent to all configured endpoints independently with parallel processing.
+
+```typescript
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' },           // TraceLog analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }    // Custom data warehouse
+  }
+});
+
+// Events sent to BOTH endpoints with:
+// ✅ Independent error handling (4xx/5xx per integration)
+// ✅ Independent retry/persistence (separate localStorage keys)
+// ✅ Parallel sending (non-blocking)
+```
+
+**Use Cases:**
+- **Analytics + Data Warehouse:** Send to TraceLog for dashboards + custom warehouse for long-term storage
+- **Compliance:** Send to both production analytics and compliance logging system
+- **Migration:** Dual-send during migration from custom backend to TraceLog SaaS
+
+**Technical Details:**
+
+| Feature | Behavior |
+|---------|----------|
+| **Error Handling** | Each integration handles 4xx (permanent) and 5xx (temporary) errors independently |
+| **Persistence** | Separate localStorage keys: `tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom` |
+| **Recovery** | Failed events recovered independently per integration on next page load |
+| **Sending** | Async: Parallel with `Promise.allSettled()`, Sync (sendBeacon): All must succeed |
+
 ---
 
 ## Event Types

@@ -235,6 +235,21 @@ await tracelog.init({
 });
 ```
 
+### 5. Multi-Integration (TraceLog SaaS + Custom Backend)
+```typescript
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' },           // Analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }    // Data warehouse
+  }
+});
+
+// Events sent to BOTH endpoints independently
+// - Independent error handling per integration
+// - Independent retry/persistence per integration
+// - Parallel sending (non-blocking)
+```
+
 **→ [Integration Setup Guide](./API_REFERENCE.md#integration-configuration)**
 
 ---

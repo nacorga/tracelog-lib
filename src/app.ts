@@ -8,7 +8,7 @@ import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
 import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrl, detectQaMode, log } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrls, detectQaMode, log } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -152,8 +152,8 @@ export class App extends StateManager {
     const userId = UserManager.getId(this.managers.storage as StorageManager);
     this.set('userId', userId);
 
-    const collectApiUrl = getCollectApiUrl(config);
-    this.set('collectApiUrl', collectApiUrl);
+    const collectApiUrls = getCollectApiUrls(config);
+    this.set('collectApiUrls', collectApiUrls);
 
     const device = getDeviceType();
     this.set('device', device);
