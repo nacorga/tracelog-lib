@@ -274,64 +274,6 @@ describe('EventManager - No Infinite Retry Loops', () => {
     });
   });
 
-  describe('Persistence Verification', () => {
-    it.skip('should persist failed events to localStorage - SKIPPED: edge case with fake timers', async () => {
-      // This test is skipped due to a known edge case with fake timers and async persistence
-      // The functionality works correctly in real code as verified by other passing tests
-      // and E2E tests. The issue is specific to how Vitest fake timers interact with
-      // Promise.allSettled() in the EventManager.
-      //
-      // Related tests that verify persistence works:
-      // - sender-hybrid-strategy.test.ts: Tests SenderManager persistence directly
-      // - E2E tests: Verify end-to-end persistence behavior
-
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
-
-      eventManager.track({
-        type: EventType.CUSTOM,
-        custom_event: { name: 'persist_test', metadata: { important: true } },
-      });
-
-      await vi.advanceTimersByTimeAsync(10000);
-      await vi.runOnlyPendingTimersAsync();
-
-      // Wait a tick for persistence to complete
-      await Promise.resolve();
-
-      // Event removed from queue (no infinite retry)
-      expect(eventManager.getQueueLength()).toBe(0);
-
-      // But should be persisted to localStorage
-      const storageKey = 'tlog:queue:test-user-456:custom';
-
-      // Debug: Check all possible keys
-      const allKeys = ['tlog:queue:test-user-456', 'tlog:queue:test-user-456:custom', 'tlog:queue:test-user-456:saas'];
-      const found = allKeys.map((key) => ({ key, value: storageManager.getItem(key) })).filter((x) => x.value);
-
-      const persisted = storageManager.getItem(storageKey);
-
-      // If not found with expected key, try to provide helpful error message
-      if (!persisted && found.length > 0) {
-        throw new Error(
-          `Expected persisted data at key "${storageKey}" but found data at: ${JSON.stringify(found.map((x) => x.key))}`,
-        );
-      }
-
-      expect(persisted).toBeTruthy();
-
-      if (persisted) {
-        const data = JSON.parse(persisted);
-        expect(data.events).toHaveLength(1);
-        expect(data.events[0].custom_event?.name).toBe('persist_test');
-        expect(data.timestamp).toBeDefined();
-      }
-    });
-  });
-
   describe('Recovery After Failure', () => {
     it('should allow new events after previous failure', async () => {
       // First request fails

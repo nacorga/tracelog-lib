@@ -36,7 +36,7 @@ Core business logic components that handle analytics data processing, state mana
   - Parallel async sending with `Promise.allSettled()` (independent success/failure per integration)
   - Sync sending with `sendBeacon()` requires all integrations to succeed
   - Independent error handling (4xx/5xx) and persistence per integration
-- **Standalone mode**: Queue events emitted without clearing queue when no integrations configured
+- **Standalone mode**: Queue events emitted and cleared after emission when no integrations configured
 - **Synchronous and asynchronous flushing**: Dual-mode for normal operation and page unload scenarios
 - **Event persistence recovery**: Automatic recovery from localStorage on initialization (independent per integration)
 - **QA mode**: Console logging for custom events without backend transmission
