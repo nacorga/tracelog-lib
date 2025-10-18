@@ -4,7 +4,7 @@ Core business logic components that handle analytics data processing, state mana
 
 ## EventManager
 
-**Purpose**: Core component responsible for event tracking, queue management, deduplication, rate limiting, and API communication coordination.
+**Purpose**: Core component responsible for event tracking, queue management, deduplication, rate limiting, and multi-integration API communication coordination.
 
 **Core Functionality**:
 - **Event Tracking**: Captures user interactions (clicks, scrolls, page views, custom events, web vitals, errors)
@@ -15,8 +15,9 @@ Core business logic components that handle analytics data processing, state mana
 - **Per-Session Caps**: Configurable limits prevent runaway event generation (1000 total, type-specific limits)
 - **Dynamic Queue Flush**: Events sent immediately when batch threshold (50 events) is reached
 - **Pending Events Buffer**: Buffers up to 100 events before session initialization to prevent data loss
-- **Event Recovery**: Recovers persisted events from localStorage after crashes or network failures
-- **API Communication**: Coordinates with SenderManager for reliable event transmission
+- **Event Recovery**: Recovers persisted events from localStorage after crashes or network failures (independent per integration)
+- **Multi-Integration Orchestration**: Manages 0-2 SenderManager instances (SaaS + Custom) with parallel async sending
+- **Standalone Mode Support**: Emits queue events without network requests when no integrations configured
 - **Event Emitter**: Emits events locally for standalone mode and external integrations
 - **Integration Support**: Forwards custom events to Google Analytics when configured
 
@@ -31,8 +32,13 @@ Core business logic components that handle analytics data processing, state mana
 - **Per-session event caps**: Total 1000/session, Clicks 500, Page views 100, Custom 500, Viewport 200, Scroll 120
 - **Dynamic flush**: Immediate send when 50-event batch threshold reached
 - **Sampling support**: Client-side event sampling with configurable rate (0-1)
+- **Multi-integration sending**:
+  - Parallel async sending with `Promise.allSettled()` (independent success/failure per integration)
+  - Sync sending with `sendBeacon()` requires all integrations to succeed
+  - Independent error handling (4xx/5xx) and persistence per integration
+- **Standalone mode**: Queue events emitted without clearing queue when no integrations configured
 - **Synchronous and asynchronous flushing**: Dual-mode for normal operation and page unload scenarios
-- **Event persistence recovery**: Automatic recovery from localStorage on initialization
+- **Event persistence recovery**: Automatic recovery from localStorage on initialization (independent per integration)
 - **QA mode**: Console logging for custom events without backend transmission
 - **Event emitter integration**: Local event consumption via `EmitterEvent.EVENT` and `EmitterEvent.QUEUE`
 
@@ -53,17 +59,21 @@ Core business logic components that handle analytics data processing, state mana
 
 ## SenderManager
 
-**Purpose**: Reliable event transmission to the analytics API with network resilience and event persistence for cross-session recovery.
+**Purpose**: Integration-aware event transmission with network resilience and independent persistence per integration (SaaS/Custom).
 
 **Core Functionality**:
+- **Integration-Specific Sending**: Each instance handles one integration (identified by `integrationId`: 'saas' or 'custom')
 - **Network Transmission**: Sends analytics events via HTTP POST (async) or sendBeacon (sync)
-- **Event Persistence**: localStorage-based persistence for recovery after network failures
-- **Permanent Error Detection**: Identifies 4xx errors as unrecoverable to prevent retry loops
+- **Independent Persistence**: localStorage-based persistence with integration-specific keys (`tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom`)
+- **Permanent Error Detection**: Identifies 4xx errors as unrecoverable to prevent retry loops (clears storage, no retry)
 - **Synchronous Support**: Uses `navigator.sendBeacon()` for page unload scenarios
-- **Recovery on Next Load**: Automatically recovers persisted events when page reloads
+- **Independent Recovery**: Automatically recovers persisted events when page reloads (per integration)
 - **Recovery Guard**: Prevents concurrent recovery attempts during rapid navigation
 
 **Key Features**:
+- **Integration-aware architecture** - Constructor accepts `integrationId` and `apiUrl` parameters
+  - Multiple instances can coexist (one per integration)
+  - Independent storage keys prevent cross-integration interference
 - **No in-session retries** - Events removed from queue immediately after send failure
   - Prevents infinite retry loops during API outages (critical fix)
   - Failed events persist to localStorage for next-page-load recovery
@@ -77,10 +87,15 @@ Core business logic components that handle analytics data processing, state mana
   - Persists oversized payloads for recovery instead of silent failure
   - Prevents data loss at page unload with large event batches
   - Configured via `MAX_BEACON_PAYLOAD_SIZE` constant
-- **Permanent error throttling** - 1 log per status code per minute
+- **Permanent error throttling** - 1 log per status code per minute with integration label
 - **Request timeout** - 10 seconds with AbortController
-- **Sanitized error logging** - Domain masking for privacy
+- **Sanitized error logging** - Domain masking for privacy with `[saas]` or `[custom]` labels
 - **Test mode support** - QA scenarios and mock failures
+
+**Integration Storage Keys**:
+- **SaaS**: `tlog:queue:{userId}:saas`
+- **Custom**: `tlog:queue:{userId}:custom`
+- **Legacy/Standalone**: `tlog:queue:{userId}` (no suffix)
 
 ## SessionManager
 
