@@ -29,14 +29,14 @@ export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
   private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
+  private readonly recentEventFingerprints = new Map<string, number>();
+  private readonly perEventRateLimits: Map<string, number[]> = new Map();
 
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
-  private readonly recentEventFingerprints = new Map<string, number>(); // Time-based deduplication cache
   private sendIntervalId: number | null = null;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
-  private readonly perEventRateLimits: Map<string, number[]> = new Map();
   private sessionEventCounts: {
     total: number;
     [key: string]: number;
@@ -60,7 +60,6 @@ export class EventManager extends StateManager {
     this.googleAnalytics = googleAnalytics;
     this.emitter = emitter;
 
-    // Create 0-2 SenderManager instances based on configured integrations
     this.dataSenders = [];
     const collectApiUrls = this.get('collectApiUrls');
 
@@ -74,7 +73,6 @@ export class EventManager extends StateManager {
   }
 
   async recoverPersistedEvents(): Promise<void> {
-    // Recover persisted events independently for each integration
     const recoveryPromises = this.dataSenders.map(async (sender) =>
       sender.recoverPersistedEvents({
         onSuccess: (_eventCount, recoveredEvents, body) => {
@@ -139,7 +137,6 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Reset session counters if session ID changed (Phase 3)
     if (this.lastSessionId !== currentSessionId) {
       this.lastSessionId = currentSessionId;
       this.sessionEventCounts = {
@@ -153,15 +150,14 @@ export class EventManager extends StateManager {
     }
 
     const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
+
     if (!isCriticalEvent && !this.checkRateLimit()) {
       return;
     }
 
     const eventType = type as EventType;
 
-    // Per-session event caps (Phase 3) - skip for critical events
     if (!isCriticalEvent) {
-      // Check total session limit
       if (this.sessionEventCounts.total >= MAX_EVENTS_PER_SESSION) {
         log('warn', 'Session event limit reached', {
           data: {
@@ -170,13 +166,15 @@ export class EventManager extends StateManager {
             limit: MAX_EVENTS_PER_SESSION,
           },
         });
+
         return;
       }
 
-      // Check type-specific limits
       const typeLimit = this.getTypeLimitForEvent(eventType);
+
       if (typeLimit) {
         const currentCount = this.sessionEventCounts[eventType];
+
         if (currentCount !== undefined && currentCount >= typeLimit) {
           log('warn', 'Session event type limit reached', {
             data: {
@@ -185,14 +183,15 @@ export class EventManager extends StateManager {
               limit: typeLimit,
             },
           });
+
           return;
         }
       }
     }
 
-    // Per-event-name rate limiting for CUSTOM events to prevent infinite loops
     if (eventType === EventType.CUSTOM && custom_event?.name) {
       const maxSameEventPerMinute = this.get('config')?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
+
       if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
         return;
       }
@@ -256,9 +255,9 @@ export class EventManager extends StateManager {
 
     this.addToQueue(payload);
 
-    // Increment session counters (Phase 3) - only for non-critical events
     if (!isCriticalEvent) {
       this.sessionEventCounts.total++;
+
       if (this.sessionEventCounts[eventType] !== undefined) {
         this.sessionEventCounts[eventType]++;
       }
@@ -287,7 +286,6 @@ export class EventManager extends StateManager {
     };
     this.lastSessionId = null;
 
-    // Stop all senders
     this.dataSenders.forEach((sender) => {
       sender.stop();
     });
@@ -334,6 +332,10 @@ export class EventManager extends StateManager {
     }
   }
 
+  private isSuccessfulResult(result: PromiseSettledResult<boolean>): boolean {
+    return result.status === 'fulfilled' && result.value === true;
+  }
+
   private flushEvents(isSync: boolean): boolean | Promise<boolean> {
     if (this.eventsQueue.length === 0) {
       return isSync ? true : Promise.resolve(true);
@@ -344,15 +346,14 @@ export class EventManager extends StateManager {
     const eventIds = eventsToSend.map((e) => e.id);
 
     if (this.dataSenders.length === 0) {
-      // Standalone mode - no network requests, but still emit queue event for local listeners
       this.removeProcessedEvents(eventIds);
       this.clearSendInterval();
       this.emitEventsQueue(body);
+
       return isSync ? true : Promise.resolve(true);
     }
 
     if (isSync) {
-      // Sync mode (sendBeacon): All must succeed for true
       const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
       const allSucceeded = results.every((success) => success);
 
@@ -378,15 +379,13 @@ export class EventManager extends StateManager {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
 
-        const anySucceeded = results.some((result) => result.status === 'fulfilled' && result.value === true);
+        const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
 
         if (anySucceeded) {
           this.emitEventsQueue(body);
         }
 
-        const failedCount = results.filter(
-          (result) => result.status === 'rejected' || (result.status === 'fulfilled' && result.value === false),
-        ).length;
+        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
 
         if (failedCount > 0) {
           log(
@@ -411,7 +410,6 @@ export class EventManager extends StateManager {
     const body = this.buildEventsPayload();
 
     if (this.dataSenders.length === 0) {
-      // Standalone mode - emit queue event without clearing queue (no network requests)
       this.emitEventsQueue(body);
       return;
     }
@@ -419,11 +417,8 @@ export class EventManager extends StateManager {
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
 
-    // Send to all integrations independently
     const sendPromises = this.dataSenders.map(async (sender) =>
       sender.sendEventsQueue(body, {
-        // Empty callbacks: SenderManager handles persistence internally.
-        // Success/failure is determined by Promise.allSettled() result inspection below.
         onSuccess: () => {},
         onFailure: () => {},
       }),
@@ -433,7 +428,7 @@ export class EventManager extends StateManager {
 
     this.removeProcessedEvents(eventIds);
 
-    const anySucceeded = results.some((result) => result.status === 'fulfilled' && result.value === true);
+    const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
 
     if (anySucceeded) {
       this.emitEventsQueue(body);
@@ -443,9 +438,7 @@ export class EventManager extends StateManager {
       this.clearSendInterval();
     }
 
-    const failedCount = results.filter(
-      (result) => result.status === 'rejected' || (result.status === 'fulfilled' && result.value === false),
-    ).length;
+    const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
 
     if (failedCount > 0) {
       log('warn', 'Events send completed with some failures, removed from queue and persisted per-integration', {
@@ -506,34 +499,27 @@ export class EventManager extends StateManager {
     return payload;
   }
 
-  /**
-   * Checks if event is a duplicate using time-based cache
-   * Tracks recent event fingerprints with timestamp-based cleanup
-   */
   private isDuplicateEvent(event: EventData): boolean {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event);
 
     const lastSeen = this.recentEventFingerprints.get(fingerprint);
 
-    // Check if seen recently
     if (lastSeen && now - lastSeen < DUPLICATE_EVENT_THRESHOLD_MS) {
-      this.recentEventFingerprints.set(fingerprint, now); // Update timestamp
-      return true; // Duplicate
+      this.recentEventFingerprints.set(fingerprint, now);
+      return true;
     }
 
-    // Add to cache
     this.recentEventFingerprints.set(fingerprint, now);
 
-    // Cleanup if cache too large (soft limit)
     if (this.recentEventFingerprints.size > MAX_FINGERPRINTS) {
       this.pruneOldFingerprints();
     }
 
-    // Hard limit: aggressive cleanup
     if (this.recentEventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
       this.recentEventFingerprints.clear();
       this.recentEventFingerprints.set(fingerprint, now);
+
       log('warn', 'Event fingerprint cache exceeded hard limit, cleared', {
         data: { hardLimit: MAX_FINGERPRINTS_HARD_LIMIT },
       });
@@ -542,10 +528,6 @@ export class EventManager extends StateManager {
     return false;
   }
 
-  /**
-   * Prunes old fingerprints from cache based on timestamp
-   * Removes entries older than 10x the duplicate threshold (5 seconds)
-   */
   private pruneOldFingerprints(): void {
     const now = Date.now();
     const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER; // 5 seconds
@@ -623,7 +605,6 @@ export class EventManager extends StateManager {
       this.startSendInterval();
     }
 
-    // Dynamic flush: Send immediately when batch size threshold is reached
     if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
       void this.sendEventsQueue();
     }
@@ -670,15 +651,10 @@ export class EventManager extends StateManager {
     return true;
   }
 
-  /**
-   * Checks per-event-name rate limiting to prevent infinite loops in user code
-   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
-   */
   private checkPerEventRateLimit(eventName: string, maxSameEventPerMinute: number): boolean {
     const now = Date.now();
     const timestamps = this.perEventRateLimits.get(eventName) ?? [];
 
-    // Remove timestamps older than the rate limit window (60 seconds)
     const validTimestamps = timestamps.filter((ts) => now - ts < PER_EVENT_RATE_LIMIT_WINDOW_MS);
 
     if (validTimestamps.length >= maxSameEventPerMinute) {
@@ -692,16 +668,12 @@ export class EventManager extends StateManager {
       return false;
     }
 
-    // Add current timestamp and update map
     validTimestamps.push(now);
     this.perEventRateLimits.set(eventName, validTimestamps);
 
     return true;
   }
 
-  /**
-   * Gets the per-session limit for a specific event type (Phase 3)
-   */
   private getTypeLimitForEvent(type: EventType): number | null {
     const limits: Partial<Record<EventType, number>> = {
       [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
