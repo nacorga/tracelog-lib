@@ -213,7 +213,8 @@ describe('Event Flow Integration', () => {
       expect(call).toBeDefined();
       const payload = eventManager['buildEventPayload'](call!);
 
-      expect(payload.page_url).toBe('https://example.com');
+      expect(payload).not.toBeNull();
+      expect(payload!.page_url).toBe('https://example.com');
     });
 
     it('should add timestamp to events', () => {
@@ -229,8 +230,9 @@ describe('Event Flow Integration', () => {
         custom_event: { name: 'test' },
       });
 
-      expect(payload.timestamp).toBeGreaterThanOrEqual(now);
-      expect(payload.timestamp).toBeLessThanOrEqual(Date.now());
+      expect(payload).not.toBeNull();
+      expect(payload!.timestamp).toBeGreaterThanOrEqual(now);
+      expect(payload!.timestamp).toBeLessThanOrEqual(Date.now());
     });
 
     it('should add referrer to session_start events', () => {
@@ -243,7 +245,8 @@ describe('Event Flow Integration', () => {
         type: EventType.SESSION_START,
       });
 
-      expect(payload.referrer).toBe('https://google.com');
+      expect(payload).not.toBeNull();
+      expect(payload!.referrer).toBe('https://google.com');
     });
 
     it('should add UTM parameters to session_start events', () => {
@@ -260,10 +263,11 @@ describe('Event Flow Integration', () => {
         type: EventType.SESSION_START,
       });
 
-      expect(payload.utm).toBeDefined();
-      expect(payload.utm?.source).toBe('google');
-      expect(payload.utm?.medium).toBe('cpc');
-      expect(payload.utm?.campaign).toBe('summer');
+      expect(payload).not.toBeNull();
+      expect(payload!.utm).toBeDefined();
+      expect(payload!.utm?.source).toBe('google');
+      expect(payload!.utm?.medium).toBe('cpc');
+      expect(payload!.utm?.campaign).toBe('summer');
     });
   });
 

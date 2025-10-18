@@ -6,19 +6,24 @@ import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
-import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
+import { Config, EventType, EmitterCallback, EmitterMap, Mode, EventData, EventsQueue } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrls, detectQaMode, log } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
+import { TransformerHook } from './types/transformer.types';
 
 export class App extends StateManager {
   private isInitialized = false;
   private suppressNextScrollTimer: number | null = null;
 
   private readonly emitter = new Emitter();
+  private readonly transformers: Map<
+    TransformerHook,
+    (data: EventData | EventsQueue) => EventData | EventsQueue | null
+  > = new Map();
 
   protected managers: {
     storage?: StorageManager;
@@ -54,7 +59,12 @@ export class App extends StateManager {
       this.setupState(config);
       await this.setupIntegrations();
 
-      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
+      this.managers.event = new EventManager(
+        this.managers.storage,
+        this.integrations.googleAnalytics,
+        this.emitter,
+        this.transformers,
+      );
 
       this.initializeHandlers();
 
@@ -110,6 +120,26 @@ export class App extends StateManager {
     this.emitter.off(event, callback);
   }
 
+  setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void {
+    this.transformers.set(hook, fn);
+    log('debug', 'Transformer registered', { data: { hook } });
+  }
+
+  removeTransformer(hook: TransformerHook): void {
+    const existed = this.transformers.has(hook);
+    this.transformers.delete(hook);
+
+    if (existed) {
+      log('debug', 'Transformer removed', { data: { hook } });
+    }
+  }
+
+  getTransformer(
+    hook: TransformerHook,
+  ): ((data: EventData | EventsQueue) => EventData | EventsQueue | null) | undefined {
+    return this.transformers.get(hook);
+  }
+
   destroy(force = false): void {
     if (!this.isInitialized && !force) {
       return;
@@ -137,6 +167,7 @@ export class App extends StateManager {
     this.managers.event?.stop();
 
     this.emitter.removeAllListeners();
+    this.transformers.clear();
 
     this.set('hasStartSession', false);
     this.set('suppressNextScroll', false);

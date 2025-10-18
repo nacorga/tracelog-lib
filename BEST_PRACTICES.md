@@ -454,6 +454,286 @@ await tracelog.init({
 
 ---
 
+## Transformers
+
+### ✅ DO: Use transformers for data enrichment
+
+```typescript
+import type { EventData, EventsQueue } from '@tracelog/lib';
+
+// Add application context to all events
+tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          appVersion: '2.1.0',
+          environment: process.env.NODE_ENV,
+          region: getUserRegion()
+        }
+      }
+    };
+  }
+  return data;
+});
+```
+
+### ✅ DO: Use transformers for conditional filtering
+
+```typescript
+// Filter events based on runtime conditions
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    // Don't send events from admin users
+    if (currentUser.isAdmin) {
+      return null; // Filtered out
+    }
+
+    // Don't send events in development
+    if (import.meta.env.DEV) {
+      return null;
+    }
+  }
+  return data;
+});
+
+// Filter batches with insufficient data
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data) {
+    // Only send batches with 10+ events
+    if (data.events.length < 10) {
+      return null; // Batch filtered
+    }
+  }
+  return data;
+});
+```
+
+### ✅ DO: Handle transformer errors gracefully
+
+```typescript
+// Safe transformer with try-catch
+tracelog.setTransformer('beforeSend', (data) => {
+  try {
+    // Complex transformation logic
+    return transformData(data);
+  } catch (error) {
+    console.error('Transformer error:', error);
+    return data; // Fallback to original
+  }
+});
+```
+
+### ✅ DO: Use type guards for type safety
+
+```typescript
+import type { EventData, EventsQueue } from '@tracelog/lib';
+
+tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
+  // Type guard: Check if it's an EventData
+  if ('type' in data) {
+    // TypeScript knows data is EventData here
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          transformed: true
+        }
+      }
+    };
+  }
+  return data;
+});
+
+tracelog.setTransformer('beforeBatch', (data) => {
+  // Type guard: Check if it's an EventsQueue
+  if ('events' in data) {
+    // TypeScript knows data is EventsQueue here
+    return {
+      ...data,
+      global_metadata: {
+        ...data.global_metadata,
+        batchTransformed: true
+      }
+    };
+  }
+  return data;
+});
+```
+
+### ✅ DO: Remember integration-specific behavior
+
+```typescript
+// ✅ GOOD - Use with custom backend
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// Transformers WILL be applied
+tracelog.setTransformer('beforeSend', transformFn);
+tracelog.setTransformer('beforeBatch', transformFn);
+
+// ✅ ALSO GOOD - But transformers silently ignored
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' }
+  }
+});
+
+// Transformers set but NOT applied (SaaS schema protection)
+tracelog.setTransformer('beforeSend', transformFn); // Ignored
+tracelog.setTransformer('beforeBatch', transformFn); // Ignored
+```
+
+**Key Points:**
+- **TraceLog SaaS**: Transformers silently ignored (no errors thrown)
+- **Custom Backend**: Transformers applied as configured
+- **Google Analytics**: `beforeSend` applied, `beforeBatch` N/A
+- **Multi-Integration**: Transformers only apply to custom backend
+
+### ❌ DON'T: Rely on transformers for TraceLog SaaS
+
+```typescript
+// BAD - won't work with TraceLog SaaS
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' }
+  }
+});
+
+// This won't be applied (SaaS schema protection)
+tracelog.setTransformer('beforeSend', (data) => {
+  // ❌ Never executed for SaaS
+  return enrichedData;
+});
+
+// GOOD - use custom backend if you need transformers
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+tracelog.setTransformer('beforeSend', (data) => {
+  // ✅ Applied to custom backend
+  return enrichedData;
+});
+```
+
+### ❌ DON'T: Transform sensitive data without sanitization
+
+```typescript
+// BAD - exposing PII
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          userEmail: currentUser.email, // ❌ PII leak
+          creditCard: paymentInfo.card   // ❌ Sensitive data
+        }
+      }
+    };
+  }
+  return data;
+});
+
+// GOOD - sanitize or use IDs
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          userId: currentUser.id,                    // ✅ ID only
+          paymentMethodType: paymentInfo.cardType    // ✅ Generic info
+        }
+      }
+    };
+  }
+  return data;
+});
+```
+
+### ❌ DON'T: Mutate the input data
+
+```typescript
+// BAD - mutating input
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data && data.custom_event) {
+    // ❌ Mutating original object
+    data.custom_event.metadata.transformed = true;
+    return data;
+  }
+  return data;
+});
+
+// GOOD - return new object
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    // ✅ Creating new object
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          transformed: true
+        }
+      }
+    };
+  }
+  return data;
+});
+```
+
+### ❌ DON'T: Perform heavy operations in transformers
+
+```typescript
+// BAD - slow operations block event processing
+tracelog.setTransformer('beforeSend', (data) => {
+  // ❌ Heavy operations
+  const expensiveResult = doHeavyComputation(); // 500ms+
+  const apiData = await fetch('/api/enrich'); // Async not allowed
+
+  return { ...data, expensiveResult };
+});
+
+// GOOD - pre-compute or cache expensive data
+const enrichmentData = await fetchEnrichmentData(); // Do once at init
+
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    // ✅ Fast synchronous operation
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          ...enrichmentData // Pre-computed
+        }
+      }
+    };
+  }
+  return data;
+});
+```
+
+---
+
 ## Testing & QA
 
 ### ✅ DO: Use QA mode for debugging

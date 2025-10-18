@@ -1173,9 +1173,10 @@ class SenderManager extends StateManager {
   storeManager;
   integrationId;
   apiUrl;
+  transformers;
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
-  constructor(storeManager, integrationId, apiUrl) {
+  constructor(storeManager, integrationId, apiUrl, transformers = /* @__PURE__ */ new Map()) {
     super();
     if (integrationId && !apiUrl || !integrationId && apiUrl) {
       throw new Error("SenderManager: integrationId and apiUrl must either both be provided or both be undefined");
@@ -1183,6 +1184,7 @@ class SenderManager extends StateManager {
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
+    this.transformers = transformers;
   }
   getQueueStorageKey() {
     const userId = this.get("userId") || "anonymous";
@@ -1262,17 +1264,52 @@ class SenderManager extends StateManager {
   }
   stop() {
   }
+  applyBeforeBatchTransformer(body) {
+    if (this.integrationId === "saas") {
+      return body;
+    }
+    const beforeBatchTransformer = this.transformers.get("beforeBatch");
+    if (!beforeBatchTransformer) {
+      return body;
+    }
+    try {
+      const transformed = beforeBatchTransformer(body);
+      if (transformed === null) {
+        log("debug", `Batch filtered by beforeBatch transformer [${this.integrationId}]`, {
+          data: { eventCount: body.events.length }
+        });
+        return null;
+      }
+      if (transformed && typeof transformed === "object" && "events" in transformed && Array.isArray(transformed.events)) {
+        return transformed;
+      }
+      log("warn", `beforeBatch transformer returned invalid data, using original [${this.integrationId}]`, {
+        data: { eventCount: body.events.length }
+      });
+      return body;
+    } catch (error) {
+      log("error", `beforeBatch transformer threw error, using original batch [${this.integrationId}]`, {
+        error,
+        data: { eventCount: body.events.length }
+      });
+      return body;
+    }
+  }
   async send(body) {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
+    const transformedBody = this.applyBeforeBatchTransformer(body);
+    if (!transformedBody) {
+      return true;
+    }
     if (this.apiUrl === SpecialApiUrl.Fail) {
       log("warn", `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        data: { events: body.events.length }
+        data: { events: transformedBody.events.length }
       });
       return false;
     }
-    const { url, payload } = this.prepareRequest(body);
+    const { url, payload } = this.prepareRequest(transformedBody);
     try {
       const response = await this.sendWithTimeout(url, payload);
       return response.ok;
@@ -1319,28 +1356,32 @@ class SenderManager extends StateManager {
     }
   }
   sendQueueSyncInternal(body) {
-    const { url, payload } = this.prepareRequest(body);
+    const transformedBody = this.applyBeforeBatchTransformer(body);
+    if (!transformedBody) {
+      return true;
+    }
+    const { url, payload } = this.prepareRequest(transformedBody);
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
       log("warn", "Payload exceeds sendBeacon limit, persisting for recovery", {
         data: {
           size: payload.length,
           limit: MAX_BEACON_PAYLOAD_SIZE,
-          events: body.events.length
+          events: transformedBody.events.length
         }
       });
-      this.persistEvents(body);
+      this.persistEvents(transformedBody);
       return false;
     }
     const blob = new Blob([payload], { type: "application/json" });
     if (!this.isSendBeaconAvailable()) {
       log("warn", "sendBeacon not available, persisting events for recovery");
-      this.persistEvents(body);
+      this.persistEvents(transformedBody);
       return false;
     }
     const accepted = navigator.sendBeacon(url, blob);
     if (!accepted) {
       log("warn", "sendBeacon rejected request, persisting events for recovery");
-      this.persistEvents(body);
+      this.persistEvents(transformedBody);
     }
     return accepted;
   }
@@ -1439,14 +1480,14 @@ class EventManager extends StateManager {
   googleAnalytics;
   dataSenders;
   emitter;
+  transformers;
+  recentEventFingerprints = /* @__PURE__ */ new Map();
+  perEventRateLimits = /* @__PURE__ */ new Map();
   eventsQueue = [];
   pendingEventsBuffer = [];
-  recentEventFingerprints = /* @__PURE__ */ new Map();
-  // Time-based deduplication cache
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
-  perEventRateLimits = /* @__PURE__ */ new Map();
   sessionEventCounts = {
     total: 0,
     [EventType.CLICK]: 0,
@@ -1456,17 +1497,18 @@ class EventManager extends StateManager {
     [EventType.SCROLL]: 0
   };
   lastSessionId = null;
-  constructor(storeManager, googleAnalytics = null, emitter = null) {
+  constructor(storeManager, googleAnalytics = null, emitter = null, transformers = /* @__PURE__ */ new Map()) {
     super();
     this.googleAnalytics = googleAnalytics;
     this.emitter = emitter;
+    this.transformers = transformers;
     this.dataSenders = [];
     const collectApiUrls = this.get("collectApiUrls");
     if (collectApiUrls?.saas) {
-      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas));
+      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas, transformers));
     }
     if (collectApiUrls?.custom) {
-      this.dataSenders.push(new SenderManager(storeManager, "custom", collectApiUrls.custom));
+      this.dataSenders.push(new SenderManager(storeManager, "custom", collectApiUrls.custom, transformers));
     }
   }
   async recoverPersistedEvents() {
@@ -1588,6 +1630,9 @@ class EventManager extends StateManager {
       session_end_reason,
       viewport_data
     });
+    if (!payload) {
+      return;
+    }
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
     }
@@ -1683,6 +1728,9 @@ class EventManager extends StateManager {
       this.sendIntervalId = null;
     }
   }
+  isSuccessfulResult(result) {
+    return result.status === "fulfilled" && result.value === true;
+  }
   flushEvents(isSync) {
     if (this.eventsQueue.length === 0) {
       return isSync ? true : Promise.resolve(true);
@@ -1720,13 +1768,11 @@ class EventManager extends StateManager {
       return Promise.allSettled(sendPromises).then((results) => {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
-        const anySucceeded = results.some((result) => result.status === "fulfilled" && result.value === true);
+        const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
         if (anySucceeded) {
           this.emitEventsQueue(body);
         }
-        const failedCount = results.filter(
-          (result) => result.status === "rejected" || result.status === "fulfilled" && result.value === false
-        ).length;
+        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
         if (failedCount > 0) {
           log(
             "warn",
@@ -1753,8 +1799,6 @@ class EventManager extends StateManager {
     const eventIds = eventsToSend.map((e3) => e3.id);
     const sendPromises = this.dataSenders.map(
       async (sender) => sender.sendEventsQueue(body, {
-        // Empty callbacks: SenderManager handles persistence internally.
-        // Success/failure is determined by Promise.allSettled() result inspection below.
         onSuccess: () => {
         },
         onFailure: () => {
@@ -1763,16 +1807,14 @@ class EventManager extends StateManager {
     );
     const results = await Promise.allSettled(sendPromises);
     this.removeProcessedEvents(eventIds);
-    const anySucceeded = results.some((result) => result.status === "fulfilled" && result.value === true);
+    const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
     if (anySucceeded) {
       this.emitEventsQueue(body);
     }
     if (this.eventsQueue.length === 0) {
       this.clearSendInterval();
     }
-    const failedCount = results.filter(
-      (result) => result.status === "rejected" || result.status === "fulfilled" && result.value === false
-    ).length;
+    const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
     if (failedCount > 0) {
       log("warn", "Events send completed with some failures, removed from queue and persisted per-integration", {
         data: { eventCount: eventsToSend.length, failedCount }
@@ -1801,7 +1843,7 @@ class EventManager extends StateManager {
   buildEventPayload(data) {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get("pageUrl");
-    const payload = {
+    let payload = {
       id: generateEventId(),
       type: data.type,
       page_url: currentPageUrl,
@@ -1817,12 +1859,34 @@ class EventManager extends StateManager {
       ...data.viewport_data && { viewport_data: data.viewport_data },
       ...isSessionStart && getUTMParameters() && { utm: getUTMParameters() }
     };
+    const beforeSendTransformer = this.transformers.get("beforeSend");
+    const collectApiUrls = this.get("collectApiUrls");
+    const hasCustomBackend = Boolean(collectApiUrls?.custom);
+    if (beforeSendTransformer && hasCustomBackend) {
+      try {
+        const transformed = beforeSendTransformer(payload);
+        if (transformed === null) {
+          log("debug", "Event filtered by beforeSend transformer", {
+            data: { eventType: payload.type }
+          });
+          return null;
+        }
+        if (transformed && typeof transformed === "object" && "type" in transformed) {
+          payload = transformed;
+        } else {
+          log("warn", "beforeSend transformer returned invalid data, using original", {
+            data: { eventType: payload.type }
+          });
+        }
+      } catch (error) {
+        log("error", "beforeSend transformer threw error, using original event", {
+          error,
+          data: { eventType: payload.type }
+        });
+      }
+    }
     return payload;
   }
-  /**
-   * Checks if event is a duplicate using time-based cache
-   * Tracks recent event fingerprints with timestamp-based cleanup
-   */
   isDuplicateEvent(event2) {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event2);
@@ -1844,10 +1908,6 @@ class EventManager extends StateManager {
     }
     return false;
   }
-  /**
-   * Prunes old fingerprints from cache based on timestamp
-   * Removes entries older than 10x the duplicate threshold (5 seconds)
-   */
   pruneOldFingerprints() {
     const now = Date.now();
     const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
@@ -1943,10 +2003,6 @@ class EventManager extends StateManager {
     this.rateLimitCounter++;
     return true;
   }
-  /**
-   * Checks per-event-name rate limiting to prevent infinite loops in user code
-   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
-   */
   checkPerEventRateLimit(eventName, maxSameEventPerMinute) {
     const now = Date.now();
     const timestamps = this.perEventRateLimits.get(eventName) ?? [];
@@ -1965,9 +2021,6 @@ class EventManager extends StateManager {
     this.perEventRateLimits.set(eventName, validTimestamps);
     return true;
   }
-  /**
-   * Gets the per-session limit for a specific event type (Phase 3)
-   */
   getTypeLimitForEvent(type) {
     const limits = {
       [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
@@ -3989,6 +4042,7 @@ class App extends StateManager {
   isInitialized = false;
   suppressNextScrollTimer = null;
   emitter = new Emitter();
+  transformers = /* @__PURE__ */ new Map();
   managers = {};
   handlers = {};
   integrations = {};
@@ -4003,7 +4057,12 @@ class App extends StateManager {
     try {
       this.setupState(config);
       await this.setupIntegrations();
-      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
+      this.managers.event = new EventManager(
+        this.managers.storage,
+        this.integrations.googleAnalytics,
+        this.emitter,
+        this.transformers
+      );
       this.initializeHandlers();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log("warn", "Failed to recover persisted events", { error });
@@ -4046,6 +4105,20 @@ class App extends StateManager {
   off(event2, callback) {
     this.emitter.off(event2, callback);
   }
+  setTransformer(hook, fn) {
+    this.transformers.set(hook, fn);
+    log("debug", "Transformer registered", { data: { hook } });
+  }
+  removeTransformer(hook) {
+    const existed = this.transformers.has(hook);
+    this.transformers.delete(hook);
+    if (existed) {
+      log("debug", "Transformer removed", { data: { hook } });
+    }
+  }
+  getTransformer(hook) {
+    return this.transformers.get(hook);
+  }
   destroy(force = false) {
     if (!this.isInitialized && !force) {
       return;
@@ -4065,6 +4138,7 @@ class App extends StateManager {
     this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
     this.emitter.removeAllListeners();
+    this.transformers.clear();
     this.set("hasStartSession", false);
     this.set("suppressNextScroll", false);
     this.set("sessionId", null);
@@ -4362,6 +4436,30 @@ const off = (event2, callback) => {
   }
   app.off(event2, callback);
 };
+const setTransformer = (hook, fn) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!app) {
+    throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
+  }
+  if (isDestroying) {
+    throw new Error("[TraceLog] Cannot set transformers while TraceLog is being destroyed");
+  }
+  app.setTransformer(hook, fn);
+};
+const removeTransformer = (hook) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!app) {
+    return;
+  }
+  if (isDestroying) {
+    return;
+  }
+  app.removeTransformer(hook);
+};
 const isInitialized = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return false;
@@ -4429,6 +4527,8 @@ const tracelog = {
   event,
   on,
   off,
+  setTransformer,
+  removeTransformer,
   isInitialized,
   destroy,
   setQaMode

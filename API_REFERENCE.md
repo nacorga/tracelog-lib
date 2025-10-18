@@ -281,6 +281,122 @@ tracelog.setQaMode(false);
 
 ---
 
+### `setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void`
+
+Sets a transformer function to modify events at runtime before sending to integrations.
+
+**Parameters:**
+- `hook`: Transformer hook type (`'beforeSend'` or `'beforeBatch'`)
+- `fn`: Transformer function that receives event/batch data and returns transformed data or `null` to filter
+
+**Throws:**
+- `Error` if called before `init()`
+- `Error` if called during `destroy()`
+
+**Transformer Hooks:**
+
+| Hook | Timing | Input | Applied To |
+|------|--------|-------|------------|
+| `beforeSend` | Per-event (before queueing) | `EventData` | Custom backend only |
+| `beforeBatch` | Batch-level (before sending) | `EventsQueue` | Custom backend only |
+
+**Integration Behavior:**
+- **TraceLog SaaS**: Transformers silently ignored (schema protection)
+- **Custom Backend**: Transformers applied as configured
+- **Google Analytics**: `beforeSend` applied, `beforeBatch` N/A
+
+**Examples:**
+
+```typescript
+import { tracelog } from '@tracelog/lib';
+import type { EventData, EventsQueue } from '@tracelog/lib';
+
+// Add custom metadata to all events
+tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          environment: 'production',
+          version: '1.0.0'
+        }
+      }
+    };
+  }
+  return data;
+});
+
+// Filter out sensitive events
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data && data.custom_event?.name === 'internal_event') {
+    return null; // Event will be dropped
+  }
+  return data;
+});
+
+// Add batch-level metadata
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data) {
+    return {
+      ...data,
+      global_metadata: {
+        ...data.global_metadata,
+        batchSize: data.events.length,
+        batchTimestamp: Date.now()
+      }
+    };
+  }
+  return data;
+});
+
+// Filter batch based on conditions
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data && data.events.length < 5) {
+    return null; // Don't send small batches
+  }
+  return data;
+});
+```
+
+**Error Handling:**
+- Transformer exceptions are caught and logged
+- Original event/batch used as fallback on error
+- Returning `null` filters out the event/batch (intended behavior)
+- Invalid return types logged as warnings, original data used
+
+**Notes:**
+- Only one transformer per hook (calling again replaces previous)
+- Transformers NOT applied to TraceLog SaaS (schema protection)
+- Use for data enrichment, filtering, or custom logic
+- See [README.md Transformers section](./README.md#transformers) for detailed examples
+
+---
+
+### `removeTransformer(hook: TransformerHook): void`
+
+Removes a previously set transformer function.
+
+**Parameters:**
+- `hook`: Transformer hook type to remove (`'beforeSend'` or `'beforeBatch'`)
+
+**Example:**
+
+```typescript
+// Remove specific transformer
+tracelog.removeTransformer('beforeSend');
+tracelog.removeTransformer('beforeBatch');
+```
+
+**Notes:**
+- Safe to call even if no transformer is set
+- No-op if called before initialization
+- Transformers automatically cleared on `destroy()`
+
+---
+
 ## Configuration
 
 ### `Config` Interface

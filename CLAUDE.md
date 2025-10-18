@@ -97,6 +97,31 @@ this.set('config', config)
 this.getState() // Full state snapshot
 ```
 
+### Transformer System
+
+Runtime event transformation hooks for custom data manipulation:
+
+**Available Hooks**:
+- **`beforeSend`**: Per-event transformation (applied in EventManager before queueing)
+- **`beforeBatch`**: Batch transformation (applied in SenderManager before sending)
+
+**Integration Behavior**:
+- ✅ **Custom Backend**: Both hooks applied
+- ❌ **TraceLog SaaS**: Silently ignored (schema protection)
+- ✅ **Google Analytics**: `beforeSend` applied
+
+**API Methods**:
+```typescript
+tracelog.setTransformer(hook, fn)      // Set transformer
+tracelog.removeTransformer(hook)        // Remove transformer
+app.getTransformer(hook)                // Get transformer (internal)
+```
+
+**Error Handling**:
+- Exceptions caught and logged
+- Original event/batch used as fallback
+- Returning `null` filters out event/batch
+
 ### Initialization Flow
 
 1. `api.init(config)` → validates config
@@ -362,6 +387,46 @@ this.set('sessionId', newSessionId);
 
 // Full snapshot
 const state = this.getState();
+```
+
+### Transformer Pattern
+
+Transformers are stored in the `App` class and passed to `EventManager` and `SenderManager`:
+
+```typescript
+// In App class
+private readonly transformers: Map<
+  TransformerHook,
+  (data: EventData | EventsQueue) => EventData | EventsQueue | null
+> = new Map();
+
+// Setting a transformer
+setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void {
+  this.transformers.set(hook, fn);
+}
+
+// In EventManager - beforeSend application
+const beforeSendTransformer = this.transformers.get('beforeSend');
+const hasCustomBackend = Boolean(collectApiUrls?.custom);
+
+if (beforeSendTransformer && hasCustomBackend) {
+  const transformed = beforeSendTransformer(payload);
+  if (transformed === null) return null; // Filter event
+  payload = transformed as EventData;
+}
+
+// In SenderManager - beforeBatch application
+const beforeBatchTransformer = this.transformers.get('beforeBatch');
+
+if (this.integrationId === 'saas') {
+  return body; // Skip for SaaS
+}
+
+if (beforeBatchTransformer) {
+  const transformed = beforeBatchTransformer(body);
+  if (transformed === null) return null; // Filter batch
+  return transformed as EventsQueue;
+}
 ```
 
 ### Manager/Handler Lifecycle

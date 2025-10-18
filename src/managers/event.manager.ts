@@ -24,11 +24,16 @@ import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
+import { TransformerHook } from '../types/transformer.types';
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
   private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
+  private readonly transformers: Map<
+    TransformerHook,
+    (data: EventData | EventsQueue) => EventData | EventsQueue | null
+  >;
   private readonly recentEventFingerprints = new Map<string, number>();
   private readonly perEventRateLimits: Map<string, number[]> = new Map();
 
@@ -54,21 +59,23 @@ export class EventManager extends StateManager {
     storeManager: StorageManager,
     googleAnalytics: GoogleAnalyticsIntegration | null = null,
     emitter: Emitter | null = null,
+    transformers: Map<TransformerHook, (data: EventData | EventsQueue) => EventData | EventsQueue | null> = new Map(),
   ) {
     super();
 
     this.googleAnalytics = googleAnalytics;
     this.emitter = emitter;
+    this.transformers = transformers;
 
     this.dataSenders = [];
     const collectApiUrls = this.get('collectApiUrls');
 
     if (collectApiUrls?.saas) {
-      this.dataSenders.push(new SenderManager(storeManager, 'saas', collectApiUrls.saas));
+      this.dataSenders.push(new SenderManager(storeManager, 'saas', collectApiUrls.saas, transformers));
     }
 
     if (collectApiUrls?.custom) {
-      this.dataSenders.push(new SenderManager(storeManager, 'custom', collectApiUrls.custom));
+      this.dataSenders.push(new SenderManager(storeManager, 'custom', collectApiUrls.custom, transformers));
     }
   }
 
@@ -211,6 +218,11 @@ export class EventManager extends StateManager {
       session_end_reason,
       viewport_data,
     });
+
+    // Handle event filtered by beforeSend transformer
+    if (!payload) {
+      return;
+    }
 
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
@@ -475,11 +487,11 @@ export class EventManager extends StateManager {
     };
   }
 
-  private buildEventPayload(data: Partial<EventData>): EventData {
+  private buildEventPayload(data: Partial<EventData>): EventData | null {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
 
-    const payload: EventData = {
+    let payload: EventData = {
       id: generateEventId(),
       type: data.type as EventType,
       page_url: currentPageUrl,
@@ -495,6 +507,38 @@ export class EventManager extends StateManager {
       ...(data.viewport_data && { viewport_data: data.viewport_data }),
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
+
+    // Apply beforeSend transformer (only for custom integrations, NOT TraceLog SaaS)
+    const beforeSendTransformer = this.transformers.get('beforeSend');
+    const collectApiUrls = this.get('collectApiUrls');
+    const hasCustomBackend = Boolean(collectApiUrls?.custom);
+
+    if (beforeSendTransformer && hasCustomBackend) {
+      try {
+        const transformed = beforeSendTransformer(payload);
+
+        if (transformed === null) {
+          log('debug', 'Event filtered by beforeSend transformer', {
+            data: { eventType: payload.type },
+          });
+
+          return null;
+        }
+
+        if (transformed && typeof transformed === 'object' && 'type' in transformed) {
+          payload = transformed;
+        } else {
+          log('warn', 'beforeSend transformer returned invalid data, using original', {
+            data: { eventType: payload.type },
+          });
+        }
+      } catch (error) {
+        log('error', 'beforeSend transformer threw error, using original event', {
+          error,
+          data: { eventType: payload.type },
+        });
+      }
+    }
 
     return payload;
   }
