@@ -1,9 +1,10 @@
 import { App } from './app';
-import { MetadataType, Config, EmitterCallback, EmitterMap } from './types';
+import { MetadataType, Config, EmitterCallback, EmitterMap, EventData, EventsQueue } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
+import { TransformerHook } from './types/transformer.types';
 
 interface PendingListener {
   event: keyof EmitterMap;
@@ -120,6 +121,41 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
   }
 
   app.off(event, callback);
+};
+
+export const setTransformer = (
+  hook: TransformerHook,
+  fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null,
+): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot set transformers while TraceLog is being destroyed');
+  }
+
+  app.setTransformer(hook, fn);
+};
+
+export const removeTransformer = (hook: TransformerHook): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    return;
+  }
+
+  if (isDestroying) {
+    return;
+  }
+
+  app.removeTransformer(hook);
 };
 
 export const isInitialized = (): boolean => {
