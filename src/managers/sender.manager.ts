@@ -25,6 +25,11 @@ export class SenderManager extends StateManager {
 
   constructor(storeManager: StorageManager, integrationId?: 'saas' | 'custom', apiUrl?: string) {
     super();
+
+    if ((integrationId && !apiUrl) || (!integrationId && apiUrl)) {
+      throw new Error('SenderManager: integrationId and apiUrl must either both be provided or both be undefined');
+    }
+
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;

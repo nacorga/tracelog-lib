@@ -1177,6 +1177,9 @@ class SenderManager extends StateManager {
   recoveryInProgress = false;
   constructor(storeManager, integrationId, apiUrl) {
     super();
+    if (integrationId && !apiUrl || !integrationId && apiUrl) {
+      throw new Error("SenderManager: integrationId and apiUrl must either both be provided or both be undefined");
+    }
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
@@ -1750,6 +1753,8 @@ class EventManager extends StateManager {
     const eventIds = eventsToSend.map((e3) => e3.id);
     const sendPromises = this.dataSenders.map(
       async (sender) => sender.sendEventsQueue(body, {
+        // Empty callbacks: SenderManager handles persistence internally.
+        // Success/failure is determined by Promise.allSettled() result inspection below.
         onSuccess: () => {
         },
         onFailure: () => {

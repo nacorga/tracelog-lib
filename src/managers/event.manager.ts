@@ -367,15 +367,10 @@ export class EventManager extends StateManager {
 
       return allSucceeded;
     } else {
-      // Async mode: Independent operations with Promise.allSettled
       const sendPromises = this.dataSenders.map(async (sender) =>
         sender.sendEventsQueue(body, {
-          onSuccess: () => {
-            // Success handled per-integration
-          },
-          onFailure: () => {
-            // Failure handled per-integration
-          },
+          onSuccess: () => {},
+          onFailure: () => {},
         }),
       );
 
@@ -427,12 +422,10 @@ export class EventManager extends StateManager {
     // Send to all integrations independently
     const sendPromises = this.dataSenders.map(async (sender) =>
       sender.sendEventsQueue(body, {
-        onSuccess: () => {
-          // Success handled per-integration
-        },
-        onFailure: () => {
-          // Failure handled per-integration
-        },
+        // Empty callbacks: SenderManager handles persistence internally.
+        // Success/failure is determined by Promise.allSettled() result inspection below.
+        onSuccess: () => {},
+        onFailure: () => {},
       }),
     );
 

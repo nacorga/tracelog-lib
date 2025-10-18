@@ -22,20 +22,8 @@ const isValidUrl = (url: string, allowHttp = false): boolean => {
 
 /**
  * Generates a SaaS API URL based on the given project ID and the current browser domain.
- *
- * Hostname parsing strategy:
- * - Extracts the hostname from the current window location (e.g., "app.example.com").
- * - Splits the hostname by '.' and takes the last two segments to reconstruct the base domain (e.g., "example.com").
- * - Constructs the API URL in the format: "https://{projectId}.{baseDomain}/collect".
- *
- * Error handling:
- * - Throws an error if the hostname is missing, not a string, or has an invalid structure.
- * - Throws an error if the reconstructed domain is invalid or if the final URL is not a valid HTTPS URL.
- * - All errors are wrapped with a descriptive message for easier debugging.
- *
  * @param projectId - The project ID to use as a subdomain.
  * @returns The generated SaaS API URL.
- * @throws {Error} If the hostname or generated URL is invalid.
  */
 const generateSaasApiUrl = (projectId: string): string => {
   try {
