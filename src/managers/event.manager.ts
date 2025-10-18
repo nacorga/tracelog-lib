@@ -27,7 +27,7 @@ import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.int
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
-  private readonly dataSender: SenderManager;
+  private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
 
   private eventsQueue: EventData[] = [];
@@ -58,26 +58,42 @@ export class EventManager extends StateManager {
     super();
 
     this.googleAnalytics = googleAnalytics;
-    this.dataSender = new SenderManager(storeManager);
     this.emitter = emitter;
+
+    // Create 0-2 SenderManager instances based on configured integrations
+    this.dataSenders = [];
+    const collectApiUrls = this.get('collectApiUrls');
+
+    if (collectApiUrls?.saas) {
+      this.dataSenders.push(new SenderManager(storeManager, 'saas', collectApiUrls.saas));
+    }
+
+    if (collectApiUrls?.custom) {
+      this.dataSenders.push(new SenderManager(storeManager, 'custom', collectApiUrls.custom));
+    }
   }
 
   async recoverPersistedEvents(): Promise<void> {
-    await this.dataSender.recoverPersistedEvents({
-      onSuccess: (_eventCount, recoveredEvents, body) => {
-        if (recoveredEvents && recoveredEvents.length > 0) {
-          const eventIds = recoveredEvents.map((e) => e.id);
-          this.removeProcessedEvents(eventIds);
+    // Recover persisted events independently for each integration
+    const recoveryPromises = this.dataSenders.map(async (sender) =>
+      sender.recoverPersistedEvents({
+        onSuccess: (_eventCount, recoveredEvents, body) => {
+          if (recoveredEvents && recoveredEvents.length > 0) {
+            const eventIds = recoveredEvents.map((e) => e.id);
+            this.removeProcessedEvents(eventIds);
 
-          if (body) {
-            this.emitEventsQueue(body);
+            if (body) {
+              this.emitEventsQueue(body);
+            }
           }
-        }
-      },
-      onFailure: () => {
-        log('warn', 'Failed to recover persisted events');
-      },
-    });
+        },
+        onFailure: () => {
+          log('warn', 'Failed to recover persisted events');
+        },
+      }),
+    );
+
+    await Promise.allSettled(recoveryPromises);
   }
 
   track({
@@ -271,7 +287,10 @@ export class EventManager extends StateManager {
     };
     this.lastSessionId = null;
 
-    this.dataSender.stop();
+    // Stop all senders
+    this.dataSenders.forEach((sender) => {
+      sender.stop();
+    });
   }
 
   async flushImmediately(): Promise<boolean> {
@@ -324,10 +343,20 @@ export class EventManager extends StateManager {
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
 
-    if (isSync) {
-      const success = this.dataSender.sendEventsQueueSync(body);
+    if (this.dataSenders.length === 0) {
+      // Standalone mode - no network requests, but still emit queue event for local listeners
+      this.removeProcessedEvents(eventIds);
+      this.clearSendInterval();
+      this.emitEventsQueue(body);
+      return isSync ? true : Promise.resolve(true);
+    }
 
-      if (success) {
+    if (isSync) {
+      // Sync mode (sendBeacon): All must succeed for true
+      const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
+      const allSucceeded = results.every((success) => success);
+
+      if (allSucceeded) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
@@ -336,25 +365,45 @@ export class EventManager extends StateManager {
         this.clearSendInterval();
       }
 
-      return success;
+      return allSucceeded;
     } else {
-      return this.dataSender.sendEventsQueue(body, {
-        onSuccess: () => {
-          this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
+      // Async mode: Independent operations with Promise.allSettled
+      const sendPromises = this.dataSenders.map(async (sender) =>
+        sender.sendEventsQueue(body, {
+          onSuccess: () => {
+            // Success handled per-integration
+          },
+          onFailure: () => {
+            // Failure handled per-integration
+          },
+        }),
+      );
+
+      return Promise.allSettled(sendPromises).then((results) => {
+        this.removeProcessedEvents(eventIds);
+        this.clearSendInterval();
+
+        const anySucceeded = results.some((result) => result.status === 'fulfilled' && result.value === true);
+
+        if (anySucceeded) {
           this.emitEventsQueue(body);
-        },
-        onFailure: () => {
-          this.removeProcessedEvents(eventIds);
+        }
 
-          if (this.eventsQueue.length === 0) {
-            this.clearSendInterval();
-          }
+        const failedCount = results.filter(
+          (result) => result.status === 'rejected' || (result.status === 'fulfilled' && result.value === false),
+        ).length;
 
-          log('warn', 'Async flush failed, removed from queue and persisted for recovery on next page load', {
-            data: { eventCount: eventsToSend.length },
-          });
-        },
+        if (failedCount > 0) {
+          log(
+            'warn',
+            'Async flush completed with some failures, events removed from queue and persisted per-integration',
+            {
+              data: { eventCount: eventsToSend.length, failedCount },
+            },
+          );
+        }
+
+        return anySucceeded;
       });
     }
   }
@@ -365,26 +414,51 @@ export class EventManager extends StateManager {
     }
 
     const body = this.buildEventsPayload();
+
+    if (this.dataSenders.length === 0) {
+      // Standalone mode - emit queue event without clearing queue (no network requests)
+      this.emitEventsQueue(body);
+      return;
+    }
+
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
 
-    await this.dataSender.sendEventsQueue(body, {
-      onSuccess: () => {
-        this.removeProcessedEvents(eventIds);
-        this.emitEventsQueue(body);
-      },
-      onFailure: () => {
-        this.removeProcessedEvents(eventIds);
+    // Send to all integrations independently
+    const sendPromises = this.dataSenders.map(async (sender) =>
+      sender.sendEventsQueue(body, {
+        onSuccess: () => {
+          // Success handled per-integration
+        },
+        onFailure: () => {
+          // Failure handled per-integration
+        },
+      }),
+    );
 
-        if (this.eventsQueue.length === 0) {
-          this.clearSendInterval();
-        }
+    const results = await Promise.allSettled(sendPromises);
 
-        log('warn', 'Events send failed, removed from queue and persisted for recovery on next page load', {
-          data: { eventCount: eventsToSend.length },
-        });
-      },
-    });
+    this.removeProcessedEvents(eventIds);
+
+    const anySucceeded = results.some((result) => result.status === 'fulfilled' && result.value === true);
+
+    if (anySucceeded) {
+      this.emitEventsQueue(body);
+    }
+
+    if (this.eventsQueue.length === 0) {
+      this.clearSendInterval();
+    }
+
+    const failedCount = results.filter(
+      (result) => result.status === 'rejected' || (result.status === 'fulfilled' && result.value === false),
+    ).length;
+
+    if (failedCount > 0) {
+      log('warn', 'Events send completed with some failures, removed from queue and persisted per-integration', {
+        data: { eventCount: eventsToSend.length, failedCount },
+      });
+    }
   }
 
   private buildEventsPayload(): EventsQueue {

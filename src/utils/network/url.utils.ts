@@ -21,60 +21,71 @@ const isValidUrl = (url: string, allowHttp = false): boolean => {
 };
 
 /**
- * Generates an API URL based on project ID and current domain
- * @param id - The project ID
- * @returns The generated API URL
+ * Generates a SaaS API URL based on project ID and current domain
+ * @param projectId - The project ID
+ * @returns The generated SaaS API URL
  */
-export const getCollectApiUrl = (config: Config): string => {
-  if (config.integrations?.tracelog?.projectId) {
-    try {
-      const url = new URL(window.location.href);
-      const host = url.hostname;
+const generateSaasApiUrl = (projectId: string): string => {
+  try {
+    const url = new URL(window.location.href);
+    const host = url.hostname;
 
-      if (!host || typeof host !== 'string') {
-        throw new Error('Invalid hostname');
-      }
-
-      const parts = host.split('.');
-
-      if (!parts || !Array.isArray(parts) || parts.length === 0 || (parts.length === 1 && parts[0] === '')) {
-        throw new Error('Invalid hostname structure');
-      }
-
-      const projectId = config.integrations.tracelog.projectId;
-      const cleanDomain = parts.slice(-2).join('.');
-
-      if (!cleanDomain) {
-        throw new Error('Invalid domain');
-      }
-
-      const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
-      const isValid = isValidUrl(collectApiUrl);
-
-      if (!isValid) {
-        throw new Error('Invalid URL');
-      }
-
-      return collectApiUrl;
-    } catch (error) {
-      throw new Error(`Invalid URL configuration: ${error instanceof Error ? error.message : String(error)}`);
+    if (!host || typeof host !== 'string') {
+      throw new Error('Invalid hostname');
     }
-  }
 
-  const collectApiUrl = config.integrations?.custom?.collectApiUrl;
+    const parts = host.split('.');
 
-  if (collectApiUrl) {
-    const allowHttp = config.integrations?.custom?.allowHttp ?? false;
-    const isValid = isValidUrl(collectApiUrl, allowHttp);
+    if (!parts || !Array.isArray(parts) || parts.length === 0 || (parts.length === 1 && parts[0] === '')) {
+      throw new Error('Invalid hostname structure');
+    }
+
+    const cleanDomain = parts.slice(-2).join('.');
+
+    if (!cleanDomain) {
+      throw new Error('Invalid domain');
+    }
+
+    const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
+    const isValid = isValidUrl(collectApiUrl);
 
     if (!isValid) {
       throw new Error('Invalid URL');
     }
 
     return collectApiUrl;
+  } catch (error) {
+    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Generates collection API URLs for all configured integrations
+ * @param config - The TraceLog configuration
+ * @returns Object containing API URLs for each configured integration
+ */
+export const getCollectApiUrls = (config: Config): { saas?: string; custom?: string } => {
+  const urls: { saas?: string; custom?: string } = {};
+
+  // TraceLog SaaS integration
+  if (config.integrations?.tracelog?.projectId) {
+    urls.saas = generateSaasApiUrl(config.integrations.tracelog.projectId);
   }
 
-  return '';
+  // Custom backend integration
+  const customApiUrl = config.integrations?.custom?.collectApiUrl;
+  if (customApiUrl) {
+    const allowHttp = config.integrations?.custom?.allowHttp ?? false;
+    const isValid = isValidUrl(customApiUrl, allowHttp);
+
+    if (!isValid) {
+      throw new Error('Invalid custom API URL');
+    }
+
+    urls.custom = customApiUrl;
+  }
+
+  return urls;
 };
 
 /**

@@ -18,17 +18,23 @@ interface SendCallbacks {
 
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
+  private readonly integrationId?: 'saas' | 'custom';
+  private readonly apiUrl?: string;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
 
-  constructor(storeManager: StorageManager) {
+  constructor(storeManager: StorageManager, integrationId?: 'saas' | 'custom', apiUrl?: string) {
     super();
     this.storeManager = storeManager;
+    this.integrationId = integrationId;
+    this.apiUrl = apiUrl;
   }
 
   private getQueueStorageKey(): string {
     const userId = this.get('userId') || 'anonymous';
-    return QUEUE_KEY(userId);
+    const baseKey = QUEUE_KEY(userId);
+    // Add integration suffix for multi-integration support
+    return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
 
   sendEventsQueueSync(body: EventsQueue): boolean {
@@ -36,12 +42,14 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    const config = this.get('config');
-
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log('warn', 'Fail mode: simulating network failure (sync)', {
-        data: { events: body.events.length },
-      });
+    if (this.apiUrl === SpecialApiUrl.Fail) {
+      log(
+        'warn',
+        `Fail mode: simulating network failure (sync)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        {
+          data: { events: body.events.length },
+        },
+      );
 
       return false;
     }
@@ -122,10 +130,8 @@ export class SenderManager extends StateManager {
       return this.simulateSuccessfulSend();
     }
 
-    const config = this.get('config');
-
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log('warn', 'Fail mode: simulating network failure', {
+    if (this.apiUrl === SpecialApiUrl.Fail) {
+      log('warn', `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
         data: { events: body.events.length },
       });
 
@@ -143,7 +149,7 @@ export class SenderManager extends StateManager {
         throw error;
       }
 
-      log('error', 'Send request failed', {
+      log('error', `Send request failed${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
         error,
         data: {
           events: body.events.length,
@@ -238,7 +244,7 @@ export class SenderManager extends StateManager {
     };
 
     return {
-      url: this.get('collectApiUrl'),
+      url: this.apiUrl || '',
       payload: JSON.stringify(enrichedBody),
     };
   }
@@ -316,7 +322,7 @@ export class SenderManager extends StateManager {
   }
 
   private shouldSkipSend(): boolean {
-    return !this.get('collectApiUrl');
+    return !this.apiUrl;
   }
 
   private async simulateSuccessfulSend(): Promise<boolean> {
@@ -339,7 +345,7 @@ export class SenderManager extends StateManager {
       now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
 
     if (shouldLog) {
-      log('error', context, {
+      log('error', `${context}${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
         data: { status: error.statusCode, message: error.message },
       });
 

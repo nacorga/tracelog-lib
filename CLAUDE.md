@@ -154,7 +154,53 @@ await tracelog.init({
   disabledEvents: ['scroll', 'web_vitals', 'error']
   // Core events (PAGE_VIEW, CLICK, SESSION) still tracked
 });
+
+// 6. Multi-Integration (v1.1.0+) - Simultaneous sending
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' },           // Analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' } // Data warehouse
+  }
+});
+// Events sent to BOTH endpoints independently with:
+// - Independent error handling (4xx/5xx per integration)
+// - Independent retry/persistence (separate localStorage keys)
+// - Parallel sending (non-blocking)
 ```
+
+### Multi-Integration Architecture (v1.1.0+)
+
+**State Structure:**
+```typescript
+interface State {
+  collectApiUrl: string;  // @deprecated - backward compat (first available URL)
+  collectApiUrls: {       // NEW - multi-integration support
+    saas?: string;        // TraceLog SaaS URL
+    custom?: string;      // Custom backend URL
+  };
+  // ... other fields
+}
+```
+
+**SenderManager (Per-Integration):**
+- Each integration has its own `SenderManager` instance
+- Constructor: `new SenderManager(storage, 'saas' | 'custom', 'https://...')`
+- Storage keys: `tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom`
+- Independent error handling, retry logic, and persistence
+
+**EventManager (Orchestration):**
+- Manages array of `SenderManager[]` (0-2 instances)
+- Parallel async sending: `Promise.allSettled()`
+- Sync sending (sendBeacon): All must succeed
+- Independent recovery per integration
+
+**Error Handling:**
+| Integration | Error Type | Behavior |
+|-------------|-----------|----------|
+| SaaS | 4xx (permanent) | Clear storage, no retry |
+| SaaS | 5xx (temporary) | Persist to `tlog:queue:{userId}:saas`, retry next page |
+| Custom | 4xx (permanent) | Clear storage, no retry |
+| Custom | 5xx (temporary) | Persist to `tlog:queue:{userId}:custom`, retry next page |
 
 ### Event Queue & Sending
 

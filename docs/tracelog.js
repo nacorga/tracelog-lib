@@ -310,6 +310,32 @@ const getDeviceType = () => {
 };
 const LOG_STYLE_ACTIVE = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
 const LOG_STYLE_DISABLED = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
+const DISABLEABLE_EVENT_TYPES = ["scroll", "web_vitals", "error"];
+const PII_PATTERNS = [
+  // Email addresses
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
+  // US Phone numbers (various formats)
+  /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
+  // Credit card numbers (16 digits with optional separators)
+  /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
+  // IBAN (International Bank Account Number)
+  /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi,
+  // API keys/tokens (sk_test_, sk_live_, pk_test_, pk_live_, etc.)
+  /\b[sp]k_(test|live)_[a-zA-Z0-9]{10,}\b/gi,
+  // Bearer tokens (JWT-like patterns - matches complete and partial tokens)
+  /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
+  // Passwords in connection strings (protocol://user:password@host)
+  /:\/\/[^:/]+:([^@]+)@/gi
+];
+const MAX_ERROR_MESSAGE_LENGTH = 500;
+const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
+const MAX_TRACKED_ERRORS = 50;
+const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
+const DEFAULT_ERROR_SAMPLING_RATE = 1;
+const ERROR_BURST_WINDOW_MS = 1e3;
+const ERROR_BURST_THRESHOLD = 10;
+const ERROR_BURST_BACKOFF_MS = 5e3;
+const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const STORAGE_BASE_KEY = "tlog";
 const QA_MODE_KEY = `${STORAGE_BASE_KEY}:qa_mode`;
 const USER_ID_KEY = `${STORAGE_BASE_KEY}:uid`;
@@ -374,31 +400,6 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const PII_PATTERNS = [
-  // Email addresses
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
-  // US Phone numbers (various formats)
-  /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
-  // Credit card numbers (16 digits with optional separators)
-  /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-  // IBAN (International Bank Account Number)
-  /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi,
-  // API keys/tokens (sk_test_, sk_live_, pk_test_, pk_live_, etc.)
-  /\b[sp]k_(test|live)_[a-zA-Z0-9]{10,}\b/gi,
-  // Bearer tokens (JWT-like patterns - matches complete and partial tokens)
-  /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
-  // Passwords in connection strings (protocol://user:password@host)
-  /:\/\/[^:/]+:([^@]+)@/gi
-];
-const MAX_ERROR_MESSAGE_LENGTH = 500;
-const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
-const MAX_TRACKED_ERRORS = 50;
-const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
-const DEFAULT_ERROR_SAMPLING_RATE = 1;
-const ERROR_BURST_WINDOW_MS = 1e3;
-const ERROR_BURST_THRESHOLD = 10;
-const ERROR_BURST_BACKOFF_MS = 5e3;
-const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const detectQaMode = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return false;
@@ -509,43 +510,46 @@ const isValidUrl = (url, allowHttp = false) => {
     return false;
   }
 };
-const getCollectApiUrl = (config) => {
-  if (config.integrations?.tracelog?.projectId) {
-    try {
-      const url = new URL(window.location.href);
-      const host = url.hostname;
-      if (!host || typeof host !== "string") {
-        throw new Error("Invalid hostname");
-      }
-      const parts = host.split(".");
-      if (!parts || !Array.isArray(parts) || parts.length === 0 || parts.length === 1 && parts[0] === "") {
-        throw new Error("Invalid hostname structure");
-      }
-      const projectId = config.integrations.tracelog.projectId;
-      const cleanDomain = parts.slice(-2).join(".");
-      if (!cleanDomain) {
-        throw new Error("Invalid domain");
-      }
-      const collectApiUrl2 = `https://${projectId}.${cleanDomain}/collect`;
-      const isValid = isValidUrl(collectApiUrl2);
-      if (!isValid) {
-        throw new Error("Invalid URL");
-      }
-      return collectApiUrl2;
-    } catch (error) {
-      throw new Error(`Invalid URL configuration: ${error instanceof Error ? error.message : String(error)}`);
+const generateSaasApiUrl = (projectId) => {
+  try {
+    const url = new URL(window.location.href);
+    const host = url.hostname;
+    if (!host || typeof host !== "string") {
+      throw new Error("Invalid hostname");
     }
-  }
-  const collectApiUrl = config.integrations?.custom?.collectApiUrl;
-  if (collectApiUrl) {
-    const allowHttp = config.integrations?.custom?.allowHttp ?? false;
-    const isValid = isValidUrl(collectApiUrl, allowHttp);
+    const parts = host.split(".");
+    if (!parts || !Array.isArray(parts) || parts.length === 0 || parts.length === 1 && parts[0] === "") {
+      throw new Error("Invalid hostname structure");
+    }
+    const cleanDomain = parts.slice(-2).join(".");
+    if (!cleanDomain) {
+      throw new Error("Invalid domain");
+    }
+    const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
+    const isValid = isValidUrl(collectApiUrl);
     if (!isValid) {
       throw new Error("Invalid URL");
     }
     return collectApiUrl;
+  } catch (error) {
+    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return "";
+};
+const getCollectApiUrls = (config) => {
+  const urls = {};
+  if (config.integrations?.tracelog?.projectId) {
+    urls.saas = generateSaasApiUrl(config.integrations.tracelog.projectId);
+  }
+  const customApiUrl = config.integrations?.custom?.collectApiUrl;
+  if (customApiUrl) {
+    const allowHttp = config.integrations?.custom?.allowHttp ?? false;
+    const isValid = isValidUrl(customApiUrl, allowHttp);
+    if (!isValid) {
+      throw new Error("Invalid custom API URL");
+    }
+    urls.custom = customApiUrl;
+  }
+  return urls;
 };
 const normalizeUrl = (url, sensitiveQueryParams = []) => {
   if (!url || typeof url !== "string") {
@@ -736,15 +740,14 @@ const validateAppConfig = (config) => {
     if (!Array.isArray(config.disabledEvents)) {
       throw new AppConfigValidationError("disabledEvents must be an array", "config");
     }
-    const validEventTypes = ["scroll", "web_vitals", "error"];
     const uniqueEvents = /* @__PURE__ */ new Set();
     for (const eventType of config.disabledEvents) {
       if (typeof eventType !== "string") {
         throw new AppConfigValidationError("All disabled event types must be strings", "config");
       }
-      if (!validEventTypes.includes(eventType)) {
+      if (!DISABLEABLE_EVENT_TYPES.includes(eventType)) {
         throw new AppConfigValidationError(
-          `Invalid disabled event type: "${eventType}". Must be one of: ${validEventTypes.join(", ")}`,
+          `Invalid disabled event type: "${eventType}". Must be one of: ${DISABLEABLE_EVENT_TYPES.join(", ")}`,
           "config"
         );
       }
@@ -1168,25 +1171,33 @@ class StateManager {
 }
 class SenderManager extends StateManager {
   storeManager;
+  integrationId;
+  apiUrl;
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
-  constructor(storeManager) {
+  constructor(storeManager, integrationId, apiUrl) {
     super();
     this.storeManager = storeManager;
+    this.integrationId = integrationId;
+    this.apiUrl = apiUrl;
   }
   getQueueStorageKey() {
     const userId = this.get("userId") || "anonymous";
-    return QUEUE_KEY(userId);
+    const baseKey = QUEUE_KEY(userId);
+    return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
   sendEventsQueueSync(body) {
     if (this.shouldSkipSend()) {
       return true;
     }
-    const config = this.get("config");
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log("warn", "Fail mode: simulating network failure (sync)", {
-        data: { events: body.events.length }
-      });
+    if (this.apiUrl === SpecialApiUrl.Fail) {
+      log(
+        "warn",
+        `Fail mode: simulating network failure (sync)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
+        {
+          data: { events: body.events.length }
+        }
+      );
       return false;
     }
     return this.sendQueueSyncInternal(body);
@@ -1252,9 +1263,8 @@ class SenderManager extends StateManager {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
-    const config = this.get("config");
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log("warn", "Fail mode: simulating network failure", {
+    if (this.apiUrl === SpecialApiUrl.Fail) {
+      log("warn", `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
         data: { events: body.events.length }
       });
       return false;
@@ -1267,7 +1277,7 @@ class SenderManager extends StateManager {
       if (error instanceof PermanentError) {
         throw error;
       }
-      log("error", "Send request failed", {
+      log("error", `Send request failed${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
         error,
         data: {
           events: body.events.length,
@@ -1340,7 +1350,7 @@ class SenderManager extends StateManager {
       }
     };
     return {
-      url: this.get("collectApiUrl"),
+      url: this.apiUrl || "",
       payload: JSON.stringify(enrichedBody)
     };
   }
@@ -1401,7 +1411,7 @@ class SenderManager extends StateManager {
     }
   }
   shouldSkipSend() {
-    return !this.get("collectApiUrl");
+    return !this.apiUrl;
   }
   async simulateSuccessfulSend() {
     const delay = Math.random() * 400 + 100;
@@ -1415,7 +1425,7 @@ class SenderManager extends StateManager {
     const now = Date.now();
     const shouldLog = !this.lastPermanentErrorLog || this.lastPermanentErrorLog.statusCode !== error.statusCode || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
     if (shouldLog) {
-      log("error", context, {
+      log("error", `${context}${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
         data: { status: error.statusCode, message: error.message }
       });
       this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
@@ -1424,7 +1434,7 @@ class SenderManager extends StateManager {
 }
 class EventManager extends StateManager {
   googleAnalytics;
-  dataSender;
+  dataSenders;
   emitter;
   eventsQueue = [];
   pendingEventsBuffer = [];
@@ -1446,24 +1456,34 @@ class EventManager extends StateManager {
   constructor(storeManager, googleAnalytics = null, emitter = null) {
     super();
     this.googleAnalytics = googleAnalytics;
-    this.dataSender = new SenderManager(storeManager);
     this.emitter = emitter;
+    this.dataSenders = [];
+    const collectApiUrls = this.get("collectApiUrls");
+    if (collectApiUrls?.saas) {
+      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas));
+    }
+    if (collectApiUrls?.custom) {
+      this.dataSenders.push(new SenderManager(storeManager, "custom", collectApiUrls.custom));
+    }
   }
   async recoverPersistedEvents() {
-    await this.dataSender.recoverPersistedEvents({
-      onSuccess: (_eventCount, recoveredEvents, body) => {
-        if (recoveredEvents && recoveredEvents.length > 0) {
-          const eventIds = recoveredEvents.map((e3) => e3.id);
-          this.removeProcessedEvents(eventIds);
-          if (body) {
-            this.emitEventsQueue(body);
+    const recoveryPromises = this.dataSenders.map(
+      async (sender) => sender.recoverPersistedEvents({
+        onSuccess: (_eventCount, recoveredEvents, body) => {
+          if (recoveredEvents && recoveredEvents.length > 0) {
+            const eventIds = recoveredEvents.map((e3) => e3.id);
+            this.removeProcessedEvents(eventIds);
+            if (body) {
+              this.emitEventsQueue(body);
+            }
           }
+        },
+        onFailure: () => {
+          log("warn", "Failed to recover persisted events");
         }
-      },
-      onFailure: () => {
-        log("warn", "Failed to recover persisted events");
-      }
-    });
+      })
+    );
+    await Promise.allSettled(recoveryPromises);
   }
   track({
     type,
@@ -1624,7 +1644,9 @@ class EventManager extends StateManager {
       [EventType.SCROLL]: 0
     };
     this.lastSessionId = null;
-    this.dataSender.stop();
+    this.dataSenders.forEach((sender) => {
+      sender.stop();
+    });
   }
   async flushImmediately() {
     return this.flushEvents(false);
@@ -1665,9 +1687,16 @@ class EventManager extends StateManager {
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e3) => e3.id);
+    if (this.dataSenders.length === 0) {
+      this.removeProcessedEvents(eventIds);
+      this.clearSendInterval();
+      this.emitEventsQueue(body);
+      return isSync ? true : Promise.resolve(true);
+    }
     if (isSync) {
-      const success = this.dataSender.sendEventsQueueSync(body);
-      if (success) {
+      const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
+      const allSucceeded = results.every((success) => success);
+      if (allSucceeded) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
@@ -1675,23 +1704,36 @@ class EventManager extends StateManager {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
       }
-      return success;
+      return allSucceeded;
     } else {
-      return this.dataSender.sendEventsQueue(body, {
-        onSuccess: () => {
-          this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
-          this.emitEventsQueue(body);
-        },
-        onFailure: () => {
-          this.removeProcessedEvents(eventIds);
-          if (this.eventsQueue.length === 0) {
-            this.clearSendInterval();
+      const sendPromises = this.dataSenders.map(
+        async (sender) => sender.sendEventsQueue(body, {
+          onSuccess: () => {
+          },
+          onFailure: () => {
           }
-          log("warn", "Async flush failed, removed from queue and persisted for recovery on next page load", {
-            data: { eventCount: eventsToSend.length }
-          });
+        })
+      );
+      return Promise.allSettled(sendPromises).then((results) => {
+        this.removeProcessedEvents(eventIds);
+        this.clearSendInterval();
+        const anySucceeded = results.some((result) => result.status === "fulfilled" && result.value === true);
+        if (anySucceeded) {
+          this.emitEventsQueue(body);
         }
+        const failedCount = results.filter(
+          (result) => result.status === "rejected" || result.status === "fulfilled" && result.value === false
+        ).length;
+        if (failedCount > 0) {
+          log(
+            "warn",
+            "Async flush completed with some failures, events removed from queue and persisted per-integration",
+            {
+              data: { eventCount: eventsToSend.length, failedCount }
+            }
+          );
+        }
+        return anySucceeded;
       });
     }
   }
@@ -1700,23 +1742,37 @@ class EventManager extends StateManager {
       return;
     }
     const body = this.buildEventsPayload();
+    if (this.dataSenders.length === 0) {
+      this.emitEventsQueue(body);
+      return;
+    }
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e3) => e3.id);
-    await this.dataSender.sendEventsQueue(body, {
-      onSuccess: () => {
-        this.removeProcessedEvents(eventIds);
-        this.emitEventsQueue(body);
-      },
-      onFailure: () => {
-        this.removeProcessedEvents(eventIds);
-        if (this.eventsQueue.length === 0) {
-          this.clearSendInterval();
+    const sendPromises = this.dataSenders.map(
+      async (sender) => sender.sendEventsQueue(body, {
+        onSuccess: () => {
+        },
+        onFailure: () => {
         }
-        log("warn", "Events send failed, removed from queue and persisted for recovery on next page load", {
-          data: { eventCount: eventsToSend.length }
-        });
-      }
-    });
+      })
+    );
+    const results = await Promise.allSettled(sendPromises);
+    this.removeProcessedEvents(eventIds);
+    const anySucceeded = results.some((result) => result.status === "fulfilled" && result.value === true);
+    if (anySucceeded) {
+      this.emitEventsQueue(body);
+    }
+    if (this.eventsQueue.length === 0) {
+      this.clearSendInterval();
+    }
+    const failedCount = results.filter(
+      (result) => result.status === "rejected" || result.status === "fulfilled" && result.value === false
+    ).length;
+    if (failedCount > 0) {
+      log("warn", "Events send completed with some failures, removed from queue and persisted per-integration", {
+        data: { eventCount: eventsToSend.length, failedCount }
+      });
+    }
   }
   buildEventsPayload() {
     const eventMap = /* @__PURE__ */ new Map();
@@ -4014,8 +4070,8 @@ class App extends StateManager {
     this.set("config", config);
     const userId = UserManager.getId(this.managers.storage);
     this.set("userId", userId);
-    const collectApiUrl = getCollectApiUrl(config);
-    this.set("collectApiUrl", collectApiUrl);
+    const collectApiUrls = getCollectApiUrls(config);
+    this.set("collectApiUrls", collectApiUrls);
     const device = getDeviceType();
     this.set("device", device);
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
@@ -4363,52 +4419,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     injectTestingBridge();
   }
 }
-const ENGAGEMENT_THRESHOLDS = {
-  LOW_ACTIVITY_EVENT_COUNT: 50,
-  HIGH_ACTIVITY_EVENT_COUNT: 1e3,
-  MIN_EVENTS_FOR_DYNAMIC_CALCULATION: 100,
-  MIN_EVENTS_FOR_TREND_ANALYSIS: 30,
-  BOUNCE_RATE_SESSION_THRESHOLD: 1,
-  // Sessions with 1 page view = bounce
-  MIN_ENGAGED_SESSION_DURATION_MS: 30 * 1e3,
-  MIN_SCROLL_DEPTH_ENGAGEMENT: 25
-  // 25% scroll depth for engagement
-};
-const SESSION_ANALYTICS = {
-  INACTIVITY_TIMEOUT_MS: 30 * 60 * 1e3,
-  // 30min for analytics (vs 15min client)
-  SHORT_SESSION_THRESHOLD_MS: 30 * 1e3,
-  MEDIUM_SESSION_THRESHOLD_MS: 5 * 60 * 1e3,
-  LONG_SESSION_THRESHOLD_MS: 30 * 60 * 1e3,
-  MAX_REALISTIC_SESSION_DURATION_MS: 8 * 60 * 60 * 1e3,
-  // Filter outliers
-  MIN_EVENTS_FOR_DURATION: 2
-  // Minimum events required to calculate session duration
-};
-const INSIGHT_THRESHOLDS = {
-  SIGNIFICANT_CHANGE_PERCENT: 20,
-  MAJOR_CHANGE_PERCENT: 50,
-  MIN_EVENTS_FOR_INSIGHT: 100,
-  MIN_SESSIONS_FOR_INSIGHT: 10,
-  MIN_CORRELATION_STRENGTH: 0.7,
-  // Strong correlation threshold
-  LOW_ERROR_RATE_PERCENT: 1,
-  HIGH_ERROR_RATE_PERCENT: 5,
-  CRITICAL_ERROR_RATE_PERCENT: 10
-};
-const ANALYTICS_QUERY_LIMITS = {
-  DEFAULT_EVENTS_LIMIT: 5,
-  DEFAULT_SESSIONS_LIMIT: 5,
-  DEFAULT_PAGES_LIMIT: 5,
-  MAX_EVENTS_FOR_DEEP_ANALYSIS: 1e4,
-  MAX_TIME_RANGE_DAYS: 365,
-  ANALYTICS_BATCH_SIZE: 1e3
-  // For historical analysis
-};
-const SPECIAL_PAGE_URLS = {
-  PAGE_URL_EXCLUDED: "excluded",
-  PAGE_URL_UNKNOWN: "unknown"
-};
 const tracelog = {
   init,
   event,
@@ -4619,16 +4629,13 @@ const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePro
   onTTFB: Q
 }, Symbol.toStringTag, { value: "Module" }));
 export {
-  ANALYTICS_QUERY_LIMITS,
   AppConfigValidationError,
   DEFAULT_SESSION_TIMEOUT,
   DEFAULT_WEB_VITALS_MODE,
   DeviceType,
-  ENGAGEMENT_THRESHOLDS,
   EmitterEvent,
   ErrorType,
   EventType,
-  INSIGHT_THRESHOLDS,
   InitializationTimeoutError,
   IntegrationValidationError,
   MAX_ARRAY_LENGTH,
@@ -4643,8 +4650,6 @@ export {
   Mode,
   PII_PATTERNS,
   PermanentError,
-  SESSION_ANALYTICS,
-  SPECIAL_PAGE_URLS,
   SamplingRateValidationError,
   ScrollDirection,
   SessionTimeoutValidationError,

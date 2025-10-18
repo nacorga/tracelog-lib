@@ -4,7 +4,15 @@ import { Mode } from './mode.types';
 
 export interface State {
   mode?: Mode;
-  collectApiUrl: string;
+  /**
+   * Collection of API URLs for different integrations.
+   * - saas: TraceLog SaaS endpoint (if projectId configured)
+   * - custom: Custom backend endpoint (if collectApiUrl configured)
+   */
+  collectApiUrls: {
+    saas?: string;
+    custom?: string;
+  };
   config: Config;
   sessionId: string | null;
   userId: string;

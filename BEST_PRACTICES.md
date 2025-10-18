@@ -362,6 +362,70 @@ await tracelog.init({
     googleAnalytics: { measurementId: 'G-XXXXXX' }
   }
 });
+
+// 5. Multi-Integration (NEW in v1.1.0) - simultaneous sending
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' },           // Analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' } // Data warehouse
+  }
+});
+```
+
+### ✅ DO: Use multi-integration for redundancy and compliance
+
+**New in v1.1.0:** Send events to multiple backends simultaneously with independent error handling and retry logic.
+
+```typescript
+// Use Case 1: Analytics + Data Warehouse
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'abc-123' },                    // Real-time dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }     // Long-term storage
+  }
+});
+
+// Use Case 2: Production + Compliance
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'prod-analytics' },             // Business analytics
+    custom: { collectApiUrl: 'https://compliance.gov' }    // Regulatory logging
+  }
+});
+
+// Use Case 3: Migration (Dual-Send)
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://old-system.com' },   // Legacy system
+    tracelog: { projectId: 'new-project' }                 // New TraceLog
+  }
+});
+// Gradually migrate traffic from old to new without data loss
+```
+
+**Key Benefits:**
+- ✅ **Independent error handling:** 4xx/5xx errors handled per integration
+- ✅ **Independent retry:** Failed events persisted separately for each backend
+- ✅ **Parallel sending:** Non-blocking async requests to all endpoints
+- ✅ **Zero data loss:** One backend down doesn't affect the other
+
+### ❌ DON'T: Use multi-integration for load balancing
+
+```typescript
+// BAD - not for load balancing
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api1.example.com' },
+    // ❌ Can't add second custom integration for load balancing
+  }
+});
+
+// GOOD - use a load balancer in front of your backend
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://lb.example.com' } // Load balancer handles distribution
+  }
+});
 ```
 
 ### ❌ DON'T: Use HTTP in production
