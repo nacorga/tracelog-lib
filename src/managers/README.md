@@ -122,7 +122,7 @@ Core business logic components that handle analytics data processing, state mana
 - Read-only state snapshots via `getGlobalState()` utility function
 
 **Supported State Properties**:
-- **Core State**: `collectApiUrl`, `config`, `sessionId`, `userId`, `device`, `pageUrl`
+- **Core State**: `collectApiUrls`, `config`, `sessionId`, `userId`, `device`, `pageUrl`
 - **Control Flags**: `mode` (QA/production), `hasStartSession`, `suppressNextScroll`
 - **Runtime Counters**: `scrollEventCount` (optional)
 
