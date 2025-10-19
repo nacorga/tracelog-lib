@@ -151,6 +151,89 @@ export class SenderManager extends StateManager {
     return Array.isArray(queue.events);
   }
 
+  private applyBeforeSendTransformer(body: EventsQueue): EventsQueue | null {
+    if (this.integrationId === 'saas') {
+      return body;
+    }
+
+    const beforeSendTransformer = this.transformers.get('beforeSend');
+
+    if (!beforeSendTransformer) {
+      return body;
+    }
+
+    try {
+      const transformedEvents: EventData[] = [];
+
+      for (const event of body.events) {
+        const transformed = beforeSendTransformer(event);
+
+        if (transformed === null) {
+          log('debug', `Event filtered by beforeSend transformer [${this.integrationId}]`, {
+            data: { eventType: event.type },
+          });
+
+          continue;
+        }
+
+        if (this.isValidEventData(transformed)) {
+          transformedEvents.push(transformed);
+        } else {
+          log('warn', `beforeSend transformer returned invalid data, using original [${this.integrationId}]`, {
+            data: { eventType: event.type, invalidFields: this.getMissingEventFields(transformed) },
+          });
+
+          transformedEvents.push(event);
+        }
+      }
+
+      if (transformedEvents.length === 0) {
+        log('debug', `All events filtered by beforeSend transformer [${this.integrationId}]`, {
+          data: { originalCount: body.events.length },
+        });
+
+        return null;
+      }
+
+      return {
+        ...body,
+        events: transformedEvents,
+      };
+    } catch (error) {
+      log('error', `beforeSend transformer threw error, using original batch [${this.integrationId}]`, {
+        error,
+        data: { eventCount: body.events.length },
+      });
+
+      return body;
+    }
+  }
+
+  private isValidEventData(value: unknown): value is EventData {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const event = value as Partial<EventData>;
+
+    return typeof event.type === 'string';
+  }
+
+  private getMissingEventFields(value: unknown): string[] {
+    if (!value || typeof value !== 'object') {
+      return ['value is not an object'];
+    }
+
+    const event = value as Partial<EventData>;
+    const missing: string[] = [];
+
+    if (typeof event.type !== 'string') {
+      missing.push('type (required to distinguish from EventsQueue)');
+    }
+
+    return missing;
+  }
+
   private applyBeforeBatchTransformer(body: EventsQueue): EventsQueue | null {
     if (this.integrationId === 'saas') {
       return body;
@@ -212,7 +295,13 @@ export class SenderManager extends StateManager {
       return this.simulateSuccessfulSend();
     }
 
-    const transformedBody = this.applyBeforeBatchTransformer(body);
+    const afterBeforeSend = this.applyBeforeSendTransformer(body);
+
+    if (!afterBeforeSend) {
+      return true;
+    }
+
+    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
       return true;
@@ -284,17 +373,20 @@ export class SenderManager extends StateManager {
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
-    // Apply beforeBatch transformer
-    const transformedBody = this.applyBeforeBatchTransformer(body);
+    const afterBeforeSend = this.applyBeforeSendTransformer(body);
+
+    if (!afterBeforeSend) {
+      return true;
+    }
+
+    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
-      // Batch was filtered out by transformer
       return true;
     }
 
     const { url, payload } = this.prepareRequest(transformedBody);
 
-    // Check payload size against 64KB browser limit (Phase 3)
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
       log('warn', 'Payload exceeds sendBeacon limit, persisting for recovery', {
         data: {
@@ -303,7 +395,9 @@ export class SenderManager extends StateManager {
           events: transformedBody.events.length,
         },
       });
+
       this.persistEvents(transformedBody);
+
       return false;
     }
 
@@ -315,9 +409,6 @@ export class SenderManager extends StateManager {
       return false;
     }
 
-    // sendBeacon only returns true/false without HTTP status codes
-    // true: browser accepted the request for sending
-    // false: request rejected (queue full, size limits, etc.)
     const accepted = navigator.sendBeacon(url, blob);
 
     if (!accepted) {
@@ -329,8 +420,6 @@ export class SenderManager extends StateManager {
   }
 
   private prepareRequest(body: EventsQueue): { url: string; payload: string } {
-    // Enrich payload with metadata for sendBeacon() fallback
-    // sendBeacon() doesn't send custom headers, so we include referer in payload
     const enrichedBody = {
       ...body,
       _metadata: {

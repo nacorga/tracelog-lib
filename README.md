@@ -203,7 +203,7 @@ Transform events dynamically at runtime before they're sent to integrations. Use
 |-------------|--------------|---------------|
 | **TraceLog SaaS** | ❌ Silently ignored | ❌ Silently ignored |
 | **Custom Backend** | ✅ Applied | ✅ Applied |
-| **Google Analytics** | ✅ Applied | N/A |
+| **Google Analytics** | ❌ Not applied | N/A |
 
 ### Available Hooks
 

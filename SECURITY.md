@@ -366,7 +366,7 @@ tracelog.setTransformer('beforeSend', (data) => {
 **Critical Security Note:**
 - **TraceLog SaaS**: Transformers silently ignored (schema protection)
 - **Custom Backend**: Transformers applied (YOUR responsibility to secure)
-- **Google Analytics**: `beforeSend` applied (be careful with GA)
+- **Google Analytics**: Transformers NOT applied (events sent as-is)
 
 ```typescript
 // Custom backend - transformers applied (YOU control security)
@@ -411,7 +411,9 @@ tracelog.setTransformer('beforeSend', (data) => {
   return data;
 });
 
-// GOOD - use hashed/anonymized IDs only
+// GOOD - use hashed/anonymized IDs only (precompute async values)
+const hashedUserId = await hashUserId(currentUser.id); // Precompute outside transformer
+
 tracelog.setTransformer('beforeSend', (data) => {
   if ('type' in data) {
     return {
@@ -420,8 +422,8 @@ tracelog.setTransformer('beforeSend', (data) => {
         ...data.custom_event,
         metadata: {
           ...data.custom_event?.metadata,
-          userId: await hashUserId(currentUser.id), // ✅ Hashed ID
-          userSegment: currentUser.segment           // ✅ Generic category
+          userId: hashedUserId,              // ✅ Precomputed hashed ID
+          userSegment: currentUser.segment   // ✅ Generic category
         }
       }
     };

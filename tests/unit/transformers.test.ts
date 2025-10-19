@@ -1,11 +1,27 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { App } from '../../src/app';
 import type { EventData, EventsQueue } from '../../src/types';
 
 describe('Transformers', () => {
   let app: App;
 
+  // Helper to flush events for testing
+  const flushEvents = () => {
+    // Access private EventManager and call flushEvents
+    const eventManager = (app as any).managers?.event;
+    if (eventManager && typeof eventManager.flushEvents === 'function') {
+      eventManager.flushEvents(false);
+    }
+  };
+
   beforeEach(async () => {
+    // Mock fetch to prevent actual network calls
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+    });
+
     app = new App();
     await app.init({
       integrations: {
@@ -22,6 +38,7 @@ describe('Transformers', () => {
     if (app) {
       app.destroy();
     }
+    vi.restoreAllMocks();
   });
 
   describe('setTransformer', () => {
@@ -111,7 +128,10 @@ describe('Transformers', () => {
 
       app.sendCustomEvent('test_event', { key: 'value' });
 
-      // Wait for event to be processed
+      // Manually flush events to trigger transformer
+      flushEvents();
+
+      // Wait for async send to complete
       await vi.waitFor(() => {
         expect(transformer).toHaveBeenCalled();
       });
@@ -123,6 +143,9 @@ describe('Transformers', () => {
       app.setTransformer('beforeSend', transformer);
 
       app.sendCustomEvent('test_event', { key: 'value' });
+
+      // Manually flush events to trigger transformer
+      flushEvents();
 
       // Event should be filtered out
       await vi.waitFor(() => {
@@ -196,6 +219,9 @@ describe('Transformers', () => {
       app.setTransformer('beforeSend', transformer);
 
       app.sendCustomEvent('test_event', { key: 'value' });
+
+      // Manually flush events to trigger transformer
+      flushEvents();
 
       // Wait for event to be processed
       await vi.waitFor(() => {
@@ -341,6 +367,9 @@ describe('Transformers', () => {
 
       app.setTransformer('beforeSend', transformer);
       app.sendCustomEvent('test_event', { key: 'value' });
+
+      // Manually flush events to trigger transformer
+      flushEvents();
 
       await vi.waitFor(() => {
         expect(transformer).toHaveBeenCalled();

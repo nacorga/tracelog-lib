@@ -198,8 +198,7 @@ await tracelog.init({
 **State Structure:**
 ```typescript
 interface State {
-  collectApiUrl: string;  // @deprecated - backward compat (first available URL)
-  collectApiUrls: {       // NEW - multi-integration support
+  collectApiUrls: {       // Multi-integration support
     saas?: string;        // TraceLog SaaS URL
     custom?: string;      // Custom backend URL
   };
