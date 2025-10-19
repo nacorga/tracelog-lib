@@ -1271,6 +1271,69 @@ class SenderManager extends StateManager {
     const queue = value;
     return Array.isArray(queue.events);
   }
+  applyBeforeSendTransformer(body) {
+    if (this.integrationId === "saas") {
+      return body;
+    }
+    const beforeSendTransformer = this.transformers.get("beforeSend");
+    if (!beforeSendTransformer) {
+      return body;
+    }
+    try {
+      const transformedEvents = [];
+      for (const event2 of body.events) {
+        const transformed = beforeSendTransformer(event2);
+        if (transformed === null) {
+          log("debug", `Event filtered by beforeSend transformer [${this.integrationId}]`, {
+            data: { eventType: event2.type }
+          });
+          continue;
+        }
+        if (this.isValidEventData(transformed)) {
+          transformedEvents.push(transformed);
+        } else {
+          log("warn", `beforeSend transformer returned invalid data, using original [${this.integrationId}]`, {
+            data: { eventType: event2.type, invalidFields: this.getMissingEventFields(transformed) }
+          });
+          transformedEvents.push(event2);
+        }
+      }
+      if (transformedEvents.length === 0) {
+        log("debug", `All events filtered by beforeSend transformer [${this.integrationId}]`, {
+          data: { originalCount: body.events.length }
+        });
+        return null;
+      }
+      return {
+        ...body,
+        events: transformedEvents
+      };
+    } catch (error) {
+      log("error", `beforeSend transformer threw error, using original batch [${this.integrationId}]`, {
+        error,
+        data: { eventCount: body.events.length }
+      });
+      return body;
+    }
+  }
+  isValidEventData(value) {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    const event2 = value;
+    return typeof event2.type === "string";
+  }
+  getMissingEventFields(value) {
+    if (!value || typeof value !== "object") {
+      return ["value is not an object"];
+    }
+    const event2 = value;
+    const missing = [];
+    if (typeof event2.type !== "string") {
+      missing.push("type (required to distinguish from EventsQueue)");
+    }
+    return missing;
+  }
   applyBeforeBatchTransformer(body) {
     if (this.integrationId === "saas") {
       return body;
@@ -1317,7 +1380,11 @@ class SenderManager extends StateManager {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
-    const transformedBody = this.applyBeforeBatchTransformer(body);
+    const afterBeforeSend = this.applyBeforeSendTransformer(body);
+    if (!afterBeforeSend) {
+      return true;
+    }
+    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
     if (!transformedBody) {
       return true;
     }
@@ -1374,7 +1441,11 @@ class SenderManager extends StateManager {
     }
   }
   sendQueueSyncInternal(body) {
-    const transformedBody = this.applyBeforeBatchTransformer(body);
+    const afterBeforeSend = this.applyBeforeSendTransformer(body);
+    if (!afterBeforeSend) {
+      return true;
+    }
+    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
     if (!transformedBody) {
       return true;
     }
@@ -1498,7 +1569,6 @@ class EventManager extends StateManager {
   googleAnalytics;
   dataSenders;
   emitter;
-  transformers;
   recentEventFingerprints = /* @__PURE__ */ new Map();
   perEventRateLimits = /* @__PURE__ */ new Map();
   eventsQueue = [];
@@ -1519,7 +1589,6 @@ class EventManager extends StateManager {
     super();
     this.googleAnalytics = googleAnalytics;
     this.emitter = emitter;
-    this.transformers = transformers;
     this.dataSenders = [];
     const collectApiUrls = this.get("collectApiUrls");
     if (collectApiUrls?.saas) {
@@ -1861,7 +1930,7 @@ class EventManager extends StateManager {
   buildEventPayload(data) {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get("pageUrl");
-    let payload = {
+    const payload = {
       id: generateEventId(),
       type: data.type,
       page_url: currentPageUrl,
@@ -1877,51 +1946,7 @@ class EventManager extends StateManager {
       ...data.viewport_data && { viewport_data: data.viewport_data },
       ...isSessionStart && getUTMParameters() && { utm: getUTMParameters() }
     };
-    const beforeSendTransformer = this.transformers.get("beforeSend");
-    const collectApiUrls = this.get("collectApiUrls");
-    const hasCustomBackend = Boolean(collectApiUrls?.custom);
-    if (beforeSendTransformer && hasCustomBackend) {
-      try {
-        const transformed = beforeSendTransformer(payload);
-        if (transformed === null) {
-          log("debug", "Event filtered by beforeSend transformer", {
-            data: { eventType: payload.type }
-          });
-          return null;
-        }
-        if (this.isValidEventData(transformed)) {
-          payload = transformed;
-        } else {
-          log("warn", "beforeSend transformer returned invalid data, using original", {
-            data: { eventType: payload.type, invalidFields: this.getMissingEventFields(transformed) }
-          });
-        }
-      } catch (error) {
-        log("error", "beforeSend transformer threw error, using original event", {
-          error,
-          data: { eventType: payload.type }
-        });
-      }
-    }
     return payload;
-  }
-  isValidEventData(value) {
-    if (!value || typeof value !== "object") {
-      return false;
-    }
-    const event2 = value;
-    return typeof event2.type === "string";
-  }
-  getMissingEventFields(value) {
-    if (!value || typeof value !== "object") {
-      return ["value is not an object"];
-    }
-    const event2 = value;
-    const missing = [];
-    if (typeof event2.type !== "string") {
-      missing.push("type (required to distinguish from EventsQueue)");
-    }
-    return missing;
   }
   isDuplicateEvent(event2) {
     const now = Date.now();
