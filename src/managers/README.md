@@ -51,6 +51,14 @@ Core business logic components that handle analytics data processing, state mana
 - `flushPendingEvents()`: Flushes pre-session buffered events after session initialization
 - `recoverPersistedEvents()`: Recovers events from localStorage after crashes/failures
 
+**Transformer Support**:
+- **`beforeSend` Hook**: Applied during event payload building in `buildEventPayload()`
+  - Transforms individual events before they enter the queue
+  - Only applied for custom backend integrations (NOT TraceLog SaaS)
+  - Can filter events by returning `null`
+  - Errors caught and logged, original event used as fallback
+  - Integration check: `hasCustomBackend = Boolean(collectApiUrls?.custom)`
+
 ## SamplingManager
 
 **Status**: **REMOVED** in v1 refactoring.
@@ -96,6 +104,15 @@ Core business logic components that handle analytics data processing, state mana
 - **SaaS**: `tlog:queue:{userId}:saas`
 - **Custom**: `tlog:queue:{userId}:custom`
 - **Legacy/Standalone**: `tlog:queue:{userId}` (no suffix)
+
+**Transformer Support**:
+- **`beforeBatch` Hook**: Applied in `applyBeforeBatchTransformer()` before sending
+  - Transforms entire batch before network transmission
+  - Only applied for custom backend integrations (`integrationId === 'custom'`)
+  - Silently bypassed for TraceLog SaaS (`integrationId === 'saas'`)
+  - Can filter batches by returning `null`
+  - Errors caught and logged, original batch used as fallback
+  - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
 
 ## SessionManager
 

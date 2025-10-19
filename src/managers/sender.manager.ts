@@ -6,10 +6,11 @@ import {
   MAX_BEACON_PAYLOAD_SIZE,
   PERSISTENCE_THROTTLE_MS,
 } from '../constants';
-import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError } from '../types';
+import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, EventData } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
+import { TransformerHook } from '../types/transformer.types';
 
 interface SendCallbacks {
   onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
@@ -20,10 +21,19 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly integrationId?: 'saas' | 'custom';
   private readonly apiUrl?: string;
+  private readonly transformers: Map<
+    TransformerHook,
+    (data: EventData | EventsQueue) => EventData | EventsQueue | null
+  >;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
 
-  constructor(storeManager: StorageManager, integrationId?: 'saas' | 'custom', apiUrl?: string) {
+  constructor(
+    storeManager: StorageManager,
+    integrationId?: 'saas' | 'custom',
+    apiUrl?: string,
+    transformers: Map<TransformerHook, (data: EventData | EventsQueue) => EventData | EventsQueue | null> = new Map(),
+  ) {
     super();
 
     if ((integrationId && !apiUrl) || (!integrationId && apiUrl)) {
@@ -33,6 +43,7 @@ export class SenderManager extends StateManager {
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
+    this.transformers = transformers;
   }
 
   private getQueueStorageKey(): string {
@@ -130,20 +141,92 @@ export class SenderManager extends StateManager {
 
   stop(): void {}
 
+  private isValidEventsQueue(value: unknown): value is EventsQueue {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const queue = value as Partial<EventsQueue>;
+
+    return Array.isArray(queue.events);
+  }
+
+  private applyBeforeBatchTransformer(body: EventsQueue): EventsQueue | null {
+    if (this.integrationId === 'saas') {
+      return body;
+    }
+
+    const beforeBatchTransformer = this.transformers.get('beforeBatch');
+
+    if (!beforeBatchTransformer) {
+      return body;
+    }
+
+    try {
+      const transformed = beforeBatchTransformer(body);
+
+      if (transformed === null) {
+        log('debug', `Batch filtered by beforeBatch transformer [${this.integrationId}]`, {
+          data: { eventCount: body.events.length },
+        });
+
+        return null;
+      }
+
+      if (this.isValidEventsQueue(transformed)) {
+        return transformed;
+      }
+
+      log('warn', `beforeBatch transformer returned invalid data, using original [${this.integrationId}]`, {
+        data: { eventCount: body.events.length, invalidFields: this.getMissingQueueFields(transformed) },
+      });
+
+      return body;
+    } catch (error) {
+      log('error', `beforeBatch transformer threw error, using original batch [${this.integrationId}]`, {
+        error,
+        data: { eventCount: body.events.length },
+      });
+
+      return body;
+    }
+  }
+
+  private getMissingQueueFields(value: unknown): string[] {
+    if (!value || typeof value !== 'object') {
+      return ['value is not an object'];
+    }
+
+    const queue = value as Partial<EventsQueue>;
+    const missing: string[] = [];
+
+    if (!Array.isArray(queue.events)) {
+      missing.push('events (required array to distinguish from EventData)');
+    }
+
+    return missing;
+  }
+
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
 
+    const transformedBody = this.applyBeforeBatchTransformer(body);
+
+    if (!transformedBody) {
+      return true;
+    }
+
     if (this.apiUrl === SpecialApiUrl.Fail) {
       log('warn', `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
-        data: { events: body.events.length },
+        data: { events: transformedBody.events.length },
       });
 
       return false;
     }
 
-    const { url, payload } = this.prepareRequest(body);
+    const { url, payload } = this.prepareRequest(transformedBody);
 
     try {
       const response = await this.sendWithTimeout(url, payload);
@@ -201,7 +284,15 @@ export class SenderManager extends StateManager {
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
-    const { url, payload } = this.prepareRequest(body);
+    // Apply beforeBatch transformer
+    const transformedBody = this.applyBeforeBatchTransformer(body);
+
+    if (!transformedBody) {
+      // Batch was filtered out by transformer
+      return true;
+    }
+
+    const { url, payload } = this.prepareRequest(transformedBody);
 
     // Check payload size against 64KB browser limit (Phase 3)
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
@@ -209,10 +300,10 @@ export class SenderManager extends StateManager {
         data: {
           size: payload.length,
           limit: MAX_BEACON_PAYLOAD_SIZE,
-          events: body.events.length,
+          events: transformedBody.events.length,
         },
       });
-      this.persistEvents(body);
+      this.persistEvents(transformedBody);
       return false;
     }
 
@@ -220,7 +311,7 @@ export class SenderManager extends StateManager {
 
     if (!this.isSendBeaconAvailable()) {
       log('warn', 'sendBeacon not available, persisting events for recovery');
-      this.persistEvents(body);
+      this.persistEvents(transformedBody);
       return false;
     }
 
@@ -231,7 +322,7 @@ export class SenderManager extends StateManager {
 
     if (!accepted) {
       log('warn', 'sendBeacon rejected request, persisting events for recovery');
-      this.persistEvents(body);
+      this.persistEvents(transformedBody);
     }
 
     return accepted;
