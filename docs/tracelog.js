@@ -1264,6 +1264,13 @@ class SenderManager extends StateManager {
   }
   stop() {
   }
+  isValidEventsQueue(value) {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    const queue = value;
+    return Array.isArray(queue.events);
+  }
   applyBeforeBatchTransformer(body) {
     if (this.integrationId === "saas") {
       return body;
@@ -1280,11 +1287,11 @@ class SenderManager extends StateManager {
         });
         return null;
       }
-      if (transformed && typeof transformed === "object" && "events" in transformed && Array.isArray(transformed.events)) {
+      if (this.isValidEventsQueue(transformed)) {
         return transformed;
       }
       log("warn", `beforeBatch transformer returned invalid data, using original [${this.integrationId}]`, {
-        data: { eventCount: body.events.length }
+        data: { eventCount: body.events.length, invalidFields: this.getMissingQueueFields(transformed) }
       });
       return body;
     } catch (error) {
@@ -1294,6 +1301,17 @@ class SenderManager extends StateManager {
       });
       return body;
     }
+  }
+  getMissingQueueFields(value) {
+    if (!value || typeof value !== "object") {
+      return ["value is not an object"];
+    }
+    const queue = value;
+    const missing = [];
+    if (!Array.isArray(queue.events)) {
+      missing.push("events (required array to distinguish from EventData)");
+    }
+    return missing;
   }
   async send(body) {
     if (this.shouldSkipSend()) {
@@ -1871,11 +1889,11 @@ class EventManager extends StateManager {
           });
           return null;
         }
-        if (transformed && typeof transformed === "object" && "type" in transformed) {
+        if (this.isValidEventData(transformed)) {
           payload = transformed;
         } else {
           log("warn", "beforeSend transformer returned invalid data, using original", {
-            data: { eventType: payload.type }
+            data: { eventType: payload.type, invalidFields: this.getMissingEventFields(transformed) }
           });
         }
       } catch (error) {
@@ -1886,6 +1904,24 @@ class EventManager extends StateManager {
       }
     }
     return payload;
+  }
+  isValidEventData(value) {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    const event2 = value;
+    return typeof event2.type === "string";
+  }
+  getMissingEventFields(value) {
+    if (!value || typeof value !== "object") {
+      return ["value is not an object"];
+    }
+    const event2 = value;
+    const missing = [];
+    if (typeof event2.type !== "string") {
+      missing.push("type (required to distinguish from EventsQueue)");
+    }
+    return missing;
   }
   isDuplicateEvent(event2) {
     const now = Date.now();
@@ -4453,10 +4489,10 @@ const removeTransformer = (hook) => {
     return;
   }
   if (!app) {
-    return;
+    throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
   }
   if (isDestroying) {
-    return;
+    throw new Error("[TraceLog] Cannot remove transformers while TraceLog is being destroyed");
   }
   app.removeTransformer(hook);
 };

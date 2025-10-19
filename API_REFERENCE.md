@@ -367,6 +367,12 @@ tracelog.setTransformer('beforeBatch', (data) => {
 - Returning `null` filters out the event/batch (intended behavior)
 - Invalid return types logged as warnings, original data used
 
+**Validation:**
+- `beforeSend`: Only validates that `'type'` field exists (minimal check to distinguish from EventsQueue)
+- `beforeBatch`: Only validates that `'events'` array exists (minimal check to distinguish from EventData)
+- **Custom schemas fully supported** - transformers can return completely different structures for custom backends
+- All other fields are optional to allow maximum flexibility
+
 **Notes:**
 - Only one transformer per hook (calling again replaces previous)
 - Transformers NOT applied to TraceLog SaaS (schema protection)
@@ -382,6 +388,10 @@ Removes a previously set transformer function.
 **Parameters:**
 - `hook`: Transformer hook type to remove (`'beforeSend'` or `'beforeBatch'`)
 
+**Throws:**
+- `Error` if called before `init()`
+- `Error` if called during `destroy()`
+
 **Example:**
 
 ```typescript
@@ -391,8 +401,7 @@ tracelog.removeTransformer('beforeBatch');
 ```
 
 **Notes:**
-- Safe to call even if no transformer is set
-- No-op if called before initialization
+- Safe to call even if no transformer is set (doesn't throw if transformer doesn't exist)
 - Transformers automatically cleared on `destroy()`
 
 ---

@@ -508,7 +508,6 @@ export class EventManager extends StateManager {
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 
-    // Apply beforeSend transformer (only for custom integrations, NOT TraceLog SaaS)
     const beforeSendTransformer = this.transformers.get('beforeSend');
     const collectApiUrls = this.get('collectApiUrls');
     const hasCustomBackend = Boolean(collectApiUrls?.custom);
@@ -525,11 +524,11 @@ export class EventManager extends StateManager {
           return null;
         }
 
-        if (transformed && typeof transformed === 'object' && 'type' in transformed) {
+        if (this.isValidEventData(transformed)) {
           payload = transformed;
         } else {
           log('warn', 'beforeSend transformer returned invalid data, using original', {
-            data: { eventType: payload.type },
+            data: { eventType: payload.type, invalidFields: this.getMissingEventFields(transformed) },
           });
         }
       } catch (error) {
@@ -541,6 +540,31 @@ export class EventManager extends StateManager {
     }
 
     return payload;
+  }
+
+  private isValidEventData(value: unknown): value is EventData {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const event = value as Partial<EventData>;
+
+    return typeof event.type === 'string';
+  }
+
+  private getMissingEventFields(value: unknown): string[] {
+    if (!value || typeof value !== 'object') {
+      return ['value is not an object'];
+    }
+
+    const event = value as Partial<EventData>;
+    const missing: string[] = [];
+
+    if (typeof event.type !== 'string') {
+      missing.push('type (required to distinguish from EventsQueue)');
+    }
+
+    return missing;
   }
 
   private isDuplicateEvent(event: EventData): boolean {

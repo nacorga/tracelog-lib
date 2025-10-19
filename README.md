@@ -279,13 +279,19 @@ tracelog.removeTransformer('beforeSend');
 tracelog.removeTransformer('beforeBatch');
 ```
 
-### Error Handling
+### Error Handling & Validation
 
-Transformers are designed to be resilient:
+Transformers are designed to be resilient and flexible:
 
+**Error Handling:**
 - **Exceptions**: Caught and logged, original event/batch used
 - **Invalid return**: Logged warning, original event/batch used
 - **`null` return**: Event/batch filtered out (intended behavior)
+
+**Validation:**
+- **Minimal checks only**: `beforeSend` requires `'type'` field, `beforeBatch` requires `'events'` array
+- **Custom schemas supported**: All other fields optional for maximum flexibility with custom backends
+- **Use case**: Transform data to match your backend's schema (e.g., data warehouses, custom APIs)
 
 ```typescript
 // Safe transformer - errors won't break tracking
@@ -297,6 +303,21 @@ tracelog.setTransformer('beforeSend', (data) => {
     console.error('Transformer error:', error);
     return data; // Fallback to original
   }
+});
+
+// Custom schema example - completely reshape for your backend
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return {
+      type: 'analytics_event',
+      eventName: data.custom_event?.name,
+      timestamp: Date.now(),
+      // Your custom fields - TraceLog won't reject this!
+      customField1: 'value',
+      customField2: 123
+    };
+  }
+  return data;
 });
 ```
 

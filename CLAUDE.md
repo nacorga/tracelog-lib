@@ -405,17 +405,24 @@ setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => Eve
   this.transformers.set(hook, fn);
 }
 
-// In EventManager - beforeSend application
+// In EventManager - beforeSend application with minimal validation
 const beforeSendTransformer = this.transformers.get('beforeSend');
 const hasCustomBackend = Boolean(collectApiUrls?.custom);
 
 if (beforeSendTransformer && hasCustomBackend) {
   const transformed = beforeSendTransformer(payload);
   if (transformed === null) return null; // Filter event
-  payload = transformed as EventData;
+
+  // Minimal validation: only check for 'type' field (allows custom schemas)
+  if (transformed && typeof transformed === 'object' && 'type' in transformed) {
+    payload = transformed as EventData;
+  } else {
+    // Fallback to original on invalid return
+    log('warn', 'beforeSend transformer returned invalid data, using original');
+  }
 }
 
-// In SenderManager - beforeBatch application
+// In SenderManager - beforeBatch application with minimal validation
 const beforeBatchTransformer = this.transformers.get('beforeBatch');
 
 if (this.integrationId === 'saas') {
@@ -425,9 +432,23 @@ if (this.integrationId === 'saas') {
 if (beforeBatchTransformer) {
   const transformed = beforeBatchTransformer(body);
   if (transformed === null) return null; // Filter batch
-  return transformed as EventsQueue;
+
+  // Minimal validation: only check for 'events' array (allows custom schemas)
+  if (transformed && typeof transformed === 'object' && 'events' in transformed && Array.isArray(transformed.events)) {
+    return transformed as EventsQueue;
+  } else {
+    // Fallback to original on invalid return
+    log('warn', 'beforeBatch transformer returned invalid data, using original');
+    return body;
+  }
 }
 ```
+
+**Validation Philosophy:**
+- Only validates discriminator fields (`type` for events, `events` for batches)
+- Allows completely custom schemas for custom backend integrations
+- Falls back to original data if transformer returns invalid structure
+- Designed for maximum flexibility while maintaining type safety
 
 ### Manager/Handler Lifecycle
 

@@ -264,4 +264,47 @@ describe('Transformers', () => {
       expect(app.getTransformer('beforeBatch')).toBeUndefined();
     });
   });
+
+  describe('Custom schema support', () => {
+    it('should allow custom event schemas with minimal validation (only type field required)', async () => {
+      const transformer = vi.fn((data: EventData | EventsQueue): EventData | EventsQueue | null => {
+        if ('type' in data) {
+          // Return completely custom schema (only 'type' field required)
+          return {
+            type: 'custom_schema_event',
+            myCustomField: 'value',
+            anotherField: 123,
+            // Note: Missing standard fields like id, page_url, timestamp - this is allowed!
+          } as unknown as EventData;
+        }
+        return data;
+      });
+
+      app.setTransformer('beforeSend', transformer);
+      app.sendCustomEvent('test_event', { key: 'value' });
+
+      await vi.waitFor(() => {
+        expect(transformer).toHaveBeenCalled();
+      });
+    });
+
+    it('should allow custom batch schemas with minimal validation (only events array required)', () => {
+      const transformer = vi.fn((data: EventData | EventsQueue): EventData | EventsQueue | null => {
+        if ('events' in data) {
+          // Return completely custom schema (only 'events' array required)
+          return {
+            events: data.events,
+            customBatchField: 'my-value',
+            customTimestamp: Date.now(),
+            // Note: Missing standard fields like user_id, session_id, device - this is allowed!
+          } as unknown as EventsQueue;
+        }
+        return data;
+      });
+
+      expect(() => {
+        app.setTransformer('beforeBatch', transformer);
+      }).not.toThrow();
+    });
+  });
 });

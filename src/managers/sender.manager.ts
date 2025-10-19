@@ -141,8 +141,17 @@ export class SenderManager extends StateManager {
 
   stop(): void {}
 
+  private isValidEventsQueue(value: unknown): value is EventsQueue {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const queue = value as Partial<EventsQueue>;
+
+    return Array.isArray(queue.events);
+  }
+
   private applyBeforeBatchTransformer(body: EventsQueue): EventsQueue | null {
-    // beforeBatch is only applied for custom backend (NOT TraceLog SaaS)
     if (this.integrationId === 'saas') {
       return body;
     }
@@ -164,17 +173,12 @@ export class SenderManager extends StateManager {
         return null;
       }
 
-      if (
-        transformed &&
-        typeof transformed === 'object' &&
-        'events' in transformed &&
-        Array.isArray(transformed.events)
-      ) {
+      if (this.isValidEventsQueue(transformed)) {
         return transformed;
       }
 
       log('warn', `beforeBatch transformer returned invalid data, using original [${this.integrationId}]`, {
-        data: { eventCount: body.events.length },
+        data: { eventCount: body.events.length, invalidFields: this.getMissingQueueFields(transformed) },
       });
 
       return body;
@@ -188,16 +192,29 @@ export class SenderManager extends StateManager {
     }
   }
 
+  private getMissingQueueFields(value: unknown): string[] {
+    if (!value || typeof value !== 'object') {
+      return ['value is not an object'];
+    }
+
+    const queue = value as Partial<EventsQueue>;
+    const missing: string[] = [];
+
+    if (!Array.isArray(queue.events)) {
+      missing.push('events (required array to distinguish from EventData)');
+    }
+
+    return missing;
+  }
+
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
 
-    // Apply beforeBatch transformer
     const transformedBody = this.applyBeforeBatchTransformer(body);
 
     if (!transformedBody) {
-      // Batch was filtered out by transformer
       return true;
     }
 

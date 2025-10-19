@@ -148,11 +148,11 @@ export const removeTransformer = (hook: TransformerHook): void => {
   }
 
   if (!app) {
-    return;
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
   }
 
   if (isDestroying) {
-    return;
+    throw new Error('[TraceLog] Cannot remove transformers while TraceLog is being destroyed');
   }
 
   app.removeTransformer(hook);
