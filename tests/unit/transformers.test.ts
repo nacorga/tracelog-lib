@@ -17,6 +17,13 @@ describe('Transformers', () => {
     });
   });
 
+  afterEach(() => {
+    // Clean up after each test
+    if (app) {
+      app.destroy();
+    }
+  });
+
   describe('setTransformer', () => {
     it('should set beforeSend transformer', () => {
       const transformer = vi.fn((data: EventData | EventsQueue) => data);
@@ -139,22 +146,48 @@ describe('Transformers', () => {
       // Re-initialize with SaaS integration
       app.destroy();
       app = new App();
-      await app.init({
-        integrations: {
-          tracelog: {
-            projectId: 'test-project',
-          },
+
+      // Mock window.location for SaaS URL generation
+      const originalHref = window.location.href;
+      const originalHostname = window.location.hostname;
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          href: 'https://example.com',
+          hostname: 'example.com',
         },
+        writable: true,
+        configurable: true,
       });
 
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      try {
+        await app.init({
+          integrations: {
+            tracelog: {
+              projectId: 'test-project',
+            },
+          },
+        });
 
-      app.setTransformer('beforeSend', transformer);
+        const transformer = vi.fn((data: EventData | EventsQueue) => data);
 
-      app.sendCustomEvent('test_event', { key: 'value' });
+        app.setTransformer('beforeSend', transformer);
 
-      // Transformer should not be called for SaaS integration
-      expect(transformer).not.toHaveBeenCalled();
+        app.sendCustomEvent('test_event', { key: 'value' });
+
+        // Transformer should not be called for SaaS integration
+        expect(transformer).not.toHaveBeenCalled();
+      } finally {
+        // Restore original location
+        Object.defineProperty(window, 'location', {
+          value: {
+            href: originalHref,
+            hostname: originalHostname,
+          },
+          writable: true,
+          configurable: true,
+        });
+      }
     });
 
     it('should apply to custom backend integration', async () => {
@@ -217,22 +250,48 @@ describe('Transformers', () => {
       // Re-initialize with SaaS integration
       app.destroy();
       app = new App();
-      await app.init({
-        integrations: {
-          tracelog: {
-            projectId: 'test-project',
-          },
+
+      // Mock window.location for SaaS URL generation
+      const originalHref = window.location.href;
+      const originalHostname = window.location.hostname;
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          href: 'https://example.com',
+          hostname: 'example.com',
         },
+        writable: true,
+        configurable: true,
       });
 
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      try {
+        await app.init({
+          integrations: {
+            tracelog: {
+              projectId: 'test-project',
+            },
+          },
+        });
 
-      expect(() => {
-        app.setTransformer('beforeBatch', transformer);
-      }).not.toThrow();
+        const transformer = vi.fn((data: EventData | EventsQueue) => data);
 
-      const result = app.getTransformer('beforeBatch');
-      expect(result).toBe(transformer);
+        expect(() => {
+          app.setTransformer('beforeBatch', transformer);
+        }).not.toThrow();
+
+        const result = app.getTransformer('beforeBatch');
+        expect(result).toBe(transformer);
+      } finally {
+        // Restore original location
+        Object.defineProperty(window, 'location', {
+          value: {
+            href: originalHref,
+            hostname: originalHostname,
+          },
+          writable: true,
+          configurable: true,
+        });
+      }
     });
 
     it('should set beforeBatch transformer for custom backend integration', () => {
