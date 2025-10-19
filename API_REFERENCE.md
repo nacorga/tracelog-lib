@@ -759,7 +759,7 @@ await tracelog.init({
 |---------|----------|
 | **Error Handling** | Each integration handles 4xx (permanent) and 5xx (temporary) errors independently |
 | **Persistence** | Separate localStorage keys: `tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom` |
-| **Recovery** | Failed events recovered independently per integration on next page load |
+| **Recovery** | Failed events recovered independently per integration on next page load. Recovery occurs automatically during `init()` on the subsequent page navigation. |
 | **Sending** | Async: Parallel with `Promise.allSettled()`, Sync (sendBeacon): All must succeed |
 
 ---
