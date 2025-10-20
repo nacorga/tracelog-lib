@@ -491,6 +491,12 @@ describe('API Integration - Emitter Methods', () => {
 
         await vi.advanceTimersByTimeAsync(10100);
 
+        // Switch to real timers to allow all async operations (promises, microtasks) to settle
+        vi.useRealTimers();
+
+        // Wait for the callback to be invoked with polling
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
+
         expect(queueCallback).toHaveBeenCalled();
 
         const queueData = queueCallback.mock.calls[0]?.[0];
@@ -556,6 +562,12 @@ describe('API Integration - Emitter Methods', () => {
         }
 
         await vi.advanceTimersByTimeAsync(10100);
+
+        // Switch to real timers to allow all async operations (promises, microtasks) to settle
+        vi.useRealTimers();
+
+        // Wait for the callback to be invoked with polling
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
 
         // Should have at least one queue emission
         expect(queueCallback).toHaveBeenCalled();
