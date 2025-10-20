@@ -9,6 +9,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as TraceLog from '../../src/api';
 import { EmitterEvent } from '../../src/types';
 
+/**
+ * Helper to wait for a condition to become true with polling.
+ * Useful for async operations that need to settle in tests.
+ */
+async function waitForCondition(condition: () => boolean, timeoutMs = 500, intervalMs = 10): Promise<void> {
+  const start = Date.now();
+  while (!condition() && Date.now() - start < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  if (!condition()) {
+    throw new Error(`Timeout waiting for condition after ${timeoutMs}ms`);
+  }
+}
+
 describe('API Integration - Emitter Methods', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -360,7 +374,9 @@ describe('API Integration - Emitter Methods', () => {
 
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Wait for the callback to be invoked with polling
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
 
         // QUEUE callback should have been called
         expect(queueCallback).toHaveBeenCalled();
@@ -419,7 +435,9 @@ describe('API Integration - Emitter Methods', () => {
 
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Wait for the callback to be invoked with polling
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
 
         expect(queueCallback).toHaveBeenCalled();
 

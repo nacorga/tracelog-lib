@@ -102,28 +102,30 @@ describe('Transformers - End-to-End Critical Flows', () => {
           return { ...data, beforeBatch_applied: true } as EventsQueue;
         });
 
-        // Listen for queue event (fires when batch is about to be sent)
-        const queuePromise = new Promise<EventsQueue>((resolve) => {
-          api.on(EmitterEvent.QUEUE, resolve);
+        // Listen for queue event
+        let queueData: EventsQueue | null = null;
+        api.on(EmitterEvent.QUEUE, (data) => {
+          queueData = data;
         });
 
+        // Send custom event
         api.event('test_event', { key: 'value' });
 
-        // Advance timers to trigger interval-based flush (10 seconds)
+        // Advance timers to trigger flush (10 seconds)
         await vi.advanceTimersByTimeAsync(10100);
 
-        await queuePromise;
-
-        // Switch to real timers briefly to allow async operations to settle
+        // Switch to real timers and wait for async operations
         vi.useRealTimers();
         await new Promise((resolve) => setTimeout(resolve, 100));
-        vi.useFakeTimers();
+
+        // Verify queue event was emitted
+        expect(queueData).not.toBeNull();
 
         // Verify fetch was called
         expect(fetchSpy).toHaveBeenCalled();
 
         // Get network payload (transformers applied in SenderManager)
-        const fetchCall = fetchSpy.mock.calls[0];
+        const fetchCall = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
         expect(fetchCall).toBeDefined();
         const networkPayload = JSON.parse(fetchCall![1].body as string) as EventsQueue;
 
@@ -492,8 +494,9 @@ describe('Transformers - End-to-End Critical Flows', () => {
           return { session_id: 'test' } as any; // Missing 'events'
         });
 
-        const queuePromise = new Promise<EventsQueue>((resolve) => {
-          api.on(EmitterEvent.QUEUE, resolve);
+        let queueData: EventsQueue | null = null;
+        api.on(EmitterEvent.QUEUE, (data) => {
+          queueData = data;
         });
 
         api.event('test_event', { key: 'value' });
@@ -501,11 +504,16 @@ describe('Transformers - End-to-End Critical Flows', () => {
         // Advance timers to trigger interval-based flush
         await vi.advanceTimersByTimeAsync(10100);
 
-        const queue = await queuePromise;
+        // Switch to real timers and wait for async operations
+        vi.useRealTimers();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Queue event should have fired with original data
+        expect(queueData).not.toBeNull();
 
         // Should send with original batch (validation failed)
-        expect(Array.isArray(queue.events)).toBe(true);
-        expect(queue.events.length).toBeGreaterThan(0);
+        expect(Array.isArray(queueData!.events)).toBe(true);
+        expect(queueData!.events.length).toBeGreaterThan(0);
       } finally {
         vi.useRealTimers();
       }

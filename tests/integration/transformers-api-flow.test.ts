@@ -113,10 +113,10 @@ describe('Transformers - Full API Flow Integration', () => {
       }).not.toThrow();
     });
 
-    it('should throw error if called before init()', () => {
+    it('should buffer transformer if called before init()', () => {
       expect(() => {
         api.setTransformer('beforeSend', (data: EventData) => data);
-      }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
+      }).not.toThrow();
     });
 
     it('should allow transformer to filter events via null return', async () => {
@@ -167,10 +167,10 @@ describe('Transformers - Full API Flow Integration', () => {
       }).not.toThrow();
     });
 
-    it('should throw error if called before init()', () => {
+    it('should allow removing buffered transformer before init()', () => {
       expect(() => {
         api.removeTransformer('beforeSend');
-      }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
+      }).not.toThrow();
     });
 
     it('should not throw if removing non-existent transformer', async () => {
@@ -207,10 +207,10 @@ describe('Transformers - Full API Flow Integration', () => {
       // Destroy should clear transformers
       api.destroy();
 
-      // After destroy, cannot set transformers (not initialized)
+      // After destroy, transformers can be buffered again (not initialized)
       expect(() => {
         api.setTransformer('beforeSend', transformer);
-      }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
+      }).not.toThrow();
     });
 
     it('should allow setting new transformer after re-initialization', async () => {
