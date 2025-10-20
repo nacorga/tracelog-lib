@@ -235,6 +235,49 @@ jobs:
             exit 1
           fi
 
+      - name: Cleanup RC versions
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "🧹 Cleaning up RC versions from npm..."
+
+          # Get all versions with 'next' tag (RC versions)
+          RC_VERSIONS=$(npm view @tracelog/lib versions --json | jq -r '.[] | select(contains("-rc."))')
+
+          if [[ -z "$RC_VERSIONS" ]]; then
+            echo "✅ No RC versions found to clean up"
+            exit 0
+          fi
+
+          echo "Found RC versions to unpublish:"
+          echo "$RC_VERSIONS"
+
+          # Unpublish each RC version
+          UNPUBLISHED_COUNT=0
+          FAILED_COUNT=0
+
+          while IFS= read -r version; do
+            if [[ -n "$version" ]]; then
+              echo "Unpublishing @tracelog/lib@$version..."
+              if npm unpublish "@tracelog/lib@$version" --force 2>/dev/null; then
+                echo "  ✅ Unpublished $version"
+                ((UNPUBLISHED_COUNT++))
+              else
+                echo "  ⚠️  Failed to unpublish $version (may already be removed)"
+                ((FAILED_COUNT++))
+              fi
+            fi
+          done <<< "$RC_VERSIONS"
+
+          echo ""
+          echo "🧹 Cleanup summary:"
+          echo "  Unpublished: $UNPUBLISHED_COUNT RC versions"
+          if [[ $FAILED_COUNT -gt 0 ]]; then
+            echo "  Failed/Skipped: $FAILED_COUNT versions"
+          fi
+          echo "✅ RC cleanup completed"
+
   notify-success:
     name: Notify Success
     runs-on: ubuntu-latest
