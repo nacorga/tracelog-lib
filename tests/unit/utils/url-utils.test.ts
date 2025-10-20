@@ -66,8 +66,8 @@ describe('URL Utils', () => {
         expect(() => getCollectApiUrls(config)).toThrow('Invalid SaaS URL configuration');
       });
 
-      test('should generate URL for localhost (single-part domain)', () => {
-        // Note: localhost is technically valid, generates https://project-id.localhost/collect
+      test('should reject localhost with helpful error message', () => {
+        // localhost is NOT supported for SaaS integration
         (window as any).location = {
           href: 'http://localhost:3000',
           hostname: 'localhost',
@@ -81,10 +81,10 @@ describe('URL Utils', () => {
           },
         };
 
-        const result = getCollectApiUrls(config);
-
-        // Single-part domain still works (uses 'localhost' as domain)
-        expect(result.saas).toBe('https://test-project.localhost/collect');
+        // Should throw error suggesting custom backend
+        expect(() => getCollectApiUrls(config)).toThrow(
+          'Invalid SaaS URL configuration: SaaS integration not supported on localhost or IP addresses. Use custom backend integration instead.',
+        );
       });
     });
 

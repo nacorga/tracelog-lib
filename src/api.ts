@@ -1,10 +1,17 @@
 import { App } from './app';
-import { MetadataType, Config, EmitterCallback, EmitterMap, EventData, EventsQueue } from './types';
+import {
+  MetadataType,
+  Config,
+  EmitterCallback,
+  EmitterMap,
+  TransformerHook,
+  BeforeSendTransformer,
+  BeforeBatchTransformer,
+} from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
-import { TransformerHook } from './types/transformer.types';
 
 interface PendingListener {
   event: keyof EmitterMap;
@@ -23,7 +30,7 @@ export const init = async (config?: Config): Promise<void> => {
     return;
   }
 
-  if (window.__traceLogDisabled) {
+  if (window.__traceLogDisabled === true) {
     return;
   }
 
@@ -123,10 +130,9 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
   app.off(event, callback);
 };
 
-export const setTransformer = (
-  hook: TransformerHook,
-  fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null,
-): void => {
+export function setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
+export function setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
+export function setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -139,8 +145,12 @@ export const setTransformer = (
     throw new Error('[TraceLog] Cannot set transformers while TraceLog is being destroyed');
   }
 
-  app.setTransformer(hook, fn);
-};
+  if (hook === 'beforeSend') {
+    app.setTransformer('beforeSend', fn as BeforeSendTransformer);
+  } else {
+    app.setTransformer('beforeBatch', fn as BeforeBatchTransformer);
+  }
+}
 
 export const removeTransformer = (hook: TransformerHook): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -190,7 +200,7 @@ export const destroy = (): void => {
     // Clear TestBridge reference in dev mode to prevent stale references
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__traceLogBridge) {
       // Don't call destroy on bridge (would cause recursion), just clear reference
-      window.__traceLogBridge = undefined as any;
+      window.__traceLogBridge = undefined;
     }
   } catch (error) {
     app = null;

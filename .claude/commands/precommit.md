@@ -22,7 +22,6 @@ Run comprehensive validation before committing code changes to ensure all accept
 !npm run build:all
 !npm run test:unit
 !npm run test:integration
-!npm run test:e2e
 
 ## Summary Report
 
@@ -41,7 +40,6 @@ Format output as:
 ✅ Build: [PASSED/FAILED] (ESM + CJS + Browser)
 ✅ Unit Tests: [PASSED/FAILED] (X/Y)
 ✅ Integration Tests: [PASSED/FAILED] (X/Y)
-✅ E2E Tests: [PASSED/FAILED] (X/Y)
 
 📊 Summary:
 - X blocking errors

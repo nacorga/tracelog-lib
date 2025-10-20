@@ -120,11 +120,16 @@ await tracelog.init({
   disabledEvents: ['scroll'],  // Disable specific auto-tracked events
                                 // Options: 'scroll', 'web_vitals', 'error'
 
-  // Integrations (pick one or none)
+  // Integrations (pick one, multiple, or none)
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
     custom: { collectApiUrl: 'https://api.com' },    // Custom backend
-    googleAnalytics: { measurementId: 'G-XXXXXX' }   // GA4 forwarding
+    googleAnalytics: { measurementId: 'G-XXXXXX' },  // GA4 forwarding
+
+    // Multi-integration: Send to multiple backends simultaneously
+    // tracelog: { projectId: 'proj-123' },          // Analytics dashboard
+    // custom: { collectApiUrl: 'https://warehouse.com' }  // Data warehouse
+    // Events sent to BOTH independently with separate error handling
   },
 
   // Web Vitals filtering
@@ -199,17 +204,28 @@ Transform events dynamically at runtime before they're sent to integrations. Use
 
 **Important**: Transformers are **integration-specific** to protect TraceLog SaaS schema integrity:
 
-| Integration | `beforeSend` | `beforeBatch` |
-|-------------|--------------|---------------|
-| **TraceLog SaaS** | ❌ Silently ignored | ❌ Silently ignored |
-| **Custom Backend** | ✅ Applied | ✅ Applied |
-| **Google Analytics** | ❌ Not applied | N/A |
+| Integration | `beforeSend` | `beforeBatch` | Notes |
+|-------------|--------------|---------------|-------|
+| **TraceLog SaaS (only)** | ❌ Silently ignored | ❌ Silently ignored | Schema protection |
+| **Custom Backend (only)** | ✅ Applied | ✅ Applied | Full control |
+| **Multi-Integration** | ⚠️ Custom only | ⚠️ Custom only | SaaS gets original events, custom gets transformed |
+| **Google Analytics** | ❌ N/A | ❌ N/A | Forwards `tracelog.event()` calls as-is |
+
+**Multi-Integration Behavior:**
+- When using both TraceLog SaaS + Custom backend simultaneously
+- SaaS receives **original events** (transformers not applied)
+- Custom backend receives **transformed events**
+- Independent error handling and retry per integration
 
 ### Available Hooks
 
 #### `beforeSend` - Per-Event Transformation
 
-Transform individual events before they're added to the queue. Runs once per event.
+Transform individual events **before** deduplication, sampling, and queueing.
+
+**Timing:**
+- **Custom-only mode**: Runs in `EventManager.buildEventPayload()` (before dedup/sampling)
+- **Multi-integration mode**: Runs in `SenderManager` per-integration (SaaS skipped)
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
@@ -282,6 +298,10 @@ tracelog.removeTransformer('beforeBatch');
 ### Error Handling & Validation
 
 Transformers are designed to be resilient and flexible:
+
+**Input Validation:**
+- **Function type check**: `setTransformer()` throws error if `fn` is not a function
+- **Example**: `tracelog.setTransformer('beforeSend', null)` → Throws `Error: [TraceLog] Transformer must be a function, received: object`
 
 **Error Handling:**
 - **Exceptions**: Caught and logged, original event/batch used

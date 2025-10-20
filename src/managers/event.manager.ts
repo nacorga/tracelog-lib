@@ -18,18 +18,18 @@ import {
   FINGERPRINT_CLEANUP_MULTIPLIER,
   MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
-import { EventsQueue, EmitterEvent, EventData, EventType, Mode } from '../types';
-import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
+import { EventsQueue, EmitterEvent, EventData, EventType, Mode, TransformerMap } from '../types';
+import { getUTMParameters, log, Emitter, generateEventId, transformEvent } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
-import { TransformerHook } from '../types/transformer.types';
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
   private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
+  private readonly transformers: TransformerMap;
   private readonly recentEventFingerprints = new Map<string, number>();
   private readonly perEventRateLimits: Map<string, number[]> = new Map();
 
@@ -38,6 +38,8 @@ export class EventManager extends StateManager {
   private sendIntervalId: number | null = null;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
+  private lastSessionId: string | null = null;
+
   private sessionEventCounts: {
     total: number;
     [key: string]: number;
@@ -49,18 +51,18 @@ export class EventManager extends StateManager {
     [EventType.VIEWPORT_VISIBLE]: 0,
     [EventType.SCROLL]: 0,
   };
-  private lastSessionId: string | null = null;
 
   constructor(
     storeManager: StorageManager,
     googleAnalytics: GoogleAnalyticsIntegration | null = null,
     emitter: Emitter | null = null,
-    transformers: Map<TransformerHook, (data: EventData | EventsQueue) => EventData | EventsQueue | null> = new Map(),
+    transformers: TransformerMap = {},
   ) {
     super();
 
     this.googleAnalytics = googleAnalytics;
     this.emitter = emitter;
+    this.transformers = transformers;
 
     this.dataSenders = [];
     const collectApiUrls = this.get('collectApiUrls');
@@ -486,7 +488,7 @@ export class EventManager extends StateManager {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
 
-    const payload: EventData = {
+    let payload: EventData = {
       id: generateEventId(),
       type: data.type as EventType,
       page_url: currentPageUrl,
@@ -502,6 +504,23 @@ export class EventManager extends StateManager {
       ...(data.viewport_data && { viewport_data: data.viewport_data }),
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
+
+    // Apply beforeSend transformer (custom backend only, NOT in multi-integration mode)
+    // In multi-integration mode, SenderManager handles per-integration transformation
+    const collectApiUrls = this.get('collectApiUrls');
+    const hasCustomBackend = Boolean(collectApiUrls?.custom);
+    const hasSaasBackend = Boolean(collectApiUrls?.saas);
+    const isMultiIntegration = hasCustomBackend && hasSaasBackend;
+    const beforeSendTransformer = this.transformers.beforeSend;
+
+    // Only apply beforeSend in EventManager if custom-only (not multi-integration)
+    if (beforeSendTransformer && hasCustomBackend && !isMultiIntegration) {
+      const transformed = transformEvent(payload, beforeSendTransformer, 'EventManager');
+      if (transformed === null) {
+        return null; // Filter event
+      }
+      payload = transformed;
+    }
 
     return payload;
   }

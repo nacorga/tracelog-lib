@@ -34,23 +34,39 @@ const generateSaasApiUrl = (projectId: string): string => {
       throw new Error('Invalid hostname');
     }
 
+    if (host === 'localhost' || host === '127.0.0.1' || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+      throw new Error(
+        'SaaS integration not supported on localhost or IP addresses. Use custom backend integration instead.',
+      );
+    }
+
     const parts = host.split('.');
 
     if (!parts || !Array.isArray(parts) || parts.length === 0 || (parts.length === 1 && parts[0] === '')) {
       throw new Error('Invalid hostname structure');
     }
 
-    const cleanDomain = parts.slice(-2).join('.');
+    if (parts.length === 1) {
+      throw new Error('Single-part domain not supported for SaaS integration');
+    }
 
-    if (!cleanDomain) {
-      throw new Error('Invalid domain');
+    let cleanDomain: string;
+
+    if (parts.length === 2) {
+      cleanDomain = parts.join('.');
+    } else {
+      cleanDomain = parts.slice(-2).join('.');
+    }
+
+    if (!cleanDomain || cleanDomain.split('.').length < 2) {
+      throw new Error('Invalid domain structure for SaaS');
     }
 
     const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
     const isValid = isValidUrl(collectApiUrl);
 
     if (!isValid) {
-      throw new Error('Invalid URL');
+      throw new Error('Generated URL failed validation');
     }
 
     return collectApiUrl;
@@ -129,6 +145,7 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
     return result;
   } catch (error) {
     const urlPreview = url && typeof url === 'string' ? url.slice(0, 100) : String(url);
+
     log('warn', 'URL normalization failed, returning original', { error, data: { url: urlPreview } });
 
     return url;

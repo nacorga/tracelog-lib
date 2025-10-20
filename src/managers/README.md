@@ -52,12 +52,16 @@ Core business logic components that handle analytics data processing, state mana
 - `recoverPersistedEvents()`: Recovers events from localStorage after crashes/failures
 
 **Transformer Support**:
-- **`beforeSend` Hook**: Applied during event payload building in `buildEventPayload()`
-  - Transforms individual events before they enter the queue
-  - Only applied for custom backend integrations (NOT TraceLog SaaS)
+- **`beforeSend` Hook**: Applied conditionally in `buildEventPayload()` based on integration mode
+  - **Custom-only mode**: Applied in EventManager (before dedup/sampling/queueing)
+    - Uses `transformEvent()` utility for error handling and validation
+    - Integration check: `hasCustomBackend && !isMultiIntegration`
+    - Transforms individual events before they enter the queue
+  - **Multi-integration mode** (SaaS + Custom): Skipped in EventManager
+    - SenderManager applies per-integration transformations instead (see SenderManager section)
+    - Prevents SaaS from receiving transformed data (schema protection)
   - Can filter events by returning `null`
-  - Errors caught and logged, original event used as fallback
-  - Integration check: `hasCustomBackend = Boolean(collectApiUrls?.custom)`
+  - Errors caught by utility, original event used as fallback
 
 ## SamplingManager
 
@@ -106,12 +110,22 @@ Core business logic components that handle analytics data processing, state mana
 - **Legacy/Standalone**: `tlog:queue:{userId}` (no suffix)
 
 **Transformer Support**:
+- **`beforeSend` Hook**: Applied in `applyBeforeSendTransformer()` for multi-integration mode
+  - Operates on **array of events** (not individual events)
+  - Uses `transformEvents()` utility for per-event transformation with error handling
+  - Only applied for custom backend integrations (`integrationId === 'custom'`)
+  - Silently bypassed for TraceLog SaaS (`integrationId === 'saas'`)
+  - Filters events by returning empty array (not `null`)
+  - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
+  - **Multi-integration behavior**: In multi-integration mode (SaaS + Custom), this is where per-integration transformation happens
+
 - **`beforeBatch` Hook**: Applied in `applyBeforeBatchTransformer()` before sending
+  - Uses `transformBatch()` utility for error handling and validation
   - Transforms entire batch before network transmission
   - Only applied for custom backend integrations (`integrationId === 'custom'`)
   - Silently bypassed for TraceLog SaaS (`integrationId === 'saas'`)
   - Can filter batches by returning `null`
-  - Errors caught and logged, original batch used as fallback
+  - Errors caught by utility, original batch used as fallback
   - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
 
 ## SessionManager

@@ -301,9 +301,10 @@ Sets a transformer function to modify events at runtime before sending to integr
 | `beforeBatch` | Batch-level (before sending) | `EventsQueue` | Custom backend only |
 
 **Integration Behavior:**
-- **TraceLog SaaS**: Transformers silently ignored (schema protection)
-- **Custom Backend**: Transformers applied as configured
-- **Google Analytics**: `beforeSend` applied, `beforeBatch` N/A
+- **TraceLog SaaS (only)**: Transformers silently ignored (schema protection)
+- **Custom Backend (only)**: Transformers applied as configured
+- **Multi-Integration (SaaS + Custom)**: SaaS gets original events, custom gets transformed events
+- **Google Analytics**: Transformers N/A (only forwards `tracelog.event()` calls as-is, no batching)
 
 **Examples:**
 
@@ -732,8 +733,6 @@ await tracelog.init({
 
 #### Multi-Integration (TraceLog SaaS + Custom Backend)
 
-**New in v1.1.0:** You can now configure **multiple integrations simultaneously**. Events are sent to all configured endpoints independently with parallel processing.
-
 ```typescript
 await tracelog.init({
   integrations: {
@@ -761,6 +760,7 @@ await tracelog.init({
 | **Persistence** | Separate localStorage keys: `tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom` |
 | **Recovery** | Failed events recovered independently per integration on next page load. Recovery occurs automatically during `init()` on the subsequent page navigation. |
 | **Sending** | Async: Parallel with `Promise.allSettled()`, Sync (sendBeacon): All must succeed |
+| **Transformers** | SaaS receives **original events**, custom receives **transformed events** (if transformers configured) |
 
 ---
 

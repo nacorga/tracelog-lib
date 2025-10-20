@@ -6,11 +6,10 @@ import {
   MAX_BEACON_PAYLOAD_SIZE,
   PERSISTENCE_THROTTLE_MS,
 } from '../constants';
-import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, EventData } from '../types';
-import { log } from '../utils';
+import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
+import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
-import { TransformerHook } from '../types/transformer.types';
 
 interface SendCallbacks {
   onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
@@ -21,10 +20,7 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly integrationId?: 'saas' | 'custom';
   private readonly apiUrl?: string;
-  private readonly transformers: Map<
-    TransformerHook,
-    (data: EventData | EventsQueue) => EventData | EventsQueue | null
-  >;
+  private readonly transformers: TransformerMap;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
 
@@ -32,7 +28,7 @@ export class SenderManager extends StateManager {
     storeManager: StorageManager,
     integrationId?: 'saas' | 'custom',
     apiUrl?: string,
-    transformers: Map<TransformerHook, (data: EventData | EventsQueue) => EventData | EventsQueue | null> = new Map(),
+    transformers: TransformerMap = {},
   ) {
     super();
 
@@ -141,97 +137,32 @@ export class SenderManager extends StateManager {
 
   stop(): void {}
 
-  private isValidEventsQueue(value: unknown): value is EventsQueue {
-    if (!value || typeof value !== 'object') {
-      return false;
-    }
-
-    const queue = value as Partial<EventsQueue>;
-
-    return Array.isArray(queue.events);
-  }
-
   private applyBeforeSendTransformer(body: EventsQueue): EventsQueue | null {
+    // Skip for SaaS integration
     if (this.integrationId === 'saas') {
       return body;
     }
 
-    const beforeSendTransformer = this.transformers.get('beforeSend');
+    const beforeSendTransformer = this.transformers.beforeSend;
 
     if (!beforeSendTransformer) {
       return body;
     }
 
-    try {
-      const transformedEvents: EventData[] = [];
+    const transformedEvents = transformEvents(
+      body.events,
+      beforeSendTransformer,
+      this.integrationId || 'SenderManager',
+    );
 
-      for (const event of body.events) {
-        const transformed = beforeSendTransformer(event);
-
-        if (transformed === null) {
-          log('debug', `Event filtered by beforeSend transformer [${this.integrationId}]`, {
-            data: { eventType: event.type },
-          });
-
-          continue;
-        }
-
-        if (this.isValidEventData(transformed)) {
-          transformedEvents.push(transformed);
-        } else {
-          log('warn', `beforeSend transformer returned invalid data, using original [${this.integrationId}]`, {
-            data: { eventType: event.type, invalidFields: this.getMissingEventFields(transformed) },
-          });
-
-          transformedEvents.push(event);
-        }
-      }
-
-      if (transformedEvents.length === 0) {
-        log('debug', `All events filtered by beforeSend transformer [${this.integrationId}]`, {
-          data: { originalCount: body.events.length },
-        });
-
-        return null;
-      }
-
-      return {
-        ...body,
-        events: transformedEvents,
-      };
-    } catch (error) {
-      log('error', `beforeSend transformer threw error, using original batch [${this.integrationId}]`, {
-        error,
-        data: { eventCount: body.events.length },
-      });
-
-      return body;
-    }
-  }
-
-  private isValidEventData(value: unknown): value is EventData {
-    if (!value || typeof value !== 'object') {
-      return false;
+    if (transformedEvents.length === 0) {
+      return null;
     }
 
-    const event = value as Partial<EventData>;
-
-    return typeof event.type === 'string';
-  }
-
-  private getMissingEventFields(value: unknown): string[] {
-    if (!value || typeof value !== 'object') {
-      return ['value is not an object'];
-    }
-
-    const event = value as Partial<EventData>;
-    const missing: string[] = [];
-
-    if (typeof event.type !== 'string') {
-      missing.push('type (required to distinguish from EventsQueue)');
-    }
-
-    return missing;
+    return {
+      ...body,
+      events: transformedEvents,
+    };
   }
 
   private applyBeforeBatchTransformer(body: EventsQueue): EventsQueue | null {
@@ -239,55 +170,15 @@ export class SenderManager extends StateManager {
       return body;
     }
 
-    const beforeBatchTransformer = this.transformers.get('beforeBatch');
+    const beforeBatchTransformer = this.transformers.beforeBatch;
 
     if (!beforeBatchTransformer) {
       return body;
     }
 
-    try {
-      const transformed = beforeBatchTransformer(body);
+    const transformed = transformBatch(body, beforeBatchTransformer, this.integrationId || 'SenderManager');
 
-      if (transformed === null) {
-        log('debug', `Batch filtered by beforeBatch transformer [${this.integrationId}]`, {
-          data: { eventCount: body.events.length },
-        });
-
-        return null;
-      }
-
-      if (this.isValidEventsQueue(transformed)) {
-        return transformed;
-      }
-
-      log('warn', `beforeBatch transformer returned invalid data, using original [${this.integrationId}]`, {
-        data: { eventCount: body.events.length, invalidFields: this.getMissingQueueFields(transformed) },
-      });
-
-      return body;
-    } catch (error) {
-      log('error', `beforeBatch transformer threw error, using original batch [${this.integrationId}]`, {
-        error,
-        data: { eventCount: body.events.length },
-      });
-
-      return body;
-    }
-  }
-
-  private getMissingQueueFields(value: unknown): string[] {
-    if (!value || typeof value !== 'object') {
-      return ['value is not an object'];
-    }
-
-    const queue = value as Partial<EventsQueue>;
-    const missing: string[] = [];
-
-    if (!Array.isArray(queue.events)) {
-      missing.push('events (required array to distinguish from EventData)');
-    }
-
-    return missing;
+    return transformed;
   }
 
   private async send(body: EventsQueue): Promise<boolean> {
@@ -295,12 +186,14 @@ export class SenderManager extends StateManager {
       return this.simulateSuccessfulSend();
     }
 
+    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {
       return true;
     }
 
+    // Apply beforeBatch (batch-level transformation)
     const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
@@ -373,12 +266,14 @@ export class SenderManager extends StateManager {
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
+    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {
       return true;
     }
 
+    // Apply beforeBatch (batch-level transformation)
     const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
@@ -388,13 +283,17 @@ export class SenderManager extends StateManager {
     const { url, payload } = this.prepareRequest(transformedBody);
 
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
-      log('warn', 'Payload exceeds sendBeacon limit, persisting for recovery', {
-        data: {
-          size: payload.length,
-          limit: MAX_BEACON_PAYLOAD_SIZE,
-          events: transformedBody.events.length,
+      log(
+        'warn',
+        `Payload exceeds sendBeacon limit, persisting for recovery${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        {
+          data: {
+            size: payload.length,
+            limit: MAX_BEACON_PAYLOAD_SIZE,
+            events: transformedBody.events.length,
+          },
         },
-      });
+      );
 
       this.persistEvents(transformedBody);
 
@@ -404,7 +303,11 @@ export class SenderManager extends StateManager {
     const blob = new Blob([payload], { type: 'application/json' });
 
     if (!this.isSendBeaconAvailable()) {
-      log('warn', 'sendBeacon not available, persisting events for recovery');
+      log(
+        'warn',
+        `sendBeacon not available, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+
       this.persistEvents(transformedBody);
       return false;
     }
@@ -412,7 +315,11 @@ export class SenderManager extends StateManager {
     const accepted = navigator.sendBeacon(url, blob);
 
     if (!accepted) {
-      log('warn', 'sendBeacon rejected request, persisting events for recovery');
+      log(
+        'warn',
+        `sendBeacon rejected request, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+
       this.persistEvents(transformedBody);
     }
 
@@ -443,7 +350,7 @@ export class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      log('warn', 'Failed to parse persisted data', { error });
+      log('warn', `Failed to parse persisted data${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
       this.clearPersistedEvents();
     }
 
@@ -473,9 +380,13 @@ export class SenderManager extends StateManager {
         const timeSinceExisting = Date.now() - existing.timestamp;
 
         if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
-          log('debug', 'Skipping persistence, another tab recently persisted events', {
-            data: { timeSinceExisting },
-          });
+          log(
+            'debug',
+            `Skipping persistence, another tab recently persisted events${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+            {
+              data: { timeSinceExisting },
+            },
+          );
 
           return true;
         }
@@ -492,7 +403,7 @@ export class SenderManager extends StateManager {
 
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      log('warn', 'Failed to persist events', { error });
+      log('warn', `Failed to persist events${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
       return false;
     }
   }
@@ -502,7 +413,7 @@ export class SenderManager extends StateManager {
       const key = this.getQueueStorageKey();
       this.storeManager.removeItem(key);
     } catch (error) {
-      log('warn', 'Failed to clear persisted events', { error });
+      log('warn', `Failed to clear persisted events${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
     }
   }
 

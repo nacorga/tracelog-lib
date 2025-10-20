@@ -5,7 +5,6 @@ export * from './app.constants';
 
 // Types
 export * from './types';
-export type { TransformerHook } from './types/transformer.types';
 
 // TraceLog namespace containing all API methods
 export const tracelog = {
