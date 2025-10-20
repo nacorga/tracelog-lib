@@ -40,6 +40,9 @@ describe('API Integration - Emitter Methods', () => {
   });
 
   afterEach(async () => {
+    // Always restore real timers first (in case test failed before finally block)
+    vi.useRealTimers();
+
     try {
       if (TraceLog.isInitialized()) {
         TraceLog.destroy();
@@ -372,6 +375,9 @@ describe('API Integration - Emitter Methods', () => {
         // Advance time to trigger interval-based flush (10 seconds)
         await vi.advanceTimersByTimeAsync(10100);
 
+        // Run all pending timers and promises
+        await vi.runAllTimersAsync();
+
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
 
@@ -436,6 +442,9 @@ describe('API Integration - Emitter Methods', () => {
 
         await vi.advanceTimersByTimeAsync(10100);
 
+        // Run all pending timers and promises
+        await vi.runAllTimersAsync();
+
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
 
@@ -493,6 +502,9 @@ describe('API Integration - Emitter Methods', () => {
         TraceLog.event('test-event');
 
         await vi.advanceTimersByTimeAsync(10100);
+
+        // Run all pending timers and promises
+        await vi.runAllTimersAsync();
 
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
@@ -565,6 +577,9 @@ describe('API Integration - Emitter Methods', () => {
         }
 
         await vi.advanceTimersByTimeAsync(10100);
+
+        // Run all pending timers and promises
+        await vi.runAllTimersAsync();
 
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
