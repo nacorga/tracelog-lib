@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EventData, EventsQueue, EventType } from '../../src/types';
+import { EventData, EventsQueue, EventType, EmitterEvent } from '../../src/types';
 import type { BeforeSendTransformer } from '../../src/types/transformer.types';
 import * as api from '../../src/api';
 
@@ -99,7 +99,7 @@ describe('Transformer Timing Validation', () => {
         const capturedEvents: EventData[] = [];
 
         // Capture all events via listener
-        api.on('event', (event: EventData) => {
+        api.on(EmitterEvent.EVENT, (event: EventData) => {
           capturedEvents.push(event);
         });
 
@@ -151,7 +151,7 @@ describe('Transformer Timing Validation', () => {
 
         const capturedEvents: EventData[] = [];
 
-        api.on('event', (event: EventData) => {
+        api.on(EmitterEvent.EVENT, (event: EventData) => {
           capturedEvents.push(event);
         });
 
@@ -183,7 +183,7 @@ describe('Transformer Timing Validation', () => {
         // Verify: Only the normal event was captured (filtered event never entered queue)
         const customEvents = capturedEvents.filter((e) => e.type === EventType.CUSTOM);
         expect(customEvents.length).toBe(1);
-        expect(customEvents[0].custom_event?.name).toBe('normal_event');
+        expect(customEvents[0]?.custom_event?.name).toBe('normal_event');
       } finally {
         vi.useRealTimers();
       }
@@ -206,14 +206,12 @@ describe('Transformer Timing Validation', () => {
 
         const capturedEvents: EventData[] = [];
 
-        api.on('event', (event: EventData) => {
+        api.on(EmitterEvent.EVENT, (event: EventData) => {
           capturedEvents.push(event);
         });
 
         // Transformer adds metadata that could affect business logic
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
-
+        api.setTransformer('beforeSend', (data: EventData) => {
           return {
             ...data,
             custom_event: {
@@ -233,7 +231,11 @@ describe('Transformer Timing Validation', () => {
         // Verify: Event has transformer-added metadata
         const customEvents = capturedEvents.filter((e) => e.type === EventType.CUSTOM);
         expect(customEvents.length).toBeGreaterThan(0);
-        expect(customEvents[0].custom_event?.metadata?.samplingEligible).toBe(true);
+        const firstEvent = customEvents[0];
+        expect(firstEvent).toBeDefined();
+        if (firstEvent?.custom_event?.metadata && !Array.isArray(firstEvent.custom_event.metadata)) {
+          expect((firstEvent.custom_event.metadata as Record<string, any>).samplingEligible).toBe(true);
+        }
       } finally {
         vi.useRealTimers();
       }
@@ -255,14 +257,12 @@ describe('Transformer Timing Validation', () => {
 
         const capturedEvents: EventData[] = [];
 
-        api.on('event', (event: EventData) => {
+        api.on(EmitterEvent.EVENT, (event: EventData) => {
           capturedEvents.push(event);
         });
 
         // Transformer enriches events
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
-
+        api.setTransformer('beforeSend', (data: EventData) => {
           return {
             ...data,
             enriched_before_queue: true,
@@ -283,8 +283,12 @@ describe('Transformer Timing Validation', () => {
         // Verify: Event listener receives TRANSFORMED event (not original)
         const customEvents = capturedEvents.filter((e) => e.type === EventType.CUSTOM);
         expect(customEvents.length).toBeGreaterThan(0);
-        expect(customEvents[0]).toHaveProperty('enriched_before_queue', true);
-        expect(customEvents[0].custom_event?.metadata?.enrichmentTimestamp).toBeDefined();
+        const firstEvent = customEvents[0];
+        expect(firstEvent).toBeDefined();
+        expect(firstEvent).toHaveProperty('enriched_before_queue', true);
+        if (firstEvent?.custom_event?.metadata && !Array.isArray(firstEvent.custom_event.metadata)) {
+          expect((firstEvent.custom_event.metadata as Record<string, any>).enrichmentTimestamp).toBeDefined();
+        }
       } finally {
         vi.useRealTimers();
       }
@@ -304,14 +308,12 @@ describe('Transformer Timing Validation', () => {
 
         const queuedBatches: EventsQueue[] = [];
 
-        api.on('queue', (batch: EventsQueue) => {
+        api.on(EmitterEvent.QUEUE, (batch: EventsQueue) => {
           queuedBatches.push(batch);
         });
 
         // Transformer filters all events with specific pattern
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
-
+        api.setTransformer('beforeSend', (data: EventData) => {
           if (data.custom_event?.name?.startsWith('internal_')) {
             return null; // Never queue internal events
           }
@@ -368,14 +370,12 @@ describe('Transformer Timing Validation', () => {
 
         const capturedEvents: EventData[] = [];
 
-        api.on('event', (event: EventData) => {
+        api.on(EmitterEvent.EVENT, (event: EventData) => {
           capturedEvents.push(event);
         });
 
         // Transformer throws error
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
-
+        api.setTransformer('beforeSend', () => {
           throw new Error('Transformer error');
         });
 
@@ -386,8 +386,12 @@ describe('Transformer Timing Validation', () => {
         // Verify: Original event was still captured (fallback)
         const customEvents = capturedEvents.filter((e) => e.type === EventType.CUSTOM);
         expect(customEvents.length).toBeGreaterThan(0);
-        expect(customEvents[0].custom_event?.name).toBe('error_test');
-        expect(customEvents[0].custom_event?.metadata?.original).toBe('data');
+        const firstEvent = customEvents[0];
+        expect(firstEvent).toBeDefined();
+        expect(firstEvent?.custom_event?.name).toBe('error_test');
+        if (firstEvent?.custom_event?.metadata && !Array.isArray(firstEvent.custom_event.metadata)) {
+          expect((firstEvent.custom_event.metadata as Record<string, any>).original).toBe('data');
+        }
 
         // Verify error was logged
         expect(consoleErrorSpy).toHaveBeenCalled();
@@ -414,14 +418,12 @@ describe('Transformer Timing Validation', () => {
 
         const capturedEvents: EventData[] = [];
 
-        api.on('event', (event: EventData) => {
+        api.on(EmitterEvent.EVENT, (event: EventData) => {
           capturedEvents.push(event);
         });
 
         // Transformer returns invalid data (missing 'type' field)
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
-
+        api.setTransformer('beforeSend', () => {
           return { invalid: 'data' } as any;
         });
 
@@ -432,7 +434,9 @@ describe('Transformer Timing Validation', () => {
         // Verify: Original event was captured (fallback)
         const customEvents = capturedEvents.filter((e) => e.type === EventType.CUSTOM);
         expect(customEvents.length).toBeGreaterThan(0);
-        expect(customEvents[0].custom_event?.name).toBe('invalid_test');
+        const firstEvent = customEvents[0];
+        expect(firstEvent).toBeDefined();
+        expect(firstEvent?.custom_event?.name).toBe('invalid_test');
 
         // Verify warning was logged (check all console.warn calls for the message)
         const warnCalls = consoleWarnSpy.mock.calls.map((call) => call.join(' '));

@@ -92,18 +92,14 @@ describe('Transformers - End-to-End Critical Flows', () => {
           },
         });
 
-        // beforeSend applied in SenderManager (per-event transformation)
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
+        // beforeSend applied in EventManager (per-event transformation)
+        api.setTransformer('beforeSend', (data: EventData) => {
           return { ...data, beforeSend_applied: true } as EventData;
         });
 
         // beforeBatch applied in SenderManager (batch-level transformation)
-        api.setTransformer('beforeBatch', (data: EventData | EventsQueue) => {
-          if ('events' in data) {
-            return { ...data, beforeBatch_applied: true } as EventsQueue;
-          }
-          return data;
+        api.setTransformer('beforeBatch', (data: EventsQueue) => {
+          return { ...data, beforeBatch_applied: true } as EventsQueue;
         });
 
         // Listen for queue event (fires when batch is about to be sent)
@@ -153,8 +149,7 @@ describe('Transformers - End-to-End Critical Flows', () => {
       });
 
       // Filter all CUSTOM events at beforeSend level
-      api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-        if ('events' in data) return data;
+      api.setTransformer('beforeSend', (data: EventData) => {
         if (data.type === EventType.CUSTOM) return null; // Filter
         return data;
       });
@@ -219,8 +214,7 @@ describe('Transformers - End-to-End Critical Flows', () => {
         });
 
         // Set transformer (should be ignored - no custom backend)
-        const beforeSendSpy = vi.fn((data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
+        const beforeSendSpy = vi.fn((data: EventData) => {
           return { ...data, should_not_appear: true } as EventData;
         });
 
@@ -276,11 +270,8 @@ describe('Transformers - End-to-End Critical Flows', () => {
         });
 
         // Set beforeBatch (should be skipped for SaaS)
-        const beforeBatchSpy = vi.fn((data: EventData | EventsQueue) => {
-          if ('events' in data) {
-            return { ...data, should_not_appear: true } as EventsQueue;
-          }
-          return data;
+        const beforeBatchSpy = vi.fn((data: EventsQueue) => {
+          return { ...data, should_not_appear: true } as EventsQueue;
         });
 
         api.setTransformer('beforeBatch', beforeBatchSpy);
@@ -332,8 +323,7 @@ describe('Transformers - End-to-End Critical Flows', () => {
           },
         });
 
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
+        api.setTransformer('beforeSend', (data: EventData) => {
           return { ...data, custom_transformed: true } as EventData;
         });
 
@@ -460,8 +450,7 @@ describe('Transformers - End-to-End Critical Flows', () => {
         });
 
         // Return object without 'type' field
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-          if ('events' in data) return data;
+        api.setTransformer('beforeSend', () => {
           return { custom_field: 'value' } as any; // Missing 'type'
         });
 
@@ -499,11 +488,8 @@ describe('Transformers - End-to-End Critical Flows', () => {
         });
 
         // Return object without 'events' array
-        api.setTransformer('beforeBatch', (data: EventData | EventsQueue) => {
-          if ('events' in data) {
-            return { session_id: 'test' } as any; // Missing 'events'
-          }
-          return data;
+        api.setTransformer('beforeBatch', () => {
+          return { session_id: 'test' } as any; // Missing 'events'
         });
 
         const queuePromise = new Promise<EventsQueue>((resolve) => {

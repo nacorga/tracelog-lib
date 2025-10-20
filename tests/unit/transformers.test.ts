@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { App } from '../../src/app';
 import type { EventData, EventsQueue } from '../../src/types';
+import type { BeforeSendTransformer, BeforeBatchTransformer } from '../../src/types/transformer.types';
 
 describe('Transformers', () => {
   let app: App;
@@ -43,7 +44,7 @@ describe('Transformers', () => {
 
   describe('setTransformer', () => {
     it('should set beforeSend transformer', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      const transformer: BeforeSendTransformer = vi.fn((data: EventData) => data);
 
       app.setTransformer('beforeSend', transformer);
 
@@ -52,7 +53,7 @@ describe('Transformers', () => {
     });
 
     it('should set beforeBatch transformer', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      const transformer: BeforeBatchTransformer = vi.fn((data: EventsQueue) => data);
 
       app.setTransformer('beforeBatch', transformer);
 
@@ -61,8 +62,8 @@ describe('Transformers', () => {
     });
 
     it('should replace existing transformer', () => {
-      const transformer1 = vi.fn((data: EventData | EventsQueue) => data);
-      const transformer2 = vi.fn((data: EventData | EventsQueue) => data);
+      const transformer1: BeforeSendTransformer = vi.fn((data: EventData) => data);
+      const transformer2: BeforeSendTransformer = vi.fn((data: EventData) => data);
 
       app.setTransformer('beforeSend', transformer1);
       expect(app.getTransformer('beforeSend')).toBe(transformer1);
@@ -74,7 +75,7 @@ describe('Transformers', () => {
 
   describe('removeTransformer', () => {
     it('should remove existing transformer', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      const transformer: BeforeSendTransformer = vi.fn((data: EventData) => data);
 
       app.setTransformer('beforeSend', transformer);
       expect(app.getTransformer('beforeSend')).toBe(transformer);
@@ -97,7 +98,7 @@ describe('Transformers', () => {
     });
 
     it('should return the set transformer', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      const transformer: BeforeSendTransformer = vi.fn((data: EventData) => data);
 
       app.setTransformer('beforeSend', transformer);
 
@@ -108,8 +109,8 @@ describe('Transformers', () => {
 
   describe('beforeSend transformer', () => {
     it('should transform event data', async () => {
-      const transformer = vi.fn((data: EventData | EventsQueue): EventData | EventsQueue | null => {
-        if ('type' in data && data.custom_event) {
+      const transformer: BeforeSendTransformer = vi.fn((data: EventData): EventData | null => {
+        if (data.custom_event) {
           return {
             ...data,
             custom_event: {
@@ -138,7 +139,7 @@ describe('Transformers', () => {
     });
 
     it('should filter out event when returning null', async () => {
-      const transformer = vi.fn(() => null);
+      const transformer: BeforeSendTransformer = vi.fn(() => null);
 
       app.setTransformer('beforeSend', transformer);
 
@@ -154,7 +155,7 @@ describe('Transformers', () => {
     });
 
     it('should handle transformer errors gracefully', () => {
-      const transformer = vi.fn(() => {
+      const transformer: BeforeSendTransformer = vi.fn(() => {
         throw new Error('Transformer error');
       });
 
@@ -192,7 +193,7 @@ describe('Transformers', () => {
           },
         });
 
-        const transformer = vi.fn((data: EventData | EventsQueue) => data);
+        const transformer: BeforeSendTransformer = vi.fn((data: EventData) => data);
 
         app.setTransformer('beforeSend', transformer);
 
@@ -214,7 +215,7 @@ describe('Transformers', () => {
     });
 
     it('should apply to custom backend integration', async () => {
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      const transformer: BeforeSendTransformer = vi.fn((data: EventData) => data);
 
       app.setTransformer('beforeSend', transformer);
 
@@ -232,17 +233,14 @@ describe('Transformers', () => {
 
   describe('beforeBatch transformer', () => {
     it('should set and get beforeBatch transformer', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue): EventData | EventsQueue | null => {
-        if ('events' in data) {
-          return {
-            ...data,
-            global_metadata: {
-              ...data.global_metadata,
-              batchTransformed: true,
-            },
-          };
-        }
-        return data;
+      const transformer: BeforeBatchTransformer = vi.fn((data: EventsQueue): EventsQueue | null => {
+        return {
+          ...data,
+          global_metadata: {
+            ...data.global_metadata,
+            batchTransformed: true,
+          },
+        };
       });
 
       app.setTransformer('beforeBatch', transformer);
@@ -252,7 +250,7 @@ describe('Transformers', () => {
     });
 
     it('should set beforeBatch transformer that returns null', () => {
-      const transformer = vi.fn(() => null);
+      const transformer: BeforeBatchTransformer = vi.fn(() => null);
 
       app.setTransformer('beforeBatch', transformer);
 
@@ -299,7 +297,7 @@ describe('Transformers', () => {
           },
         });
 
-        const transformer = vi.fn((data: EventData | EventsQueue) => data);
+        const transformer: BeforeBatchTransformer = vi.fn((data: EventsQueue) => data);
 
         expect(() => {
           app.setTransformer('beforeBatch', transformer);
@@ -321,7 +319,7 @@ describe('Transformers', () => {
     });
 
     it('should set beforeBatch transformer for custom backend integration', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      const transformer: BeforeBatchTransformer = vi.fn((data: EventsQueue) => data);
 
       expect(() => {
         app.setTransformer('beforeBatch', transformer);
@@ -334,10 +332,11 @@ describe('Transformers', () => {
 
   describe('Transformer lifecycle', () => {
     it('should clear transformers on destroy', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue) => data);
+      const beforeSendTransformer: BeforeSendTransformer = vi.fn((data: EventData) => data);
+      const beforeBatchTransformer: BeforeBatchTransformer = vi.fn((data: EventsQueue) => data);
 
-      app.setTransformer('beforeSend', transformer);
-      app.setTransformer('beforeBatch', transformer);
+      app.setTransformer('beforeSend', beforeSendTransformer);
+      app.setTransformer('beforeBatch', beforeBatchTransformer);
 
       expect(app.getTransformer('beforeSend')).toBeDefined();
       expect(app.getTransformer('beforeBatch')).toBeDefined();
@@ -352,17 +351,14 @@ describe('Transformers', () => {
 
   describe('Custom schema support', () => {
     it('should allow custom event schemas with minimal validation (only type field required)', async () => {
-      const transformer = vi.fn((data: EventData | EventsQueue): EventData | EventsQueue | null => {
-        if ('type' in data) {
-          // Return completely custom schema (only 'type' field required)
-          return {
-            type: 'custom_schema_event',
-            myCustomField: 'value',
-            anotherField: 123,
-            // Note: Missing standard fields like id, page_url, timestamp - this is allowed!
-          } as unknown as EventData;
-        }
-        return data;
+      const transformer: BeforeSendTransformer = vi.fn((): EventData | null => {
+        // Return completely custom schema (only 'type' field required)
+        return {
+          type: 'custom_schema_event',
+          myCustomField: 'value',
+          anotherField: 123,
+          // Note: Missing standard fields like id, page_url, timestamp - this is allowed!
+        } as unknown as EventData;
       });
 
       app.setTransformer('beforeSend', transformer);
@@ -377,17 +373,14 @@ describe('Transformers', () => {
     });
 
     it('should allow custom batch schemas with minimal validation (only events array required)', () => {
-      const transformer = vi.fn((data: EventData | EventsQueue): EventData | EventsQueue | null => {
-        if ('events' in data) {
-          // Return completely custom schema (only 'events' array required)
-          return {
-            events: data.events,
-            customBatchField: 'my-value',
-            customTimestamp: Date.now(),
-            // Note: Missing standard fields like user_id, session_id, device - this is allowed!
-          } as unknown as EventsQueue;
-        }
-        return data;
+      const transformer: BeforeBatchTransformer = vi.fn((data: EventsQueue): EventsQueue | null => {
+        // Return completely custom schema (only 'events' array required)
+        return {
+          events: data.events,
+          customBatchField: 'my-value',
+          customTimestamp: Date.now(),
+          // Note: Missing standard fields like user_id, session_id, device - this is allowed!
+        } as unknown as EventsQueue;
       });
 
       expect(() => {

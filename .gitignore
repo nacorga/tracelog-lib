@@ -5,10 +5,10 @@
 /.playwright-mcp
 /.archive
 /dist
-/dist_v2
 /node_modules
 /coverage
 /test-results
 /test-reports
 /playwright-report
 /coverage-integration
+/docs/tracelog.js

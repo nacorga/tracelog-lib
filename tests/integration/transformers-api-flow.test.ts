@@ -75,8 +75,7 @@ describe('Transformers - Full API Flow Integration', () => {
       });
 
       // Set transformer via public API - should not throw
-      const beforeSendTransformer = (data: EventData | EventsQueue): EventData | EventsQueue | null => {
-        if ('events' in data) return data; // EventsQueue
+      const beforeSendTransformer = (data: EventData): EventData | null => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return { ...data, transformed_via_api: true } as any;
       };
@@ -101,12 +100,9 @@ describe('Transformers - Full API Flow Integration', () => {
         },
       });
 
-      const beforeBatchTransformer = (data: EventData | EventsQueue): EventData | EventsQueue | null => {
-        if ('events' in data) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return { ...data, batch_transformed: true } as any;
-        }
-        return data; // EventData
+      const beforeBatchTransformer = (data: EventsQueue): EventsQueue | null => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return { ...data, batch_transformed: true } as any;
       };
 
       expect(() => {
@@ -119,7 +115,7 @@ describe('Transformers - Full API Flow Integration', () => {
 
     it('should throw error if called before init()', () => {
       expect(() => {
-        api.setTransformer('beforeSend', (data: EventData | EventsQueue) => data);
+        api.setTransformer('beforeSend', (data: EventData) => data);
       }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
     });
 
@@ -299,7 +295,7 @@ describe('Transformers - Full API Flow Integration', () => {
         },
       });
 
-      const throwingTransformer = (): EventData | EventsQueue | null => {
+      const throwingTransformer = (): EventData | null => {
         throw new Error('Transformer error');
       };
 
@@ -321,7 +317,7 @@ describe('Transformers - Full API Flow Integration', () => {
         },
       });
 
-      const invalidTransformer = (): EventData | EventsQueue | null => 'invalid' as unknown as EventData;
+      const invalidTransformer = (): EventData | null => 'invalid' as unknown as EventData;
 
       api.setTransformer('beforeSend', invalidTransformer);
 
