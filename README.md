@@ -56,24 +56,40 @@ await tracelog.init({
 
 ## Quick Start
 
-```typescript
-// 1. Initialize (standalone mode - no backend required)
-await tracelog.init();
+### Initialization Order
 
-// 2. Track custom events
+**Important:** Set up listeners and transformers **before** calling `init()` to capture all events from the start:
+
+```typescript
+// 1. Register event listeners FIRST (before init)
+tracelog.on('event', (event) => {
+  console.log(event.type, event);
+});
+
+// 2. Configure transformers SECOND (if using custom backend)
+tracelog.setTransformer('beforeSend', (event) => {
+  // Transform events before they're queued
+  return { ...event, custom_metadata: { app: 'v1' } };
+});
+
+// 3. Initialize LAST (starts tracking immediately)
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// 4. Track custom events (after init)
 tracelog.event('button_clicked', {
   buttonId: 'signup-cta',
   source: 'homepage'
 });
 
-// 3. Subscribe to events (real-time)
-tracelog.on('event', (event) => {
-  console.log(event.type, event);
-});
-
-// 4. Cleanup (on consent revoke or app unmount)
+// 5. Cleanup (on consent revoke or app unmount)
 tracelog.destroy();
 ```
+
+**Why this order?** Events like `SESSION_START` and `PAGE_VIEW` fire during initialization. Registering listeners and transformers first ensures you don't miss them.
 
 **That's it!** TraceLog now automatically tracks:
 - Page views & navigation (including SPA routes)
@@ -93,6 +109,8 @@ tracelog.destroy();
 | `event(name, metadata?)` | Track custom events |
 | `on(event, callback)` | Subscribe to events (`'event'` or `'queue'`) |
 | `off(event, callback)` | Unsubscribe from events |
+| `setTransformer(hook, fn)` | Transform events before sending (see [Transformers](#transformers)) |
+| `removeTransformer(hook)` | Remove a previously set transformer |
 | `isInitialized()` | Check initialization status |
 | `setQaMode(enabled)` | Enable/disable QA mode (console logging) |
 | `destroy()` | Stop tracking and cleanup |
@@ -118,11 +136,16 @@ await tracelog.init({
   disabledEvents: ['scroll'],  // Disable specific auto-tracked events
                                 // Options: 'scroll', 'web_vitals', 'error'
 
-  // Integrations (pick one or none)
+  // Integrations (pick one, multiple, or none)
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
     custom: { collectApiUrl: 'https://api.com' },    // Custom backend
-    googleAnalytics: { measurementId: 'G-XXXXXX' }   // GA4 forwarding
+    googleAnalytics: { measurementId: 'G-XXXXXX' },  // GA4 forwarding
+
+    // Multi-integration: Send to multiple backends simultaneously
+    // tracelog: { projectId: 'proj-123' },          // Analytics dashboard
+    // custom: { collectApiUrl: 'https://warehouse.com' }  // Data warehouse
+    // Events sent to BOTH independently with separate error handling
   },
 
   // Web Vitals filtering
@@ -191,6 +214,207 @@ tracelog.event('purchase_completed', {
 
 ---
 
+## Transformers
+
+Transform events dynamically at runtime before they're sent to integrations. Useful for adding custom logic, enrichment, or filtering.
+
+**Important**: Transformers are **integration-specific** to protect TraceLog SaaS schema integrity:
+
+| Integration | `beforeSend` | `beforeBatch` | Notes |
+|-------------|--------------|---------------|-------|
+| **TraceLog SaaS (only)** | ❌ Silently ignored | ❌ Silently ignored | Schema protection |
+| **Custom Backend (only)** | ✅ Applied | ✅ Applied | Full control |
+| **Multi-Integration** | ⚠️ Custom only | ⚠️ Custom only | SaaS gets original events, custom gets transformed |
+| **Google Analytics** | ❌ N/A | ❌ N/A | Forwards `tracelog.event()` calls as-is |
+
+**Multi-Integration Behavior:**
+- When using both TraceLog SaaS + Custom backend simultaneously
+- SaaS receives **original events** (transformers not applied)
+- Custom backend receives **transformed events**
+- Independent error handling and retry per integration
+
+### Available Hooks
+
+#### `beforeSend` - Per-Event Transformation
+
+Transform individual events **before** deduplication, sampling, and queueing.
+
+**Timing:**
+- **Custom-only mode**: Runs in `EventManager.buildEventPayload()` (before dedup/sampling)
+- **Multi-integration mode**: Runs in `SenderManager` per-integration (SaaS skipped)
+
+```typescript
+import { tracelog } from '@tracelog/lib';
+import type { EventData, EventsQueue } from '@tracelog/lib';
+
+// Add custom metadata to all events
+tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          environment: 'production',
+          version: '1.0.0'
+        }
+      }
+    };
+  }
+  return data;
+});
+
+// Filter out sensitive events
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data && data.custom_event?.name === 'internal_event') {
+    return null; // Event will be dropped
+  }
+  return data;
+});
+```
+
+#### `beforeBatch` - Batch Transformation
+
+Transform the entire batch before sending to backend. Runs once per batch (every 10s or 50 events).
+
+```typescript
+// Add batch-level metadata
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data) {
+    return {
+      ...data,
+      global_metadata: {
+        ...data.global_metadata,
+        batchSize: data.events.length,
+        batchTimestamp: Date.now()
+      }
+    };
+  }
+  return data;
+});
+
+// Filter batch based on conditions
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data && data.events.length < 5) {
+    return null; // Don't send small batches
+  }
+  return data;
+});
+```
+
+### Removing Transformers
+
+```typescript
+// Remove specific transformer
+tracelog.removeTransformer('beforeSend');
+tracelog.removeTransformer('beforeBatch');
+```
+
+### Error Handling & Validation
+
+Transformers are designed to be resilient and flexible:
+
+**Input Validation:**
+- **Function type check**: `setTransformer()` throws error if `fn` is not a function
+- **Example**: `tracelog.setTransformer('beforeSend', null)` → Throws `Error: [TraceLog] Transformer must be a function, received: object`
+
+**Error Handling:**
+- **Exceptions**: Caught and logged, original event/batch used
+- **Invalid return**: Logged warning, original event/batch used
+- **`null` return**: Event/batch filtered out (intended behavior)
+
+**Validation:**
+- **Minimal checks only**: `beforeSend` requires `'type'` field, `beforeBatch` requires `'events'` array
+- **Custom schemas supported**: All other fields optional for maximum flexibility with custom backends
+- **Use case**: Transform data to match your backend's schema (e.g., data warehouses, custom APIs)
+
+```typescript
+// Safe transformer - errors won't break tracking
+tracelog.setTransformer('beforeSend', (data) => {
+  try {
+    // Complex transformation logic
+    return transformData(data);
+  } catch (error) {
+    console.error('Transformer error:', error);
+    return data; // Fallback to original
+  }
+});
+
+// Custom schema example - completely reshape for your backend
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return {
+      type: 'analytics_event',
+      eventName: data.custom_event?.name,
+      timestamp: Date.now(),
+      // Your custom fields - TraceLog won't reject this!
+      customField1: 'value',
+      customField2: 123
+    };
+  }
+  return data;
+});
+```
+
+### Use Cases
+
+**Data Enrichment:**
+```typescript
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          userId: getCurrentUserId(),
+          sessionContext: getSessionContext()
+        }
+      }
+    };
+  }
+  return data;
+});
+```
+
+**Event Filtering:**
+```typescript
+// Filter out bot traffic
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data) {
+    const filteredEvents = data.events.filter(
+      event => !isBotUserAgent(navigator.userAgent)
+    );
+    return { ...data, events: filteredEvents };
+  }
+  return data;
+});
+```
+
+**PII Sanitization (Custom Backend):**
+```typescript
+// Additional sanitization for custom backend
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data && data.custom_event?.metadata) {
+    const sanitized = { ...data.custom_event.metadata };
+    delete sanitized.email;
+    delete sanitized.phone;
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: sanitized
+      }
+    };
+  }
+  return data;
+});
+```
+
+---
+
 ## Integration Modes
 
 TraceLog supports multiple integration modes. Choose what fits your needs:
@@ -233,6 +457,21 @@ await tracelog.init({
     googleAnalytics: { measurementId: 'G-XXXXXX' }
   }
 });
+```
+
+### 5. Multi-Integration (TraceLog SaaS + Custom Backend)
+```typescript
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' },           // Analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }    // Data warehouse
+  }
+});
+
+// Events sent to BOTH endpoints independently
+// - Independent error handling per integration
+// - Independent retry/persistence per integration
+// - Parallel sending (non-blocking)
 ```
 
 **→ [Integration Setup Guide](./API_REFERENCE.md#integration-configuration)**

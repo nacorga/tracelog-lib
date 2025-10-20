@@ -87,7 +87,7 @@ describe('App Lifecycle Integration', () => {
       expect(app.initialized).toBe(true);
     });
 
-    it('should initialize with tracelog integration configured', async () => {
+    it('should reject tracelog SaaS integration on localhost', async () => {
       const config: Config = {
         integrations: {
           tracelog: {
@@ -96,9 +96,10 @@ describe('App Lifecycle Integration', () => {
         },
       };
 
-      await app.init(config);
-
-      expect(app.initialized).toBe(true);
+      // SaaS integration should fail on localhost with helpful error
+      await expect(app.init(config)).rejects.toThrow(
+        'Invalid SaaS URL configuration: SaaS integration not supported on localhost or IP addresses',
+      );
     });
 
     it('should initialize with custom integration configured', async () => {

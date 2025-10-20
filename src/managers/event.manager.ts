@@ -18,8 +18,8 @@ import {
   FINGERPRINT_CLEANUP_MULTIPLIER,
   MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
-import { EventsQueue, EmitterEvent, EventData, EventType, Mode } from '../types';
-import { getUTMParameters, log, Emitter, generateEventId } from '../utils';
+import { EventsQueue, EmitterEvent, EventData, EventType, Mode, TransformerMap } from '../types';
+import { getUTMParameters, log, Emitter, generateEventId, transformEvent, transformBatch } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -27,16 +27,19 @@ import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.int
 
 export class EventManager extends StateManager {
   private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
-  private readonly dataSender: SenderManager;
+  private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
+  private readonly transformers: TransformerMap;
+  private readonly recentEventFingerprints = new Map<string, number>();
+  private readonly perEventRateLimits: Map<string, number[]> = new Map();
 
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
-  private readonly recentEventFingerprints = new Map<string, number>(); // Time-based deduplication cache
   private sendIntervalId: number | null = null;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
-  private readonly perEventRateLimits: Map<string, number[]> = new Map();
+  private lastSessionId: string | null = null;
+
   private sessionEventCounts: {
     total: number;
     [key: string]: number;
@@ -48,36 +51,51 @@ export class EventManager extends StateManager {
     [EventType.VIEWPORT_VISIBLE]: 0,
     [EventType.SCROLL]: 0,
   };
-  private lastSessionId: string | null = null;
 
   constructor(
     storeManager: StorageManager,
     googleAnalytics: GoogleAnalyticsIntegration | null = null,
     emitter: Emitter | null = null,
+    transformers: TransformerMap = {},
   ) {
     super();
 
     this.googleAnalytics = googleAnalytics;
-    this.dataSender = new SenderManager(storeManager);
     this.emitter = emitter;
+    this.transformers = transformers;
+
+    this.dataSenders = [];
+    const collectApiUrls = this.get('collectApiUrls');
+
+    if (collectApiUrls?.saas) {
+      this.dataSenders.push(new SenderManager(storeManager, 'saas', collectApiUrls.saas, transformers));
+    }
+
+    if (collectApiUrls?.custom) {
+      this.dataSenders.push(new SenderManager(storeManager, 'custom', collectApiUrls.custom, transformers));
+    }
   }
 
   async recoverPersistedEvents(): Promise<void> {
-    await this.dataSender.recoverPersistedEvents({
-      onSuccess: (_eventCount, recoveredEvents, body) => {
-        if (recoveredEvents && recoveredEvents.length > 0) {
-          const eventIds = recoveredEvents.map((e) => e.id);
-          this.removeProcessedEvents(eventIds);
+    const recoveryPromises = this.dataSenders.map(async (sender) =>
+      sender.recoverPersistedEvents({
+        onSuccess: (_eventCount, recoveredEvents, body) => {
+          if (recoveredEvents && recoveredEvents.length > 0) {
+            const eventIds = recoveredEvents.map((e) => e.id);
+            this.removeProcessedEvents(eventIds);
 
-          if (body) {
-            this.emitEventsQueue(body);
+            if (body) {
+              this.emitEventsQueue(body);
+            }
           }
-        }
-      },
-      onFailure: () => {
-        log('warn', 'Failed to recover persisted events');
-      },
-    });
+        },
+        onFailure: () => {
+          log('warn', 'Failed to recover persisted events');
+        },
+      }),
+    );
+
+    await Promise.allSettled(recoveryPromises);
   }
 
   track({
@@ -123,7 +141,6 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Reset session counters if session ID changed (Phase 3)
     if (this.lastSessionId !== currentSessionId) {
       this.lastSessionId = currentSessionId;
       this.sessionEventCounts = {
@@ -137,15 +154,14 @@ export class EventManager extends StateManager {
     }
 
     const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
+
     if (!isCriticalEvent && !this.checkRateLimit()) {
       return;
     }
 
     const eventType = type as EventType;
 
-    // Per-session event caps (Phase 3) - skip for critical events
     if (!isCriticalEvent) {
-      // Check total session limit
       if (this.sessionEventCounts.total >= MAX_EVENTS_PER_SESSION) {
         log('warn', 'Session event limit reached', {
           data: {
@@ -154,13 +170,15 @@ export class EventManager extends StateManager {
             limit: MAX_EVENTS_PER_SESSION,
           },
         });
+
         return;
       }
 
-      // Check type-specific limits
       const typeLimit = this.getTypeLimitForEvent(eventType);
+
       if (typeLimit) {
         const currentCount = this.sessionEventCounts[eventType];
+
         if (currentCount !== undefined && currentCount >= typeLimit) {
           log('warn', 'Session event type limit reached', {
             data: {
@@ -169,14 +187,15 @@ export class EventManager extends StateManager {
               limit: typeLimit,
             },
           });
+
           return;
         }
       }
     }
 
-    // Per-event-name rate limiting for CUSTOM events to prevent infinite loops
     if (eventType === EventType.CUSTOM && custom_event?.name) {
       const maxSameEventPerMinute = this.get('config')?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE;
+
       if (!this.checkPerEventRateLimit(custom_event.name, maxSameEventPerMinute)) {
         return;
       }
@@ -196,6 +215,11 @@ export class EventManager extends StateManager {
       session_end_reason,
       viewport_data,
     });
+
+    // Handle event filtered by beforeSend transformer
+    if (!payload) {
+      return;
+    }
 
     if (!isCriticalEvent && !this.shouldSample()) {
       return;
@@ -240,9 +264,9 @@ export class EventManager extends StateManager {
 
     this.addToQueue(payload);
 
-    // Increment session counters (Phase 3) - only for non-critical events
     if (!isCriticalEvent) {
       this.sessionEventCounts.total++;
+
       if (this.sessionEventCounts[eventType] !== undefined) {
         this.sessionEventCounts[eventType]++;
       }
@@ -271,7 +295,9 @@ export class EventManager extends StateManager {
     };
     this.lastSessionId = null;
 
-    this.dataSender.stop();
+    this.dataSenders.forEach((sender) => {
+      sender.stop();
+    });
   }
 
   async flushImmediately(): Promise<boolean> {
@@ -315,6 +341,10 @@ export class EventManager extends StateManager {
     }
   }
 
+  private isSuccessfulResult(result: PromiseSettledResult<boolean>): boolean {
+    return result.status === 'fulfilled' && result.value === true;
+  }
+
   private flushEvents(isSync: boolean): boolean | Promise<boolean> {
     if (this.eventsQueue.length === 0) {
       return isSync ? true : Promise.resolve(true);
@@ -324,10 +354,19 @@ export class EventManager extends StateManager {
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
 
-    if (isSync) {
-      const success = this.dataSender.sendEventsQueueSync(body);
+    if (this.dataSenders.length === 0) {
+      this.removeProcessedEvents(eventIds);
+      this.clearSendInterval();
+      this.emitEventsQueue(body);
 
-      if (success) {
+      return isSync ? true : Promise.resolve(true);
+    }
+
+    if (isSync) {
+      const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
+      const allSucceeded = results.every((success) => success);
+
+      if (allSucceeded) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
@@ -336,25 +375,38 @@ export class EventManager extends StateManager {
         this.clearSendInterval();
       }
 
-      return success;
+      return allSucceeded;
     } else {
-      return this.dataSender.sendEventsQueue(body, {
-        onSuccess: () => {
-          this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
+      const sendPromises = this.dataSenders.map(async (sender) =>
+        sender.sendEventsQueue(body, {
+          onSuccess: () => {},
+          onFailure: () => {},
+        }),
+      );
+
+      return Promise.allSettled(sendPromises).then((results) => {
+        this.removeProcessedEvents(eventIds);
+        this.clearSendInterval();
+
+        const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
+
+        if (anySucceeded) {
           this.emitEventsQueue(body);
-        },
-        onFailure: () => {
-          this.removeProcessedEvents(eventIds);
+        }
 
-          if (this.eventsQueue.length === 0) {
-            this.clearSendInterval();
-          }
+        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
 
-          log('warn', 'Async flush failed, removed from queue and persisted for recovery on next page load', {
-            data: { eventCount: eventsToSend.length },
-          });
-        },
+        if (failedCount > 0) {
+          log(
+            'warn',
+            'Async flush completed with some failures, events removed from queue and persisted per-integration',
+            {
+              data: { eventCount: eventsToSend.length, failedCount },
+            },
+          );
+        }
+
+        return anySucceeded;
       });
     }
   }
@@ -365,26 +417,43 @@ export class EventManager extends StateManager {
     }
 
     const body = this.buildEventsPayload();
+
+    if (this.dataSenders.length === 0) {
+      this.emitEventsQueue(body);
+      return;
+    }
+
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
 
-    await this.dataSender.sendEventsQueue(body, {
-      onSuccess: () => {
-        this.removeProcessedEvents(eventIds);
-        this.emitEventsQueue(body);
-      },
-      onFailure: () => {
-        this.removeProcessedEvents(eventIds);
+    const sendPromises = this.dataSenders.map(async (sender) =>
+      sender.sendEventsQueue(body, {
+        onSuccess: () => {},
+        onFailure: () => {},
+      }),
+    );
 
-        if (this.eventsQueue.length === 0) {
-          this.clearSendInterval();
-        }
+    const results = await Promise.allSettled(sendPromises);
 
-        log('warn', 'Events send failed, removed from queue and persisted for recovery on next page load', {
-          data: { eventCount: eventsToSend.length },
-        });
-      },
-    });
+    this.removeProcessedEvents(eventIds);
+
+    const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
+
+    if (anySucceeded) {
+      this.emitEventsQueue(body);
+    }
+
+    if (this.eventsQueue.length === 0) {
+      this.clearSendInterval();
+    }
+
+    const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+
+    if (failedCount > 0) {
+      log('warn', 'Events send completed with some failures, removed from queue and persisted per-integration', {
+        data: { eventCount: eventsToSend.length, failedCount },
+      });
+    }
   }
 
   private buildEventsPayload(): EventsQueue {
@@ -406,20 +475,34 @@ export class EventManager extends StateManager {
       .filter((event): event is EventData => Boolean(event))
       .sort((a, b) => a.timestamp - b.timestamp);
 
-    return {
+    let queue: EventsQueue = {
       user_id: this.get('userId'),
       session_id: this.get('sessionId') as string,
       device: this.get('device'),
       events,
       ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
     };
+
+    const collectApiUrls = this.get('collectApiUrls');
+    const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
+    const beforeBatchTransformer = this.transformers.beforeBatch;
+
+    if (!hasAnyBackend && beforeBatchTransformer) {
+      const transformed = transformBatch(queue, beforeBatchTransformer, 'EventManager');
+
+      if (transformed !== null) {
+        queue = transformed;
+      }
+    }
+
+    return queue;
   }
 
-  private buildEventPayload(data: Partial<EventData>): EventData {
+  private buildEventPayload(data: Partial<EventData>): EventData | null {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
 
-    const payload: EventData = {
+    let payload: EventData = {
       id: generateEventId(),
       type: data.type as EventType,
       page_url: currentPageUrl,
@@ -436,37 +519,50 @@ export class EventManager extends StateManager {
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 
+    const collectApiUrls = this.get('collectApiUrls');
+    const hasCustomBackend = Boolean(collectApiUrls?.custom);
+    const hasSaasBackend = Boolean(collectApiUrls?.saas);
+    const hasAnyBackend = hasCustomBackend || hasSaasBackend;
+    const isMultiIntegration = hasCustomBackend && hasSaasBackend;
+    const beforeSendTransformer = this.transformers.beforeSend;
+
+    const shouldApplyBeforeSend =
+      beforeSendTransformer && (!hasAnyBackend || (hasCustomBackend && !isMultiIntegration));
+
+    if (shouldApplyBeforeSend) {
+      const transformed = transformEvent(payload, beforeSendTransformer, 'EventManager');
+
+      if (transformed === null) {
+        return null;
+      }
+
+      payload = transformed;
+    }
+
     return payload;
   }
 
-  /**
-   * Checks if event is a duplicate using time-based cache
-   * Tracks recent event fingerprints with timestamp-based cleanup
-   */
   private isDuplicateEvent(event: EventData): boolean {
     const now = Date.now();
     const fingerprint = this.createEventFingerprint(event);
 
     const lastSeen = this.recentEventFingerprints.get(fingerprint);
 
-    // Check if seen recently
     if (lastSeen && now - lastSeen < DUPLICATE_EVENT_THRESHOLD_MS) {
-      this.recentEventFingerprints.set(fingerprint, now); // Update timestamp
-      return true; // Duplicate
+      this.recentEventFingerprints.set(fingerprint, now);
+      return true;
     }
 
-    // Add to cache
     this.recentEventFingerprints.set(fingerprint, now);
 
-    // Cleanup if cache too large (soft limit)
     if (this.recentEventFingerprints.size > MAX_FINGERPRINTS) {
       this.pruneOldFingerprints();
     }
 
-    // Hard limit: aggressive cleanup
     if (this.recentEventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
       this.recentEventFingerprints.clear();
       this.recentEventFingerprints.set(fingerprint, now);
+
       log('warn', 'Event fingerprint cache exceeded hard limit, cleared', {
         data: { hardLimit: MAX_FINGERPRINTS_HARD_LIMIT },
       });
@@ -475,10 +571,6 @@ export class EventManager extends StateManager {
     return false;
   }
 
-  /**
-   * Prunes old fingerprints from cache based on timestamp
-   * Removes entries older than 10x the duplicate threshold (5 seconds)
-   */
   private pruneOldFingerprints(): void {
     const now = Date.now();
     const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER; // 5 seconds
@@ -556,7 +648,6 @@ export class EventManager extends StateManager {
       this.startSendInterval();
     }
 
-    // Dynamic flush: Send immediately when batch size threshold is reached
     if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
       void this.sendEventsQueue();
     }
@@ -603,15 +694,10 @@ export class EventManager extends StateManager {
     return true;
   }
 
-  /**
-   * Checks per-event-name rate limiting to prevent infinite loops in user code
-   * Tracks timestamps per event name and limits to maxSameEventPerMinute per minute
-   */
   private checkPerEventRateLimit(eventName: string, maxSameEventPerMinute: number): boolean {
     const now = Date.now();
     const timestamps = this.perEventRateLimits.get(eventName) ?? [];
 
-    // Remove timestamps older than the rate limit window (60 seconds)
     const validTimestamps = timestamps.filter((ts) => now - ts < PER_EVENT_RATE_LIMIT_WINDOW_MS);
 
     if (validTimestamps.length >= maxSameEventPerMinute) {
@@ -625,16 +711,12 @@ export class EventManager extends StateManager {
       return false;
     }
 
-    // Add current timestamp and update map
     validTimestamps.push(now);
     this.perEventRateLimits.set(eventName, validTimestamps);
 
     return true;
   }
 
-  /**
-   * Gets the per-session limit for a specific event type (Phase 3)
-   */
   private getTypeLimitForEvent(type: EventType): number | null {
     const limits: Partial<Record<EventType, number>> = {
       [EventType.CLICK]: MAX_CLICKS_PER_SESSION,

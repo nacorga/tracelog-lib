@@ -85,6 +85,45 @@ npm run test:e2e              # E2E tests
 npm run build:all             # Build verification
 ```
 
+## 📦 RC Version Management
+
+### What are RC Versions?
+**RC (Release Candidate)** versions are pre-release versions published during pull request development to allow testing before merging to main.
+
+### RC Version Lifecycle
+```
+1. PR Created → RC version published
+   Format: {version}-rc.{PR_NUMBER}.{COMMIT_COUNT}
+   Example: 1.2.3-rc.45.2
+   NPM Tag: next
+
+2. PR Updated → New RC version published
+   Example: 1.2.3-rc.45.3 (commit count incremented)
+   Previous RC versions remain on npm
+
+3. PR Merged → Stable release published → All RC versions cleaned up
+   Stable version: 1.2.3 (NPM tag: latest)
+   All -rc.* versions: Unpublished from npm
+```
+
+### Installing RC Versions
+```bash
+# Install specific RC version (for testing)
+npm install @tracelog/lib@1.2.3-rc.45.2
+
+# Install latest RC version (automatically uses 'next' tag)
+npm install @tracelog/lib@next
+```
+
+### Automatic Cleanup
+When a PR is merged to main and a stable release is published:
+- ✅ All RC versions (containing `-rc.` in version string) are automatically unpublished
+- ✅ Keeps npm package registry clean
+- ✅ Prevents confusion between stable and pre-release versions
+- ✅ No manual cleanup required
+
+**Note:** RC versions are ONLY for testing during PR review. Once merged, they are no longer needed and are automatically removed.
+
 ## 🔄 CI/CD Pipeline
 
 ### 1. **Pull Request Validation (CI Workflow)**
@@ -95,9 +134,10 @@ npm run build:all             # Build verification
 - ✅ E2E test coverage (Playwright)
 - ✅ Package configuration validation
 - ✅ Upload test artifacts if failures occur
+- ✅ **RC version publication** (publishes `{version}-rc.{PR_NUMBER}.{COMMIT_COUNT}` to npm with `next` tag)
 
 ### 2. **Release Process (Release Workflow)**
-**Triggers**: Manual GitHub Actions workflow
+**Triggers**: Manual GitHub Actions workflow OR automatic on push to main
 - ✅ Environment validation (git repo, main branch)
 - ✅ Version detection (conventional commits analysis)
 - ✅ Project build
@@ -105,6 +145,7 @@ npm run build:all             # Build verification
 - ✅ Git tag creation
 - ✅ NPM publication with verification
 - ✅ GitHub release creation
+- ✅ **RC versions cleanup** (unpublishes all `-rc.*` versions from npm)
 
 ### 3. **Intelligent Version Detection**
 The system analyzes conventional commits since the last tag:

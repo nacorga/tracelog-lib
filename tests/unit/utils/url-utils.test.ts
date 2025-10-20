@@ -1,8 +1,237 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { normalizeUrl, getCollectApiUrl } from '../../../src/utils/network/url.utils';
-import { Config } from '../../../src/types';
+import { normalizeUrl, getCollectApiUrls } from '../../../src/utils/network/url.utils';
+import type { Config } from '../../../src/types';
 
 describe('URL Utils', () => {
+  describe('getCollectApiUrls', () => {
+    beforeEach(() => {
+      // Mock window.location for SaaS URL generation
+      delete (window as any).location;
+      (window as any).location = {
+        href: 'https://app.example.com/page',
+        hostname: 'app.example.com',
+      };
+    });
+
+    describe('SaaS URL generation (generateSaasApiUrl)', () => {
+      test('should generate valid SaaS URL from project ID', () => {
+        const config: Config = {
+          integrations: {
+            tracelog: {
+              projectId: 'test-project',
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        expect(result.saas).toBe('https://test-project.example.com/collect');
+        expect(result.custom).toBeUndefined();
+      });
+
+      test('should handle subdomain and generate correct SaaS URL', () => {
+        (window as any).location = {
+          href: 'https://subdomain.app.example.com/page',
+          hostname: 'subdomain.app.example.com',
+        };
+
+        const config: Config = {
+          integrations: {
+            tracelog: {
+              projectId: 'my-project',
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        // Should use last 2 parts of domain
+        expect(result.saas).toBe('https://my-project.example.com/collect');
+      });
+
+      test('should throw error for invalid hostname (empty string)', () => {
+        (window as any).location = {
+          href: 'about:blank',
+          hostname: '',
+        };
+
+        const config: Config = {
+          integrations: {
+            tracelog: {
+              projectId: 'test-project',
+            },
+          },
+        };
+
+        expect(() => getCollectApiUrls(config)).toThrow('Invalid SaaS URL configuration');
+      });
+
+      test('should reject localhost with helpful error message', () => {
+        // localhost is NOT supported for SaaS integration
+        (window as any).location = {
+          href: 'http://localhost:3000',
+          hostname: 'localhost',
+        };
+
+        const config: Config = {
+          integrations: {
+            tracelog: {
+              projectId: 'test-project',
+            },
+          },
+        };
+
+        // Should throw error suggesting custom backend
+        expect(() => getCollectApiUrls(config)).toThrow(
+          'Invalid SaaS URL configuration: SaaS integration not supported on localhost or IP addresses. Use custom backend integration instead.',
+        );
+      });
+    });
+
+    describe('Custom backend URL validation', () => {
+      test('should accept valid HTTPS custom URL', () => {
+        const config: Config = {
+          integrations: {
+            custom: {
+              collectApiUrl: 'https://api.custom.com/collect',
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        expect(result.custom).toBe('https://api.custom.com/collect');
+        expect(result.saas).toBeUndefined();
+      });
+
+      test('should reject HTTP custom URL by default', () => {
+        const config: Config = {
+          integrations: {
+            custom: {
+              collectApiUrl: 'http://api.custom.com/collect',
+            },
+          },
+        };
+
+        expect(() => getCollectApiUrls(config)).toThrow('Invalid custom API URL');
+      });
+
+      test('should accept HTTP custom URL when allowHttp is true', () => {
+        const config: Config = {
+          integrations: {
+            custom: {
+              collectApiUrl: 'http://localhost:3000/collect',
+              allowHttp: true,
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        expect(result.custom).toBe('http://localhost:3000/collect');
+      });
+
+      test('should reject invalid custom URL', () => {
+        const config: Config = {
+          integrations: {
+            custom: {
+              collectApiUrl: 'not-a-valid-url',
+            },
+          },
+        };
+
+        expect(() => getCollectApiUrls(config)).toThrow('Invalid custom API URL');
+      });
+
+      test('should skip empty custom URL (falsy check)', () => {
+        const config: Config = {
+          integrations: {
+            custom: {
+              collectApiUrl: '',
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        // Empty string is falsy, so it's skipped
+        expect(result.custom).toBeUndefined();
+      });
+    });
+
+    describe('Multi-integration configuration', () => {
+      test('should return both SaaS and custom URLs when configured', () => {
+        const config: Config = {
+          integrations: {
+            tracelog: {
+              projectId: 'my-project',
+            },
+            custom: {
+              collectApiUrl: 'https://warehouse.example.com/events',
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        expect(result.saas).toBe('https://my-project.example.com/collect');
+        expect(result.custom).toBe('https://warehouse.example.com/events');
+      });
+
+      test('should handle SaaS-only configuration', () => {
+        const config: Config = {
+          integrations: {
+            tracelog: {
+              projectId: 'solo-project',
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        expect(result.saas).toBe('https://solo-project.example.com/collect');
+        expect(result.custom).toBeUndefined();
+      });
+
+      test('should handle custom-only configuration', () => {
+        const config: Config = {
+          integrations: {
+            custom: {
+              collectApiUrl: 'https://api.mybackend.com/analytics',
+            },
+          },
+        };
+
+        const result = getCollectApiUrls(config);
+
+        expect(result.saas).toBeUndefined();
+        expect(result.custom).toBe('https://api.mybackend.com/analytics');
+      });
+    });
+
+    describe('Empty configuration', () => {
+      test('should return empty object when no integrations configured', () => {
+        const config: Config = {};
+
+        const result = getCollectApiUrls(config);
+
+        expect(result).toEqual({});
+        expect(result.saas).toBeUndefined();
+        expect(result.custom).toBeUndefined();
+      });
+
+      test('should return empty object when integrations object is empty', () => {
+        const config: Config = {
+          integrations: {},
+        };
+
+        const result = getCollectApiUrls(config);
+
+        expect(result).toEqual({});
+      });
+    });
+  });
+
   describe('normalizeUrl', () => {
     test('should apply default sensitive params even when no custom params provided', () => {
       const url = 'https://test.com/page?user=john&id=123&token=secret';
@@ -110,180 +339,6 @@ describe('URL Utils', () => {
       expect(result).toBe('https://test.com/page?user=john');
       expect(result).not.toContain('token');
       expect(result).not.toContain('custom_secret');
-    });
-  });
-
-  describe('getCollectApiUrl', () => {
-    beforeEach(() => {
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'https://example.com/page',
-          hostname: 'example.com',
-          protocol: 'https:',
-        },
-        writable: true,
-        configurable: true,
-      });
-    });
-
-    test('should return empty string when no integrations configured', () => {
-      const config: Config = {};
-      const result = getCollectApiUrl(config);
-
-      expect(result).toBe('');
-    });
-
-    test('should generate API URL from tracelog projectId', () => {
-      const config: Config = {
-        integrations: {
-          tracelog: {
-            projectId: 'my-project',
-          },
-        },
-      };
-
-      const result = getCollectApiUrl(config);
-
-      expect(result).toBe('https://my-project.example.com/collect');
-    });
-
-    test('should use custom collectApiUrl when provided', () => {
-      const config: Config = {
-        integrations: {
-          custom: {
-            collectApiUrl: 'https://api.custom.com/collect',
-          },
-        },
-      };
-
-      const result = getCollectApiUrl(config);
-
-      expect(result).toBe('https://api.custom.com/collect');
-    });
-
-    test('should throw error for invalid custom collectApiUrl', () => {
-      const config: Config = {
-        integrations: {
-          custom: {
-            collectApiUrl: 'not-a-valid-url',
-          },
-        },
-      };
-
-      expect(() => getCollectApiUrl(config)).toThrow('Invalid URL');
-    });
-
-    test('should handle subdomain extraction correctly', () => {
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'https://app.example.com/page',
-          hostname: 'app.example.com',
-          protocol: 'https:',
-        },
-        writable: true,
-        configurable: true,
-      });
-
-      const config: Config = {
-        integrations: {
-          tracelog: {
-            projectId: 'test-project',
-          },
-        },
-      };
-
-      const result = getCollectApiUrl(config);
-
-      expect(result).toBe('https://test-project.example.com/collect');
-    });
-
-    test('should allow HTTP when allowHttp is true in custom integration', () => {
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/page',
-          hostname: 'localhost',
-          protocol: 'http:',
-        },
-        writable: true,
-        configurable: true,
-      });
-
-      const config: Config = {
-        integrations: {
-          custom: {
-            collectApiUrl: 'http://localhost:3000/collect',
-            allowHttp: true,
-          },
-        },
-      };
-
-      const result = getCollectApiUrl(config);
-
-      expect(result).toContain('http://');
-    });
-
-    test('should reject HTTP URL when allowHttp is false in custom integration', () => {
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'http://localhost:3000/page',
-          hostname: 'localhost',
-          protocol: 'http:',
-        },
-        writable: true,
-        configurable: true,
-      });
-
-      const config: Config = {
-        integrations: {
-          custom: {
-            collectApiUrl: 'http://localhost:3000/collect',
-            allowHttp: false,
-          },
-        },
-      };
-
-      // This should throw an error because HTTP is not allowed
-      expect(() => getCollectApiUrl(config)).toThrow('Invalid URL');
-    });
-
-    test('should prioritize tracelog projectId over custom collectApiUrl', () => {
-      const config: Config = {
-        integrations: {
-          tracelog: {
-            projectId: 'project-1',
-          },
-          custom: {
-            collectApiUrl: 'https://api.custom.com/collect',
-          },
-        },
-      };
-
-      const result = getCollectApiUrl(config);
-
-      // tracelog is checked first in the actual implementation
-      expect(result).toBe('https://project-1.example.com/collect');
-    });
-
-    test('should throw error when domain parts are invalid', () => {
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'https://',
-          hostname: '',
-          protocol: 'https:',
-        },
-        writable: true,
-        configurable: true,
-      });
-
-      const config: Config = {
-        integrations: {
-          tracelog: {
-            projectId: 'test',
-          },
-        },
-      };
-
-      expect(() => getCollectApiUrl(config)).toThrow('Invalid URL');
     });
   });
 });

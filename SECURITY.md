@@ -309,6 +309,223 @@ await tracelog.init({
 
 ---
 
+### Transformer Security Considerations
+
+**New in v1.2.0:** Transformers allow runtime event modification. Use them securely to avoid introducing vulnerabilities.
+
+#### ✅ DO: Use transformers for additional PII sanitization
+
+```typescript
+import type { EventData, EventsQueue } from '@tracelog/lib';
+
+// Strip PII from custom backend events
+tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
+  if ('type' in data && data.custom_event?.metadata) {
+    const sanitized = { ...data.custom_event.metadata };
+
+    // Remove known PII fields
+    delete sanitized.email;
+    delete sanitized.phone;
+    delete sanitized.ssn;
+    delete sanitized.creditCard;
+
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: sanitized
+      }
+    };
+  }
+  return data;
+});
+```
+
+#### ✅ DO: Filter events based on user consent level
+
+```typescript
+// Example: Filter events for users with limited consent
+const userConsent = getUserConsent(); // Your consent manager
+
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    // Users with "essential only" consent
+    if (userConsent.level === 'essential') {
+      // Only allow core events (page_view, session)
+      if (data.type !== 'page_view' && data.type !== 'session_start' && data.type !== 'session_end') {
+        return null; // Filter out non-essential events
+      }
+    }
+  }
+  return data;
+});
+```
+
+#### ✅ DO: Remember transformers are integration-specific
+
+**Critical Security Note:**
+- **TraceLog SaaS**: Transformers silently ignored (schema protection)
+- **Custom Backend**: Transformers applied (YOUR responsibility to secure)
+- **Google Analytics**: Transformers NOT applied (events sent as-is)
+
+```typescript
+// Custom backend - transformers applied (YOU control security)
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://your-api.com' }
+  }
+});
+
+// YOUR responsibility to sanitize when using transformers with custom backend
+tracelog.setTransformer('beforeSend', sanitizePII);
+
+// TraceLog SaaS - transformers ignored (TraceLog controls security)
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' }
+  }
+});
+
+// Transformers NOT applied (SaaS schema protection)
+tracelog.setTransformer('beforeSend', anyTransformer); // Ignored
+```
+
+#### ❌ DON'T: Add PII via transformers
+
+```typescript
+// BAD - introducing PII leak
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          userEmail: currentUser.email, // ❌ PII leak
+          userPhone: currentUser.phone   // ❌ PII leak
+        }
+      }
+    };
+  }
+  return data;
+});
+
+// GOOD - use hashed/anonymized IDs only (precompute async values)
+const hashedUserId = await hashUserId(currentUser.id); // Precompute outside transformer
+
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          userId: hashedUserId,              // ✅ Precomputed hashed ID
+          userSegment: currentUser.segment   // ✅ Generic category
+        }
+      }
+    };
+  }
+  return data;
+});
+```
+
+#### ❌ DON'T: Trust transformer input blindly
+
+```typescript
+// BAD - no validation
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    // Directly using external data without validation
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          ...window.externalData // ❌ Unvalidated external data
+        }
+      }
+    };
+  }
+  return data;
+});
+
+// GOOD - validate and sanitize
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    const validated = validateExternalData(window.externalData);
+    const sanitized = sanitizePII(validated);
+
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          ...sanitized // ✅ Validated and sanitized
+        }
+      }
+    };
+  }
+  return data;
+});
+```
+
+#### ❌ DON'T: Log sensitive data in transformers
+
+```typescript
+// BAD - logging PII in transformer
+tracelog.setTransformer('beforeSend', (data) => {
+  console.log('Event data:', data); // ❌ May contain PII in production logs
+  return data;
+});
+
+// GOOD - conditional logging with sanitization
+tracelog.setTransformer('beforeSend', (data) => {
+  if (import.meta.env.DEV) {
+    // Only log in development, and redact sensitive fields
+    const sanitized = { ...data, custom_event: { name: data.custom_event?.name } };
+    console.log('Event (sanitized):', sanitized);
+  }
+  return data;
+});
+```
+
+#### Security Checklist for Transformers
+
+Before using transformers in production:
+
+- [ ] **Integration type confirmed** - Know whether transformers will be applied (SaaS vs custom)
+- [ ] **PII removal verified** - Ensure transformers don't introduce PII leaks
+- [ ] **Input validation** - Validate any external data added via transformers
+- [ ] **Error handling** - Transformers wrapped in try-catch for safe fallback
+- [ ] **Logging reviewed** - No sensitive data logged in transformer code
+- [ ] **Performance tested** - Transformers don't block event processing (<5ms per call)
+- [ ] **Testing completed** - Test transformers with real events in QA mode
+
+**Example Test:**
+
+```typescript
+// Test transformer in QA mode
+tracelog.setQaMode(true);
+
+// Set transformer
+tracelog.setTransformer('beforeSend', myTransformer);
+
+// Send test event
+tracelog.event('test_event', { key: 'value' });
+
+// Check browser console - verify:
+// 1. Transformation applied correctly
+// 2. No PII leaked
+// 3. Performance acceptable
+```
+
+---
+
 ## 🧪 Security Testing
 
 TraceLog includes comprehensive E2E security tests:

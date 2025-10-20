@@ -6,8 +6,8 @@ import {
   MAX_BEACON_PAYLOAD_SIZE,
   PERSISTENCE_THROTTLE_MS,
 } from '../constants';
-import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError } from '../types';
-import { log } from '../utils';
+import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
+import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -18,17 +18,35 @@ interface SendCallbacks {
 
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
+  private readonly integrationId?: 'saas' | 'custom';
+  private readonly apiUrl?: string;
+  private readonly transformers: TransformerMap;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
 
-  constructor(storeManager: StorageManager) {
+  constructor(
+    storeManager: StorageManager,
+    integrationId?: 'saas' | 'custom',
+    apiUrl?: string,
+    transformers: TransformerMap = {},
+  ) {
     super();
+
+    if ((integrationId && !apiUrl) || (!integrationId && apiUrl)) {
+      throw new Error('SenderManager: integrationId and apiUrl must either both be provided or both be undefined');
+    }
+
     this.storeManager = storeManager;
+    this.integrationId = integrationId;
+    this.apiUrl = apiUrl;
+    this.transformers = transformers;
   }
 
   private getQueueStorageKey(): string {
     const userId = this.get('userId') || 'anonymous';
-    return QUEUE_KEY(userId);
+    const baseKey = QUEUE_KEY(userId);
+    // Add integration suffix for multi-integration support
+    return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
 
   sendEventsQueueSync(body: EventsQueue): boolean {
@@ -36,12 +54,14 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    const config = this.get('config');
-
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log('warn', 'Fail mode: simulating network failure (sync)', {
-        data: { events: body.events.length },
-      });
+    if (this.apiUrl === SpecialApiUrl.Fail) {
+      log(
+        'warn',
+        `Fail mode: simulating network failure (sync)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        {
+          data: { events: body.events.length },
+        },
+      );
 
       return false;
     }
@@ -117,22 +137,78 @@ export class SenderManager extends StateManager {
 
   stop(): void {}
 
+  private applyBeforeSendTransformer(body: EventsQueue): EventsQueue | null {
+    // Skip for SaaS integration
+    if (this.integrationId === 'saas') {
+      return body;
+    }
+
+    const beforeSendTransformer = this.transformers.beforeSend;
+
+    if (!beforeSendTransformer) {
+      return body;
+    }
+
+    const transformedEvents = transformEvents(
+      body.events,
+      beforeSendTransformer,
+      this.integrationId || 'SenderManager',
+    );
+
+    if (transformedEvents.length === 0) {
+      return null;
+    }
+
+    return {
+      ...body,
+      events: transformedEvents,
+    };
+  }
+
+  private applyBeforeBatchTransformer(body: EventsQueue): EventsQueue | null {
+    if (this.integrationId === 'saas') {
+      return body;
+    }
+
+    const beforeBatchTransformer = this.transformers.beforeBatch;
+
+    if (!beforeBatchTransformer) {
+      return body;
+    }
+
+    const transformed = transformBatch(body, beforeBatchTransformer, this.integrationId || 'SenderManager');
+
+    return transformed;
+  }
+
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
 
-    const config = this.get('config');
+    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
+    const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
-    if (config?.integrations?.custom?.collectApiUrl === SpecialApiUrl.Fail) {
-      log('warn', 'Fail mode: simulating network failure', {
-        data: { events: body.events.length },
+    if (!afterBeforeSend) {
+      return true;
+    }
+
+    // Apply beforeBatch (batch-level transformation)
+    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
+
+    if (!transformedBody) {
+      return true;
+    }
+
+    if (this.apiUrl === SpecialApiUrl.Fail) {
+      log('warn', `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
+        data: { events: transformedBody.events.length },
       });
 
       return false;
     }
 
-    const { url, payload } = this.prepareRequest(body);
+    const { url, payload } = this.prepareRequest(transformedBody);
 
     try {
       const response = await this.sendWithTimeout(url, payload);
@@ -143,7 +219,7 @@ export class SenderManager extends StateManager {
         throw error;
       }
 
-      log('error', 'Send request failed', {
+      log('error', `Send request failed${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
         error,
         data: {
           events: body.events.length,
@@ -190,45 +266,67 @@ export class SenderManager extends StateManager {
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
-    const { url, payload } = this.prepareRequest(body);
+    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
+    const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
-    // Check payload size against 64KB browser limit (Phase 3)
+    if (!afterBeforeSend) {
+      return true;
+    }
+
+    // Apply beforeBatch (batch-level transformation)
+    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
+
+    if (!transformedBody) {
+      return true;
+    }
+
+    const { url, payload } = this.prepareRequest(transformedBody);
+
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
-      log('warn', 'Payload exceeds sendBeacon limit, persisting for recovery', {
-        data: {
-          size: payload.length,
-          limit: MAX_BEACON_PAYLOAD_SIZE,
-          events: body.events.length,
+      log(
+        'warn',
+        `Payload exceeds sendBeacon limit, persisting for recovery${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        {
+          data: {
+            size: payload.length,
+            limit: MAX_BEACON_PAYLOAD_SIZE,
+            events: transformedBody.events.length,
+          },
         },
-      });
-      this.persistEvents(body);
+      );
+
+      this.persistEvents(transformedBody);
+
       return false;
     }
 
     const blob = new Blob([payload], { type: 'application/json' });
 
     if (!this.isSendBeaconAvailable()) {
-      log('warn', 'sendBeacon not available, persisting events for recovery');
-      this.persistEvents(body);
+      log(
+        'warn',
+        `sendBeacon not available, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+
+      this.persistEvents(transformedBody);
       return false;
     }
 
-    // sendBeacon only returns true/false without HTTP status codes
-    // true: browser accepted the request for sending
-    // false: request rejected (queue full, size limits, etc.)
     const accepted = navigator.sendBeacon(url, blob);
 
     if (!accepted) {
-      log('warn', 'sendBeacon rejected request, persisting events for recovery');
-      this.persistEvents(body);
+      log(
+        'warn',
+        `sendBeacon rejected request, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+
+      this.persistEvents(transformedBody);
     }
 
     return accepted;
   }
 
   private prepareRequest(body: EventsQueue): { url: string; payload: string } {
-    // Enrich payload with metadata for sendBeacon() fallback
-    // sendBeacon() doesn't send custom headers, so we include referer in payload
     const enrichedBody = {
       ...body,
       _metadata: {
@@ -238,7 +336,7 @@ export class SenderManager extends StateManager {
     };
 
     return {
-      url: this.get('collectApiUrl'),
+      url: this.apiUrl || '',
       payload: JSON.stringify(enrichedBody),
     };
   }
@@ -252,7 +350,7 @@ export class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      log('warn', 'Failed to parse persisted data', { error });
+      log('warn', `Failed to parse persisted data${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
       this.clearPersistedEvents();
     }
 
@@ -282,9 +380,13 @@ export class SenderManager extends StateManager {
         const timeSinceExisting = Date.now() - existing.timestamp;
 
         if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
-          log('debug', 'Skipping persistence, another tab recently persisted events', {
-            data: { timeSinceExisting },
-          });
+          log(
+            'debug',
+            `Skipping persistence, another tab recently persisted events${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+            {
+              data: { timeSinceExisting },
+            },
+          );
 
           return true;
         }
@@ -301,7 +403,7 @@ export class SenderManager extends StateManager {
 
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      log('warn', 'Failed to persist events', { error });
+      log('warn', `Failed to persist events${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
       return false;
     }
   }
@@ -311,12 +413,12 @@ export class SenderManager extends StateManager {
       const key = this.getQueueStorageKey();
       this.storeManager.removeItem(key);
     } catch (error) {
-      log('warn', 'Failed to clear persisted events', { error });
+      log('warn', `Failed to clear persisted events${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
     }
   }
 
   private shouldSkipSend(): boolean {
-    return !this.get('collectApiUrl');
+    return !this.apiUrl;
   }
 
   private async simulateSuccessfulSend(): Promise<boolean> {
@@ -339,7 +441,7 @@ export class SenderManager extends StateManager {
       now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
 
     if (shouldLog) {
-      log('error', context, {
+      log('error', `${context}${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
         data: { status: error.statusCode, message: error.message },
       });
 

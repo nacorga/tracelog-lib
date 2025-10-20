@@ -1,5 +1,13 @@
 import { App } from './app';
-import { MetadataType, Config, EmitterCallback, EmitterMap } from './types';
+import {
+  MetadataType,
+  Config,
+  EmitterCallback,
+  EmitterMap,
+  TransformerHook,
+  BeforeSendTransformer,
+  BeforeBatchTransformer,
+} from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
@@ -10,8 +18,16 @@ interface PendingListener {
   callback: EmitterCallback<EmitterMap[keyof EmitterMap]>;
 }
 
+interface PendingTransformer {
+  hook: TransformerHook;
+  fn: BeforeSendTransformer | BeforeBatchTransformer;
+}
+
 // Buffer for listeners registered before init()
 const pendingListeners: PendingListener[] = [];
+
+// Buffer for transformers registered before init()
+const pendingTransformers: PendingTransformer[] = [];
 
 let app: App | null = null;
 let isInitializing = false;
@@ -22,7 +38,7 @@ export const init = async (config?: Config): Promise<void> => {
     return;
   }
 
-  if (window.__traceLogDisabled) {
+  if (window.__traceLogDisabled === true) {
     return;
   }
 
@@ -46,6 +62,16 @@ export const init = async (config?: Config): Promise<void> => {
       });
 
       pendingListeners.length = 0;
+
+      pendingTransformers.forEach(({ hook, fn }) => {
+        if (hook === 'beforeSend') {
+          instance.setTransformer('beforeSend', fn as BeforeSendTransformer);
+        } else {
+          instance.setTransformer('beforeBatch', fn as BeforeBatchTransformer);
+        }
+      });
+
+      pendingTransformers.length = 0;
 
       const initPromise = instance.init(validatedConfig);
 
@@ -122,6 +148,58 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
   app.off(event, callback);
 };
 
+export function setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
+export function setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
+export function setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app || isInitializing) {
+    const existingIndex = pendingTransformers.findIndex((t) => t.hook === hook);
+
+    if (existingIndex !== -1) {
+      pendingTransformers.splice(existingIndex, 1);
+    }
+
+    pendingTransformers.push({ hook, fn });
+
+    return;
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot set transformers while TraceLog is being destroyed');
+  }
+
+  if (hook === 'beforeSend') {
+    app.setTransformer('beforeSend', fn as BeforeSendTransformer);
+  } else {
+    app.setTransformer('beforeBatch', fn as BeforeBatchTransformer);
+  }
+}
+
+export const removeTransformer = (hook: TransformerHook): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    const index = pendingTransformers.findIndex((t) => t.hook === hook);
+
+    if (index !== -1) {
+      pendingTransformers.splice(index, 1);
+    }
+
+    return;
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot remove transformers while TraceLog is being destroyed');
+  }
+
+  app.removeTransformer(hook);
+};
+
 export const isInitialized = (): boolean => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return false;
@@ -150,23 +228,29 @@ export const destroy = (): void => {
     app = null;
     isInitializing = false;
     pendingListeners.length = 0;
+    pendingTransformers.length = 0;
 
-    // Clear TestBridge reference in dev mode to prevent stale references
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__traceLogBridge) {
-      // Don't call destroy on bridge (would cause recursion), just clear reference
-      window.__traceLogBridge = undefined as any;
+      window.__traceLogBridge = undefined;
     }
   } catch (error) {
     app = null;
     isInitializing = false;
     pendingListeners.length = 0;
+    pendingTransformers.length = 0;
 
-    // Log error but don't re-throw - destroy should always complete successfully
-    // Applications should be able to tear down TraceLog even if internal cleanup fails
     log('warn', 'Error during destroy, forced cleanup completed', { error });
   } finally {
     isDestroying = false;
   }
+};
+
+export const setQaMode = (enabled: boolean): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  setQaModeUtil(enabled);
 };
 
 /**
@@ -195,20 +279,11 @@ export const __setAppInstance = (instance: App | null): void => {
     }
   }
 
-  // Prevent overwriting an already initialized app (except when clearing)
   if (app !== null && instance !== null && app !== instance) {
     throw new Error('[TraceLog] Cannot overwrite existing app instance. Call destroy() first.');
   }
 
   app = instance;
-};
-
-export const setQaMode = (enabled: boolean): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  setQaModeUtil(enabled);
 };
 
 if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {

@@ -6,9 +6,19 @@ import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
-import { Config, EventType, EmitterCallback, EmitterMap, Mode } from './types';
+import {
+  Config,
+  EventType,
+  EmitterCallback,
+  EmitterMap,
+  Mode,
+  TransformerHook,
+  TransformerMap,
+  BeforeSendTransformer,
+  BeforeBatchTransformer,
+} from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrl, detectQaMode, log } from './utils';
+import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrls, detectQaMode, log } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -19,6 +29,7 @@ export class App extends StateManager {
   private suppressNextScrollTimer: number | null = null;
 
   private readonly emitter = new Emitter();
+  private readonly transformers: TransformerMap = {};
 
   protected managers: {
     storage?: StorageManager;
@@ -54,7 +65,12 @@ export class App extends StateManager {
       this.setupState(config);
       await this.setupIntegrations();
 
-      this.managers.event = new EventManager(this.managers.storage, this.integrations.googleAnalytics, this.emitter);
+      this.managers.event = new EventManager(
+        this.managers.storage,
+        this.integrations.googleAnalytics,
+        this.emitter,
+        this.transformers,
+      );
 
       this.initializeHandlers();
 
@@ -110,6 +126,26 @@ export class App extends StateManager {
     this.emitter.off(event, callback);
   }
 
+  setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
+  setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
+  setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void {
+    if (typeof fn !== 'function') {
+      throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
+    }
+
+    this.transformers[hook] = fn as BeforeSendTransformer & BeforeBatchTransformer;
+  }
+
+  removeTransformer(hook: TransformerHook): void {
+    delete this.transformers[hook];
+  }
+
+  getTransformer(hook: 'beforeSend'): BeforeSendTransformer | undefined;
+  getTransformer(hook: 'beforeBatch'): BeforeBatchTransformer | undefined;
+  getTransformer(hook: TransformerHook): BeforeSendTransformer | BeforeBatchTransformer | undefined {
+    return this.transformers[hook];
+  }
+
   destroy(force = false): void {
     if (!this.isInitialized && !force) {
       return;
@@ -137,6 +173,8 @@ export class App extends StateManager {
     this.managers.event?.stop();
 
     this.emitter.removeAllListeners();
+    this.transformers.beforeSend = undefined;
+    this.transformers.beforeBatch = undefined;
 
     this.set('hasStartSession', false);
     this.set('suppressNextScroll', false);
@@ -152,8 +190,8 @@ export class App extends StateManager {
     const userId = UserManager.getId(this.managers.storage as StorageManager);
     this.set('userId', userId);
 
-    const collectApiUrl = getCollectApiUrl(config);
-    this.set('collectApiUrl', collectApiUrl);
+    const collectApiUrls = getCollectApiUrls(config);
+    this.set('collectApiUrls', collectApiUrls);
 
     const device = getDeviceType();
     this.set('device', device);

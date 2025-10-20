@@ -1,4 +1,4 @@
-import { init, event, on, off, isInitialized, destroy, setQaMode } from './api';
+import { init, event, on, off, isInitialized, destroy, setQaMode, setTransformer, removeTransformer } from './api';
 
 // Constants
 export * from './app.constants';
@@ -12,6 +12,8 @@ export const tracelog = {
   event,
   on,
   off,
+  setTransformer,
+  removeTransformer,
   isInitialized,
   destroy,
   setQaMode,

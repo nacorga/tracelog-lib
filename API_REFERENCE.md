@@ -57,10 +57,26 @@ if (typeof window !== 'undefined') {
 }
 ```
 
+**Initialization Order Best Practice:**
+
+For optimal setup, follow this order to ensure no events are missed:
+
+```typescript
+// 1. Register listeners FIRST
+tracelog.on('event', handler);
+
+// 2. Set transformers SECOND (if using custom backend)
+tracelog.setTransformer('beforeSend', transformFn);
+
+// 3. Initialize LAST
+await tracelog.init();
+```
+
+**Why?** Events like `SESSION_START` and `PAGE_VIEW` fire immediately during `init()`. Registering listeners and transformers beforehand ensures you capture and transform these initial events.
+
 **Notes:**
 - Automatically starts tracking page views, clicks, scrolls, sessions, and performance
 - Recovers any failed events from previous sessions (localStorage)
-- Registers listeners before `init()` to catch initial events
 - Safe to call multiple times (idempotent)
 
 ---
@@ -278,6 +294,132 @@ tracelog.setQaMode(false);
 - Automatic events (clicks, scrolls, etc.) still sent normally
 - URL parameter auto-removed after detection
 - State persists in sessionStorage across page reloads
+
+---
+
+### `setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void`
+
+Sets a transformer function to modify events at runtime before sending to integrations.
+
+**Parameters:**
+- `hook`: Transformer hook type (`'beforeSend'` or `'beforeBatch'`)
+- `fn`: Transformer function that receives event/batch data and returns transformed data or `null` to filter
+
+**Throws:**
+- `Error` if called before `init()`
+- `Error` if called during `destroy()`
+
+**Transformer Hooks:**
+
+| Hook | Timing | Input | Applied To |
+|------|--------|-------|------------|
+| `beforeSend` | Per-event (before queueing) | `EventData` | Custom backend only |
+| `beforeBatch` | Batch-level (before sending) | `EventsQueue` | Custom backend only |
+
+**Integration Behavior:**
+- **TraceLog SaaS (only)**: Transformers silently ignored (schema protection)
+- **Custom Backend (only)**: Transformers applied as configured
+- **Multi-Integration (SaaS + Custom)**: SaaS gets original events, custom gets transformed events
+- **Google Analytics**: Transformers N/A (only forwards `tracelog.event()` calls as-is, no batching)
+
+**Examples:**
+
+```typescript
+import { tracelog } from '@tracelog/lib';
+import type { EventData, EventsQueue } from '@tracelog/lib';
+
+// Add custom metadata to all events
+tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
+  if ('type' in data) {
+    return {
+      ...data,
+      custom_event: {
+        ...data.custom_event,
+        metadata: {
+          ...data.custom_event?.metadata,
+          environment: 'production',
+          version: '1.0.0'
+        }
+      }
+    };
+  }
+  return data;
+});
+
+// Filter out sensitive events
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data && data.custom_event?.name === 'internal_event') {
+    return null; // Event will be dropped
+  }
+  return data;
+});
+
+// Add batch-level metadata
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data) {
+    return {
+      ...data,
+      global_metadata: {
+        ...data.global_metadata,
+        batchSize: data.events.length,
+        batchTimestamp: Date.now()
+      }
+    };
+  }
+  return data;
+});
+
+// Filter batch based on conditions
+tracelog.setTransformer('beforeBatch', (data) => {
+  if ('events' in data && data.events.length < 5) {
+    return null; // Don't send small batches
+  }
+  return data;
+});
+```
+
+**Error Handling:**
+- Transformer exceptions are caught and logged
+- Original event/batch used as fallback on error
+- Returning `null` filters out the event/batch (intended behavior)
+- Invalid return types logged as warnings, original data used
+
+**Validation:**
+- `beforeSend`: Only validates that `'type'` field exists (minimal check to distinguish from EventsQueue)
+- `beforeBatch`: Only validates that `'events'` array exists (minimal check to distinguish from EventData)
+- **Custom schemas fully supported** - transformers can return completely different structures for custom backends
+- All other fields are optional to allow maximum flexibility
+
+**Notes:**
+- Only one transformer per hook (calling again replaces previous)
+- Transformers NOT applied to TraceLog SaaS (schema protection)
+- Use for data enrichment, filtering, or custom logic
+- See [README.md Transformers section](./README.md#transformers) for detailed examples
+
+---
+
+### `removeTransformer(hook: TransformerHook): void`
+
+Removes a previously set transformer function.
+
+**Parameters:**
+- `hook`: Transformer hook type to remove (`'beforeSend'` or `'beforeBatch'`)
+
+**Throws:**
+- `Error` if called before `init()`
+- `Error` if called during `destroy()`
+
+**Example:**
+
+```typescript
+// Remove specific transformer
+tracelog.removeTransformer('beforeSend');
+tracelog.removeTransformer('beforeBatch');
+```
+
+**Notes:**
+- Safe to call even if no transformer is set (doesn't throw if transformer doesn't exist)
+- Transformers automatically cleared on `destroy()`
 
 ---
 
@@ -604,6 +746,37 @@ await tracelog.init({
 **Notes:**
 - Forwards custom events to GA4 via `gtag()` (requires gtag.js loaded)
 - Does not forward automatic events (clicks, scrolls, etc.)
+
+#### Multi-Integration (TraceLog SaaS + Custom Backend)
+
+```typescript
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' },           // TraceLog analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }    // Custom data warehouse
+  }
+});
+
+// Events sent to BOTH endpoints with:
+// ✅ Independent error handling (4xx/5xx per integration)
+// ✅ Independent retry/persistence (separate localStorage keys)
+// ✅ Parallel sending (non-blocking)
+```
+
+**Use Cases:**
+- **Analytics + Data Warehouse:** Send to TraceLog for dashboards + custom warehouse for long-term storage
+- **Compliance:** Send to both production analytics and compliance logging system
+- **Migration:** Dual-send during migration from custom backend to TraceLog SaaS
+
+**Technical Details:**
+
+| Feature | Behavior |
+|---------|----------|
+| **Error Handling** | Each integration handles 4xx (permanent) and 5xx (temporary) errors independently |
+| **Persistence** | Separate localStorage keys: `tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom` |
+| **Recovery** | Failed events recovered independently per integration on next page load. Recovery occurs automatically during `init()` on the subsequent page navigation. |
+| **Sending** | Async: Parallel with `Promise.allSettled()`, Sync (sendBeacon): All must succeed |
+| **Transformers** | SaaS receives **original events**, custom receives **transformed events** (if transformers configured) |
 
 ---
 

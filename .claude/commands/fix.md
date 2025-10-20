@@ -17,7 +17,8 @@ Automatically fix lint and format issues across the codebase.
 !npm run check
 !npm run type-check
 !npm run build:all
-!npm run test
+!npm run test:unit
+!npm run test:coverage
 
 ## Report Format
 

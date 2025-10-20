@@ -11,6 +11,7 @@ export * from './scroll.types';
 export * from './session.types';
 export * from './state.types';
 export * from './test-bridge.types';
+export * from './transformer.types';
 export * from './validation-error.types';
 export * from './viewport.types';
 export * from './window.types';

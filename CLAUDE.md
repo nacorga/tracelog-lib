@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-TraceLog is a client-side JavaScript analytics library (v0.11.2) that automatically tracks user interactions with optional backend integrations. The library is **fully autonomous** - it requires no backend to function and only sends events to servers when explicitly configured.
+TraceLog is a client-side JavaScript analytics library that automatically tracks user interactions with optional backend integrations. The library is **fully autonomous** - it requires no backend to function and only sends events to servers when explicitly configured.
 
 **Key Principle**: Client-only first. The library captures events locally and emits them via event listeners. Network requests are opt-in via integration configuration.
 
@@ -97,6 +97,51 @@ this.set('config', config)
 this.getState() // Full state snapshot
 ```
 
+### Transformer System
+
+Runtime event transformation hooks for custom data manipulation:
+
+**Available Hooks**:
+- **`beforeSend`**: Per-event transformation (applied in `EventManager.buildEventPayload()` BEFORE deduplication, sampling, and queueing)
+- **`beforeBatch`**: Batch transformation (applied in `SenderManager` BEFORE network transmission)
+
+**Application Timeline**:
+```
+User Event → Handler → EventManager.buildEventPayload()
+  ↓
+  beforeSend transformer applied here (standalone mode OR custom backend only)
+  ↓
+Deduplication check → Sampling check → Add to queue
+  ↓
+Queue flush trigger → EventManager.buildEventsPayload()
+  ↓
+  beforeBatch transformer applied here (standalone mode only)
+  ↓
+  [If backend configured] → SenderManager.send() → beforeBatch transformer applied
+  ↓
+Network transmission (fetch/sendBeacon) OR local emission only
+```
+
+**Integration Behavior**:
+- ✅ **Standalone Mode (no backend)**: Both `beforeSend` and `beforeBatch` applied in EventManager, events emitted to local listeners with transformations
+- ✅ **Custom Backend (only)**: Both `beforeSend` and `beforeBatch` applied
+- ❌ **TraceLog SaaS (only)**: Both transformers silently ignored (schema protection)
+- ⚠️ **Multi-Integration (SaaS + Custom)**: SaaS receives original events, custom receives transformed events (per-integration in SenderManager)
+- ❌ **Google Analytics**: Neither transformer applied (forwards `tracelog.event()` calls as-is)
+
+**API Methods**:
+```typescript
+tracelog.setTransformer(hook, fn)      // Set transformer (validates fn is function)
+tracelog.removeTransformer(hook)        // Remove transformer
+app.getTransformer(hook)                // Get transformer (internal)
+```
+
+**Error Handling**:
+- Input validation: Throws error if `fn` is not a function
+- Runtime exceptions caught and logged
+- Original event/batch used as fallback on error
+- Returning `null` filters out event/batch
+
 ### Initialization Flow
 
 1. `api.init(config)` → validates config
@@ -105,6 +150,46 @@ this.getState() // Full state snapshot
 4. Handlers start tracking (PageView, Click, Scroll, etc.)
 5. Session recovers from localStorage (if exists)
 6. Pending events flushed after session init
+
+### Recommended User Initialization Order
+
+**Critical for developers:** Users should follow this sequence to capture all events:
+
+```typescript
+// 1. FIRST: Register event listeners (before init)
+tracelog.on('event', eventHandler);
+tracelog.on('queue', queueHandler);
+
+// 2. SECOND: Configure transformers (before init)
+// Works in standalone mode (no backend) and custom backend mode
+tracelog.setTransformer('beforeSend', (event) => { /* transform */ });
+tracelog.setTransformer('beforeBatch', (batch) => { /* transform */ });
+
+// 3. THIRD: Initialize (starts tracking immediately)
+await tracelog.init({ /* config */ });
+
+// 4. FOURTH: Send custom events (after init completes)
+tracelog.event('custom_event', { /* metadata */ });
+```
+
+**Why this order matters:**
+- **Listeners before init**: `SESSION_START` and `PAGE_VIEW` events fire during `App.init()` → `SessionHandler.startTracking()` → `SessionManager.startNewSession()`. Listeners registered after `init()` miss these events.
+- **Transformers before init**: `beforeSend` is applied in `EventManager.buildEventPayload()` which runs for initial events. Setting transformers after init means initial events won't be transformed.
+- **Custom events after init**: Calling `tracelog.event()` before `init()` throws an error (app not initialized check in `api.ts`).
+
+**Technical flow during init:**
+```
+tracelog.init()
+  → App.init()
+    → SessionHandler.startTracking()
+      → SessionManager.startNewSession()
+        → EventManager.track({ type: SESSION_START })
+          → EventManager.buildEventPayload() [beforeSend applied here]
+            → emitter.emit('event', sessionStartEvent) [listeners called here]
+    → PageViewHandler.startTracking()
+      → EventManager.track({ type: PAGE_VIEW })
+        → [same flow as above]
+```
 
 ## Critical Patterns
 
@@ -122,8 +207,22 @@ this.getState() // Full state snapshot
 
 ```typescript
 // 1. Standalone (no backend) - DEFAULT
+// Events only emitted to local listeners, transformers applied
+tracelog.on('event', (event) => console.log('Event:', event));
+tracelog.on('queue', (queue) => console.log('Queue:', queue));
+
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,
+  customField: 'Added by transformer'
+}));
+
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  queueCustomField: 'Batch transformed'
+}));
+
 await tracelog.init();
-// Events emitted via tracelog.on('event', callback) only
+// Transformers applied, events visible in listeners with custom fields
 
 // 2. TraceLog SaaS
 await tracelog.init({
@@ -154,7 +253,52 @@ await tracelog.init({
   disabledEvents: ['scroll', 'web_vitals', 'error']
   // Core events (PAGE_VIEW, CLICK, SESSION) still tracked
 });
+
+// 6. Multi-Integration (v1.1.0+) - Simultaneous sending
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' },           // Analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' } // Data warehouse
+  }
+});
+// Events sent to BOTH endpoints independently with:
+// - Independent error handling (4xx/5xx per integration)
+// - Independent retry/persistence (separate localStorage keys)
+// - Parallel sending (non-blocking)
 ```
+
+### Multi-Integration Architecture (v1.1.0+)
+
+**State Structure:**
+```typescript
+interface State {
+  collectApiUrls: {       // Multi-integration support
+    saas?: string;        // TraceLog SaaS URL
+    custom?: string;      // Custom backend URL
+  };
+  // ... other fields
+}
+```
+
+**SenderManager (Per-Integration):**
+- Each integration has its own `SenderManager` instance
+- Constructor: `new SenderManager(storage, 'saas' | 'custom', 'https://...')`
+- Storage keys: `tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom`
+- Independent error handling, retry logic, and persistence
+
+**EventManager (Orchestration):**
+- Manages array of `SenderManager[]` (0-2 instances)
+- Parallel async sending: `Promise.allSettled()`
+- Sync sending (sendBeacon): All must succeed
+- Independent recovery per integration
+
+**Error Handling:**
+| Integration | Error Type | Behavior |
+|-------------|-----------|----------|
+| SaaS | 4xx (permanent) | Clear storage, no retry |
+| SaaS | 5xx (temporary) | Persist to `tlog:queue:{userId}:saas`, retry next page |
+| Custom | 4xx (permanent) | Clear storage, no retry |
+| Custom | 5xx (temporary) | Persist to `tlog:queue:{userId}:custom`, retry next page |
 
 ### Event Queue & Sending
 
@@ -317,6 +461,75 @@ this.set('sessionId', newSessionId);
 // Full snapshot
 const state = this.getState();
 ```
+
+### Transformer Pattern
+
+Transformers are stored in the `App` class and passed to `EventManager` and `SenderManager`:
+
+```typescript
+// In App class
+private readonly transformers: Map<
+  TransformerHook,
+  (data: EventData | EventsQueue) => EventData | EventsQueue | null
+> = new Map();
+
+// Setting a transformer with validation
+setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void {
+  if (typeof fn !== 'function') {
+    throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
+  }
+  this.transformers.set(hook, fn);
+}
+
+// In EventManager.buildEventPayload() - beforeSend application with minimal validation
+const collectApiUrls = this.get('collectApiUrls');
+const hasCustomBackend = Boolean(collectApiUrls?.custom);
+const beforeSendTransformer = this.transformers.get('beforeSend');
+
+if (beforeSendTransformer && hasCustomBackend) {
+  try {
+    const transformed = beforeSendTransformer(payload);
+    if (transformed === null) return null; // Filter event
+
+    // Minimal validation: only check for 'type' field (allows custom schemas)
+    if (transformed && typeof transformed === 'object' && 'type' in transformed) {
+      payload = transformed as EventData;
+    } else {
+      log('warn', 'beforeSend transformer returned invalid data, using original');
+    }
+  } catch (error) {
+    log('error', 'beforeSend transformer threw error, using original event', { error });
+  }
+}
+
+// In SenderManager - beforeBatch application with minimal validation
+// Note: beforeSend is NO LONGER applied here (moved to EventManager)
+const beforeBatchTransformer = this.transformers.get('beforeBatch');
+
+if (this.integrationId === 'saas') {
+  return body; // Skip for SaaS
+}
+
+if (beforeBatchTransformer) {
+  const transformed = beforeBatchTransformer(body);
+  if (transformed === null) return null; // Filter batch
+
+  // Minimal validation: only check for 'events' array (allows custom schemas)
+  if (transformed && typeof transformed === 'object' && 'events' in transformed && Array.isArray(transformed.events)) {
+    return transformed as EventsQueue;
+  } else {
+    // Fallback to original on invalid return
+    log('warn', 'beforeBatch transformer returned invalid data, using original');
+    return body;
+  }
+}
+```
+
+**Validation Philosophy:**
+- Only validates discriminator fields (`type` for events, `events` for batches)
+- Allows completely custom schemas for custom backend integrations
+- Falls back to original data if transformer returns invalid structure
+- Designed for maximum flexibility while maintaining type safety
 
 ### Manager/Handler Lifecycle
 
