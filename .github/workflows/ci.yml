@@ -299,7 +299,7 @@ jobs:
           echo "📦 Publishing v$RC_VERSION to NPM with 'next' tag..."
 
           # Publish to npm with 'next' tag (won't override 'latest')
-          npm publish --tag next
+          npm publish --tag next || { echo "❌ Publish failed"; exit 1; }
 
           echo "✅ Published v$RC_VERSION to NPM"
           echo "💡 Install with: npm install @tracelog/lib@$RC_VERSION"
@@ -310,8 +310,8 @@ jobs:
           RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
           echo "🔍 Verifying publication on NPM..."
 
-          # Wait a bit for NPM to propagate
-          sleep 5
+          # Wait for NPM to propagate
+          sleep 20
 
           # Check if version exists on NPM
           if npm view "@tracelog/lib@$RC_VERSION" version > /dev/null 2>&1; then
@@ -346,18 +346,6 @@ jobs:
             Or install the latest RC from this PR:
             \`\`\`bash
             npm install @tracelog/lib@next
-            \`\`\`
-
-            ### Testing
-
-            \`\`\`typescript
-            import tracelog from '@tracelog/lib';
-
-            await tracelog.init({
-              // Your config
-            });
-
-            console.log('TraceLog version:', tracelog.version); // Should show ${rcVersion}
             \`\`\`
 
             ---
