@@ -19,7 +19,7 @@ import {
   MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
 import { EventsQueue, EmitterEvent, EventData, EventType, Mode, TransformerMap } from '../types';
-import { getUTMParameters, log, Emitter, generateEventId, transformEvent } from '../utils';
+import { getUTMParameters, log, Emitter, generateEventId, transformEvent, transformBatch } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -475,13 +475,27 @@ export class EventManager extends StateManager {
       .filter((event): event is EventData => Boolean(event))
       .sort((a, b) => a.timestamp - b.timestamp);
 
-    return {
+    let queue: EventsQueue = {
       user_id: this.get('userId'),
       session_id: this.get('sessionId') as string,
       device: this.get('device'),
       events,
       ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
     };
+
+    const collectApiUrls = this.get('collectApiUrls');
+    const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
+    const beforeBatchTransformer = this.transformers.beforeBatch;
+
+    if (!hasAnyBackend && beforeBatchTransformer) {
+      const transformed = transformBatch(queue, beforeBatchTransformer, 'EventManager');
+
+      if (transformed !== null) {
+        queue = transformed;
+      }
+    }
+
+    return queue;
   }
 
   private buildEventPayload(data: Partial<EventData>): EventData | null {
@@ -505,20 +519,23 @@ export class EventManager extends StateManager {
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
 
-    // Apply beforeSend transformer (custom backend only, NOT in multi-integration mode)
-    // In multi-integration mode, SenderManager handles per-integration transformation
     const collectApiUrls = this.get('collectApiUrls');
     const hasCustomBackend = Boolean(collectApiUrls?.custom);
     const hasSaasBackend = Boolean(collectApiUrls?.saas);
+    const hasAnyBackend = hasCustomBackend || hasSaasBackend;
     const isMultiIntegration = hasCustomBackend && hasSaasBackend;
     const beforeSendTransformer = this.transformers.beforeSend;
 
-    // Only apply beforeSend in EventManager if custom-only (not multi-integration)
-    if (beforeSendTransformer && hasCustomBackend && !isMultiIntegration) {
+    const shouldApplyBeforeSend =
+      beforeSendTransformer && (!hasAnyBackend || (hasCustomBackend && !isMultiIntegration));
+
+    if (shouldApplyBeforeSend) {
       const transformed = transformEvent(payload, beforeSendTransformer, 'EventManager');
+
       if (transformed === null) {
-        return null; // Filter event
+        return null;
       }
+
       payload = transformed;
     }
 

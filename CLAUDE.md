@@ -109,21 +109,24 @@ Runtime event transformation hooks for custom data manipulation:
 ```
 User Event → Handler → EventManager.buildEventPayload()
   ↓
-  beforeSend transformer applied here (custom backend only)
+  beforeSend transformer applied here (standalone mode OR custom backend only)
   ↓
 Deduplication check → Sampling check → Add to queue
   ↓
 Queue flush trigger → EventManager.buildEventsPayload()
   ↓
-SenderManager.send() → beforeBatch transformer applied here
+  beforeBatch transformer applied here (standalone mode only)
   ↓
-Network transmission (fetch/sendBeacon)
+  [If backend configured] → SenderManager.send() → beforeBatch transformer applied
+  ↓
+Network transmission (fetch/sendBeacon) OR local emission only
 ```
 
 **Integration Behavior**:
+- ✅ **Standalone Mode (no backend)**: Both `beforeSend` and `beforeBatch` applied in EventManager, events emitted to local listeners with transformations
 - ✅ **Custom Backend (only)**: Both `beforeSend` and `beforeBatch` applied
 - ❌ **TraceLog SaaS (only)**: Both transformers silently ignored (schema protection)
-- ⚠️ **Multi-Integration (SaaS + Custom)**: SaaS receives original events, custom receives transformed events
+- ⚠️ **Multi-Integration (SaaS + Custom)**: SaaS receives original events, custom receives transformed events (per-integration in SenderManager)
 - ❌ **Google Analytics**: Neither transformer applied (forwards `tracelog.event()` calls as-is)
 
 **API Methods**:
@@ -157,7 +160,8 @@ app.getTransformer(hook)                // Get transformer (internal)
 tracelog.on('event', eventHandler);
 tracelog.on('queue', queueHandler);
 
-// 2. SECOND: Configure transformers (before init, if using custom backend)
+// 2. SECOND: Configure transformers (before init)
+// Works in standalone mode (no backend) and custom backend mode
 tracelog.setTransformer('beforeSend', (event) => { /* transform */ });
 tracelog.setTransformer('beforeBatch', (batch) => { /* transform */ });
 
@@ -203,8 +207,22 @@ tracelog.init()
 
 ```typescript
 // 1. Standalone (no backend) - DEFAULT
+// Events only emitted to local listeners, transformers applied
+tracelog.on('event', (event) => console.log('Event:', event));
+tracelog.on('queue', (queue) => console.log('Queue:', queue));
+
+tracelog.setTransformer('beforeSend', (event) => ({
+  ...event,
+  customField: 'Added by transformer'
+}));
+
+tracelog.setTransformer('beforeBatch', (queue) => ({
+  ...queue,
+  queueCustomField: 'Batch transformed'
+}));
+
 await tracelog.init();
-// Events emitted via tracelog.on('event', callback) only
+// Transformers applied, events visible in listeners with custom fields
 
 // 2. TraceLog SaaS
 await tracelog.init({

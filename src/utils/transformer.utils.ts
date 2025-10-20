@@ -21,15 +21,16 @@ export function transformEvent(
       return null; // Event filtered
     }
 
-    // Validate return type (simplified - no redundant checks)
     if (typeof result === 'object' && result !== null && 'type' in result) {
       return result;
     }
 
     log('warn', `beforeSend transformer returned invalid data, using original [${context}]`);
+
     return event;
   } catch (error) {
     log('error', `beforeSend transformer threw error, using original event [${context}]`, { error });
+
     return event;
   }
 }
@@ -68,10 +69,10 @@ export function transformBatch(
       log('debug', `Batch filtered by beforeBatch transformer [${context}]`, {
         data: { eventCount: batch.events.length },
       });
-      return null; // Batch filtered
+
+      return null;
     }
 
-    // Validate return type
     if (typeof result === 'object' && result !== null && Array.isArray(result.events)) {
       return result;
     }
@@ -79,12 +80,14 @@ export function transformBatch(
     log('warn', `beforeBatch transformer returned invalid data, using original [${context}]`, {
       data: { eventCount: batch.events.length },
     });
+
     return batch;
   } catch (error) {
     log('error', `beforeBatch transformer threw error, using original batch [${context}]`, {
       error,
       data: { eventCount: batch.events.length },
     });
+
     return batch;
   }
 }
