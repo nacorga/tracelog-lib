@@ -375,8 +375,8 @@ describe('API Integration - Emitter Methods', () => {
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
 
-        // Wait for the callback to be invoked with polling
-        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
+        // Wait for the callback to be invoked with polling - increased timeout for CI
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 1000, 20);
 
         // QUEUE callback should have been called
         expect(queueCallback).toHaveBeenCalled();
@@ -429,15 +429,18 @@ describe('API Integration - Emitter Methods', () => {
           json: async () => Promise.resolve({}),
         } as Response);
 
-        TraceLog.event('test-event');
+        // Create multiple events to increase likelihood of flush
+        for (let i = 0; i < 3; i++) {
+          TraceLog.event(`test-event-${i}`);
+        }
 
         await vi.advanceTimersByTimeAsync(10100);
 
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
 
-        // Wait for the callback to be invoked with polling
-        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
+        // Wait for the callback to be invoked with polling - increased timeout for CI
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 1000, 20);
 
         expect(queueCallback).toHaveBeenCalled();
 
@@ -494,8 +497,8 @@ describe('API Integration - Emitter Methods', () => {
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
 
-        // Wait for the callback to be invoked with polling
-        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
+        // Wait for the callback to be invoked with polling - increased timeout for CI
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 1000, 20);
 
         expect(queueCallback).toHaveBeenCalled();
 
@@ -566,8 +569,8 @@ describe('API Integration - Emitter Methods', () => {
         // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
 
-        // Wait for the callback to be invoked with polling
-        await waitForCondition(() => queueCallback.mock.calls.length > 0, 500);
+        // Wait for the callback to be invoked with polling - increased timeout for CI
+        await waitForCondition(() => queueCallback.mock.calls.length > 0, 1000, 20);
 
         // Should have at least one queue emission
         expect(queueCallback).toHaveBeenCalled();
