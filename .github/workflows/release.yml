@@ -222,8 +222,12 @@ jobs:
           echo "🔍 Verifying package publication on NPM..."
           TARGET_VERSION="${{ steps.get-version.outputs.version }}"
 
-          # Wait and retry NPM version check up to 5 times (NPM registry propagation can take time)
-          for i in {1..5}; do
+          # Configuration: NPM registry propagation retry settings
+          MAX_RETRIES=5
+          RETRY_DELAY=10  # seconds between retries
+
+          # Wait and retry NPM version check (NPM registry propagation can take time)
+          for i in $(seq 1 $MAX_RETRIES); do
             PACKAGE_VERSION=$(npm view @tracelog/lib version 2>/dev/null || echo "")
 
             if [[ "$PACKAGE_VERSION" == "$TARGET_VERSION" ]]; then
@@ -231,13 +235,13 @@ jobs:
               exit 0
             fi
 
-            if [[ $i -lt 5 ]]; then
-              echo "⏳ Waiting for NPM registry to propagate... (attempt $i/5, current: $PACKAGE_VERSION, expected: $TARGET_VERSION)"
-              sleep 10
+            if [[ $i -lt $MAX_RETRIES ]]; then
+              echo "⏳ Waiting for NPM registry to propagate... (attempt $i/$MAX_RETRIES, current: $PACKAGE_VERSION, expected: $TARGET_VERSION)"
+              sleep $RETRY_DELAY
             fi
           done
 
-          echo "❌ Package version mismatch on NPM after 5 attempts"
+          echo "❌ Package version mismatch on NPM after $MAX_RETRIES attempts"
           echo "   Expected: $TARGET_VERSION"
           echo "   Found: $PACKAGE_VERSION"
           exit 1
@@ -250,9 +254,12 @@ jobs:
         run: |
           echo "🧹 Cleaning up RC versions from npm..."
 
+          # Configuration: NPM registry stabilization delay
+          STABILIZATION_DELAY=5  # seconds to wait for registry stabilization
+
           # Wait a moment to ensure stable version is fully propagated before cleanup
           echo "⏳ Waiting for NPM registry stabilization..."
-          sleep 5
+          sleep $STABILIZATION_DELAY
 
           # Get all versions with 'next' tag (RC versions)
           RC_VERSIONS=$(npm view @tracelog/lib versions --json 2>/dev/null | jq -r '.[] | select(contains("-rc."))' || echo "")
