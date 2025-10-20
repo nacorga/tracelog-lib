@@ -358,13 +358,9 @@ describe('API Integration - Emitter Methods', () => {
         // Advance time to trigger interval-based flush (10 seconds)
         await vi.advanceTimersByTimeAsync(10100);
 
-        // Run all pending microtasks to ensure async operations complete
-        await vi.runAllTimersAsync();
-
-        // Switch to real timers briefly to allow any remaining async operations to settle
+        // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        vi.useFakeTimers();
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         // QUEUE callback should have been called
         expect(queueCallback).toHaveBeenCalled();
@@ -421,13 +417,9 @@ describe('API Integration - Emitter Methods', () => {
 
         await vi.advanceTimersByTimeAsync(10100);
 
-        // Run all pending microtasks to ensure async operations complete
-        await vi.runAllTimersAsync();
-
-        // Switch to real timers briefly to allow any remaining async operations to settle
+        // Switch to real timers to allow all async operations (promises, microtasks) to settle
         vi.useRealTimers();
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        vi.useFakeTimers();
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         expect(queueCallback).toHaveBeenCalled();
 
