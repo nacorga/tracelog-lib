@@ -19,12 +19,17 @@ git push origin feature/your-feature-name
 ### 2. **Pull Request Process**
 - Create PR to `main` branch
 - **CI automatically runs all validations:**
-  - ✅ Security audit
+  - ✅ Security audit (npm audit)
   - ✅ Code quality (ESLint + Prettier)
-  - ✅ Build integrity
+  - ✅ Unit tests (Vitest)
+  - ✅ Integration tests
+  - ✅ Code coverage (≥70% threshold)
+  - ✅ Build integrity (ESM + CJS + Browser)
   - ✅ E2E tests with Playwright
   - ✅ Package configuration validation
+  - ✅ **RC version published** (with `next` tag for testing)
 - **Cannot merge until CI passes + code review**
+- **CI does NOT run after merge** - all validation happens in PR
 
 ### 3. **Release Process**
 Once your PR is merged to `main`:
@@ -34,7 +39,11 @@ Once your PR is merged to `main`:
 # Click "Run workflow" → Select options → Run
 ```
 
-**That's it!** All validations were already done in CI. Release just handles versioning and publishing.
+**Important Notes:**
+- ✅ All validations were already done in CI during the PR
+- ✅ Release is **manual-only** via GitHub Actions workflow_dispatch
+- ✅ Release handles: versioning, changelog, git tags, NPM publish, RC cleanup
+- ❌ Release does NOT auto-trigger on push to main (prevents infinite loops)
 
 ## 🚀 How to Make Your First Release
 
@@ -126,26 +135,41 @@ When a PR is merged to main and a stable release is published:
 
 ## 🔄 CI/CD Pipeline
 
+### Key Design Principles
+- ✅ **All validation happens in PRs** - CI runs on every PR change
+- ❌ **No CI on push to main** - Avoids redundant validation after merge
+- ✅ **Manual release control** - Releases only via workflow_dispatch
+- ⚡ **Concurrency control** - Cancels outdated workflow runs automatically
+- 🔒 **Single status check** - "All Checks Passed" job for branch protection
+- 📦 **RC versions** - Published during PR for testing, cleaned up on release
+
 ### 1. **Pull Request Validation (CI Workflow)**
-**Triggers**: Every PR to `main`
-- ✅ Security audit (npm audit)
+**Triggers**: Every PR to `main` (opened, synchronize, reopened, ready_for_review)
+- ✅ Security audit (npm audit --audit-level high)
 - ✅ Code quality (ESLint + Prettier)
+- ✅ Unit tests (Vitest)
+- ✅ Integration tests
+- ✅ Code coverage validation (≥70% threshold)
 - ✅ Build integrity (ESM + CJS + Browser)
-- ✅ E2E test coverage (Playwright)
+- ✅ E2E test coverage (Playwright - Chromium + Mobile Chrome)
 - ✅ Package configuration validation
 - ✅ Upload test artifacts if failures occur
 - ✅ **RC version publication** (publishes `{version}-rc.{PR_NUMBER}.{COMMIT_COUNT}` to npm with `next` tag)
+- ✅ **All Checks Passed** job (single status check for branch protection)
+- ⚡ **Concurrency control** (cancels outdated runs when new commits pushed)
 
 ### 2. **Release Process (Release Workflow)**
-**Triggers**: Manual GitHub Actions workflow OR automatic on push to main
-- ✅ Environment validation (git repo, main branch)
-- ✅ Version detection (conventional commits analysis)
-- ✅ Project build
-- ✅ Version update & changelog generation
-- ✅ Git tag creation
-- ✅ NPM publication with verification
-- ✅ GitHub release creation
-- ✅ **RC versions cleanup** (unpublishes all `-rc.*` versions from npm)
+**Triggers**: Manual GitHub Actions `workflow_dispatch` ONLY
+- ✅ Conventional commits analysis (determines if release needed)
+- ✅ Version detection & bump (auto/patch/minor/major)
+- ✅ Project build (all outputs)
+- ✅ CHANGELOG.md generation
+- ✅ package.json version update
+- ✅ Git commit & tag creation
+- ✅ NPM publication with retry verification (5 attempts for registry propagation)
+- ✅ GitHub release creation with notes
+- ✅ **RC versions cleanup** (unpublishes all `-rc.*` versions from npm automatically)
+- ✅ Post-release validation & notifications
 
 ### 3. **Intelligent Version Detection**
 The system analyzes conventional commits since the last tag:
@@ -164,38 +188,66 @@ The system analyzes conventional commits since the last tag:
 ## 🛡️ Quality Gates & Security
 
 ### Branch Protection (GitHub Settings)
-- **Required Status Checks**: CI must pass before merge
+- **Required Status Checks**:
+  - `All Checks Passed` - Single status check that validates all CI jobs
+  - PRs must pass this check before merge
 - **Required Reviews**: Code review mandatory
 - **Up-to-date branches**: PRs must be current with main
 - **Linear History**: Enforced clean git history
 - **Admin Enforcement**: No bypassing rules
+- **Concurrency Protection**: Old workflow runs automatically cancelled on new commits
 
 ### CI Validation Gates
-- **Dependencies**: No critical or high vulnerabilities
-- **Code Quality**: ESLint + Prettier must pass
+- **Dependencies**: No critical or high vulnerabilities (npm audit --audit-level high)
+- **Code Quality**: ESLint + Prettier must pass (npm run check)
+- **Unit Tests**: Vitest test suite must pass
+- **Integration Tests**: Component interaction tests must pass
+- **Code Coverage**: Minimum 70% line coverage required
 - **Build Verification**: All builds (ESM/CJS/Browser) successful
-- **Test Coverage**: Complete E2E test suite with Playwright
+- **E2E Tests**: Complete Playwright test suite (Chromium + Mobile Chrome)
+- **Package Config**: package.json, exports, and files array validation
 
 ### Release Security
-- **Branch Restriction**: Only releases from `main`
-- **NPM Authentication**: Automatic token validation
+- **Manual Trigger Only**: No automatic releases on push (prevents infinite loops)
+- **Branch Restriction**: Only releases from `main` branch
+- **NPM Authentication**: Automatic token validation via secrets
 - **Version Validation**: Semantic versioning enforced
-- **Publication Verification**: Post-publish success check
+- **Publication Verification**: Post-publish success check with 5 retry attempts
+- **RC Cleanup**: Automatic unpublishing of pre-release versions
 
 ## 📊 GitHub Actions Workflows
 
 ### CI Workflow (`.github/workflows/ci.yml`)
 ```yaml
-# Triggers: pull_request to main, push to main
-# Jobs: validate (security, quality, build, tests, performance)
-# Artifacts: Playwright reports on test failures
+# Triggers: pull_request to main (opened, synchronize, reopened, ready_for_review)
+# Concurrency: Cancels outdated runs on new commits
+# Jobs:
+#   - validate: security, quality, unit tests, integration tests,
+#               coverage, build, E2E tests, package validation
+#   - publish-rc: Publishes RC version with 'next' tag (PR only)
+#   - notify-rc-failure: Comments on PR if RC publish fails
+#   - all-checks-passed: Single status check for branch protection
+# Artifacts: test-reports, coverage-report (on success/failure)
 ```
 
 ### Release Workflow (`.github/workflows/release.yml`)
 ```yaml
-# Trigger: workflow_dispatch (manual)
-# Options: version_type, force_version, dry_run
-# Jobs: check-release-needed → release → notifications
+# Trigger: workflow_dispatch (manual) ONLY - no auto-trigger on push
+# Options: version_type (auto/patch/minor/major), force_version, dry_run, skip_tests
+# Jobs:
+#   - check-release-needed: Analyzes conventional commits
+#   - release: Version bump, changelog, git tag, npm publish, RC cleanup
+#   - notify-success: Success notification
+#   - notify-failure: Failure notification
+```
+
+### Deploy Demo Workflow (`.github/workflows/deploy-demo.yml`)
+```yaml
+# Triggers: push to main (paths: docs/**, src/**)
+# Concurrency: Cancels outdated deployments
+# Jobs:
+#   - deploy-demo: Builds library, copies to docs/, deploys to gh-pages
+#   - notify-failure: Deployment failure notification
 ```
 
 ## 🔧 Configuration
