@@ -148,6 +148,45 @@ app.getTransformer(hook)                // Get transformer (internal)
 5. Session recovers from localStorage (if exists)
 6. Pending events flushed after session init
 
+### Recommended User Initialization Order
+
+**Critical for developers:** Users should follow this sequence to capture all events:
+
+```typescript
+// 1. FIRST: Register event listeners (before init)
+tracelog.on('event', eventHandler);
+tracelog.on('queue', queueHandler);
+
+// 2. SECOND: Configure transformers (before init, if using custom backend)
+tracelog.setTransformer('beforeSend', (event) => { /* transform */ });
+tracelog.setTransformer('beforeBatch', (batch) => { /* transform */ });
+
+// 3. THIRD: Initialize (starts tracking immediately)
+await tracelog.init({ /* config */ });
+
+// 4. FOURTH: Send custom events (after init completes)
+tracelog.event('custom_event', { /* metadata */ });
+```
+
+**Why this order matters:**
+- **Listeners before init**: `SESSION_START` and `PAGE_VIEW` events fire during `App.init()` → `SessionHandler.startTracking()` → `SessionManager.startNewSession()`. Listeners registered after `init()` miss these events.
+- **Transformers before init**: `beforeSend` is applied in `EventManager.buildEventPayload()` which runs for initial events. Setting transformers after init means initial events won't be transformed.
+- **Custom events after init**: Calling `tracelog.event()` before `init()` throws an error (app not initialized check in `api.ts`).
+
+**Technical flow during init:**
+```
+tracelog.init()
+  → App.init()
+    → SessionHandler.startTracking()
+      → SessionManager.startNewSession()
+        → EventManager.track({ type: SESSION_START })
+          → EventManager.buildEventPayload() [beforeSend applied here]
+            → emitter.emit('event', sessionStartEvent) [listeners called here]
+    → PageViewHandler.startTracking()
+      → EventManager.track({ type: PAGE_VIEW })
+        → [same flow as above]
+```
+
 ## Critical Patterns
 
 ### Client-Side Controls

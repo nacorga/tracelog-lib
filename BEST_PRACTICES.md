@@ -6,6 +6,54 @@ Quick reference for common patterns, pitfalls, and best practices when using Tra
 
 ## Initialization
 
+### ✅ DO: Follow the recommended initialization order
+
+Set up listeners and transformers **before** calling `init()` to ensure no events are missed:
+
+```typescript
+// STEP 1: Register event listeners FIRST
+tracelog.on('event', (event) => {
+  console.log('Event captured:', event.type);
+});
+
+tracelog.on('queue', (batch) => {
+  console.log('Batch ready:', batch.events.length);
+});
+
+// STEP 2: Configure transformers SECOND (if using custom backend)
+tracelog.setTransformer('beforeSend', (event) => {
+  if ('type' in event) {
+    return {
+      ...event,
+      custom_event: {
+        ...event.custom_event,
+        metadata: {
+          ...event.custom_event?.metadata,
+          app_version: '1.0.0'
+        }
+      }
+    };
+  }
+  return event;
+});
+
+// STEP 3: Initialize LAST (starts tracking immediately)
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// STEP 4: Send custom events AFTER init
+tracelog.event('app_ready', { timestamp: Date.now() });
+```
+
+**Why this order matters:**
+- `SESSION_START` and `PAGE_VIEW` events fire **immediately** during `init()`
+- Listeners registered after `init()` will miss these critical initial events
+- Transformers set after `init()` won't transform initial events
+- Custom events sent before `init()` will throw errors
+
 ### ✅ DO: Register listeners BEFORE init()
 
 ```typescript

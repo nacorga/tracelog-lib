@@ -57,10 +57,26 @@ if (typeof window !== 'undefined') {
 }
 ```
 
+**Initialization Order Best Practice:**
+
+For optimal setup, follow this order to ensure no events are missed:
+
+```typescript
+// 1. Register listeners FIRST
+tracelog.on('event', handler);
+
+// 2. Set transformers SECOND (if using custom backend)
+tracelog.setTransformer('beforeSend', transformFn);
+
+// 3. Initialize LAST
+await tracelog.init();
+```
+
+**Why?** Events like `SESSION_START` and `PAGE_VIEW` fire immediately during `init()`. Registering listeners and transformers beforehand ensures you capture and transform these initial events.
+
 **Notes:**
 - Automatically starts tracking page views, clicks, scrolls, sessions, and performance
 - Recovers any failed events from previous sessions (localStorage)
-- Registers listeners before `init()` to catch initial events
 - Safe to call multiple times (idempotent)
 
 ---

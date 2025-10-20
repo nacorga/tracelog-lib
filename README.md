@@ -56,24 +56,40 @@ await tracelog.init({
 
 ## Quick Start
 
-```typescript
-// 1. Initialize (standalone mode - no backend required)
-await tracelog.init();
+### Initialization Order
 
-// 2. Track custom events
+**Important:** Set up listeners and transformers **before** calling `init()` to capture all events from the start:
+
+```typescript
+// 1. Register event listeners FIRST (before init)
+tracelog.on('event', (event) => {
+  console.log(event.type, event);
+});
+
+// 2. Configure transformers SECOND (if using custom backend)
+tracelog.setTransformer('beforeSend', (event) => {
+  // Transform events before they're queued
+  return { ...event, custom_metadata: { app: 'v1' } };
+});
+
+// 3. Initialize LAST (starts tracking immediately)
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// 4. Track custom events (after init)
 tracelog.event('button_clicked', {
   buttonId: 'signup-cta',
   source: 'homepage'
 });
 
-// 3. Subscribe to events (real-time)
-tracelog.on('event', (event) => {
-  console.log(event.type, event);
-});
-
-// 4. Cleanup (on consent revoke or app unmount)
+// 5. Cleanup (on consent revoke or app unmount)
 tracelog.destroy();
 ```
+
+**Why this order?** Events like `SESSION_START` and `PAGE_VIEW` fire during initialization. Registering listeners and transformers first ensures you don't miss them.
 
 **That's it!** TraceLog now automatically tracks:
 - Page views & navigation (including SPA routes)
