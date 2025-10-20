@@ -9,6 +9,10 @@ on:
       - '.github/workflows/deploy-demo.yml'
   workflow_dispatch:
 
+concurrency:
+  group: deploy-demo-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
