@@ -358,9 +358,6 @@ describe('API Integration - Emitter Methods', () => {
         // Advance time to trigger interval-based flush (10 seconds)
         await vi.advanceTimersByTimeAsync(10100);
 
-        // Wait for all pending promises and timers to complete
-        await vi.runAllTimersAsync();
-
         // Switch to real timers briefly to allow async operations to settle
         vi.useRealTimers();
         await new Promise((resolve) => setTimeout(resolve, 100));
