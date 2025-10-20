@@ -20,6 +20,64 @@
 
 
 
+
+## [1.1.0] - 2025-10-20
+
+### ✨ Features
+
+- Add support for beforeBatch transformer in EventManager to enhance event processing ([e5dba86](../../commit/e5dba863b906b7f94fbcc0d9c96603d40af542d1))
+- Enhance transformer validation for custom schemas and improve error handling ([7186db9](../../commit/7186db9dadb1c459f345d96c3476a762105adfd1))
+- Implement transformer system for runtime event modification ([aecd8fb](../../commit/aecd8fb1994dfb0e94d1707862a657d32179759f))
+- Enforce consistent integrationId and apiUrl requirements in SenderManager constructor ([db23873](../../commit/db23873bc5bf83fd27e7b48d3c9ec6e20ef4f602))
+- Introduce multi-integration support for simultaneous event sending ([f5bbda9](../../commit/f5bbda9dc559483b34215a8f25a6adc857948369))
+
+### 🧪 Tests
+
+- Streamline API emitter integration tests by removing redundant timer management and enhancing event batching logic ([2159cab](../../commit/2159cab0326b58d9812164dc077902b3a0552d2f))
+- Enhance timer management in API emitter integration tests by ensuring all pending timers and promises are resolved ([d7ae84b](../../commit/d7ae84b1d875cb1a5c54ba5827dfdca2f0fa0df8))
+- Increase timeout for callback polling in API emitter integration tests to improve reliability in CI ([09bd13e](../../commit/09bd13e18e7c52f4e3cb7192a974000f45b19745))
+- Enhance session manager tests with improved handling of document visibility changes and timer management ([25f9dc4](../../commit/25f9dc4859ec7a3f5935981c838366ef279560f3))
+- Improve async operation resolution in API emitter integration tests by switching to real timers ([0e73f35](../../commit/0e73f358ed4b9d090260aa4e5cb5a9dc53ba65ce))
+- Refine timer management in API emitter integration tests to ensure complete async operation resolution ([a165547](../../commit/a165547e10a4ab444b339b3682acec4e6ee31c40))
+- Enhance timer handling in API emitter integration tests for better async operation management ([37c494e](../../commit/37c494e522ef509e55f94258ee88cc30dfa0baa7))
+- Remove unnecessary timer handling in API emitter integration tests ([4b5a8b4](../../commit/4b5a8b4800db6c7f25d62bfd2bea456eaa0efaa5))
+- Update transformer tests to use specific types for beforeSend and beforeBatch ([65f75c1](../../commit/65f75c1b2a07491f3ac47087b82a18701888b77b))
+- Add integration and unit tests for transformer API flow and edge cases ([c1430a2](../../commit/c1430a2c9aae0ff35dc7b1ec0bc33953a02a6fa7))
+- Add comprehensive tests for getCollectApiUrls function ([ccd8d56](../../commit/ccd8d562c79436762bfd82708e85373576c5071e))
+- Add cleanup and window.location mocking in transformers tests ([20e2f5f](../../commit/20e2f5f436ad164b82cc313d3d0907e7dceb3f30))
+
+### 📚 Documentation
+
+- Clarify recovery process in API reference for event handling ([645ac02](../../commit/645ac02af0356bbebd29a6ec1c25a9c91cd22a2c))
+- Clarify standalone mode behavior in README and enhance URL generation documentation ([e23176e](../../commit/e23176ec0a9fcdd11760e8f1f7e73eb71a8719b6))
+- Update README to reflect multi-integration capabilities and independent event persistence for SenderManager ([111b8e1](../../commit/111b8e1866d6f8975cd92c87a6ff27c33a842494))
+- Correct typo in README for core state property name ([b92eb07](../../commit/b92eb07423d2904ff44a3bd4c0de00fe5c9e2214))
+
+### ♻️ Refactoring
+
+- Implement pending transformers management in API to handle beforeSend and beforeBatch hooks ([d5da71e](../../commit/d5da71ee0ec51b73ea0fe8d90c306dc33e40faec))
+- Update transformer API to use specific types for beforeSend and beforeBatch ([c1d159c](../../commit/c1d159c280dc7a5c254900aaeba25a6d4d1e907e))
+- Simplify event transformation logic and improve error handling in SenderManager ([4ab4d27](../../commit/4ab4d27eaedca588f8227f51ff2e52b335aff58f))
+- Streamline event management logic and enhance rate limiting mechanisms ([250f00e](../../commit/250f00ee5de204ec38bb56be005a8f3147e90085))
+
+### 🔧 Other Changes
+
+- Merge pull request #49 from nacorga/release/20251019.1 ([bd230c0](../../commit/bd230c0fbd0e0510629e74e3ad521628ffc92e37))
+- Add cleanup step for RC versions in release workflow to unpublish outdated npm packages ([4c29fdc](../../commit/4c29fdc5b60401cd4bf9c4f10e640a8741d648f7))
+- Improve NPM publish process with error handling and increase wait time for propagation ([b769914](../../commit/b7699148c4adc1a014f02429d2633f736b219246))
+- Merge pull request #48 from nacorga/feature/transformers ([821394a](../../commit/821394acde681d199ab0020ef6c48923b2789aa6))
+- Merge pull request #47 from nacorga/feature/parallel-send ([3ce37c4](../../commit/3ce37c47a6d2d4493125fef7887c3c734e9b2134))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.0.0...v1.1.0
+
+
 ## [1.0.0] - 2025-10-16
 
 ### ⚠️ BREAKING CHANGES
