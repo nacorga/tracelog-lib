@@ -21,6 +21,30 @@
 
 
 
+
+## [1.1.1] - 2025-10-20
+
+### 📚 Documentation
+
+- Update RELEASE.md to clarify CI processes, release triggers, and validation steps ([ad047aa](../../commit/ad047aa282b847d300a9323281377aa4c202e853))
+
+### 🔧 Other Changes
+
+- Merge pull request #51 from nacorga/release/20251020.1 ([b501242](../../commit/b501242f37763bd4703cd467bfe0080904488681))
+- Merge pull request #50 from nacorga/refactor/ci-workflows ([600e36f](../../commit/600e36fbbf8a352a9564821d72bbed9a1248e557))
+- Improve NPM version check and stabilization delay in release workflow ([7f83f38](../../commit/7f83f382da3955db92ab3f34706323609b0f68ae))
+- Enhance CI workflows with concurrency management and all-checks validation step ([37daf12](../../commit/37daf122ab41a6b52a01b4674559883fdcd454e1))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.1.0...v1.1.1
+
+
 ## [1.1.0] - 2025-10-20
 
 ### ✨ Features
