@@ -28,13 +28,6 @@ on:
         default: false
         type: boolean
 
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'CHANGELOG.md'
-      - 'package.json'
-      - 'package-lock.json'
-
 permissions:
   contents: write
   packages: write
@@ -226,24 +219,43 @@ jobs:
       - name: Post-release validation
         if: github.event.inputs.dry_run != 'true'
         run: |
-          # Verify the package was published
-          PACKAGE_VERSION=$(npm view @tracelog/lib version)
-          if [[ "$PACKAGE_VERSION" == "${{ steps.get-version.outputs.version }}" ]]; then
-            echo "✅ Package successfully published to NPM"
-          else
-            echo "❌ Package version mismatch on NPM"
-            exit 1
-          fi
+          echo "🔍 Verifying package publication on NPM..."
+          TARGET_VERSION="${{ steps.get-version.outputs.version }}"
+
+          # Wait and retry NPM version check up to 5 times (NPM registry propagation can take time)
+          for i in {1..5}; do
+            PACKAGE_VERSION=$(npm view @tracelog/lib version 2>/dev/null || echo "")
+
+            if [[ "$PACKAGE_VERSION" == "$TARGET_VERSION" ]]; then
+              echo "✅ Package successfully published to NPM (version: $PACKAGE_VERSION)"
+              exit 0
+            fi
+
+            if [[ $i -lt 5 ]]; then
+              echo "⏳ Waiting for NPM registry to propagate... (attempt $i/5, current: $PACKAGE_VERSION, expected: $TARGET_VERSION)"
+              sleep 10
+            fi
+          done
+
+          echo "❌ Package version mismatch on NPM after 5 attempts"
+          echo "   Expected: $TARGET_VERSION"
+          echo "   Found: $PACKAGE_VERSION"
+          exit 1
 
       - name: Cleanup RC versions
         if: github.event.inputs.dry_run != 'true'
+        continue-on-error: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "🧹 Cleaning up RC versions from npm..."
 
+          # Wait a moment to ensure stable version is fully propagated before cleanup
+          echo "⏳ Waiting for NPM registry stabilization..."
+          sleep 5
+
           # Get all versions with 'next' tag (RC versions)
-          RC_VERSIONS=$(npm view @tracelog/lib versions --json | jq -r '.[] | select(contains("-rc."))')
+          RC_VERSIONS=$(npm view @tracelog/lib versions --json 2>/dev/null | jq -r '.[] | select(contains("-rc."))' || echo "")
 
           if [[ -z "$RC_VERSIONS" ]]; then
             echo "✅ No RC versions found to clean up"
