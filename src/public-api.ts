@@ -1,4 +1,17 @@
-import { init, event, on, off, isInitialized, destroy, setQaMode, setTransformer, removeTransformer } from './api';
+import {
+  init,
+  event,
+  on,
+  off,
+  isInitialized,
+  destroy,
+  setQaMode,
+  setTransformer,
+  removeTransformer,
+  setConsent,
+  hasConsent,
+  getConsentState,
+} from './api';
 
 // Constants
 export * from './app.constants';
@@ -17,4 +30,7 @@ export const tracelog = {
   isInitialized,
   destroy,
   setQaMode,
+  setConsent,
+  hasConsent,
+  getConsentState,
 };

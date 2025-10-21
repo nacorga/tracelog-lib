@@ -1,6 +1,7 @@
 import { EventManager } from './managers/event.manager';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
+import { ConsentManager } from './managers/consent.manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
@@ -34,6 +35,7 @@ export class App extends StateManager {
   protected managers: {
     storage?: StorageManager;
     event?: EventManager;
+    consent?: ConsentManager;
   } = {};
 
   protected handlers: {
@@ -63,11 +65,28 @@ export class App extends StateManager {
 
     try {
       this.setupState(config);
+
+      // Initialize consent manager first (before integrations)
+      this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
+
+      // Log consent mode
+      if (config.waitForConsent) {
+        const consentState = this.managers.consent.getConsentState();
+        log('info', 'Consent mode enabled', {
+          data: {
+            google: consentState.google,
+            custom: consentState.custom,
+            tracelog: consentState.tracelog,
+          },
+        });
+      }
+
       await this.setupIntegrations();
 
       this.managers.event = new EventManager(
         this.managers.storage,
         this.integrations.google,
+        this.managers.consent,
         this.emitter,
         this.transformers,
       );
@@ -169,6 +188,7 @@ export class App extends StateManager {
     }
 
     this.managers.event?.stop();
+    this.managers.consent?.cleanup();
 
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = undefined;
@@ -213,14 +233,122 @@ export class App extends StateManager {
       const hasContainerId = Boolean(googleConfig.containerId?.trim());
 
       if (hasMeasurementId || hasContainerId) {
-        try {
-          this.integrations.google = new GoogleAnalyticsIntegration();
-          await this.integrations.google.initialize();
-        } catch {
-          this.integrations.google = undefined;
+        // Check consent before initializing Google Analytics
+        const shouldInitializeGoogle = this.shouldInitializeIntegration('google');
+
+        if (shouldInitializeGoogle) {
+          try {
+            this.integrations.google = new GoogleAnalyticsIntegration();
+            await this.integrations.google.initialize();
+            log('debug', 'Google Analytics integration initialized');
+          } catch (error) {
+            this.integrations.google = undefined;
+            log('warn', 'Failed to initialize Google Analytics', { error });
+          }
+        } else {
+          log('info', 'Google Analytics initialization deferred, waiting for consent');
         }
       }
     }
+  }
+
+  /**
+   * Get consent manager instance (for api.ts)
+   */
+  public getConsentManager(): ConsentManager | undefined {
+    return this.managers.consent;
+  }
+
+  /**
+   * Get config (for api.ts)
+   */
+  public getConfig(): Config {
+    return this.get('config');
+  }
+
+  /**
+   * Get collect API URLs (for api.ts)
+   */
+  public getCollectApiUrls() {
+    return this.get('collectApiUrls');
+  }
+
+  /**
+   * Get event manager (for api.ts)
+   */
+  public getEventManager(): EventManager | undefined {
+    return this.managers.event;
+  }
+
+  /**
+   * Handle consent granted for an integration (orchestrates initialization and buffer flush)
+   * This is the public method called from api.ts when consent is granted
+   */
+  public async handleConsentGranted(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
+    log('info', `Consent granted for ${integration}, initializing and flushing buffer`);
+
+    // Initialize the integration if not already initialized
+    await this.initializeIntegration(integration);
+
+    // Flush consent buffer for this integration
+    if (this.managers.event) {
+      await this.managers.event.flushConsentBuffer(integration);
+    }
+  }
+
+  /**
+   * Initialize a specific integration (called when consent is granted)
+   */
+  private async initializeIntegration(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
+    if (integration === 'google') {
+      const config = this.get('config');
+      const googleConfig = config.integrations?.google;
+
+      if (googleConfig && !this.integrations.google) {
+        const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
+        const hasContainerId = Boolean(googleConfig.containerId?.trim());
+
+        if (hasMeasurementId || hasContainerId) {
+          try {
+            this.integrations.google = new GoogleAnalyticsIntegration();
+            await this.integrations.google.initialize();
+
+            // Update reference in EventManager so it can send events to Google
+            if (this.managers.event) {
+              this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
+            }
+
+            log('info', 'Google Analytics integration initialized after consent');
+          } catch (error) {
+            this.integrations.google = undefined;
+            log('warn', 'Failed to initialize Google Analytics after consent', { error });
+          }
+        }
+      }
+    }
+
+    // Custom and TraceLog integrations are handled by EventManager/SenderManager
+    // They don't need explicit initialization here
+  }
+
+  /**
+   * Check if an integration should be initialized based on consent
+   */
+  private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
+    const config = this.get('config');
+
+    // If waitForConsent is not enabled, always initialize
+    if (!config?.waitForConsent) {
+      return true;
+    }
+
+    // Check if we have consent
+    const consentManager = this.managers.consent;
+    if (!consentManager) {
+      return true; // Fail open if consent manager not available
+    }
+
+    return consentManager.hasConsent(integration);
   }
 
   private initializeHandlers(): void {

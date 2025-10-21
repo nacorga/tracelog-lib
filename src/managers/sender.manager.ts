@@ -10,6 +10,7 @@ import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, Trans
 import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
+import { ConsentManager } from './consent.manager';
 
 interface SendCallbacks {
   onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
@@ -20,6 +21,7 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly integrationId?: 'saas' | 'custom';
   private readonly apiUrl?: string;
+  private readonly consentManager: ConsentManager | null;
   private readonly transformers: TransformerMap;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
@@ -28,6 +30,7 @@ export class SenderManager extends StateManager {
     storeManager: StorageManager,
     integrationId?: 'saas' | 'custom',
     apiUrl?: string,
+    consentManager: ConsentManager | null = null,
     transformers: TransformerMap = {},
   ) {
     super();
@@ -39,7 +42,16 @@ export class SenderManager extends StateManager {
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
+    this.consentManager = consentManager;
     this.transformers = transformers;
+  }
+
+  /**
+   * Get the integration ID for this sender
+   * @returns The integration ID ('saas' or 'custom') or undefined if not set
+   */
+  public getIntegrationId(): 'saas' | 'custom' | undefined {
+    return this.integrationId;
   }
 
   private getQueueStorageKey(): string {
@@ -52,6 +64,15 @@ export class SenderManager extends StateManager {
   sendEventsQueueSync(body: EventsQueue): boolean {
     if (this.shouldSkipSend()) {
       return true;
+    }
+
+    // Check consent before sending
+    if (!this.hasConsentForIntegration()) {
+      log(
+        'debug',
+        `Skipping sync send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+      return true; // Return true to avoid retries
     }
 
     if (this.apiUrl === SpecialApiUrl.Fail) {
@@ -100,6 +121,15 @@ export class SenderManager extends StateManager {
     if (this.recoveryInProgress) {
       log('debug', 'Recovery already in progress, skipping duplicate attempt');
       return;
+    }
+
+    // Check consent before attempting recovery
+    if (!this.hasConsentForIntegration()) {
+      log(
+        'debug',
+        `Skipping recovery, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+      return; // Keep persisted events for future recovery when consent is granted
     }
 
     this.recoveryInProgress = true;
@@ -184,6 +214,12 @@ export class SenderManager extends StateManager {
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
+    }
+
+    // Check consent before sending
+    if (!this.hasConsentForIntegration()) {
+      log('debug', `Skipping send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`);
+      return true; // Return true to avoid retries
     }
 
     // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
@@ -447,5 +483,34 @@ export class SenderManager extends StateManager {
 
       this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
+  }
+
+  /**
+   * Check if this integration has consent to send data
+   */
+  private hasConsentForIntegration(): boolean {
+    const config = this.get('config');
+
+    // If waitForConsent is not enabled, always allow
+    if (!config?.waitForConsent) {
+      return true;
+    }
+
+    // If no consent manager, can't check consent
+    if (!this.consentManager) {
+      return true; // Fail open if consent manager not available
+    }
+
+    // Map integration ID to consent integration type
+    if (this.integrationId === 'saas') {
+      return this.consentManager.hasConsent('tracelog');
+    }
+
+    if (this.integrationId === 'custom') {
+      return this.consentManager.hasConsent('custom');
+    }
+
+    // Unknown integration, allow by default
+    return true;
   }
 }

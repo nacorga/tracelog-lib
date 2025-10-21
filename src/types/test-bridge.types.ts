@@ -44,7 +44,7 @@ export interface TraceLogTestBridge {
 
   // Manager and handler getter methods for testing
   getStorageManager(): TraceLogStorageManager | null;
-  getEventManager(): EventManager | null;
+  getEventManager(): EventManager | undefined;
   getSessionHandler(): SessionHandler | null;
   getPageViewHandler(): PageViewHandler | null;
   getClickHandler(): ClickHandler | null;
