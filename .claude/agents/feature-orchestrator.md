@@ -30,7 +30,7 @@ You MUST follow these project-specific guidelines from `CLAUDE.md`:
 
 ### Architecture Principles
 - **Standalone Mode**: No integrations config = local-only operation (no network requests)
-- **Backend Integration**: Optional `tracelog`/`custom`/`googleAnalytics` integrations
+- **Backend Integration**: Optional `tracelog`/`custom`/`google` integrations
 - **Client-Side Controls**: All validation, sampling, deduplication happen in browser
 - **Event Flow**: Capture → Validate → Emit locally AND/OR send to backend (if configured)
 
@@ -137,7 +137,7 @@ tracelog.init({
 tracelog.init({
   integrations: {
     tracelog: { projectId: 'abc' },
-    googleAnalytics: { measurementId: 'G-XXX' }
+    google: { measurementId: 'G-XXX' }
   }
 });
 ```
@@ -167,7 +167,7 @@ interface Config {
   integrations?: {
     tracelog?: { projectId: string };
     custom?: { collectApiUrl: string; allowHttp?: boolean };
-    googleAnalytics?: { measurementId: string };
+    google?: { measurementId?: string; containerId?: string };
   };
 }
 ```

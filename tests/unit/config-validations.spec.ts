@@ -415,7 +415,7 @@ describe('Config Validations', () => {
       it('should accept valid Google Analytics 4 measurement ID', () => {
         const config: Config = {
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         };
         expect(() => {
@@ -426,7 +426,29 @@ describe('Config Validations', () => {
       it('should accept valid Universal Analytics ID', () => {
         const config: Config = {
           integrations: {
-            googleAnalytics: { measurementId: 'UA-XXXXXXXXX-X' },
+            google: { measurementId: 'UA-XXXXXXXXX-X' },
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept valid Google Tag Manager container ID', () => {
+        const config: Config = {
+          integrations: {
+            google: { containerId: 'GTM-XXXXXXX' },
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept valid Google Ads conversion ID', () => {
+        const config: Config = {
+          integrations: {
+            google: { measurementId: 'AW-XXXXXXXXXX' },
           },
         };
         expect(() => {
@@ -437,7 +459,7 @@ describe('Config Validations', () => {
       it('should reject empty measurement ID', () => {
         const config: Config = {
           integrations: {
-            googleAnalytics: { measurementId: '' },
+            google: { measurementId: '' },
           },
         };
         expect(() => {
@@ -448,7 +470,7 @@ describe('Config Validations', () => {
       it('should reject whitespace-only measurement ID', () => {
         const config: Config = {
           integrations: {
-            googleAnalytics: { measurementId: '   ' },
+            google: { measurementId: '   ' },
           },
         };
         expect(() => {
@@ -456,10 +478,10 @@ describe('Config Validations', () => {
         }).toThrow(IntegrationValidationError);
       });
 
-      it('should reject measurement ID without G- or UA- prefix', () => {
+      it('should reject measurement ID without valid prefix', () => {
         const config: Config = {
           integrations: {
-            googleAnalytics: { measurementId: 'XXXXXXXXXX' },
+            google: { measurementId: 'XXXXXXXXXX' },
           },
         };
         expect(() => {
@@ -467,13 +489,13 @@ describe('Config Validations', () => {
         }).toThrow(IntegrationValidationError);
         expect(() => {
           validateAppConfig(config);
-        }).toThrow('must start with "G-" or "UA-"');
+        }).toThrow('must start with "G-" (GA4), "UA-" (Universal Analytics), or "AW-" (Google Ads)');
       });
 
       it('should reject non-string measurement ID', () => {
         const config: Config = {
           integrations: {
-            googleAnalytics: { measurementId: 123 as any },
+            google: { measurementId: 123 as any },
           },
         };
         expect(() => {
@@ -484,7 +506,7 @@ describe('Config Validations', () => {
       it('should reject null measurement ID', () => {
         const config: Config = {
           integrations: {
-            googleAnalytics: { measurementId: null as any },
+            google: { measurementId: null as any },
           },
         };
         expect(() => {
@@ -1088,7 +1110,7 @@ describe('Config Validations', () => {
           errorSampling: 0.5,
           samplingRate: 0.8,
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         };
         const normalized = validateAndNormalizeConfig(config);

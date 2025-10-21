@@ -47,7 +47,7 @@ export class App extends StateManager {
   } = {};
 
   protected integrations: {
-    googleAnalytics?: GoogleAnalyticsIntegration;
+    google?: GoogleAnalyticsIntegration;
   } = {};
 
   get initialized(): boolean {
@@ -67,7 +67,7 @@ export class App extends StateManager {
 
       this.managers.event = new EventManager(
         this.managers.storage,
-        this.integrations.googleAnalytics,
+        this.integrations.google,
         this.emitter,
         this.transformers,
       );
@@ -151,7 +151,7 @@ export class App extends StateManager {
       return;
     }
 
-    this.integrations.googleAnalytics?.cleanup();
+    this.integrations.google?.cleanup();
 
     Object.values(this.handlers)
       .filter(Boolean)
@@ -167,8 +167,6 @@ export class App extends StateManager {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
     }
-
-    this.managers.event?.flushImmediatelySync();
 
     this.managers.event?.stop();
 
@@ -208,14 +206,19 @@ export class App extends StateManager {
 
   private async setupIntegrations(): Promise<void> {
     const config = this.get('config');
-    const measurementId = config.integrations?.googleAnalytics?.measurementId;
+    const googleConfig = config.integrations?.google;
 
-    if (measurementId?.trim()) {
-      try {
-        this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
-        await this.integrations.googleAnalytics.initialize();
-      } catch {
-        this.integrations.googleAnalytics = undefined;
+    if (googleConfig) {
+      const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
+      const hasContainerId = Boolean(googleConfig.containerId?.trim());
+
+      if (hasMeasurementId || hasContainerId) {
+        try {
+          this.integrations.google = new GoogleAnalyticsIntegration();
+          await this.integrations.google.initialize();
+        } catch {
+          this.integrations.google = undefined;
+        }
       }
     }
   }

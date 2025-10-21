@@ -1,6 +1,6 @@
 import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
-import { WebVitalType } from './event.types';
+import { EventTypeName, WebVitalType } from './event.types';
 import { DisabledEventType } from '../constants';
 
 /**
@@ -70,10 +70,18 @@ export interface Config {
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
     };
-    /** Google Analytics integration options. */
-    googleAnalytics?: {
-      /** Required measurement ID for Google Analytics. */
-      measurementId: string;
+    /** GA4 / GTM integration. */
+    google?: {
+      /** GA4 measurement ID. @example 'G-XXXXXXXXXX' */
+      measurementId?: string;
+      /** GTM container ID. @example 'GTM-XXXXXXX' */
+      containerId?: string;
+      /**
+       * Event types to forward to GA4/GTM.
+       * @example ['page_view', 'custom', 'web_vitals']
+       * Supported values: 'page_view', 'click', 'scroll', 'session_start', 'session_end', 'custom', 'web_vitals', 'error', 'viewport_visible', or 'all'
+       */
+      forwardEvents?: EventTypeName[] | 'all';
     };
   };
 }

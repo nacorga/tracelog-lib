@@ -185,11 +185,14 @@ await tracelog.init({
 });
 ```
 
-### Google Analytics
+### Google Analytics / Google Tag Manager
 ```typescript
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    google: {
+      measurementId: 'G-XXXXXX',      // GA4 (optional)
+      containerId: 'GTM-XXXXXXX'       // GTM (optional)
+    }
   }
 });
 ```
@@ -227,7 +230,7 @@ interface Config {
   integrations?: {
     tracelog?: { projectId: string; };
     custom?: { collectApiUrl: string; allowHttp?: boolean; };
-    googleAnalytics?: { measurementId: string; };
+    google?: { measurementId?: string; containerId?: string; };
   };
 
   // Testing

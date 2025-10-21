@@ -19,6 +19,7 @@ import {
   SessionTimeoutValidationError,
   SamplingRateValidationError,
   IntegrationValidationError,
+  EventType,
 } from '../../types';
 
 /**
@@ -322,19 +323,81 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
     }
   }
 
-  if (integrations.googleAnalytics) {
-    if (
-      !integrations.googleAnalytics.measurementId ||
-      typeof integrations.googleAnalytics.measurementId !== 'string' ||
-      integrations.googleAnalytics.measurementId.trim() === ''
-    ) {
-      throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_GOOGLE_ANALYTICS_ID, 'config');
+  if (integrations.google) {
+    const { measurementId, containerId, forwardEvents } = integrations.google;
+    const isValidMeasurementId = typeof measurementId === 'string' && measurementId.trim() !== '';
+    const isValidContainerId = typeof containerId === 'string' && containerId.trim() !== '';
+
+    if (!isValidMeasurementId && !isValidContainerId) {
+      throw new IntegrationValidationError(
+        'Google integration requires at least one of: measurementId (GA4) or containerId (GTM)',
+        'config',
+      );
     }
 
-    const measurementId = integrations.googleAnalytics.measurementId.trim();
+    if (isValidMeasurementId) {
+      const trimmedMeasurementId = measurementId.trim();
 
-    if (!measurementId.match(/^(G-|UA-)/)) {
-      throw new IntegrationValidationError('Google Analytics measurement ID must start with "G-" or "UA-"', 'config');
+      if (!trimmedMeasurementId.match(/^(G-|UA-|AW-)[A-Z0-9-]+$/)) {
+        throw new IntegrationValidationError(
+          'Google Analytics measurement ID must start with "G-" (GA4), "UA-" (Universal Analytics), or "AW-" (Google Ads), followed by uppercase letters, digits, or hyphens',
+          'config',
+        );
+      }
+    }
+
+    if (isValidContainerId) {
+      const trimmedContainerId = containerId.trim();
+
+      if (!trimmedContainerId.match(/^GTM-[A-Z0-9]+$/)) {
+        throw new IntegrationValidationError(
+          'Google Tag Manager container ID must match the format "GTM-XXXXXX" (uppercase letters and digits only)',
+          'config',
+        );
+      }
+    }
+
+    if (forwardEvents !== undefined) {
+      if (forwardEvents === 'all') {
+        // 'all' is valid
+      } else if (Array.isArray(forwardEvents)) {
+        if (forwardEvents.length === 0) {
+          throw new IntegrationValidationError(
+            'Google integration forwardEvents cannot be an empty array. Use undefined to use default or specify event types.',
+            'config',
+          );
+        }
+
+        const validEventTypes = Object.values(EventType);
+        const uniqueEvents = new Set<string>();
+
+        for (const eventType of forwardEvents) {
+          if (typeof eventType !== 'string') {
+            throw new IntegrationValidationError('All forwarded event types must be strings', 'config');
+          }
+
+          if (!validEventTypes.includes(eventType as EventType)) {
+            throw new IntegrationValidationError(
+              `Invalid forwarded event type: "${eventType}". Must be one of: ${validEventTypes.join(', ')}`,
+              'config',
+            );
+          }
+
+          if (uniqueEvents.has(eventType)) {
+            throw new IntegrationValidationError(
+              `Duplicate forwarded event type found: "${eventType}". Each event type should appear only once.`,
+              'config',
+            );
+          }
+
+          uniqueEvents.add(eventType);
+        }
+      } else {
+        throw new IntegrationValidationError(
+          'Google integration forwardEvents must be an array of event types or the string "all"',
+          'config',
+        );
+      }
     }
   }
 };
@@ -363,7 +426,6 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     disabledEvents: config?.disabledEvents ?? [],
   };
 
-  // Normalize integrations
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
       ...normalizedConfig.integrations.custom,
@@ -371,7 +433,6 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     };
   }
 
-  // Normalize viewport config
   if (normalizedConfig.viewport) {
     normalizedConfig.viewport = {
       ...normalizedConfig.viewport,

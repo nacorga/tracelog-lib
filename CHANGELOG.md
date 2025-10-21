@@ -21,6 +21,56 @@
 
 
 
+
+
+## [1.2.0] - 2025-10-21
+
+### ✨ Features
+
+- Implement session management improvements and regression tests ([1305577](../../commit/130557743221a6da03b15661a611928a84d3b190))
+
+### ♻️ Refactoring
+
+- Update timer handling to use runOnlyPendingTimersAsync for improved accuracy ([51b296d](../../commit/51b296d7a974b24538d40a346d427ed5895539db))
+
+### 🔧 Other Changes
+
+- Merge pull request #52 from nacorga/hotfix/20251021.1 ([1d352e2](../../commit/1d352e26cd53eb3958625811cd187273053d3158))
+- Remove unnecessary line in session manager and update type for onmessage in tests ([305097c](../../commit/305097cbcc4f305ca5a35cdfe6db842093dc197b))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.1.1...v1.2.0
+
+
+## [1.1.1] - 2025-10-20
+
+### 📚 Documentation
+
+- Update RELEASE.md to clarify CI processes, release triggers, and validation steps ([ad047aa](../../commit/ad047aa282b847d300a9323281377aa4c202e853))
+
+### 🔧 Other Changes
+
+- Merge pull request #51 from nacorga/release/20251020.1 ([b501242](../../commit/b501242f37763bd4703cd467bfe0080904488681))
+- Merge pull request #50 from nacorga/refactor/ci-workflows ([600e36f](../../commit/600e36fbbf8a352a9564821d72bbed9a1248e557))
+- Improve NPM version check and stabilization delay in release workflow ([7f83f38](../../commit/7f83f382da3955db92ab3f34706323609b0f68ae))
+- Enhance CI workflows with concurrency management and all-checks validation step ([37daf12](../../commit/37daf122ab41a6b52a01b4674559883fdcd454e1))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.1.0...v1.1.1
+
+
 ## [1.1.0] - 2025-10-20
 
 ### ✨ Features

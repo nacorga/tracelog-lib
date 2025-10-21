@@ -140,7 +140,10 @@ await tracelog.init({
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
     custom: { collectApiUrl: 'https://api.com' },    // Custom backend
-    googleAnalytics: { measurementId: 'G-XXXXXX' },  // GA4 forwarding
+    google: {                                         // Google Analytics/GTM
+      measurementId: 'G-XXXXXX',                     // GA4 measurement ID (optional)
+      containerId: 'GTM-XXXXXXX'                      // GTM container ID (optional)
+    },
 
     // Multi-integration: Send to multiple backends simultaneously
     // tracelog: { projectId: 'proj-123' },          // Analytics dashboard
@@ -450,14 +453,38 @@ await tracelog.init({
 });
 ```
 
-### 4. Google Analytics
+### 4. Google Analytics / Google Tag Manager
 ```typescript
+// Option 1: GA4 only
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    google: { measurementId: 'G-XXXXXX' }
+  }
+});
+
+// Option 2: GTM only
+await tracelog.init({
+  integrations: {
+    google: { containerId: 'GTM-XXXXXXX' }
+  }
+});
+
+// Option 3: Both (GTM takes priority for script loading)
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      containerId: 'GTM-XXXXXXX'
+    }
   }
 });
 ```
+
+**Supported formats:**
+- **measurementId**: `G-XXXXXX` (GA4), `AW-XXXXXX` (Google Ads), `UA-XXXXXX` (Universal Analytics - legacy)
+- **containerId**: `GTM-XXXXXX` (Google Tag Manager)
+
+**Note:** TraceLog automatically detects the format and loads the appropriate script (gtag.js or gtm.js). If gtag/GTM is already loaded on your site, TraceLog will reuse the existing instance.
 
 ### 5. Multi-Integration (TraceLog SaaS + Custom Backend)
 ```typescript

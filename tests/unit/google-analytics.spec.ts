@@ -32,11 +32,15 @@ describe('Google Analytics Integration', () => {
   describe('initialize()', () => {
     describe('Successful Initialization', () => {
       it('should initialize when valid config and userId are provided', async () => {
+        // Clear window.gtag and dataLayer for this test
+        delete window.gtag;
+        delete window.dataLayer;
+
         const mockState = {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -61,7 +65,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -78,11 +82,15 @@ describe('Google Analytics Integration', () => {
       });
 
       it('should inject configuration script with userId', async () => {
+        // Clear window.gtag and dataLayer for this test
+        delete window.gtag;
+        delete window.dataLayer;
+
         const mockState = {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-TEST123' },
+              google: { measurementId: 'G-TEST123' },
             },
           },
           userId: 'user-456',
@@ -105,11 +113,15 @@ describe('Google Analytics Integration', () => {
       });
 
       it('should create gtag function and dataLayer', async () => {
+        // Clear window.gtag and dataLayer for this test
+        delete window.gtag;
+        delete window.dataLayer;
+
         const mockState = {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -138,7 +150,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -164,7 +176,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: '' },
+              google: { measurementId: '' },
             },
           },
           userId: 'user-123',
@@ -188,7 +200,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: '   ' },
+              google: { measurementId: '   ' },
             },
           },
           userId: 'user-123',
@@ -210,7 +222,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: '',
@@ -234,7 +246,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: '   ',
@@ -280,7 +292,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -301,11 +313,15 @@ describe('Google Analytics Integration', () => {
 
     describe('Error Handling', () => {
       it('should handle script loading failure gracefully', async () => {
+        // Clear window.gtag and dataLayer for this test
+        delete window.gtag;
+        delete window.dataLayer;
+
         const mockState = {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -330,7 +346,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -355,7 +371,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -471,7 +487,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -497,7 +513,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -527,7 +543,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -554,7 +570,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -596,6 +612,10 @@ describe('Google Analytics Integration', () => {
     });
 
     it('should return false when no GA script is loaded', () => {
+      // Clear window.gtag and dataLayer for this test
+      delete window.gtag;
+      delete window.dataLayer;
+
       const result = (gaIntegration as any).isScriptAlreadyLoaded();
       expect(result).toBe(false);
     });

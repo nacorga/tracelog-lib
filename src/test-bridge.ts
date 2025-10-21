@@ -160,7 +160,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
 
   // Integration accessors
   getGoogleAnalytics(): GoogleAnalyticsIntegration | null {
-    return this.safeAccess(this.integrations?.googleAnalytics);
+    return this.safeAccess(this.integrations?.google);
   }
 
   override destroy(force = false): void {

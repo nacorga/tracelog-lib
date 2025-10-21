@@ -259,7 +259,7 @@ test('Google Analytics integration forwards events', async ({ page }) => {
 
   await tracelog.init({
     integrations: {
-      googleAnalytics: { measurementId: 'G-TEST123' }
+      google: { measurementId: 'G-TEST123' }
     }
   });
 

@@ -17,24 +17,46 @@ export class GoogleAnalyticsIntegration extends StateManager {
       return;
     }
 
-    const measurementId = this.get('config').integrations?.googleAnalytics?.measurementId;
+    const googleConfig = this.get('config').integrations?.google;
     const userId = this.get('userId');
 
-    if (!measurementId?.trim() || !userId?.trim()) {
+    if (!googleConfig || !userId?.trim()) {
+      return;
+    }
+
+    const { measurementId, containerId } = googleConfig;
+
+    if (!measurementId?.trim() && !containerId?.trim()) {
       return;
     }
 
     try {
-      if (this.isScriptAlreadyLoaded()) {
+      if (this.hasExistingGtagInstance()) {
+        log('info', 'Google Analytics/GTM already loaded by external service, reusing existing script', {
+          showToClient: true,
+        });
+
         this.isInitialized = true;
+
         return;
       }
 
-      await this.loadScript(measurementId);
-      this.configureGtag(measurementId, userId);
+      if (this.isScriptAlreadyLoaded()) {
+        this.isInitialized = true;
+
+        return;
+      }
+
+      const scriptId = containerId?.trim() || measurementId?.trim();
+
+      if (scriptId) {
+        await this.loadScript(scriptId);
+        this.configureGtag(scriptId, userId);
+      }
+
       this.isInitialized = true;
     } catch (error) {
-      log('error', 'Google Analytics initialization failed', { error });
+      log('error', 'Google Analytics/GTM initialization failed', { error });
     }
   }
 
@@ -54,20 +76,34 @@ export class GoogleAnalyticsIntegration extends StateManager {
   cleanup(): void {
     this.isInitialized = false;
     const script = document.getElementById('tracelog-ga-script');
+
     if (script) {
       script.remove();
     }
   }
 
+  private hasExistingGtagInstance(): boolean {
+    return typeof window.gtag === 'function' && Array.isArray(window.dataLayer);
+  }
+
+  private getScriptType(measurementId: string): 'GTM' | 'GA4' {
+    return measurementId.startsWith('GTM-') ? 'GTM' : 'GA4';
+  }
+
   private isScriptAlreadyLoaded(): boolean {
-    // Check if we already loaded the script
+    if (this.hasExistingGtagInstance()) {
+      return true;
+    }
+
     if (document.getElementById('tracelog-ga-script')) {
       return true;
     }
 
-    // Check if GA is already loaded by another source
-    const existingGAScript = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
-    return !!existingGAScript;
+    const existingScript = document.querySelector(
+      'script[src*="googletagmanager.com/gtag/js"], script[src*="googletagmanager.com/gtm.js"]',
+    );
+
+    return !!existingScript;
   }
 
   private async loadScript(measurementId: string): Promise<void> {
@@ -75,13 +111,21 @@ export class GoogleAnalyticsIntegration extends StateManager {
       const script = document.createElement('script');
       script.id = 'tracelog-ga-script';
       script.async = true;
-      script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
 
-      script.onload = () => {
+      const scriptType = this.getScriptType(measurementId);
+
+      if (scriptType === 'GTM') {
+        script.src = `https://www.googletagmanager.com/gtm.js?id=${measurementId}`;
+      } else {
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+      }
+
+      script.onload = (): void => {
         resolve();
       };
-      script.onerror = () => {
-        reject(new Error('Failed to load Google Analytics script'));
+      script.onerror = (): void => {
+        const type = scriptType === 'GTM' ? 'GTM' : 'Google Analytics';
+        reject(new Error(`Failed to load ${type} script`));
       };
 
       document.head.appendChild(script);
@@ -90,14 +134,24 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
   private configureGtag(measurementId: string, userId: string): void {
     const gaScriptConfig = document.createElement('script');
-    gaScriptConfig.innerHTML = `
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', '${measurementId}', {
-        'user_id': '${userId}'
-      });
-    `;
+
+    if (measurementId.startsWith('GTM-')) {
+      gaScriptConfig.innerHTML = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+      `;
+    } else {
+      gaScriptConfig.innerHTML = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', '${measurementId}', {
+          'user_id': '${userId}'
+        });
+      `;
+    }
+
     document.head.appendChild(gaScriptConfig);
   }
 }
