@@ -1191,7 +1191,7 @@ class Ct extends T {
       [d.CUSTOM]: 0,
       [d.VIEWPORT_VISIBLE]: 0,
       [d.SCROLL]: 0
-    }, this.lastSessionId = null, this.dataSenders.forEach((e) => {
+    }, this.lastSessionId = null, this.set("hasStartSession", !1), this.dataSenders.forEach((e) => {
       e.stop();
     });
   }
@@ -1442,12 +1442,13 @@ class Pt extends T {
   storageManager;
   eventManager;
   projectId;
-  sessionTimeoutId = null;
-  broadcastChannel = null;
   activityHandler = null;
   visibilityChangeHandler = null;
   beforeUnloadHandler = null;
+  sessionTimeoutId = null;
+  broadcastChannel = null;
   isTracking = !1;
+  isEnding = !1;
   constructor(e, t, r) {
     super(), this.storageManager = e, this.eventManager = t, this.projectId = r;
   }
@@ -1464,7 +1465,7 @@ class Pt extends T {
           this.resetSessionState();
           return;
         }
-        s && typeof i == "number" && i > Date.now() - 5e3 && (this.set("sessionId", s), this.set("hasStartSession", !0), this.persistSession(s, i), this.isTracking && this.setupSessionTimeout());
+        s && typeof i == "number" && i > Date.now() - 5e3 && (this.set("sessionId", s), this.persistSession(s, i), this.isTracking && this.setupSessionTimeout());
       }
     };
   }
@@ -1539,9 +1540,9 @@ class Pt extends T {
     const e = this.recoverSession(), t = e ?? this.generateSessionId(), r = !!e;
     this.isTracking = !0;
     try {
-      this.set("sessionId", t), this.persistSession(t), r || this.eventManager.track({
+      this.set("sessionId", t), this.persistSession(t), this.initCrossTabSync(), this.shareSession(t), r || this.eventManager.track({
         type: d.SESSION_START
-      }), this.initCrossTabSync(), this.shareSession(t), this.setupSessionTimeout(), this.setupActivityListeners(), this.setupLifecycleListeners();
+      }), this.setupSessionTimeout(), this.setupActivityListeners(), this.setupLifecycleListeners();
     } catch (s) {
       throw this.isTracking = !1, this.clearSessionTimeout(), this.cleanupActivityListeners(), this.cleanupLifecycleListeners(), this.cleanupCrossTabSync(), this.set("sessionId", null), s;
     }
@@ -1583,17 +1584,24 @@ class Pt extends T {
     this.visibilityChangeHandler && (document.removeEventListener("visibilitychange", this.visibilityChangeHandler), this.visibilityChangeHandler = null), this.beforeUnloadHandler && (window.removeEventListener("beforeunload", this.beforeUnloadHandler), this.beforeUnloadHandler = null);
   }
   endSession(e) {
+    if (this.isEnding)
+      return;
     const t = this.get("sessionId");
     if (!t) {
       l("warn", "endSession called without active session", { data: { reason: e } }), this.resetSessionState(e);
       return;
     }
-    this.eventManager.track({
-      type: d.SESSION_END,
-      session_end_reason: e
-    }), this.eventManager.flushImmediatelySync() || l("warn", "Sync flush failed during session end, events persisted for recovery", {
-      data: { reason: e, sessionId: t }
-    }), this.broadcastSessionEnd(t, e), this.resetSessionState(e);
+    this.isEnding = !0;
+    try {
+      this.eventManager.track({
+        type: d.SESSION_END,
+        session_end_reason: e
+      }), this.eventManager.flushImmediatelySync() || l("warn", "Sync flush failed during session end, events persisted for recovery", {
+        data: { reason: e, sessionId: t }
+      }), this.broadcastSessionEnd(t, e), this.resetSessionState(e);
+    } finally {
+      this.isEnding = !1;
+    }
   }
   resetSessionState(e) {
     this.clearSessionTimeout(), this.cleanupActivityListeners(), this.cleanupLifecycleListeners(), this.cleanupCrossTabSync(), e !== "page_unload" && this.clearStoredSession(), this.set("sessionId", null), this.set("hasStartSession", !1), this.isTracking = !1;
@@ -2873,7 +2881,7 @@ class Wt extends T {
       } catch (r) {
         l("warn", "Failed to stop tracking", { error: r });
       }
-    }), this.suppressNextScrollTimer && (clearTimeout(this.suppressNextScrollTimer), this.suppressNextScrollTimer = null), this.managers.event?.flushImmediatelySync(), this.managers.event?.stop(), this.emitter.removeAllListeners(), this.transformers.beforeSend = void 0, this.transformers.beforeBatch = void 0, this.set("hasStartSession", !1), this.set("suppressNextScroll", !1), this.set("sessionId", null), this.isInitialized = !1, this.handlers = {});
+    }), this.suppressNextScrollTimer && (clearTimeout(this.suppressNextScrollTimer), this.suppressNextScrollTimer = null), this.managers.event?.stop(), this.emitter.removeAllListeners(), this.transformers.beforeSend = void 0, this.transformers.beforeBatch = void 0, this.set("hasStartSession", !1), this.set("suppressNextScroll", !1), this.set("sessionId", null), this.isInitialized = !1, this.handlers = {});
   }
   setupState(e = {}) {
     this.set("config", e);
