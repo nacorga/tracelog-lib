@@ -213,6 +213,39 @@ window.__traceLogBridge!.getSessionData();
 
 ## ⚡ Best Practices
 
+### ⚠️ Fake Timers (CRITICAL)
+
+**Problem**: `vi.runAllTimersAsync()` causes infinite loops with `setInterval` in EventManager.
+
+```typescript
+// ❌ BAD - Infinite loop in CI
+it('test', async () => {
+  vi.useFakeTimers();
+  await vi.runAllTimersAsync(); // ← Loops forever with setInterval
+  vi.useRealTimers();
+});
+
+// ✅ GOOD - Use runOnlyPendingTimersAsync
+it('test', async () => {
+  vi.useFakeTimers();
+  await vi.advanceTimersByTimeAsync(10000);
+  await vi.runOnlyPendingTimersAsync(); // ← Only pending timers
+  vi.useRealTimers();
+});
+
+// ✅ BETTER - Avoid fake timers when testing "no retry"
+it('should NOT retry', async () => {
+  await senderManager.send(body);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+});
+```
+
+**When to Use:**
+- ✅ `vi.runOnlyPendingTimersAsync()` - Testing periodic events
+- ✅ Real timers - Testing "no retry" behavior
+- ❌ `vi.runAllTimersAsync()` - NEVER (causes infinite loops)
+
 ### ✅ All Tests
 - TypeScript strict mode, proper setup/teardown, descriptive names
 
