@@ -228,8 +228,33 @@ export class StorageManager {
   }
 
   /**
-   * Attempts to cleanup old TraceLog data from storage to free up space
-   * Returns true if any data was removed, false otherwise
+   * Implements two-phase cleanup strategy to free storage space when quota exceeded.
+   *
+   * **Purpose**: Removes TraceLog data intelligently to make room for new writes
+   * while preserving critical user state (session, user ID, device ID, config).
+   *
+   * **Two-Phase Cleanup Strategy**:
+   * 1. **Phase 1 (Priority)**: Remove all persisted events (`tracelog_persisted_events_*`)
+   *    - These are typically the largest data items (batches of events)
+   *    - Safe to remove as they represent recoverable failed sends
+   *    - Returns immediately if any persisted events found and removed
+   *
+   * 2. **Phase 2 (Fallback)**: Remove up to 5 non-critical keys
+   *    - Only executed if no persisted events found
+   *    - Preserves critical keys: session data, user ID, device ID, config
+   *    - Limits to 5 keys to avoid excessive cleanup time
+   *
+   * **Critical Keys (Never Removed)**:
+   * - `tracelog_session_*` - Active session data
+   * - `tracelog_user_id` - User identification
+   * - `tracelog_device_id` - Device fingerprint
+   * - `tracelog_config` - Configuration cache
+   *
+   * **Error Handling**:
+   * - Individual key removal failures silently ignored (continue cleanup)
+   * - Overall cleanup errors logged and return false
+   *
+   * @returns true if any data was successfully removed, false if nothing cleaned up
    */
   private cleanupOldData(): boolean {
     if (!this.storage) {
@@ -290,7 +315,28 @@ export class StorageManager {
   }
 
   /**
-   * Initialize storage (localStorage or sessionStorage) with feature detection
+   * Initializes storage with feature detection and write-test validation.
+   *
+   * **Purpose**: Validates storage availability by performing actual write/remove test,
+   * preventing false positives in privacy modes where storage API exists but throws on write.
+   *
+   * **Validation Strategy**:
+   * 1. SSR Safety: Returns null in Node.js environments (`typeof window === 'undefined'`)
+   * 2. API Check: Verifies storage object exists on window
+   * 3. Write Test: Attempts to write test key (`__tracelog_test__`)
+   * 4. Cleanup: Removes test key immediately after validation
+   *
+   * **Why Write Test is Critical**:
+   * - Safari private browsing: storage API exists but throws QuotaExceededError on write
+   * - iOS private mode: storage appears available but operations fail
+   * - Incognito modes: API exists but writes are silently ignored or throw
+   *
+   * **Fallback Behavior**:
+   * - Returns null if storage unavailable or test fails
+   * - Caller automatically falls back to in-memory Map storage
+   *
+   * @param type - Storage type to initialize ('localStorage' | 'sessionStorage')
+   * @returns Storage instance if available and writable, null otherwise
    */
   private initializeStorage(type: 'localStorage' | 'sessionStorage'): Storage | null {
     if (typeof window === 'undefined') {

@@ -129,7 +129,7 @@ export class SenderManager extends StateManager {
   private getQueueStorageKey(): string {
     const userId = this.get('userId') || 'anonymous';
     const baseKey = QUEUE_KEY(userId);
-    // Add integration suffix for multi-integration support
+    // Separate storage keys prevent cross-integration interference in multi-integration mode
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
 
@@ -365,8 +365,34 @@ export class SenderManager extends StateManager {
    */
   stop(): void {}
 
+  /**
+   * Applies beforeSend transformer to event array for custom backend integrations.
+   *
+   * **Purpose**: Per-event transformation in multi-integration mode for custom backends only.
+   * Bypassed for TraceLog SaaS to maintain schema integrity.
+   *
+   * **Application Context**:
+   * - Only applied in multi-integration mode (SaaS + Custom)
+   * - EventManager applies beforeSend for standalone/custom-only modes
+   * - This method handles the multi-integration scenario
+   *
+   * **Transformation Flow**:
+   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
+   * 2. Check if beforeSend transformer exists
+   * 3. Apply transformer to each event via transformEvents() utility
+   * 4. Filter out events (empty array = filter entire batch)
+   * 5. Return transformed queue or null
+   *
+   * **Error Handling**:
+   * - transformEvents() utility catches and logs transformer errors
+   * - Failed transformations fall back to original event
+   * - Empty result array treated as filter signal (returns null)
+   *
+   * @param body - Event queue to transform
+   * @returns Transformed queue with modified events, or null to filter entire batch
+   */
   private applyBeforeSendTransformer(body: EventsQueue): EventsQueue | null {
-    // Skip for SaaS integration
+    // TraceLog SaaS requires untransformed events to maintain schema integrity
     if (this.integrationId === 'saas') {
       return body;
     }
@@ -393,7 +419,39 @@ export class SenderManager extends StateManager {
     };
   }
 
+  /**
+   * Applies beforeBatch transformer to entire event queue for custom backend integrations.
+   *
+   * **Purpose**: Batch-level transformation before network transmission for custom backends only.
+   * Bypassed for TraceLog SaaS to maintain schema integrity.
+   *
+   * **Application Context**:
+   * - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
+   * - Operates on entire queue after beforeSend transformations
+   * - Final transformation step before network transmission
+   *
+   * **Transformation Flow**:
+   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
+   * 2. Check if beforeBatch transformer exists
+   * 3. Apply transformer to entire queue via transformBatch() utility
+   * 4. Return transformed queue or null to filter
+   *
+   * **Use Cases**:
+   * - Add batch-level metadata (timestamps, signatures)
+   * - Compress or encrypt entire payload
+   * - Apply custom formatting to queue structure
+   * - Filter entire batch based on conditions
+   *
+   * **Error Handling**:
+   * - transformBatch() utility catches and logs transformer errors
+   * - Failed transformations fall back to original batch
+   * - Returning null filters entire batch (prevents send)
+   *
+   * @param body - Event queue to transform
+   * @returns Transformed queue, or null to filter entire batch
+   */
   private applyBeforeBatchTransformer(body: EventsQueue): EventsQueue | null {
+    // TraceLog SaaS requires untransformed batches to maintain schema integrity
     if (this.integrationId === 'saas') {
       return body;
     }
@@ -420,14 +478,12 @@ export class SenderManager extends StateManager {
       return true; // Return true to avoid retries
     }
 
-    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {
       return true;
     }
 
-    // Apply beforeBatch (batch-level transformation)
     const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
@@ -484,7 +540,11 @@ export class SenderManager extends StateManager {
       });
 
       if (!response.ok) {
-        const isPermanentError = response.status >= 400 && response.status < 500;
+        // 4xx errors are permanent (unrecoverable) except:
+        // - 408 Request Timeout (transient - network/server issue)
+        // - 429 Too Many Requests (transient - rate limiting)
+        const isPermanentError =
+          response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
 
         if (isPermanentError) {
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
@@ -500,14 +560,12 @@ export class SenderManager extends StateManager {
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
-    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {
       return true;
     }
 
-    // Apply beforeBatch (batch-level transformation)
     const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
@@ -684,7 +742,38 @@ export class SenderManager extends StateManager {
   }
 
   /**
-   * Check if this integration has consent to send data
+   * Checks if consent has been granted for this integration's data collection.
+   *
+   * **Purpose**: GDPR/CCPA compliance check before sending events to backend.
+   * Prevents data transmission when user has not granted consent.
+   *
+   * **Fail-Open Strategy** (Always returns true when):
+   * - `waitForConsent` config option is disabled (default behavior)
+   * - ConsentManager instance not provided (consent not required)
+   * - Unknown integration ID (defensive programming)
+   *
+   * **Integration ID Mapping**:
+   * - `'saas'` → Checks consent for `'tracelog'` (TraceLog SaaS)
+   * - `'custom'` → Checks consent for `'custom'` (Custom backend)
+   * - No integration ID → Allows by default (legacy support)
+   *
+   * **Consent Flow**:
+   * 1. Check if consent required (`config.waitForConsent`)
+   * 2. Verify ConsentManager available
+   * 3. Map integration ID to consent type
+   * 4. Query ConsentManager for consent status
+   * 5. Return true if consent granted, false otherwise
+   *
+   * **Called by**:
+   * - `send()` method before async transmission
+   * - `sendQueueSyncInternal()` is NOT called (sync sends skip consent check for performance)
+   *
+   * **Behavior when false**:
+   * - Events NOT sent to backend
+   * - Returns true to caller (prevents retry loops)
+   * - Events may be buffered in ConsentManager for later flush
+   *
+   * @returns true if consent granted or not required, false if consent denied
    */
   private hasConsentForIntegration(): boolean {
     const config = this.get('config');
@@ -694,9 +783,9 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    // If no consent manager, can't check consent
+    // If no consent manager, can't check consent (fail open for backwards compatibility)
     if (!this.consentManager) {
-      return true; // Fail open if consent manager not available
+      return true;
     }
 
     // Map integration ID to consent integration type
@@ -708,7 +797,7 @@ export class SenderManager extends StateManager {
       return this.consentManager.hasConsent('custom');
     }
 
-    // Unknown integration, allow by default
+    // Unknown integration, allow by default (defensive programming)
     return true;
   }
 }

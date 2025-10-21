@@ -499,6 +499,37 @@ export class SessionManager extends StateManager {
     this.endSession('manual_stop');
   }
 
+  /**
+   * Destroys the session manager and cleans up all resources.
+   *
+   * **Purpose**: Performs deep cleanup of session manager resources without
+   * tracking SESSION_END event. Used during application teardown.
+   *
+   * **Differences from stopTracking()**:
+   * - Does NOT track SESSION_END event
+   * - Does NOT broadcast session end to other tabs
+   * - Does NOT clear localStorage (preserves session for recovery)
+   * - Used for internal cleanup, not user-initiated session end
+   *
+   * **Cleanup Flow**:
+   * 1. Clears inactivity timeout
+   * 2. Removes activity listeners (click, keydown, scroll)
+   * 3. Closes BroadcastChannel
+   * 4. Removes lifecycle listeners (visibilitychange, beforeunload, pagehide)
+   * 5. Resets tracking flags (`isTracking`, `hasStartSession`)
+   *
+   * **Called by**: `App.destroy()` during application teardown
+   *
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * sessionManager.destroy();
+   * // → All resources cleaned up
+   * // → NO SESSION_END event tracked
+   * // → Session preserved in localStorage for recovery
+   * ```
+   */
   destroy(): void {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();

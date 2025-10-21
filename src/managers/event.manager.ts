@@ -643,8 +643,41 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Flush consent buffer for specific integration
-   * Called when consent is granted for an integration
+   * Flushes buffered events to a specific integration when consent is granted.
+   *
+   * **Purpose**: Sends events that were tracked before consent was granted to the
+   * specified integration. Events are batched and sent with delays to prevent
+   * overwhelming the backend.
+   *
+   * **Behavior**:
+   * - Filters events that haven't been sent to this integration yet
+   * - Sorts events: SESSION_START first, then chronological by timestamp
+   * - Sends in batches of 10 events (CONSENT_FLUSH_BATCH_SIZE)
+   * - 100ms delay between batches (CONSENT_FLUSH_DELAY_MS)
+   * - Tracks sent events per-integration to support multi-integration scenarios
+   * - Removes events from buffer when sent to all configured integrations
+   *
+   * **Concurrency Protection**:
+   * - Guard flag `isFlushingConsentBuffer` prevents concurrent flushes
+   * - Returns early if flush already in progress
+   *
+   * **Multi-Integration Support**:
+   * - Tracks which integrations each event has been sent to
+   * - Allows partial sending (e.g., sent to TraceLog but not Custom yet)
+   * - Events only removed from buffer when sent to ALL configured integrations
+   *
+   * **Called by**: ConsentManager when consent is granted for an integration
+   *
+   * @param integration - Integration to flush events to ('google' | 'custom' | 'tracelog')
+   * @returns Promise<void> - Resolves when all batches sent or error occurs
+   *
+   * @example
+   * ```typescript
+   * // User grants consent for TraceLog SaaS
+   * await eventManager.flushConsentBuffer('tracelog');
+   * // → Sends buffered events to TraceLog in batches of 10
+   * // → 100ms delay between batches
+   * ```
    */
   async flushConsentBuffer(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
     if (this.consentEventsBuffer.length === 0) {
@@ -786,8 +819,35 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Clear consent buffer for specific integration when consent is revoked
-   * Removes events that were only waiting for this integration
+   * Clears consent buffer entries for a specific integration when consent is revoked.
+   *
+   * **Purpose**: Removes tracking data for events that were waiting to be sent to
+   * an integration when the user revokes consent. Events remain in buffer if they're
+   * waiting for other integrations.
+   *
+   * **Behavior**:
+   * - Removes the integration from each event's "sent to" tracking map
+   * - Events removed from buffer if they've been sent to all OTHER configured integrations
+   * - Events kept in buffer if still waiting for other integrations
+   * - Logs removed count for debugging
+   *
+   * **Multi-Integration Support**:
+   * - In multi-integration mode, events may wait for multiple integrations
+   * - Revoking consent for one integration doesn't affect others
+   * - Example: Event sent to TraceLog but waiting for Custom → kept in buffer when TraceLog consent revoked
+   *
+   * **Called by**: ConsentManager when consent is revoked for an integration
+   *
+   * @param integration - Integration to clear tracking for ('google' | 'custom' | 'tracelog')
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * // User revokes consent for Google Analytics
+   * eventManager.clearConsentBufferForIntegration('google');
+   * // → Removes Google from event tracking
+   * // → Events still waiting for TraceLog/Custom remain in buffer
+   * ```
    */
   clearConsentBufferForIntegration(integration: 'google' | 'custom' | 'tracelog'): void {
     const initialLength = this.consentEventsBuffer.length;
@@ -1230,7 +1290,39 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Update the Google Analytics integration instance (called when consent is granted)
+   * Updates the Google Analytics integration instance.
+   *
+   * **Purpose**: Sets or removes the Google Analytics integration instance used
+   * for forwarding custom events to GA4/GTM. Called when consent is granted or revoked.
+   *
+   * **Behavior**:
+   * - Sets `this.google` to the provided instance or null
+   * - Enables/disables Google Analytics event forwarding
+   * - Logs integration status change for debugging
+   *
+   * **Consent Integration**:
+   * - Called by ConsentManager when Google consent is granted → passes GoogleAnalyticsIntegration
+   * - Called by ConsentManager when Google consent is revoked → passes null
+   *
+   * **Use Cases**:
+   * - Consent granted: Start forwarding custom events to Google Analytics
+   * - Consent revoked: Stop forwarding events to Google Analytics
+   * - Runtime control: Enable/disable Google Analytics without reinitialization
+   *
+   * @param google - GoogleAnalyticsIntegration instance or null to disable
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * // Consent granted - enable Google Analytics
+   * const gaIntegration = new GoogleAnalyticsIntegration(config);
+   * eventManager.setGoogleAnalyticsIntegration(gaIntegration);
+   * // → Custom events now forwarded to GA4
+   *
+   * // Consent revoked - disable Google Analytics
+   * eventManager.setGoogleAnalyticsIntegration(null);
+   * // → Custom events no longer forwarded to GA4
+   * ```
    */
   setGoogleAnalyticsIntegration(google: GoogleAnalyticsIntegration | null): void {
     this.google = google;

@@ -17,7 +17,6 @@ import { log } from '../utils';
  * - Page Visibility API integration (`visibilitychange`)
  * - Window focus/blur detection
  * - Basic network status monitoring (`online`/`offline`)
- * - Simplified v1 architecture (removed mobile-specific complexity)
  * - Passive listeners for optimal performance
  * - Non-critical manager: Setup failures log errors but don't throw (graceful degradation)
  *

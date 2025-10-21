@@ -11,7 +11,6 @@ import { log } from '../utils';
  * **Key Features**:
  * - Essential touch event coverage (start, move, end)
  * - Orientation change detection for mobile devices
- * - Simplified v1 implementation (removed device motion complexity)
  * - Passive listeners for smooth touch performance
  * - Critical manager: Setup failures throw errors (fail-fast)
  *

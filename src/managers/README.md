@@ -74,8 +74,6 @@ Core business logic components that handle analytics data processing, state mana
 
 ## SamplingManager
 
-**Status**: **REMOVED** in v1 refactoring.
-
 **Reason**: Dead code elimination - the SamplingManager was completely unused throughout the codebase. Event sampling is now handled directly in EventManager using simple random sampling (`Math.random() < samplingRate`), providing consistent behavior across all event types while reducing bundle size and architectural complexity.
 
 ## SenderManager
@@ -224,6 +222,54 @@ Core business logic components that handle analytics data processing, state mana
 - Consistent API regardless of underlying storage mechanism
 - Test key validation during initialization (`__tracelog_test__`)
 
+## ConsentManager
+
+**Purpose**: GDPR/CCPA-compliant consent management with cross-tab synchronization and automatic consent persistence.
+
+**Core Functionality**:
+- **Consent State Management**: Tracks consent status per integration (TraceLog SaaS, Custom Backend, Google Analytics)
+- **Cross-Tab Synchronization**: Syncs consent state across browser tabs via storage events
+- **Automatic Persistence**: Debounced localStorage persistence with 50ms delay to prevent thrashing
+- **Consent Expiration**: Stored consent expires after 365 days requiring re-consent
+- **Event Emission**: Emits `CONSENT_CHANGED` events for integration with EventManager
+- **Browser Environment Checks**: Verifies browser context before consent operations
+
+**Key Features**:
+- Per-integration consent tracking (`tracelog`, `custom`, `google`)
+- Debounced persistence (50ms) to optimize localStorage writes during rapid consent changes
+- Cross-tab sync via storage events with message validation
+- Consent expiration after 365 days (configurable via `CONSENT_EXPIRY_DAYS`)
+- SSR-safe operations with browser environment detection
+- Storage quota error detection and recovery
+- Event-driven architecture with `EmitterEvent.CONSENT_CHANGED` emissions
+- Automatic cleanup with `cleanup()` method for memory leak prevention
+
+**Public API Methods**:
+- `grantConsent(integration: 'tracelog' | 'custom' | 'google')`: Grants consent for specific integration
+- `revokeConsent(integration: 'tracelog' | 'custom' | 'google')`: Revokes consent for specific integration
+- `hasConsent(integration: 'tracelog' | 'custom' | 'google')`: Checks if consent granted for integration
+- `getConsentState()`: Returns full consent state object with all integrations
+- `cleanup()`: Cleans up resources (timers, listeners) without clearing persisted consent
+
+**Integration with EventManager**:
+- EventManager checks consent via `ConsentManager.hasConsent()` before tracking events
+- Events tracked before consent granted are buffered in `EventManager.consentEventsBuffer`
+- When consent granted, EventManager calls `flushConsentBuffer()` to send buffered events
+- When consent revoked, EventManager calls `clearConsentBufferForIntegration()` to discard buffered events
+- Per-integration consent allows mixed scenarios (e.g., TraceLog SaaS consent granted, Custom Backend denied)
+
+**Consent Persistence**:
+- Storage key: `tracelog_consent`
+- Format: `{ tracelog?: boolean, custom?: boolean, google?: boolean, timestamp: number }`
+- Expiration: 365 days from grant timestamp
+- Cross-tab sync: Automatic via storage event listener
+
+**Important Implementation Details**:
+- **Does NOT extend StateManager**: ConsentManager is intentionally standalone (doesn't need global state access)
+- **Debouncing Strategy**: 50ms delay provides optimal balance between responsiveness and localStorage write performance
+- **SSR Safety**: All operations check `typeof window !== 'undefined'` before DOM/storage access
+- **Error Recovery**: Corrupted consent data automatically cleared from storage with fallback to default (no consent)
+
 ## UserManager
 
 **Purpose**: Simple utility for managing unique user identification for analytics tracking across browser sessions.
@@ -247,7 +293,3 @@ static getId(storageManager: StorageManager): string
 ```
 
 **Storage Key**: `tlog:uid` (fixed, not project-scoped)
-
----
-
-All managers extend `StateManager` for global state access and follow clean code principles with comprehensive error handling, TypeScript strict mode compliance, and production-ready reliability for the v1 release.

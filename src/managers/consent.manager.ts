@@ -46,14 +46,17 @@ import { log } from '../utils';
  * **Consent Flow**:
  * 1. User grants consent via `setConsent()`
  * 2. Consent persisted to localStorage (debounced 50ms)
- * 3. `consent-changed` event emitted
- * 4. EventManager flushes buffered events for granted integration
+ * 3. `consent-changed` event emitted via `EmitterEvent.CONSENT_CHANGED`
+ * 4. EventManager listens to consent events and flushes buffered events for granted integration
  * 5. Other tabs sync consent via `storage` event
  *
- * **Event Buffering**:
- * - Events tracked before consent granted are buffered in `consentEventsBuffer`
+ * **Event Buffering Integration**:
+ * - ConsentManager emits consent state changes via events
+ * - EventManager listens to `CONSENT_CHANGED` events and manages event buffering
+ * - Events tracked before consent granted are buffered in `EventManager.consentEventsBuffer`
  * - Buffer flushed when consent granted via `EventManager.flushConsentBuffer()`
- * - Events tracked per-integration (SaaS vs Custom)
+ * - Events tracked per-integration (tracelog, custom, google)
+ * - See `EventManager` documentation for complete buffering implementation details
  *
  * @see API_REFERENCE.md (lines 437-646) for consent API details
  *
@@ -87,6 +90,17 @@ export class ConsentManager {
   private consentState: ConsentState;
   private storageListener: ((event: StorageEvent) => void) | null = null;
   private persistDebounceTimer: number | null = null;
+
+  /**
+   * Debounce delay for localStorage persistence (50ms).
+   *
+   * **Rationale**: Balances responsiveness with localStorage write performance.
+   * - Long enough to batch rapid UI interactions (e.g., programmatic consent setup)
+   * - Short enough to feel instant to users (< 100ms threshold)
+   * - Prevents localStorage thrashing during rapid consent changes
+   *
+   * **Performance Impact**: 10 rapid changes = 1 write instead of 10 writes
+   */
   private readonly PERSIST_DEBOUNCE_MS = 50;
 
   /**
@@ -309,7 +323,40 @@ export class ConsentManager {
   }
 
   /**
-   * Clean up resources
+   * Cleans up ConsentManager resources and event listeners.
+   *
+   * **Purpose**: Releases memory and detaches event listeners to prevent memory leaks
+   * when ConsentManager is no longer needed.
+   *
+   * **Cleanup Operations**:
+   * 1. Clears pending debounce timer (prevents delayed persistence after cleanup)
+   * 2. Removes cross-tab storage event listener
+   * 3. Sets references to null for garbage collection
+   *
+   * **Important Notes**:
+   * - Does NOT clear persisted consent from localStorage
+   * - Consent state remains accessible in future sessions
+   * - SSR-safe: Browser environment check before removing storage listener
+   *
+   * **Use Cases**:
+   * - Called during `App.destroy()` lifecycle
+   * - Test cleanup between test cases
+   * - Manual cleanup when consent management no longer needed
+   *
+   * **After Cleanup**:
+   * - ConsentManager instance should not be reused
+   * - Consent state persists in localStorage
+   * - Cross-tab sync stops (other tabs unaffected)
+   *
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * consentManager.cleanup();
+   * // → Debounce timer cleared
+   * // → Storage listener removed
+   * // → Consent data remains in localStorage
+   * ```
    */
   cleanup(): void {
     if (this.persistDebounceTimer) {
@@ -324,7 +371,31 @@ export class ConsentManager {
   }
 
   /**
-   * Load persisted consent from localStorage
+   * Loads and validates persisted consent state from localStorage with expiration check.
+   *
+   * **Purpose**: Restores consent preferences from previous sessions, ensuring they haven't
+   * expired (365 days default).
+   *
+   * **Validation Flow**:
+   * 1. SSR safety check (returns early in Node.js)
+   * 2. Retrieves consent data from localStorage
+   * 3. Parses JSON and validates structure (state, timestamp, expiresAt fields required)
+   * 4. Checks expiration against current time
+   * 5. Loads consent state into memory if valid
+   *
+   * **Error Recovery**:
+   * - Invalid JSON → Clears storage, starts fresh
+   * - Missing required fields → Clears storage, logs warning
+   * - Expired consent → Clears storage, logs info
+   * - Parse errors → Clears storage, logs warning, starts with default (no consent)
+   *
+   * **Expiration Calculation**:
+   * - Consent expires after CONSENT_EXPIRY_DAYS (365 days)
+   * - Logs days until expiry for debugging
+   *
+   * **Called by**: Constructor during ConsentManager initialization
+   *
+   * @private
    */
   private loadPersistedConsent(): void {
     if (typeof window === 'undefined') {
@@ -374,7 +445,31 @@ export class ConsentManager {
   }
 
   /**
-   * Persist consent state to localStorage with debouncing
+   * Debounces consent persistence to prevent excessive localStorage writes during rapid consent changes.
+   *
+   * **Purpose**: Optimizes localStorage write performance by batching multiple consent changes
+   * into a single write operation after 50ms of inactivity.
+   *
+   * **Debouncing Strategy**:
+   * - Clears existing timer if called while timer pending
+   * - Sets new 50ms timer to delay persistence
+   * - Only persists once after rapid sequence of consent changes completes
+   *
+   * **Performance Impact**:
+   * - Without debouncing: N consent changes = N localStorage writes
+   * - With debouncing: N consent changes = 1 localStorage write
+   * - Example: 10 rapid grants/revokes = 1 write instead of 10
+   *
+   * **Delay Rationale** (50ms):
+   * - Long enough to batch rapid UI interactions
+   * - Short enough to feel instant to users
+   * - Prevents localStorage thrashing during programmatic consent setup
+   *
+   * **SSR Safety**: Returns early in Node.js environments
+   *
+   * **Called by**: `setConsent()` after each consent state change
+   *
+   * @private
    */
   private persistConsentDebounced(): void {
     if (typeof window === 'undefined') {
@@ -436,7 +531,38 @@ export class ConsentManager {
   }
 
   /**
-   * Setup cross-tab synchronization via storage events
+   * Establishes cross-tab consent synchronization using storage events.
+   *
+   * **Purpose**: Keeps consent state synchronized across all browser tabs/windows
+   * by listening to localStorage changes made by other tabs.
+   *
+   * **How It Works**:
+   * 1. Listens to `storage` event (fires when localStorage changes in other tab)
+   * 2. Filters events to CONSENT_KEY only
+   * 3. Validates new consent data structure
+   * 4. Updates in-memory consent state
+   * 5. Emits CONSENT_CHANGED event to notify EventManager
+   *
+   * **Cross-Tab Scenarios**:
+   * - Tab A grants consent → Tab B/C/D receive update via storage event
+   * - Tab A revokes consent → Tab B/C/D stop sending events immediately
+   * - New tab opened → Loads existing consent from localStorage
+   *
+   * **Event Filtering**:
+   * - Only processes events for CONSENT_KEY ('tracelog_consent')
+   * - Ignores other localStorage changes
+   * - Validates data structure before applying
+   *
+   * **Error Handling**:
+   * - Invalid JSON → Ignored (keeps current state)
+   * - Missing required fields → Ignored (logs warning)
+   * - Parse errors → Ignored (logs warning, maintains stability)
+   *
+   * **SSR Safety**: Returns early in Node.js environments
+   *
+   * **Called by**: Constructor during ConsentManager initialization
+   *
+   * @private
    */
   private setupCrossTabSync(): void {
     if (typeof window === 'undefined') {

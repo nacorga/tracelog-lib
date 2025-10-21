@@ -311,8 +311,6 @@ await tracelog.init({
 
 ### Transformer Security Considerations
 
-**New in v1.2.0:** Transformers allow runtime event modification. Use them securely to avoid introducing vulnerabilities.
-
 #### ✅ DO: Use transformers for additional PII sanitization
 
 ```typescript

@@ -411,7 +411,7 @@ await tracelog.init({
   }
 });
 
-// 5. Multi-Integration (NEW in v1.1.0) - simultaneous sending
+// 5. Multi-Integration - simultaneous sending
 await tracelog.init({
   integrations: {
     tracelog: { projectId: 'project-id' },           // Analytics dashboard
@@ -421,8 +421,6 @@ await tracelog.init({
 ```
 
 ### ✅ DO: Use multi-integration for redundancy and compliance
-
-**New in v1.1.0:** Send events to multiple backends simultaneously with independent error handling and retry logic.
 
 ```typescript
 // Use Case 1: Analytics + Data Warehouse

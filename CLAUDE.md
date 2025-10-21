@@ -257,7 +257,7 @@ await tracelog.init({
   // Core events (PAGE_VIEW, CLICK, SESSION) still tracked
 });
 
-// 6. Multi-Integration (v1.1.0+) - Simultaneous sending
+// 6. Multi-Integration - Simultaneous sending
 await tracelog.init({
   integrations: {
     tracelog: { projectId: 'project-id' },           // Analytics dashboard
@@ -270,7 +270,7 @@ await tracelog.init({
 // - Parallel sending (non-blocking)
 ```
 
-### Multi-Integration Architecture (v1.1.0+)
+### Multi-Integration Architecture
 
 **State Structure:**
 ```typescript
