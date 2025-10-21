@@ -5,11 +5,12 @@ Complete API documentation for TraceLog library. For quick start and examples, s
 ## Table of Contents
 
 1. [Core API](#core-api)
-2. [Configuration](#configuration)
-3. [Event Types](#event-types)
-4. [Event Emitters](#event-emitters)
-5. [TypeScript Types](#typescript-types)
-6. [Error Handling](#error-handling)
+2. [Consent Management](#consent-management)
+3. [Configuration](#configuration)
+4. [Event Types](#event-types)
+5. [Event Emitters](#event-emitters)
+6. [TypeScript Types](#typescript-types)
+7. [Error Handling](#error-handling)
 
 ---
 
@@ -137,12 +138,13 @@ tracelog.event('purchase_completed', {
 Subscribes to TraceLog events for real-time event consumption.
 
 **Parameters:**
-- `event`: Event type to subscribe to (`'event'` or `'queue'`)
+- `event`: Event type to subscribe to (`'event'`, `'queue'`, or `'consent-changed'`)
 - `callback`: Function called when event fires
 
 **Event Types:**
 - `'event'`: Fired for each individual event captured (real-time)
 - `'queue'`: Fired when events are batched and ready to send (every 10s or 50 events)
+- `'consent-changed'`: Fired when consent state changes for any integration (see [Consent Management](#consent-management))
 
 **Examples:**
 
@@ -161,6 +163,15 @@ tracelog.on('event', (event) => {
 tracelog.on('queue', (batch) => {
   console.log('Batch ready:', batch.events.length, 'events');
   console.log('Session ID:', batch.session_id);
+});
+
+// Listen to consent changes (reactive UI)
+tracelog.on('consent-changed', (consentState) => {
+  console.log('Consent updated:', consentState);
+  // { google: true, custom: false, tracelog: true }
+  
+  // Update UI automatically
+  updatePrivacySettings(consentState);
 });
 
 // Filter specific event types
@@ -423,6 +434,183 @@ tracelog.removeTransformer('beforeBatch');
 
 ---
 
+## Consent Management
+
+TraceLog provides GDPR/CCPA-compliant consent management with granular control per integration. When `waitForConsent` is enabled, events are buffered until explicit consent is granted.
+
+### `setConsent(integration: ConsentIntegration, granted: boolean): Promise<void>`
+
+Grants or revokes consent for a specific integration or all integrations.
+
+**Parameters:**
+- `integration`: Integration identifier (`'google'`, `'custom'`, `'tracelog'`, or `'all'`)
+- `granted`: `true` to grant consent, `false` to revoke
+
+**Returns:** Promise that resolves when consent is applied and persisted
+
+**Examples:**
+
+```typescript
+// Grant consent for Google Analytics
+await tracelog.setConsent('google', true);
+
+// Grant consent for custom backend
+await tracelog.setConsent('custom', true);
+
+// Grant consent for TraceLog SaaS
+await tracelog.setConsent('tracelog', true);
+
+// Grant consent for ALL configured integrations
+await tracelog.setConsent('all', true);
+
+// Revoke consent
+await tracelog.setConsent('google', false);
+```
+
+**Consent Flow:**
+
+```typescript
+// 1. Initialize with consent waiting
+await tracelog.init({
+  waitForConsent: true,
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+// Events are buffered, not sent yet
+
+// 2. User accepts cookie banner
+await tracelog.setConsent('all', true);
+// All buffered events sent retroactively
+
+// 3. User changes preferences later
+await tracelog.setConsent('google', false);
+// Google Analytics stops receiving events
+```
+
+**Before Init:**
+
+```typescript
+// Can be called before init() - consent is persisted to localStorage
+await tracelog.setConsent('google', true);
+
+// Later, consent is auto-loaded
+await tracelog.init({ waitForConsent: true });
+```
+
+**Notes:**
+- Consent is persisted to `localStorage` with 365-day expiration
+- When granted, buffered events are sent retroactively (sorted with SESSION_START first)
+- When revoked, stops future sends and **clears buffered events** for that integration
+- Emits `'consent-changed'` event for reactive UI updates
+- Cross-tab synchronized via StorageEvent
+- Safe to call before or after `init()`
+
+**Event Cleanup on Revoke:**
+When consent is revoked, buffered events waiting for that integration are automatically removed from memory:
+- Events exclusively for revoked integration are discarded
+- Events needed by other integrations are preserved
+- Memory freed immediately for better performance
+
+---
+
+### `hasConsent(integration: ConsentIntegration): boolean`
+
+Checks if consent has been granted for a specific integration.
+
+**Parameters:**
+- `integration`: Integration identifier (`'google'`, `'custom'`, `'tracelog'`, or `'all'`)
+
+**Returns:** `true` if consent granted, `false` otherwise
+
+**Examples:**
+
+```typescript
+// Check specific integration
+if (tracelog.hasConsent('google')) {
+  console.log('Google Analytics enabled');
+}
+
+// Check if ALL integrations have consent
+if (tracelog.hasConsent('all')) {
+  console.log('Full tracking enabled');
+}
+
+// Conditional tracking
+if (tracelog.hasConsent('custom')) {
+  tracelog.event('premium_feature_used');
+}
+```
+
+**Before Init:**
+
+```typescript
+// Reads directly from localStorage if not initialized
+const hasConsent = tracelog.hasConsent('google');
+```
+
+---
+
+### `getConsentState(): ConsentState`
+
+Retrieves the current consent state for all integrations.
+
+**Returns:** Object with consent status for each integration
+
+```typescript
+interface ConsentState {
+  google: boolean;
+  custom: boolean;
+  tracelog: boolean;
+}
+```
+
+**Example:**
+
+```typescript
+const state = tracelog.getConsentState();
+
+console.log('Consent State:', state);
+// {
+//   google: true,
+//   custom: false,
+//   tracelog: true
+// }
+
+// Build privacy dashboard
+function PrivacySettings() {
+  const consent = tracelog.getConsentState();
+  
+  return (
+    <div>
+      <Toggle
+        checked={consent.google}
+        onChange={(v) => tracelog.setConsent('google', v)}
+      >
+        Google Analytics
+      </Toggle>
+      
+      <Toggle
+        checked={consent.custom}
+        onChange={(v) => tracelog.setConsent('custom', v)}
+      >
+        Custom Analytics
+      </Toggle>
+    </div>
+  );
+}
+```
+
+**Before Init:**
+
+```typescript
+// Reads directly from localStorage if not initialized
+const state = tracelog.getConsentState();
+```
+
+---
+
 ## Configuration
 
 ### `Config` Interface
@@ -440,6 +628,8 @@ interface Config {
   pageViewThrottleMs?: number;
   clickThrottleMs?: number;
   maxSameEventPerMinute?: number;
+  waitForConsent?: boolean;
+  maxConsentBufferSize?: number;
   webVitalsMode?: WebVitalsMode;
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
   integrations?: {
@@ -515,6 +705,55 @@ await tracelog.init({
   errorSampling: 0.1  // Track 10% of errors
 });
 ```
+
+#### `waitForConsent`
+- **Type:** `boolean`
+- **Default:** `false`
+- **Description:** Wait for explicit consent before initializing integrations and sending events. When enabled, events are buffered until `setConsent()` is called.
+
+```typescript
+// Enable consent mode
+await tracelog.init({
+  waitForConsent: true,
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+// Events buffered, not sent yet
+
+// User accepts consent
+await tracelog.setConsent('all', true);
+// All buffered events sent retroactively
+```
+
+**Key Features:**
+- Events buffered in memory until consent granted
+- Retroactive send when consent granted (SESSION_START sent first)
+- Integration-specific control (e.g., consent for Google but not Custom)
+- Persisted to localStorage with 365-day expiration
+- Cross-tab synchronized via StorageEvent
+- Consent can be set before or after `init()`
+
+**See Also:** [Consent Management](#consent-management) section for `setConsent()`, `hasConsent()`, and `getConsentState()` methods.
+
+#### `maxConsentBufferSize`
+- **Type:** `number` (positive integer)
+- **Default:** `500`
+- **Description:** Maximum events to buffer while waiting for consent. Older events discarded (FIFO) when limit reached, preserving critical `SESSION_START` events.
+
+```typescript
+await tracelog.init({
+  waitForConsent: true,
+  maxConsentBufferSize: 1000  // Buffer up to 1000 events
+});
+```
+
+**Overflow Behavior:**
+- FIFO (First In, First Out) eviction when limit reached
+- `SESSION_START` events preserved (critical for session context)
+- Non-critical events removed first (e.g., clicks, scrolls)
+- Warning logged when buffer overflows
 
 #### `disabledEvents`
 - **Type:** `Array<'scroll' | 'web_vitals' | 'error'>`

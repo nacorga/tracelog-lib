@@ -25,3 +25,7 @@ export const SESSION_RECOVERY_KEY = (id: string): string =>
 // BroadcastChannel name for cross-tab communication
 export const BROADCAST_CHANNEL_NAME = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
+
+// Consent management constants
+export const CONSENT_KEY = `${STORAGE_BASE_KEY}:consent`;
+export const CONSENT_EXPIRY_DAYS = 365;

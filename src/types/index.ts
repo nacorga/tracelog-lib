@@ -1,5 +1,6 @@
 export * from './common.types';
 export * from './config.types';
+export * from './consent.types';
 export * from './device.types';
 export * from './emitter.types';
 export * from './error.types';

@@ -6,6 +6,7 @@ Lightweight web analytics library for tracking user behavior. Works standalone o
 
 - **Zero-config** - Auto-captures clicks, scrolls, page views, sessions, and performance metrics
 - **Standalone** - No backend required; optional integrations (TraceLog SaaS, custom API, GA4)
+- **Consent Management** - GDPR/CCPA-compliant with granular per-integration control
 - **Privacy-first** - PII sanitization, client-side sampling, `data-tlog-ignore` attribute
 - **Cross-tab sessions** - BroadcastChannel sync with localStorage recovery
 - **Event-driven** - Subscribe via `on()`/`off()` for real-time events
@@ -415,6 +416,234 @@ tracelog.setTransformer('beforeSend', (data) => {
   return data;
 });
 ```
+
+---
+
+## Consent Management
+
+TraceLog provides **GDPR/CCPA-compliant consent management** with granular control per integration. Perfect for cookie banners and privacy compliance.
+
+### Quick Start
+
+```typescript
+// 1. Initialize with consent waiting
+await tracelog.init({
+  waitForConsent: true,  // Events buffered until consent granted
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// 2. User accepts cookie banner
+await tracelog.setConsent('all', true);
+// ✅ All buffered events sent retroactively
+
+// 3. User manages preferences later
+await tracelog.setConsent('google', false);
+// ❌ Google Analytics stops receiving events
+```
+
+### Key Features
+
+- ✅ **Event Buffering**: Events captured but not sent until consent granted
+- ✅ **Retroactive Send**: Buffered events sent when consent granted (SESSION_START first)
+- ✅ **Granular Control**: Per-integration consent (Google, Custom, TraceLog)
+- ✅ **Persistent**: Stored in localStorage with 365-day expiration
+- ✅ **Cross-Tab Sync**: Consent changes propagate across browser tabs
+- ✅ **Before Init**: Can call `setConsent()` before `init()` (persisted)
+
+### API Methods
+
+#### `setConsent(integration, granted)`
+
+Grant or revoke consent for specific integration or all.
+
+```typescript
+// Grant consent for specific integrations
+await tracelog.setConsent('google', true);
+await tracelog.setConsent('custom', true);
+await tracelog.setConsent('tracelog', true);
+
+// Grant consent for ALL configured integrations
+await tracelog.setConsent('all', true);
+
+// Revoke consent
+await tracelog.setConsent('google', false);
+```
+
+#### `hasConsent(integration)`
+
+Check if consent has been granted.
+
+```typescript
+if (tracelog.hasConsent('google')) {
+  console.log('Google Analytics enabled');
+}
+
+// Check if ALL integrations have consent
+if (tracelog.hasConsent('all')) {
+  console.log('Full tracking enabled');
+}
+```
+
+#### `getConsentState()`
+
+Get current consent state for all integrations.
+
+```typescript
+const consent = tracelog.getConsentState();
+// {
+//   google: true,
+//   custom: false,
+//   tracelog: true
+// }
+```
+
+### Cookie Banner Integration
+
+```typescript
+// Example with popular consent libraries
+import CookieConsent from 'cookie-consent-banner';
+
+// 1. Initialize TraceLog in waiting mode
+await tracelog.init({
+  waitForConsent: true,
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// 2. Connect to cookie banner
+CookieConsent.init({
+  onAccept: async (preferences) => {
+    if (preferences.analytics) {
+      await tracelog.setConsent('all', true);
+    }
+  },
+  onReject: async () => {
+    await tracelog.setConsent('all', false);
+  }
+});
+```
+
+### Privacy Dashboard Example
+
+```typescript
+// React component for privacy settings (reactive)
+function PrivacySettings() {
+  const [consent, setConsent] = useState(tracelog.getConsentState());
+  
+  // Reactive: Listen to consent changes from anywhere in the app
+  useEffect(() => {
+    const handleConsentChange = (newConsent) => {
+      setConsent(newConsent);
+    };
+    
+    tracelog.on('consent-changed', handleConsentChange);
+    
+    return () => {
+      tracelog.off('consent-changed', handleConsentChange);
+    };
+  }, []);
+  
+  const handleToggle = async (integration, value) => {
+    await tracelog.setConsent(integration, value);
+    // State updates automatically via 'consent-changed' event
+  };
+  
+  return (
+    <div>
+      <h2>Privacy Preferences</h2>
+      
+      <Toggle
+        label="Google Analytics"
+        checked={consent.google}
+        onChange={(v) => handleToggle('google', v)}
+      />
+      
+      <Toggle
+        label="Custom Analytics"
+        checked={consent.custom}
+        onChange={(v) => handleToggle('custom', v)}
+      />
+      
+      <Toggle
+        label="TraceLog Analytics"
+        checked={consent.tracelog}
+        onChange={(v) => handleToggle('tracelog', v)}
+      />
+    </div>
+  );
+}
+```
+
+**Reactive UI Pattern:**
+
+The `'consent-changed'` event enables reactive consent management without polling:
+
+```typescript
+// Consent changes propagate automatically across components
+tracelog.on('consent-changed', (state) => {
+  console.log('Consent updated:', state);
+  // Update any UI that depends on consent state
+  updateCookieBanner(state);
+  updatePrivacyDashboard(state);
+  updateAnalyticsIndicators(state);
+});
+
+// Changes from cookie banner automatically update dashboard
+await tracelog.setConsent('google', true);
+// ✅ All subscribed components receive the update
+```
+
+### Configuration Options
+
+```typescript
+await tracelog.init({
+  // Enable consent mode
+  waitForConsent: true,
+  
+  // Buffer size (default: 500 events)
+  maxConsentBufferSize: 1000,
+  
+  integrations: { /* ... */ }
+});
+```
+
+**Buffer Overflow Behavior:**
+- FIFO (First In, First Out) eviction when limit reached
+- `SESSION_START` events preserved (critical for analytics)
+- Non-critical events (clicks, scrolls) removed first
+- Warning logged when buffer overflows
+
+### Before Init
+
+Consent can be set **before** `init()` - it's persisted to localStorage:
+
+```typescript
+// User previously accepted consent
+await tracelog.setConsent('all', true);
+
+// Later (e.g., after page reload)
+await tracelog.init({ waitForConsent: true });
+// ✅ Consent auto-loaded, events sent immediately
+```
+
+### Cross-Tab Synchronization
+
+Consent changes propagate across all browser tabs automatically:
+
+```typescript
+// Tab 1: User accepts consent
+await tracelog.setConsent('google', true);
+
+// Tab 2: Consent automatically updated via StorageEvent
+// Events start sending without user action
+```
+
+**→ [Full Consent API Reference](./API_REFERENCE.md#consent-management)**
 
 ---
 

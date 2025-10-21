@@ -129,8 +129,8 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return this.safeAccess(this.managers?.storage);
   }
 
-  getEventManager(): EventManager | null {
-    return this.safeAccess(this.managers?.event);
+  override getEventManager(): EventManager | undefined {
+    return this.managers.event;
   }
 
   // Handler accessors
@@ -161,6 +161,74 @@ export class TestBridge extends App implements TraceLogTestBridge {
   // Integration accessors
   getGoogleAnalytics(): GoogleAnalyticsIntegration | null {
     return this.safeAccess(this.integrations?.google);
+  }
+
+  // Consent methods for E2E testing
+  async setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void> {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      throw new Error('Consent manager not available');
+    }
+
+    const config = this.get('config');
+
+    // Handle 'all' integration
+    if (integration === 'all') {
+      const integrations: ('google' | 'custom' | 'tracelog')[] = [];
+
+      if (config?.integrations?.google) {
+        integrations.push('google');
+      }
+
+      const collectApiUrls = this.get('collectApiUrls');
+      if (collectApiUrls?.custom) {
+        integrations.push('custom');
+      }
+
+      if (collectApiUrls?.saas) {
+        integrations.push('tracelog');
+      }
+
+      // Apply to all configured integrations
+      for (const int of integrations) {
+        await this.setConsent(int, granted);
+      }
+
+      return;
+    }
+
+    // Get previous consent state
+    const hadConsent = consentManager.hasConsent(integration);
+
+    // Update consent state
+    consentManager.setConsent(integration, granted);
+
+    // Handle consent granted - delegate to parent class method
+    if (granted && !hadConsent) {
+      await this.handleConsentGranted(integration);
+    }
+  }
+
+  hasConsent(integration: 'google' | 'custom' | 'tracelog' | 'all'): boolean {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      return false;
+    }
+
+    return consentManager.hasConsent(integration);
+  }
+
+  getConsentState(): { google: boolean; custom: boolean; tracelog: boolean } {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      return { google: false, custom: false, tracelog: false };
+    }
+
+    return consentManager.getConsentState();
+  }
+
+  getConsentBufferLength(): number {
+    return this.managers.event?.getConsentBufferLength() ?? 0;
   }
 
   override destroy(force = false): void {

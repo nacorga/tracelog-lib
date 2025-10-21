@@ -33,6 +33,18 @@ export interface Config {
   /** Maximum number of same custom event name allowed per minute to prevent infinite loops. @default 60 */
   maxSameEventPerMinute?: number;
   /**
+   * Wait for explicit consent before initializing integrations and sending events.
+   * When enabled, events are buffered until consent is granted via setConsent().
+   * @default false
+   */
+  waitForConsent?: boolean;
+  /**
+   * Maximum number of events to buffer while waiting for consent.
+   * Older events are discarded (FIFO) when limit is reached.
+   * @default 500
+   */
+  maxConsentBufferSize?: number;
+  /**
    * Web Vitals filtering mode. @default 'needs-improvement'
    * - 'all': Track all metrics (good, needs-improvement, poor) - full trend analysis
    * - 'needs-improvement': Track metrics that need improvement or are poor - balanced approach

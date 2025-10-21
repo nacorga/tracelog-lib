@@ -12,6 +12,7 @@ import {
   DEFAULT_VISIBILITY_TIMEOUT_MS,
   DEFAULT_ERROR_SAMPLING_RATE,
   DISABLEABLE_EVENT_TYPES,
+  MAX_CONSENT_BUFFER_LENGTH,
 } from '../../constants';
 import {
   Config,
@@ -196,6 +197,23 @@ export const validateAppConfig = (config?: Config): void => {
           'config',
         );
       }
+    }
+  }
+
+  if (config.waitForConsent !== undefined) {
+    if (typeof config.waitForConsent !== 'boolean') {
+      throw new AppConfigValidationError('waitForConsent must be a boolean', 'config');
+    }
+  }
+
+  if (config.maxConsentBufferSize !== undefined) {
+    if (
+      typeof config.maxConsentBufferSize !== 'number' ||
+      !Number.isFinite(config.maxConsentBufferSize) ||
+      config.maxConsentBufferSize <= 0 ||
+      !Number.isInteger(config.maxConsentBufferSize)
+    ) {
+      throw new AppConfigValidationError('maxConsentBufferSize must be a positive integer', 'config');
     }
   }
 };
@@ -421,6 +439,8 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
     disabledEvents: config?.disabledEvents ?? [],
+    waitForConsent: config?.waitForConsent ?? false,
+    maxConsentBufferSize: config?.maxConsentBufferSize ?? MAX_CONSENT_BUFFER_LENGTH,
   };
 
   if (normalizedConfig.integrations?.custom) {
