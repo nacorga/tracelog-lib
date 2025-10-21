@@ -292,6 +292,23 @@ test('Google Analytics integration forwards events', async ({ page }) => {
 - 💡 Complex transformation logic not extracted to helpers
 - 💡 Missing test coverage for error paths
 - 💡 No rate limiting for third-party API calls
+- 💡 Redundant comments describing obvious checks
+- 💡 Comments without added integration context
+
+## Code Comments Policy
+
+**✅ Use comments for:**
+- Third-party API quirks and workarounds
+- Script injection safety mechanisms
+- Event transformation logic
+- Integration-specific error handling strategies
+- Ad blocker detection patterns
+
+**❌ NEVER use comments for:**
+- Obvious initialization checks (e.g., `// Check if initialized`)
+- Simple API existence checks (e.g., `// Check if gtag exists`)
+- Script element creation (e.g., `// Create script tag`)
+- Type information in TypeScript signatures
 
 ## Integration Checklist
 

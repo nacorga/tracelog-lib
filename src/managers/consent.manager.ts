@@ -111,19 +111,12 @@ export class ConsentManager {
       tracelog: false,
     };
 
-    // SSR safety: Skip side effects in non-browser environments
     if (typeof window === 'undefined') {
       return;
     }
 
-    // Load persisted consent and setup cross-tab sync on initialization
-    // Note: These side effects (storage read, event listeners) are intentional:
-    // - ConsentManager is a singleton managed by App lifecycle
-    // - Event listeners are cleaned up in cleanup() called by App.destroy()
-    // - Temporary instances (enableCrossTabSync=false) skip listener setup
     this.loadPersistedConsent();
 
-    // Only enable cross-tab sync for persistent instances (not temporary ones)
     if (enableCrossTabSync) {
       this.setupCrossTabSync();
     }
@@ -451,12 +444,10 @@ export class ConsentManager {
     }
 
     this.storageListener = (event: StorageEvent) => {
-      // Only handle consent key changes from other tabs
       if (event.key !== CONSENT_KEY || event.storageArea !== window.localStorage) {
         return;
       }
 
-      // Consent was cleared in another tab
       if (!event.newValue) {
         this.consentState = {
           google: false,
@@ -468,7 +459,6 @@ export class ConsentManager {
         return;
       }
 
-      // Consent was updated in another tab
       try {
         const parsed: PersistedConsent = JSON.parse(event.newValue);
 

@@ -73,27 +73,23 @@ export class ErrorHandler extends StateManager {
   }
 
   /**
-   * Checks sampling rate and burst detection (Phase 3)
+   * Checks sampling rate and burst detection
    * Returns false if in cooldown period after burst detection
    */
   private shouldSample(): boolean {
     const now = Date.now();
 
-    // Check if in backoff period (Phase 3)
     if (now < this.burstBackoffUntil) {
       return false;
     }
 
-    // Reset burst counter if window expired
     if (now - this.burstWindowStart > ERROR_BURST_WINDOW_MS) {
       this.errorBurstCounter = 0;
       this.burstWindowStart = now;
     }
 
-    // Increment burst counter
     this.errorBurstCounter++;
 
-    // Trigger backoff if burst threshold exceeded
     if (this.errorBurstCounter > ERROR_BURST_THRESHOLD) {
       this.burstBackoffUntil = now + ERROR_BURST_BACKOFF_MS;
       log('warn', 'Error burst detected - entering cooldown', {
@@ -105,7 +101,6 @@ export class ErrorHandler extends StateManager {
       return false;
     }
 
-    // Normal sampling logic
     const config = this.get('config');
     const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;

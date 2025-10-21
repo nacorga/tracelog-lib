@@ -81,10 +81,8 @@ export class App extends StateManager {
     try {
       this.setupState(config);
 
-      // Initialize consent manager first (before integrations)
       this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
 
-      // Log consent mode
       if (config.waitForConsent) {
         const consentState = this.managers.consent.getConsentState();
         log('info', 'Consent mode enabled', {

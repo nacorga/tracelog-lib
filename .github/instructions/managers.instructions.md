@@ -139,6 +139,23 @@ export class CustomManager extends StateManager {
 - 💡 Magic numbers without constants (use `constants/`)
 - 💡 Missing JSDoc comments on public methods
 - 💡 Inconsistent naming conventions
+- 💡 Redundant comments (e.g., `// Set state` before state assignment)
+- 💡 Obvious comments without context
+
+## Code Comments Policy
+
+**✅ Use comments for:**
+- State management patterns and design decisions
+- Complex business logic that's non-obvious
+- Edge cases in session/event handling
+- Cross-tab synchronization mechanics
+- Queue management strategies
+
+**❌ NEVER use comments for:**
+- State access patterns (e.g., `// Get sessionId from state`)
+- Obvious method calls (e.g., `// Track event`)
+- Simple validations (e.g., `// Check if initialized`)
+- Type information evident from TypeScript
 
 ## State Management Best Practices
 

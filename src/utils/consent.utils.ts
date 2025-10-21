@@ -30,7 +30,6 @@ export const loadConsentFromStorage = (): ConsentState | null => {
       return null;
     }
 
-    // Check expiration
     if (Date.now() > parsed.expiresAt) {
       return null;
     }

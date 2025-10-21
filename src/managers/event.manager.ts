@@ -706,22 +706,18 @@ export class EventManager extends StateManager {
         return a.timestamp - b.timestamp;
       });
 
-      // Flush in batches to avoid payload size issues
       const batchSize = CONSENT_FLUSH_BATCH_SIZE;
       let flushedCount = 0;
 
       for (let i = 0; i < eventsToSend.length; i += batchSize) {
         const batch = eventsToSend.slice(i, i + batchSize);
 
-        // Send to the specific integration
         if (integration === 'google' && this.google) {
-          // Send to Google Analytics (synchronous calls - already non-blocking)
           batch.forEach((event) => {
             this.handleGoogleAnalyticsIntegration(event);
           });
         }
 
-        // Send to Custom or TraceLog backend
         if (integration === 'custom' || integration === 'tracelog') {
           const targetSender = this.dataSenders.find((sender) => {
             const senderId = sender.getIntegrationId();
@@ -734,7 +730,6 @@ export class EventManager extends StateManager {
           });
 
           if (targetSender) {
-            // Build batch payload for this specific sender
             const batchPayload: EventsQueue = {
               user_id: this.get('userId'),
               session_id: this.get('sessionId') as string,
@@ -743,12 +738,10 @@ export class EventManager extends StateManager {
               ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
             };
 
-            // Send directly to the target sender, not to all senders
             await targetSender.sendEventsQueue(batchPayload);
           }
         }
 
-        // Mark events as sent to this integration
         batch.forEach((event) => {
           const eventId = event.id || `${event.type}-${event.timestamp}`;
           if (!this.consentEventsSentTo.has(eventId)) {
@@ -759,27 +752,23 @@ export class EventManager extends StateManager {
 
         flushedCount += batch.length;
 
-        // Small delay between batches
         if (i + batchSize < eventsToSend.length) {
           await new Promise((resolve) => setTimeout(resolve, CONSENT_FLUSH_DELAY_MS));
         }
       }
 
-      // Clean up events that have been sent to all configured integrations
       this.consentEventsBuffer = this.consentEventsBuffer.filter((event) => {
         const eventId = event.id || `${event.type}-${event.timestamp}`;
         const sentTo = this.consentEventsSentTo.get(eventId) || new Set();
 
-        // Keep event if not all configured integrations have received it
         const allSent = Array.from(configuredIntegrations).every((int) => sentTo.has(int));
 
         if (allSent) {
-          // Clean up tracking for this event
           this.consentEventsSentTo.delete(eventId);
-          return false; // Remove from buffer
+          return false;
         }
 
-        return true; // Keep in buffer
+        return true;
       });
 
       log('info', 'Consent buffer flushed successfully', {

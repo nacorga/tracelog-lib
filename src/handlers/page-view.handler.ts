@@ -99,7 +99,6 @@ export class PageViewHandler extends StateManager {
       return;
     }
 
-    // Throttle: Prevent rapid navigation spam
     const now = Date.now();
     const throttleMs = this.get('config').pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS;
 
@@ -144,7 +143,6 @@ export class PageViewHandler extends StateManager {
     const { referrer } = document;
     const { title } = document;
 
-    // Early return if no meaningful data
     if (!referrer && !title && !pathname && !search && !hash) {
       return undefined;
     }

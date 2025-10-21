@@ -166,11 +166,7 @@ export class PerformanceHandler extends StateManager {
 
       const ttfb = nav.responseStart;
 
-      // TTFB can be 0 in some browsers (especially Mobile Safari) when:
-      // - Response is served from cache
-      // - Connection is reused
-      // - Browser cannot determine exact timing
-      // We still report it as it's a valid measurement
+      // TTFB can be 0 in Mobile Safari when response is served from cache
       if (typeof ttfb === 'number' && Number.isFinite(ttfb)) {
         this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
       }
@@ -208,7 +204,6 @@ export class PerformanceHandler extends StateManager {
 
     const navId = this.getNavigationId();
 
-    // Check for duplicates if we have a navigation ID
     if (navId) {
       const reportedForNav = this.reportedByNav.get(navId);
       const isDuplicate = reportedForNav?.has(sample.type);
@@ -217,12 +212,10 @@ export class PerformanceHandler extends StateManager {
         return;
       }
 
-      // Initialize or update reported vitals for this navigation
       if (!reportedForNav) {
         this.reportedByNav.set(navId, new Set([sample.type]));
         this.navigationHistory.push(navId);
 
-        // FIFO eviction: Remove oldest navigation when limit is exceeded
         if (this.navigationHistory.length > MAX_NAVIGATION_HISTORY) {
           const oldestNav = this.navigationHistory.shift();
           if (oldestNav) {
@@ -260,7 +253,6 @@ export class PerformanceHandler extends StateManager {
         return null;
       }
 
-      // Use more precise timestamp and add random component to prevent collisions
       const timestamp = nav.startTime || performance.now();
       const random = Math.random().toString(36).substr(2, 5);
       return `${timestamp.toFixed(2)}_${window.location.pathname}_${random}`;
@@ -301,7 +293,7 @@ export class PerformanceHandler extends StateManager {
           try {
             observer.disconnect();
           } catch {
-            // Disconnect errors are safe to ignore
+            /* empty */
           }
         }
       });

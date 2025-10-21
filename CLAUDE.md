@@ -412,6 +412,49 @@ Target: ES2022, Lib: DOM + ES2022
 
 See [SECURITY.md](./SECURITY.md) for complete guide.
 
+## Code Comments Policy
+
+### When to Use Comments
+
+**✅ Use comments for:**
+- **JSDoc for public APIs**: Complete documentation with `@param`, `@returns`, `@example`, `@throws`
+- **Section organization**: Organizational section comments (e.g., `//  ===`) in constants files
+- **Complex logic explanations**: Clarify non-obvious logic or algorithms
+- **Design rationale**: Explain "why" (design decisions) rather than "what" (code description)
+- **Edge cases**: Document special behaviors and edge case handling
+- **Important patterns**: Context about critical patterns (BroadcastChannel, multi-tab sync, etc.)
+- **Magic values**: Explain timeouts, limits, thresholds with justification
+
+**❌ DO NOT use comments for:**
+- **Repeating code**: Comments that only rephrase what the code does
+- **Obvious statements**: Comments that duplicate function/variable names
+- **Check pattern**: Comments like "Check if X" followed by `if (X)`
+- **Silent pattern**: Comments like "Silent X" without additional context
+- **Redundant descriptions**: Comments before self-explanatory code
+- **Type descriptions**: Comments describing types already evident from TypeScript
+
+### Examples
+
+```typescript
+// ❌ BAD: Redundant comment
+// Check if user is authenticated
+if (isAuthenticated) { ... }
+
+// ✅ GOOD: Explains "why" and edge case
+// Skip session validation during recovery to prevent infinite loops
+// when multiple tabs fail simultaneously (1s window protection)
+if (isRecovering) { ... }
+
+// ❌ BAD: Obvious comment
+// Set session ID
+this.set('sessionId', newSessionId);
+
+// ✅ GOOD: Explains design decision
+// Store session ID in queue root (not per-event) to reduce payload size
+// and maintain consistency across multi-integration sends
+this.set('sessionId', newSessionId);
+```
+
 ## Code Patterns
 
 ### Adding a New Handler

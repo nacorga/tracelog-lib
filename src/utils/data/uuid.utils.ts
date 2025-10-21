@@ -3,12 +3,10 @@
  * @returns A UUID string
  */
 export const generateUUID = (): string => {
-  // Use native crypto.randomUUID() if available (modern browsers)
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
 
-  // Fallback for older browsers
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -31,7 +29,6 @@ export const generateUUID = (): string => {
 export const generateEventId = (): string => {
   const timestamp = Date.now();
 
-  // Generate 8 random hex chars (32 bits entropy)
   let random = '';
   try {
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
@@ -41,10 +38,9 @@ export const generateEventId = (): string => {
       }
     }
   } catch {
-    // crypto failed, use fallback
+    /* empty */
   }
 
-  // Fallback to Math.random if crypto unavailable
   if (!random) {
     random = Math.floor(Math.random() * 0xffffffff)
       .toString(16)

@@ -122,7 +122,6 @@ export class GoogleAnalyticsIntegration extends StateManager {
         return;
       }
 
-      // Priority: GTM container ID takes precedence over measurement ID if both provided
       const scriptId = containerId?.trim() || measurementId?.trim();
 
       if (scriptId) {
@@ -177,7 +176,6 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
 
     try {
-      // Normalize array metadata to GA4 e-commerce format: { items: [...] }
       const normalizedMetadata = Array.isArray(metadata) ? { items: metadata } : metadata;
       window.gtag('event', eventName, normalizedMetadata);
     } catch (error) {
@@ -219,37 +217,19 @@ export class GoogleAnalyticsIntegration extends StateManager {
     return typeof window.gtag === 'function' && Array.isArray(window.dataLayer);
   }
 
-  /**
-   * Determines script type based on ID format.
-   *
-   * - GTM-XXXXXXX → 'GTM' (Google Tag Manager)
-   * - G-XXXXXXXXXX → 'GA4' (Google Analytics 4)
-   * - AW-XXXXXXXXXX → 'GA4' (Google Ads)
-   * - UA-XXXXXXXXXX → 'GA4' (Universal Analytics - legacy)
-   */
   private getScriptType(measurementId: string): 'GTM' | 'GA4' {
     return measurementId.startsWith('GTM-') ? 'GTM' : 'GA4';
   }
 
-  /**
-   * Checks if Google Analytics/GTM script is already loaded on the page.
-   *
-   * Detection methods:
-   * 1. Check for existing gtag instance (external load)
-   * 2. Check for TraceLog-injected script element
-   * 3. Check for any gtag.js or gtm.js script in DOM
-   */
   private isScriptAlreadyLoaded(): boolean {
     if (this.hasExistingGtagInstance()) {
       return true;
     }
 
-    // Check for TraceLog-injected script
     if (document.getElementById('tracelog-ga-script')) {
       return true;
     }
 
-    // Check for any GA/GTM script in DOM (external load)
     const existingScript = document.querySelector(
       'script[src*="googletagmanager.com/gtag/js"], script[src*="googletagmanager.com/gtm.js"]',
     );
@@ -276,7 +256,6 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
       const scriptType = this.getScriptType(measurementId);
 
-      // GTM uses different URL structure than gtag.js
       if (scriptType === 'GTM') {
         script.src = `https://www.googletagmanager.com/gtm.js?id=${measurementId}`;
       } else {
@@ -315,14 +294,12 @@ export class GoogleAnalyticsIntegration extends StateManager {
     const gaScriptConfig = document.createElement('script');
 
     if (measurementId.startsWith('GTM-')) {
-      // GTM: Only initialize gtag, no config call (tags managed in GTM UI)
       gaScriptConfig.innerHTML = `
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
       `;
     } else {
-      // GA4/Ads/UA: Initialize and configure with user_id
       gaScriptConfig.innerHTML = `
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}

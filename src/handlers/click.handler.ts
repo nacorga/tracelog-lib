@@ -113,7 +113,6 @@ export class ClickHandler extends StateManager {
     const signature = this.getElementSignature(element);
     const now = Date.now();
 
-    // Prune cache periodically to prevent unbounded growth
     this.pruneThrottleCache(now);
 
     const lastClickTime = this.lastClickTimes.get(signature);
@@ -145,16 +144,14 @@ export class ClickHandler extends StateManager {
     this.lastPruneTime = now;
     const cutoff = now - THROTTLE_ENTRY_TTL_MS;
 
-    // Remove entries older than TTL
     for (const [key, timestamp] of this.lastClickTimes.entries()) {
       if (timestamp < cutoff) {
         this.lastClickTimes.delete(key);
       }
     }
 
-    // Enforce max size limit (LRU eviction)
     if (this.lastClickTimes.size > MAX_THROTTLE_CACHE_ENTRIES) {
-      const entries = Array.from(this.lastClickTimes.entries()).sort((a, b) => a[1] - b[1]); // Sort by timestamp (oldest first)
+      const entries = Array.from(this.lastClickTimes.entries()).sort((a, b) => a[1] - b[1]);
 
       const excessCount = this.lastClickTimes.size - MAX_THROTTLE_CACHE_ENTRIES;
       const toDelete = entries.slice(0, excessCount);
@@ -177,24 +174,20 @@ export class ClickHandler extends StateManager {
    * Priority: id > data-testid > data-tlog-name > DOM path
    */
   private getElementSignature(element: HTMLElement): string {
-    // Priority 1: Element ID (most stable)
     if (element.id) {
       return `#${element.id}`;
     }
 
-    // Priority 2: data-testid (common in tests)
     const testId = element.getAttribute('data-testid');
     if (testId) {
       return `[data-testid="${testId}"]`;
     }
 
-    // Priority 3: data-tlog-name (our own tracking attribute)
     const tlogName = element.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
     if (tlogName) {
       return `[${HTML_DATA_ATTR_PREFIX}-name="${tlogName}"]`;
     }
 
-    // Priority 4: Generate DOM path as fallback
     return this.getElementPath(element);
   }
 
@@ -208,7 +201,6 @@ export class ClickHandler extends StateManager {
     while (current && current !== document.body) {
       let selector = current.tagName.toLowerCase();
 
-      // Add class if available (first class only for brevity)
       if (current.className) {
         const firstClass = current.className.split(' ')[0];
         if (firstClass) {
