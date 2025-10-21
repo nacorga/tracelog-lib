@@ -44,12 +44,21 @@ Core business logic components that handle analytics data processing, state mana
 
 **Public API Methods**:
 - `track(event: Partial<EventData>)`: Adds event to queue with validation and deduplication
-- `stop()`: Stops interval timer, clears queues and state
+- `stop()`: Stops interval timer, clears queues and state (includes resetting `hasStartSession` flag for clean reinit cycles)
 - `flushImmediately()`: Asynchronously flushes event queue (returns Promise<boolean>)
 - `flushImmediatelySync()`: Synchronously flushes queue for page unload (returns boolean)
 - `getQueueLength()`: Returns current event queue size
 - `flushPendingEvents()`: Flushes pre-session buffered events after session initialization
 - `recoverPersistedEvents()`: Recovers events from localStorage after crashes/failures
+
+**State Management**:
+- **`hasStartSession` Flag**: Prevents duplicate SESSION_START events across init cycles
+  - Set to `true` when SESSION_START is tracked via `track()` method
+  - Reset to `false` in `stop()` method to allow subsequent init() → destroy() → init() cycles
+  - NOT set by SessionManager's BroadcastChannel message handler (secondary tabs don't track SESSION_START)
+
+**Application Lifecycle Integration**:
+- **App.destroy() Flow**: When `App.destroy()` is called, handlers are stopped first (including `SessionHandler.stopTracking()`), which triggers `SessionManager.endSession()` that tracks SESSION_END and calls `flushImmediatelySync()`. EventManager.stop() is called AFTER handlers are stopped, so there's no redundant flush call - the queue is already processed by the time `stop()` runs.
 
 **Transformer Support**:
 - **`beforeSend` Hook**: Applied conditionally in `buildEventPayload()` based on integration mode
@@ -142,13 +151,21 @@ Core business logic components that handle analytics data processing, state mana
 **Key Features**:
 - Configurable session timeouts (default: 15 minutes, range: 30s - 24 hours)
 - BroadcastChannel-based cross-tab communication with project-scoped namespacing and 5-second message freshness validation
+- **BroadcastChannel initialization timing**: ALWAYS initialized BEFORE SESSION_START tracking to ensure cross-tab sync is ready when events are emitted
 - Automatic session recovery from localStorage with conditional persistence (preserved on page_unload, cleared on inactivity/manual_stop)
 - Page visibility change handling (pauses timeout when hidden, resumes when visible)
 - Graceful cleanup and resource management with passive event listeners for optimal performance
 - Unique session ID generation: `{timestamp}-{9-char-base36}` format (e.g., `1728488234567-kx9f2m1bq`)
 - Synchronous event flush on session end with automatic localStorage persistence fallback for recovery
+- **Concurrent endSession() protection**: Guard flag (`isEnding`) with try-finally pattern prevents duplicate SESSION_END events when timeout and page_unload fire simultaneously
 - Five session end reasons: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
 - Graceful BroadcastChannel fallback (sessions work without cross-tab sync if API unavailable)
+
+**Critical Implementation Details**:
+- **Initialization Order**: `initCrossTabSync()` MUST be called before `eventManager.track(SESSION_START)` to prevent message loss during session initialization
+- **Cross-Tab Message Handling**: Secondary tabs receiving session broadcasts do NOT set `hasStartSession` flag - this flag is managed exclusively by EventManager when SESSION_START event is tracked
+- **Concurrency Guard**: `isEnding` flag prevents race conditions between timeout-triggered and user-triggered session end (e.g., timeout + beforeunload firing simultaneously)
+- **Guard Reset**: `isEnding` flag reset in finally block ensures flag is cleared even if endSession() throws an error
 
 ## StateManager
 
