@@ -333,8 +333,11 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
 
     const measurementId = integrations.googleAnalytics.measurementId.trim();
 
-    if (!measurementId.match(/^(G-|UA-)/)) {
-      throw new IntegrationValidationError('Google Analytics measurement ID must start with "G-" or "UA-"', 'config');
+    if (!measurementId.match(/^(G-|UA-|GTM-|AW-)/)) {
+      throw new IntegrationValidationError(
+        'Google Analytics measurement ID must start with "G-", "UA-", "GTM-", or "AW-"',
+        'config',
+      );
     }
   }
 };

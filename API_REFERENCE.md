@@ -731,21 +731,44 @@ await tracelog.init({
 
 #### `integrations.googleAnalytics`
 - **Type:** `{ measurementId: string }`
-- **Description:** Google Analytics 4 integration
+- **Description:** Google Analytics 4 / Google Tag Manager integration
 
 ```typescript
 await tracelog.init({
   integrations: {
     googleAnalytics: {
-      measurementId: 'G-XXXXXXXXXX'
+      measurementId: 'G-XXXXXXXXXX'  // or GTM-XXXXXXX
     }
   }
 });
 ```
 
-**Notes:**
-- Forwards custom events to GA4 via `gtag()` (requires gtag.js loaded)
-- Does not forward automatic events (clicks, scrolls, etc.)
+**Supported Formats:**
+- `G-XXXXXXXXXX` - Google Analytics 4
+- `GTM-XXXXXXX` - Google Tag Manager
+- `AW-XXXXXXXXXX` - Google Ads
+- `UA-XXXXXXXXXX` - Universal Analytics (legacy)
+
+**How it works:**
+- **GA4 / Google Ads / UA**: Loads gtag.js and configures with user_id
+- **GTM**: Loads gtm.js and initializes dataLayer (tags configured in GTM UI)
+- **Auto-detection**: Reuses existing gtag/GTM if already loaded on your site
+- **Event forwarding**: Only `tracelog.event()` custom events are forwarded via `gtag('event', ...)`
+- **Automatic events**: Clicks, scrolls, page views, etc. are NOT forwarded (use event listeners if needed)
+
+**Example with GTM:**
+
+```typescript
+await tracelog.init({
+  integrations: {
+    googleAnalytics: { measurementId: 'GTM-ABC123' }
+  }
+});
+
+// Custom events are automatically forwarded to GTM's dataLayer via gtag
+tracelog.event('button_click', { button_id: 'cta' });
+// ↓ Pushed to dataLayer as gtag('event', 'button_click', { button_id: 'cta' })
+```
 
 #### Multi-Integration (TraceLog SaaS + Custom Backend)
 

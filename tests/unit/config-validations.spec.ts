@@ -434,6 +434,28 @@ describe('Config Validations', () => {
         }).not.toThrow();
       });
 
+      it('should accept valid Google Tag Manager container ID', () => {
+        const config: Config = {
+          integrations: {
+            googleAnalytics: { measurementId: 'GTM-XXXXXXX' },
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
+      it('should accept valid Google Ads conversion ID', () => {
+        const config: Config = {
+          integrations: {
+            googleAnalytics: { measurementId: 'AW-XXXXXXXXXX' },
+          },
+        };
+        expect(() => {
+          validateAppConfig(config);
+        }).not.toThrow();
+      });
+
       it('should reject empty measurement ID', () => {
         const config: Config = {
           integrations: {
@@ -456,7 +478,7 @@ describe('Config Validations', () => {
         }).toThrow(IntegrationValidationError);
       });
 
-      it('should reject measurement ID without G- or UA- prefix', () => {
+      it('should reject measurement ID without valid prefix', () => {
         const config: Config = {
           integrations: {
             googleAnalytics: { measurementId: 'XXXXXXXXXX' },
@@ -467,7 +489,7 @@ describe('Config Validations', () => {
         }).toThrow(IntegrationValidationError);
         expect(() => {
           validateAppConfig(config);
-        }).toThrow('must start with "G-" or "UA-"');
+        }).toThrow('must start with "G-", "UA-", "GTM-", or "AW-"');
       });
 
       it('should reject non-string measurement ID', () => {

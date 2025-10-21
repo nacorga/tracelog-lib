@@ -70,9 +70,24 @@ export interface Config {
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
     };
-    /** Google Analytics integration options. */
+    /**
+     * Google Analytics / Google Tag Manager integration.
+     *
+     * Supported formats:
+     * - 'G-XXXXXXXXXX' (Google Analytics 4)
+     * - 'GTM-XXXXXXX' (Google Tag Manager)
+     * - 'AW-XXXXXXXXXX' (Google Ads)
+     * - 'UA-XXXXXXXXXX' (Universal Analytics - legacy)
+     *
+     * Note: If gtag.js or GTM is already loaded by another service,
+     * TraceLog will detect and reuse the existing instance.
+     */
     googleAnalytics?: {
-      /** Required measurement ID for Google Analytics. */
+      /**
+       * Measurement ID or Container ID.
+       * @example 'G-XXXXXXXXXX' // GA4
+       * @example 'GTM-XXXXXXX' // Google Tag Manager
+       */
       measurementId: string;
     };
   };

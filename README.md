@@ -450,14 +450,22 @@ await tracelog.init({
 });
 ```
 
-### 4. Google Analytics
+### 4. Google Analytics / Google Tag Manager
 ```typescript
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    googleAnalytics: { measurementId: 'G-XXXXXX' }  // or GTM-XXXXXX
   }
 });
 ```
+
+**Supported formats:**
+- `G-XXXXXX` (Google Analytics 4)
+- `GTM-XXXXXX` (Google Tag Manager)
+- `AW-XXXXXX` (Google Ads)
+- `UA-XXXXXX` (Universal Analytics - legacy)
+
+**Note:** TraceLog automatically detects the format and loads the appropriate script (gtag.js or gtm.js). If gtag/GTM is already loaded on your site, TraceLog will reuse the existing instance.
 
 ### 5. Multi-Integration (TraceLog SaaS + Custom Backend)
 ```typescript
