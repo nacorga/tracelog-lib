@@ -99,10 +99,10 @@ export const setupTestState = (config: Config = createTestConfig()): void => {
  */
 export const createTestEventManager = (
   storageManager?: StorageManager,
-  googleAnalytics?: GoogleAnalyticsIntegration | null,
+  google?: GoogleAnalyticsIntegration | null,
   emitter?: Emitter | null,
 ): EventManager => {
-  return new EventManager(storageManager || createMockStorageManager(), googleAnalytics || null, emitter || null);
+  return new EventManager(storageManager || createMockStorageManager(), google || null, emitter || null);
 };
 
 /**

@@ -445,7 +445,7 @@ interface Config {
   integrations?: {
     tracelog?: { projectId: string };
     custom?: { collectApiUrl: string; allowHttp?: boolean };
-    googleAnalytics?: { measurementId: string };
+    google?: { measurementId?: string; containerId?: string };
   };
 }
 ```
@@ -729,29 +729,45 @@ await tracelog.init({
 - `allowHttp: true` **only for local testing** (e.g., `http://localhost:8080`)
 - Production must use HTTPS
 
-#### `integrations.googleAnalytics`
-- **Type:** `{ measurementId: string }`
+#### `integrations.google`
+- **Type:** `{ measurementId?: string; containerId?: string }`
 - **Description:** Google Analytics 4 / Google Tag Manager integration
+- **Note:** At least one of `measurementId` or `containerId` is required
 
 ```typescript
+// Option 1: GA4 only
 await tracelog.init({
   integrations: {
-    googleAnalytics: {
-      measurementId: 'G-XXXXXXXXXX'  // or GTM-XXXXXXX
+    google: { measurementId: 'G-XXXXXXXXXX' }
+  }
+});
+
+// Option 2: GTM only
+await tracelog.init({
+  integrations: {
+    google: { containerId: 'GTM-XXXXXXX' }
+  }
+});
+
+// Option 3: Both (GTM takes priority for script loading)
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXXXXXX',
+      containerId: 'GTM-XXXXXXX'
     }
   }
 });
 ```
 
 **Supported Formats:**
-- `G-XXXXXXXXXX` - Google Analytics 4
-- `GTM-XXXXXXX` - Google Tag Manager
-- `AW-XXXXXXXXXX` - Google Ads
-- `UA-XXXXXXXXXX` - Universal Analytics (legacy)
+- **measurementId**: `G-XXXXXXXXXX` (GA4), `AW-XXXXXXXXXX` (Google Ads), `UA-XXXXXXXXXX` (Universal Analytics - legacy)
+- **containerId**: `GTM-XXXXXXX` (Google Tag Manager)
 
 **How it works:**
 - **GA4 / Google Ads / UA**: Loads gtag.js and configures with user_id
 - **GTM**: Loads gtm.js and initializes dataLayer (tags configured in GTM UI)
+- **Priority**: If both IDs provided, GTM container ID takes priority for script loading
 - **Auto-detection**: Reuses existing gtag/GTM if already loaded on your site
 - **Event forwarding**: Only `tracelog.event()` custom events are forwarded via `gtag('event', ...)`
 - **Automatic events**: Clicks, scrolls, page views, etc. are NOT forwarded (use event listeners if needed)
@@ -761,13 +777,37 @@ await tracelog.init({
 ```typescript
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'GTM-ABC123' }
+    google: { containerId: 'GTM-ABC123' }
   }
 });
 
 // Custom events are automatically forwarded to GTM's dataLayer via gtag
 tracelog.event('button_click', { button_id: 'cta' });
 // ↓ Pushed to dataLayer as gtag('event', 'button_click', { button_id: 'cta' })
+```
+
+**Important GTM Configuration Notes:**
+
+When using GTM with TraceLog:
+
+1. **TraceLog sends events via `gtag('event', ...)`** - These events are pushed to GTM's dataLayer
+2. **You must configure tags in your GTM container** to process these events:
+   - Add a **GA4 Configuration tag** with your measurement ID (if using GA4)
+   - Add **GA4 Event tags** to listen for custom events from TraceLog
+   - Configure triggers as needed in the GTM UI
+3. **GTM manages the dataLayer and gtag function** - TraceLog detects and reuses existing GTM installations
+4. **Automatic events** (clicks, scrolls, page views) are NOT sent to GTM by default - use event listeners if you need them:
+
+```typescript
+// Forward all TraceLog events to GTM (optional)
+tracelog.on('event', (event) => {
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({
+    'event': 'tracelog_event',
+    'event_type': event.type,
+    'event_data': event
+  });
+});
 ```
 
 #### Multi-Integration (TraceLog SaaS + Custom Backend)

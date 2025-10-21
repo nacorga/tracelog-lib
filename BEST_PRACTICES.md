@@ -407,7 +407,7 @@ await tracelog.init({
 // 4. Google Analytics - parallel tracking
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    google: { measurementId: 'G-XXXXXX' }
   }
 });
 

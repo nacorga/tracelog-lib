@@ -114,7 +114,7 @@ grep -rn "script" src/integrations/google-analytics.integration.ts
 
 **Required**:
 - [ ] GA script not loaded until consent granted
-- [ ] `enableIntegration('googleAnalytics')` method exists
+- [ ] `enableIntegration('google')` method exists
 - [ ] Lazy-load GA script on consent
 - [ ] Sync with consent management system
 

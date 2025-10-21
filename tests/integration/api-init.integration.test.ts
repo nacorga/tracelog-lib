@@ -353,7 +353,7 @@ describe('API Integration - Init Flow', () => {
       const integrations = (app as any).integrations;
 
       expect(integrations).toBeDefined();
-      expect(integrations.googleAnalytics).toBeUndefined();
+      expect(integrations.google).toBeUndefined();
     });
 
     it('should cleanup all handlers on destroy', async () => {

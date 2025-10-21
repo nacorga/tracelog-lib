@@ -241,10 +241,13 @@ await tracelog.init({
   }
 });
 
-// 4. Google Analytics
+// 4. Google Analytics/GTM
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    google: {
+      measurementId: 'G-XXXXXX',      // GA4 (optional)
+      containerId: 'GTM-XXXXXXX'       // GTM (optional)
+    }
   }
 });
 

@@ -1,6 +1,6 @@
 import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
-import { WebVitalType } from './event.types';
+import { EventTypeName, WebVitalType } from './event.types';
 import { DisabledEventType } from '../constants';
 
 /**
@@ -70,25 +70,18 @@ export interface Config {
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
     };
-    /**
-     * Google Analytics / Google Tag Manager integration.
-     *
-     * Supported formats:
-     * - 'G-XXXXXXXXXX' (Google Analytics 4)
-     * - 'GTM-XXXXXXX' (Google Tag Manager)
-     * - 'AW-XXXXXXXXXX' (Google Ads)
-     * - 'UA-XXXXXXXXXX' (Universal Analytics - legacy)
-     *
-     * Note: If gtag.js or GTM is already loaded by another service,
-     * TraceLog will detect and reuse the existing instance.
-     */
-    googleAnalytics?: {
+    /** GA4 / GTM integration. */
+    google?: {
+      /** GA4 measurement ID. @example 'G-XXXXXXXXXX' */
+      measurementId?: string;
+      /** GTM container ID. @example 'GTM-XXXXXXX' */
+      containerId?: string;
       /**
-       * Measurement ID or Container ID.
-       * @example 'G-XXXXXXXXXX' // GA4
-       * @example 'GTM-XXXXXXX' // Google Tag Manager
+       * Event types to forward to GA4/GTM.
+       * @example ['page_view', 'custom', 'web_vitals']
+       * Supported values: 'page_view', 'click', 'scroll', 'session_start', 'session_end', 'custom', 'web_vitals', 'error', 'viewport_visible', or 'all'
        */
-      measurementId: string;
+      forwardEvents?: EventTypeName[] | 'all';
     };
   };
 }

@@ -17,10 +17,16 @@ export class GoogleAnalyticsIntegration extends StateManager {
       return;
     }
 
-    const measurementId = this.get('config').integrations?.googleAnalytics?.measurementId;
+    const googleConfig = this.get('config').integrations?.google;
     const userId = this.get('userId');
 
-    if (!measurementId?.trim() || !userId?.trim()) {
+    if (!googleConfig || !userId?.trim()) {
+      return;
+    }
+
+    const { measurementId, containerId } = googleConfig;
+
+    if (!measurementId?.trim() && !containerId?.trim()) {
       return;
     }
 
@@ -41,9 +47,13 @@ export class GoogleAnalyticsIntegration extends StateManager {
         return;
       }
 
-      await this.loadScript(measurementId);
+      const scriptId = containerId?.trim() || measurementId?.trim();
 
-      this.configureGtag(measurementId, userId);
+      if (scriptId) {
+        await this.loadScript(scriptId);
+        this.configureGtag(scriptId, userId);
+      }
+
       this.isInitialized = true;
     } catch (error) {
       log('error', 'Google Analytics/GTM initialization failed', { error });

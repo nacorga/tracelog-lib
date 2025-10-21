@@ -166,7 +166,7 @@ await tracelog.init({
 // Google Analytics
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXXXXXX' }
+    google: { measurementId: 'G-XXXXXXXXXX' }
   }
 });
 ```

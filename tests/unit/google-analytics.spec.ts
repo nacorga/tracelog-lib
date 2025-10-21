@@ -40,7 +40,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -65,7 +65,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -90,7 +90,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-TEST123' },
+              google: { measurementId: 'G-TEST123' },
             },
           },
           userId: 'user-456',
@@ -121,7 +121,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -150,7 +150,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -176,7 +176,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: '' },
+              google: { measurementId: '' },
             },
           },
           userId: 'user-123',
@@ -200,7 +200,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: '   ' },
+              google: { measurementId: '   ' },
             },
           },
           userId: 'user-123',
@@ -222,7 +222,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: '',
@@ -246,7 +246,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: '   ',
@@ -292,7 +292,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -321,7 +321,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -346,7 +346,7 @@ describe('Google Analytics Integration', () => {
           config: {
             id: 'test-project',
             integrations: {
-              googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+              google: { measurementId: 'G-XXXXXXXXXX' },
             },
           },
           userId: 'user-123',
@@ -371,7 +371,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -487,7 +487,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -513,7 +513,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -543,7 +543,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',
@@ -570,7 +570,7 @@ describe('Google Analytics Integration', () => {
         config: {
           id: 'test-project',
           integrations: {
-            googleAnalytics: { measurementId: 'G-XXXXXXXXXX' },
+            google: { measurementId: 'G-XXXXXXXXXX' },
           },
         },
         userId: 'user-123',

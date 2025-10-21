@@ -26,7 +26,7 @@ import { StorageManager } from './storage.manager';
 import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
 
 export class EventManager extends StateManager {
-  private readonly googleAnalytics: GoogleAnalyticsIntegration | null;
+  private readonly google: GoogleAnalyticsIntegration | null;
   private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
   private readonly transformers: TransformerMap;
@@ -54,13 +54,13 @@ export class EventManager extends StateManager {
 
   constructor(
     storeManager: StorageManager,
-    googleAnalytics: GoogleAnalyticsIntegration | null = null,
+    google: GoogleAnalyticsIntegration | null = null,
     emitter: Emitter | null = null,
     transformers: TransformerMap = {},
   ) {
     super();
 
-    this.googleAnalytics = googleAnalytics;
+    this.google = google;
     this.emitter = emitter;
     this.transformers = transformers;
 
@@ -665,12 +665,66 @@ export class EventManager extends StateManager {
   }
 
   private handleGoogleAnalyticsIntegration(event: EventData): void {
-    if (this.googleAnalytics && event.type === EventType.CUSTOM && event.custom_event) {
-      if (this.get('mode') === Mode.QA) {
-        return;
-      }
+    if (!this.google || this.get('mode') === Mode.QA) {
+      return;
+    }
 
-      this.googleAnalytics.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
+    const googleConfig = this.get('config').integrations?.google;
+    const forwardEvents = googleConfig?.forwardEvents;
+
+    if (!forwardEvents?.length) {
+      return;
+    }
+
+    const shouldForward = forwardEvents === 'all' || forwardEvents.includes(event.type);
+
+    if (!shouldForward) {
+      return;
+    }
+
+    if (event.type === EventType.CUSTOM && event.custom_event) {
+      this.google.trackEvent(event.custom_event.name, event.custom_event.metadata ?? {});
+    } else if (event.type === EventType.PAGE_VIEW) {
+      this.google.trackEvent('page_view', {
+        page_location: event.page_url,
+        page_title: document.title,
+        ...(event.from_page_url && { page_referrer: event.from_page_url }),
+      });
+    } else if (event.type === EventType.SESSION_START) {
+      this.google.trackEvent('session_start', {
+        engagement_time_msec: 0,
+        ...(event.referrer && { referrer: event.referrer }),
+        ...(event.utm && event.utm),
+      });
+    } else if (event.type === EventType.WEB_VITALS && event.web_vitals) {
+      const metricName = event.web_vitals.type.toLowerCase();
+      this.google.trackEvent(metricName, {
+        value: event.web_vitals.value,
+      });
+    } else if (event.type === EventType.ERROR && event.error_data) {
+      this.google.trackEvent('exception', {
+        description: event.error_data.message,
+        fatal: false,
+      });
+    } else if (event.type === EventType.SCROLL && event.scroll_data) {
+      this.google.trackEvent('scroll', {
+        depth: event.scroll_data.depth,
+        direction: event.scroll_data.direction,
+      });
+    } else if (event.type === EventType.CLICK && event.click_data) {
+      this.google.trackEvent('click', {
+        ...(event.click_data.id && { element_id: event.click_data.id }),
+        ...(event.click_data.text && { text: event.click_data.text }),
+        ...(event.click_data.tag && { tag: event.click_data.tag }),
+      });
+    } else if (event.type === EventType.VIEWPORT_VISIBLE && event.viewport_data) {
+      this.google.trackEvent('viewport_visible', {
+        selector: event.viewport_data.selector,
+        ...(event.viewport_data.id && { element_id: event.viewport_data.id }),
+        ...(event.viewport_data.name && { element_name: event.viewport_data.name }),
+        dwell_time: event.viewport_data.dwellTime,
+        visibility_ratio: event.viewport_data.visibilityRatio,
+      });
     }
   }
 

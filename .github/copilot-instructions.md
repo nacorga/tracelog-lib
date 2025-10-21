@@ -16,7 +16,7 @@
 
 ### 3. Client-Only Architecture
 - **Autonomous Operation**: Library must work without backend dependencies
-- **Optional Integrations**: Backend integrations (tracelog, custom, googleAnalytics) are optional
+- **Optional Integrations**: Backend integrations (tracelog, custom, google) are optional
 - **No Required Network**: No required network calls for core functionality
 - **Event Emission**: Events always emitted via `on('event')` regardless of backend config
 
@@ -149,10 +149,10 @@ All configuration options are optional. Review for:
   - **minDwellTime**: Min time visible before tracking (default: 2000ms)
   - **cooldownPeriod**: Time before re-tracking (default: 30000ms)
   - **maxTrackedElements**: Max elements to track (default: 50)
-- **integrations**: Optional backend integrations (tracelog, custom, googleAnalytics)
+- **integrations**: Optional backend integrations (tracelog, custom, google)
   - **tracelog**: `{ projectId: string }` - TraceLog SaaS integration
   - **custom**: `{ collectApiUrl: string; allowHttp?: boolean }` - Custom backend
-  - **googleAnalytics**: `{ measurementId: string }` - Google Analytics forwarding
+  - **google**: `{ measurementId?: string; containerId?: string }` - Google Analytics (GA4) / Google Tag Manager (GTM) forwarding
 
 ## Security & Privacy
 
