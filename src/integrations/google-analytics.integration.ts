@@ -31,7 +31,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
 
     try {
-      if (typeof window.gtag === 'function' && window.dataLayer) {
+      if (this.hasExistingGtagInstance()) {
         log('info', 'Google Analytics/GTM already loaded by external service, reusing existing script', {
           showToClient: true,
         });
@@ -82,8 +82,16 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
   }
 
+  private hasExistingGtagInstance(): boolean {
+    return typeof window.gtag === 'function' && Array.isArray(window.dataLayer);
+  }
+
+  private getScriptType(measurementId: string): 'GTM' | 'GA4' {
+    return measurementId.startsWith('GTM-') ? 'GTM' : 'GA4';
+  }
+
   private isScriptAlreadyLoaded(): boolean {
-    if (typeof window.gtag === 'function' && Array.isArray(window.dataLayer)) {
+    if (this.hasExistingGtagInstance()) {
       return true;
     }
 
@@ -104,17 +112,19 @@ export class GoogleAnalyticsIntegration extends StateManager {
       script.id = 'tracelog-ga-script';
       script.async = true;
 
-      if (measurementId.startsWith('GTM-')) {
+      const scriptType = this.getScriptType(measurementId);
+
+      if (scriptType === 'GTM') {
         script.src = `https://www.googletagmanager.com/gtm.js?id=${measurementId}`;
       } else {
         script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
       }
 
-      script.onload = () => {
+      script.onload = (): void => {
         resolve();
       };
-      script.onerror = () => {
-        const type = measurementId.startsWith('GTM-') ? 'GTM' : 'Google Analytics';
+      script.onerror = (): void => {
+        const type = scriptType === 'GTM' ? 'GTM' : 'Google Analytics';
         reject(new Error(`Failed to load ${type} script`));
       };
 
