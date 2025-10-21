@@ -433,13 +433,6 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     };
   }
 
-  if (normalizedConfig.integrations?.google) {
-    normalizedConfig.integrations.google = {
-      ...normalizedConfig.integrations.google,
-      forwardEvents: normalizedConfig.integrations.google.forwardEvents,
-    };
-  }
-
   if (normalizedConfig.viewport) {
     normalizedConfig.viewport = {
       ...normalizedConfig.viewport,
