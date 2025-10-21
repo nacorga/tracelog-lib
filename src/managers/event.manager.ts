@@ -294,6 +294,7 @@ export class EventManager extends StateManager {
       [EventType.SCROLL]: 0,
     };
     this.lastSessionId = null;
+    this.set('hasStartSession', false);
 
     this.dataSenders.forEach((sender) => {
       sender.stop();

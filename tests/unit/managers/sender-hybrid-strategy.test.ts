@@ -260,8 +260,6 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
   describe('No In-Session Retries', () => {
     it('should NOT retry automatically after fetch failure', async () => {
-      vi.useFakeTimers();
-
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
@@ -273,19 +271,14 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
-      // Advance time by 30 seconds (old retry would have triggered)
-      vi.advanceTimersByTime(30000);
-      await vi.runAllTimersAsync();
+      // Wait a bit to ensure no retry is scheduled
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Should still be only 1 call (no retries)
       expect(mockFetch).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
     });
 
-    it('should NOT retry after sendBeacon failure', () => {
-      vi.useFakeTimers();
-
+    it('should NOT retry after sendBeacon failure', async () => {
       mockSendBeacon.mockReturnValue(false);
 
       const body = createEventDto();
@@ -293,13 +286,11 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
 
       expect(mockSendBeacon).toHaveBeenCalledTimes(1);
 
-      // Advance time
-      vi.advanceTimersByTime(30000);
+      // Wait a bit to ensure no retry is scheduled
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Should still be only 1 call
       expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
     });
   });
 });

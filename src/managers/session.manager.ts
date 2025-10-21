@@ -15,12 +15,14 @@ export class SessionManager extends StateManager {
   private readonly storageManager: StorageManager;
   private readonly eventManager: EventManager;
   private readonly projectId: string;
-  private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  private broadcastChannel: BroadcastChannel | null = null;
+
   private activityHandler: (() => void) | null = null;
   private visibilityChangeHandler: (() => void) | null = null;
   private beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
+  private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private broadcastChannel: BroadcastChannel | null = null;
   private isTracking = false;
+  private isEnding = false;
 
   constructor(storageManager: StorageManager, eventManager: EventManager, projectId: string) {
     super();
@@ -52,7 +54,6 @@ export class SessionManager extends StateManager {
 
       if (sessionId && typeof timestamp === 'number' && timestamp > Date.now() - 5000) {
         this.set('sessionId', sessionId);
-        this.set('hasStartSession', true);
         this.persistSession(sessionId, timestamp);
         if (this.isTracking) {
           this.setupSessionTimeout();
@@ -178,6 +179,8 @@ export class SessionManager extends StateManager {
     try {
       this.set('sessionId', sessionId);
       this.persistSession(sessionId);
+      this.initCrossTabSync();
+      this.shareSession(sessionId);
 
       if (!isRecovered) {
         this.eventManager.track({
@@ -185,8 +188,6 @@ export class SessionManager extends StateManager {
         });
       }
 
-      this.initCrossTabSync();
-      this.shareSession(sessionId);
       this.setupSessionTimeout();
       this.setupActivityListeners();
       this.setupLifecycleListeners();
@@ -287,6 +288,10 @@ export class SessionManager extends StateManager {
   }
 
   private endSession(reason: SessionEndReason): void {
+    if (this.isEnding) {
+      return;
+    }
+
     const sessionId = this.get('sessionId');
 
     if (!sessionId) {
@@ -295,21 +300,27 @@ export class SessionManager extends StateManager {
       return;
     }
 
-    this.eventManager.track({
-      type: EventType.SESSION_END,
-      session_end_reason: reason,
-    });
+    this.isEnding = true;
 
-    const flushResult = this.eventManager.flushImmediatelySync();
-
-    if (!flushResult) {
-      log('warn', 'Sync flush failed during session end, events persisted for recovery', {
-        data: { reason, sessionId },
+    try {
+      this.eventManager.track({
+        type: EventType.SESSION_END,
+        session_end_reason: reason,
       });
-    }
 
-    this.broadcastSessionEnd(sessionId, reason);
-    this.resetSessionState(reason);
+      const flushResult = this.eventManager.flushImmediatelySync();
+
+      if (!flushResult) {
+        log('warn', 'Sync flush failed during session end, events persisted for recovery', {
+          data: { reason, sessionId },
+        });
+      }
+
+      this.broadcastSessionEnd(sessionId, reason);
+      this.resetSessionState(reason);
+    } finally {
+      this.isEnding = false;
+    }
   }
 
   private resetSessionState(reason?: SessionEndReason): void {

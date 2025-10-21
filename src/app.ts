@@ -168,8 +168,6 @@ export class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
 
-    this.managers.event?.flushImmediatelySync();
-
     this.managers.event?.stop();
 
     this.emitter.removeAllListeners();
