@@ -56,6 +56,21 @@ export class App extends StateManager {
     return this.isInitialized;
   }
 
+  /**
+   * Initializes TraceLog application with configuration.
+   *
+   * **Initialization flow:**
+   * 1. Setup state (config, userId, device, pageUrl)
+   * 2. Initialize ConsentManager (loads persisted consent)
+   * 3. Setup integrations (Google Analytics if configured and consented)
+   * 4. Initialize EventManager with SenderManager instances
+   * 5. Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
+   * 6. Recover persisted events from localStorage
+   *
+   * @param config - Configuration object
+   * @throws {Error} If initialization fails
+   * @internal This method is called from api.init() - users should use the API wrapper
+   */
   async init(config: Config = {}): Promise<void> {
     if (this.isInitialized) {
       return;
@@ -105,6 +120,20 @@ export class App extends StateManager {
     }
   }
 
+  /**
+   * Sends a custom event with optional metadata.
+   *
+   * **Features:**
+   * - Validates event name and metadata structure
+   * - Sanitizes metadata (PII protection)
+   * - Normalizes DOMStringMap and similar objects to plain objects
+   * - In QA mode: throws validation errors, logs to console (not sent to backend)
+   * - In normal mode: silently drops invalid events
+   *
+   * @param name - Event name identifier
+   * @param metadata - Optional metadata (flat key-value pairs or array of objects)
+   * @internal This method is called from api.event() - users should use the API wrapper
+   */
   sendCustomEvent(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
     if (!this.managers.event) {
       return;
@@ -165,6 +194,19 @@ export class App extends StateManager {
     return this.transformers[hook];
   }
 
+  /**
+   * Destroys the TraceLog instance and cleans up all resources.
+   *
+   * **Cleanup sequence:**
+   * 1. Stop all handlers (sends SESSION_END event)
+   * 2. Flush remaining events via EventManager.stop()
+   * 3. Clear timers and intervals
+   * 4. Remove all event listeners (emitter, consent, integrations)
+   * 5. Reset global state flags
+   *
+   * @param force - If true, forces cleanup even if not initialized (internal use)
+   * @internal This method is called from api.destroy() - users should use the API wrapper
+   */
   destroy(force = false): void {
     if (!this.isInitialized && !force) {
       return;
@@ -253,44 +295,60 @@ export class App extends StateManager {
   }
 
   /**
-   * Get consent manager instance (for api.ts)
+   * Get consent manager instance.
+   *
+   * @returns ConsentManager instance or undefined if not initialized
+   * @internal Used by api.ts for consent operations
    */
   public getConsentManager(): ConsentManager | undefined {
     return this.managers.consent;
   }
 
   /**
-   * Get config (for api.ts)
+   * Get current configuration.
+   *
+   * @returns Configuration object
+   * @internal Used by api.ts for config access
    */
   public getConfig(): Config {
     return this.get('config');
   }
 
   /**
-   * Get collect API URLs (for api.ts)
+   * Get configured API URLs for integrations.
+   *
+   * @returns Object with saas and/or custom API URLs
+   * @internal Used by api.ts for integration checks
    */
   public getCollectApiUrls() {
     return this.get('collectApiUrls');
   }
 
   /**
-   * Get event manager (for api.ts)
+   * Get event manager instance.
+   *
+   * @returns EventManager instance or undefined if not initialized
+   * @internal Used by api.ts for consent buffer operations
    */
   public getEventManager(): EventManager | undefined {
     return this.managers.event;
   }
 
   /**
-   * Handle consent granted for an integration (orchestrates initialization and buffer flush)
-   * This is the public method called from api.ts when consent is granted
+   * Handles consent granted for an integration.
+   *
+   * **Orchestration:**
+   * 1. Initialize the integration if not already initialized
+   * 2. Flush consent buffer for this integration (sends buffered events)
+   *
+   * @param integration - Integration identifier
+   * @internal Called from api.setConsent() when consent is granted
    */
   public async handleConsentGranted(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
     log('info', `Consent granted for ${integration}, initializing and flushing buffer`);
 
-    // Initialize the integration if not already initialized
     await this.initializeIntegration(integration);
 
-    // Flush consent buffer for this integration
     if (this.managers.event) {
       await this.managers.event.flushConsentBuffer(integration);
     }

@@ -11,6 +11,66 @@ interface StoredSessionData {
   lastActivity: number;
 }
 
+/**
+ * Manages user sessions with cross-tab synchronization, inactivity detection,
+ * and automatic lifecycle tracking.
+ *
+ * **Purpose**: Creates and manages user sessions, tracking session boundaries
+ * (start/end) with automatic persistence, recovery, and multi-tab synchronization.
+ *
+ * **Core Functionality**:
+ * - **Session Generation**: Creates unique session IDs (`{timestamp}-{9-char-base36}`)
+ * - **Activity Tracking**: Monitors user interactions to extend session timeout
+ * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
+ * - **Persistence**: Stores session data in localStorage for recovery
+ * - **Inactivity Detection**: Automatic session end after timeout (default 15 minutes)
+ * - **Page Unload Handling**: Immediate session end on page close
+ * - **Lifecycle Events**: Emits SESSION_START and SESSION_END events
+ *
+ * **Key Features**:
+ * - **Session ID Format**: `{timestamp}-{9-char-base36}` (e.g., `1704896400000-a3b4c5d6e`)
+ * - **Default Timeout**: 15 minutes (900,000 ms), configurable via `sessionTimeout`
+ * - **Cross-Tab Sharing**: Primary tab creates session, shares via BroadcastChannel
+ * - **Secondary Tab Behavior**: Receives session from primary tab, no SESSION_START event
+ * - **Session End Reasons**: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
+ * - **State Guard**: `isEnding` flag with try-finally prevents duplicate SESSION_END events
+ *
+ * **BroadcastChannel Integration**:
+ * - **Initialized BEFORE SESSION_START**: Prevents race condition with secondary tabs
+ * - **Messages**: `session_start` (share session), `session_end` (notify termination)
+ * - **Fallback**: Logs warning if BroadcastChannel not supported (no cross-tab sync)
+ *
+ * **Activity Detection**:
+ * - Tracks user interactions via listener managers (mouse, keyboard, touch, scroll, etc.)
+ * - Resets inactivity timeout on each activity
+ * - Updates `lastActivity` timestamp in localStorage
+ *
+ * **State Management**:
+ * - **`sessionId`**: Current session ID stored in global state
+ * - **`hasStartSession`**: Flag in global state to prevent duplicate SESSION_START
+ *
+ * @see src/managers/README.md (lines 140-169) for detailed documentation
+ *
+ * @example
+ * ```typescript
+ * const sessionManager = new SessionManager(storage, eventManager, 'project123');
+ *
+ * // Start session tracking
+ * sessionManager.startTracking();
+ * // → Creates session ID: '1704896400000-a3b4c5d6e'
+ * // → Emits SESSION_START event
+ * // → Sets up activity listeners
+ * // → Initializes cross-tab sync
+ *
+ * // User activity extends session
+ * // (automatic via activity listeners)
+ *
+ * // Manual session end
+ * sessionManager.stopTracking();
+ * // → Emits SESSION_END event (reason: 'manual_stop')
+ * // → Cleans up listeners and timers
+ * ```
+ */
 export class SessionManager extends StateManager {
   private readonly storageManager: StorageManager;
   private readonly eventManager: EventManager;
@@ -24,6 +84,13 @@ export class SessionManager extends StateManager {
   private isTracking = false;
   private isEnding = false;
 
+  /**
+   * Creates a SessionManager instance.
+   *
+   * @param storageManager - Storage manager for session persistence
+   * @param eventManager - Event manager for SESSION_START/SESSION_END events
+   * @param projectId - Project identifier for namespacing session storage
+   */
   constructor(storageManager: StorageManager, eventManager: EventManager, projectId: string) {
     super();
     this.storageManager = storageManager;
@@ -164,6 +231,57 @@ export class SessionManager extends StateManager {
     return this.projectId;
   }
 
+  /**
+   * Starts session tracking with lifecycle management and cross-tab synchronization.
+   *
+   * **Purpose**: Initializes session tracking, creating or recovering a session ID,
+   * setting up activity listeners, and enabling cross-tab synchronization.
+   *
+   * **Flow**:
+   * 1. Checks if tracking already active (idempotent)
+   * 2. Attempts to recover session from localStorage
+   * 3. If no recovery: Generates new session ID (`{timestamp}-{9-char-base36}`)
+   * 4. Sets `sessionId` in global state
+   * 5. Persists session to localStorage
+   * 6. Initializes BroadcastChannel for cross-tab sync (BEFORE SESSION_START)
+   * 7. Shares session via BroadcastChannel (notifies other tabs)
+   * 8. If NOT recovered: Tracks SESSION_START event
+   * 9. Sets up inactivity timeout (default 15 minutes)
+   * 10. Sets up activity listeners (click, keydown, scroll)
+   * 11. Sets up lifecycle listeners (visibilitychange, beforeunload)
+   *
+   * **Session Recovery**:
+   * - Checks localStorage for existing session
+   * - Recovers if session exists and is recent (within timeout window)
+   * - NO SESSION_START event if session recovered
+   *
+   * **Error Handling**:
+   * - On error: Rolls back all setup (cleanup listeners, timers, state)
+   * - Re-throws error to caller (App.init() handles failure)
+   *
+   * **BroadcastChannel Initialization Order**:
+   * - CRITICAL: BroadcastChannel initialized BEFORE SESSION_START event
+   * - Prevents race condition with secondary tabs
+   * - Ensures secondary tabs can receive session_start message
+   *
+   * **Called by**: `SessionHandler.startTracking()` during `App.init()`
+   *
+   * **Important**: After successful call, `sessionId` is available in global state
+   * and EventManager can flush pending events via `flushPendingEvents()`.
+   *
+   * @throws Error if initialization fails (rolled back automatically)
+   *
+   * @example
+   * ```typescript
+   * sessionManager.startTracking();
+   * // → Session created: '1704896400000-a3b4c5d6e'
+   * // → SESSION_START event tracked
+   * // → Activity listeners active
+   * // → Cross-tab sync enabled
+   * ```
+   *
+   * @see src/managers/README.md (lines 140-169) for session management details
+   */
   startTracking(): void {
     if (this.isTracking) {
       log('warn', 'Session tracking already active');
@@ -338,6 +456,45 @@ export class SessionManager extends StateManager {
     this.isTracking = false;
   }
 
+  /**
+   * Stops session tracking and ends the current session.
+   *
+   * **Purpose**: Manually ends the current session, tracking SESSION_END event
+   * and cleaning up all listeners and timers.
+   *
+   * **Flow**:
+   * 1. Calls `endSession('manual_stop')` internally
+   * 2. Tracks SESSION_END event (reason: 'manual_stop')
+   * 3. Broadcasts session_end via BroadcastChannel (notifies other tabs)
+   * 4. Clears inactivity timeout
+   * 5. Cleans up activity listeners
+   * 6. Cleans up lifecycle listeners
+   * 7. Cleans up BroadcastChannel
+   * 8. Clears session from localStorage
+   * 9. Resets `sessionId` and `hasStartSession` in global state
+   * 10. Sets `isTracking` to false
+   *
+   * **State Guard**:
+   * - `isEnding` flag prevents duplicate SESSION_END events
+   * - Try-finally ensures cleanup even if error occurs
+   *
+   * **Called by**: `App.destroy()` during application teardown
+   *
+   * **Important**: After calling, session is terminated and cannot be resumed.
+   * New session will be created on next `startTracking()` call.
+   *
+   * @example
+   * ```typescript
+   * // Manual session end
+   * sessionManager.stopTracking();
+   * // → SESSION_END event tracked (reason: 'manual_stop')
+   * // → All listeners cleaned up
+   * // → Session cleared from localStorage
+   * // → Other tabs notified via BroadcastChannel
+   * ```
+   *
+   * @see src/managers/README.md (lines 140-169) for session management details
+   */
   stopTracking(): void {
     this.endSession('manual_stop');
   }

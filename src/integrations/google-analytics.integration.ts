@@ -9,9 +9,84 @@ declare global {
   }
 }
 
+/**
+ * Google Analytics 4 / Google Tag Manager integration for TraceLog.
+ *
+ * **Supported Services**:
+ * - Google Analytics 4 (GA4): `G-XXXXXXXXXX`
+ * - Google Ads: `AW-XXXXXXXXXX`
+ * - Universal Analytics (legacy): `UA-XXXXXXXXXX`
+ * - Google Tag Manager (GTM): `GTM-XXXXXXX`
+ *
+ * **Key Features**:
+ * - Auto-detection: Reuses existing gtag/GTM if already loaded on the page
+ * - Priority: GTM container ID takes priority over measurement ID if both provided
+ * - User tracking: Automatically sets `user_id` in GA4 config
+ * - Selective forwarding: Only custom events (`tracelog.event()`) are sent to Google
+ * - Automatic events: Clicks, scrolls, page views are NOT forwarded (handled locally)
+ *
+ * **Consent Integration**:
+ * - Respects consent settings from ConsentManager
+ * - Initialization deferred until consent granted for 'google' integration
+ * - Script not loaded until consent obtained
+ *
+ * @see API_REFERENCE.md (lines 972-1056) for configuration details
+ * @see README.md (lines 144-147) for usage examples
+ *
+ * @example
+ * ```typescript
+ * // GA4 only
+ * await tracelog.init({
+ *   integrations: {
+ *     google: { measurementId: 'G-XXXXXXXXXX' }
+ *   }
+ * });
+ *
+ * // GTM only
+ * await tracelog.init({
+ *   integrations: {
+ *     google: { containerId: 'GTM-XXXXXXX' }
+ *   }
+ * });
+ *
+ * // Both (GTM takes priority for script loading)
+ * await tracelog.init({
+ *   integrations: {
+ *     google: {
+ *       measurementId: 'G-XXXXXXXXXX',
+ *       containerId: 'GTM-XXXXXXX'
+ *     }
+ *   }
+ * });
+ * ```
+ */
 export class GoogleAnalyticsIntegration extends StateManager {
   private isInitialized = false;
 
+  /**
+   * Initializes Google Analytics/GTM integration.
+   *
+   * **Initialization Flow**:
+   * 1. Validates configuration (measurementId or containerId required)
+   * 2. Checks for existing gtag instance (auto-detection)
+   * 3. Checks if script already loaded (avoids duplicate loading)
+   * 4. Loads appropriate script (GTM or gtag.js)
+   * 5. Configures gtag with user_id
+   *
+   * **Script Priority**:
+   * - If `containerId` provided: Loads GTM script (`gtm.js`)
+   * - Otherwise: Loads GA4 script (`gtag/js`)
+   *
+   * **Auto-detection**:
+   * - Reuses existing gtag/dataLayer if found
+   * - Logs info message when reusing external scripts
+   *
+   * **Error Handling**:
+   * - Initialization failures are logged but don't throw
+   * - Safe to call multiple times (idempotent)
+   *
+   * @returns Promise that resolves when initialization completes
+   */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
       return;
@@ -47,6 +122,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
         return;
       }
 
+      // Priority: GTM container ID takes precedence over measurement ID if both provided
       const scriptId = containerId?.trim() || measurementId?.trim();
 
       if (scriptId) {
@@ -60,12 +136,48 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
   }
 
+  /**
+   * Sends a custom event to Google Analytics/GTM via gtag.
+   *
+   * **Event Flow**:
+   * - Called by EventManager when custom event (`tracelog.event()`) is tracked
+   * - Only custom events are forwarded (automatic events like clicks are NOT sent)
+   * - Events pushed to dataLayer via `gtag('event', eventName, metadata)`
+   *
+   * **Metadata Handling**:
+   * - Arrays are wrapped in `{ items: [...] }` for GA4 compatibility
+   * - Objects passed directly to gtag
+   *
+   * **Requirements**:
+   * - Integration must be initialized (`initialize()` called successfully)
+   * - `window.gtag` function must exist
+   * - Event name must be non-empty string
+   *
+   * **Error Handling**:
+   * - Silent failures (logs error but doesn't throw)
+   * - Safe to call before initialization (no-op)
+   *
+   * @param eventName - Event name (e.g., 'button_click', 'purchase_completed')
+   * @param metadata - Event metadata (flat key-value object or array of objects)
+   *
+   * @example
+   * ```typescript
+   * // Object metadata
+   * trackEvent('button_click', { button_id: 'cta', page: 'home' });
+   * // → gtag('event', 'button_click', { button_id: 'cta', page: 'home' })
+   *
+   * // Array metadata (wrapped for GA4 e-commerce)
+   * trackEvent('purchase', [{ id: '123', name: 'Product', price: 99 }]);
+   * // → gtag('event', 'purchase', { items: [{ id: '123', name: 'Product', price: 99 }] })
+   * ```
+   */
   trackEvent(eventName: string, metadata: Record<string, MetadataType> | Record<string, MetadataType>[]): void {
     if (!eventName?.trim() || !this.isInitialized || typeof window.gtag !== 'function') {
       return;
     }
 
     try {
+      // Normalize array metadata to GA4 e-commerce format: { items: [...] }
       const normalizedMetadata = Array.isArray(metadata) ? { items: metadata } : metadata;
       window.gtag('event', eventName, normalizedMetadata);
     } catch (error) {
@@ -73,6 +185,21 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
   }
 
+  /**
+   * Cleans up Google Analytics integration resources.
+   *
+   * **Cleanup Actions**:
+   * - Resets initialization flag
+   * - Removes TraceLog-injected script element
+   * - Does NOT remove externally loaded gtag/GTM scripts
+   *
+   * **Note**: gtag function and dataLayer remain in window even after cleanup.
+   * This is intentional to avoid breaking external scripts that may depend on them.
+   *
+   * Called by:
+   * - `App.destroy()` - When destroying entire TraceLog instance
+   * - Error scenarios during initialization
+   */
   cleanup(): void {
     this.isInitialized = false;
     const script = document.getElementById('tracelog-ga-script');
@@ -82,23 +209,47 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
   }
 
+  /**
+   * Checks if gtag is already loaded by external service.
+   *
+   * Auto-detection prevents duplicate script loading when GA/GTM
+   * is already present (e.g., loaded by Consent Management Platform).
+   */
   private hasExistingGtagInstance(): boolean {
     return typeof window.gtag === 'function' && Array.isArray(window.dataLayer);
   }
 
+  /**
+   * Determines script type based on ID format.
+   *
+   * - GTM-XXXXXXX → 'GTM' (Google Tag Manager)
+   * - G-XXXXXXXXXX → 'GA4' (Google Analytics 4)
+   * - AW-XXXXXXXXXX → 'GA4' (Google Ads)
+   * - UA-XXXXXXXXXX → 'GA4' (Universal Analytics - legacy)
+   */
   private getScriptType(measurementId: string): 'GTM' | 'GA4' {
     return measurementId.startsWith('GTM-') ? 'GTM' : 'GA4';
   }
 
+  /**
+   * Checks if Google Analytics/GTM script is already loaded on the page.
+   *
+   * Detection methods:
+   * 1. Check for existing gtag instance (external load)
+   * 2. Check for TraceLog-injected script element
+   * 3. Check for any gtag.js or gtm.js script in DOM
+   */
   private isScriptAlreadyLoaded(): boolean {
     if (this.hasExistingGtagInstance()) {
       return true;
     }
 
+    // Check for TraceLog-injected script
     if (document.getElementById('tracelog-ga-script')) {
       return true;
     }
 
+    // Check for any GA/GTM script in DOM (external load)
     const existingScript = document.querySelector(
       'script[src*="googletagmanager.com/gtag/js"], script[src*="googletagmanager.com/gtm.js"]',
     );
@@ -106,6 +257,17 @@ export class GoogleAnalyticsIntegration extends StateManager {
     return !!existingScript;
   }
 
+  /**
+   * Dynamically loads Google Analytics/GTM script into page.
+   *
+   * Script URLs:
+   * - GTM: https://www.googletagmanager.com/gtm.js?id=GTM-XXXXXXX
+   * - GA4/Ads/UA: https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX
+   *
+   * @param measurementId - GA4/GTM/Ads/UA ID
+   * @returns Promise that resolves when script loads successfully
+   * @throws Error if script fails to load
+   */
   private async loadScript(measurementId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -114,6 +276,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
 
       const scriptType = this.getScriptType(measurementId);
 
+      // GTM uses different URL structure than gtag.js
       if (scriptType === 'GTM') {
         script.src = `https://www.googletagmanager.com/gtm.js?id=${measurementId}`;
       } else {
@@ -132,16 +295,34 @@ export class GoogleAnalyticsIntegration extends StateManager {
     });
   }
 
+  /**
+   * Configures gtag function and dataLayer.
+   *
+   * **GTM Configuration**:
+   * - Only initializes gtag function and dataLayer
+   * - No config call (tags configured in GTM UI)
+   * - Allows GTM container to manage configuration
+   *
+   * **GA4/Ads/UA Configuration**:
+   * - Initializes gtag function and dataLayer
+   * - Calls `gtag('config')` with measurement ID
+   * - Sets `user_id` for cross-device tracking
+   *
+   * @param measurementId - GA4/GTM/Ads/UA ID
+   * @param userId - TraceLog user ID for user tracking
+   */
   private configureGtag(measurementId: string, userId: string): void {
     const gaScriptConfig = document.createElement('script');
 
     if (measurementId.startsWith('GTM-')) {
+      // GTM: Only initialize gtag, no config call (tags managed in GTM UI)
       gaScriptConfig.innerHTML = `
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
       `;
     } else {
+      // GA4/Ads/UA: Initialize and configure with user_id
       gaScriptConfig.innerHTML = `
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}

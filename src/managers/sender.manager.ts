@@ -17,6 +17,65 @@ interface SendCallbacks {
   onFailure?: () => void;
 }
 
+/**
+ * Manages sending event queues to configured API endpoints with persistence,
+ * recovery, and multi-integration support.
+ *
+ * **Purpose**: Handles reliable event transmission to backend APIs with automatic
+ * persistence for crash recovery and support for multiple integration backends.
+ *
+ * **Core Functionality**:
+ * - **Event Transmission**: Sends event batches via `fetch()` (async) or `sendBeacon()` (sync)
+ * - **Persistence & Recovery**: Stores failed events in localStorage, recovers on next page load
+ * - **Multi-Integration**: Separate queues for SaaS (`tracelog`) and Custom backends
+ * - **Multi-Tab Protection**: 1-second window prevents duplicate sends across tabs
+ * - **Event Expiry**: Discards events older than 2 hours (prevents stale data accumulation)
+ * - **Consent Integration**: Skips sends when consent not granted for integration
+ * - **Transformer Support**: Applies `beforeBatch` transformer before network transmission
+ *
+ * **Key Features**:
+ * - **NO Retries In-Session**: Events removed from queue immediately after send attempt
+ * - **Recovery on Next Page**: Failed events persisted to localStorage, recovered on init
+ * - **Payload Size Validation**: 64KB limit for `sendBeacon()` to prevent truncation
+ * - **Permanent Error Detection**: 4xx status codes (except 408, 429) marked as permanent
+ * - **Independent Multi-Integration**: Separate SenderManager instances for each backend
+ * - **Consent-Aware**: Checks consent before sending, skips if consent not granted
+ *
+ * **Error Handling**:
+ * - **4xx Errors** (permanent): Logged once per minute (throttled), events discarded
+ * - **5xx Errors** (transient): Events persisted for recovery on next page
+ * - **Network Errors**: Events persisted for recovery on next page
+ * - **Timeout**: 30-second timeout, events persisted on timeout
+ *
+ * **Storage Keys**:
+ * - **Standalone**: `tlog:{userId}:queue` (single queue)
+ * - **SaaS Integration**: `tlog:{userId}:queue:saas`
+ * - **Custom Integration**: `tlog:{userId}:queue:custom`
+ *
+ * **Multi-Tab Protection**:
+ * - Persisted events include `lastPersistTime` timestamp
+ * - Recovery skips events persisted within last 1 second (active tab may retry)
+ *
+ * @see src/managers/README.md (lines 82-139) for detailed documentation
+ *
+ * @example
+ * ```typescript
+ * // Standalone mode (no backend)
+ * const sender = new SenderManager(storage);
+ * const success = await sender.send(eventsQueue); // No-op, returns true
+ *
+ * // SaaS integration
+ * const saasSender = new SenderManager(storage, 'saas', 'https://api.tracelog.io/collect', consentManager);
+ * const success = await saasSender.send(eventsQueue);
+ *
+ * // Custom backend
+ * const customSender = new SenderManager(storage, 'custom', 'https://myapi.com/events', consentManager);
+ * const success = await customSender.send(eventsQueue);
+ *
+ * // Synchronous send (page unload)
+ * const success = sender.sendQueueSync(eventsQueue); // Uses sendBeacon()
+ * ```
+ */
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly integrationId?: 'saas' | 'custom';
@@ -26,6 +85,19 @@ export class SenderManager extends StateManager {
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
 
+  /**
+   * Creates a SenderManager instance.
+   *
+   * **Validation**: `integrationId` and `apiUrl` must both be provided or both be undefined.
+   * Throws error if only one is provided.
+   *
+   * @param storeManager - Storage manager for event persistence
+   * @param integrationId - Optional integration identifier ('saas' or 'custom')
+   * @param apiUrl - Optional API endpoint URL
+   * @param consentManager - Optional consent manager for GDPR compliance
+   * @param transformers - Optional event transformation hooks
+   * @throws Error if integrationId and apiUrl are not both provided or both undefined
+   */
   constructor(
     storeManager: StorageManager,
     integrationId?: 'saas' | 'custom',
@@ -61,6 +133,36 @@ export class SenderManager extends StateManager {
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
 
+  /**
+   * Sends events synchronously using `navigator.sendBeacon()`.
+   *
+   * **Purpose**: Guarantees event delivery before page unload even if network is slow.
+   *
+   * **Use Cases**:
+   * - Page unload (`beforeunload`, `pagehide` events)
+   * - Tab close scenarios
+   * - Any case where async send might be interrupted
+   *
+   * **Behavior**:
+   * - Uses `navigator.sendBeacon()` (browser-queued, synchronous API)
+   * - Payload size limited to 64KB (enforced by browser)
+   * - Browser guarantees delivery attempt (survives page close)
+   * - NO persistence on failure (fire-and-forget)
+   *
+   * **Consent Check**: Skips send if consent not granted for this integration
+   *
+   * **Return Values**:
+   * - `true`: Send succeeded OR skipped (standalone mode, no consent)
+   * - `false`: Send failed (network error, browser rejected beacon)
+   *
+   * **Important**: No retry mechanism for failures. Events are NOT persisted.
+   *
+   * @param body - Event queue to send
+   * @returns `true` if send succeeded or was skipped, `false` if failed
+   *
+   * @see sendEventsQueue for async send with persistence
+   * @see src/managers/README.md (lines 82-139) for send details
+   */
   sendEventsQueueSync(body: EventsQueue): boolean {
     if (this.shouldSkipSend()) {
       return true;
@@ -90,6 +192,37 @@ export class SenderManager extends StateManager {
     return this.sendQueueSyncInternal(body);
   }
 
+  /**
+   * Sends events asynchronously using `fetch()` API with automatic persistence on failure.
+   *
+   * **Purpose**: Reliable event transmission with localStorage fallback for failed sends.
+   *
+   * **Flow**:
+   * 1. Calls internal `send()` method (applies transformers, consent checks)
+   * 2. On success: Clears persisted events, invokes `onSuccess` callback
+   * 3. On failure: Persists events to localStorage, invokes `onFailure` callback
+   * 4. On permanent error (4xx): Clears persisted events (no retry)
+   *
+   * **Callbacks**:
+   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
+   * - `onFailure()`: Called after failed transmission or permanent error
+   *
+   * **Error Handling**:
+   * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
+   * - **Transient errors** (5xx, network, timeout): Events persisted for recovery
+   *
+   * **Consent Check**: Skips send if consent not granted for this integration
+   *
+   * **Important**: Events are NOT retried in-session. Persistence is for
+   * recovery on next page load via `recoverPersistedEvents()`.
+   *
+   * @param body - Event queue to send
+   * @param callbacks - Optional success/failure callbacks
+   * @returns Promise resolving to `true` if send succeeded, `false` if failed
+   *
+   * @see recoverPersistedEvents for recovery flow
+   * @see src/managers/README.md (lines 82-139) for send details
+   */
   async sendEventsQueue(body: EventsQueue, callbacks?: SendCallbacks): Promise<boolean> {
     try {
       const success = await this.send(body);
@@ -117,6 +250,60 @@ export class SenderManager extends StateManager {
     }
   }
 
+  /**
+   * Recovers and attempts to resend events persisted from previous session.
+   *
+   * **Purpose**: Zero data loss guarantee - recovers events that failed to send
+   * in previous session due to network errors or crashes.
+   *
+   * **Flow**:
+   * 1. Checks if recovery already in progress (prevents duplicate attempts)
+   * 2. Checks consent for this integration (skips if no consent)
+   * 3. Loads persisted events from localStorage
+   * 4. Validates freshness (discards events older than 2 hours)
+   * 5. Applies multi-tab protection (skips events persisted within 1 second)
+   * 6. Attempts to resend via `send()` method
+   * 7. On success: Clears persisted events, invokes `onSuccess` callback
+   * 8. On failure: Keeps events in localStorage, invokes `onFailure` callback
+   * 9. On permanent error (4xx): Clears persisted events (no further retry)
+   *
+   * **Multi-Tab Protection**:
+   * - Events persisted within last 1 second are skipped (active tab may retry)
+   * - Prevents duplicate sends when multiple tabs recover simultaneously
+   *
+   * **Event Expiry**:
+   * - Events older than 2 hours are discarded (prevents stale data accumulation)
+   * - Expiry check uses event timestamps, not persistence time
+   *
+   * **Consent Integration**:
+   * - Skips recovery if consent not granted for this integration
+   * - Events remain persisted for future recovery when consent obtained
+   *
+   * **Callbacks**:
+   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
+   * - `onFailure()`: Called on send failure or permanent error
+   *
+   * **Called by**: `EventManager.recoverPersistedEvents()` during `App.init()`
+   *
+   * **Important**: This method is idempotent and safe to call multiple times.
+   * Recovery flag prevents concurrent attempts.
+   *
+   * @param callbacks - Optional success/failure callbacks
+   *
+   * @example
+   * ```typescript
+   * await senderManager.recoverPersistedEvents({
+   *   onSuccess: (count, events, body) => {
+   *     console.log(`Recovered ${count} events`);
+   *   },
+   *   onFailure: () => {
+   *     console.warn('Recovery failed, will retry on next init');
+   *   }
+   * });
+   * ```
+   *
+   * @see src/managers/README.md (lines 82-139) for recovery details
+   */
   async recoverPersistedEvents(callbacks?: SendCallbacks): Promise<void> {
     if (this.recoveryInProgress) {
       log('debug', 'Recovery already in progress, skipping duplicate attempt');
@@ -165,6 +352,17 @@ export class SenderManager extends StateManager {
     }
   }
 
+  /**
+   * Cleanup method called during `App.destroy()`.
+   *
+   * **Purpose**: Reserved for future cleanup logic (currently no-op).
+   *
+   * **Note**: This method is intentionally empty. SenderManager has no
+   * cleanup requirements (no timers, no event listeners, no active connections).
+   * Persisted events are intentionally kept in localStorage for recovery.
+   *
+   * **Called by**: `EventManager.stop()` during application teardown
+   */
   stop(): void {}
 
   private applyBeforeSendTransformer(body: EventsQueue): EventsQueue | null {
