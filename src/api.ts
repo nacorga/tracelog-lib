@@ -16,6 +16,8 @@ import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
 
+const CONSENT_PERSIST_WAIT_MS = 60;
+
 interface PendingListener {
   event: keyof EmitterMap;
   callback: EmitterCallback<EmitterMap[keyof EmitterMap]>;
@@ -296,8 +298,8 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
 
       tempConsent.setConsent(integration, granted);
 
-      // Wait for debounced persist to complete (PERSIST_DEBOUNCE_MS = 50ms + margin)
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // Wait for debounced persist to complete
+      await new Promise((resolve) => setTimeout(resolve, CONSENT_PERSIST_WAIT_MS));
 
       // Cleanup to prevent memory leak
       tempConsent.cleanup();
