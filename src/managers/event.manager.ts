@@ -574,7 +574,7 @@ export class EventManager extends StateManager {
 
   private pruneOldFingerprints(): void {
     const now = Date.now();
-    const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER; // 5 seconds
+    const cutoff = DUPLICATE_EVENT_THRESHOLD_MS * FINGERPRINT_CLEANUP_MULTIPLIER;
 
     for (const [fingerprint, timestamp] of this.recentEventFingerprints.entries()) {
       if (now - timestamp > cutoff) {
@@ -672,7 +672,7 @@ export class EventManager extends StateManager {
     const googleConfig = this.get('config').integrations?.google;
     const forwardEvents = googleConfig?.forwardEvents;
 
-    if (!forwardEvents?.length) {
+    if (forwardEvents == null || (Array.isArray(forwardEvents) && forwardEvents.length === 0)) {
       return;
     }
 
