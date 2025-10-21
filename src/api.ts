@@ -16,6 +16,11 @@ import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
 
+/**
+ * Wait time for ConsentManager's debounced persistence to complete
+ * Value: 60ms = PERSIST_DEBOUNCE_MS (50ms) + safety margin (10ms)
+ * Used in setConsent() before init to ensure localStorage write completes
+ */
 const CONSENT_PERSIST_WAIT_MS = 60;
 
 interface PendingListener {

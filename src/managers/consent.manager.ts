@@ -28,10 +28,6 @@ export class ConsentManager {
   private readonly PERSIST_DEBOUNCE_MS = 50;
 
   constructor(storageManager: StorageManager, enableCrossTabSync = true, emitter: Emitter | null = null) {
-    if (typeof window === 'undefined') {
-      throw new Error('[TraceLog] ConsentManager can only be used in browser environment');
-    }
-
     this.storageManager = storageManager;
     this.emitter = emitter;
     this.consentState = {
@@ -40,8 +36,16 @@ export class ConsentManager {
       tracelog: false,
     };
 
+    // SSR safety: Skip side effects in non-browser environments
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     // Load persisted consent and setup cross-tab sync on initialization
-    // Note: These side effects are intentional and necessary for proper initialization
+    // Note: These side effects (storage read, event listeners) are intentional:
+    // - ConsentManager is a singleton managed by App lifecycle
+    // - Event listeners are cleaned up in cleanup() called by App.destroy()
+    // - Temporary instances (enableCrossTabSync=false) skip listener setup
     this.loadPersistedConsent();
 
     // Only enable cross-tab sync for persistent instances (not temporary ones)
