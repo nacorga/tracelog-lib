@@ -28,6 +28,10 @@ export class ConsentManager {
   private readonly PERSIST_DEBOUNCE_MS = 50;
 
   constructor(storageManager: StorageManager, enableCrossTabSync = true, emitter: Emitter | null = null) {
+    if (typeof window === 'undefined') {
+      throw new Error('[TraceLog] ConsentManager can only be used in browser environment');
+    }
+
     this.storageManager = storageManager;
     this.emitter = emitter;
     this.consentState = {

@@ -290,18 +290,16 @@ export class EventManager extends StateManager {
       this.sendIntervalId = null;
     }
 
-    // Warn if discarding consent buffer
     if (this.consentEventsBuffer.length > 0) {
       log('warn', 'Discarding consent buffer on destroy', {
         data: { bufferedEvents: this.consentEventsBuffer.length },
       });
-      this.consentEventsBuffer = [];
-      this.consentEventsSentTo.clear();
     }
 
     this.eventsQueue = [];
     this.pendingEventsBuffer = [];
     this.consentEventsBuffer = [];
+    this.consentEventsSentTo.clear();
     this.isFlushingConsentBuffer = false;
     this.recentEventFingerprints.clear();
     this.rateLimitCounter = 0;
@@ -412,7 +410,7 @@ export class EventManager extends StateManager {
 
         // Send to the specific integration
         if (integration === 'google' && this.google) {
-          // Send to Google Analytics
+          // Send to Google Analytics (synchronous calls - already non-blocking)
           batch.forEach((event) => {
             this.handleGoogleAnalyticsIntegration(event);
           });
@@ -420,20 +418,28 @@ export class EventManager extends StateManager {
 
         // Send to Custom or TraceLog backend
         if (integration === 'custom' || integration === 'tracelog') {
-          // Add to queue and send to specific backend
           const targetSender = this.dataSenders.find((sender) => {
             const senderId = sender.getIntegrationId();
+
             if (integration === 'custom') {
               return senderId === 'custom';
             }
+
             return senderId === 'saas';
           });
 
           if (targetSender) {
-            batch.forEach((event) => {
-              this.eventsQueue.push(event);
-            });
-            await this.sendEventsQueue();
+            // Build batch payload for this specific sender
+            const batchPayload: EventsQueue = {
+              user_id: this.get('userId'),
+              session_id: this.get('sessionId') as string,
+              device: this.get('device'),
+              events: batch,
+              ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
+            };
+
+            // Send directly to the target sender, not to all senders
+            await targetSender.sendEventsQueue(batchPayload);
           }
         }
 

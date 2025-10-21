@@ -1,5 +1,6 @@
 import { ConsentState, PersistedConsent } from '../types/consent.types';
 import { CONSENT_KEY } from '../constants/storage.constants';
+import { log } from './logging.utils';
 
 /**
  * Load consent state from localStorage
@@ -39,7 +40,8 @@ export const loadConsentFromStorage = (): ConsentState | null => {
       custom: Boolean(parsed.state.custom),
       tracelog: Boolean(parsed.state.tracelog),
     };
-  } catch {
+  } catch (err) {
+    log('error', 'Failed to load consent from storage', { error: err });
     return null;
   }
 };
