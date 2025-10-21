@@ -338,9 +338,9 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
     if (isValidMeasurementId) {
       const trimmedMeasurementId = measurementId.trim();
 
-      if (!trimmedMeasurementId.match(/^(G-|UA-|AW-)/)) {
+      if (!trimmedMeasurementId.match(/^(G-|UA-|AW-)[A-Z0-9-]+$/)) {
         throw new IntegrationValidationError(
-          'Google Analytics measurement ID must start with "G-" (GA4), "UA-" (Universal Analytics), or "AW-" (Google Ads)',
+          'Google Analytics measurement ID must start with "G-" (GA4), "UA-" (Universal Analytics), or "AW-" (Google Ads), followed by uppercase letters, digits, or hyphens',
           'config',
         );
       }
@@ -349,8 +349,11 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
     if (isValidContainerId) {
       const trimmedContainerId = containerId.trim();
 
-      if (!trimmedContainerId.match(/^GTM-/)) {
-        throw new IntegrationValidationError('Google Tag Manager container ID must start with "GTM-"', 'config');
+      if (!trimmedContainerId.match(/^GTM-[A-Z0-9]+$/)) {
+        throw new IntegrationValidationError(
+          'Google Tag Manager container ID must match the format "GTM-XXXXXX" (uppercase letters and digits only)',
+          'config',
+        );
       }
     }
 

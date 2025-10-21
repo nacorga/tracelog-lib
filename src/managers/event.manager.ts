@@ -676,7 +676,8 @@ export class EventManager extends StateManager {
       return;
     }
 
-    const shouldForward = forwardEvents === 'all' || forwardEvents.includes(event.type);
+    const shouldForward =
+      forwardEvents === 'all' || (Array.isArray(forwardEvents) && forwardEvents.includes(event.type));
 
     if (!shouldForward) {
       return;

@@ -31,7 +31,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
 
     try {
-      if (typeof window.gtag === 'function' && window.dataLayer) {
+      if (typeof window.gtag === 'function' && Array.isArray(window.dataLayer)) {
         log('info', 'Google Analytics/GTM already loaded by external service, reusing existing script', {
           showToClient: true,
         });
