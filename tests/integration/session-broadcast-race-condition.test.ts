@@ -53,7 +53,7 @@ describe('Integration - Session BroadcastChannel Race Condition', () => {
         }
       }),
       close: vi.fn(),
-      onmessage: null as ((event: MessageEvent) => void) | null,
+      onmessage: null as any,
     };
 
     broadcastChannelInstance = mockBroadcastChannel;

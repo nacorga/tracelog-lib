@@ -55,7 +55,6 @@ export class SessionManager extends StateManager {
       if (sessionId && typeof timestamp === 'number' && timestamp > Date.now() - 5000) {
         this.set('sessionId', sessionId);
         this.persistSession(sessionId, timestamp);
-
         if (this.isTracking) {
           this.setupSessionTimeout();
         }

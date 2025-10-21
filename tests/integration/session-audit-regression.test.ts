@@ -39,7 +39,7 @@ describe('Integration - Session Audit Regression Tests', () => {
     const mockBroadcastChannel = {
       postMessage: vi.fn(),
       close: vi.fn(),
-      onmessage: null as ((event: MessageEvent) => void) | null,
+      onmessage: null as any,
     };
 
     global.BroadcastChannel = vi.fn(() => mockBroadcastChannel) as any;
@@ -390,6 +390,7 @@ describe('Integration - Session Audit Regression Tests', () => {
       // Spy on SessionManager.destroy()
       let destroyCalled = false;
       const originalStartTracking = SessionManager.prototype.startTracking;
+      const originalDestroy = SessionManager.prototype.destroy;
       SessionManager.prototype.destroy = vi.fn(() => {
         destroyCalled = true;
       }) as any;
@@ -405,7 +406,7 @@ describe('Integration - Session Audit Regression Tests', () => {
       expect(destroyCalled).toBe(true);
 
       // Restore
-      SessionManager.prototype.destroy = function () {} as any;
+      SessionManager.prototype.destroy = originalDestroy;
       SessionManager.prototype.startTracking = originalStartTracking;
     });
 
