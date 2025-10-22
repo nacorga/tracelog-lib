@@ -40,9 +40,13 @@ export class PageViewHandler extends StateManager {
   /**
    * Starts tracking page views.
    *
-   * - Tracks initial page load immediately
-   * - Patches History API methods (pushState, replaceState)
-   * - Listens to popstate and hashchange events
+   * - Tracks initial page load first (via trackInitialPageView)
+   * - Attaches popstate and hashchange event listeners
+   * - Patches History API methods (pushState, replaceState) for SPA navigation
+   * - All setup happens synchronously
+   *
+   * **Note**: onTrack() callback is invoked AFTER initial page view but BEFORE
+   * subsequent navigation events for session management coordination.
    */
   startTracking(): void {
     this.trackInitialPageView();

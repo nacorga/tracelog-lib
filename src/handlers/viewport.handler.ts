@@ -200,7 +200,7 @@ export class ViewportHandler extends StateManager {
 
     const dwellTime = Math.round(performance.now() - tracked.startTime);
 
-    if (tracked.element.hasAttribute('data-tlog-ignore')) {
+    if (tracked.element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
       return;
     }
 

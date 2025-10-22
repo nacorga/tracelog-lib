@@ -529,7 +529,7 @@ Tracks element visibility in the viewport using the IntersectionObserver API wit
 ```javascript
 // Event without identifiers
 {
-  type: 'VIEWPORT_VISIBLE',
+  type: 'viewport_visible',
   viewport_data: {
     selector: '.product-card',      // CSS selector that matched this element
     dwellTime: 2147,                // Time element was visible in milliseconds
@@ -539,7 +539,7 @@ Tracks element visibility in the viewport using the IntersectionObserver API wit
 
 // Event with identifiers (for analytics)
 {
-  type: 'VIEWPORT_VISIBLE',
+  type: 'viewport_visible',
   viewport_data: {
     selector: '.cta-button',        // CSS selector
     id: 'pricing-cta',              // Unique identifier for analytics (optional)

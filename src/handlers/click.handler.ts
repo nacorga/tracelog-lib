@@ -13,6 +13,35 @@ import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { log } from '../utils';
 
+/**
+ * Captures mouse clicks and converts them into analytics events with element context and coordinates.
+ *
+ * **Features**:
+ * - Smart element detection via INTERACTIVE_SELECTORS (29 selectors including buttons, links, form elements, ARIA roles)
+ * - Relative coordinates calculation (0-1 scale, 3 decimal precision, clamped)
+ * - Custom event tracking via `data-tlog-name` attributes
+ * - Text extraction with length limits (255 chars max) and priority logic
+ * - PII sanitization (emails, phone numbers, credit cards, API keys, tokens)
+ * - Privacy controls via `data-tlog-ignore` attribute
+ * - Per-element click throttling (default 300ms) with memory management (TTL + LRU)
+ *
+ * **Events Generated**: `click`, `custom` (for elements with data-tlog-name)
+ *
+ * **Triggers**: Capture-phase click events on document
+ *
+ * **Memory Management**:
+ * - TTL-based pruning: 5-minute TTL with automatic cleanup
+ * - LRU eviction: Maintains maximum 1000 throttle entries
+ * - Rate-limited pruning: Runs every 30 seconds
+ *
+ * @example
+ * ```typescript
+ * const handler = new ClickHandler(eventManager);
+ * handler.startTracking();
+ * // Clicks are now tracked automatically
+ * handler.stopTracking();
+ * ```
+ */
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly lastClickTimes: Map<string, number> = new Map();
@@ -25,6 +54,19 @@ export class ClickHandler extends StateManager {
     this.eventManager = eventManager;
   }
 
+  /**
+   * Starts tracking click events on the document.
+   *
+   * Attaches a single capture-phase click listener to window that:
+   * - Detects interactive elements or falls back to clicked element
+   * - Applies click throttling per element (configurable, default 300ms)
+   * - Extracts custom tracking data from data-tlog-name attributes
+   * - Generates both custom events (for tracked elements) and click events
+   * - Respects data-tlog-ignore privacy controls
+   * - Sanitizes text content for PII protection
+   *
+   * Idempotent: Safe to call multiple times (early return if already tracking).
+   */
   startTracking(): void {
     if (this.clickHandler) {
       return;
@@ -86,6 +128,12 @@ export class ClickHandler extends StateManager {
     window.addEventListener('click', this.clickHandler, true);
   }
 
+  /**
+   * Stops tracking click events and cleans up resources.
+   *
+   * Removes the click event listener, clears throttle cache, and resets prune timer.
+   * Prevents memory leaks by properly cleaning up all state.
+   */
   stopTracking(): void {
     if (this.clickHandler) {
       window.removeEventListener('click', this.clickHandler, true);
@@ -246,6 +294,17 @@ export class ClickHandler extends StateManager {
     return element;
   }
 
+  /**
+   * Clamps relative coordinate values to [0, 1] range with 3 decimal precision.
+   *
+   * @param value - Raw relative coordinate value
+   * @returns Clamped value between 0 and 1 with 3 decimal places (e.g., 0.123)
+   *
+   * @example
+   * clamp(1.234)   // returns 1.000
+   * clamp(0.12345) // returns 0.123
+   * clamp(-0.5)    // returns 0.000
+   */
   private clamp(value: number): number {
     return Math.max(0, Math.min(1, Number(value.toFixed(3))));
   }
@@ -302,6 +361,25 @@ export class ClickHandler extends StateManager {
     };
   }
 
+  /**
+   * Sanitizes text by replacing PII patterns with [REDACTED].
+   *
+   * Protects against:
+   * - Email addresses
+   * - Phone numbers (US format)
+   * - Credit card numbers
+   * - IBAN numbers
+   * - API keys/tokens
+   * - Bearer tokens
+   *
+   * @param text - Raw text content from element
+   * @returns Sanitized text with PII replaced by [REDACTED]
+   *
+   * @example
+   * sanitizeText('Email: user@example.com')      // returns 'Email: [REDACTED]'
+   * sanitizeText('Card: 1234-5678-9012-3456')    // returns 'Card: [REDACTED]'
+   * sanitizeText('Bearer token123')              // returns '[REDACTED]'
+   */
   private sanitizeText(text: string): string {
     let sanitized = text;
 

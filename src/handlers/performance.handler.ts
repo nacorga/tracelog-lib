@@ -12,6 +12,41 @@ import { log } from '../utils';
 
 type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
 
+/**
+ * Captures Web Vitals and performance metrics using the web-vitals library with fallback to native Performance Observer API.
+ *
+ * **Features**:
+ * - Configurable filtering modes: 'all', 'needs-improvement' (default), 'poor'
+ * - Custom threshold overrides via webVitalsThresholds config
+ * - Navigation-based deduplication with 50-navigation FIFO history
+ * - CLS accumulation with reset on navigation change
+ * - Long task throttling (maximum 1 event per second)
+ * - Automatic fallback to Performance Observer if web-vitals library fails
+ * - Final values only (reportAllChanges: false for all metrics)
+ *
+ * **Events Generated**: `web_vitals`
+ *
+ * **Metrics Captured**:
+ * - LCP (Largest Contentful Paint): Main content loading time
+ * - CLS (Cumulative Layout Shift): Visual stability score
+ * - FCP (First Contentful Paint): Initial rendering time
+ * - TTFB (Time to First Byte): Server response time
+ * - INP (Interaction to Next Paint): Responsiveness measure
+ * - LONG_TASK: Tasks blocking main thread (>50ms, throttled to 1/second)
+ *
+ * **Filtering Modes**:
+ * - 'all': Track all positive metric values (threshold = 0)
+ * - 'needs-improvement': Track metrics exceeding good thresholds (default)
+ * - 'poor': Track only critical performance issues
+ *
+ * @example
+ * ```typescript
+ * const handler = new PerformanceHandler(eventManager);
+ * await handler.startTracking();
+ * // Web Vitals are now being tracked with default 'needs-improvement' mode
+ * handler.stopTracking();
+ * ```
+ */
 export class PerformanceHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly reportedByNav: Map<string, Set<string>> = new Map();
@@ -26,6 +61,20 @@ export class PerformanceHandler extends StateManager {
     this.vitalThresholds = getWebVitalsThresholds(DEFAULT_WEB_VITALS_MODE);
   }
 
+  /**
+   * Starts tracking Web Vitals and performance metrics.
+   *
+   * Asynchronously loads the web-vitals library and initializes performance tracking.
+   * Falls back to native Performance Observer API if web-vitals fails to load.
+   *
+   * **Configuration**:
+   * - Reads webVitalsMode from config ('all', 'needs-improvement', 'poor')
+   * - Merges webVitalsThresholds with mode defaults for custom thresholds
+   * - Initializes web-vitals library observers (LCP, CLS, FCP, TTFB, INP)
+   * - Starts long task observation with 1/second throttling
+   *
+   * @returns Promise that resolves when tracking is initialized
+   */
   async startTracking(): Promise<void> {
     const config = this.get('config');
     const mode = config?.webVitalsMode ?? DEFAULT_WEB_VITALS_MODE;
@@ -40,6 +89,15 @@ export class PerformanceHandler extends StateManager {
     this.observeLongTasks();
   }
 
+  /**
+   * Stops tracking Web Vitals and cleans up resources.
+   *
+   * Disconnects all Performance Observers and clears internal state:
+   * - Disconnects all active observers (web-vitals and long task)
+   * - Clears navigation-based deduplication map
+   * - Clears navigation history array
+   * - Prevents memory leaks in long-running applications
+   */
   stopTracking(): void {
     this.observers.forEach((obs, index) => {
       try {
