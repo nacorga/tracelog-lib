@@ -3563,14 +3563,11 @@ class ConsentManager {
    * ```
    */
   cleanup() {
-    if (this.persistDebounceTimer !== null) {
-      try {
-        this.flush();
-      } catch (error) {
-        log("warn", "Failed to persist consent during cleanup", { error });
-      }
+    if (this.persistDebounceTimer) {
+      clearTimeout(this.persistDebounceTimer);
+      this.persistDebounceTimer = null;
     }
-    if (this.storageListener !== null && typeof window !== "undefined") {
+    if (this.storageListener && typeof window !== "undefined") {
       window.removeEventListener("storage", this.storageListener);
       this.storageListener = null;
     }
@@ -3688,7 +3685,6 @@ class ConsentManager {
    * - Before navigation/page unload
    * - When consent must be persisted synchronously (e.g., before init)
    *
-   * @throws {Error} If localStorage persistence fails (e.g., QuotaExceededError)
    * @public
    */
   flush() {
@@ -3696,18 +3692,10 @@ class ConsentManager {
       clearTimeout(this.persistDebounceTimer);
       this.persistDebounceTimer = null;
     }
-    try {
-      this.persistConsent();
-    } catch (error) {
-      throw new Error(
-        `Failed to flush consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    this.persistConsent();
   }
   /**
    * Immediately persist consent state to localStorage
-   * 
-   * @throws {Error} If localStorage quota is exceeded or other storage errors occur
    */
   persistConsent() {
     if (typeof window === "undefined") {
@@ -3727,7 +3715,6 @@ class ConsentManager {
       if (error instanceof Error && error.name === "QuotaExceededError") {
         log("warn", "localStorage quota exceeded, consent will be volatile for this session");
       }
-      throw error;
     }
   }
   /**
@@ -5507,50 +5494,39 @@ class StorageManager {
    *
    * @param key - Storage key
    * @param value - String value to store
-   * @throws {Error} Re-throws QuotaExceededError if cleanup fails (for critical keys like consent)
    */
   setItem(key, value) {
     this.fallbackStorage.set(key, value);
-    console.log("[DEBUG] setItem called for key:", key, "storage available:", this.storage !== null);
     try {
       if (this.storage) {
         this.storage.setItem(key, value);
-        console.log("[DEBUG] setItem succeeded for key:", key);
         return;
       }
     } catch (error) {
-      console.log("[DEBUG] setItem caught error for key:", key, "error:", error);
       const isQuotaError = error instanceof DOMException && error.name === "QuotaExceededError" || error instanceof Error && error.name === "QuotaExceededError";
-      console.log("[DEBUG] isQuotaError:", isQuotaError);
       if (isQuotaError) {
         this.hasQuotaExceededError = true;
         log("warn", "localStorage quota exceeded, attempting cleanup", {
           data: { key, valueSize: value.length }
         });
         const cleanedUp = this.cleanupOldData();
-        console.log("[DEBUG] cleanedUp:", cleanedUp, "for key:", key);
         if (cleanedUp) {
           try {
             if (this.storage) {
               this.storage.setItem(key, value);
-              console.log("[DEBUG] Retry succeeded for key:", key);
               return;
             }
           } catch (retryError) {
-            console.log("[DEBUG] Retry failed for key:", key, retryError);
             log("error", "localStorage quota exceeded even after cleanup - data will not persist", {
               error: retryError,
               data: { key, valueSize: value.length }
             });
-            throw retryError;
           }
         } else {
-          console.log("[DEBUG] No cleanup possible, throwing for key:", key);
           log("error", "localStorage quota exceeded and no data to cleanup - data will not persist", {
             error,
             data: { key, valueSize: value.length }
           });
-          throw error;
         }
       }
     }
@@ -6714,6 +6690,11 @@ class TestBridge extends App {
   }
   // Consent methods for E2E testing
   async setConsent(integration, granted) {
+    if (!this.initialized) {
+      const { setConsent: setConsent2 } = await Promise.resolve().then(() => api);
+      await setConsent2(integration, granted);
+      return;
+    }
     const consentManager = this.managers?.consent;
     if (!consentManager) {
       throw new Error("Consent manager not available");
@@ -6993,7 +6974,9 @@ const setConsent = async (integration, granted) => {
         log("debug", `Consent for 'all' persisted to localStorage before init`);
       } catch (error) {
         log("error", "Failed to persist consent for all integrations before init", { error });
-        throw new Error(`[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(
+          `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
       return;
     }
@@ -7007,11 +6990,10 @@ const setConsent = async (integration, granted) => {
       tempConsent.cleanup();
       log("debug", `Consent for ${integration} persisted before init`);
     } catch (error) {
-      console.log("[DEBUG API] Caught error in setConsent:", error);
       log("error", "Failed to persist consent before init", { error });
-      const wrappedError = new Error(`[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`);
-      console.log("[DEBUG API] Throwing wrapped error:", wrappedError.message);
-      throw wrappedError;
+      throw new Error(
+        `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
     return;
   }
@@ -7120,6 +7102,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     injectTestingBridge();
   }
 }
+const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  __setAppInstance,
+  destroy,
+  event,
+  getConsentState,
+  hasConsent,
+  init,
+  isInitialized,
+  off,
+  on,
+  removeTransformer,
+  setConsent,
+  setQaMode,
+  setTransformer
+}, Symbol.toStringTag, { value: "Module" }));
 const tracelog = {
   init,
   event,

@@ -165,6 +165,13 @@ export class TestBridge extends App implements TraceLogTestBridge {
 
   // Consent methods for E2E testing
   async setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void> {
+    // If not initialized, delegate to public API which handles pre-init consent
+    if (!this.initialized) {
+      const { setConsent } = await import('./api');
+      await setConsent(integration, granted);
+      return;
+    }
+
     const consentManager = this.managers?.consent;
     if (!consentManager) {
       throw new Error('Consent manager not available');
