@@ -355,10 +355,13 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
 
     if (isValidMeasurementId) {
       const trimmedMeasurementId = measurementId.trim();
+      const isGA4 = /^G-[A-Z0-9]{10}$/.test(trimmedMeasurementId);
+      const isUA = /^UA-[0-9]{6,9}-[0-9]{1}$/.test(trimmedMeasurementId);
+      const isAW = /^AW-[0-9]{10}$/.test(trimmedMeasurementId);
 
-      if (!trimmedMeasurementId.match(/^(G-|UA-|AW-)[A-Z0-9-]+$/)) {
+      if (!isGA4 && !isUA && !isAW) {
         throw new IntegrationValidationError(
-          'Google Analytics measurement ID must start with "G-" (GA4), "UA-" (Universal Analytics), or "AW-" (Google Ads), followed by uppercase letters, digits, or hyphens',
+          'Google Analytics measurement ID must match one of: "G-XXXXXXXXXX" (GA4), "UA-XXXXXXXXX-X" (Universal Analytics), or "AW-XXXXXXXXXX" (Google Ads)',
           'config',
         );
       }

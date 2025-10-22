@@ -426,7 +426,7 @@ describe('Config Validations', () => {
       it('should accept valid Universal Analytics ID', () => {
         const config: Config = {
           integrations: {
-            google: { measurementId: 'UA-XXXXXXXXX-X' },
+            google: { measurementId: 'UA-123456789-1' },
           },
         };
         expect(() => {
@@ -448,7 +448,7 @@ describe('Config Validations', () => {
       it('should accept valid Google Ads conversion ID', () => {
         const config: Config = {
           integrations: {
-            google: { measurementId: 'AW-XXXXXXXXXX' },
+            google: { measurementId: 'AW-1234567890' },
           },
         };
         expect(() => {
@@ -489,7 +489,7 @@ describe('Config Validations', () => {
         }).toThrow(IntegrationValidationError);
         expect(() => {
           validateAppConfig(config);
-        }).toThrow('must start with "G-" (GA4), "UA-" (Universal Analytics), or "AW-" (Google Ads)');
+        }).toThrow('must match one of');
       });
 
       it('should reject non-string measurement ID', () => {

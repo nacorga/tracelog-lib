@@ -1413,15 +1413,17 @@ export class EventManager extends StateManager {
   }
 
   private handleGoogleAnalyticsIntegration(event: EventData): void {
-    if (!this.google || this.get('mode') === Mode.QA) {
+    if (!this.google) {
       return;
     }
 
-    // Check consent for Google integration
     const config = this.get('config');
 
     if (config?.waitForConsent && this.consentManager && !this.consentManager.hasConsent('google')) {
-      // Skip sending to Google if waiting for consent
+      return;
+    }
+
+    if (this.get('mode') === Mode.QA) {
       return;
     }
 

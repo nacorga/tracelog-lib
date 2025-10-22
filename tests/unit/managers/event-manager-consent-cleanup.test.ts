@@ -61,4 +61,22 @@ describe('EventManager - clearConsentBufferForIntegration', () => {
       eventManager.clearConsentBufferForIntegration('tracelog');
     }).not.toThrow();
   });
+
+  it('should properly clean up consentEventsSentTo Map when called multiple times', () => {
+    eventManager = new EventManager(storageManager, null, consentManager, null);
+
+    // Call multiple times on empty buffer
+    eventManager.clearConsentBufferForIntegration('google');
+    eventManager.clearConsentBufferForIntegration('google');
+    eventManager.clearConsentBufferForIntegration('google');
+
+    // Verify buffer is still empty (no memory accumulation)
+    expect(eventManager.getConsentBufferLength()).toBe(0);
+
+    // The internal Map should also be clean (no way to directly test private field,
+    // but this ensures no errors occur and buffer remains consistent)
+    expect(() => {
+      eventManager.clearConsentBufferForIntegration('google');
+    }).not.toThrow();
+  });
 });

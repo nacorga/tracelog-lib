@@ -560,6 +560,10 @@ export class SenderManager extends StateManager {
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
+    if (!this.hasConsentForIntegration()) {
+      return true;
+    }
+
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {

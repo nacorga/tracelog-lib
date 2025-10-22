@@ -82,7 +82,10 @@ export interface Config {
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
     };
-    /** GA4 / GTM integration. */
+    /**
+     * GA4 / GTM integration.
+     * At least one of measurementId or containerId must be provided.
+     */
     google?: {
       /** GA4 measurement ID. @example 'G-XXXXXXXXXX' */
       measurementId?: string;
@@ -94,7 +97,7 @@ export interface Config {
        * Supported values: 'page_view', 'click', 'scroll', 'session_start', 'session_end', 'custom', 'web_vitals', 'error', 'viewport_visible', or 'all'
        */
       forwardEvents?: EventTypeName[] | 'all';
-    };
+    } & ({ measurementId: string } | { containerId: string });
   };
 }
 
