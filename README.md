@@ -472,6 +472,19 @@ await tracelog.setConsent('all', true);
 await tracelog.setConsent('google', false);
 ```
 
+**⚠️ Important**: If `setConsent()` fails to persist to localStorage (e.g., quota exceeded) **before** `init()`, it will throw an error. After `init()`, persistence failures are logged but don't throw (graceful degradation). Handle errors appropriately:
+
+```typescript
+try {
+  await tracelog.setConsent('all', true);
+} catch (error) {
+  console.error('Failed to save consent:', error);
+  // Show user notification
+}
+
+await tracelog.init({ waitForConsent: true });
+```
+
 #### `hasConsent(integration)`
 
 Check if consent has been granted.
@@ -481,10 +494,18 @@ if (tracelog.hasConsent('google')) {
   console.log('Google Analytics enabled');
 }
 
-// Check if ALL integrations have consent
+// Check if ALL integrations have consent (strict AND logic)
+// Returns true ONLY if google=true AND custom=true AND tracelog=true
+// Regardless of which integrations are configured
 if (tracelog.hasConsent('all')) {
-  console.log('Full tracking enabled');
+  console.log('Full tracking consent granted for all possible integrations');
 }
+
+// For checking "at least one configured integration has consent", check individually:
+const hasAnyConsent =
+  tracelog.hasConsent('google') ||
+  tracelog.hasConsent('custom') ||
+  tracelog.hasConsent('tracelog');
 ```
 
 #### `getConsentState()`

@@ -31,6 +31,9 @@ const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
 const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 const BATCH_SIZE_THRESHOLD = 50;
 const MAX_PENDING_EVENTS_BUFFER = 100;
+const MAX_CONSENT_BUFFER_LENGTH = 500;
+const CONSENT_FLUSH_BATCH_SIZE = 50;
+const CONSENT_FLUSH_DELAY_MS = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
 const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
@@ -108,7 +111,6 @@ const VALIDATION_MESSAGES = {
   INVALID_ERROR_SAMPLING_RATE: "Error sampling must be between 0 and 1",
   INVALID_TRACELOG_PROJECT_ID: "TraceLog project ID is required when integration is enabled",
   INVALID_CUSTOM_API_URL: "Custom API URL is required when integration is enabled",
-  INVALID_GOOGLE_ANALYTICS_ID: "Google Analytics measurement ID is required when integration is enabled",
   INVALID_GLOBAL_METADATA: "Global metadata must be an object",
   INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings",
   INVALID_PRIMARY_SCROLL_SELECTOR: "Primary scroll selector must be a non-empty string",
@@ -149,6 +151,7 @@ var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
 var EmitterEvent = /* @__PURE__ */ ((EmitterEvent2) => {
   EmitterEvent2["EVENT"] = "event";
   EmitterEvent2["QUEUE"] = "queue";
+  EmitterEvent2["CONSENT_CHANGED"] = "consent-changed";
   return EmitterEvent2;
 })(EmitterEvent || {});
 class PermanentError extends Error {
@@ -345,6 +348,8 @@ const QA_MODE_DISABLE_VALUE = "qa_off";
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
+const CONSENT_KEY = `${STORAGE_BASE_KEY}:consent`;
+const CONSENT_EXPIRY_DAYS = 365;
 const WEB_VITALS_GOOD_THRESHOLDS = {
   LCP: 2500,
   // Good: ≤ 2.5s
@@ -472,6 +477,32 @@ const getUTMParameters = () => {
   });
   const result = Object.keys(utmParams).length ? utmParams : void 0;
   return result;
+};
+const loadConsentFromStorage = () => {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return null;
+  }
+  try {
+    const storedData = localStorage.getItem(CONSENT_KEY);
+    if (!storedData) {
+      return null;
+    }
+    const parsed = JSON.parse(storedData);
+    if (!parsed.state || !parsed.expiresAt) {
+      return null;
+    }
+    if (Date.now() > parsed.expiresAt) {
+      return null;
+    }
+    return {
+      google: Boolean(parsed.state.google),
+      custom: Boolean(parsed.state.custom),
+      tracelog: Boolean(parsed.state.tracelog)
+    };
+  } catch (err) {
+    log("error", "Failed to load consent from storage", { error: err });
+    return null;
+  }
 };
 const generateUUID = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -808,6 +839,16 @@ const validateAppConfig = (config) => {
       }
     }
   }
+  if (config.waitForConsent !== void 0) {
+    if (typeof config.waitForConsent !== "boolean") {
+      throw new AppConfigValidationError("waitForConsent must be a boolean", "config");
+    }
+  }
+  if (config.maxConsentBufferSize !== void 0) {
+    if (typeof config.maxConsentBufferSize !== "number" || !Number.isFinite(config.maxConsentBufferSize) || config.maxConsentBufferSize <= 0 || !Number.isInteger(config.maxConsentBufferSize)) {
+      throw new AppConfigValidationError("maxConsentBufferSize must be a positive integer", "config");
+    }
+  }
 };
 const validateViewportConfig = (viewport) => {
   if (typeof viewport !== "object" || viewport === null) {
@@ -888,13 +929,69 @@ const validateIntegrations = (integrations) => {
       );
     }
   }
-  if (integrations.googleAnalytics) {
-    if (!integrations.googleAnalytics.measurementId || typeof integrations.googleAnalytics.measurementId !== "string" || integrations.googleAnalytics.measurementId.trim() === "") {
-      throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_GOOGLE_ANALYTICS_ID, "config");
+  if (integrations.google) {
+    const { measurementId, containerId, forwardEvents } = integrations.google;
+    const isValidMeasurementId = typeof measurementId === "string" && measurementId.trim() !== "";
+    const isValidContainerId = typeof containerId === "string" && containerId.trim() !== "";
+    if (!isValidMeasurementId && !isValidContainerId) {
+      throw new IntegrationValidationError(
+        "Google integration requires at least one of: measurementId (GA4) or containerId (GTM)",
+        "config"
+      );
     }
-    const measurementId = integrations.googleAnalytics.measurementId.trim();
-    if (!measurementId.match(/^(G-|UA-)/)) {
-      throw new IntegrationValidationError('Google Analytics measurement ID must start with "G-" or "UA-"', "config");
+    if (isValidMeasurementId) {
+      const trimmedMeasurementId = measurementId.trim();
+      if (!trimmedMeasurementId.match(/^(G-|UA-|AW-)[A-Z0-9-]+$/)) {
+        throw new IntegrationValidationError(
+          'Google Analytics measurement ID must start with "G-" (GA4), "UA-" (Universal Analytics), or "AW-" (Google Ads), followed by uppercase letters, digits, or hyphens',
+          "config"
+        );
+      }
+    }
+    if (isValidContainerId) {
+      const trimmedContainerId = containerId.trim();
+      if (!trimmedContainerId.match(/^GTM-[A-Z0-9]+$/)) {
+        throw new IntegrationValidationError(
+          'Google Tag Manager container ID must match the format "GTM-XXXXXX" (uppercase letters and digits only)',
+          "config"
+        );
+      }
+    }
+    if (forwardEvents !== void 0) {
+      if (forwardEvents === "all") ;
+      else if (Array.isArray(forwardEvents)) {
+        if (forwardEvents.length === 0) {
+          throw new IntegrationValidationError(
+            "Google integration forwardEvents cannot be an empty array. Use undefined to use default or specify event types.",
+            "config"
+          );
+        }
+        const validEventTypes = Object.values(EventType);
+        const uniqueEvents = /* @__PURE__ */ new Set();
+        for (const eventType of forwardEvents) {
+          if (typeof eventType !== "string") {
+            throw new IntegrationValidationError("All forwarded event types must be strings", "config");
+          }
+          if (!validEventTypes.includes(eventType)) {
+            throw new IntegrationValidationError(
+              `Invalid forwarded event type: "${eventType}". Must be one of: ${validEventTypes.join(", ")}`,
+              "config"
+            );
+          }
+          if (uniqueEvents.has(eventType)) {
+            throw new IntegrationValidationError(
+              `Duplicate forwarded event type found: "${eventType}". Each event type should appear only once.`,
+              "config"
+            );
+          }
+          uniqueEvents.add(eventType);
+        }
+      } else {
+        throw new IntegrationValidationError(
+          'Google integration forwardEvents must be an array of event types or the string "all"',
+          "config"
+        );
+      }
     }
   }
 };
@@ -910,7 +1007,9 @@ const validateAndNormalizeConfig = (config) => {
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
-    disabledEvents: config?.disabledEvents ?? []
+    disabledEvents: config?.disabledEvents ?? [],
+    waitForConsent: config?.waitForConsent ?? false,
+    maxConsentBufferSize: config?.maxConsentBufferSize ?? MAX_CONSENT_BUFFER_LENGTH
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -1143,12 +1242,57 @@ const isEventValid = (eventName, metadata) => {
 };
 class Emitter {
   listeners = /* @__PURE__ */ new Map();
+  /**
+   * Subscribes to an event channel
+   *
+   * **Behavior**:
+   * - Creates event channel if it doesn't exist
+   * - Appends callback to list of listeners for this event
+   * - Same callback can be registered multiple times (will fire multiple times)
+   *
+   * **Type Safety**: Callback receives data type matching the event name
+   *
+   * @param event - Event name to subscribe to
+   * @param callback - Function to call when event is emitted
+   *
+   * @example
+   * ```typescript
+   * emitter.on('event', (eventData) => {
+   *   // eventData is typed as EventData
+   *   console.log(eventData.type);
+   * });
+   * ```
+   */
   on(event2, callback) {
     if (!this.listeners.has(event2)) {
       this.listeners.set(event2, []);
     }
     this.listeners.get(event2).push(callback);
   }
+  /**
+   * Unsubscribes from an event channel
+   *
+   * **Behavior**:
+   * - Removes first occurrence of callback from listener list
+   * - If callback not found, no error is thrown
+   * - If callback was registered multiple times, only one instance is removed
+   *
+   * **Important**: Must use same function reference passed to `on()`
+   *
+   * @param event - Event name to unsubscribe from
+   * @param callback - Function reference to remove (must match `on()` reference)
+   *
+   * @example
+   * ```typescript
+   * const callback = (data) => console.log(data);
+   * emitter.on('event', callback);
+   * emitter.off('event', callback); // Unsubscribes successfully
+   *
+   * // BAD: Won't work (different function reference)
+   * emitter.on('event', (data) => console.log(data));
+   * emitter.off('event', (data) => console.log(data)); // No effect
+   * ```
+   */
   off(event2, callback) {
     const callbacks = this.listeners.get(event2);
     if (callbacks) {
@@ -1158,6 +1302,34 @@ class Emitter {
       }
     }
   }
+  /**
+   * Emits an event with data to all subscribed listeners
+   *
+   * **Behavior**:
+   * - Calls all registered callbacks for this event synchronously
+   * - Callbacks execute in registration order
+   * - If no listeners, no-op (no error thrown)
+   * - Errors in callbacks are NOT caught (propagate to caller)
+   *
+   * **Type Safety**: Data type must match event name's expected type
+   *
+   * @param event - Event name to emit
+   * @param data - Event data (type must match EmitterMap[event])
+   *
+   * @example
+   * ```typescript
+   * // Emit event data
+   * emitter.emit('event', eventData);
+   *
+   * // Emit queue data
+   * emitter.emit('queue', {
+   *   user_id: 'user-123',
+   *   session_id: 'session-456',
+   *   device: DeviceType.Desktop,
+   *   events: [event1, event2]
+   * });
+   * ```
+   */
   emit(event2, data) {
     const callbacks = this.listeners.get(event2);
     if (callbacks) {
@@ -1166,6 +1338,28 @@ class Emitter {
       });
     }
   }
+  /**
+   * Removes all listeners for all events
+   *
+   * **Purpose**: Cleanup method called during `App.destroy()` to prevent memory leaks
+   *
+   * **Behavior**:
+   * - Clears all event channels
+   * - Listeners cannot be restored (new subscriptions required)
+   * - Called automatically during library teardown
+   *
+   * **Use Cases**:
+   * - Application teardown
+   * - Component unmounting in SPA frameworks
+   * - Test cleanup
+   *
+   * @example
+   * ```typescript
+   * // During destroy
+   * emitter.removeAllListeners();
+   * // All subscriptions cleared
+   * ```
+   */
   removeAllListeners() {
     this.listeners.clear();
   }
@@ -1215,12 +1409,39 @@ function transformBatch(batch, transformer, context) {
 }
 const globalState = {};
 class StateManager {
+  /**
+   * Retrieves a value from global state.
+   *
+   * Type-safe getter with compile-time key validation.
+   *
+   * @template T - State key type (compile-time validated)
+   * @param key - State property key
+   * @returns Current value for the given key (may be undefined)
+   */
   get(key) {
     return globalState[key];
   }
+  /**
+   * Sets a value in global state.
+   *
+   * Type-safe setter with compile-time type checking.
+   * Changes are immediately visible to all StateManager subclasses.
+   *
+   * @template T - State key type (compile-time validated)
+   * @param key - State property key
+   * @param value - New value (type must match State[T])
+   */
   set(key, value) {
     globalState[key] = value;
   }
+  /**
+   * Returns an immutable snapshot of the entire global state.
+   *
+   * Creates a shallow copy to prevent accidental mutations.
+   * Use for debugging or when multiple state properties are needed.
+   *
+   * @returns Readonly shallow copy of global state
+   */
   getState() {
     return { ...globalState };
   }
@@ -1229,10 +1450,24 @@ class SenderManager extends StateManager {
   storeManager;
   integrationId;
   apiUrl;
+  consentManager;
   transformers;
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
-  constructor(storeManager, integrationId, apiUrl, transformers = {}) {
+  /**
+   * Creates a SenderManager instance.
+   *
+   * **Validation**: `integrationId` and `apiUrl` must both be provided or both be undefined.
+   * Throws error if only one is provided.
+   *
+   * @param storeManager - Storage manager for event persistence
+   * @param integrationId - Optional integration identifier ('saas' or 'custom')
+   * @param apiUrl - Optional API endpoint URL
+   * @param consentManager - Optional consent manager for GDPR compliance
+   * @param transformers - Optional event transformation hooks
+   * @throws Error if integrationId and apiUrl are not both provided or both undefined
+   */
+  constructor(storeManager, integrationId, apiUrl, consentManager = null, transformers = {}) {
     super();
     if (integrationId && !apiUrl || !integrationId && apiUrl) {
       throw new Error("SenderManager: integrationId and apiUrl must either both be provided or both be undefined");
@@ -1240,15 +1475,60 @@ class SenderManager extends StateManager {
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
+    this.consentManager = consentManager;
     this.transformers = transformers;
+  }
+  /**
+   * Get the integration ID for this sender
+   * @returns The integration ID ('saas' or 'custom') or undefined if not set
+   */
+  getIntegrationId() {
+    return this.integrationId;
   }
   getQueueStorageKey() {
     const userId = this.get("userId") || "anonymous";
     const baseKey = QUEUE_KEY(userId);
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
+  /**
+   * Sends events synchronously using `navigator.sendBeacon()`.
+   *
+   * **Purpose**: Guarantees event delivery before page unload even if network is slow.
+   *
+   * **Use Cases**:
+   * - Page unload (`beforeunload`, `pagehide` events)
+   * - Tab close scenarios
+   * - Any case where async send might be interrupted
+   *
+   * **Behavior**:
+   * - Uses `navigator.sendBeacon()` (browser-queued, synchronous API)
+   * - Payload size limited to 64KB (enforced by browser)
+   * - Browser guarantees delivery attempt (survives page close)
+   * - NO persistence on failure (fire-and-forget)
+   *
+   * **Consent Check**: Skips send if consent not granted for this integration
+   *
+   * **Return Values**:
+   * - `true`: Send succeeded OR skipped (standalone mode, no consent)
+   * - `false`: Send failed (network error, browser rejected beacon)
+   *
+   * **Important**: No retry mechanism for failures. Events are NOT persisted.
+   *
+   * @param body - Event queue to send
+   * @returns `true` if send succeeded or was skipped, `false` if failed
+   *
+   * @see sendEventsQueue for async send with persistence
+   * @see src/managers/README.md (lines 82-139) for send details
+   */
   sendEventsQueueSync(body) {
     if (this.shouldSkipSend()) {
+      return true;
+    }
+    if (!this.hasConsentForIntegration()) {
+      log(
+        "debug",
+        `Skipping sync send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ""}`
+      );
       return true;
     }
     if (this.apiUrl === SpecialApiUrl.Fail) {
@@ -1263,6 +1543,37 @@ class SenderManager extends StateManager {
     }
     return this.sendQueueSyncInternal(body);
   }
+  /**
+   * Sends events asynchronously using `fetch()` API with automatic persistence on failure.
+   *
+   * **Purpose**: Reliable event transmission with localStorage fallback for failed sends.
+   *
+   * **Flow**:
+   * 1. Calls internal `send()` method (applies transformers, consent checks)
+   * 2. On success: Clears persisted events, invokes `onSuccess` callback
+   * 3. On failure: Persists events to localStorage, invokes `onFailure` callback
+   * 4. On permanent error (4xx): Clears persisted events (no retry)
+   *
+   * **Callbacks**:
+   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
+   * - `onFailure()`: Called after failed transmission or permanent error
+   *
+   * **Error Handling**:
+   * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
+   * - **Transient errors** (5xx, network, timeout): Events persisted for recovery
+   *
+   * **Consent Check**: Skips send if consent not granted for this integration
+   *
+   * **Important**: Events are NOT retried in-session. Persistence is for
+   * recovery on next page load via `recoverPersistedEvents()`.
+   *
+   * @param body - Event queue to send
+   * @param callbacks - Optional success/failure callbacks
+   * @returns Promise resolving to `true` if send succeeded, `false` if failed
+   *
+   * @see recoverPersistedEvents for recovery flow
+   * @see src/managers/README.md (lines 82-139) for send details
+   */
   async sendEventsQueue(body, callbacks) {
     try {
       const success = await this.send(body);
@@ -1286,9 +1597,70 @@ class SenderManager extends StateManager {
       return false;
     }
   }
+  /**
+   * Recovers and attempts to resend events persisted from previous session.
+   *
+   * **Purpose**: Zero data loss guarantee - recovers events that failed to send
+   * in previous session due to network errors or crashes.
+   *
+   * **Flow**:
+   * 1. Checks if recovery already in progress (prevents duplicate attempts)
+   * 2. Checks consent for this integration (skips if no consent)
+   * 3. Loads persisted events from localStorage
+   * 4. Validates freshness (discards events older than 2 hours)
+   * 5. Applies multi-tab protection (skips events persisted within 1 second)
+   * 6. Attempts to resend via `send()` method
+   * 7. On success: Clears persisted events, invokes `onSuccess` callback
+   * 8. On failure: Keeps events in localStorage, invokes `onFailure` callback
+   * 9. On permanent error (4xx): Clears persisted events (no further retry)
+   *
+   * **Multi-Tab Protection**:
+   * - Events persisted within last 1 second are skipped (active tab may retry)
+   * - Prevents duplicate sends when multiple tabs recover simultaneously
+   *
+   * **Event Expiry**:
+   * - Events older than 2 hours are discarded (prevents stale data accumulation)
+   * - Expiry check uses event timestamps, not persistence time
+   *
+   * **Consent Integration**:
+   * - Skips recovery if consent not granted for this integration
+   * - Events remain persisted for future recovery when consent obtained
+   *
+   * **Callbacks**:
+   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
+   * - `onFailure()`: Called on send failure or permanent error
+   *
+   * **Called by**: `EventManager.recoverPersistedEvents()` during `App.init()`
+   *
+   * **Important**: This method is idempotent and safe to call multiple times.
+   * Recovery flag prevents concurrent attempts.
+   *
+   * @param callbacks - Optional success/failure callbacks
+   *
+   * @example
+   * ```typescript
+   * await senderManager.recoverPersistedEvents({
+   *   onSuccess: (count, events, body) => {
+   *     console.log(`Recovered ${count} events`);
+   *   },
+   *   onFailure: () => {
+   *     console.warn('Recovery failed, will retry on next init');
+   *   }
+   * });
+   * ```
+   *
+   * @see src/managers/README.md (lines 82-139) for recovery details
+   */
   async recoverPersistedEvents(callbacks) {
     if (this.recoveryInProgress) {
       log("debug", "Recovery already in progress, skipping duplicate attempt");
+      return;
+    }
+    if (!this.hasConsentForIntegration()) {
+      log(
+        "debug",
+        `Skipping recovery, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ""}`
+      );
       return;
     }
     this.recoveryInProgress = true;
@@ -1318,8 +1690,45 @@ class SenderManager extends StateManager {
       this.recoveryInProgress = false;
     }
   }
+  /**
+   * Cleanup method called during `App.destroy()`.
+   *
+   * **Purpose**: Reserved for future cleanup logic (currently no-op).
+   *
+   * **Note**: This method is intentionally empty. SenderManager has no
+   * cleanup requirements (no timers, no event listeners, no active connections).
+   * Persisted events are intentionally kept in localStorage for recovery.
+   *
+   * **Called by**: `EventManager.stop()` during application teardown
+   */
   stop() {
   }
+  /**
+   * Applies beforeSend transformer to event array for custom backend integrations.
+   *
+   * **Purpose**: Per-event transformation in multi-integration mode for custom backends only.
+   * Bypassed for TraceLog SaaS to maintain schema integrity.
+   *
+   * **Application Context**:
+   * - Only applied in multi-integration mode (SaaS + Custom)
+   * - EventManager applies beforeSend for standalone/custom-only modes
+   * - This method handles the multi-integration scenario
+   *
+   * **Transformation Flow**:
+   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
+   * 2. Check if beforeSend transformer exists
+   * 3. Apply transformer to each event via transformEvents() utility
+   * 4. Filter out events (empty array = filter entire batch)
+   * 5. Return transformed queue or null
+   *
+   * **Error Handling**:
+   * - transformEvents() utility catches and logs transformer errors
+   * - Failed transformations fall back to original event
+   * - Empty result array treated as filter signal (returns null)
+   *
+   * @param body - Event queue to transform
+   * @returns Transformed queue with modified events, or null to filter entire batch
+   */
   applyBeforeSendTransformer(body) {
     if (this.integrationId === "saas") {
       return body;
@@ -1341,6 +1750,37 @@ class SenderManager extends StateManager {
       events: transformedEvents
     };
   }
+  /**
+   * Applies beforeBatch transformer to entire event queue for custom backend integrations.
+   *
+   * **Purpose**: Batch-level transformation before network transmission for custom backends only.
+   * Bypassed for TraceLog SaaS to maintain schema integrity.
+   *
+   * **Application Context**:
+   * - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
+   * - Operates on entire queue after beforeSend transformations
+   * - Final transformation step before network transmission
+   *
+   * **Transformation Flow**:
+   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
+   * 2. Check if beforeBatch transformer exists
+   * 3. Apply transformer to entire queue via transformBatch() utility
+   * 4. Return transformed queue or null to filter
+   *
+   * **Use Cases**:
+   * - Add batch-level metadata (timestamps, signatures)
+   * - Compress or encrypt entire payload
+   * - Apply custom formatting to queue structure
+   * - Filter entire batch based on conditions
+   *
+   * **Error Handling**:
+   * - transformBatch() utility catches and logs transformer errors
+   * - Failed transformations fall back to original batch
+   * - Returning null filters entire batch (prevents send)
+   *
+   * @param body - Event queue to transform
+   * @returns Transformed queue, or null to filter entire batch
+   */
   applyBeforeBatchTransformer(body) {
     if (this.integrationId === "saas") {
       return body;
@@ -1355,6 +1795,10 @@ class SenderManager extends StateManager {
   async send(body) {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
+    }
+    if (!this.hasConsentForIntegration()) {
+      log("debug", `Skipping send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ""}`);
+      return true;
     }
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
     if (!afterBeforeSend) {
@@ -1405,7 +1849,7 @@ class SenderManager extends StateManager {
         }
       });
       if (!response.ok) {
-        const isPermanentError = response.status >= 400 && response.status < 500;
+        const isPermanentError = response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
         if (isPermanentError) {
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
         }
@@ -1554,9 +1998,60 @@ class SenderManager extends StateManager {
       this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
   }
+  /**
+   * Checks if consent has been granted for this integration's data collection.
+   *
+   * **Purpose**: GDPR/CCPA compliance check before sending events to backend.
+   * Prevents data transmission when user has not granted consent.
+   *
+   * **Fail-Open Strategy** (Always returns true when):
+   * - `waitForConsent` config option is disabled (default behavior)
+   * - ConsentManager instance not provided (consent not required)
+   * - Unknown integration ID (defensive programming)
+   *
+   * **Integration ID Mapping**:
+   * - `'saas'` → Checks consent for `'tracelog'` (TraceLog SaaS)
+   * - `'custom'` → Checks consent for `'custom'` (Custom backend)
+   * - No integration ID → Allows by default (legacy support)
+   *
+   * **Consent Flow**:
+   * 1. Check if consent required (`config.waitForConsent`)
+   * 2. Verify ConsentManager available
+   * 3. Map integration ID to consent type
+   * 4. Query ConsentManager for consent status
+   * 5. Return true if consent granted, false otherwise
+   *
+   * **Called by**:
+   * - `send()` method before async transmission
+   * - `sendQueueSyncInternal()` is NOT called (sync sends skip consent check for performance)
+   *
+   * **Behavior when false**:
+   * - Events NOT sent to backend
+   * - Returns true to caller (prevents retry loops)
+   * - Events may be buffered in ConsentManager for later flush
+   *
+   * @returns true if consent granted or not required, false if consent denied
+   */
+  hasConsentForIntegration() {
+    const config = this.get("config");
+    if (!config?.waitForConsent) {
+      return true;
+    }
+    if (!this.consentManager) {
+      return true;
+    }
+    if (this.integrationId === "saas") {
+      return this.consentManager.hasConsent("tracelog");
+    }
+    if (this.integrationId === "custom") {
+      return this.consentManager.hasConsent("custom");
+    }
+    return true;
+  }
 }
 class EventManager extends StateManager {
-  googleAnalytics;
+  google;
+  consentManager;
   dataSenders;
   emitter;
   transformers;
@@ -1564,6 +2059,10 @@ class EventManager extends StateManager {
   perEventRateLimits = /* @__PURE__ */ new Map();
   eventsQueue = [];
   pendingEventsBuffer = [];
+  consentEventsBuffer = [];
+  consentEventsSentTo = /* @__PURE__ */ new Map();
+  // eventId -> Set<integration>
+  isFlushingConsentBuffer = false;
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
@@ -1576,20 +2075,62 @@ class EventManager extends StateManager {
     [EventType.VIEWPORT_VISIBLE]: 0,
     [EventType.SCROLL]: 0
   };
-  constructor(storeManager, googleAnalytics = null, emitter = null, transformers = {}) {
+  /**
+   * Creates an EventManager instance.
+   *
+   * **Initialization**:
+   * - Creates SenderManager instances for configured integrations (SaaS/Custom)
+   * - Sets up Google Analytics forwarding if configured
+   * - Configures consent management if enabled
+   * - Initializes event emitter for local consumption
+   *
+   * @param storeManager - Storage manager for persistence
+   * @param google - Optional Google Analytics integration
+   * @param consentManager - Optional consent manager for GDPR compliance
+   * @param emitter - Optional event emitter for local event consumption
+   * @param transformers - Optional event transformation hooks
+   */
+  constructor(storeManager, google = null, consentManager = null, emitter = null, transformers = {}) {
     super();
-    this.googleAnalytics = googleAnalytics;
+    this.google = google;
+    this.consentManager = consentManager;
     this.emitter = emitter;
     this.transformers = transformers;
     this.dataSenders = [];
     const collectApiUrls = this.get("collectApiUrls");
     if (collectApiUrls?.saas) {
-      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas, transformers));
+      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas, consentManager, transformers));
     }
     if (collectApiUrls?.custom) {
-      this.dataSenders.push(new SenderManager(storeManager, "custom", collectApiUrls.custom, transformers));
+      this.dataSenders.push(
+        new SenderManager(storeManager, "custom", collectApiUrls.custom, consentManager, transformers)
+      );
     }
   }
+  /**
+   * Recovers persisted events from localStorage after a crash or page reload.
+   *
+   * **Purpose**: Ensures zero data loss by recovering events that failed to send
+   * in the previous session due to network errors or crashes.
+   *
+   * **Flow**:
+   * 1. Calls `recoverPersistedEvents()` on all SenderManager instances in parallel
+   * 2. Each SenderManager attempts to resend its persisted events to backend
+   * 3. On success: Removes recovered events from consent/pending buffers
+   * 4. On failure: Logs warning (events remain in localStorage for next attempt)
+   *
+   * **Multi-Integration**:
+   * - Independent recovery per integration (SaaS + Custom backends)
+   * - Parallel recovery via `Promise.allSettled()` (one failure doesn't block others)
+   * - No cross-contamination (SaaS events don't go to Custom API)
+   *
+   * **Called by**: `App.init()` after initialization
+   *
+   * **Important**: Events are NOT removed from pending/consent buffers until
+   * successful network transmission.
+   *
+   * @see src/managers/README.md (lines 5-75) for recovery details
+   */
   async recoverPersistedEvents() {
     const recoveryPromises = this.dataSenders.map(
       async (sender) => sender.recoverPersistedEvents({
@@ -1609,6 +2150,67 @@ class EventManager extends StateManager {
     );
     await Promise.allSettled(recoveryPromises);
   }
+  /**
+   * Tracks a user interaction event and adds it to the event queue.
+   *
+   * **Purpose**: Central tracking method for all analytics events (clicks, page views,
+   * custom events, web vitals, errors, scroll, viewport visibility, session start/end).
+   *
+   * **Validation & Buffering**:
+   * - Validates `type` is provided (required)
+   * - If session not initialized: Buffers in `pendingEventsBuffer` (max 100 events, FIFO)
+   * - If consent pending: Buffers in `consentEventsBuffer` (flushed when consent granted)
+   *
+   * **Rate Limiting** (non-critical events only):
+   * - Global: 50 events/second sliding window (critical events exempted)
+   * - Per-event-name: 60/minute for custom events (configurable via `maxSameEventPerMinute`)
+   * - Per-session total: 1000 events max
+   * - Per-session by type: Clicks 500, Page views 100, Custom 500, Viewport 200, Scroll 120
+   *
+   * **Deduplication**:
+   * - LRU cache with 1000 fingerprints (10px coordinate precision for clicks, 500ms time threshold)
+   * - Prevents duplicate events within 500ms window
+   * - SESSION_START protected by `hasStartSession` flag
+   *
+   * **Sampling**:
+   * - Applied after validation and rate limiting
+   * - Critical events (SESSION_START/END) always included
+   * - Configurable via `samplingRate` (0-1)
+   *
+   * **Transformation**:
+   * - `beforeSend` applied (if custom-only mode) before dedup/sampling/queueing
+   * - Returning `null` from `beforeSend` filters out the event
+   *
+   * **Queue Management**:
+   * - Events added to `eventsQueue` (max 100 events, FIFO with priority for session events)
+   * - Dynamic flush: Immediate send when 50-event batch threshold reached
+   * - Periodic flush: Every 10 seconds
+   *
+   * **Multi-Integration**:
+   * - Google Analytics: Forwards custom events to GA/GTM
+   * - Backend integrations: Handled by SenderManager instances
+   *
+   * **QA Mode**:
+   * - Custom events logged to console with styling
+   * - Events NOT sent to backend (emitted locally only)
+   *
+   * @param eventData - Event data to track
+   *
+   * @example
+   * ```typescript
+   * eventManager.track({
+   *   type: EventType.CLICK,
+   *   click_data: { x: 0.5, y: 0.3, tag: 'button', text: 'Submit' }
+   * });
+   *
+   * eventManager.track({
+   *   type: EventType.CUSTOM,
+   *   custom_event: { name: 'checkout_completed', metadata: { total: 99.99 } }
+   * });
+   * ```
+   *
+   * @see src/managers/README.md (lines 5-75) for detailed tracking logic
+   */
   track({
     type,
     page_url,
@@ -1751,13 +2353,58 @@ class EventManager extends StateManager {
       }
     }
   }
+  /**
+   * Stops event tracking and clears all queues and buffers.
+   *
+   * **Purpose**: Cleanup method called during `App.destroy()` to reset EventManager state
+   * and allow subsequent init() → destroy() → init() cycles.
+   *
+   * **Cleanup Actions**:
+   * 1. **Clear send interval**: Stops periodic 10-second queue flush timer
+   * 2. **Clear all queues and buffers**:
+   *    - `eventsQueue`: Discarded (not sent)
+   *    - `pendingEventsBuffer`: Discarded (events before session init)
+   *    - `consentEventsBuffer`: Discarded with warning (events awaiting consent)
+   * 3. **Reset rate limiting state**: Clears rate limit counters and per-event limits
+   * 4. **Reset session counters**: Clears per-session event counts
+   * 5. **Reset `hasStartSession` flag**: Allows SESSION_START in next init cycle
+   * 6. **Stop SenderManagers**: Calls `stop()` on all SenderManager instances
+   *
+   * **Important Behavior**:
+   * - **No final flush**: Events in queue are NOT sent before stopping
+   * - For flush before destroy, call `flushImmediatelySync()` first
+   * - Consent buffer discarded: Events awaiting consent are lost (logged as warning)
+   *
+   * **Multi-Integration**:
+   * - Stops all SenderManager instances (SaaS + Custom)
+   * - Clears per-integration consent tracking
+   *
+   * **Called by**: `App.destroy()` during application teardown
+   *
+   * @example
+   * ```typescript
+   * // Proper cleanup with final flush
+   * eventManager.flushImmediatelySync(); // Send pending events
+   * eventManager.stop();                  // Stop and clear
+   * ```
+   *
+   * @see src/managers/README.md (lines 5-75) for cleanup details
+   */
   stop() {
     if (this.sendIntervalId) {
       clearInterval(this.sendIntervalId);
       this.sendIntervalId = null;
     }
+    if (this.consentEventsBuffer.length > 0) {
+      log("warn", "Discarding consent buffer on destroy", {
+        data: { bufferedEvents: this.consentEventsBuffer.length }
+      });
+    }
     this.eventsQueue = [];
     this.pendingEventsBuffer = [];
+    this.consentEventsBuffer = [];
+    this.consentEventsSentTo.clear();
+    this.isFlushingConsentBuffer = false;
     this.recentEventFingerprints.clear();
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
@@ -1776,15 +2423,379 @@ class EventManager extends StateManager {
       sender.stop();
     });
   }
+  /**
+   * Flushes all events in the queue asynchronously.
+   *
+   * **Purpose**: Force immediate sending of queued events without waiting for
+   * the 10-second periodic flush timer.
+   *
+   * **Use Cases**:
+   * - Manual flush triggered by user action
+   * - Before page unload (prefer `flushImmediatelySync()` for unload scenarios)
+   * - Testing/debugging
+   *
+   * **Behavior**:
+   * - Sends events via `fetch()` API (async, reliable, allows retries)
+   * - Multi-integration: Sends to all configured backends in parallel
+   * - Does NOT block (returns Promise that resolves when all sends complete)
+   * - Clears queue only after successful transmission
+   *
+   * **Note**: For page unload, use `flushImmediatelySync()` instead,
+   * which uses `sendBeacon()` for guaranteed delivery.
+   *
+   * @returns Promise resolving to `true` if all sends succeeded, `false` if any failed
+   *
+   * @example
+   * ```typescript
+   * // Before critical user action
+   * await eventManager.flushImmediately();
+   * ```
+   *
+   * @see flushImmediatelySync for synchronous page unload flush
+   * @see src/managers/README.md (lines 5-75) for flush details
+   */
   async flushImmediately() {
     return this.flushEvents(false);
   }
+  /**
+   * Flushes all events in the queue synchronously using `sendBeacon()`.
+   *
+   * **Purpose**: Ensure events are sent before page unload, even if network is slow.
+   *
+   * **Use Cases**:
+   * - Page unload (`beforeunload`, `pagehide` events)
+   * - Tab close detection
+   * - Any scenario where async flush might be interrupted
+   *
+   * **Behavior**:
+   * - Uses `navigator.sendBeacon()` API (synchronous, queued by browser)
+   * - Payload size limited to 64KB per beacon
+   * - Browser guarantees delivery attempt (queued even if page closes)
+   * - Clears queue immediately (no retry mechanism)
+   *
+   * **Multi-Integration**:
+   * - Sends to all configured backends (SaaS + Custom) in parallel
+   * - Independent success tracking per integration
+   *
+   * **Limitations**:
+   * - No retry on failure (sendBeacon is fire-and-forget)
+   * - 64KB payload limit (large batches may be truncated)
+   *
+   * @returns `true` if all sends succeeded, `false` if any failed
+   *
+   * @example
+   * ```typescript
+   * // Page unload handler
+   * window.addEventListener('beforeunload', () => {
+   *   eventManager.flushImmediatelySync();
+   * });
+   * ```
+   *
+   * @see flushImmediately for async flush with retries
+   * @see src/managers/README.md (lines 5-75) for flush details
+   */
   flushImmediatelySync() {
     return this.flushEvents(true);
   }
+  /**
+   * Returns the current number of events in the main queue.
+   *
+   * **Purpose**: Debugging and monitoring utility to check queue length.
+   *
+   * **Note**: This does NOT include:
+   * - Pending events buffer (events before session init)
+   * - Consent events buffer (events awaiting consent)
+   * - Persisted events (events in localStorage from previous sessions)
+   *
+   * @returns Number of events currently in the main queue
+   *
+   * @example
+   * ```typescript
+   * const queueSize = eventManager.getQueueLength();
+   * console.log(`Queue has ${queueSize} events`);
+   * ```
+   */
   getQueueLength() {
     return this.eventsQueue.length;
   }
+  /**
+   * Returns the current number of events in the consent buffer.
+   *
+   * **Purpose**: Debugging and monitoring utility to check consent buffer length.
+   *
+   * **Use Cases**:
+   * - Verify events are being buffered when consent is pending
+   * - Monitor consent buffer growth before consent decision
+   * - Testing consent workflows
+   *
+   * @returns Number of events currently awaiting consent
+   *
+   * @example
+   * ```typescript
+   * const consentBufferSize = eventManager.getConsentBufferLength();
+   * console.log(`${consentBufferSize} events awaiting consent`);
+   * ```
+   */
+  getConsentBufferLength() {
+    return this.consentEventsBuffer.length;
+  }
+  /**
+   * Flushes buffered events to a specific integration when consent is granted.
+   *
+   * **Purpose**: Sends events that were tracked before consent was granted to the
+   * specified integration. Events are batched and sent with delays to prevent
+   * overwhelming the backend.
+   *
+   * **Behavior**:
+   * - Filters events that haven't been sent to this integration yet
+   * - Sorts events: SESSION_START first, then chronological by timestamp
+   * - Sends in batches of 10 events (CONSENT_FLUSH_BATCH_SIZE)
+   * - 100ms delay between batches (CONSENT_FLUSH_DELAY_MS)
+   * - Tracks sent events per-integration to support multi-integration scenarios
+   * - Removes events from buffer when sent to all configured integrations
+   *
+   * **Concurrency Protection**:
+   * - Guard flag `isFlushingConsentBuffer` prevents concurrent flushes
+   * - Returns early if flush already in progress
+   *
+   * **Multi-Integration Support**:
+   * - Tracks which integrations each event has been sent to
+   * - Allows partial sending (e.g., sent to TraceLog but not Custom yet)
+   * - Events only removed from buffer when sent to ALL configured integrations
+   *
+   * **Called by**: ConsentManager when consent is granted for an integration
+   *
+   * @param integration - Integration to flush events to ('google' | 'custom' | 'tracelog')
+   * @returns Promise<void> - Resolves when all batches sent or error occurs
+   *
+   * @example
+   * ```typescript
+   * // User grants consent for TraceLog SaaS
+   * await eventManager.flushConsentBuffer('tracelog');
+   * // → Sends buffered events to TraceLog in batches of 10
+   * // → 100ms delay between batches
+   * ```
+   */
+  async flushConsentBuffer(integration) {
+    if (this.consentEventsBuffer.length === 0) {
+      return;
+    }
+    if (this.isFlushingConsentBuffer) {
+      log("debug", "Consent buffer flush already in progress, skipping");
+      return;
+    }
+    this.isFlushingConsentBuffer = true;
+    try {
+      const config = this.get("config");
+      const collectApiUrls = this.get("collectApiUrls");
+      const configuredIntegrations = /* @__PURE__ */ new Set();
+      if (config?.integrations?.google) {
+        configuredIntegrations.add("google");
+      }
+      if (collectApiUrls?.custom) {
+        configuredIntegrations.add("custom");
+      }
+      if (collectApiUrls?.saas) {
+        configuredIntegrations.add("tracelog");
+      }
+      const eventsToSend = this.consentEventsBuffer.filter((event2) => {
+        const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
+        const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
+        return !sentTo.has(integration);
+      });
+      if (eventsToSend.length === 0) {
+        log("debug", `No new events to flush for ${integration}`);
+        this.isFlushingConsentBuffer = false;
+        return;
+      }
+      log("info", "Flushing consent buffer", {
+        data: {
+          totalEvents: eventsToSend.length,
+          integration,
+          bufferedTotal: this.consentEventsBuffer.length
+        }
+      });
+      eventsToSend.sort((a2, b2) => {
+        if (a2.type === EventType.SESSION_START && b2.type !== EventType.SESSION_START) {
+          return -1;
+        }
+        if (b2.type === EventType.SESSION_START && a2.type !== EventType.SESSION_START) {
+          return 1;
+        }
+        return a2.timestamp - b2.timestamp;
+      });
+      const batchSize = CONSENT_FLUSH_BATCH_SIZE;
+      let flushedCount = 0;
+      for (let i = 0; i < eventsToSend.length; i += batchSize) {
+        const batch = eventsToSend.slice(i, i + batchSize);
+        if (integration === "google" && this.google) {
+          batch.forEach((event2) => {
+            this.handleGoogleAnalyticsIntegration(event2);
+          });
+        }
+        if (integration === "custom" || integration === "tracelog") {
+          const targetSender = this.dataSenders.find((sender) => {
+            const senderId = sender.getIntegrationId();
+            if (integration === "custom") {
+              return senderId === "custom";
+            }
+            return senderId === "saas";
+          });
+          if (targetSender) {
+            const batchPayload = {
+              user_id: this.get("userId"),
+              session_id: this.get("sessionId"),
+              device: this.get("device"),
+              events: batch,
+              ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata }
+            };
+            await targetSender.sendEventsQueue(batchPayload);
+          }
+        }
+        batch.forEach((event2) => {
+          const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
+          if (!this.consentEventsSentTo.has(eventId)) {
+            this.consentEventsSentTo.set(eventId, /* @__PURE__ */ new Set());
+          }
+          this.consentEventsSentTo.get(eventId).add(integration);
+        });
+        flushedCount += batch.length;
+        if (i + batchSize < eventsToSend.length) {
+          await new Promise((resolve) => setTimeout(resolve, CONSENT_FLUSH_DELAY_MS));
+        }
+      }
+      this.consentEventsBuffer = this.consentEventsBuffer.filter((event2) => {
+        const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
+        const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
+        const allSent = Array.from(configuredIntegrations).every((int) => sentTo.has(int));
+        if (allSent) {
+          this.consentEventsSentTo.delete(eventId);
+          return false;
+        }
+        return true;
+      });
+      log("info", "Consent buffer flushed successfully", {
+        data: {
+          flushedEvents: flushedCount,
+          integration,
+          remainingInBuffer: this.consentEventsBuffer.length
+        }
+      });
+    } catch (error) {
+      log("error", "Failed to flush consent buffer", { error });
+    } finally {
+      this.isFlushingConsentBuffer = false;
+    }
+  }
+  /**
+   * Clears consent buffer entries for a specific integration when consent is revoked.
+   *
+   * **Purpose**: Removes tracking data for events that were waiting to be sent to
+   * an integration when the user revokes consent. Events remain in buffer if they're
+   * waiting for other integrations.
+   *
+   * **Behavior**:
+   * - Removes the integration from each event's "sent to" tracking map
+   * - Events removed from buffer if they've been sent to all OTHER configured integrations
+   * - Events kept in buffer if still waiting for other integrations
+   * - Logs removed count for debugging
+   *
+   * **Multi-Integration Support**:
+   * - In multi-integration mode, events may wait for multiple integrations
+   * - Revoking consent for one integration doesn't affect others
+   * - Example: Event sent to TraceLog but waiting for Custom → kept in buffer when TraceLog consent revoked
+   *
+   * **Called by**: ConsentManager when consent is revoked for an integration
+   *
+   * @param integration - Integration to clear tracking for ('google' | 'custom' | 'tracelog')
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * // User revokes consent for Google Analytics
+   * eventManager.clearConsentBufferForIntegration('google');
+   * // → Removes Google from event tracking
+   * // → Events still waiting for TraceLog/Custom remain in buffer
+   * ```
+   */
+  clearConsentBufferForIntegration(integration) {
+    const initialLength = this.consentEventsBuffer.length;
+    if (initialLength === 0) {
+      return;
+    }
+    this.consentEventsSentTo.forEach((sentTo, eventId) => {
+      sentTo.delete(integration);
+      if (sentTo.size === 0) {
+        this.consentEventsSentTo.delete(eventId);
+      }
+    });
+    const config = this.get("config");
+    const collectApiUrls = this.get("collectApiUrls");
+    const remainingIntegrations = /* @__PURE__ */ new Set();
+    if (config?.integrations?.google && integration !== "google") {
+      remainingIntegrations.add("google");
+    }
+    if (collectApiUrls?.custom && integration !== "custom") {
+      remainingIntegrations.add("custom");
+    }
+    if (collectApiUrls?.saas && integration !== "tracelog") {
+      remainingIntegrations.add("tracelog");
+    }
+    if (remainingIntegrations.size === 0) {
+      this.consentEventsBuffer = [];
+      this.consentEventsSentTo.clear();
+      log("info", `Cleared entire consent buffer (${initialLength} events) - no remaining integrations`);
+    } else {
+      this.consentEventsBuffer = this.consentEventsBuffer.filter((event2) => {
+        const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
+        const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
+        return Array.from(remainingIntegrations).some((int) => !sentTo.has(int));
+      });
+      const removed = initialLength - this.consentEventsBuffer.length;
+      if (removed > 0) {
+        log("info", `Cleared ${removed} buffered events for revoked ${integration} consent`, {
+          data: {
+            removed,
+            remaining: this.consentEventsBuffer.length,
+            otherIntegrations: Array.from(remainingIntegrations)
+          }
+        });
+      }
+    }
+  }
+  /**
+   * Flushes buffered events to the main queue after session initialization.
+   *
+   * **Purpose**: Re-tracks events that were captured before session initialization
+   * (e.g., events fired during `App.init()` before SessionManager completes).
+   *
+   * **Pending Events Buffer**:
+   * - Holds up to 100 events captured before `sessionId` is available
+   * - FIFO eviction when buffer full (oldest events dropped with warning)
+   * - Cleared and re-tracked when session becomes available
+   *
+   * **Flow**:
+   * 1. Check if session is initialized (`sessionId` exists in global state)
+   * 2. If not initialized: Log warning and keep events in buffer
+   * 3. If initialized: Copy buffer, clear it, and re-track each event via `track()`
+   * 4. Each event goes through full validation/dedup/rate limiting pipeline
+   *
+   * **Called by**:
+   * - `SessionManager.startTracking()` after session initialization
+   * - Ensures no events are lost during initialization phase
+   *
+   * **Important**: Events are re-tracked through `track()` method, so they go
+   * through all validation, deduplication, rate limiting, and consent checks again.
+   *
+   * @example
+   * ```typescript
+   * // In SessionManager after session creation
+   * this.set('sessionId', newSessionId);
+   * eventManager.flushPendingEvents(); // Re-track buffered events
+   * ```
+   *
+   * @see src/managers/README.md (lines 5-75) for pending buffer details
+   */
   flushPendingEvents() {
     if (this.pendingEventsBuffer.length === 0) {
       return;
@@ -2026,8 +3037,12 @@ class EventManager extends StateManager {
     return this.createEventFingerprint(event2);
   }
   addToQueue(event2) {
-    this.eventsQueue.push(event2);
     this.emitEvent(event2);
+    if (this.shouldBufferForConsent()) {
+      this.addToConsentBuffer(event2);
+      return;
+    }
+    this.eventsQueue.push(event2);
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
       const nonCriticalIndex = this.eventsQueue.findIndex(
         (e3) => e3.type !== EventType.SESSION_START && e3.type !== EventType.SESSION_END
@@ -2050,6 +3065,92 @@ class EventManager extends StateManager {
     }
     this.handleGoogleAnalyticsIntegration(event2);
   }
+  /**
+   * Updates the Google Analytics integration instance.
+   *
+   * **Purpose**: Sets or removes the Google Analytics integration instance used
+   * for forwarding custom events to GA4/GTM. Called when consent is granted or revoked.
+   *
+   * **Behavior**:
+   * - Sets `this.google` to the provided instance or null
+   * - Enables/disables Google Analytics event forwarding
+   * - Logs integration status change for debugging
+   *
+   * **Consent Integration**:
+   * - Called by ConsentManager when Google consent is granted → passes GoogleAnalyticsIntegration
+   * - Called by ConsentManager when Google consent is revoked → passes null
+   *
+   * **Use Cases**:
+   * - Consent granted: Start forwarding custom events to Google Analytics
+   * - Consent revoked: Stop forwarding events to Google Analytics
+   * - Runtime control: Enable/disable Google Analytics without reinitialization
+   *
+   * @param google - GoogleAnalyticsIntegration instance or null to disable
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * // Consent granted - enable Google Analytics
+   * const gaIntegration = new GoogleAnalyticsIntegration(config);
+   * eventManager.setGoogleAnalyticsIntegration(gaIntegration);
+   * // → Custom events now forwarded to GA4
+   *
+   * // Consent revoked - disable Google Analytics
+   * eventManager.setGoogleAnalyticsIntegration(null);
+   * // → Custom events no longer forwarded to GA4
+   * ```
+   */
+  setGoogleAnalyticsIntegration(google) {
+    this.google = google;
+    if (google) {
+      log("debug", "Google Analytics integration updated in EventManager");
+    } else {
+      log("debug", "Google Analytics integration removed from EventManager");
+    }
+  }
+  /**
+   * Check if events should be buffered due to waiting for consent
+   */
+  shouldBufferForConsent() {
+    if (this.get("mode") === Mode.QA) {
+      return false;
+    }
+    const config = this.get("config");
+    if (!config?.waitForConsent) {
+      return false;
+    }
+    if (!this.consentManager) {
+      return false;
+    }
+    const collectApiUrls = this.get("collectApiUrls");
+    const hasGoogleIntegration = Boolean(config.integrations?.google);
+    const hasCustomIntegration = Boolean(collectApiUrls?.custom);
+    const hasTracelogIntegration = Boolean(collectApiUrls?.saas);
+    if (!hasGoogleIntegration && !hasCustomIntegration && !hasTracelogIntegration) {
+      return false;
+    }
+    const hasAnyConsent = hasGoogleIntegration && this.consentManager.hasConsent("google") || hasCustomIntegration && this.consentManager.hasConsent("custom") || hasTracelogIntegration && this.consentManager.hasConsent("tracelog");
+    return !hasAnyConsent;
+  }
+  /**
+   * Add event to consent buffer with overflow management
+   */
+  addToConsentBuffer(event2) {
+    const config = this.get("config");
+    const maxBufferSize = config?.maxConsentBufferSize ?? 500;
+    this.consentEventsBuffer.push(event2);
+    if (this.consentEventsBuffer.length > maxBufferSize) {
+      const nonCriticalIndex = this.consentEventsBuffer.findIndex((e3) => e3.type !== EventType.SESSION_START);
+      const removedEvent = nonCriticalIndex >= 0 ? this.consentEventsBuffer.splice(nonCriticalIndex, 1)[0] : this.consentEventsBuffer.shift();
+      log("warn", "Consent buffer overflow, oldest non-critical event discarded", {
+        data: {
+          maxBufferSize,
+          currentSize: this.consentEventsBuffer.length,
+          removedEventType: removedEvent?.type
+        }
+      });
+    }
+  }
   startSendInterval() {
     this.sendIntervalId = window.setInterval(() => {
       if (this.eventsQueue.length > 0) {
@@ -2058,11 +3159,65 @@ class EventManager extends StateManager {
     }, EVENT_SENT_INTERVAL_MS);
   }
   handleGoogleAnalyticsIntegration(event2) {
-    if (this.googleAnalytics && event2.type === EventType.CUSTOM && event2.custom_event) {
-      if (this.get("mode") === Mode.QA) {
-        return;
-      }
-      this.googleAnalytics.trackEvent(event2.custom_event.name, event2.custom_event.metadata ?? {});
+    if (!this.google || this.get("mode") === Mode.QA) {
+      return;
+    }
+    const config = this.get("config");
+    if (config?.waitForConsent && this.consentManager && !this.consentManager.hasConsent("google")) {
+      return;
+    }
+    const googleConfig = this.get("config").integrations?.google;
+    const forwardEvents = googleConfig?.forwardEvents;
+    if (forwardEvents == null || Array.isArray(forwardEvents) && forwardEvents.length === 0) {
+      return;
+    }
+    const shouldForward = forwardEvents === "all" || Array.isArray(forwardEvents) && forwardEvents.includes(event2.type);
+    if (!shouldForward) {
+      return;
+    }
+    if (event2.type === EventType.CUSTOM && event2.custom_event) {
+      this.google.trackEvent(event2.custom_event.name, event2.custom_event.metadata ?? {});
+    } else if (event2.type === EventType.PAGE_VIEW) {
+      this.google.trackEvent("page_view", {
+        page_location: event2.page_url,
+        page_title: document.title,
+        ...event2.from_page_url && { page_referrer: event2.from_page_url }
+      });
+    } else if (event2.type === EventType.SESSION_START) {
+      this.google.trackEvent("session_start", {
+        engagement_time_msec: 0,
+        ...event2.referrer && { referrer: event2.referrer },
+        ...event2.utm && event2.utm
+      });
+    } else if (event2.type === EventType.WEB_VITALS && event2.web_vitals) {
+      const metricName = event2.web_vitals.type.toLowerCase();
+      this.google.trackEvent(metricName, {
+        value: event2.web_vitals.value
+      });
+    } else if (event2.type === EventType.ERROR && event2.error_data) {
+      this.google.trackEvent("exception", {
+        description: event2.error_data.message,
+        fatal: false
+      });
+    } else if (event2.type === EventType.SCROLL && event2.scroll_data) {
+      this.google.trackEvent("scroll", {
+        depth: event2.scroll_data.depth,
+        direction: event2.scroll_data.direction
+      });
+    } else if (event2.type === EventType.CLICK && event2.click_data) {
+      this.google.trackEvent("click", {
+        ...event2.click_data.id && { element_id: event2.click_data.id },
+        ...event2.click_data.text && { text: event2.click_data.text },
+        ...event2.click_data.tag && { tag: event2.click_data.tag }
+      });
+    } else if (event2.type === EventType.VIEWPORT_VISIBLE && event2.viewport_data) {
+      this.google.trackEvent("viewport_visible", {
+        selector: event2.viewport_data.selector,
+        ...event2.viewport_data.id && { element_id: event2.viewport_data.id },
+        ...event2.viewport_data.name && { element_name: event2.viewport_data.name },
+        dwell_time: event2.viewport_data.dwellTime,
+        visibility_ratio: event2.viewport_data.visibilityRatio
+      });
     }
   }
   shouldSample() {
@@ -2128,12 +3283,20 @@ class EventManager extends StateManager {
 }
 class UserManager {
   /**
-   * Gets or creates a unique user ID for the given project.
-   * The user ID is persisted in localStorage and reused across sessions.
+   * Gets or creates a unique user ID.
    *
-   * @param storageManager - Storage manager instance
-   * @param projectId - Project identifier for namespacing
-   * @returns Persistent unique user ID
+   * **Behavior**:
+   * 1. Checks localStorage for existing user ID
+   * 2. Returns existing ID if found
+   * 3. Generates new RFC4122-compliant UUID v4 if not found
+   * 4. Persists new ID to localStorage
+   *
+   * **Storage Key**: `tlog:uid` (fixed, shared across all TraceLog projects)
+   *
+   * **ID Format**: UUID v4 (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+   *
+   * @param storageManager - Storage manager instance for persistence
+   * @returns Persistent unique user ID (UUID v4 format)
    */
   static getId(storageManager) {
     const storageKey = USER_ID_KEY;
@@ -2146,6 +3309,518 @@ class UserManager {
     return newUserId;
   }
 }
+class ConsentManager {
+  storageManager;
+  emitter;
+  consentState;
+  storageListener = null;
+  persistDebounceTimer = null;
+  /**
+   * Debounce delay for localStorage persistence (50ms).
+   *
+   * **Rationale**: Balances responsiveness with localStorage write performance.
+   * - Long enough to batch rapid UI interactions (e.g., programmatic consent setup)
+   * - Short enough to feel instant to users (< 100ms threshold)
+   * - Prevents localStorage thrashing during rapid consent changes
+   *
+   * **Performance Impact**: 10 rapid changes = 1 write instead of 10 writes
+   */
+  PERSIST_DEBOUNCE_MS = 50;
+  /**
+   * Creates a ConsentManager instance.
+   *
+   * **Side Effects**:
+   * - Loads persisted consent from localStorage
+   * - Sets up cross-tab synchronization (if `enableCrossTabSync` is true)
+   *
+   * **SSR Safety**: No-op in Node.js environments
+   *
+   * @param storageManager - Storage manager for consent persistence
+   * @param enableCrossTabSync - Enable cross-tab synchronization (default: true)
+   * @param emitter - Optional event emitter for consent-changed events
+   */
+  constructor(storageManager, enableCrossTabSync = true, emitter = null) {
+    this.storageManager = storageManager;
+    this.emitter = emitter;
+    this.consentState = {
+      google: false,
+      custom: false,
+      tracelog: false
+    };
+    if (typeof window === "undefined") {
+      return;
+    }
+    this.loadPersistedConsent();
+    if (enableCrossTabSync) {
+      this.setupCrossTabSync();
+    }
+  }
+  /**
+   * Checks if consent has been granted for a specific integration.
+   *
+   * **Purpose**: Query consent state before sending events to integrations.
+   *
+   * **Behavior**:
+   * - `'all'`: Returns `true` only if ALL integrations have consent
+   * - Specific integration: Returns consent state for that integration
+   * - SSR: Always returns `false` in Node.js environments
+   *
+   * **Use Cases**:
+   * - EventManager: Checks before sending events to backends
+   * - SenderManager: Validates consent before network requests
+   * - External code: Conditional rendering based on consent
+   *
+   * @param integration - Integration to check ('all', 'google', 'custom', 'tracelog')
+   * @returns `true` if consent granted, `false` otherwise
+   *
+   * @example
+   * ```typescript
+   * if (consentManager.hasConsent('google')) {
+   *   // Send events to Google Analytics
+   * }
+   *
+   * if (consentManager.hasConsent('all')) {
+   *   // All integrations have consent
+   * }
+   * ```
+   */
+  hasConsent(integration) {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    if (integration === "all") {
+      return this.consentState.google && this.consentState.custom && this.consentState.tracelog;
+    }
+    return this.consentState[integration];
+  }
+  /**
+   * Grants or revokes consent for one or all integrations.
+   *
+   * **Purpose**: Update consent state and trigger buffered event flush.
+   *
+   * **Behavior**:
+   * - `'all'`: Grants/revokes consent for ALL integrations
+   * - Specific integration: Updates consent for that integration only
+   * - Persists to localStorage with 50ms debounce
+   * - Emits `consent-changed` event
+   * - Triggers flush of buffered events (if consent granted)
+   * - SSR: No-op in Node.js environments
+   *
+   * **Persistence**:
+   * - Stored in localStorage with 365-day expiration
+   * - Debounced 50ms to prevent excessive writes
+   * - Cross-tab synchronized via `storage` events
+   *
+   * **Event Emission**:
+   * - Emits `consent-changed` event with current consent state
+   * - EventManager listens and flushes buffered events for granted integration
+   *
+   * **Important**: Revoking consent does NOT delete already-sent events.
+   * It only prevents future events from being sent.
+   *
+   * @param integration - Integration to update ('all', 'google', 'custom', 'tracelog')
+   * @param granted - `true` to grant consent, `false` to revoke
+   *
+   * @example
+   * ```typescript
+   * // Grant consent for Google Analytics
+   * consentManager.setConsent('google', true);
+   * // → Buffered Google Analytics events sent
+   *
+   * // Revoke consent for custom backend
+   * consentManager.setConsent('custom', false);
+   * // → Future events NOT sent to custom backend
+   *
+   * // Grant consent for all integrations
+   * consentManager.setConsent('all', true);
+   * // → All buffered events sent
+   * ```
+   */
+  setConsent(integration, granted) {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (integration === "all") {
+      this.consentState.google = granted;
+      this.consentState.custom = granted;
+      this.consentState.tracelog = granted;
+      log("info", `Consent ${granted ? "granted" : "revoked"} for all integrations`);
+    } else {
+      this.consentState[integration] = granted;
+      log("info", `Consent ${granted ? "granted" : "revoked"} for ${integration} integration`);
+    }
+    this.persistConsentDebounced();
+    if (this.emitter) {
+      this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
+    }
+  }
+  /**
+   * Returns a snapshot of the current consent state for all integrations.
+   *
+   * **Purpose**: Retrieve consent state for display in UI or for external logic.
+   *
+   * **Behavior**:
+   * - Returns shallow copy (prevents external mutations)
+   * - Always includes all integrations (`google`, `custom`, `tracelog`)
+   * - Each integration is `true` (granted) or `false` (not granted)
+   *
+   * **Use Cases**:
+   * - Display consent status in UI
+   * - Sync consent to external systems
+   * - Conditional logic based on multiple integrations
+   *
+   * @returns Snapshot of current consent state
+   *
+   * @example
+   * ```typescript
+   * const state = consentManager.getConsentState();
+   * // → { google: true, custom: false, tracelog: true }
+   *
+   * // Display in UI
+   * console.log(`Google: ${state.google ? 'Granted' : 'Not granted'}`);
+   * console.log(`Custom: ${state.custom ? 'Granted' : 'Not granted'}`);
+   * console.log(`TraceLog: ${state.tracelog ? 'Granted' : 'Not granted'}`);
+   * ```
+   */
+  getConsentState() {
+    return { ...this.consentState };
+  }
+  /**
+   * Returns a list of integrations that have been granted consent.
+   *
+   * **Purpose**: Get only granted integrations for conditional logic.
+   *
+   * **Behavior**:
+   * - Returns array of integration names with `true` consent
+   * - Empty array if no consent granted
+   * - Excludes `'all'` (not a real integration)
+   *
+   * **Use Cases**:
+   * - Iterate over granted integrations
+   * - Display granted integrations in UI
+   * - Conditional initialization of integrations
+   *
+   * @returns Array of granted integration names
+   *
+   * @example
+   * ```typescript
+   * const granted = consentManager.getGrantedIntegrations();
+   * // → ['google', 'tracelog']
+   *
+   * // Iterate over granted integrations
+   * granted.forEach(integration => {
+   *   console.log(`${integration} has consent`);
+   * });
+   * ```
+   */
+  getGrantedIntegrations() {
+    const granted = [];
+    if (this.consentState.google) {
+      granted.push("google");
+    }
+    if (this.consentState.custom) {
+      granted.push("custom");
+    }
+    if (this.consentState.tracelog) {
+      granted.push("tracelog");
+    }
+    return granted;
+  }
+  /**
+   * Cleans up ConsentManager resources and event listeners.
+   *
+   * **Purpose**: Releases memory and detaches event listeners to prevent memory leaks
+   * when ConsentManager is no longer needed.
+   *
+   * **Cleanup Operations**:
+   * 1. Clears pending debounce timer (prevents delayed persistence after cleanup)
+   * 2. Removes cross-tab storage event listener
+   * 3. Sets references to null for garbage collection
+   *
+   * **Important Notes**:
+   * - Does NOT clear persisted consent from localStorage
+   * - Consent state remains accessible in future sessions
+   * - SSR-safe: Browser environment check before removing storage listener
+   *
+   * **Use Cases**:
+   * - Called during `App.destroy()` lifecycle
+   * - Test cleanup between test cases
+   * - Manual cleanup when consent management no longer needed
+   *
+   * **After Cleanup**:
+   * - ConsentManager instance should not be reused
+   * - Consent state persists in localStorage
+   * - Cross-tab sync stops (other tabs unaffected)
+   *
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * consentManager.cleanup();
+   * // → Debounce timer cleared
+   * // → Storage listener removed
+   * // → Consent data remains in localStorage
+   * ```
+   */
+  cleanup() {
+    if (this.persistDebounceTimer !== null) {
+      try {
+        this.flush();
+      } catch (error) {
+        log("warn", "Failed to persist consent during cleanup", { error });
+      }
+    }
+    if (this.storageListener !== null && typeof window !== "undefined") {
+      window.removeEventListener("storage", this.storageListener);
+      this.storageListener = null;
+    }
+  }
+  /**
+   * Loads and validates persisted consent state from localStorage with expiration check.
+   *
+   * **Purpose**: Restores consent preferences from previous sessions, ensuring they haven't
+   * expired (365 days default).
+   *
+   * **Validation Flow**:
+   * 1. SSR safety check (returns early in Node.js)
+   * 2. Retrieves consent data from localStorage
+   * 3. Parses JSON and validates structure (state, timestamp, expiresAt fields required)
+   * 4. Checks expiration against current time
+   * 5. Loads consent state into memory if valid
+   *
+   * **Error Recovery**:
+   * - Invalid JSON → Clears storage, starts fresh
+   * - Missing required fields → Clears storage, logs warning
+   * - Expired consent → Clears storage, logs info
+   * - Parse errors → Clears storage, logs warning, starts with default (no consent)
+   *
+   * **Expiration Calculation**:
+   * - Consent expires after CONSENT_EXPIRY_DAYS (365 days)
+   * - Logs days until expiry for debugging
+   *
+   * **Called by**: Constructor during ConsentManager initialization
+   *
+   * @private
+   */
+  loadPersistedConsent() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const persistedData = this.storageManager.getItem(CONSENT_KEY);
+      if (!persistedData) {
+        return;
+      }
+      const parsed = JSON.parse(persistedData);
+      if (!parsed.state || !parsed.timestamp || !parsed.expiresAt) {
+        log("warn", "Invalid consent data structure, ignoring");
+        this.clearPersistedConsent();
+        return;
+      }
+      const now = Date.now();
+      if (now > parsed.expiresAt) {
+        log("info", "Persisted consent has expired, clearing");
+        this.clearPersistedConsent();
+        return;
+      }
+      this.consentState = {
+        google: Boolean(parsed.state.google),
+        custom: Boolean(parsed.state.custom),
+        tracelog: Boolean(parsed.state.tracelog)
+      };
+      log("debug", "Loaded persisted consent state", {
+        data: {
+          google: this.consentState.google,
+          custom: this.consentState.custom,
+          tracelog: this.consentState.tracelog,
+          daysUntilExpiry: Math.floor((parsed.expiresAt - now) / (1e3 * 60 * 60 * 24))
+        }
+      });
+    } catch (error) {
+      log("warn", "Failed to load persisted consent, starting fresh", { error });
+      this.clearPersistedConsent();
+    }
+  }
+  /**
+   * Debounces consent persistence to prevent excessive localStorage writes during rapid consent changes.
+   *
+   * **Purpose**: Optimizes localStorage write performance by batching multiple consent changes
+   * into a single write operation after 50ms of inactivity.
+   *
+   * **Debouncing Strategy**:
+   * - Clears existing timer if called while timer pending
+   * - Sets new 50ms timer to delay persistence
+   * - Only persists once after rapid sequence of consent changes completes
+   *
+   * **Performance Impact**:
+   * - Without debouncing: N consent changes = N localStorage writes
+   * - With debouncing: N consent changes = 1 localStorage write
+   * - Example: 10 rapid grants/revokes = 1 write instead of 10
+   *
+   * **Delay Rationale** (50ms):
+   * - Long enough to batch rapid UI interactions
+   * - Short enough to feel instant to users
+   * - Prevents localStorage thrashing during programmatic consent setup
+   *
+   * **SSR Safety**: Returns early in Node.js environments
+   *
+   * **Called by**: `setConsent()` after each consent state change
+   *
+   * @private
+   */
+  persistConsentDebounced() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (this.persistDebounceTimer) {
+      clearTimeout(this.persistDebounceTimer);
+    }
+    this.persistDebounceTimer = window.setTimeout(() => {
+      this.persistConsent();
+      this.persistDebounceTimer = null;
+    }, this.PERSIST_DEBOUNCE_MS);
+  }
+  /**
+   * Immediately flush any pending consent persistence to localStorage.
+   * Clears debounce timer and persists immediately.
+   *
+   * **Use Cases:**
+   * - Before navigation/page unload
+   * - When consent must be persisted synchronously (e.g., before init)
+   *
+   * @throws {Error} If localStorage persistence fails (e.g., QuotaExceededError)
+   * @public
+   */
+  flush() {
+    if (this.persistDebounceTimer !== null) {
+      clearTimeout(this.persistDebounceTimer);
+      this.persistDebounceTimer = null;
+    }
+    try {
+      this.persistConsent();
+    } catch (error) {
+      throw new Error(
+        `Failed to flush consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  /**
+   * Immediately persist consent state to localStorage
+   * 
+   * @throws {Error} If localStorage quota is exceeded or other storage errors occur
+   */
+  persistConsent() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const now = Date.now();
+      const expiresAt = now + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1e3;
+      const data = {
+        state: { ...this.consentState },
+        timestamp: now,
+        expiresAt
+      };
+      this.storageManager.setItem(CONSENT_KEY, JSON.stringify(data));
+    } catch (error) {
+      log("error", "Failed to persist consent state", { error });
+      if (error instanceof Error && error.name === "QuotaExceededError") {
+        log("warn", "localStorage quota exceeded, consent will be volatile for this session");
+      }
+      throw error;
+    }
+  }
+  /**
+   * Clear persisted consent from localStorage
+   */
+  clearPersistedConsent() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      this.storageManager.removeItem(CONSENT_KEY);
+    } catch (error) {
+      log("warn", "Failed to clear persisted consent", { error });
+    }
+  }
+  /**
+   * Establishes cross-tab consent synchronization using storage events.
+   *
+   * **Purpose**: Keeps consent state synchronized across all browser tabs/windows
+   * by listening to localStorage changes made by other tabs.
+   *
+   * **How It Works**:
+   * 1. Listens to `storage` event (fires when localStorage changes in other tab)
+   * 2. Filters events to CONSENT_KEY only
+   * 3. Validates new consent data structure
+   * 4. Updates in-memory consent state
+   * 5. Emits CONSENT_CHANGED event to notify EventManager
+   *
+   * **Cross-Tab Scenarios**:
+   * - Tab A grants consent → Tab B/C/D receive update via storage event
+   * - Tab A revokes consent → Tab B/C/D stop sending events immediately
+   * - New tab opened → Loads existing consent from localStorage
+   *
+   * **Event Filtering**:
+   * - Only processes events for CONSENT_KEY ('tracelog_consent')
+   * - Ignores other localStorage changes
+   * - Validates data structure before applying
+   *
+   * **Error Handling**:
+   * - Invalid JSON → Ignored (keeps current state)
+   * - Missing required fields → Ignored (logs warning)
+   * - Parse errors → Ignored (logs warning, maintains stability)
+   *
+   * **SSR Safety**: Returns early in Node.js environments
+   *
+   * **Called by**: Constructor during ConsentManager initialization
+   *
+   * @private
+   */
+  setupCrossTabSync() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    this.storageListener = (event2) => {
+      if (event2.key !== CONSENT_KEY || event2.storageArea !== window.localStorage) {
+        return;
+      }
+      if (!event2.newValue) {
+        this.consentState = {
+          google: false,
+          custom: false,
+          tracelog: false
+        };
+        log("debug", "Consent cleared in another tab, synced locally");
+        return;
+      }
+      try {
+        const parsed = JSON.parse(event2.newValue);
+        if (parsed.state) {
+          this.consentState = {
+            google: Boolean(parsed.state.google),
+            custom: Boolean(parsed.state.custom),
+            tracelog: Boolean(parsed.state.tracelog)
+          };
+          log("debug", "Consent updated in another tab, synced locally", {
+            data: {
+              google: this.consentState.google,
+              custom: this.consentState.custom,
+              tracelog: this.consentState.tracelog
+            }
+          });
+        }
+      } catch (error) {
+        log("warn", "Failed to parse consent update from another tab", { error });
+      }
+    };
+    window.addEventListener("storage", this.storageListener);
+  }
+}
+const consent_manager = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  ConsentManager
+}, Symbol.toStringTag, { value: "Module" }));
 class SessionManager extends StateManager {
   storageManager;
   eventManager;
@@ -2157,6 +3832,13 @@ class SessionManager extends StateManager {
   broadcastChannel = null;
   isTracking = false;
   isEnding = false;
+  /**
+   * Creates a SessionManager instance.
+   *
+   * @param storageManager - Storage manager for session persistence
+   * @param eventManager - Event manager for SESSION_START/SESSION_END events
+   * @param projectId - Project identifier for namespacing session storage
+   */
   constructor(storageManager, eventManager, projectId) {
     super();
     this.storageManager = storageManager;
@@ -2273,6 +3955,57 @@ class SessionManager extends StateManager {
   getProjectId() {
     return this.projectId;
   }
+  /**
+   * Starts session tracking with lifecycle management and cross-tab synchronization.
+   *
+   * **Purpose**: Initializes session tracking, creating or recovering a session ID,
+   * setting up activity listeners, and enabling cross-tab synchronization.
+   *
+   * **Flow**:
+   * 1. Checks if tracking already active (idempotent)
+   * 2. Attempts to recover session from localStorage
+   * 3. If no recovery: Generates new session ID (`{timestamp}-{9-char-base36}`)
+   * 4. Sets `sessionId` in global state
+   * 5. Persists session to localStorage
+   * 6. Initializes BroadcastChannel for cross-tab sync (BEFORE SESSION_START)
+   * 7. Shares session via BroadcastChannel (notifies other tabs)
+   * 8. If NOT recovered: Tracks SESSION_START event
+   * 9. Sets up inactivity timeout (default 15 minutes)
+   * 10. Sets up activity listeners (click, keydown, scroll)
+   * 11. Sets up lifecycle listeners (visibilitychange, beforeunload)
+   *
+   * **Session Recovery**:
+   * - Checks localStorage for existing session
+   * - Recovers if session exists and is recent (within timeout window)
+   * - NO SESSION_START event if session recovered
+   *
+   * **Error Handling**:
+   * - On error: Rolls back all setup (cleanup listeners, timers, state)
+   * - Re-throws error to caller (App.init() handles failure)
+   *
+   * **BroadcastChannel Initialization Order**:
+   * - CRITICAL: BroadcastChannel initialized BEFORE SESSION_START event
+   * - Prevents race condition with secondary tabs
+   * - Ensures secondary tabs can receive session_start message
+   *
+   * **Called by**: `SessionHandler.startTracking()` during `App.init()`
+   *
+   * **Important**: After successful call, `sessionId` is available in global state
+   * and EventManager can flush pending events via `flushPendingEvents()`.
+   *
+   * @throws Error if initialization fails (rolled back automatically)
+   *
+   * @example
+   * ```typescript
+   * sessionManager.startTracking();
+   * // → Session created: '1704896400000-a3b4c5d6e'
+   * // → SESSION_START event tracked
+   * // → Activity listeners active
+   * // → Cross-tab sync enabled
+   * ```
+   *
+   * @see src/managers/README.md (lines 140-169) for session management details
+   */
   startTracking() {
     if (this.isTracking) {
       log("warn", "Session tracking already active");
@@ -2414,9 +4147,79 @@ class SessionManager extends StateManager {
     this.set("hasStartSession", false);
     this.isTracking = false;
   }
+  /**
+   * Stops session tracking and ends the current session.
+   *
+   * **Purpose**: Manually ends the current session, tracking SESSION_END event
+   * and cleaning up all listeners and timers.
+   *
+   * **Flow**:
+   * 1. Calls `endSession('manual_stop')` internally
+   * 2. Tracks SESSION_END event (reason: 'manual_stop')
+   * 3. Broadcasts session_end via BroadcastChannel (notifies other tabs)
+   * 4. Clears inactivity timeout
+   * 5. Cleans up activity listeners
+   * 6. Cleans up lifecycle listeners
+   * 7. Cleans up BroadcastChannel
+   * 8. Clears session from localStorage
+   * 9. Resets `sessionId` and `hasStartSession` in global state
+   * 10. Sets `isTracking` to false
+   *
+   * **State Guard**:
+   * - `isEnding` flag prevents duplicate SESSION_END events
+   * - Try-finally ensures cleanup even if error occurs
+   *
+   * **Called by**: `App.destroy()` during application teardown
+   *
+   * **Important**: After calling, session is terminated and cannot be resumed.
+   * New session will be created on next `startTracking()` call.
+   *
+   * @example
+   * ```typescript
+   * // Manual session end
+   * sessionManager.stopTracking();
+   * // → SESSION_END event tracked (reason: 'manual_stop')
+   * // → All listeners cleaned up
+   * // → Session cleared from localStorage
+   * // → Other tabs notified via BroadcastChannel
+   * ```
+   *
+   * @see src/managers/README.md (lines 140-169) for session management details
+   */
   stopTracking() {
     this.endSession("manual_stop");
   }
+  /**
+   * Destroys the session manager and cleans up all resources.
+   *
+   * **Purpose**: Performs deep cleanup of session manager resources without
+   * tracking SESSION_END event. Used during application teardown.
+   *
+   * **Differences from stopTracking()**:
+   * - Does NOT track SESSION_END event
+   * - Does NOT broadcast session end to other tabs
+   * - Does NOT clear localStorage (preserves session for recovery)
+   * - Used for internal cleanup, not user-initiated session end
+   *
+   * **Cleanup Flow**:
+   * 1. Clears inactivity timeout
+   * 2. Removes activity listeners (click, keydown, scroll)
+   * 3. Closes BroadcastChannel
+   * 4. Removes lifecycle listeners (visibilitychange, beforeunload, pagehide)
+   * 5. Resets tracking flags (`isTracking`, `hasStartSession`)
+   *
+   * **Called by**: `App.destroy()` during application teardown
+   *
+   * @returns void
+   *
+   * @example
+   * ```typescript
+   * sessionManager.destroy();
+   * // → All resources cleaned up
+   * // → NO SESSION_END event tracked
+   * // → Session preserved in localStorage for recovery
+   * ```
+   */
   destroy() {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
@@ -2501,6 +4304,13 @@ class PageViewHandler extends StateManager {
     this.eventManager = eventManager;
     this.onTrack = onTrack;
   }
+  /**
+   * Starts tracking page views.
+   *
+   * - Tracks initial page load immediately
+   * - Patches History API methods (pushState, replaceState)
+   * - Listens to popstate and hashchange events
+   */
   startTracking() {
     this.trackInitialPageView();
     window.addEventListener("popstate", this.trackCurrentPage, true);
@@ -2508,6 +4318,13 @@ class PageViewHandler extends StateManager {
     this.patchHistory("pushState");
     this.patchHistory("replaceState");
   }
+  /**
+   * Stops tracking page views and restores original History API methods.
+   *
+   * - Removes event listeners (popstate, hashchange)
+   * - Restores original pushState and replaceState methods
+   * - Resets throttling state
+   */
   stopTracking() {
     window.removeEventListener("popstate", this.trackCurrentPage, true);
     window.removeEventListener("hashchange", this.trackCurrentPage, true);
@@ -3420,27 +5237,100 @@ class ViewportHandler extends StateManager {
 }
 class GoogleAnalyticsIntegration extends StateManager {
   isInitialized = false;
+  /**
+   * Initializes Google Analytics/GTM integration.
+   *
+   * **Initialization Flow**:
+   * 1. Validates configuration (measurementId or containerId required)
+   * 2. Checks for existing gtag instance (auto-detection)
+   * 3. Checks if script already loaded (avoids duplicate loading)
+   * 4. Loads appropriate script (GTM or gtag.js)
+   * 5. Configures gtag with user_id
+   *
+   * **Script Priority**:
+   * - If `containerId` provided: Loads GTM script (`gtm.js`)
+   * - Otherwise: Loads GA4 script (`gtag/js`)
+   *
+   * **Auto-detection**:
+   * - Reuses existing gtag/dataLayer if found
+   * - Logs info message when reusing external scripts
+   *
+   * **Error Handling**:
+   * - Initialization failures are logged but don't throw
+   * - Safe to call multiple times (idempotent)
+   *
+   * @returns Promise that resolves when initialization completes
+   */
   async initialize() {
     if (this.isInitialized) {
       return;
     }
-    const measurementId = this.get("config").integrations?.googleAnalytics?.measurementId;
+    const googleConfig = this.get("config").integrations?.google;
     const userId = this.get("userId");
-    if (!measurementId?.trim() || !userId?.trim()) {
+    if (!googleConfig || !userId?.trim()) {
+      return;
+    }
+    const { measurementId, containerId } = googleConfig;
+    if (!measurementId?.trim() && !containerId?.trim()) {
       return;
     }
     try {
+      if (this.hasExistingGtagInstance()) {
+        log("info", "Google Analytics/GTM already loaded by external service, reusing existing script", {
+          showToClient: true
+        });
+        this.isInitialized = true;
+        return;
+      }
       if (this.isScriptAlreadyLoaded()) {
         this.isInitialized = true;
         return;
       }
-      await this.loadScript(measurementId);
-      this.configureGtag(measurementId, userId);
+      const scriptId = containerId?.trim() || measurementId?.trim();
+      if (scriptId) {
+        await this.loadScript(scriptId);
+        this.configureGtag(scriptId, userId);
+      }
       this.isInitialized = true;
     } catch (error) {
-      log("error", "Google Analytics initialization failed", { error });
+      log("error", "Google Analytics/GTM initialization failed", { error });
     }
   }
+  /**
+   * Sends a custom event to Google Analytics/GTM via gtag.
+   *
+   * **Event Flow**:
+   * - Called by EventManager when custom event (`tracelog.event()`) is tracked
+   * - Only custom events are forwarded (automatic events like clicks are NOT sent)
+   * - Events pushed to dataLayer via `gtag('event', eventName, metadata)`
+   *
+   * **Metadata Handling**:
+   * - Arrays are wrapped in `{ items: [...] }` for GA4 compatibility
+   * - Objects passed directly to gtag
+   *
+   * **Requirements**:
+   * - Integration must be initialized (`initialize()` called successfully)
+   * - `window.gtag` function must exist
+   * - Event name must be non-empty string
+   *
+   * **Error Handling**:
+   * - Silent failures (logs error but doesn't throw)
+   * - Safe to call before initialization (no-op)
+   *
+   * @param eventName - Event name (e.g., 'button_click', 'purchase_completed')
+   * @param metadata - Event metadata (flat key-value object or array of objects)
+   *
+   * @example
+   * ```typescript
+   * // Object metadata
+   * trackEvent('button_click', { button_id: 'cta', page: 'home' });
+   * // → gtag('event', 'button_click', { button_id: 'cta', page: 'home' })
+   *
+   * // Array metadata (wrapped for GA4 e-commerce)
+   * trackEvent('purchase', [{ id: '123', name: 'Product', price: 99 }]);
+   * // → gtag('event', 'purchase', { items: [{ id: '123', name: 'Product', price: 99 }] })
+   * ```
+   */
   trackEvent(eventName, metadata) {
     if (!eventName?.trim() || !this.isInitialized || typeof window.gtag !== "function") {
       return;
@@ -3452,6 +5342,21 @@ class GoogleAnalyticsIntegration extends StateManager {
       log("error", "Google Analytics event tracking failed", { error });
     }
   }
+  /**
+   * Cleans up Google Analytics integration resources.
+   *
+   * **Cleanup Actions**:
+   * - Resets initialization flag
+   * - Removes TraceLog-injected script element
+   * - Does NOT remove externally loaded gtag/GTM scripts
+   *
+   * **Note**: gtag function and dataLayer remain in window even after cleanup.
+   * This is intentional to avoid breaking external scripts that may depend on them.
+   *
+   * Called by:
+   * - `App.destroy()` - When destroying entire TraceLog instance
+   * - Error scenarios during initialization
+   */
   cleanup() {
     this.isInitialized = false;
     const script = document.getElementById("tracelog-ga-script");
@@ -3459,38 +5364,96 @@ class GoogleAnalyticsIntegration extends StateManager {
       script.remove();
     }
   }
+  /**
+   * Checks if gtag is already loaded by external service.
+   *
+   * Auto-detection prevents duplicate script loading when GA/GTM
+   * is already present (e.g., loaded by Consent Management Platform).
+   */
+  hasExistingGtagInstance() {
+    return typeof window.gtag === "function" && Array.isArray(window.dataLayer);
+  }
+  getScriptType(measurementId) {
+    return measurementId.startsWith("GTM-") ? "GTM" : "GA4";
+  }
   isScriptAlreadyLoaded() {
+    if (this.hasExistingGtagInstance()) {
+      return true;
+    }
     if (document.getElementById("tracelog-ga-script")) {
       return true;
     }
-    const existingGAScript = document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
-    return !!existingGAScript;
+    const existingScript = document.querySelector(
+      'script[src*="googletagmanager.com/gtag/js"], script[src*="googletagmanager.com/gtm.js"]'
+    );
+    return !!existingScript;
   }
+  /**
+   * Dynamically loads Google Analytics/GTM script into page.
+   *
+   * Script URLs:
+   * - GTM: https://www.googletagmanager.com/gtm.js?id=GTM-XXXXXXX
+   * - GA4/Ads/UA: https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX
+   *
+   * @param measurementId - GA4/GTM/Ads/UA ID
+   * @returns Promise that resolves when script loads successfully
+   * @throws Error if script fails to load
+   */
   async loadScript(measurementId) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.id = "tracelog-ga-script";
       script.async = true;
-      script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+      const scriptType = this.getScriptType(measurementId);
+      if (scriptType === "GTM") {
+        script.src = `https://www.googletagmanager.com/gtm.js?id=${measurementId}`;
+      } else {
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+      }
       script.onload = () => {
         resolve();
       };
       script.onerror = () => {
-        reject(new Error("Failed to load Google Analytics script"));
+        const type = scriptType === "GTM" ? "GTM" : "Google Analytics";
+        reject(new Error(`Failed to load ${type} script`));
       };
       document.head.appendChild(script);
     });
   }
+  /**
+   * Configures gtag function and dataLayer.
+   *
+   * **GTM Configuration**:
+   * - Only initializes gtag function and dataLayer
+   * - No config call (tags configured in GTM UI)
+   * - Allows GTM container to manage configuration
+   *
+   * **GA4/Ads/UA Configuration**:
+   * - Initializes gtag function and dataLayer
+   * - Calls `gtag('config')` with measurement ID
+   * - Sets `user_id` for cross-device tracking
+   *
+   * @param measurementId - GA4/GTM/Ads/UA ID
+   * @param userId - TraceLog user ID for user tracking
+   */
   configureGtag(measurementId, userId) {
     const gaScriptConfig = document.createElement("script");
-    gaScriptConfig.innerHTML = `
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', '${measurementId}', {
-        'user_id': '${userId}'
-      });
-    `;
+    if (measurementId.startsWith("GTM-")) {
+      gaScriptConfig.innerHTML = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+      `;
+    } else {
+      gaScriptConfig.innerHTML = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', '${measurementId}', {
+          'user_id': '${userId}'
+        });
+      `;
+    }
     document.head.appendChild(gaScriptConfig);
   }
 }
@@ -3511,7 +5474,12 @@ class StorageManager {
     }
   }
   /**
-   * Retrieves an item from storage
+   * Retrieves an item from localStorage.
+   *
+   * Automatically falls back to in-memory storage if localStorage unavailable.
+   *
+   * @param key - Storage key
+   * @returns Stored value or null if not found
    */
   getItem(key) {
     try {
@@ -3524,45 +5492,75 @@ class StorageManager {
     }
   }
   /**
-   * Stores an item in storage
+   * Stores an item in localStorage with automatic quota handling.
+   *
+   * **Behavior**:
+   * 1. Updates fallback storage first (ensures consistency)
+   * 2. Attempts to store in localStorage
+   * 3. On QuotaExceededError: Triggers cleanup and retries once
+   * 4. Falls back to in-memory storage if retry fails
+   *
+   * **Cleanup on Quota Error**:
+   * - Removes persisted events (largest data)
+   * - Removes up to 5 non-critical keys
+   * - Preserves session, user, device, and config keys
+   *
+   * @param key - Storage key
+   * @param value - String value to store
+   * @throws {Error} Re-throws QuotaExceededError if cleanup fails (for critical keys like consent)
    */
   setItem(key, value) {
     this.fallbackStorage.set(key, value);
+    console.log("[DEBUG] setItem called for key:", key, "storage available:", this.storage !== null);
     try {
       if (this.storage) {
         this.storage.setItem(key, value);
+        console.log("[DEBUG] setItem succeeded for key:", key);
         return;
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === "QuotaExceededError") {
+      console.log("[DEBUG] setItem caught error for key:", key, "error:", error);
+      const isQuotaError = error instanceof DOMException && error.name === "QuotaExceededError" || error instanceof Error && error.name === "QuotaExceededError";
+      console.log("[DEBUG] isQuotaError:", isQuotaError);
+      if (isQuotaError) {
         this.hasQuotaExceededError = true;
         log("warn", "localStorage quota exceeded, attempting cleanup", {
           data: { key, valueSize: value.length }
         });
         const cleanedUp = this.cleanupOldData();
+        console.log("[DEBUG] cleanedUp:", cleanedUp, "for key:", key);
         if (cleanedUp) {
           try {
             if (this.storage) {
               this.storage.setItem(key, value);
+              console.log("[DEBUG] Retry succeeded for key:", key);
               return;
             }
           } catch (retryError) {
+            console.log("[DEBUG] Retry failed for key:", key, retryError);
             log("error", "localStorage quota exceeded even after cleanup - data will not persist", {
               error: retryError,
               data: { key, valueSize: value.length }
             });
+            throw retryError;
           }
         } else {
+          console.log("[DEBUG] No cleanup possible, throwing for key:", key);
           log("error", "localStorage quota exceeded and no data to cleanup - data will not persist", {
             error,
             data: { key, valueSize: value.length }
           });
+          throw error;
         }
       }
     }
   }
   /**
-   * Removes an item from storage
+   * Removes an item from localStorage and fallback storage.
+   *
+   * Safe to call even if key doesn't exist (idempotent).
+   *
+   * @param key - Storage key to remove
    */
   removeItem(key) {
     try {
@@ -3574,7 +5572,15 @@ class StorageManager {
     this.fallbackStorage.delete(key);
   }
   /**
-   * Clears all TracLog-related items from storage
+   * Clears all TraceLog-related items from storage.
+   *
+   * Only removes keys with `tracelog_` prefix (safe for shared storage).
+   * Clears both localStorage and fallback storage.
+   *
+   * **Use Cases**:
+   * - User logout/privacy actions
+   * - Development/testing cleanup
+   * - Reset analytics state
    */
   clear() {
     if (!this.storage) {
@@ -3599,21 +5605,54 @@ class StorageManager {
     }
   }
   /**
-   * Checks if storage is available
+   * Checks if localStorage is available.
+   *
+   * @returns true if localStorage is working, false if using fallback
    */
   isAvailable() {
     return this.storage !== null;
   }
   /**
-   * Checks if a QuotaExceededError has occurred
-   * This indicates localStorage is full and data may not persist
+   * Checks if a QuotaExceededError has occurred during this session.
+   *
+   * **Purpose**: Detect when localStorage is full and data may not persist.
+   * Allows application to show warnings or adjust behavior.
+   *
+   * **Note**: Flag is set on first QuotaExceededError and never reset.
+   *
+   * @returns true if quota exceeded at any point during this session
    */
   hasQuotaError() {
     return this.hasQuotaExceededError;
   }
   /**
-   * Attempts to cleanup old TraceLog data from storage to free up space
-   * Returns true if any data was removed, false otherwise
+   * Implements two-phase cleanup strategy to free storage space when quota exceeded.
+   *
+   * **Purpose**: Removes TraceLog data intelligently to make room for new writes
+   * while preserving critical user state (session, user ID, device ID, config).
+   *
+   * **Two-Phase Cleanup Strategy**:
+   * 1. **Phase 1 (Priority)**: Remove all persisted events (`tracelog_persisted_events_*`)
+   *    - These are typically the largest data items (batches of events)
+   *    - Safe to remove as they represent recoverable failed sends
+   *    - Returns immediately if any persisted events found and removed
+   *
+   * 2. **Phase 2 (Fallback)**: Remove up to 5 non-critical keys
+   *    - Only executed if no persisted events found
+   *    - Preserves critical keys: session data, user ID, device ID, config
+   *    - Limits to 5 keys to avoid excessive cleanup time
+   *
+   * **Critical Keys (Never Removed)**:
+   * - `tracelog_session_*` - Active session data
+   * - `tracelog_user_id` - User identification
+   * - `tracelog_device_id` - Device fingerprint
+   * - `tracelog_config` - Configuration cache
+   *
+   * **Error Handling**:
+   * - Individual key removal failures silently ignored (continue cleanup)
+   * - Overall cleanup errors logged and return false
+   *
+   * @returns true if any data was successfully removed, false if nothing cleaned up
    */
   cleanupOldData() {
     if (!this.storage) {
@@ -3661,7 +5700,28 @@ class StorageManager {
     }
   }
   /**
-   * Initialize storage (localStorage or sessionStorage) with feature detection
+   * Initializes storage with feature detection and write-test validation.
+   *
+   * **Purpose**: Validates storage availability by performing actual write/remove test,
+   * preventing false positives in privacy modes where storage API exists but throws on write.
+   *
+   * **Validation Strategy**:
+   * 1. SSR Safety: Returns null in Node.js environments (`typeof window === 'undefined'`)
+   * 2. API Check: Verifies storage object exists on window
+   * 3. Write Test: Attempts to write test key (`__tracelog_test__`)
+   * 4. Cleanup: Removes test key immediately after validation
+   *
+   * **Why Write Test is Critical**:
+   * - Safari private browsing: storage API exists but throws QuotaExceededError on write
+   * - iOS private mode: storage appears available but operations fail
+   * - Incognito modes: API exists but writes are silently ignored or throw
+   *
+   * **Fallback Behavior**:
+   * - Returns null if storage unavailable or test fails
+   * - Caller automatically falls back to in-memory Map storage
+   *
+   * @param type - Storage type to initialize ('localStorage' | 'sessionStorage')
+   * @returns Storage instance if available and writable, null otherwise
    */
   initializeStorage(type) {
     if (typeof window === "undefined") {
@@ -3678,7 +5738,12 @@ class StorageManager {
     }
   }
   /**
-   * Retrieves an item from sessionStorage
+   * Retrieves an item from sessionStorage.
+   *
+   * Automatically falls back to in-memory storage if sessionStorage unavailable.
+   *
+   * @param key - Storage key
+   * @returns Stored value or null if not found
    */
   getSessionItem(key) {
     try {
@@ -3691,7 +5756,18 @@ class StorageManager {
     }
   }
   /**
-   * Stores an item in sessionStorage
+   * Stores an item in sessionStorage with quota error detection.
+   *
+   * **Behavior**:
+   * 1. Updates fallback storage first (ensures consistency)
+   * 2. Attempts to store in sessionStorage
+   * 3. On QuotaExceededError: Logs error and uses fallback (no retry/cleanup)
+   *
+   * **Note**: sessionStorage quota errors are rare (typically 5-10MB per tab).
+   * No automatic cleanup unlike localStorage.
+   *
+   * @param key - Storage key
+   * @param value - String value to store
    */
   setSessionItem(key, value) {
     this.fallbackSessionStorage.set(key, value);
@@ -3701,7 +5777,8 @@ class StorageManager {
         return;
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === "QuotaExceededError") {
+      const isQuotaError = error instanceof DOMException && error.name === "QuotaExceededError" || error instanceof Error && error.name === "QuotaExceededError";
+      if (isQuotaError) {
         log("error", "sessionStorage quota exceeded - data will not persist", {
           error,
           data: { key, valueSize: value.length }
@@ -3710,7 +5787,11 @@ class StorageManager {
     }
   }
   /**
-   * Removes an item from sessionStorage
+   * Removes an item from sessionStorage and fallback storage.
+   *
+   * Safe to call even if key doesn't exist (idempotent).
+   *
+   * @param key - Storage key to remove
    */
   removeSessionItem(key) {
     try {
@@ -3722,6 +5803,10 @@ class StorageManager {
     this.fallbackSessionStorage.delete(key);
   }
 }
+const storage_manager = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  StorageManager
+}, Symbol.toStringTag, { value: "Module" }));
 class PerformanceHandler extends StateManager {
   eventManager;
   reportedByNav = /* @__PURE__ */ new Map();
@@ -3986,10 +6071,23 @@ class ErrorHandler extends StateManager {
     super();
     this.eventManager = eventManager;
   }
+  /**
+   * Starts tracking JavaScript errors and promise rejections.
+   *
+   * - Registers global error event listener
+   * - Registers unhandledrejection event listener
+   */
   startTracking() {
     window.addEventListener("error", this.handleError);
     window.addEventListener("unhandledrejection", this.handleRejection);
   }
+  /**
+   * Stops tracking errors and cleans up resources.
+   *
+   * - Removes error event listeners
+   * - Clears recent errors map
+   * - Resets burst detection counters
+   */
   stopTracking() {
     window.removeEventListener("error", this.handleError);
     window.removeEventListener("unhandledrejection", this.handleRejection);
@@ -3999,7 +6097,7 @@ class ErrorHandler extends StateManager {
     this.burstBackoffUntil = 0;
   }
   /**
-   * Checks sampling rate and burst detection (Phase 3)
+   * Checks sampling rate and burst detection
    * Returns false if in cooldown period after burst detection
    */
   shouldSample() {
@@ -4135,6 +6233,36 @@ class App extends StateManager {
   get initialized() {
     return this.isInitialized;
   }
+  /**
+   * Initializes TraceLog application with configuration.
+   *
+   * **Initialization flow:**
+   * 1. Create StorageManager (localStorage/sessionStorage wrapper with fallback)
+   * 2. Setup state (config, userId, device, pageUrl, mode detection)
+   * 3. Initialize ConsentManager (loads persisted consent from localStorage, enables emitter)
+   * 4. Log consent state if waitForConsent enabled
+   * 5. Setup integrations (Google Analytics if configured and consented, or deferred)
+   * 6. Initialize EventManager (receives transformers, creates SenderManager instances)
+   * 7. Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
+   * 8. Recover persisted events from localStorage (non-fatal errors logged)
+   * 9. Set isInitialized flag
+   *
+   * **Deferred Integration Initialization:**
+   * - If `waitForConsent: true` and consent not granted, integrations are not initialized
+   * - When consent is later granted via `setConsent()`, integrations initialize via `handleConsentGranted()`
+   *
+   * **Transformers:**
+   * - Transformers stored in `App.transformers` are passed to EventManager constructor
+   * - EventManager applies transformers during event processing
+   *
+   * **Error Handling:**
+   * - If initialization fails, calls `destroy(true)` for cleanup (force=true bypasses isInitialized check)
+   * - Event recovery errors are non-fatal (logged but don't prevent initialization)
+   *
+   * @param config - Configuration object
+   * @throws {Error} If initialization fails
+   * @internal This method is called from api.init() - users should use the API wrapper
+   */
   async init(config = {}) {
     if (this.isInitialized) {
       return;
@@ -4142,10 +6270,22 @@ class App extends StateManager {
     this.managers.storage = new StorageManager();
     try {
       this.setupState(config);
+      this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
+      if (config.waitForConsent) {
+        const consentState = this.managers.consent.getConsentState();
+        log("info", "Consent mode enabled", {
+          data: {
+            google: consentState.google,
+            custom: consentState.custom,
+            tracelog: consentState.tracelog
+          }
+        });
+      }
       await this.setupIntegrations();
       this.managers.event = new EventManager(
         this.managers.storage,
-        this.integrations.googleAnalytics,
+        this.integrations.google,
+        this.managers.consent,
         this.emitter,
         this.transformers
       );
@@ -4160,6 +6300,20 @@ class App extends StateManager {
       throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`);
     }
   }
+  /**
+   * Sends a custom event with optional metadata.
+   *
+   * **Features:**
+   * - Validates event name and metadata structure
+   * - Sanitizes metadata (PII protection)
+   * - Normalizes DOMStringMap and similar objects to plain objects
+   * - In QA mode: throws validation errors, logs to console (not sent to backend)
+   * - In normal mode: silently drops invalid events
+   *
+   * @param name - Event name identifier
+   * @param metadata - Optional metadata (flat key-value pairs or array of objects)
+   * @internal This method is called from api.event() - users should use the API wrapper
+   */
   sendCustomEvent(name, metadata) {
     if (!this.managers.event) {
       return;
@@ -4203,11 +6357,36 @@ class App extends StateManager {
   getTransformer(hook) {
     return this.transformers[hook];
   }
+  /**
+   * Destroys the TraceLog instance and cleans up all resources.
+   *
+   * **Cleanup sequence:**
+   * 1. Stop all handlers (sends SESSION_END event)
+   * 2. Flush remaining events via EventManager.stop()
+   * 3. Clear timers and intervals
+   * 4. Remove all event listeners (emitter, consent, integrations)
+   * 5. Reset global state flags
+   *
+   * **Force Parameter:**
+   * @param force - If true, forces cleanup even if not initialized
+   *
+   * **Use Cases for `force=true`:**
+   * - **Init Failure**: When `init()` fails partway through, some managers may be initialized
+   *   but `isInitialized` flag is still false. Force cleanup ensures proper resource cleanup.
+   * - **Example**: `init()` → creates StorageManager → error occurs → `destroy(true)` called
+   *   in catch block to cleanup partially initialized state
+   *
+   * **Normal Usage:**
+   * - Users call `api.destroy()` which calls `app.destroy()` (force=false by default)
+   * - Only triggers cleanup if `isInitialized === true`
+   *
+   * @internal This method is called from api.destroy() - users should use the API wrapper
+   */
   destroy(force = false) {
     if (!this.isInitialized && !force) {
       return;
     }
-    this.integrations.googleAnalytics?.cleanup();
+    this.integrations.google?.cleanup();
     Object.values(this.handlers).filter(Boolean).forEach((handler) => {
       try {
         handler.stopTracking();
@@ -4220,6 +6399,7 @@ class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
     this.managers.event?.stop();
+    this.managers.consent?.cleanup();
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = void 0;
     this.transformers.beforeBatch = void 0;
@@ -4244,17 +6424,143 @@ class App extends StateManager {
       this.set("mode", mode);
     }
   }
+  /**
+   * Sets up configured integrations (Google Analytics, etc.)
+   *
+   * **Consent-Aware Initialization:**
+   * - If `waitForConsent: true`, checks consent before initializing integrations
+   * - If consent not granted, initialization is **deferred**
+   * - Deferred integrations initialize later when consent is granted via `handleConsentGranted()`
+   *
+   * **Google Analytics Integration:**
+   * - Requires either `measurementId` or `containerId` configuration
+   * - Checks `shouldInitializeIntegration('google')` before initialization
+   * - If deferred, logs "Google Analytics initialization deferred, waiting for consent"
+   * - Later initialization happens when user calls `setConsent('google', true)` or `setConsent('all', true)`
+   *
+   * @private
+   */
   async setupIntegrations() {
     const config = this.get("config");
-    const measurementId = config.integrations?.googleAnalytics?.measurementId;
-    if (measurementId?.trim()) {
-      try {
-        this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
-        await this.integrations.googleAnalytics.initialize();
-      } catch {
-        this.integrations.googleAnalytics = void 0;
+    const googleConfig = config.integrations?.google;
+    if (googleConfig) {
+      const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
+      const hasContainerId = Boolean(googleConfig.containerId?.trim());
+      if (hasMeasurementId || hasContainerId) {
+        const shouldInitializeGoogle = this.shouldInitializeIntegration("google");
+        if (shouldInitializeGoogle) {
+          try {
+            this.integrations.google = new GoogleAnalyticsIntegration();
+            await this.integrations.google.initialize();
+            log("debug", "Google Analytics integration initialized");
+          } catch (error) {
+            this.integrations.google = void 0;
+            log("warn", "Failed to initialize Google Analytics", { error });
+          }
+        } else {
+          log("info", "Google Analytics initialization deferred, waiting for consent");
+        }
       }
     }
+  }
+  /**
+   * Get consent manager instance.
+   *
+   * @returns ConsentManager instance or undefined if not initialized
+   * @internal Used by api.ts for consent operations
+   */
+  getConsentManager() {
+    return this.managers.consent;
+  }
+  /**
+   * Get current configuration.
+   *
+   * @returns Configuration object
+   * @internal Used by api.ts for config access
+   */
+  getConfig() {
+    return this.get("config");
+  }
+  /**
+   * Get configured API URLs for integrations.
+   *
+   * @returns Object with saas and/or custom API URLs
+   * @internal Used by api.ts for integration checks
+   */
+  getCollectApiUrls() {
+    return this.get("collectApiUrls");
+  }
+  /**
+   * Get event manager instance.
+   *
+   * @returns EventManager instance or undefined if not initialized
+   * @internal Used by api.ts for consent buffer operations
+   */
+  getEventManager() {
+    return this.managers.event;
+  }
+  /**
+   * Handles consent granted for an integration.
+   *
+   * **Orchestration:**
+   * 1. Initialize the integration if not already initialized (deferred initialization)
+   * 2. Flush consent buffer for this integration (sends buffered events)
+   *
+   * **Deferred Initialization Flow:**
+   * - If integration was deferred during `init()` due to missing consent
+   * - This method initializes it when user grants consent via `setConsent()`
+   * - For Google Analytics: Creates integration, initializes, and updates EventManager reference
+   * - For Custom/TraceLog: Handled by EventManager/SenderManager (no explicit initialization needed)
+   *
+   * @param integration - Integration identifier
+   * @internal Called from api.setConsent() when consent is granted
+   */
+  async handleConsentGranted(integration) {
+    log("info", `Consent granted for ${integration}, initializing and flushing buffer`);
+    await this.initializeIntegration(integration);
+    if (this.managers.event) {
+      await this.managers.event.flushConsentBuffer(integration);
+    }
+  }
+  /**
+   * Initialize a specific integration (called when consent is granted)
+   */
+  async initializeIntegration(integration) {
+    if (integration === "google") {
+      const config = this.get("config");
+      const googleConfig = config.integrations?.google;
+      if (googleConfig && !this.integrations.google) {
+        const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
+        const hasContainerId = Boolean(googleConfig.containerId?.trim());
+        if (hasMeasurementId || hasContainerId) {
+          try {
+            this.integrations.google = new GoogleAnalyticsIntegration();
+            await this.integrations.google.initialize();
+            if (this.managers.event) {
+              this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
+            }
+            log("info", "Google Analytics integration initialized after consent");
+          } catch (error) {
+            this.integrations.google = void 0;
+            log("warn", "Failed to initialize Google Analytics after consent", { error });
+          }
+        }
+      }
+    }
+  }
+  /**
+   * Check if an integration should be initialized based on consent
+   */
+  shouldInitializeIntegration(integration) {
+    const config = this.get("config");
+    if (!config?.waitForConsent) {
+      return true;
+    }
+    const consentManager = this.managers.consent;
+    if (!consentManager) {
+      return true;
+    }
+    return consentManager.hasConsent(integration);
   }
   initializeHandlers() {
     const config = this.get("config");
@@ -4381,7 +6687,7 @@ class TestBridge extends App {
     return this.safeAccess(this.managers?.storage);
   }
   getEventManager() {
-    return this.safeAccess(this.managers?.event);
+    return this.managers.event;
   }
   // Handler accessors
   getSessionHandler() {
@@ -4404,7 +6710,54 @@ class TestBridge extends App {
   }
   // Integration accessors
   getGoogleAnalytics() {
-    return this.safeAccess(this.integrations?.googleAnalytics);
+    return this.safeAccess(this.integrations?.google);
+  }
+  // Consent methods for E2E testing
+  async setConsent(integration, granted) {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      throw new Error("Consent manager not available");
+    }
+    const config = this.get("config");
+    if (integration === "all") {
+      const integrations = [];
+      if (config?.integrations?.google) {
+        integrations.push("google");
+      }
+      const collectApiUrls = this.get("collectApiUrls");
+      if (collectApiUrls?.custom) {
+        integrations.push("custom");
+      }
+      if (collectApiUrls?.saas) {
+        integrations.push("tracelog");
+      }
+      for (const int of integrations) {
+        await this.setConsent(int, granted);
+      }
+      return;
+    }
+    const hadConsent = consentManager.hasConsent(integration);
+    consentManager.setConsent(integration, granted);
+    if (granted && !hadConsent) {
+      await this.handleConsentGranted(integration);
+    }
+  }
+  hasConsent(integration) {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      return false;
+    }
+    return consentManager.hasConsent(integration);
+  }
+  getConsentState() {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      return { google: false, custom: false, tracelog: false };
+    }
+    return consentManager.getConsentState();
+  }
+  getConsentBufferLength() {
+    return this.managers.event?.getConsentBufferLength() ?? 0;
   }
   destroy(force = false) {
     if (!this.initialized && !force) {
@@ -4438,6 +6791,7 @@ class TestBridge extends App {
 }
 const pendingListeners = [];
 const pendingTransformers = [];
+const pendingConsents = [];
 let app = null;
 let isInitializing = false;
 let isDestroying = false;
@@ -4479,6 +6833,17 @@ const init = async (config) => {
       });
       await Promise.race([initPromise, timeoutPromise]);
       app = instance;
+      if (pendingConsents.length > 0) {
+        const consents = [...pendingConsents];
+        pendingConsents.length = 0;
+        for (const { integration, granted } of consents) {
+          try {
+            await setConsent(integration, granted);
+          } catch (error) {
+            log("warn", `Failed to apply pending consent for ${integration}`, { error });
+          }
+        }
+      }
     } catch (error) {
       try {
         instance.destroy(true);
@@ -4589,6 +6954,7 @@ const destroy = () => {
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
+    pendingConsents.length = 0;
     if (typeof window !== "undefined" && window.__traceLogBridge) {
       window.__traceLogBridge = void 0;
     }
@@ -4597,10 +6963,134 @@ const destroy = () => {
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
+    pendingConsents.length = 0;
     log("warn", "Error during destroy, forced cleanup completed", { error });
   } finally {
     isDestroying = false;
   }
+};
+const setConsent = async (integration, granted) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!app || isInitializing) {
+    if (integration === "all") {
+      const existingIndex = pendingConsents.findIndex((c2) => c2.integration === integration);
+      if (existingIndex !== -1) {
+        pendingConsents.splice(existingIndex, 1);
+      }
+      pendingConsents.push({ integration, granted });
+      try {
+        const { StorageManager: StorageManager2 } = await Promise.resolve().then(() => storage_manager);
+        const { ConsentManager: ConsentManager2 } = await Promise.resolve().then(() => consent_manager);
+        const tempStorage = new StorageManager2();
+        const tempConsent = new ConsentManager2(tempStorage, false, null);
+        tempConsent.setConsent("google", granted);
+        tempConsent.setConsent("custom", granted);
+        tempConsent.setConsent("tracelog", granted);
+        tempConsent.flush();
+        tempConsent.cleanup();
+        log("debug", `Consent for 'all' persisted to localStorage before init`);
+      } catch (error) {
+        log("error", "Failed to persist consent for all integrations before init", { error });
+        throw new Error(`[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+    try {
+      const { StorageManager: StorageManager2 } = await Promise.resolve().then(() => storage_manager);
+      const { ConsentManager: ConsentManager2 } = await Promise.resolve().then(() => consent_manager);
+      const tempStorage = new StorageManager2();
+      const tempConsent = new ConsentManager2(tempStorage, false, null);
+      tempConsent.setConsent(integration, granted);
+      tempConsent.flush();
+      tempConsent.cleanup();
+      log("debug", `Consent for ${integration} persisted before init`);
+    } catch (error) {
+      console.log("[DEBUG API] Caught error in setConsent:", error);
+      log("error", "Failed to persist consent before init", { error });
+      const wrappedError = new Error(`[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`);
+      console.log("[DEBUG API] Throwing wrapped error:", wrappedError.message);
+      throw wrappedError;
+    }
+    return;
+  }
+  if (isDestroying) {
+    throw new Error("[TraceLog] Cannot set consent while TraceLog is being destroyed");
+  }
+  const consentManager = app.getConsentManager();
+  if (!consentManager) {
+    log("warn", "Consent manager not available");
+    return;
+  }
+  const config = app.getConfig();
+  if (integration === "all") {
+    const integrations = [];
+    if (config.integrations?.google) {
+      integrations.push("google");
+    }
+    const collectApiUrls = app.getCollectApiUrls();
+    if (collectApiUrls?.custom) {
+      integrations.push("custom");
+    }
+    if (collectApiUrls?.saas) {
+      integrations.push("tracelog");
+    }
+    for (const int of integrations) {
+      await setConsent(int, granted);
+    }
+    return;
+  }
+  const hadConsent = consentManager.hasConsent(integration);
+  consentManager.setConsent(integration, granted);
+  if (granted && !hadConsent) {
+    await app.handleConsentGranted(integration);
+  }
+  if (!granted && hadConsent) {
+    log("info", `Consent revoked for ${integration}`);
+    const eventManager = app.getEventManager();
+    if (eventManager) {
+      eventManager.clearConsentBufferForIntegration(integration);
+    }
+  }
+};
+const hasConsent = (integration) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return false;
+  }
+  if (!app) {
+    if (integration === "all") {
+      const state2 = loadConsentFromStorage();
+      if (state2 === null) {
+        return false;
+      }
+      return Boolean(state2.google === true && state2.custom === true && state2.tracelog === true);
+    }
+    const state = loadConsentFromStorage();
+    if (state === null) {
+      return false;
+    }
+    return Boolean(state[integration] === true);
+  }
+  const consentManager = app.getConsentManager();
+  if (consentManager === void 0) {
+    return false;
+  }
+  return consentManager.hasConsent(integration);
+};
+const getConsentState = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return { google: false, custom: false, tracelog: false };
+  }
+  if (!app) {
+    const state = loadConsentFromStorage();
+    return state ?? { google: false, custom: false, tracelog: false };
+  }
+  const consentManager = app.getConsentManager();
+  if (!consentManager) {
+    return { google: false, custom: false, tracelog: false };
+  }
+  return consentManager.getConsentState();
 };
 const setQaMode = (enabled) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -4639,7 +7129,10 @@ const tracelog = {
   removeTransformer,
   isInitialized,
   destroy,
-  setQaMode
+  setQaMode,
+  setConsent,
+  hasConsent,
+  getConsentState
 };
 var e, o = -1, a = function(e3) {
   addEventListener("pageshow", (function(n) {

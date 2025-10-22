@@ -60,12 +60,27 @@ export class App extends StateManager {
    * Initializes TraceLog application with configuration.
    *
    * **Initialization flow:**
-   * 1. Setup state (config, userId, device, pageUrl)
-   * 2. Initialize ConsentManager (loads persisted consent)
-   * 3. Setup integrations (Google Analytics if configured and consented)
-   * 4. Initialize EventManager with SenderManager instances
-   * 5. Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
-   * 6. Recover persisted events from localStorage
+   * 1. Create StorageManager (localStorage/sessionStorage wrapper with fallback)
+   * 2. Setup state (config, userId, device, pageUrl, mode detection)
+   * 3. Initialize ConsentManager (loads persisted consent from localStorage, enables emitter)
+   * 4. Log consent state if waitForConsent enabled
+   * 5. Setup integrations (Google Analytics if configured and consented, or deferred)
+   * 6. Initialize EventManager (receives transformers, creates SenderManager instances)
+   * 7. Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
+   * 8. Recover persisted events from localStorage (non-fatal errors logged)
+   * 9. Set isInitialized flag
+   *
+   * **Deferred Integration Initialization:**
+   * - If `waitForConsent: true` and consent not granted, integrations are not initialized
+   * - When consent is later granted via `setConsent()`, integrations initialize via `handleConsentGranted()`
+   *
+   * **Transformers:**
+   * - Transformers stored in `App.transformers` are passed to EventManager constructor
+   * - EventManager applies transformers during event processing
+   *
+   * **Error Handling:**
+   * - If initialization fails, calls `destroy(true)` for cleanup (force=true bypasses isInitialized check)
+   * - Event recovery errors are non-fatal (logged but don't prevent initialization)
    *
    * @param config - Configuration object
    * @throws {Error} If initialization fails
@@ -202,7 +217,19 @@ export class App extends StateManager {
    * 4. Remove all event listeners (emitter, consent, integrations)
    * 5. Reset global state flags
    *
-   * @param force - If true, forces cleanup even if not initialized (internal use)
+   * **Force Parameter:**
+   * @param force - If true, forces cleanup even if not initialized
+   *
+   * **Use Cases for `force=true`:**
+   * - **Init Failure**: When `init()` fails partway through, some managers may be initialized
+   *   but `isInitialized` flag is still false. Force cleanup ensures proper resource cleanup.
+   * - **Example**: `init()` → creates StorageManager → error occurs → `destroy(true)` called
+   *   in catch block to cleanup partially initialized state
+   *
+   * **Normal Usage:**
+   * - Users call `api.destroy()` which calls `app.destroy()` (force=false by default)
+   * - Only triggers cleanup if `isInitialized === true`
+   *
    * @internal This method is called from api.destroy() - users should use the API wrapper
    */
   destroy(force = false): void {
@@ -264,6 +291,22 @@ export class App extends StateManager {
     }
   }
 
+  /**
+   * Sets up configured integrations (Google Analytics, etc.)
+   *
+   * **Consent-Aware Initialization:**
+   * - If `waitForConsent: true`, checks consent before initializing integrations
+   * - If consent not granted, initialization is **deferred**
+   * - Deferred integrations initialize later when consent is granted via `handleConsentGranted()`
+   *
+   * **Google Analytics Integration:**
+   * - Requires either `measurementId` or `containerId` configuration
+   * - Checks `shouldInitializeIntegration('google')` before initialization
+   * - If deferred, logs "Google Analytics initialization deferred, waiting for consent"
+   * - Later initialization happens when user calls `setConsent('google', true)` or `setConsent('all', true)`
+   *
+   * @private
+   */
   private async setupIntegrations(): Promise<void> {
     const config = this.get('config');
     const googleConfig = config.integrations?.google;
@@ -336,8 +379,14 @@ export class App extends StateManager {
    * Handles consent granted for an integration.
    *
    * **Orchestration:**
-   * 1. Initialize the integration if not already initialized
+   * 1. Initialize the integration if not already initialized (deferred initialization)
    * 2. Flush consent buffer for this integration (sends buffered events)
+   *
+   * **Deferred Initialization Flow:**
+   * - If integration was deferred during `init()` due to missing consent
+   * - This method initializes it when user grants consent via `setConsent()`
+   * - For Google Analytics: Creates integration, initializes, and updates EventManager reference
+   * - For Custom/TraceLog: Handled by EventManager/SenderManager (no explicit initialization needed)
    *
    * @param integration - Integration identifier
    * @internal Called from api.setConsent() when consent is granted
@@ -370,6 +419,7 @@ export class App extends StateManager {
             await this.integrations.google.initialize();
 
             // Update reference in EventManager so it can send events to Google
+            // Note: Buffered events are flushed by caller (handleConsentGranted)
             if (this.managers.event) {
               this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
             }

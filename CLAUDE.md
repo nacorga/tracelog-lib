@@ -144,12 +144,22 @@ app.getTransformer(hook)                // Get transformer (internal)
 
 ### Initialization Flow
 
-1. `api.init(config)` → validates config
-2. `App.init()` → creates managers and handlers
-3. Managers initialize (Storage, Event, Session)
-4. Handlers start tracking (PageView, Click, Scroll, etc.)
-5. Session recovers from localStorage (if exists)
-6. Pending events flushed after session init
+1. `api.init(config)` → validates config and normalizes it
+2. `App.init()` begins initialization:
+   - **Step 1**: Create StorageManager (localStorage/sessionStorage wrapper with fallback)
+   - **Step 2**: Setup state (config, userId, device, pageUrl, mode detection)
+   - **Step 3**: Initialize ConsentManager (loads persisted consent, enables emitter)
+   - **Step 4**: Log consent state if `waitForConsent` enabled
+   - **Step 5**: Setup integrations (Google Analytics if configured and consented)
+     - If `waitForConsent: true` and no consent → deferred initialization
+     - Later initialized via `handleConsentGranted()` when consent granted
+   - **Step 6**: Initialize EventManager (receives transformers from App, creates SenderManagers)
+   - **Step 7**: Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
+     - Handlers are conditionally created based on `disabledEvents` config
+   - **Step 8**: Recover persisted events from localStorage (non-fatal errors logged)
+   - **Step 9**: Set `isInitialized = true`
+3. Pending listeners and transformers applied during steps 6-7
+4. Initial events fire (SESSION_START, PAGE_VIEW) during handler initialization
 
 ### Recommended User Initialization Order
 
@@ -514,17 +524,20 @@ Transformers are stored in the `App` class and passed to `EventManager` and `Sen
 
 ```typescript
 // In App class
-private readonly transformers: Map<
-  TransformerHook,
-  (data: EventData | EventsQueue) => EventData | EventsQueue | null
-> = new Map();
+private readonly transformers: TransformerMap = {};
+
+// TransformerMap interface (from transformer.types.ts)
+interface TransformerMap {
+  beforeSend?: BeforeSendTransformer;
+  beforeBatch?: BeforeBatchTransformer;
+}
 
 // Setting a transformer with validation
 setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void {
   if (typeof fn !== 'function') {
     throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
   }
-  this.transformers.set(hook, fn);
+  this.transformers[hook] = fn as BeforeSendTransformer & BeforeBatchTransformer;
 }
 
 // In EventManager.buildEventPayload() - beforeSend application with minimal validation

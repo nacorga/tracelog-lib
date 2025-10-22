@@ -117,7 +117,11 @@ export class StorageManager {
         return;
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      const isQuotaError =
+        (error instanceof DOMException && error.name === 'QuotaExceededError') ||
+        (error instanceof Error && error.name === 'QuotaExceededError');
+
+      if (isQuotaError) {
         this.hasQuotaExceededError = true;
 
         log('warn', 'localStorage quota exceeded, attempting cleanup', {
@@ -398,7 +402,11 @@ export class StorageManager {
         return;
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      const isQuotaError =
+        (error instanceof DOMException && error.name === 'QuotaExceededError') ||
+        (error instanceof Error && error.name === 'QuotaExceededError');
+
+      if (isQuotaError) {
         log('error', 'sessionStorage quota exceeded - data will not persist', {
           error,
           data: { key, valueSize: value.length },

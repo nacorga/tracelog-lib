@@ -487,6 +487,25 @@ export class ConsentManager {
   }
 
   /**
+   * Immediately flush any pending consent persistence to localStorage.
+   * Clears debounce timer and persists immediately.
+   *
+   * **Use Cases:**
+   * - Before navigation/page unload
+   * - When consent must be persisted synchronously (e.g., before init)
+   *
+   * @public
+   */
+  flush(): void {
+    if (this.persistDebounceTimer !== null) {
+      clearTimeout(this.persistDebounceTimer);
+      this.persistDebounceTimer = null;
+    }
+
+    this.persistConsent();
+  }
+
+  /**
    * Immediately persist consent state to localStorage
    */
   private persistConsent(): void {

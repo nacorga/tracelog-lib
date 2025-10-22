@@ -16,13 +16,6 @@ import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
 
-/**
- * Wait time for ConsentManager's debounced persistence to complete
- * Value: 60ms = PERSIST_DEBOUNCE_MS (50ms) + safety margin (10ms)
- * Used in setConsent() before init to ensure localStorage write completes
- */
-const CONSENT_PERSIST_WAIT_MS = 60;
-
 interface PendingListener {
   event: keyof EmitterMap;
   callback: EmitterCallback<EmitterMap[keyof EmitterMap]>;
@@ -216,8 +209,22 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
 /**
  * Subscribes to TraceLog events for real-time event consumption.
  *
- * **Important:** Register listeners BEFORE calling init() to capture initial events
- * like SESSION_START and PAGE_VIEW that fire during initialization.
+ * **Critical Timing Requirement:**
+ * Register listeners **BEFORE calling `init()`** to capture initial events like
+ * SESSION_START and PAGE_VIEW that fire during initialization.
+ *
+ * **What Happens:**
+ * - ✅ Listeners registered **before `tracelog.init()`**: Buffered and attached during init,
+ *   will receive SESSION_START and PAGE_VIEW events
+ * - ❌ Listeners registered **during or after `init()` starts**: Attached after init completes,
+ *   will MISS SESSION_START and PAGE_VIEW events
+ *
+ * **Timing Window:**
+ * ```
+ * tracelog.on('event', handler);  // ✅ Register FIRST
+ * await tracelog.init();           // Then initialize
+ * // SESSION_START and PAGE_VIEW fire here during init
+ * ```
  *
  * Available event types:
  * - `'event'`: Individual events as they're captured (real-time)
@@ -229,10 +236,11 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
  *
  * @example
  * ```typescript
- * // Listen to individual events
+ * // CORRECT: Register listener before init
  * tracelog.on('event', (event) => {
  *   console.log('Event:', event.type, event);
  * });
+ * await tracelog.init();  // Will receive SESSION_START and PAGE_VIEW
  *
  * // Listen to batches
  * tracelog.on('queue', (batch) => {
@@ -295,23 +303,50 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
  * Sets a transformer function to modify events at runtime before sending.
  *
  * **Integration-specific behavior:**
- * - TraceLog SaaS: Transformers silently ignored (schema protection)
- * - Custom Backend: Transformers applied as configured
- * - Multi-Integration: SaaS gets original, custom gets transformed
+ * - **Standalone Mode (no integration)**: Both transformers applied in EventManager
+ *   - `beforeSend` applied per-event in `buildEventPayload()` before queueing
+ *   - `beforeBatch` applied before emitting to local listeners
+ *   - Events visible in `on('event')` and `on('queue')` with transformations
+ * - **TraceLog SaaS (only)**: Transformers silently ignored (schema protection)
+ * - **Custom Backend (only)**: Both transformers applied
+ *   - `beforeSend` applied per-event in `buildEventPayload()` before queueing
+ *   - `beforeBatch` applied in SenderManager before network transmission
+ * - **Multi-Integration (SaaS + Custom)**: Transformers only apply to custom backend
+ *   - SaaS receives original events (schema protection)
+ *   - Custom backend receives transformed events
+ *   - Independent processing per integration
+ * - **Google Analytics**: Transformers NOT applied (forwards `tracelog.event()` as-is)
  *
  * **Available hooks:**
  * - `beforeSend`: Per-event transformation (before dedup/sampling/queueing)
- * - `beforeBatch`: Batch transformation (before network transmission)
+ * - `beforeBatch`: Batch transformation (before network transmission or local emit)
  *
- * **Register BEFORE init()** to transform initial events (SESSION_START, PAGE_VIEW).
+ * **Timing:**
+ * - Transformers are passed to EventManager during App initialization
+ * - Can be registered BEFORE or DURING `init()` - both work for initial events
+ * - Recommended: Register BEFORE `init()` for clarity and consistency
  *
  * @param hook - Transformer hook type
  * @param fn - Transformer function (return null to filter out event/batch)
- * @throws {Error} If called during destroy() or after init with invalid timing
+ * @throws {Error} If called during destroy()
+ * @throws {Error} If fn is not a function
  *
  * @example
  * ```typescript
- * // Add custom metadata to all events
+ * // Standalone mode - transformers applied locally
+ * tracelog.setTransformer('beforeSend', (data) => {
+ *   if ('type' in data) {
+ *     return { ...data, customField: 'added' };
+ *   }
+ *   return data;
+ * });
+ *
+ * await tracelog.init(); // No integration - standalone mode
+ * tracelog.on('event', (event) => {
+ *   console.log(event.customField); // 'added'
+ * });
+ *
+ * // Custom backend - transformers applied before sending
  * tracelog.setTransformer('beforeSend', (data) => {
  *   if ('type' in data) {
  *     return {
@@ -326,6 +361,12 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
  *     };
  *   }
  *   return data;
+ * });
+ *
+ * await tracelog.init({
+ *   integrations: {
+ *     custom: { collectApiUrl: 'https://api.example.com' }
+ *   }
  * });
  *
  * // Filter batch
@@ -495,11 +536,32 @@ export const destroy = (): void => {
  * - Cross-tab synchronization via storage events
  * - Can be called before init() - consent is persisted and auto-loaded
  * - When granted: buffered events sent retroactively (SESSION_START first)
- * - When revoked: stops future sends and clears buffered events for that integration
+ * - When revoked: stops future sends and **clears buffered events** for that integration
+ *
+ * **'all' Integration Behavior:**
+ * - **Before init()**: Sets consent for google, custom, AND tracelog (all three)
+ * - **After init()**: Sets consent only for CONFIGURED integrations
+ * - **Rationale**: Before init, we don't know which integrations will be configured,
+ *   so we persist consent for all possible integrations. After init, we only modify
+ *   configured integrations to avoid touching unused integration consent state.
+ *
+ * **Consent Revocation Behavior:**
+ * When consent is revoked (`granted: false`):
+ * 1. Consent state updated in ConsentManager and persisted to localStorage
+ * 2. **Buffered events cleared**: All events waiting for this integration are removed from memory
+ *    - Events exclusively for this integration are discarded
+ *    - Events needed by other integrations are preserved
+ * 3. Future event sends to this integration are blocked
+ * 4. Emits `'consent-changed'` event for reactive UI updates
+ *
+ * **Memory Management:**
+ * Clearing buffered events on revoke prevents memory buildup and ensures privacy compliance
+ * (user doesn't want data sent, so we don't keep it in memory)
  *
  * @param integration - Integration identifier ('google', 'custom', 'tracelog', or 'all')
  * @param granted - true to grant consent, false to revoke
  * @throws {Error} If called during destroy()
+ * @throws {Error} If localStorage persistence fails (before init only)
  *
  * @example
  * ```typescript
@@ -507,10 +569,12 @@ export const destroy = (): void => {
  * await tracelog.setConsent('google', true);
  * await tracelog.setConsent('custom', true);
  *
- * // Grant consent for ALL integrations
+ * // Grant consent for ALL integrations (behavior depends on timing)
  * await tracelog.setConsent('all', true);
+ * // Before init: sets google=true, custom=true, tracelog=true
+ * // After init: sets consent only for configured integrations
  *
- * // Revoke consent
+ * // Revoke consent (clears buffered events)
  * await tracelog.setConsent('google', false);
  *
  * // Set before init (persisted to localStorage)
@@ -530,6 +594,32 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
         pendingConsents.splice(existingIndex, 1);
       }
       pendingConsents.push({ integration, granted });
+
+      // Persist 'all' consent to localStorage for cross-reload persistence
+      try {
+        const { StorageManager } = await import('./managers/storage.manager');
+        const { ConsentManager } = await import('./managers/consent.manager');
+
+        const tempStorage = new StorageManager();
+        const tempConsent = new ConsentManager(tempStorage, false, null);
+
+        // Set consent for all possible integrations
+        tempConsent.setConsent('google', granted);
+        tempConsent.setConsent('custom', granted);
+        tempConsent.setConsent('tracelog', granted);
+
+        // Flush immediately instead of waiting for debounce
+        tempConsent.flush();
+        tempConsent.cleanup();
+
+        log('debug', `Consent for 'all' persisted to localStorage before init`);
+      } catch (error) {
+        log('error', 'Failed to persist consent for all integrations before init', { error });
+        throw new Error(
+          `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
       return;
     }
 
@@ -541,12 +631,16 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
       const tempConsent = new ConsentManager(tempStorage, false, null);
 
       tempConsent.setConsent(integration, granted);
-      await new Promise((resolve) => setTimeout(resolve, CONSENT_PERSIST_WAIT_MS));
+      // Flush immediately instead of waiting for debounce
+      tempConsent.flush();
       tempConsent.cleanup();
 
       log('debug', `Consent for ${integration} persisted before init`);
     } catch (error) {
-      log('warn', 'Failed to persist consent before init', { error });
+      log('error', 'Failed to persist consent before init', { error });
+      throw new Error(
+        `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     return;
@@ -648,21 +742,28 @@ export const hasConsent = (integration: ConsentIntegration): boolean => {
 
   if (!app) {
     if (integration === 'all') {
-      const pending = pendingConsents.find((c) => c.integration === integration);
-      return pending ? pending.granted : false;
+      // Check localStorage for persisted consent state
+      const state = loadConsentFromStorage();
+      if (state === null) {
+        return false;
+      }
+
+      // 'all' means ALL possible integrations must have consent (strict AND logic)
+      // This matches ConsentManager.hasConsent('all') behavior for consistency
+      return Boolean(state.google === true && state.custom === true && state.tracelog === true);
     }
 
     const state = loadConsentFromStorage();
-    if (!state) {
+    if (state === null) {
       return false;
     }
 
-    return Boolean(state[integration]);
+    return Boolean(state[integration] === true);
   }
 
   const consentManager = app.getConsentManager();
 
-  if (!consentManager) {
+  if (consentManager === undefined) {
     return false;
   }
 
