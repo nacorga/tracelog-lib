@@ -771,7 +771,19 @@ export class EventManager extends StateManager {
               ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
             };
 
-            await targetSender.sendEventsQueue(batchPayload);
+            // Send with automatic retries (handled by SenderManager)
+            // SenderManager will retry up to 2 times for transient errors (5xx, timeout)
+            const success = await targetSender.sendEventsQueue(batchPayload);
+
+            if (!success) {
+              log(
+                'warn',
+                `Failed to send consent buffer batch for ${integration} after retries, events persisted for recovery`,
+                {
+                  data: { batchSize: batch.length, integration },
+                },
+              );
+            }
           }
         }
 
@@ -993,18 +1005,24 @@ export class EventManager extends StateManager {
 
     if (isSync) {
       const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
-      const allSucceeded = results.every((success) => success);
+      const anySucceeded = results.some((success) => success);
 
-      if (allSucceeded) {
+      // Optimistic removal: Remove events if AT LEAST ONE integration succeeded
+      // Each integration persists independently if it fails
+      if (anySucceeded) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
       } else {
-        this.removeProcessedEvents(eventIds);
+        // All integrations failed - keep events in queue
+        // Next periodic flush will retry (recovery happens on next page load)
         this.clearSendInterval();
+        log('warn', 'Sync flush failed for all integrations, events remain in queue for next flush', {
+          data: { eventCount: eventIds.length },
+        });
       }
 
-      return allSucceeded;
+      return anySucceeded;
     } else {
       const sendPromises = this.dataSenders.map(async (sender) =>
         sender.sendEventsQueue(body, {
@@ -1014,25 +1032,34 @@ export class EventManager extends StateManager {
       );
 
       return Promise.allSettled(sendPromises).then((results) => {
-        this.removeProcessedEvents(eventIds);
-        this.clearSendInterval();
-
         const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
 
+        // Optimistic removal: Remove events if AT LEAST ONE integration succeeded
+        // Each integration persists independently if it fails
         if (anySucceeded) {
+          this.removeProcessedEvents(eventIds);
+          this.clearSendInterval();
           this.emitEventsQueue(body);
-        }
 
-        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+          const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
 
-        if (failedCount > 0) {
-          log(
-            'warn',
-            'Async flush completed with some failures, events removed from queue and persisted per-integration',
-            {
-              data: { eventCount: eventsToSend.length, failedCount },
-            },
-          );
+          if (failedCount > 0) {
+            log(
+              'warn',
+              'Async flush completed with partial success, events removed from queue and persisted per failed integration',
+              {
+                data: { eventCount: eventsToSend.length, succeededCount: results.length - failedCount, failedCount },
+              },
+            );
+          }
+        } else {
+          // All integrations failed - events already persisted per-integration
+          // Remove from queue anyway to avoid duplicate persistence attempts
+          this.removeProcessedEvents(eventIds);
+          this.clearSendInterval();
+          log('error', 'Async flush failed for all integrations, events persisted per-integration for recovery', {
+            data: { eventCount: eventsToSend.length, integrations: this.dataSenders.length },
+          });
         }
 
         return anySucceeded;

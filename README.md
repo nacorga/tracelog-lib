@@ -755,6 +755,87 @@ await tracelog.init({
 
 ---
 
+## Error Handling & Reliability
+
+TraceLog implements intelligent error handling with automatic retries for transient failures:
+
+### Automatic Retry Strategy
+
+**Transient Errors** (5xx, timeouts, network failures):
+- **Up to 2 retry attempts** per integration (3 total attempts)
+- **Exponential backoff with jitter**: 200-300ms, 400-500ms
+- **Independent retries** per integration (SaaS and Custom retry separately)
+- **Persistence after exhaustion**: Events saved to localStorage for next-page recovery
+
+**Permanent Errors** (4xx except 408, 429):
+- **No retries** (immediate failure)
+- **Events discarded** (not persisted)
+- **Exceptions**: 408 Request Timeout and 429 Too Many Requests are treated as transient
+
+```typescript
+// Multi-backend example with automatic retries
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' },
+    custom: { collectApiUrl: 'https://api.example.com/collect' }
+  }
+});
+
+// If tracelog SaaS returns 500:
+// - Retries 2 times with backoff (200-300ms, 400-500ms)
+// - If all fail → persists to localStorage for next page
+
+// If custom backend succeeds:
+// - Events removed from queue (optimistic removal)
+// - Failed integration recovered on next page load
+```
+
+### Error Classification
+
+| Status Code | Type | Retries | Persistence |
+|-------------|------|---------|-------------|
+| **2xx** | Success | None | Cleared |
+| **4xx** (except 408, 429) | Permanent | ❌ None | ❌ Discarded |
+| **408** Request Timeout | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **429** Too Many Requests | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **5xx** | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **Network Error** | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **Timeout** | Transient | ✅ Up to 2 | ✅ After exhaustion |
+
+### Optimistic Queue Management
+
+**Multi-Integration Behavior:**
+- Events removed from queue if **AT LEAST ONE** integration succeeds
+- Failed integrations persist independently for next-page recovery
+- Successful integration doesn't retry (performance optimization)
+
+**Example Scenario:**
+```typescript
+// SaaS succeeds immediately → no retry needed
+// Custom fails with 503 → retries 2 times → persists for recovery
+// Events removed from queue (SaaS succeeded)
+// Next page load → only Custom integration recovers persisted events
+```
+
+### Recovery on Page Load
+
+Failed events automatically recovered on next `init()`:
+
+```typescript
+// Page 1: Events fail to send (5xx error after retries)
+// → Persisted to localStorage per-integration
+
+// Page 2: User navigates to new page
+await tracelog.init({ /* same config */ });
+// ✅ Automatically recovers and resends persisted events
+// ✅ Independent recovery per integration
+// ✅ Multi-tab protection (1s window prevents duplicates)
+```
+
+**→ [Full Error Handling Reference](./API_REFERENCE.md#error-handling)**
+
+---
+
 ## Privacy & Security
 
 TraceLog is **privacy-first** by design:

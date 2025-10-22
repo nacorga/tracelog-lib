@@ -5,6 +5,9 @@ import {
   PERMANENT_ERROR_LOG_THROTTLE_MS,
   MAX_BEACON_PAYLOAD_SIZE,
   PERSISTENCE_THROTTLE_MS,
+  MAX_SEND_RETRIES,
+  RETRY_BACKOFF_BASE_MS,
+  RETRY_BACKOFF_JITTER_MS,
 } from '../constants';
 import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
 import { log, transformEvents, transformBatch } from '../utils';
@@ -26,6 +29,7 @@ interface SendCallbacks {
  *
  * **Core Functionality**:
  * - **Event Transmission**: Sends event batches via `fetch()` (async) or `sendBeacon()` (sync)
+ * - **Automatic Retries**: Up to 2 in-session retry attempts for transient failures (5xx, timeout)
  * - **Persistence & Recovery**: Stores failed events in localStorage, recovers on next page load
  * - **Multi-Integration**: Separate queues for SaaS (`tracelog`) and Custom backends
  * - **Multi-Tab Protection**: 1-second window prevents duplicate sends across tabs
@@ -34,7 +38,7 @@ interface SendCallbacks {
  * - **Transformer Support**: Applies `beforeBatch` transformer before network transmission
  *
  * **Key Features**:
- * - **NO Retries In-Session**: Events removed from queue immediately after send attempt
+ * - **In-Session Retries**: Up to 2 retry attempts for 5xx/timeout with exponential backoff
  * - **Recovery on Next Page**: Failed events persisted to localStorage, recovered on init
  * - **Payload Size Validation**: 64KB limit for `sendBeacon()` to prevent truncation
  * - **Permanent Error Detection**: 4xx status codes (except 408, 429) marked as permanent
@@ -42,10 +46,10 @@ interface SendCallbacks {
  * - **Consent-Aware**: Checks consent before sending, skips if consent not granted
  *
  * **Error Handling**:
- * - **4xx Errors** (permanent): Logged once per minute (throttled), events discarded
- * - **5xx Errors** (transient): Events persisted for recovery on next page
- * - **Network Errors**: Events persisted for recovery on next page
- * - **Timeout**: 30-second timeout, events persisted on timeout
+ * - **4xx Errors** (permanent): Logged once per minute (throttled), events discarded, no retries
+ * - **5xx Errors** (transient): Retried up to 2 times with exponential backoff, then persisted
+ * - **Network Errors** (transient): Retried up to 2 times with exponential backoff, then persisted
+ * - **Timeout** (transient): Retried up to 2 times with exponential backoff, then persisted
  *
  * **Storage Keys**:
  * - **Standalone**: `tlog:{userId}:queue` (single queue)
@@ -467,6 +471,68 @@ export class SenderManager extends StateManager {
     return transformed;
   }
 
+  /**
+   * Calculates exponential backoff delay with jitter for retry attempts.
+   *
+   * **Purpose**: Prevents thundering herd problem when multiple clients retry simultaneously.
+   *
+   * **Formula**: `RETRY_BACKOFF_BASE_MS * (2 ^ attempt) + random(0, RETRY_BACKOFF_JITTER_MS)`
+   *
+   * **Examples**:
+   * - Attempt 1: 100ms * 2^1 + jitter = 200ms + 0-100ms = 200-300ms
+   * - Attempt 2: 100ms * 2^2 + jitter = 400ms + 0-100ms = 400-500ms
+   *
+   * **Why Jitter?**
+   * - Distributes retry timing across clients
+   * - Reduces server load spikes from synchronized retries
+   * - Industry standard pattern (AWS, Google, Netflix use similar approaches)
+   *
+   * @param attempt - Current retry attempt number (1-based)
+   * @returns Promise that resolves after calculated delay
+   */
+  private async backoffDelay(attempt: number): Promise<void> {
+    const exponentialDelay = RETRY_BACKOFF_BASE_MS * Math.pow(2, attempt);
+    const jitter = Math.random() * RETRY_BACKOFF_JITTER_MS;
+    const totalDelay = exponentialDelay + jitter;
+
+    return new Promise((resolve) => setTimeout(resolve, totalDelay));
+  }
+
+  /**
+   * Sends event queue with automatic retry logic for transient failures.
+   *
+   * **Purpose**: Reliable event transmission with intelligent retry mechanism
+   * for transient network/server errors while avoiding unnecessary retries for
+   * permanent client errors.
+   *
+   * **Retry Strategy**:
+   * - **Maximum Attempts**: Up to `MAX_SEND_RETRIES` (2) retry attempts
+   * - **Backoff**: Exponential backoff with jitter (200-300ms, 400-500ms)
+   * - **Transient Errors**: 5xx status codes, network failures, timeouts
+   * - **Permanent Errors**: 4xx status codes (except 408, 429) - no retries
+   *
+   * **Retry Flow**:
+   * 1. Attempt send with `sendWithTimeout()`
+   * 2. If success (2xx) → return true immediately
+   * 3. If permanent error (4xx) → throw PermanentError immediately
+   * 4. If transient error (5xx/timeout/network):
+   *    - If attempts remaining → wait backoff delay → retry
+   *    - If no attempts remaining → return false (caller persists)
+   *
+   * **Important Behaviors**:
+   * - Transformers applied once before retry loop (not re-applied per attempt)
+   * - Consent checked once before retry loop
+   * - Each retry uses same transformed payload
+   * - Permanent errors bypass retries immediately
+   *
+   * **Error Classification**:
+   * - **Permanent** (4xx except 408, 429): Schema errors, auth failures, invalid data
+   * - **Transient** (5xx, timeout, network): Server overload, network hiccups, DNS issues
+   *
+   * @param body - Event queue to send
+   * @returns Promise resolving to true if send succeeded, false if all retries exhausted
+   * @throws PermanentError for 4xx errors (caller should not retry)
+   */
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
@@ -500,25 +566,64 @@ export class SenderManager extends StateManager {
 
     const { url, payload } = this.prepareRequest(transformedBody);
 
-    try {
-      const response = await this.sendWithTimeout(url, payload);
+    // Retry loop: initial attempt + MAX_SEND_RETRIES additional attempts
+    for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
+      try {
+        const response = await this.sendWithTimeout(url, payload);
 
-      return response.ok;
-    } catch (error) {
-      if (error instanceof PermanentError) {
-        throw error;
+        if (response.ok) {
+          if (attempt > 1) {
+            log(
+              'info',
+              `Send succeeded after ${attempt - 1} retry attempt(s)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+              {
+                data: { events: transformedBody.events.length, attempt },
+              },
+            );
+          }
+
+          return true;
+        }
+
+        // Response received but not OK - should be handled by sendWithTimeout throwing error
+        // This branch should not be reached, but included for defensive programming
+        return false;
+      } catch (error) {
+        const isLastAttempt = attempt === MAX_SEND_RETRIES + 1;
+
+        // Permanent errors bypass retries immediately
+        if (error instanceof PermanentError) {
+          throw error;
+        }
+
+        // Log error with retry context
+        log(
+          isLastAttempt ? 'error' : 'warn',
+          `Send attempt ${attempt} failed${this.integrationId ? ` [${this.integrationId}]` : ''}${isLastAttempt ? ' (all retries exhausted)' : ', will retry'}`,
+          {
+            error,
+            data: {
+              events: body.events.length,
+              url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+              attempt,
+              maxAttempts: MAX_SEND_RETRIES + 1,
+            },
+          },
+        );
+
+        // If not last attempt, wait backoff delay and retry
+        if (!isLastAttempt) {
+          await this.backoffDelay(attempt);
+          continue;
+        }
+
+        // All retries exhausted
+        return false;
       }
-
-      log('error', `Send request failed${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
-        error,
-        data: {
-          events: body.events.length,
-          url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
-        },
-      });
-
-      return false;
     }
+
+    // Should never reach here due to loop structure, but included for type safety
+    return false;
   }
 
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {

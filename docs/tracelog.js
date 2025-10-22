@@ -105,6 +105,9 @@ const DEFAULT_SENSITIVE_QUERY_PARAMS = [
 ];
 const INITIALIZATION_TIMEOUT_MS = 1e4;
 const SCROLL_SUPPRESS_MULTIPLIER = 2;
+const MAX_SEND_RETRIES = 2;
+const RETRY_BACKOFF_BASE_MS = 100;
+const RETRY_BACKOFF_JITTER_MS = 100;
 const VALIDATION_MESSAGES = {
   INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
   INVALID_SAMPLING_RATE: "Sampling rate must be between 0 and 1",
@@ -1809,6 +1812,66 @@ class SenderManager extends StateManager {
     const transformed = transformBatch(body, beforeBatchTransformer, this.integrationId || "SenderManager");
     return transformed;
   }
+  /**
+   * Calculates exponential backoff delay with jitter for retry attempts.
+   *
+   * **Purpose**: Prevents thundering herd problem when multiple clients retry simultaneously.
+   *
+   * **Formula**: `RETRY_BACKOFF_BASE_MS * (2 ^ attempt) + random(0, RETRY_BACKOFF_JITTER_MS)`
+   *
+   * **Examples**:
+   * - Attempt 1: 100ms * 2^1 + jitter = 200ms + 0-100ms = 200-300ms
+   * - Attempt 2: 100ms * 2^2 + jitter = 400ms + 0-100ms = 400-500ms
+   *
+   * **Why Jitter?**
+   * - Distributes retry timing across clients
+   * - Reduces server load spikes from synchronized retries
+   * - Industry standard pattern (AWS, Google, Netflix use similar approaches)
+   *
+   * @param attempt - Current retry attempt number (1-based)
+   * @returns Promise that resolves after calculated delay
+   */
+  async backoffDelay(attempt) {
+    const exponentialDelay = RETRY_BACKOFF_BASE_MS * Math.pow(2, attempt);
+    const jitter = Math.random() * RETRY_BACKOFF_JITTER_MS;
+    const totalDelay = exponentialDelay + jitter;
+    return new Promise((resolve) => setTimeout(resolve, totalDelay));
+  }
+  /**
+   * Sends event queue with automatic retry logic for transient failures.
+   *
+   * **Purpose**: Reliable event transmission with intelligent retry mechanism
+   * for transient network/server errors while avoiding unnecessary retries for
+   * permanent client errors.
+   *
+   * **Retry Strategy**:
+   * - **Maximum Attempts**: Up to `MAX_SEND_RETRIES` (2) retry attempts
+   * - **Backoff**: Exponential backoff with jitter (200-300ms, 400-500ms)
+   * - **Transient Errors**: 5xx status codes, network failures, timeouts
+   * - **Permanent Errors**: 4xx status codes (except 408, 429) - no retries
+   *
+   * **Retry Flow**:
+   * 1. Attempt send with `sendWithTimeout()`
+   * 2. If success (2xx) → return true immediately
+   * 3. If permanent error (4xx) → throw PermanentError immediately
+   * 4. If transient error (5xx/timeout/network):
+   *    - If attempts remaining → wait backoff delay → retry
+   *    - If no attempts remaining → return false (caller persists)
+   *
+   * **Important Behaviors**:
+   * - Transformers applied once before retry loop (not re-applied per attempt)
+   * - Consent checked once before retry loop
+   * - Each retry uses same transformed payload
+   * - Permanent errors bypass retries immediately
+   *
+   * **Error Classification**:
+   * - **Permanent** (4xx except 408, 429): Schema errors, auth failures, invalid data
+   * - **Transient** (5xx, timeout, network): Server overload, network hiccups, DNS issues
+   *
+   * @param body - Event queue to send
+   * @returns Promise resolving to true if send succeeded, false if all retries exhausted
+   * @throws PermanentError for 4xx errors (caller should not retry)
+   */
   async send(body) {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
@@ -1832,22 +1895,48 @@ class SenderManager extends StateManager {
       return false;
     }
     const { url, payload } = this.prepareRequest(transformedBody);
-    try {
-      const response = await this.sendWithTimeout(url, payload);
-      return response.ok;
-    } catch (error) {
-      if (error instanceof PermanentError) {
-        throw error;
-      }
-      log("error", `Send request failed${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        error,
-        data: {
-          events: body.events.length,
-          url: url.replace(/\/\/[^/]+/, "//[DOMAIN]")
+    for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
+      try {
+        const response = await this.sendWithTimeout(url, payload);
+        if (response.ok) {
+          if (attempt > 1) {
+            log(
+              "info",
+              `Send succeeded after ${attempt - 1} retry attempt(s)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
+              {
+                data: { events: transformedBody.events.length, attempt }
+              }
+            );
+          }
+          return true;
         }
-      });
-      return false;
+        return false;
+      } catch (error) {
+        const isLastAttempt = attempt === MAX_SEND_RETRIES + 1;
+        if (error instanceof PermanentError) {
+          throw error;
+        }
+        log(
+          isLastAttempt ? "error" : "warn",
+          `Send attempt ${attempt} failed${this.integrationId ? ` [${this.integrationId}]` : ""}${isLastAttempt ? " (all retries exhausted)" : ", will retry"}`,
+          {
+            error,
+            data: {
+              events: body.events.length,
+              url: url.replace(/\/\/[^/]+/, "//[DOMAIN]"),
+              attempt,
+              maxAttempts: MAX_SEND_RETRIES + 1
+            }
+          }
+        );
+        if (!isLastAttempt) {
+          await this.backoffDelay(attempt);
+          continue;
+        }
+        return false;
+      }
     }
+    return false;
   }
   async sendWithTimeout(url, payload) {
     const controller = new AbortController();
@@ -2669,7 +2758,16 @@ class EventManager extends StateManager {
               events: batch,
               ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata }
             };
-            await targetSender.sendEventsQueue(batchPayload);
+            const success = await targetSender.sendEventsQueue(batchPayload);
+            if (!success) {
+              log(
+                "warn",
+                `Failed to send consent buffer batch for ${integration} after retries, events persisted for recovery`,
+                {
+                  data: { batchSize: batch.length, integration }
+                }
+              );
+            }
           }
         }
         batch.forEach((event2) => {
@@ -2857,16 +2955,18 @@ class EventManager extends StateManager {
     }
     if (isSync) {
       const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
-      const allSucceeded = results.every((success) => success);
-      if (allSucceeded) {
+      const anySucceeded = results.some((success) => success);
+      if (anySucceeded) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
       } else {
-        this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
+        log("warn", "Sync flush failed for all integrations, events remain in queue for next flush", {
+          data: { eventCount: eventIds.length }
+        });
       }
-      return allSucceeded;
+      return anySucceeded;
     } else {
       const sendPromises = this.dataSenders.map(
         async (sender) => sender.sendEventsQueue(body, {
@@ -2877,21 +2977,27 @@ class EventManager extends StateManager {
         })
       );
       return Promise.allSettled(sendPromises).then((results) => {
-        this.removeProcessedEvents(eventIds);
-        this.clearSendInterval();
         const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
         if (anySucceeded) {
+          this.removeProcessedEvents(eventIds);
+          this.clearSendInterval();
           this.emitEventsQueue(body);
-        }
-        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-        if (failedCount > 0) {
-          log(
-            "warn",
-            "Async flush completed with some failures, events removed from queue and persisted per-integration",
-            {
-              data: { eventCount: eventsToSend.length, failedCount }
-            }
-          );
+          const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+          if (failedCount > 0) {
+            log(
+              "warn",
+              "Async flush completed with partial success, events removed from queue and persisted per failed integration",
+              {
+                data: { eventCount: eventsToSend.length, succeededCount: results.length - failedCount, failedCount }
+              }
+            );
+          }
+        } else {
+          this.removeProcessedEvents(eventIds);
+          this.clearSendInterval();
+          log("error", "Async flush failed for all integrations, events persisted per-integration for recovery", {
+            data: { eventCount: eventsToSend.length, integrations: this.dataSenders.length }
+          });
         }
         return anySucceeded;
       });
@@ -3724,7 +3830,7 @@ class ConsentManager {
   }
   /**
    * Immediately persist consent state to localStorage
-   * 
+   *
    * @param throwOnError - Whether to throw storage errors (default: false)
    */
   persistConsent(throwOnError = false) {
@@ -6862,6 +6968,9 @@ function setTransformer(hook, fn) {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
+  if (typeof fn !== "function") {
+    throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
+  }
   if (!app || isInitializing) {
     const existingIndex = pendingTransformers.findIndex((t) => t.hook === hook);
     if (existingIndex !== -1) {
@@ -6962,7 +7071,6 @@ const setConsent = async (integration, granted) => {
           expiresAt
         };
         localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
-        log("debug", `Consent for 'all' persisted to localStorage before init`);
       } catch (error) {
         log("error", "Failed to persist consent for all integrations before init", { error });
         throw new Error(
@@ -6987,15 +7095,12 @@ const setConsent = async (integration, granted) => {
       const consentData = {
         state: {
           ...existingState,
-          // Preserve existing consent values
           [integration]: granted
-          // Update only the specified integration
         },
         timestamp: now,
         expiresAt
       };
       localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
-      log("debug", `Consent for ${integration} persisted before init`);
     } catch (error) {
       log("error", "Failed to persist consent before init", { error });
       throw new Error(
@@ -7359,6 +7464,14 @@ class TestBridge extends App {
     }
     super.sendCustomEvent(name, data);
   }
+  event(name, metadata) {
+    this.sendCustomEvent(name, metadata);
+  }
+  setQaMode(enabled) {
+    void Promise.resolve().then(() => api).then(({ setQaMode: setQaMode2 }) => {
+      setQaMode2(enabled);
+    });
+  }
   getSessionData() {
     return {
       id: this.get("sessionId"),
@@ -7400,14 +7513,12 @@ class TestBridge extends App {
   get(key) {
     return super.get(key);
   }
-  // Manager accessors
   getStorageManager() {
     return this.safeAccess(this.managers?.storage);
   }
   getEventManager() {
     return this.managers.event;
   }
-  // Handler accessors
   getSessionHandler() {
     return this.safeAccess(this.handlers?.session);
   }
@@ -7426,11 +7537,9 @@ class TestBridge extends App {
   getErrorHandler() {
     return this.safeAccess(this.handlers?.error);
   }
-  // Integration accessors
   getGoogleAnalytics() {
     return this.safeAccess(this.integrations?.google);
   }
-  // Consent methods for E2E testing
   async setConsent(integration, granted) {
     if (!this.initialized) {
       await setConsent(integration, granted);

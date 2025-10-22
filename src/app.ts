@@ -59,34 +59,11 @@ export class App extends StateManager {
   }
 
   /**
-   * Initializes TraceLog application with configuration.
-   *
-   * **Initialization flow:**
-   * 1. Create StorageManager (localStorage/sessionStorage wrapper with fallback)
-   * 2. Setup state (config, userId, device, pageUrl, mode detection)
-   * 3. Initialize ConsentManager (loads persisted consent from localStorage, enables emitter)
-   * 4. Log consent state if waitForConsent enabled
-   * 5. Setup integrations (Google Analytics if configured and consented, or deferred)
-   * 6. Initialize EventManager (receives transformers, creates SenderManager instances)
-   * 7. Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
-   * 8. Recover persisted events from localStorage (non-fatal errors logged)
-   * 9. Set isInitialized flag
-   *
-   * **Deferred Integration Initialization:**
-   * - If `waitForConsent: true` and consent not granted, integrations are not initialized
-   * - When consent is later granted via `setConsent()`, integrations initialize via `handleConsentGranted()`
-   *
-   * **Transformers:**
-   * - Transformers stored in `App.transformers` are passed to EventManager constructor
-   * - EventManager applies transformers during event processing
-   *
-   * **Error Handling:**
-   * - If initialization fails, calls `destroy(true)` for cleanup (force=true bypasses isInitialized check)
-   * - Event recovery errors are non-fatal (logged but don't prevent initialization)
+   * Initializes TraceLog with configuration.
    *
    * @param config - Configuration object
    * @throws {Error} If initialization fails
-   * @internal This method is called from api.init() - users should use the API wrapper
+   * @internal Called from api.init()
    */
   async init(config: Config = {}): Promise<void> {
     if (this.isInitialized) {
@@ -154,16 +131,9 @@ export class App extends StateManager {
   /**
    * Sends a custom event with optional metadata.
    *
-   * **Features:**
-   * - Validates event name and metadata structure
-   * - Sanitizes metadata (PII protection)
-   * - Normalizes DOMStringMap and similar objects to plain objects
-   * - In QA mode: throws validation errors, logs to console (not sent to backend)
-   * - In normal mode: silently drops invalid events
-   *
-   * @param name - Event name identifier
-   * @param metadata - Optional metadata (flat key-value pairs or array of objects)
-   * @internal This method is called from api.event() - users should use the API wrapper
+   * @param name - Event name
+   * @param metadata - Optional metadata
+   * @internal Called from api.event()
    */
   sendCustomEvent(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
     if (!this.managers.event) {
@@ -228,27 +198,8 @@ export class App extends StateManager {
   /**
    * Destroys the TraceLog instance and cleans up all resources.
    *
-   * **Cleanup sequence:**
-   * 1. Stop all handlers (sends SESSION_END event)
-   * 2. Flush remaining events via EventManager.stop()
-   * 3. Clear timers and intervals
-   * 4. Remove all event listeners (emitter, consent, integrations)
-   * 5. Reset global state flags
-   *
-   * **Force Parameter:**
-   * @param force - If true, forces cleanup even if not initialized
-   *
-   * **Use Cases for `force=true`:**
-   * - **Init Failure**: When `init()` fails partway through, some managers may be initialized
-   *   but `isInitialized` flag is still false. Force cleanup ensures proper resource cleanup.
-   * - **Example**: `init()` → creates StorageManager → error occurs → `destroy(true)` called
-   *   in catch block to cleanup partially initialized state
-   *
-   * **Normal Usage:**
-   * - Users call `api.destroy()` which calls `app.destroy()` (force=false by default)
-   * - Only triggers cleanup if `isInitialized === true`
-   *
-   * @internal This method is called from api.destroy() - users should use the API wrapper
+   * @param force - If true, forces cleanup even if not initialized (used during init failure)
+   * @internal Called from api.destroy()
    */
   destroy(force = false): void {
     if (!this.isInitialized && !force) {
@@ -309,170 +260,87 @@ export class App extends StateManager {
     }
   }
 
-  /**
-   * Sets up configured integrations (Google Analytics, etc.)
-   *
-   * **Consent-Aware Initialization:**
-   * - If `waitForConsent: true`, checks consent before initializing integrations
-   * - If consent not granted, initialization is **deferred**
-   * - Deferred integrations initialize later when consent is granted via `handleConsentGranted()`
-   *
-   * **Google Analytics Integration:**
-   * - Requires either `measurementId` or `containerId` configuration
-   * - Checks `shouldInitializeIntegration('google')` before initialization
-   * - If deferred, logs "Google Analytics initialization deferred, waiting for consent"
-   * - Later initialization happens when user calls `setConsent('google', true)` or `setConsent('all', true)`
-   *
-   * @private
-   */
   private async setupIntegrations(): Promise<void> {
-    const config = this.get('config');
-    const googleConfig = config.integrations?.google;
+    if (!this.hasValidGoogleConfig()) {
+      return;
+    }
 
-    if (googleConfig) {
-      const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
-      const hasContainerId = Boolean(googleConfig.containerId?.trim());
-
-      if (hasMeasurementId || hasContainerId) {
-        // Check consent before initializing Google Analytics
-        const shouldInitializeGoogle = this.shouldInitializeIntegration('google');
-
-        if (shouldInitializeGoogle) {
-          try {
-            this.integrations.google = new GoogleAnalyticsIntegration();
-            await this.integrations.google.initialize();
-            log('debug', 'Google Analytics integration initialized');
-          } catch (error) {
-            this.integrations.google = undefined;
-            log('warn', 'Failed to initialize Google Analytics', { error });
-          }
-        } else {
-          log('info', 'Google Analytics initialization deferred, waiting for consent');
-        }
-      }
+    if (this.shouldInitializeIntegration('google')) {
+      await this.initializeGoogleAnalytics();
+    } else {
+      log('info', 'Google Analytics initialization deferred, waiting for consent');
     }
   }
 
-  /**
-   * Get consent manager instance.
-   *
-   * @returns ConsentManager instance or undefined if not initialized
-   * @internal Used by api.ts for consent operations
-   */
+  /** @internal Used by api.ts */
   public getConsentManager(): ConsentManager | undefined {
     return this.managers.consent;
   }
 
-  /**
-   * Get current configuration.
-   *
-   * @returns Configuration object
-   * @internal Used by api.ts for config access
-   */
+  /** @internal Used by api.ts */
   public getConfig(): Config {
     return this.get('config');
   }
 
-  /**
-   * Get configured API URLs for integrations.
-   *
-   * @returns Object with saas and/or custom API URLs
-   * @internal Used by api.ts for integration checks
-   */
-  public getCollectApiUrls() {
+  /** @internal Used by api.ts */
+  public getCollectApiUrls(): { saas?: string; custom?: string } {
     return this.get('collectApiUrls');
   }
 
-  /**
-   * Get event manager instance.
-   *
-   * @returns EventManager instance or undefined if not initialized
-   * @internal Used by api.ts for consent buffer operations
-   */
+  /** @internal Used by api.ts */
   public getEventManager(): EventManager | undefined {
     return this.managers.event;
   }
 
-  /**
-   * Handles consent granted for an integration.
-   *
-   * **Orchestration:**
-   * 1. Initialize the integration if not already initialized (deferred initialization)
-   * 2. Flush consent buffer for this integration (sends buffered events)
-   *
-   * **Deferred Initialization Flow:**
-   * - If integration was deferred during `init()` due to missing consent
-   * - This method initializes it when user grants consent via `setConsent()`
-   * - For Google Analytics: Creates integration, initializes, and updates EventManager reference
-   * - For Custom/TraceLog: Handled by EventManager/SenderManager (no explicit initialization needed)
-   *
-   * @param integration - Integration identifier
-   * @internal Called from api.setConsent() when consent is granted
-   */
+  /** @internal Called from api.setConsent() when consent is granted */
   public async handleConsentGranted(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
     log('info', `Consent granted for ${integration}, initializing and flushing buffer`);
 
-    await this.initializeIntegration(integration);
+    if (integration === 'google' && !this.integrations.google && this.hasValidGoogleConfig()) {
+      const initialized = await this.initializeGoogleAnalytics();
+
+      if (initialized && this.managers.event && this.integrations.google) {
+        this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
+      }
+    }
 
     if (this.managers.event) {
       await this.managers.event.flushConsentBuffer(integration);
     }
   }
 
-  /**
-   * Initialize a specific integration (called when consent is granted)
-   */
-  private async initializeIntegration(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
-    if (integration === 'google') {
-      const config = this.get('config');
-      const googleConfig = config.integrations?.google;
-
-      if (googleConfig && !this.integrations.google) {
-        const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
-        const hasContainerId = Boolean(googleConfig.containerId?.trim());
-
-        if (hasMeasurementId || hasContainerId) {
-          try {
-            this.integrations.google = new GoogleAnalyticsIntegration();
-            await this.integrations.google.initialize();
-
-            // Update reference in EventManager so it can send events to Google
-            // Note: Buffered events are flushed by caller (handleConsentGranted)
-            if (this.managers.event) {
-              this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
-            }
-
-            log('info', 'Google Analytics integration initialized after consent');
-          } catch (error) {
-            this.integrations.google = undefined;
-            log('warn', 'Failed to initialize Google Analytics after consent', { error });
-          }
-        }
-      }
+  private hasValidGoogleConfig(): boolean {
+    const googleConfig = this.get('config').integrations?.google;
+    if (!googleConfig) {
+      return false;
     }
 
-    // Custom and TraceLog integrations are handled by EventManager/SenderManager
-    // They don't need explicit initialization here
+    const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
+    const hasContainerId = Boolean(googleConfig.containerId?.trim());
+
+    return hasMeasurementId || hasContainerId;
   }
 
-  /**
-   * Check if an integration should be initialized based on consent
-   */
+  private async initializeGoogleAnalytics(): Promise<boolean> {
+    try {
+      this.integrations.google = new GoogleAnalyticsIntegration();
+      await this.integrations.google.initialize();
+      log('debug', 'Google Analytics integration initialized');
+      return true;
+    } catch (error) {
+      log('warn', 'Failed to initialize Google Analytics', { error });
+      return false;
+    }
+  }
+
   private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
     const config = this.get('config');
 
-    // If waitForConsent is not enabled, always initialize
-    if (!config?.waitForConsent) {
+    if (!config.waitForConsent) {
       return true;
     }
 
-    // Check if we have consent
-    const consentManager = this.managers.consent;
-    if (!consentManager) {
-      return true; // Fail open if consent manager not available
-    }
-
-    return consentManager.hasConsent(integration);
+    return this.managers.consent?.hasConsent(integration) ?? true;
   }
 
   private initializeHandlers(): void {

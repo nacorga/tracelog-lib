@@ -7,7 +7,7 @@ import { EmitterEvent } from '../../src/types';
 describe('Consent Management Integration', () => {
   let storageManager: StorageManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     storageManager = new StorageManager();
     storageManager.clear();
 
@@ -17,6 +17,9 @@ describe('Consent Management Integration', () => {
     if (tracelog.isInitialized()) {
       tracelog.destroy();
     }
+
+    // Wait for cleanup
+    await new Promise((resolve) => setTimeout(resolve, 10));
   });
 
   afterEach(() => {

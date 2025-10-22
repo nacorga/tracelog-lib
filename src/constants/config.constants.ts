@@ -234,6 +234,31 @@ export const SCROLL_SUPPRESS_MULTIPLIER = 2;
 export const RATE_LIMIT_INTERVAL = 1000; // 1 second
 
 // ============================================================================
+// RETRY CONFIGURATION
+// ============================================================================
+
+/**
+ * Maximum number of retry attempts for failed event transmissions
+ * Applied to 5xx errors and network timeouts (transient failures)
+ * 4xx errors (permanent) are not retried
+ */
+export const MAX_SEND_RETRIES = 2;
+
+/**
+ * Base delay for exponential backoff retry strategy (in milliseconds)
+ * Formula: RETRY_BACKOFF_BASE_MS * (2 ^ attempt) + jitter
+ * Example: attempt 1 = 100ms + jitter, attempt 2 = 200ms + jitter
+ */
+export const RETRY_BACKOFF_BASE_MS = 100;
+
+/**
+ * Maximum random jitter added to retry backoff delay (in milliseconds)
+ * Prevents thundering herd problem when multiple clients retry simultaneously
+ * Jitter range: 0 to RETRY_BACKOFF_JITTER_MS
+ */
+export const RETRY_BACKOFF_JITTER_MS = 100;
+
+// ============================================================================
 // VALIDATION
 // ============================================================================
 

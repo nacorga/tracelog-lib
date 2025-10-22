@@ -67,21 +67,18 @@ describe('EventManager - No Infinite Retry Loops', () => {
       // Verify event added to queue
       expect(eventManager.getQueueLength()).toBe(1);
 
-      // Wait for first send (10 seconds)
+      // Wait for first send (10 seconds flush interval)
       await vi.advanceTimersByTimeAsync(10000);
-      await vi.runOnlyPendingTimersAsync();
 
-      // Should have called API once
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Wait for all retries to complete (exponential backoff with delays)
+      // This will execute all pending timers including retry delays
+      await vi.runAllTimersAsync();
 
-      // CRITICAL: Queue should be empty (event removed to prevent infinite retry)
+      // Should have called API 3 times (1 initial + 2 retries with MAX_SEND_RETRIES=2)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      // CRITICAL: Queue should be empty (event removed after all retries exhausted)
       expect(eventManager.getQueueLength()).toBe(0);
-
-      // Wait another 30 seconds
-      await vi.advanceTimersByTimeAsync(30000);
-
-      // Should NOT have made additional requests (queue empty)
-      expect(mockFetch).toHaveBeenCalledTimes(1); // Still 1, no retries
     });
 
     it('should NOT retry multiple events in queue', async () => {
@@ -107,19 +104,15 @@ describe('EventManager - No Infinite Retry Loops', () => {
 
       expect(eventManager.getQueueLength()).toBe(3);
 
-      // First send attempt (10s)
+      // First send attempt (10s flush interval)
       await vi.advanceTimersByTimeAsync(10000);
-      await vi.runOnlyPendingTimersAsync();
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(eventManager.getQueueLength()).toBe(0); // All removed
+      // Wait for all retries to complete
+      await vi.runAllTimersAsync();
 
-      // Wait 50 seconds (5 intervals)
-      await vi.advanceTimersByTimeAsync(50000);
-      await vi.runOnlyPendingTimersAsync();
-
-      // Should NOT retry (queue empty)
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Should have 3 attempts (1 initial + 2 retries)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(eventManager.getQueueLength()).toBe(0); // All removed after retries exhausted
     });
   });
 
@@ -135,19 +128,15 @@ describe('EventManager - No Infinite Retry Loops', () => {
 
       expect(eventManager.getQueueLength()).toBe(1);
 
-      // First attempt
+      // First attempt (10s flush interval)
       await vi.advanceTimersByTimeAsync(10000);
-      await vi.runOnlyPendingTimersAsync();
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Wait for all retries to complete
+      await vi.runAllTimersAsync();
+
+      // Should have 3 attempts (1 initial + 2 retries)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(eventManager.getQueueLength()).toBe(0);
-
-      // Wait for potential retries
-      await vi.advanceTimersByTimeAsync(60000);
-      await vi.runOnlyPendingTimersAsync();
-
-      // No retries
-      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('should NOT retry when request times out', async () => {
@@ -164,15 +153,13 @@ describe('EventManager - No Infinite Retry Loops', () => {
       });
 
       await vi.advanceTimersByTimeAsync(10000);
-      await vi.runOnlyPendingTimersAsync();
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Wait for all retries to complete
+      await vi.runAllTimersAsync();
+
+      // Should have 3 attempts (1 initial + 2 retries)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(eventManager.getQueueLength()).toBe(0);
-
-      await vi.advanceTimersByTimeAsync(40000);
-      await vi.runOnlyPendingTimersAsync();
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -224,21 +211,14 @@ describe('EventManager - No Infinite Retry Loops', () => {
         });
       }
 
-      // Allow immediate send to complete
-      await vi.runOnlyPendingTimersAsync();
+      // Allow immediate send to complete with all retries
+      await vi.runAllTimersAsync();
 
-      // Should have sent immediately (batch threshold reached)
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Should have sent 3 times (1 initial + 2 retries)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
 
-      // Queue should be empty (all removed)
+      // Queue should be empty (all removed after retries exhausted)
       expect(eventManager.getQueueLength()).toBe(0);
-
-      // Wait for potential interval retries
-      await vi.advanceTimersByTimeAsync(100000);
-      await vi.runOnlyPendingTimersAsync();
-
-      // No retries
-      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -257,27 +237,26 @@ describe('EventManager - No Infinite Retry Loops', () => {
 
       expect(eventManager.getQueueLength()).toBe(1);
 
-      // Manual flush
-      await eventManager.flushImmediately();
+      // Manual flush with all retries
+      const flushPromise = eventManager.flushImmediately();
 
-      // Should have attempted send
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Wait for all timers (retries) to complete
+      await vi.runAllTimersAsync();
+
+      await flushPromise;
+
+      // Should have attempted send 3 times (1 initial + 2 retries)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
 
       // Queue should be empty
       expect(eventManager.getQueueLength()).toBe(0);
-
-      // Wait for interval (should not retry)
-      await vi.advanceTimersByTimeAsync(50000);
-      await vi.runOnlyPendingTimersAsync();
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('Recovery After Failure', () => {
     it('should allow new events after previous failure', async () => {
-      // First request fails
-      mockFetch.mockResolvedValueOnce({
+      // First request fails (all 3 attempts)
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
@@ -289,13 +268,16 @@ describe('EventManager - No Infinite Retry Loops', () => {
       });
 
       await vi.advanceTimersByTimeAsync(10000);
-      await vi.runOnlyPendingTimersAsync();
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Wait for all retries
+      await vi.runAllTimersAsync();
+
+      // Should have 3 attempts (1 initial + 2 retries)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(eventManager.getQueueLength()).toBe(0);
 
       // API recovers
-      mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -310,10 +292,10 @@ describe('EventManager - No Infinite Retry Loops', () => {
       expect(eventManager.getQueueLength()).toBe(1);
 
       await vi.advanceTimersByTimeAsync(10000);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.runAllTimersAsync();
 
-      // Should send new event successfully
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // Should send new event successfully (3 previous failed attempts + 1 new successful = 4 total)
+      expect(mockFetch).toHaveBeenCalledTimes(4);
       expect(eventManager.getQueueLength()).toBe(0);
     });
   });

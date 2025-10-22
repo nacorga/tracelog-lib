@@ -318,10 +318,13 @@ describe('Public API', () => {
       global.document = originalDocument;
     });
 
-    it('should throw error when in browser but not initialized', () => {
+    it('should not throw error when in browser but not initialized (idempotent)', () => {
       expect(() => {
         TraceLog.destroy();
-      }).toThrow('App not initialized');
+      }).not.toThrow();
+
+      // Should still not be initialized
+      expect(TraceLog.isInitialized()).toBe(false);
     });
 
     it('should destroy successfully when initialized', async () => {
@@ -335,16 +338,19 @@ describe('Public API', () => {
       expect(TraceLog.isInitialized()).toBe(false);
     });
 
-    it('should throw error when calling destroy after already destroyed', async () => {
+    it('should not throw error when calling destroy after already destroyed (idempotent)', async () => {
       const config = createTestConfig();
       await TraceLog.init(config);
 
       TraceLog.destroy();
 
-      // Second destroy should throw because app is now null
+      // Second destroy should be idempotent (no errors)
       expect(() => {
         TraceLog.destroy();
-      }).toThrow('App not initialized');
+      }).not.toThrow();
+
+      // Should still not be initialized
+      expect(TraceLog.isInitialized()).toBe(false);
     });
 
     it('should force cleanup even if destroy fails', async () => {

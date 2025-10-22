@@ -302,16 +302,25 @@ interface State {
 **EventManager (Orchestration):**
 - Manages array of `SenderManager[]` (0-2 instances)
 - Parallel async sending: `Promise.allSettled()`
-- Sync sending (sendBeacon): All must succeed
+- **Optimistic Queue Removal**: Events removed from queue if AT LEAST ONE integration succeeds
+- Sync sending (sendBeacon): Same optimistic strategy
 - Independent recovery per integration
 
-**Error Handling:**
-| Integration | Error Type | Behavior |
-|-------------|-----------|----------|
-| SaaS | 4xx (permanent) | Clear storage, no retry |
-| SaaS | 5xx (temporary) | Persist to `tlog:queue:{userId}:saas`, retry next page |
-| Custom | 4xx (permanent) | Clear storage, no retry |
-| Custom | 5xx (temporary) | Persist to `tlog:queue:{userId}:custom`, retry next page |
+**Error Handling & Retry Strategy:**
+| Integration | Error Type | In-Session Retries | Persistence |
+|-------------|-----------|-------------------|-------------|
+| SaaS | 4xx (permanent, except 408/429) | None (immediate failure) | Clear storage, no retry |
+| SaaS | 5xx/timeout (transient) | Up to 2 retries with backoff | Persist after exhausting retries |
+| Custom | 4xx (permanent, except 408/429) | None (immediate failure) | Clear storage, no retry |
+| Custom | 5xx/timeout (transient) | Up to 2 retries with backoff | Persist after exhausting retries |
+
+**Retry Backoff Strategy:**
+- **Maximum Retries**: 2 additional attempts per integration (3 total)
+- **Backoff Formula**: `100ms * (2 ^ attempt) + random(0-100ms)`
+- **Delays**: Attempt 1→2: 200-300ms, Attempt 2→3: 400-500ms
+- **Transient Errors**: 5xx status codes, 408 Request Timeout, 429 Too Many Requests, network failures
+- **Permanent Errors**: 4xx status codes (except 408, 429) - no retries
+- **Jitter**: Random 0-100ms added to prevent thundering herd
 
 ### Event Queue & Sending
 
@@ -319,10 +328,11 @@ interface State {
 - Sent every 10 seconds OR when 50-event threshold reached
 - Uses `navigator.sendBeacon()` for page unload (synchronous)
 - Uses `fetch()` for normal operation (asynchronous)
-- **NO in-session retries** - Events removed from queue immediately after send attempt
-- Failed events persist in localStorage for next-page recovery
-- 4xx errors = permanent failure (cleared, not persisted)
-- 5xx/network errors = removed from queue + persisted for next-page recovery
+- **In-Session Retries**: Up to 2 retry attempts for transient errors (5xx, timeout)
+- **Optimistic Removal**: Events removed from queue if AT LEAST ONE integration succeeds
+- Failed events persist in localStorage per-integration for next-page recovery
+- 4xx errors (except 408, 429) = permanent failure (cleared, not persisted, not retried)
+- 5xx/timeout = retry up to 2 times with exponential backoff, then persist for next-page recovery
 - Recovery guard prevents concurrent recovery attempts during rapid navigation
 - Multi-tab protection prevents data loss when multiple tabs fail simultaneously (1s window)
 

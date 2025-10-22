@@ -1,18 +1,14 @@
-import { ClickHandler } from '../handlers/click.handler';
-import { ErrorHandler } from '../handlers/error.handler';
-import { PageViewHandler } from '../handlers/page-view.handler';
 import { PerformanceHandler } from '../handlers/performance.handler';
-import { ScrollHandler } from '../handlers/scroll.handler';
-import { SessionHandler } from '../handlers/session.handler';
-import { GoogleAnalyticsIntegration } from '../integrations/google-analytics.integration';
 import { EventManager } from '../managers/event.manager';
-import { StorageManager as TraceLogStorageManager } from '../managers/storage.manager';
 import { Config } from './config.types';
 import { State } from './state.types';
 
 /**
  * Testing bridge interface for E2E tests
  * Only available when NODE_ENV=development
+ *
+ * Provides minimal test-specific helpers while inheriting core App functionality.
+ * Methods delegate to parent App class where possible to avoid code duplication.
  */
 export interface TraceLogTestBridge {
   // Core App methods
@@ -20,40 +16,33 @@ export interface TraceLogTestBridge {
   init(config?: Config): Promise<void>;
   destroy(): void;
 
-  // Core testing methods
+  // Core event methods (inherited from App)
   sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void;
 
-  // Event subscription methods
+  // Convenience alias for sendCustomEvent (used in E2E tests)
+  event(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void;
+
+  // Event subscription methods (inherited from App)
   on(event: string, callback: (data: any) => void): void;
   off(event: string, callback: (data: any) => void): void;
 
-  // Session management
+  // State access for testing
+  get<T extends keyof State>(key: T): State[T];
+
+  // Test inspection methods
   getSessionData(): Record<string, unknown> | null;
-  setSessionTimeout(timeout: number): void;
-
-  // Queue management
   getQueueLength(): number;
-
-  // Test simulation methods
-  simulatePersistedEvents(events: any[]): void;
+  getConsentBufferLength(): number;
 
   // Consent management (for E2E testing)
   setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void>;
   hasConsent(integration: 'google' | 'custom' | 'tracelog' | 'all'): boolean;
   getConsentState(): { google: boolean; custom: boolean; tracelog: boolean };
-  getConsentBufferLength(): number;
 
-  // State access for testing
-  get<T extends keyof State>(key: T): State[T];
+  // QA mode for testing
+  setQaMode(enabled: boolean): void;
 
-  // Manager and handler getter methods for testing
-  getStorageManager(): TraceLogStorageManager | null;
+  // Handler accessors used in E2E tests
   getEventManager(): EventManager | undefined;
-  getSessionHandler(): SessionHandler | null;
-  getPageViewHandler(): PageViewHandler | null;
-  getClickHandler(): ClickHandler | null;
-  getScrollHandler(): ScrollHandler | null;
   getPerformanceHandler(): PerformanceHandler | null;
-  getErrorHandler(): ErrorHandler | null;
-  getGoogleAnalytics(): GoogleAnalyticsIntegration | null;
 }

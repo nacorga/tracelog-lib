@@ -382,6 +382,10 @@ export function setTransformer(hook: TransformerHook, fn: BeforeSendTransformer 
     return;
   }
 
+  if (typeof fn !== 'function') {
+    throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
+  }
+
   if (!app || isInitializing) {
     const existingIndex = pendingTransformers.findIndex((t) => t.hook === hook);
 
@@ -496,7 +500,10 @@ export const destroy = (): void => {
   }
 
   if (!app) {
-    throw new Error('[TraceLog] App not initialized');
+    isDestroyed = false;
+    isDestroying = false;
+
+    return;
   }
 
   isDestroying = true;
@@ -512,17 +519,21 @@ export const destroy = (): void => {
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__traceLogBridge) {
       window.__traceLogBridge = undefined;
     }
+
+    isDestroyed = false;
+    isDestroying = false;
   } catch (error) {
     app = null;
     isInitializing = false;
+
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
     pendingConsents.length = 0;
 
-    log('warn', 'Error during destroy, forced cleanup completed', { error });
-  } finally {
+    isDestroyed = false;
     isDestroying = false;
-    isDestroyed = true;
+
+    log('warn', 'Error during destroy, forced cleanup completed', { error });
   }
 };
 
@@ -673,16 +684,15 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
     return;
   }
 
-  const config = app.getConfig();
-
   if (integration === 'all') {
+    const config = app.getConfig();
+    const collectApiUrls = app.getCollectApiUrls();
     const integrations: ('google' | 'custom' | 'tracelog')[] = [];
 
     if (config.integrations?.google) {
       integrations.push('google');
     }
 
-    const collectApiUrls = app.getCollectApiUrls();
     if (collectApiUrls?.custom) {
       integrations.push('custom');
     }
@@ -900,8 +910,6 @@ export const __getInitState = (): { isInitializing: boolean; isDestroying: boole
 
 if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {
   void import('./test-bridge').then((module) => {
-    if (module && typeof module.injectTestBridge === 'function') {
-      module.injectTestBridge();
-    }
+    module.injectTestBridge();
   });
 }

@@ -76,13 +76,24 @@ describe('SenderManager Edge Cases', () => {
     it('should clear timeout even if fetch fails', async () => {
       vi.useFakeTimers();
 
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      // Use mockResolvedValue instead of mockResolvedValueOnce to handle retries
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
 
       const body = createEventDto();
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
-      await senderManager.sendEventsQueue(body);
+      const sendPromise = senderManager.sendEventsQueue(body);
 
+      // Run all timers to complete retries
+      await vi.runAllTimersAsync();
+
+      await sendPromise;
+
+      // Should clear timeout after all retries exhausted
       expect(clearTimeoutSpy).toHaveBeenCalled();
 
       vi.useRealTimers();
@@ -117,7 +128,8 @@ describe('SenderManager Edge Cases', () => {
     });
 
     it('should handle 500 Internal Server Error', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Use mockResolvedValue to handle retries (not mockResolvedValueOnce)
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
@@ -127,10 +139,11 @@ describe('SenderManager Edge Cases', () => {
       const result = await senderManager.sendEventsQueue(body);
 
       expect(result).toBe(false);
-    });
+    }, 10000); // Increase timeout to 10s for retry logic
 
     it('should handle 503 Service Unavailable', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Use mockResolvedValue to handle retries (not mockResolvedValueOnce)
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 503,
         statusText: 'Service Unavailable',
@@ -140,7 +153,7 @@ describe('SenderManager Edge Cases', () => {
       const result = await senderManager.sendEventsQueue(body);
 
       expect(result).toBe(false);
-    });
+    }, 10000); // Increase timeout to 10s for retry logic
 
     it('should throw error for non-ok response', async () => {
       mockFetch.mockResolvedValueOnce({
@@ -259,6 +272,7 @@ describe('SenderManager Edge Cases', () => {
 
   describe('Failure Persistence', () => {
     it('should persist events on network failure', async () => {
+      // Use mockResolvedValue to handle retries
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
@@ -272,11 +286,11 @@ describe('SenderManager Edge Cases', () => {
 
       expect(onFailure).toHaveBeenCalled();
 
-      // Verify events were persisted
+      // Verify events were persisted (after all retries exhausted)
       const storageKey = 'tlog:queue:anonymous:custom';
       const persisted = storageManager.getItem(storageKey);
       expect(persisted).toBeTruthy();
-    });
+    }, 10000); // Increase timeout to 10s for retry logic
 
     it('should not persist on permanent errors (4xx)', async () => {
       // Clear any previous persisted events

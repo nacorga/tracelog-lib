@@ -101,7 +101,8 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       const result = await senderManager.sendEventsQueue(body, { onFailure });
 
       expect(result).toBe(false);
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Should retry 3 times (1 initial + 2 retries with MAX_SEND_RETRIES=2)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(onFailure).toHaveBeenCalled();
       // Events are persisted internally for recovery on next page load
     });
@@ -269,13 +270,14 @@ describe('SenderManager - Hybrid sendBeacon/fetch Strategy', () => {
       const body = createEventDto();
       await senderManager.sendEventsQueue(body);
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Should have 3 attempts (1 initial + 2 retries with MAX_SEND_RETRIES=2)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
 
-      // Wait a bit to ensure no retry is scheduled
+      // Wait a bit to ensure no MORE retries are scheduled
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Should still be only 1 call (no retries)
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Should still be only 3 calls (no more retries after exhausting MAX_SEND_RETRIES)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
     it('should NOT retry after sendBeacon failure', async () => {

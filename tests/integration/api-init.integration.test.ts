@@ -384,4 +384,79 @@ describe('API Integration - Init Flow', () => {
       expect(state.config?.sessionTimeout).toBe(500000);
     });
   });
+
+  describe('Initialization Timeout', () => {
+    it('should timeout after INITIALIZATION_TIMEOUT_MS (10 seconds) and cleanup', async () => {
+      // Mock App.init to simulate hanging initialization
+      const initSpy = vi.spyOn(App.prototype, 'init').mockImplementation(async () => {
+        // Simulate slow initialization that exceeds timeout
+        await new Promise((resolve) => setTimeout(resolve, 11000));
+      });
+
+      const destroySpy = vi.spyOn(App.prototype, 'destroy');
+
+      const startTime = Date.now();
+
+      await expect(TraceLog.init({})).rejects.toThrow('[TraceLog] Initialization timeout after 10000ms');
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+
+      // Should timeout around 10 seconds (allow 1s tolerance)
+      expect(duration).toBeGreaterThanOrEqual(9500);
+      expect(duration).toBeLessThan(11500);
+
+      // Should have attempted cleanup
+      expect(destroySpy).toHaveBeenCalledWith(true); // force=true
+
+      // App should not be initialized
+      expect(TraceLog.isInitialized()).toBe(false);
+
+      initSpy.mockRestore();
+      destroySpy.mockRestore();
+    }, 15000); // 15s timeout for this test
+
+    it('should cleanup partially initialized app on timeout', async () => {
+      // Mock App.init to hang but set some state
+      const initSpy = vi.spyOn(App.prototype, 'init').mockImplementation(async function (this: App) {
+        // Set some state to simulate partial initialization
+        this.set('userId', 'test-user-timeout');
+
+        // Then hang (exceeds 10s timeout)
+        await new Promise((resolve) => setTimeout(resolve, 11000));
+      });
+
+      try {
+        await TraceLog.init({});
+      } catch (error) {
+        // Expected to timeout
+        expect(error).toBeDefined();
+      }
+
+      // Should have cleaned up (no lingering app instance)
+      expect(TraceLog.isInitialized()).toBe(false);
+
+      initSpy.mockRestore();
+    }, 15000); // 15s timeout for this test
+
+    it('should not timeout with fast initialization', async () => {
+      // Normal fast init should complete before timeout
+      const config: Config = {
+        integrations: {
+          custom: { collectApiUrl: 'https://api.example.com/collect' },
+        },
+      };
+
+      const startTime = Date.now();
+
+      await TraceLog.init(config);
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+
+      // Should complete quickly (well under 5 seconds)
+      expect(duration).toBeLessThan(2000);
+      expect(TraceLog.isInitialized()).toBe(true);
+    });
+  });
 });
