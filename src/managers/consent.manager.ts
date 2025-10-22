@@ -494,21 +494,28 @@ export class ConsentManager {
    * - Before navigation/page unload
    * - When consent must be persisted synchronously (e.g., before init)
    *
+   * **Error Handling:**
+   * - If `throwOnError` is true, storage errors are rethrown (useful for before-init scenarios)
+   * - If `throwOnError` is false (default), storage errors are logged but not thrown
+   *
+   * @param throwOnError - Whether to throw storage errors (default: false)
    * @public
    */
-  flush(): void {
+  flush(throwOnError = false): void {
     if (this.persistDebounceTimer !== null) {
       clearTimeout(this.persistDebounceTimer);
       this.persistDebounceTimer = null;
     }
 
-    this.persistConsent();
+    this.persistConsent(throwOnError);
   }
 
   /**
    * Immediately persist consent state to localStorage
+   *
+   * @param throwOnError - Whether to throw storage errors (default: false)
    */
-  private persistConsent(): void {
+  private persistConsent(throwOnError = false): void {
     if (typeof window === 'undefined') {
       return;
     }
@@ -527,9 +534,12 @@ export class ConsentManager {
     } catch (error) {
       log('error', 'Failed to persist consent state', { error });
 
-      // Check if it's a quota error
       if (error instanceof Error && error.name === 'QuotaExceededError') {
         log('warn', 'localStorage quota exceeded, consent will be volatile for this session');
+      }
+
+      if (throwOnError) {
+        throw error;
       }
     }
   }

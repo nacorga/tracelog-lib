@@ -350,6 +350,20 @@ const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
 const CONSENT_KEY = `${STORAGE_BASE_KEY}:consent`;
 const CONSENT_EXPIRY_DAYS = 365;
+const storage_constants = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  BROADCAST_CHANNEL_NAME,
+  CONSENT_EXPIRY_DAYS,
+  CONSENT_KEY,
+  QA_MODE_DISABLE_VALUE,
+  QA_MODE_ENABLE_VALUE,
+  QA_MODE_KEY,
+  QA_MODE_URL_PARAM,
+  QUEUE_KEY,
+  SESSION_STORAGE_KEY,
+  STORAGE_BASE_KEY,
+  USER_ID_KEY
+}, Symbol.toStringTag, { value: "Module" }));
 const WEB_VITALS_GOOD_THRESHOLDS = {
   LCP: 2500,
   // Good: ≤ 2.5s
@@ -3694,19 +3708,26 @@ class ConsentManager {
    * - Before navigation/page unload
    * - When consent must be persisted synchronously (e.g., before init)
    *
+   * **Error Handling:**
+   * - If `throwOnError` is true, storage errors are rethrown (useful for before-init scenarios)
+   * - If `throwOnError` is false (default), storage errors are logged but not thrown
+   *
+   * @param throwOnError - Whether to throw storage errors (default: false)
    * @public
    */
-  flush() {
+  flush(throwOnError = false) {
     if (this.persistDebounceTimer !== null) {
       clearTimeout(this.persistDebounceTimer);
       this.persistDebounceTimer = null;
     }
-    this.persistConsent();
+    this.persistConsent(throwOnError);
   }
   /**
    * Immediately persist consent state to localStorage
+   * 
+   * @param throwOnError - Whether to throw storage errors (default: false)
    */
-  persistConsent() {
+  persistConsent(throwOnError = false) {
     if (typeof window === "undefined") {
       return;
     }
@@ -3723,6 +3744,9 @@ class ConsentManager {
       log("error", "Failed to persist consent state", { error });
       if (error instanceof Error && error.name === "QuotaExceededError") {
         log("warn", "localStorage quota exceeded, consent will be volatile for this session");
+      }
+      if (throwOnError) {
+        throw error;
       }
     }
   }
@@ -3813,10 +3837,6 @@ class ConsentManager {
     window.addEventListener("storage", this.storageListener);
   }
 }
-const consent_manager = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  ConsentManager
-}, Symbol.toStringTag, { value: "Module" }));
 class SessionManager extends StateManager {
   storageManager;
   eventManager;
@@ -4235,6 +4255,24 @@ class SessionHandler extends StateManager {
     this.eventManager = eventManager;
     this.storageManager = storageManager;
   }
+  /**
+   * Starts session tracking by creating SessionManager and initializing session.
+   *
+   * **Behavior**:
+   * - Extracts projectId from config (tracelog projectId or custom collectApiUrl or 'default')
+   * - Creates SessionManager instance with storage, event manager, and projectId
+   * - Calls SessionManager.startTracking() to begin session lifecycle
+   * - Flushes pending events buffered during initialization
+   * - Idempotent: Early return if session already active
+   * - Validates state: Warns and returns if handler destroyed
+   *
+   * **Error Handling**:
+   * - On failure: Automatically cleans up SessionManager via nested try-catch
+   * - Leaves handler in clean, reusable state after error
+   * - Re-throws error after logging
+   *
+   * @throws {Error} If SessionManager initialization fails
+   */
   startTracking() {
     if (this.isActive()) {
       return;
@@ -4244,10 +4282,7 @@ class SessionHandler extends StateManager {
       return;
     }
     const config = this.get("config");
-    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.collectApiUrl ?? "default";
-    if (!projectId) {
-      throw new Error("Cannot start session tracking: config not available");
-    }
+    const projectId = config?.integrations?.tracelog?.projectId ?? "custom";
     try {
       this.sessionManager = new SessionManager(this.storageManager, this.eventManager, projectId);
       this.sessionManager.startTracking();
@@ -4274,9 +4309,30 @@ class SessionHandler extends StateManager {
       this.sessionManager = null;
     }
   }
+  /**
+   * Stops session tracking by ending current session and cleaning up resources.
+   *
+   * Calls SessionManager.stopTracking() to end session (sends SESSION_END event),
+   * then calls SessionManager.destroy() to clean up listeners and state.
+   *
+   * **Difference from destroy()**: This method ends the session gracefully with
+   * a SESSION_END event before cleanup. Use destroy() for cleanup without session end.
+   */
   stopTracking() {
     this.cleanupSessionManager();
   }
+  /**
+   * Destroys handler and cleans up SessionManager without ending session.
+   *
+   * **Behavior**:
+   * - Idempotent: Early return if already destroyed
+   * - Calls SessionManager.destroy() only (NOT stopTracking)
+   * - Sets sessionManager to null and destroyed flag to true
+   * - Updates hasStartSession global state to false
+   *
+   * **Difference from stopTracking()**: This method does cleanup only without
+   * sending a SESSION_END event. Use stopTracking() for graceful session end.
+   */
   destroy() {
     if (this.destroyed) {
       return;
@@ -4303,9 +4359,13 @@ class PageViewHandler extends StateManager {
   /**
    * Starts tracking page views.
    *
-   * - Tracks initial page load immediately
-   * - Patches History API methods (pushState, replaceState)
-   * - Listens to popstate and hashchange events
+   * - Tracks initial page load first (via trackInitialPageView)
+   * - Attaches popstate and hashchange event listeners
+   * - Patches History API methods (pushState, replaceState) for SPA navigation
+   * - All setup happens synchronously
+   *
+   * **Note**: onTrack() callback is invoked AFTER initial page view but BEFORE
+   * subsequent navigation events for session management coordination.
    */
   startTracking() {
     this.trackInitialPageView();
@@ -4404,6 +4464,19 @@ class ClickHandler extends StateManager {
     super();
     this.eventManager = eventManager;
   }
+  /**
+   * Starts tracking click events on the document.
+   *
+   * Attaches a single capture-phase click listener to window that:
+   * - Detects interactive elements or falls back to clicked element
+   * - Applies click throttling per element (configurable, default 300ms)
+   * - Extracts custom tracking data from data-tlog-name attributes
+   * - Generates both custom events (for tracked elements) and click events
+   * - Respects data-tlog-ignore privacy controls
+   * - Sanitizes text content for PII protection
+   *
+   * Idempotent: Safe to call multiple times (early return if already tracking).
+   */
   startTracking() {
     if (this.clickHandler) {
       return;
@@ -4447,6 +4520,12 @@ class ClickHandler extends StateManager {
     };
     window.addEventListener("click", this.clickHandler, true);
   }
+  /**
+   * Stops tracking click events and cleans up resources.
+   *
+   * Removes the click event listener, clears throttle cache, and resets prune timer.
+   * Prevents memory leaks by properly cleaning up all state.
+   */
   stopTracking() {
     if (this.clickHandler) {
       window.removeEventListener("click", this.clickHandler, true);
@@ -4575,6 +4654,17 @@ class ClickHandler extends StateManager {
     }
     return element;
   }
+  /**
+   * Clamps relative coordinate values to [0, 1] range with 3 decimal precision.
+   *
+   * @param value - Raw relative coordinate value
+   * @returns Clamped value between 0 and 1 with 3 decimal places (e.g., 0.123)
+   *
+   * @example
+   * clamp(1.234)   // returns 1.000
+   * clamp(0.12345) // returns 0.123
+   * clamp(-0.5)    // returns 0.000
+   */
   clamp(value) {
     return Math.max(0, Math.min(1, Number(value.toFixed(3))));
   }
@@ -4619,6 +4709,25 @@ class ClickHandler extends StateManager {
       ...Object.keys(attributes).length > 0 && { dataAttributes: attributes }
     };
   }
+  /**
+   * Sanitizes text by replacing PII patterns with [REDACTED].
+   *
+   * Protects against:
+   * - Email addresses
+   * - Phone numbers (US format)
+   * - Credit card numbers
+   * - IBAN numbers
+   * - API keys/tokens
+   * - Bearer tokens
+   *
+   * @param text - Raw text content from element
+   * @returns Sanitized text with PII replaced by [REDACTED]
+   *
+   * @example
+   * sanitizeText('Email: user@example.com')      // returns 'Email: [REDACTED]'
+   * sanitizeText('Card: 1234-5678-9012-3456')    // returns 'Card: [REDACTED]'
+   * sanitizeText('Bearer token123')              // returns '[REDACTED]'
+   */
   sanitizeText(text) {
     let sanitized = text;
     for (const pattern of PII_PATTERNS) {
@@ -4684,12 +4793,35 @@ class ScrollHandler extends StateManager {
     super();
     this.eventManager = eventManager;
   }
+  /**
+   * Starts tracking scroll events across all detected scrollable containers.
+   *
+   * Automatically detects scrollable containers using TreeWalker with retry logic:
+   * - Searches DOM for elements with overflow: auto/scroll
+   * - Validates visibility and scrollability
+   * - Retries up to 5 times with 200ms intervals for dynamic content
+   * - Falls back to window-only tracking if no containers found
+   * - Applies primaryScrollSelector config override if provided
+   *
+   * Attaches debounced scroll listeners (250ms per container) with smart filtering:
+   * - Significant movement (10px minimum)
+   * - Depth change (5% minimum)
+   * - Rate limiting (500ms minimum interval)
+   * - Session cap (120 events maximum)
+   */
   startTracking() {
     this.limitWarningLogged = false;
     this.applyConfigOverrides();
     this.set("scrollEventCount", 0);
     this.tryDetectScrollContainers(0);
   }
+  /**
+   * Stops tracking scroll events and cleans up resources.
+   *
+   * Removes all scroll event listeners, clears debounce timers, cancels retry attempts,
+   * and resets session state (event counter, warning flags). Prevents memory leaks by
+   * properly cleaning up all containers and timers.
+   */
   stopTracking() {
     if (this.containerDiscoveryTimeoutId !== null) {
       clearTimeout(this.containerDiscoveryTimeoutId);
@@ -5135,7 +5267,7 @@ class ViewportHandler extends StateManager {
   fireViewportEvent(tracked, visibilityRatio) {
     if (tracked.startTime === null) return;
     const dwellTime = Math.round(performance.now() - tracked.startTime);
-    if (tracked.element.hasAttribute("data-tlog-ignore")) {
+    if (tracked.element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
       return;
     }
     const cooldownPeriod = this.config?.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD;
@@ -5788,10 +5920,6 @@ class StorageManager {
     this.fallbackSessionStorage.delete(key);
   }
 }
-const storage_manager = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  StorageManager
-}, Symbol.toStringTag, { value: "Module" }));
 class PerformanceHandler extends StateManager {
   eventManager;
   reportedByNav = /* @__PURE__ */ new Map();
@@ -5805,6 +5933,20 @@ class PerformanceHandler extends StateManager {
     this.eventManager = eventManager;
     this.vitalThresholds = getWebVitalsThresholds(DEFAULT_WEB_VITALS_MODE);
   }
+  /**
+   * Starts tracking Web Vitals and performance metrics.
+   *
+   * Asynchronously loads the web-vitals library and initializes performance tracking.
+   * Falls back to native Performance Observer API if web-vitals fails to load.
+   *
+   * **Configuration**:
+   * - Reads webVitalsMode from config ('all', 'needs-improvement', 'poor')
+   * - Merges webVitalsThresholds with mode defaults for custom thresholds
+   * - Initializes web-vitals library observers (LCP, CLS, FCP, TTFB, INP)
+   * - Starts long task observation with 1/second throttling
+   *
+   * @returns Promise that resolves when tracking is initialized
+   */
   async startTracking() {
     const config = this.get("config");
     const mode = config?.webVitalsMode ?? DEFAULT_WEB_VITALS_MODE;
@@ -5815,6 +5957,15 @@ class PerformanceHandler extends StateManager {
     await this.initWebVitals();
     this.observeLongTasks();
   }
+  /**
+   * Stops tracking Web Vitals and cleans up resources.
+   *
+   * Disconnects all Performance Observers and clears internal state:
+   * - Disconnects all active observers (web-vitals and long task)
+   * - Clears navigation-based deduplication map
+   * - Clears navigation history array
+   * - Prevents memory leaks in long-running applications
+   */
   stopTracking() {
     this.observers.forEach((obs, index) => {
       try {
@@ -6274,6 +6425,17 @@ class App extends StateManager {
         this.emitter,
         this.transformers
       );
+      this.emitter.on(EmitterEvent.CONSENT_CHANGED, (consentState) => {
+        if (!this.managers.event || !this.managers.consent) {
+          return;
+        }
+        const integrations = ["google", "custom", "tracelog"];
+        void Promise.all(
+          integrations.filter((integration) => consentState[integration] === true).map(async (integration) => this.managers.event.flushConsentBuffer(integration))
+        ).catch((error) => {
+          log("error", "Failed to flush consent buffer after consent granted", { error });
+        });
+      });
       this.initializeHandlers();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log("warn", "Failed to recover persisted events", { error });
@@ -6594,10 +6756,13 @@ const pendingConsents = [];
 let app = null;
 let isInitializing = false;
 let isDestroying = false;
+let isDestroyed = false;
 const init = async (config) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
+  isDestroyed = false;
+  isDestroying = false;
   if (window.__traceLogDisabled === true) {
     return;
   }
@@ -6766,11 +6931,15 @@ const destroy = () => {
     log("warn", "Error during destroy, forced cleanup completed", { error });
   } finally {
     isDestroying = false;
+    isDestroyed = true;
   }
 };
 const setConsent = async (integration, granted) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
+  }
+  if (isDestroyed || isDestroying) {
+    throw new Error("[TraceLog] Cannot set consent while TraceLog is destroyed or being destroyed");
   }
   if (!app || isInitializing) {
     if (integration === "all") {
@@ -6780,15 +6949,19 @@ const setConsent = async (integration, granted) => {
       }
       pendingConsents.push({ integration, granted });
       try {
-        const { StorageManager: StorageManager2 } = await Promise.resolve().then(() => storage_manager);
-        const { ConsentManager: ConsentManager2 } = await Promise.resolve().then(() => consent_manager);
-        const tempStorage = new StorageManager2();
-        const tempConsent = new ConsentManager2(tempStorage, false, null);
-        tempConsent.setConsent("google", granted);
-        tempConsent.setConsent("custom", granted);
-        tempConsent.setConsent("tracelog", granted);
-        tempConsent.flush();
-        tempConsent.cleanup();
+        const { CONSENT_KEY: CONSENT_KEY2, CONSENT_EXPIRY_DAYS: CONSENT_EXPIRY_DAYS2 } = await Promise.resolve().then(() => storage_constants);
+        const now = Date.now();
+        const expiresAt = now + CONSENT_EXPIRY_DAYS2 * 24 * 60 * 60 * 1e3;
+        const consentData = {
+          state: {
+            google: granted,
+            custom: granted,
+            tracelog: granted
+          },
+          timestamp: now,
+          expiresAt
+        };
+        localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
         log("debug", `Consent for 'all' persisted to localStorage before init`);
       } catch (error) {
         log("error", "Failed to persist consent for all integrations before init", { error });
@@ -6799,13 +6972,29 @@ const setConsent = async (integration, granted) => {
       return;
     }
     try {
-      const { StorageManager: StorageManager2 } = await Promise.resolve().then(() => storage_manager);
-      const { ConsentManager: ConsentManager2 } = await Promise.resolve().then(() => consent_manager);
-      const tempStorage = new StorageManager2();
-      const tempConsent = new ConsentManager2(tempStorage, false, null);
-      tempConsent.setConsent(integration, granted);
-      tempConsent.flush();
-      tempConsent.cleanup();
+      const { CONSENT_KEY: CONSENT_KEY2, CONSENT_EXPIRY_DAYS: CONSENT_EXPIRY_DAYS2 } = await Promise.resolve().then(() => storage_constants);
+      const now = Date.now();
+      const expiresAt = now + CONSENT_EXPIRY_DAYS2 * 24 * 60 * 60 * 1e3;
+      const existingRaw = localStorage.getItem(CONSENT_KEY2);
+      let existingState = {};
+      if (existingRaw !== null && existingRaw.trim() !== "") {
+        try {
+          const existingData = JSON.parse(existingRaw);
+          existingState = existingData.state ?? {};
+        } catch {
+        }
+      }
+      const consentData = {
+        state: {
+          ...existingState,
+          // Preserve existing consent values
+          [integration]: granted
+          // Update only the specified integration
+        },
+        timestamp: now,
+        expiresAt
+      };
+      localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
       log("debug", `Consent for ${integration} persisted before init`);
     } catch (error) {
       log("error", "Failed to persist consent before init", { error });
@@ -6814,9 +7003,6 @@ const setConsent = async (integration, granted) => {
       );
     }
     return;
-  }
-  if (isDestroying) {
-    throw new Error("[TraceLog] Cannot set consent while TraceLog is being destroyed");
   }
   const consentManager = app.getConsentManager();
   if (!consentManager) {
@@ -7247,8 +7433,7 @@ class TestBridge extends App {
   // Consent methods for E2E testing
   async setConsent(integration, granted) {
     if (!this.initialized) {
-      const { setConsent: setConsent2 } = await Promise.resolve().then(() => api);
-      await setConsent2(integration, granted);
+      await setConsent(integration, granted);
       return;
     }
     const consentManager = this.managers?.consent;
@@ -7302,6 +7487,7 @@ class TestBridge extends App {
     }
     this.ensureNotDestroying();
     this._isDestroying = true;
+    destroy();
     try {
       super.destroy(force);
       void Promise.resolve().then(() => api).then(({ __setAppInstance: __setAppInstance2 }) => {

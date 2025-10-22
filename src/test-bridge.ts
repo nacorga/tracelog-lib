@@ -1,4 +1,5 @@
 import { App } from './app';
+import { setConsent as apiSetConsent, destroy as apiDestroy } from './api';
 import { ClickHandler } from './handlers/click.handler';
 import { ErrorHandler } from './handlers/error.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
@@ -28,7 +29,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
       throw new Error('[TraceLog] TestBridge is only available in development mode');
     }
 
-    // Sync with public API before initializing
     try {
       const { __setAppInstance } = await import('./api');
       __setAppInstance(this);
@@ -39,7 +39,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
     try {
       await super.init(config);
     } catch (error) {
-      // Clear sync on init failure
       const { __setAppInstance } = await import('./api');
       __setAppInstance(null);
       throw error;
@@ -47,10 +46,10 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   override sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void {
-    // Silently ignore events after destroy instead of throwing error
     if (!this.initialized) {
       return;
     }
+
     super.sendCustomEvent(name, data);
   }
 
@@ -89,7 +88,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
       throw new Error('Project ID or User ID not available. Initialize TraceLog first.');
     }
 
-    // Build the persisted data structure matching what SenderManager expects
     const persistedData = {
       userId,
       sessionId: sessionId || `test-session-${Date.now()}`,
@@ -98,8 +96,8 @@ export class TestBridge extends App implements TraceLogTestBridge {
       timestamp: Date.now(),
     };
 
-    // Store in the same format as SenderManager.persistEvents()
     const storageKey = `${STORAGE_BASE_KEY}:${projectId}:queue:${userId}`;
+
     storageManager.setItem(storageKey, JSON.stringify(persistedData));
   }
 
@@ -107,7 +105,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return super.get(key);
   }
 
-  // Manager accessors
   getStorageManager(): StorageManager | null {
     return this.safeAccess(this.managers?.storage);
   }
@@ -116,7 +113,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return this.managers.event;
   }
 
-  // Handler accessors
   getSessionHandler(): SessionHandler | null {
     return this.safeAccess(this.handlers?.session);
   }
@@ -141,17 +137,13 @@ export class TestBridge extends App implements TraceLogTestBridge {
     return this.safeAccess(this.handlers?.error);
   }
 
-  // Integration accessors
   getGoogleAnalytics(): GoogleAnalyticsIntegration | null {
     return this.safeAccess(this.integrations?.google);
   }
 
-  // Consent methods for E2E testing
   async setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void> {
-    // If not initialized, delegate to public API which handles pre-init consent
     if (!this.initialized) {
-      const { setConsent } = await import('./api');
-      await setConsent(integration, granted);
+      await apiSetConsent(integration, granted);
       return;
     }
 
@@ -162,7 +154,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
 
     const config = this.get('config');
 
-    // Handle 'all' integration
     if (integration === 'all') {
       const integrations: ('google' | 'custom' | 'tracelog')[] = [];
 
@@ -179,7 +170,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
         integrations.push('tracelog');
       }
 
-      // Apply to all configured integrations
       for (const int of integrations) {
         await this.setConsent(int, granted);
       }
@@ -187,13 +177,10 @@ export class TestBridge extends App implements TraceLogTestBridge {
       return;
     }
 
-    // Get previous consent state
     const hadConsent = consentManager.hasConsent(integration);
 
-    // Update consent state
     consentManager.setConsent(integration, granted);
 
-    // Handle consent granted - delegate to parent class method
     if (granted && !hadConsent) {
       await this.handleConsentGranted(integration);
     }
@@ -229,9 +216,10 @@ export class TestBridge extends App implements TraceLogTestBridge {
     this.ensureNotDestroying();
     this._isDestroying = true;
 
+    apiDestroy();
+
     try {
       super.destroy(force);
-      // Clear public API reference
       void import('./api').then(({ __setAppInstance }) => {
         __setAppInstance(null);
       });

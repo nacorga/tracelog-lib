@@ -12,6 +12,8 @@ import {
   EventType,
   EmitterCallback,
   EmitterMap,
+  EmitterEvent,
+  ConsentState,
   Mode,
   TransformerHook,
   TransformerMap,
@@ -118,6 +120,22 @@ export class App extends StateManager {
         this.emitter,
         this.transformers,
       );
+
+      this.emitter.on(EmitterEvent.CONSENT_CHANGED, (consentState: ConsentState) => {
+        if (!this.managers.event || !this.managers.consent) {
+          return;
+        }
+
+        const integrations: Array<'google' | 'custom' | 'tracelog'> = ['google', 'custom', 'tracelog'];
+
+        void Promise.all(
+          integrations
+            .filter((integration) => consentState[integration] === true)
+            .map(async (integration) => this.managers.event!.flushConsentBuffer(integration)),
+        ).catch((error) => {
+          log('error', 'Failed to flush consent buffer after consent granted', { error });
+        });
+      });
 
       this.initializeHandlers();
 

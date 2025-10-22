@@ -57,7 +57,7 @@ test.describe('Consent Management - Timing & Initialization', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Check localStorage directly
-      const stored = localStorage.getItem('tracelog_consent');
+      const stored = localStorage.getItem('tlog:consent');
       const parsed = stored !== null ? JSON.parse(stored) : null;
 
       // Now init
@@ -102,7 +102,7 @@ test.describe('Consent Management - Timing & Initialization', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Check localStorage
-      const stored = localStorage.getItem('tracelog_consent');
+      const stored = localStorage.getItem('tlog:consent');
       const parsed = stored !== null ? JSON.parse(stored) : null;
 
       // Init with only Google configured
@@ -196,7 +196,7 @@ test.describe('Consent Management - Timing & Initialization', () => {
       const consent = traceLog.getConsentState();
 
       // Check localStorage
-      const stored = localStorage.getItem('tracelog_consent');
+      const stored = localStorage.getItem('tlog:consent');
       const parsed = stored !== null ? JSON.parse(stored) : null;
 
       return {
@@ -217,7 +217,7 @@ test.describe('Consent Management - Storage & Persistence', () => {
 
     const result = await page.evaluate(async () => {
       // Corrupt consent data in localStorage
-      localStorage.setItem('tracelog_consent', '{"invalid": "json"');
+      localStorage.setItem('tlog:consent', '{"invalid": "json"');
 
       const traceLog = window.__traceLogBridge!;
 
@@ -241,7 +241,7 @@ test.describe('Consent Management - Storage & Persistence', () => {
     const result = await page.evaluate(async () => {
       // Missing 'timestamp' field
       localStorage.setItem(
-        'tracelog_consent',
+        'tlog:consent',
         JSON.stringify({
           state: { google: true, custom: true, tracelog: true },
           expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
@@ -274,7 +274,7 @@ test.describe('Consent Management - Storage & Persistence', () => {
       const expiredTimestamp = now - 366 * 24 * 60 * 60 * 1000;
 
       localStorage.setItem(
-        'tracelog_consent',
+        'tlog:consent',
         JSON.stringify({
           state: { google: true, custom: true, tracelog: true },
           timestamp: expiredTimestamp,
@@ -352,8 +352,9 @@ test.describe('Consent Management - Integration Logic', () => {
         events.push(event);
       });
 
-      // Init WITHOUT consent
+      // Init WITHOUT consent (waitForConsent buffers events until consent granted)
       await traceLog.init({
+        waitForConsent: true,
         integrations: {
           google: { measurementId: 'G-TEST' },
         },
@@ -361,30 +362,44 @@ test.describe('Consent Management - Integration Logic', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Send events BEFORE consent (should be buffered)
+      const eventsAfterInit = events.length;
+
+      // Send events BEFORE consent (should be buffered BUT emitted locally)
       traceLog.sendCustomEvent('before_consent_1', { data: 'test1' });
       traceLog.sendCustomEvent('before_consent_2', { data: 'test2' });
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const eventsBeforeConsent = events.length;
+      const bufferSize = traceLog.getConsentBufferLength();
 
-      // Grant consent (should flush buffer)
+      // Grant consent (should flush buffer to integrations, but NOT re-emit locally)
       await traceLog.setConsent('google', true);
 
       await new Promise((resolve) => setTimeout(resolve, 800));
 
       const eventsAfterConsent = events.length;
+      const bufferSizeAfterConsent = traceLog.getConsentBufferLength();
 
       return {
+        eventsAfterInit,
         eventsBeforeConsent,
         eventsAfterConsent,
-        bufferFlushed: eventsAfterConsent > eventsBeforeConsent,
+        bufferSize,
+        bufferSizeAfterConsent,
+        eventsEmittedWhileBuffered: eventsBeforeConsent > eventsAfterInit,
+        noDoubleEmission: eventsAfterConsent === eventsBeforeConsent,
       };
     });
 
-    // Events should be emitted after consent granted
-    expect(result.bufferFlushed).toBe(true);
+    // Events should be emitted locally even when buffered (for on('event') listeners)
+    expect(result.eventsEmittedWhileBuffered).toBe(true);
+    // Events should be buffered for integrations when no consent
+    expect(result.bufferSize).toBeGreaterThan(0);
+    // After consent, buffer should be cleared (sent to integrations)
+    expect(result.bufferSizeAfterConsent).toBe(0);
+    // Events should NOT be re-emitted locally when flushed
+    expect(result.noDoubleEmission).toBe(true);
   });
 
   test('should clear buffered events when consent is revoked', async ({ page }) => {

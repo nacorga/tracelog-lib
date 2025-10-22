@@ -32,6 +32,7 @@ const pendingConsents: PendingConsent[] = [];
 let app: App | null = null;
 let isInitializing = false;
 let isDestroying = false;
+let isDestroyed = false;
 
 /**
  * Initializes TraceLog and begins tracking user interactions.
@@ -76,6 +77,9 @@ export const init = async (config?: Config): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
+
+  isDestroyed = false;
+  isDestroying = false;
 
   if (window.__traceLogDisabled === true) {
     return;
@@ -124,12 +128,11 @@ export const init = async (config?: Config): Promise<void> => {
 
       app = instance;
 
-      // Apply pending 'all' consent operations (specific integrations already persisted)
       if (pendingConsents.length > 0) {
         const consents = [...pendingConsents];
+
         pendingConsents.length = 0;
 
-        // Apply 'all' consents now that we know which integrations are configured
         for (const { integration, granted } of consents) {
           try {
             await setConsent(integration, granted);
@@ -519,6 +522,7 @@ export const destroy = (): void => {
     log('warn', 'Error during destroy, forced cleanup completed', { error });
   } finally {
     isDestroying = false;
+    isDestroyed = true;
   }
 };
 
@@ -581,34 +585,40 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
     return;
   }
 
+  if (isDestroyed || isDestroying) {
+    throw new Error('[TraceLog] Cannot set consent while TraceLog is destroyed or being destroyed');
+  }
+
   if (!app || isInitializing) {
     if (integration === 'all') {
       const existingIndex = pendingConsents.findIndex((c) => c.integration === integration);
+
       if (existingIndex !== -1) {
         pendingConsents.splice(existingIndex, 1);
       }
+
       pendingConsents.push({ integration, granted });
 
-      // Persist 'all' consent to localStorage for cross-reload persistence
       try {
-        const { StorageManager } = await import('./managers/storage.manager');
-        const { ConsentManager } = await import('./managers/consent.manager');
+        const { CONSENT_KEY, CONSENT_EXPIRY_DAYS } = await import('./constants/storage.constants');
 
-        const tempStorage = new StorageManager();
-        const tempConsent = new ConsentManager(tempStorage, false, null);
+        const now = Date.now();
+        const expiresAt = now + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 
-        // Set consent for all possible integrations
-        tempConsent.setConsent('google', granted);
-        tempConsent.setConsent('custom', granted);
-        tempConsent.setConsent('tracelog', granted);
+        const consentData = {
+          state: {
+            google: granted,
+            custom: granted,
+            tracelog: granted,
+          },
+          timestamp: now,
+          expiresAt,
+        };
 
-        // Flush immediately instead of waiting for debounce
-        tempConsent.flush();
-        tempConsent.cleanup();
-
-        log('debug', `Consent for 'all' persisted to localStorage before init`);
+        localStorage.setItem(CONSENT_KEY, JSON.stringify(consentData));
       } catch (error) {
         log('error', 'Failed to persist consent for all integrations before init', { error });
+
         throw new Error(
           `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -618,30 +628,42 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
     }
 
     try {
-      const { StorageManager } = await import('./managers/storage.manager');
-      const { ConsentManager } = await import('./managers/consent.manager');
+      const { CONSENT_KEY, CONSENT_EXPIRY_DAYS } = await import('./constants/storage.constants');
 
-      const tempStorage = new StorageManager();
-      const tempConsent = new ConsentManager(tempStorage, false, null);
+      const now = Date.now();
+      const expiresAt = now + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+      const existingRaw = localStorage.getItem(CONSENT_KEY);
 
-      tempConsent.setConsent(integration, granted);
-      // Flush immediately instead of waiting for debounce
-      tempConsent.flush();
-      tempConsent.cleanup();
+      let existingState: Record<string, boolean> = {};
 
-      log('debug', `Consent for ${integration} persisted before init`);
+      if (existingRaw !== null && existingRaw.trim() !== '') {
+        try {
+          const existingData = JSON.parse(existingRaw) as { state?: Record<string, boolean> };
+          existingState = existingData.state ?? {};
+        } catch {
+          // Corrupted JSON, start fresh
+        }
+      }
+
+      const consentData = {
+        state: {
+          ...existingState,
+          [integration]: granted,
+        },
+        timestamp: now,
+        expiresAt,
+      };
+
+      localStorage.setItem(CONSENT_KEY, JSON.stringify(consentData));
     } catch (error) {
       log('error', 'Failed to persist consent before init', { error });
+
       throw new Error(
         `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
     return;
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot set consent while TraceLog is being destroyed');
   }
 
   const consentManager = app.getConsentManager();
@@ -653,7 +675,6 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
 
   const config = app.getConfig();
 
-  // Handle 'all' integration
   if (integration === 'all') {
     const integrations: ('google' | 'custom' | 'tracelog')[] = [];
 
@@ -670,7 +691,6 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
       integrations.push('tracelog');
     }
 
-    // Apply to all configured integrations
     for (const int of integrations) {
       await setConsent(int, granted);
     }
@@ -678,28 +698,22 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
     return;
   }
 
-  // Get previous consent state
   const hadConsent = consentManager.hasConsent(integration);
 
-  // Update consent state
   consentManager.setConsent(integration, granted);
 
-  // Handle consent granted - delegate to App for orchestration
   if (granted && !hadConsent) {
     await app.handleConsentGranted(integration);
   }
 
-  // Handle consent revoked
   if (!granted && hadConsent) {
     log('info', `Consent revoked for ${integration}`);
 
-    // Clean up buffered events for this integration
     const eventManager = app.getEventManager();
+
     if (eventManager) {
       eventManager.clearConsentBufferForIntegration(integration);
     }
-
-    // EventManager/SenderManager will automatically stop sending to this integration
   }
 };
 
@@ -736,14 +750,12 @@ export const hasConsent = (integration: ConsentIntegration): boolean => {
 
   if (!app) {
     if (integration === 'all') {
-      // Check localStorage for persisted consent state
       const state = loadConsentFromStorage();
+
       if (state === null) {
         return false;
       }
 
-      // 'all' means ALL possible integrations must have consent (strict AND logic)
-      // This matches ConsentManager.hasConsent('all') behavior for consistency
       return Boolean(state.google === true && state.custom === true && state.tracelog === true);
     }
 
@@ -886,7 +898,6 @@ export const __getInitState = (): { isInitializing: boolean; isDestroying: boole
   return { isInitializing, isDestroying };
 };
 
-// Auto-inject TestBridge in development mode
 if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {
   void import('./test-bridge').then((module) => {
     if (module && typeof module.injectTestBridge === 'function') {
