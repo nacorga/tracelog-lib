@@ -9,54 +9,41 @@ import { GoogleAnalyticsIntegration } from './integrations/google-analytics.inte
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { State, TraceLogTestBridge } from './types';
-import { __setAppInstance } from './api';
 import { STORAGE_BASE_KEY } from './constants';
 
 /**
- * Test bridge for E2E testing
+ * Test bridge for E2E testing (development only)
+ *
+ * Auto-injects into window.__traceLogBridge for Playwright tests
  */
 export class TestBridge extends App implements TraceLogTestBridge {
-  private _isInitializing: boolean;
   private _isDestroying = false;
 
-  constructor(isInitializing: boolean, isDestroying: boolean) {
+  constructor() {
     super();
-    this._isInitializing = isInitializing;
-    this._isDestroying = isDestroying;
   }
 
   override async init(config?: any): Promise<void> {
-    // Guard: TestBridge should only be used in development
     if (process.env.NODE_ENV !== 'development') {
       throw new Error('[TraceLog] TestBridge is only available in development mode');
     }
 
-    // First sync with window.tracelog BEFORE initializing
-    // This ensures both APIs point to the same instance from the start
-    if (!__setAppInstance) {
-      throw new Error('[TraceLog] __setAppInstance is not available (production build?)');
-    }
-
+    // Sync with public API before initializing
     try {
+      const { __setAppInstance } = await import('./api');
       __setAppInstance(this);
     } catch {
-      // If __setAppInstance fails (e.g., already initialized), throw clear error
       throw new Error('[TraceLog] TestBridge cannot sync with existing tracelog instance. Call destroy() first.');
     }
 
     try {
       await super.init(config);
     } catch (error) {
-      // If init fails, clear the sync
-      if (__setAppInstance) {
-        __setAppInstance(null);
-      }
+      // Clear sync on init failure
+      const { __setAppInstance } = await import('./api');
+      __setAppInstance(null);
       throw error;
     }
-  }
-
-  isInitializing(): boolean {
-    return this._isInitializing;
   }
 
   override sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void {
@@ -84,10 +71,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
 
   getQueueLength(): number {
     return this.managers.event?.getQueueLength() ?? 0;
-  }
-
-  forceInitLock(enabled = true): void {
-    this._isInitializing = enabled;
   }
 
   simulatePersistedEvents(events: any[]): void {
@@ -239,21 +222,19 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   override destroy(force = false): void {
-    // If not initialized and not forcing, silently return (no-op)
     if (!this.initialized && !force) {
       return;
     }
 
     this.ensureNotDestroying();
-
     this._isDestroying = true;
 
     try {
       super.destroy(force);
-      // Clear window.tracelog API reference (only in dev mode)
-      if (__setAppInstance) {
+      // Clear public API reference
+      void import('./api').then(({ __setAppInstance }) => {
         __setAppInstance(null);
-      }
+      });
     } finally {
       this._isDestroying = false;
     }
@@ -275,3 +256,19 @@ export class TestBridge extends App implements TraceLogTestBridge {
     }
   }
 }
+
+/**
+ * Injects TestBridge into window.__traceLogBridge for E2E tests
+ * @internal Called by api.ts in development mode
+ */
+export const injectTestBridge = (): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  try {
+    window.__traceLogBridge = new TestBridge();
+  } catch (error) {
+    console.error('[TraceLog] Failed to inject TestBridge', error);
+  }
+};

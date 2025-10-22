@@ -19,14 +19,14 @@ test.describe('Consent Persistence Before Init', () => {
   test('should persist consent to localStorage when setConsent called before init', async ({ page }) => {
     const result = await page.evaluate(async () => {
       // Step 1: Call setConsent BEFORE init
-      await window.__traceLogBridge.setConsent('google', true);
+      await window.__traceLogBridge!.setConsent('google', true);
 
       // Step 2: Immediately check localStorage (before init)
       // NOTE: The correct key is 'tlog:consent' (STORAGE_BASE_KEY + ':consent')
       const storedAfterSet = window.localStorage.getItem('tlog:consent');
 
       // Step 3: Now initialize
-      await window.__traceLogBridge.init({
+      await window.__traceLogBridge!.init({
         integrations: {
           google: { measurementId: 'G-TEST' },
         },
@@ -56,7 +56,7 @@ test.describe('Consent Persistence Before Init', () => {
   test('should persist consent for "all" integrations before init', async ({ page }) => {
     const result = await page.evaluate(async () => {
       // Call setConsent('all') before init
-      await window.__traceLogBridge.setConsent('all', true);
+      await window.__traceLogBridge!.setConsent('all', true);
 
       const stored = window.localStorage.getItem('tlog:consent');
 
@@ -74,7 +74,7 @@ test.describe('Consent Persistence Before Init', () => {
   test('should persist consent for specific integration before init', async ({ page }) => {
     const result = await page.evaluate(async () => {
       // Set consent for custom integration only
-      await window.__traceLogBridge.setConsent('custom', true);
+      await window.__traceLogBridge!.setConsent('custom', true);
 
       const stored = window.localStorage.getItem('tlog:consent');
 
@@ -92,15 +92,15 @@ test.describe('Consent Persistence Before Init', () => {
   test('should handle multiple setConsent calls before init', async ({ page }) => {
     const result = await page.evaluate(async () => {
       // Multiple consent operations before init
-      await window.__traceLogBridge.setConsent('google', true);
+      await window.__traceLogBridge!.setConsent('google', true);
 
       const checkpoint1 = window.localStorage.getItem('tlog:consent');
 
-      await window.__traceLogBridge.setConsent('custom', true);
+      await window.__traceLogBridge!.setConsent('custom', true);
 
       const checkpoint2 = window.localStorage.getItem('tlog:consent');
 
-      await window.__traceLogBridge.setConsent('tracelog', false);
+      await window.__traceLogBridge!.setConsent('tracelog', false);
 
       const checkpoint3 = window.localStorage.getItem('tlog:consent');
 
@@ -131,11 +131,11 @@ test.describe('Consent Persistence Before Init', () => {
   test('should apply persisted consent after init completes', async ({ page }) => {
     const result = await page.evaluate(async () => {
       // Set consent before init
-      await window.__traceLogBridge.setConsent('google', true);
-      await window.__traceLogBridge.setConsent('custom', false);
+      await window.__traceLogBridge!.setConsent('google', true);
+      await window.__traceLogBridge!.setConsent('custom', false);
 
       // Now initialize
-      await window.__traceLogBridge.init({
+      await window.__traceLogBridge!.init({
         waitForConsent: true,
         integrations: {
           google: { measurementId: 'G-TEST' },
@@ -144,7 +144,7 @@ test.describe('Consent Persistence Before Init', () => {
       });
 
       // Get consent state after init
-      const consentState = window.__traceLogBridge.getConsentState();
+      const consentState = window.__traceLogBridge!.getConsentState();
 
       return {
         consentState,

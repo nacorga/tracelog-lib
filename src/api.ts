@@ -12,7 +12,6 @@ import {
   PendingConsent,
 } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil, loadConsentFromStorage } from './utils';
-import { TestBridge } from './test-bridge';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
 
@@ -26,13 +25,8 @@ interface PendingTransformer {
   fn: BeforeSendTransformer | BeforeBatchTransformer;
 }
 
-// Buffer for listeners registered before init()
 const pendingListeners: PendingListener[] = [];
-
-// Buffer for transformers registered before init()
 const pendingTransformers: PendingTransformer[] = [];
-
-// Buffer for consent operations registered before init()
 const pendingConsents: PendingConsent[] = [];
 
 let app: App | null = null;
@@ -855,12 +849,7 @@ export const setQaMode = (enabled: boolean): void => {
 };
 
 /**
- * Internal sync function - ONLY for TestBridge in development
- *
- * WARNING: This function is internal and should NEVER be called directly.
- * It's only exported for TestBridge synchronization in dev mode.
- *
- * @internal
+ * @internal TestBridge API - development only
  */
 export const __setAppInstance = (instance: App | null): void => {
   if (process.env.NODE_ENV !== 'development') {
@@ -887,14 +876,21 @@ export const __setAppInstance = (instance: App | null): void => {
   app = instance;
 };
 
-if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {
-  const injectTestingBridge = (): void => {
-    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectTestingBridge);
-  } else {
-    injectTestingBridge();
+/**
+ * @internal TestBridge state accessors - development only
+ */
+export const __getInitState = (): { isInitializing: boolean; isDestroying: boolean } => {
+  if (process.env.NODE_ENV !== 'development') {
+    return { isInitializing: false, isDestroying: false };
   }
+  return { isInitializing, isDestroying };
+};
+
+// Auto-inject TestBridge in development mode
+if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+  void import('./test-bridge').then((module) => {
+    if (module && typeof module.injectTestBridge === 'function') {
+      module.injectTestBridge();
+    }
+  });
 }

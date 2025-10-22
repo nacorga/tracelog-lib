@@ -21,7 +21,6 @@ export interface TraceLogTestBridge {
   destroy(): void;
 
   // Core testing methods
-  isInitializing(): boolean;
   sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void;
 
   // Event subscription methods
@@ -36,8 +35,13 @@ export interface TraceLogTestBridge {
   getQueueLength(): number;
 
   // Test simulation methods
-  forceInitLock(enabled?: boolean): void;
   simulatePersistedEvents(events: any[]): void;
+
+  // Consent management (for E2E testing)
+  setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void>;
+  hasConsent(integration: 'google' | 'custom' | 'tracelog' | 'all'): boolean;
+  getConsentState(): { google: boolean; custom: boolean; tracelog: boolean };
+  getConsentBufferLength(): number;
 
   // State access for testing
   get<T extends keyof State>(key: T): State[T];

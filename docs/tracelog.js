@@ -6579,197 +6579,6 @@ class App extends StateManager {
     }
   }
 }
-class TestBridge extends App {
-  _isInitializing;
-  _isDestroying = false;
-  constructor(isInitializing2, isDestroying2) {
-    super();
-    this._isInitializing = isInitializing2;
-    this._isDestroying = isDestroying2;
-  }
-  async init(config) {
-    if (!__setAppInstance) {
-      throw new Error("[TraceLog] __setAppInstance is not available (production build?)");
-    }
-    try {
-      __setAppInstance(this);
-    } catch {
-      throw new Error("[TraceLog] TestBridge cannot sync with existing tracelog instance. Call destroy() first.");
-    }
-    try {
-      await super.init(config);
-    } catch (error) {
-      if (__setAppInstance) {
-        __setAppInstance(null);
-      }
-      throw error;
-    }
-  }
-  isInitializing() {
-    return this._isInitializing;
-  }
-  sendCustomEvent(name, data) {
-    if (!this.initialized) {
-      return;
-    }
-    super.sendCustomEvent(name, data);
-  }
-  getSessionData() {
-    return {
-      id: this.get("sessionId"),
-      isActive: !!this.get("sessionId"),
-      timeout: this.get("config")?.sessionTimeout ?? 15 * 60 * 1e3
-    };
-  }
-  setSessionTimeout(timeout) {
-    const config = this.get("config");
-    if (config) {
-      this.set("config", { ...config, sessionTimeout: timeout });
-    }
-  }
-  getQueueLength() {
-    return this.managers.event?.getQueueLength() ?? 0;
-  }
-  forceInitLock(enabled = true) {
-    this._isInitializing = enabled;
-  }
-  simulatePersistedEvents(events) {
-    const storageManager = this.managers?.storage;
-    if (!storageManager) {
-      throw new Error("Storage manager not available");
-    }
-    const config = this.get("config");
-    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.collectApiUrl ?? "test";
-    const userId = this.get("userId");
-    const sessionId = this.get("sessionId");
-    if (!projectId || !userId) {
-      throw new Error("Project ID or User ID not available. Initialize TraceLog first.");
-    }
-    const persistedData = {
-      userId,
-      sessionId: sessionId || `test-session-${Date.now()}`,
-      device: "desktop",
-      events,
-      timestamp: Date.now()
-    };
-    const storageKey = `${STORAGE_BASE_KEY}:${projectId}:queue:${userId}`;
-    storageManager.setItem(storageKey, JSON.stringify(persistedData));
-  }
-  get(key) {
-    return super.get(key);
-  }
-  // Manager accessors
-  getStorageManager() {
-    return this.safeAccess(this.managers?.storage);
-  }
-  getEventManager() {
-    return this.managers.event;
-  }
-  // Handler accessors
-  getSessionHandler() {
-    return this.safeAccess(this.handlers?.session);
-  }
-  getPageViewHandler() {
-    return this.safeAccess(this.handlers?.pageView);
-  }
-  getClickHandler() {
-    return this.safeAccess(this.handlers?.click);
-  }
-  getScrollHandler() {
-    return this.safeAccess(this.handlers?.scroll);
-  }
-  getPerformanceHandler() {
-    return this.safeAccess(this.handlers?.performance);
-  }
-  getErrorHandler() {
-    return this.safeAccess(this.handlers?.error);
-  }
-  // Integration accessors
-  getGoogleAnalytics() {
-    return this.safeAccess(this.integrations?.google);
-  }
-  // Consent methods for E2E testing
-  async setConsent(integration, granted) {
-    if (!this.initialized) {
-      const { setConsent: setConsent2 } = await Promise.resolve().then(() => api);
-      await setConsent2(integration, granted);
-      return;
-    }
-    const consentManager = this.managers?.consent;
-    if (!consentManager) {
-      throw new Error("Consent manager not available");
-    }
-    const config = this.get("config");
-    if (integration === "all") {
-      const integrations = [];
-      if (config?.integrations?.google) {
-        integrations.push("google");
-      }
-      const collectApiUrls = this.get("collectApiUrls");
-      if (collectApiUrls?.custom) {
-        integrations.push("custom");
-      }
-      if (collectApiUrls?.saas) {
-        integrations.push("tracelog");
-      }
-      for (const int of integrations) {
-        await this.setConsent(int, granted);
-      }
-      return;
-    }
-    const hadConsent = consentManager.hasConsent(integration);
-    consentManager.setConsent(integration, granted);
-    if (granted && !hadConsent) {
-      await this.handleConsentGranted(integration);
-    }
-  }
-  hasConsent(integration) {
-    const consentManager = this.managers?.consent;
-    if (!consentManager) {
-      return false;
-    }
-    return consentManager.hasConsent(integration);
-  }
-  getConsentState() {
-    const consentManager = this.managers?.consent;
-    if (!consentManager) {
-      return { google: false, custom: false, tracelog: false };
-    }
-    return consentManager.getConsentState();
-  }
-  getConsentBufferLength() {
-    return this.managers.event?.getConsentBufferLength() ?? 0;
-  }
-  destroy(force = false) {
-    if (!this.initialized && !force) {
-      return;
-    }
-    this.ensureNotDestroying();
-    this._isDestroying = true;
-    try {
-      super.destroy(force);
-      if (__setAppInstance) {
-        __setAppInstance(null);
-      }
-    } finally {
-      this._isDestroying = false;
-    }
-  }
-  /**
-   * Helper to safely access managers/handlers and convert undefined to null
-   */
-  safeAccess(value) {
-    return value ?? null;
-  }
-  /**
-   * Ensures destroy operation is not in progress, throws if it is
-   */
-  ensureNotDestroying() {
-    if (this._isDestroying) {
-      throw new Error("Destroy operation already in progress");
-    }
-  }
-}
 const pendingListeners = [];
 const pendingTransformers = [];
 const pendingConsents = [];
@@ -7093,14 +6902,11 @@ const __setAppInstance = (instance) => {
   app = instance;
 };
 if (typeof window !== "undefined" && typeof document !== "undefined") {
-  const injectTestingBridge = () => {
-    window.__traceLogBridge = new TestBridge(isInitializing, isDestroying);
-  };
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", injectTestingBridge);
-  } else {
-    injectTestingBridge();
-  }
+  void Promise.resolve().then(() => testBridge).then((module) => {
+    if (module && typeof module.injectTestBridge === "function") {
+      module.injectTestBridge();
+    }
+  });
 }
 const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
@@ -7331,6 +7137,200 @@ const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePro
   onINP: j,
   onLCP: G,
   onTTFB: Q
+}, Symbol.toStringTag, { value: "Module" }));
+class TestBridge extends App {
+  _isDestroying = false;
+  constructor() {
+    super();
+  }
+  async init(config) {
+    try {
+      const { __setAppInstance: __setAppInstance2 } = await Promise.resolve().then(() => api);
+      __setAppInstance2(this);
+    } catch {
+      throw new Error("[TraceLog] TestBridge cannot sync with existing tracelog instance. Call destroy() first.");
+    }
+    try {
+      await super.init(config);
+    } catch (error) {
+      const { __setAppInstance: __setAppInstance2 } = await Promise.resolve().then(() => api);
+      __setAppInstance2(null);
+      throw error;
+    }
+  }
+  sendCustomEvent(name, data) {
+    if (!this.initialized) {
+      return;
+    }
+    super.sendCustomEvent(name, data);
+  }
+  getSessionData() {
+    return {
+      id: this.get("sessionId"),
+      isActive: !!this.get("sessionId"),
+      timeout: this.get("config")?.sessionTimeout ?? 15 * 60 * 1e3
+    };
+  }
+  setSessionTimeout(timeout) {
+    const config = this.get("config");
+    if (config) {
+      this.set("config", { ...config, sessionTimeout: timeout });
+    }
+  }
+  getQueueLength() {
+    return this.managers.event?.getQueueLength() ?? 0;
+  }
+  simulatePersistedEvents(events) {
+    const storageManager = this.managers?.storage;
+    if (!storageManager) {
+      throw new Error("Storage manager not available");
+    }
+    const config = this.get("config");
+    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.collectApiUrl ?? "test";
+    const userId = this.get("userId");
+    const sessionId = this.get("sessionId");
+    if (!projectId || !userId) {
+      throw new Error("Project ID or User ID not available. Initialize TraceLog first.");
+    }
+    const persistedData = {
+      userId,
+      sessionId: sessionId || `test-session-${Date.now()}`,
+      device: "desktop",
+      events,
+      timestamp: Date.now()
+    };
+    const storageKey = `${STORAGE_BASE_KEY}:${projectId}:queue:${userId}`;
+    storageManager.setItem(storageKey, JSON.stringify(persistedData));
+  }
+  get(key) {
+    return super.get(key);
+  }
+  // Manager accessors
+  getStorageManager() {
+    return this.safeAccess(this.managers?.storage);
+  }
+  getEventManager() {
+    return this.managers.event;
+  }
+  // Handler accessors
+  getSessionHandler() {
+    return this.safeAccess(this.handlers?.session);
+  }
+  getPageViewHandler() {
+    return this.safeAccess(this.handlers?.pageView);
+  }
+  getClickHandler() {
+    return this.safeAccess(this.handlers?.click);
+  }
+  getScrollHandler() {
+    return this.safeAccess(this.handlers?.scroll);
+  }
+  getPerformanceHandler() {
+    return this.safeAccess(this.handlers?.performance);
+  }
+  getErrorHandler() {
+    return this.safeAccess(this.handlers?.error);
+  }
+  // Integration accessors
+  getGoogleAnalytics() {
+    return this.safeAccess(this.integrations?.google);
+  }
+  // Consent methods for E2E testing
+  async setConsent(integration, granted) {
+    if (!this.initialized) {
+      const { setConsent: setConsent2 } = await Promise.resolve().then(() => api);
+      await setConsent2(integration, granted);
+      return;
+    }
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      throw new Error("Consent manager not available");
+    }
+    const config = this.get("config");
+    if (integration === "all") {
+      const integrations = [];
+      if (config?.integrations?.google) {
+        integrations.push("google");
+      }
+      const collectApiUrls = this.get("collectApiUrls");
+      if (collectApiUrls?.custom) {
+        integrations.push("custom");
+      }
+      if (collectApiUrls?.saas) {
+        integrations.push("tracelog");
+      }
+      for (const int of integrations) {
+        await this.setConsent(int, granted);
+      }
+      return;
+    }
+    const hadConsent = consentManager.hasConsent(integration);
+    consentManager.setConsent(integration, granted);
+    if (granted && !hadConsent) {
+      await this.handleConsentGranted(integration);
+    }
+  }
+  hasConsent(integration) {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      return false;
+    }
+    return consentManager.hasConsent(integration);
+  }
+  getConsentState() {
+    const consentManager = this.managers?.consent;
+    if (!consentManager) {
+      return { google: false, custom: false, tracelog: false };
+    }
+    return consentManager.getConsentState();
+  }
+  getConsentBufferLength() {
+    return this.managers.event?.getConsentBufferLength() ?? 0;
+  }
+  destroy(force = false) {
+    if (!this.initialized && !force) {
+      return;
+    }
+    this.ensureNotDestroying();
+    this._isDestroying = true;
+    try {
+      super.destroy(force);
+      void Promise.resolve().then(() => api).then(({ __setAppInstance: __setAppInstance2 }) => {
+        __setAppInstance2(null);
+      });
+    } finally {
+      this._isDestroying = false;
+    }
+  }
+  /**
+   * Helper to safely access managers/handlers and convert undefined to null
+   */
+  safeAccess(value) {
+    return value ?? null;
+  }
+  /**
+   * Ensures destroy operation is not in progress, throws if it is
+   */
+  ensureNotDestroying() {
+    if (this._isDestroying) {
+      throw new Error("Destroy operation already in progress");
+    }
+  }
+}
+const injectTestBridge = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  try {
+    window.__traceLogBridge = new TestBridge();
+  } catch (error) {
+    console.error("[TraceLog] Failed to inject TestBridge", error);
+  }
+};
+const testBridge = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  TestBridge,
+  injectTestBridge
 }, Symbol.toStringTag, { value: "Module" }));
 export {
   AppConfigValidationError,
