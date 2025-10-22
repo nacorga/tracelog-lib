@@ -868,7 +868,6 @@ export class EventManager extends StateManager {
       return;
     }
 
-    // Remove tracking for this integration
     this.consentEventsSentTo.forEach((sentTo, eventId) => {
       sentTo.delete(integration);
       // If event was only waiting for this integration, mark for cleanup
@@ -1362,7 +1361,20 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Check if events should be buffered due to waiting for consent
+   * Determines if events should be buffered for consent instead of being sent immediately.
+   *
+   * **Purpose**: Implements GDPR/CCPA compliance by preventing event transmission before
+   * user grants consent. Events are buffered and sent later via `flushConsentBuffer()`.
+   *
+   * **Logic**:
+   * 1. QA mode bypasses consent checks (always returns false)
+   * 2. If `waitForConsent` disabled in config, returns false (no buffering)
+   * 3. If no consent manager, returns false (can't check consent)
+   * 4. If no integrations configured, returns false (standalone mode)
+   * 5. Returns true only if integrations exist but none have consent yet
+   *
+   * @returns `true` if events should be buffered, `false` if they can be sent
+   * @private
    */
   private shouldBufferForConsent(): boolean {
     // QA mode bypasses consent checks
@@ -1382,18 +1394,15 @@ export class EventManager extends StateManager {
       return false;
     }
 
-    // Check if we have consent for any integration
     const collectApiUrls = this.get('collectApiUrls');
     const hasGoogleIntegration = Boolean(config.integrations?.google);
     const hasCustomIntegration = Boolean(collectApiUrls?.custom);
     const hasTracelogIntegration = Boolean(collectApiUrls?.saas);
 
-    // If no integrations configured, don't buffer
     if (!hasGoogleIntegration && !hasCustomIntegration && !hasTracelogIntegration) {
       return false;
     }
 
-    // Check if we have consent for at least one configured integration
     const hasAnyConsent =
       (hasGoogleIntegration && this.consentManager.hasConsent('google')) ||
       (hasCustomIntegration && this.consentManager.hasConsent('custom')) ||
@@ -1404,7 +1413,18 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Add event to consent buffer with overflow management
+   * Adds event to consent buffer with overflow protection and SESSION_START preservation.
+   *
+   * **Purpose**: Buffers events that were tracked before consent was granted. Events are
+   * later flushed per-integration when consent is granted via `flushConsentBuffer()`.
+   *
+   * **Overflow Strategy**:
+   * - Max buffer size: Configurable via `config.maxConsentBufferSize` (default 500)
+   * - FIFO eviction: Oldest non-critical events removed first when buffer full
+   * - SESSION_START preservation: Critical events always kept, non-critical removed instead
+   *
+   * @param event - Event to buffer (with id, type, timestamp, and event-specific data)
+   * @private
    */
   private addToConsentBuffer(event: EventData): void {
     const config = this.get('config');

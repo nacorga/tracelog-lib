@@ -53,15 +53,14 @@ export class UserManager {
    * @returns Persistent unique user ID (UUID v4 format)
    */
   static getId(storageManager: StorageManager): string {
-    const storageKey = USER_ID_KEY;
-    const storedUserId = storageManager.getItem(storageKey);
+    const storedUserId = storageManager.getItem(USER_ID_KEY);
 
     if (storedUserId) {
       return storedUserId;
     }
 
     const newUserId = generateUUID();
-    storageManager.setItem(storageKey, newUserId);
+    storageManager.setItem(USER_ID_KEY, newUserId);
 
     return newUserId;
   }

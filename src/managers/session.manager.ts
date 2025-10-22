@@ -515,7 +515,7 @@ export class SessionManager extends StateManager {
    * 1. Clears inactivity timeout
    * 2. Removes activity listeners (click, keydown, scroll)
    * 3. Closes BroadcastChannel
-   * 4. Removes lifecycle listeners (visibilitychange, beforeunload, pagehide)
+   * 4. Removes lifecycle listeners (visibilitychange, beforeunload)
    * 5. Resets tracking flags (`isTracking`, `hasStartSession`)
    *
    * **Called by**: `App.destroy()` during application teardown

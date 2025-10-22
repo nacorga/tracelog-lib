@@ -611,6 +611,11 @@ export class ConsentManager {
         };
 
         log('debug', 'Consent cleared in another tab, synced locally');
+
+        if (this.emitter) {
+          this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
+        }
+
         return;
       }
 
@@ -631,6 +636,10 @@ export class ConsentManager {
               tracelog: this.consentState.tracelog,
             },
           });
+
+          if (this.emitter) {
+            this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
+          }
         }
       } catch (error) {
         log('warn', 'Failed to parse consent update from another tab', { error });

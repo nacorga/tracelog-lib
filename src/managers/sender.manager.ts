@@ -626,6 +626,27 @@ export class SenderManager extends StateManager {
     return false;
   }
 
+  /**
+   * Sends HTTP POST request with 10-second timeout and AbortController.
+   *
+   * **Purpose**: Wraps fetch() with timeout protection to prevent hanging requests.
+   * Throws PermanentError for 4xx status codes (except 408, 429) to bypass retries.
+   *
+   * **Timeout Behavior**:
+   * - 10-second timeout via AbortController (REQUEST_TIMEOUT_MS constant)
+   * - Aborted requests throw network error (triggers retry in caller)
+   *
+   * **Error Classification**:
+   * - 4xx (except 408, 429): PermanentError thrown → no retries
+   * - 408, 429, 5xx, network: Standard Error thrown → triggers retry
+   *
+   * @param url - API endpoint URL
+   * @param payload - JSON-stringified EventsQueue body
+   * @returns Response object if successful
+   * @throws PermanentError for unrecoverable 4xx errors
+   * @throws Error for transient errors (5xx, timeout, network)
+   * @private
+   */
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -664,6 +685,27 @@ export class SenderManager extends StateManager {
     }
   }
 
+  /**
+   * Internal synchronous send logic using navigator.sendBeacon() for page unload scenarios.
+   *
+   * **Purpose**: Sends events synchronously during page unload when async fetch() is unreliable.
+   * Uses sendBeacon() browser API which queues request even after page closes.
+   *
+   * **Flow**:
+   * 1. Check consent (returns true if denied to prevent retry loops)
+   * 2. Apply beforeSend transformer (per-event transformation)
+   * 3. Apply beforeBatch transformer (batch-level transformation)
+   * 4. Validate payload size (64KB browser limit for sendBeacon)
+   * 5. Send via sendBeacon() or fallback to persistence if unavailable
+   * 6. Persist events on failure for next-page-load recovery
+   *
+   * **Payload Size Limit**: 64KB enforced by browser for sendBeacon()
+   * - Oversized payloads persisted instead of silently failing
+   *
+   * @param body - EventsQueue to send
+   * @returns `true` on success or when events persisted for recovery, `false` on failure
+   * @private
+   */
   private sendQueueSyncInternal(body: EventsQueue): boolean {
     if (!this.hasConsentForIntegration()) {
       return true;
@@ -727,6 +769,19 @@ export class SenderManager extends StateManager {
     return accepted;
   }
 
+  /**
+   * Prepares request by enriching payload with metadata and serializing to JSON.
+   *
+   * **Purpose**: Adds request metadata (referer, timestamp) before transmission.
+   *
+   * **Metadata Enrichment**:
+   * - `referer`: Current page URL (browser only, undefined in Node.js)
+   * - `timestamp`: Request generation time in milliseconds
+   *
+   * @param body - EventsQueue to send
+   * @returns Object with `url` (API endpoint) and `payload` (JSON string)
+   * @private
+   */
   private prepareRequest(body: EventsQueue): { url: string; payload: string } {
     const enrichedBody = {
       ...body,
@@ -742,6 +797,18 @@ export class SenderManager extends StateManager {
     };
   }
 
+  /**
+   * Retrieves persisted events from localStorage with error recovery.
+   *
+   * **Purpose**: Loads previously failed events from storage for recovery attempt.
+   *
+   * **Error Handling**:
+   * - JSON parse failures logged and storage cleared (corrupted data)
+   * - Missing data returns null (no recovery needed)
+   *
+   * @returns Persisted events object or null if none exist/invalid
+   * @private
+   */
   private getPersistedData(): PersistedEventsQueue | null {
     try {
       const storageKey = this.getQueueStorageKey();
@@ -758,6 +825,19 @@ export class SenderManager extends StateManager {
     return null;
   }
 
+  /**
+   * Checks if persisted events are within the 2-hour expiry window.
+   *
+   * **Purpose**: Prevents recovery of stale events that are too old to be relevant.
+   *
+   * **Expiry Logic**:
+   * - Events older than 2 hours (EVENT_EXPIRY_HOURS) are considered expired
+   * - Invalid/missing timestamps treated as expired
+   *
+   * @param data - Persisted events object with timestamp
+   * @returns `true` if events are recent (< 2 hours old), `false` otherwise
+   * @private
+   */
   private isDataRecent(data: PersistedEventsQueue): boolean {
     if (!data.timestamp || typeof data.timestamp !== 'number') {
       return false;
@@ -767,12 +847,38 @@ export class SenderManager extends StateManager {
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
 
+  /**
+   * Creates EventsQueue from persisted data by removing storage-specific timestamp field.
+   *
+   * **Purpose**: Converts PersistedEventsQueue (with timestamp) to EventsQueue for sending.
+   *
+   * @param data - Persisted events with timestamp
+   * @returns EventsQueue ready for transmission (timestamp removed)
+   * @private
+   */
   private createRecoveryBody(data: PersistedEventsQueue): EventsQueue {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { timestamp, ...queue } = data;
     return queue;
   }
 
+  /**
+   * Persists failed events to localStorage for next-page-load recovery.
+   *
+   * **Purpose**: Saves events that couldn't be sent due to network/server errors.
+   * Implements multi-tab protection to prevent data loss during simultaneous failures.
+   *
+   * **Multi-Tab Protection**:
+   * - Throttles persistence (1-second window via PERSISTENCE_THROTTLE_MS)
+   * - If another tab persisted within 1 second, skips write (last-write-wins)
+   * - Prevents redundant storage writes when multiple tabs fail together
+   *
+   * **Storage Format**: PersistedEventsQueue (EventsQueue + timestamp)
+   *
+   * @param body - EventsQueue to persist
+   * @returns `true` on successful persistence or throttled write, `false` on error
+   * @private
+   */
   private persistEvents(body: EventsQueue): boolean {
     try {
       const existing = this.getPersistedData();
@@ -874,8 +980,8 @@ export class SenderManager extends StateManager {
    * 5. Return true if consent granted, false otherwise
    *
    * **Called by**:
-   * - `send()` method before async transmission
-   * - `sendQueueSyncInternal()` is NOT called (sync sends skip consent check for performance)
+   * - `send()` method before async transmission (line 542)
+   * - `sendQueueSyncInternal()` method before sync transmission (line 668)
    *
    * **Behavior when false**:
    * - Events NOT sent to backend

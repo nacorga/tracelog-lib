@@ -101,6 +101,13 @@ export abstract class StateManager {
    * @template T - State key type (compile-time validated)
    * @param key - State property key
    * @returns Current value for the given key (may be undefined)
+   *
+   * @example
+   * ```typescript
+   * const userId = this.get('userId');
+   * const config = this.get('config');
+   * const sessionId = this.get('sessionId');
+   * ```
    */
   protected get<T extends keyof State>(key: T): State[T] {
     return globalState[key];
@@ -115,6 +122,13 @@ export abstract class StateManager {
    * @template T - State key type (compile-time validated)
    * @param key - State property key
    * @param value - New value (type must match State[T])
+   *
+   * @example
+   * ```typescript
+   * this.set('sessionId', 'session-123');
+   * this.set('mode', Mode.QA);
+   * this.set('hasStartSession', true);
+   * ```
    */
   protected set<T extends keyof State>(key: T, value: State[T]): void {
     globalState[key] = value;
@@ -127,6 +141,12 @@ export abstract class StateManager {
    * Use for debugging or when multiple state properties are needed.
    *
    * @returns Readonly shallow copy of global state
+   *
+   * @example
+   * ```typescript
+   * const snapshot = this.getState();
+   * console.log(snapshot.userId, snapshot.sessionId);
+   * ```
    */
   protected getState(): Readonly<State> {
     return { ...globalState };
