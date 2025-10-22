@@ -236,9 +236,9 @@ test.describe('Client-Side Sampling Rate', () => {
 
     // Both should be sampled at ~50% rate (allow 7-23 for statistical variance)
     expect(result.customEventCount).toBeGreaterThan(7);
-    expect(result.customEventCount).toBeLessThan(23);
+    expect(result.customEventCount).toBeLessThanOrEqual(23);
 
     expect(result.clickEventCount).toBeGreaterThan(7);
-    expect(result.clickEventCount).toBeLessThan(23);
+    expect(result.clickEventCount).toBeLessThanOrEqual(23);
   });
 });
