@@ -61,6 +61,9 @@ declare global {
  * ```
  */
 export class GoogleAnalyticsIntegration extends StateManager {
+  private readonly scriptId = 'tracelog-ga-script';
+  private readonly configScriptId = 'tracelog-ga-config-script';
+
   private isInitialized = false;
 
   /**
@@ -188,7 +191,7 @@ export class GoogleAnalyticsIntegration extends StateManager {
    *
    * **Cleanup Actions**:
    * - Resets initialization flag
-   * - Removes TraceLog-injected script element
+   * - Removes TraceLog-injected script elements (main + config)
    * - Does NOT remove externally loaded gtag/GTM scripts
    *
    * **Note**: gtag function and dataLayer remain in window even after cleanup.
@@ -200,10 +203,17 @@ export class GoogleAnalyticsIntegration extends StateManager {
    */
   cleanup(): void {
     this.isInitialized = false;
-    const script = document.getElementById('tracelog-ga-script');
+
+    const script = document.getElementById(this.scriptId);
 
     if (script) {
       script.remove();
+    }
+
+    const configScript = document.getElementById(this.configScriptId);
+
+    if (configScript) {
+      configScript.remove();
     }
   }
 
@@ -218,15 +228,25 @@ export class GoogleAnalyticsIntegration extends StateManager {
   }
 
   private getScriptType(measurementId: string): 'GTM' | 'GA4' {
-    return measurementId.startsWith('GTM-') ? 'GTM' : 'GA4';
+    return measurementId.startsWith('GTM-') && measurementId.length > 4 ? 'GTM' : 'GA4';
   }
 
+  /**
+   * Checks if Google Analytics/GTM script is already loaded.
+   *
+   * Three-tier detection strategy prevents duplicate script injection:
+   * 1. Checks for existing gtag instance + dataLayer (runtime detection)
+   * 2. Checks for TraceLog-injected script (#tracelog-ga-script)
+   * 3. Checks for external GA/GTM scripts by src pattern
+   *
+   * @returns True if any GA/GTM script detected, false otherwise
+   */
   private isScriptAlreadyLoaded(): boolean {
     if (this.hasExistingGtagInstance()) {
       return true;
     }
 
-    if (document.getElementById('tracelog-ga-script')) {
+    if (document.getElementById(this.scriptId)) {
       return true;
     }
 
@@ -280,7 +300,8 @@ export class GoogleAnalyticsIntegration extends StateManager {
    * **GTM Configuration**:
    * - Only initializes gtag function and dataLayer
    * - No config call (tags configured in GTM UI)
-   * - Allows GTM container to manage configuration
+   * - User tracking: Configure user_id in GTM using dataLayer variables
+   * - Allows GTM container to manage all tag configuration
    *
    * **GA4/Ads/UA Configuration**:
    * - Initializes gtag function and dataLayer
@@ -292,6 +313,8 @@ export class GoogleAnalyticsIntegration extends StateManager {
    */
   private configureGtag(measurementId: string, userId: string): void {
     const gaScriptConfig = document.createElement('script');
+    gaScriptConfig.id = this.configScriptId;
+    gaScriptConfig.type = 'text/javascript';
 
     if (measurementId.startsWith('GTM-')) {
       gaScriptConfig.innerHTML = `

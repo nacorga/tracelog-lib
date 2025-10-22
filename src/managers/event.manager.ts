@@ -1465,6 +1465,10 @@ export class EventManager extends StateManager {
       forwardEvents === 'all' || (Array.isArray(forwardEvents) && forwardEvents.includes(event.type));
 
     if (!shouldForward) {
+      log('debug', `Skipping GA event forward: ${event.type} not in forwardEvents config`, {
+        data: { eventType: event.type, forwardEvents },
+      });
+
       return;
     }
 
@@ -1510,6 +1514,11 @@ export class EventManager extends StateManager {
         ...(event.viewport_data.name && { element_name: event.viewport_data.name }),
         dwell_time: event.viewport_data.dwellTime,
         visibility_ratio: event.viewport_data.visibilityRatio,
+      });
+    } else if (event.type === EventType.SESSION_END) {
+      this.google.trackEvent('session_end', {
+        ...(event.session_end_reason && { session_end_reason: event.session_end_reason }),
+        ...(event.page_url && { page_location: event.page_url }),
       });
     }
   }

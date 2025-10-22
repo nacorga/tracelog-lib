@@ -1008,8 +1008,9 @@ await tracelog.init({
 - **GTM**: Loads gtm.js and initializes dataLayer (tags configured in GTM UI)
 - **Priority**: If both IDs provided, GTM container ID takes priority for script loading
 - **Auto-detection**: Reuses existing gtag/GTM if already loaded on your site
-- **Event forwarding**: Only `tracelog.event()` custom events are forwarded via `gtag('event', ...)`
-- **Automatic events**: Clicks, scrolls, page views, etc. are NOT forwarded (use event listeners if needed)
+- **Event forwarding (default)**: Only `tracelog.event()` custom events are forwarded via `gtag('event', ...')`
+- **Event forwarding (configurable)**: Use `forwardEvents` option to forward specific event types or `'all'` events
+- **Automatic events**: Clicks, scrolls, page views, etc. are NOT forwarded by default (handled locally)
 
 **Example with GTM:**
 
