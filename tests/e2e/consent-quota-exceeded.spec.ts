@@ -6,13 +6,25 @@
  *
  * These tests use in-browser mocking of localStorage to simulate quota errors
  * since we cannot easily fill localStorage in a test environment.
+ *
+ * NOTE: These tests only run on Chromium/Mobile Chrome due to differences in how
+ * Firefox/Webkit/Safari handle localStorage references. The StorageManager captures
+ * a reference to localStorage during initialization, and mocking after initialization
+ * doesn't work reliably in non-Chromium browsers.
  */
 
 import { test, expect } from '@playwright/test';
 import { navigateToPlayground } from './utils/environment.utils';
 
 test.describe('Consent QuotaExceededError Handling', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, browserName }) => {
+    // Skip these tests in Firefox, Webkit, and Mobile Safari
+    // because localStorage mocking doesn't work after StorageManager initialization
+    test.skip(
+      browserName === 'firefox' || browserName === 'webkit',
+      'localStorage mocking not supported in this browser',
+    );
+
     await navigateToPlayground(page, { autoInit: false });
   });
 
@@ -22,14 +34,12 @@ test.describe('Consent QuotaExceededError Handling', () => {
       const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
       let quotaErrorThrown = false;
 
-      window.localStorage.setItem = function (key: string, value: string) {
-        // Allow test key for StorageManager initialization
+      window.localStorage.setItem = function (key: string, value: string): void {
         if (key === '__tracelog_test__') {
           originalSetItem(key, value);
           return;
         }
 
-        // Throw QuotaExceededError for consent key
         if (key === 'tlog:consent') {
           quotaErrorThrown = true;
           const error = new DOMException('localStorage quota exceeded', 'QuotaExceededError');
@@ -42,6 +52,9 @@ test.describe('Consent QuotaExceededError Handling', () => {
       try {
         // This should handle the error gracefully (not throw to user code)
         await window.__traceLogBridge!.setConsent('google', true);
+
+        // Wait for debounced persistence (default 500ms)
+        await new Promise((resolve) => setTimeout(resolve, 600));
 
         // Verify consent was NOT persisted to localStorage
         const stored = window.localStorage.getItem('tlog:consent');
@@ -85,7 +98,7 @@ test.describe('Consent QuotaExceededError Handling', () => {
       let attemptCount = 0;
 
       // Mock to fail first time, succeed second time
-      window.localStorage.setItem = function (key: string, value: string) {
+      window.localStorage.setItem = function (key: string, value: string): void {
         if (key === '__tracelog_test__') {
           originalSetItem(key, value);
           return;
@@ -111,8 +124,14 @@ test.describe('Consent QuotaExceededError Handling', () => {
         // First setConsent (will fail)
         await window.__traceLogBridge!.setConsent('google', true);
 
+        // Wait for debounced persistence (default 500ms)
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
         // Second setConsent (will succeed)
         await window.__traceLogBridge!.setConsent('custom', true);
+
+        // Wait for debounced persistence (default 500ms)
+        await new Promise((resolve) => setTimeout(resolve, 600));
 
         // Check localStorage
         const stored = window.localStorage.getItem('tlog:consent');
@@ -123,7 +142,7 @@ test.describe('Consent QuotaExceededError Handling', () => {
         return {
           attemptCount,
           storedToLocalStorage: stored !== null,
-          storedData: stored ? JSON.parse(stored) : null,
+          storedData: stored !== null ? JSON.parse(stored) : null,
         };
       } catch (error) {
         window.localStorage.setItem = originalSetItem;
@@ -150,7 +169,7 @@ test.describe('Consent QuotaExceededError Handling', () => {
       const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
       let quotaErrorThrown = false;
 
-      window.localStorage.setItem = function (key: string, value: string) {
+      window.localStorage.setItem = function (key: string, value: string): void {
         if (key === '__tracelog_test__') {
           originalSetItem(key, value);
           return;
@@ -201,7 +220,7 @@ test.describe('Consent QuotaExceededError Handling', () => {
       const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
 
       // Mock localStorage to always fail
-      window.localStorage.setItem = function (key: string, value: string) {
+      window.localStorage.setItem = function (key: string, value: string): void {
         if (key === '__tracelog_test__') {
           originalSetItem(key, value);
           return;
@@ -218,6 +237,9 @@ test.describe('Consent QuotaExceededError Handling', () => {
       try {
         // Set consent (will use fallback)
         await window.__traceLogBridge!.setConsent('google', true);
+
+        // Wait for debounced persistence (default 500ms)
+        await new Promise((resolve) => setTimeout(resolve, 600));
 
         // Now init TraceLog
         await window.__traceLogBridge!.init({
