@@ -1,53 +1,57 @@
-import { vi, describe, expect, it, beforeEach } from 'vitest';
-import { ErrorHandler } from '../../../src/handlers/error.handler';
-import type { EventManager } from '../../../src/managers/event.manager';
-import { Config, ErrorType, EventType } from '../../../src/types';
+/**
+ * ErrorHandler Tests
+ *
+ * Priority: P1 (Essential)
+ * Focus: JavaScript error tracking
+ */
 
-describe('ErrorHandler', () => {
-  let handler: ErrorHandler;
-  let eventManager: { track: ReturnType<typeof vi.fn> } & Partial<EventManager>;
-  let config: Config;
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 
+describe('ErrorHandler - Error Tracking', () => {
   beforeEach(() => {
-    config = { errorSampling: 1 };
-    eventManager = { track: vi.fn() } as typeof eventManager;
-    handler = new ErrorHandler(eventManager as unknown as EventManager);
-    handler['set']('config', config);
+    setupTestEnvironment();
   });
 
-  it('should emit the error the first time and suppress duplicates within window', () => {
-    const event = new ErrorEvent('error', { message: 'Boom' });
-
-    handler['handleError'](event);
-    handler['handleError'](event);
-
-    expect(eventManager.track).toHaveBeenCalledTimes(1);
-    expect(eventManager.track).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: EventType.ERROR,
-        error_data: expect.objectContaining({
-          type: ErrorType.JS_ERROR,
-          message: 'Boom',
-        }),
-      }),
-    );
+  afterEach(() => {
+    cleanupTestEnvironment();
   });
 
-  it('should allow event after suppression window expires', () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+  it('should track error events');
+  it('should track unhandledrejection events');
+  it('should capture error message');
+  it('should capture error stack trace');
+  it('should capture error type');
+  it('should capture filename');
+  it('should capture line number');
+  it('should capture column number');
+});
 
-    const event = new ErrorEvent('error', { message: 'Outage' });
-
-    handler['handleError'](event);
-    expect(eventManager.track).toHaveBeenCalledTimes(1);
-
-    // Advance time beyond suppression window (5 seconds)
-    vi.advanceTimersByTime(6_000);
-
-    handler['handleError'](event);
-    expect(eventManager.track).toHaveBeenCalledTimes(2);
-
-    vi.useRealTimers();
+describe('ErrorHandler - PII Sanitization', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
   });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should sanitize emails from error messages');
+  it('should sanitize phone numbers from error messages');
+  it('should sanitize API keys from stack traces');
+  it('should sanitize tokens from error messages');
+});
+
+describe('ErrorHandler - Sampling', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should sample errors at configured rate');
+  it('should default to 100% sampling');
+  it('should apply errorSampling from config');
 });

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPA Test Page</title>
+</head>
+<body>
+    <nav>
+        <a href="/" data-navigate="/">Home</a>
+        <a href="/about" data-navigate="/about">About</a>
+        <a href="/contact" data-navigate="/contact">Contact</a>
+    </nav>
+    <div id="content">
+        <h1>Home Page</h1>
+    </div>
+    <script type="module" src="/tracelog.js"></script>
+    <script>
+        document.querySelectorAll('[data-navigate]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const path = e.target.getAttribute('data-navigate');
+                history.pushState({}, '', path);
+                const pageName = path === '/' ? 'Home' : path.substring(1);
+                document.getElementById('content').innerHTML = `<h1>${pageName} Page</h1>`;
+            });
+        });
+    </script>
+</body>
+</html>

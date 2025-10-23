@@ -1,5 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/**
+ * Playwright Configuration
+ *
+ * Test Structure:
+ * - Main playground: /docs/index.html (shared by all tests)
+ * - Minimal fixtures: /tests/e2e/fixtures/ (for specific edge cases)
+ * - Test files: /tests/e2e/critical-paths/*.spec.ts
+ */
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,

@@ -6,14 +6,16 @@ Comprehensive development automation pipeline for the TraceLog analytics library
 
 ```
 .claude/
-├── agents/                           # Custom subagents (5 total)
+├── agents/                           # Custom subagents (6 total)
 │   ├── feature-orchestrator.md       # Interactive feature development manager
 │   ├── test-guardian.md              # Test coverage enforcer (90%+ requirement)
+│   ├── test-implementer.md           # Test implementation expert (NEW!)
 │   ├── type-safety-enforcer.md       # TypeScript strict mode guardian
 │   ├── memory-leak-detector.md       # Browser memory leak analyzer
 │   └── security-privacy-advisor.md   # GDPR/privacy compliance checker
-├── commands/                         # Custom slash commands (7 total)
+├── commands/                         # Custom slash commands (8 total)
 │   ├── new-feature.md                # Start interactive feature development
+│   ├── implement-tests.md            # Implement test logic (NEW!)
 │   ├── precommit.md                  # Full acceptance criteria validation
 │   ├── coverage.md                   # Test coverage analysis
 │   ├── perf.md                       # Bundle size & performance check
@@ -165,7 +167,85 @@ Claude, use the test-guardian agent to analyze test coverage
 
 ---
 
-### 2. **type-safety-enforcer**
+### 2. **test-implementer**
+
+**Purpose**: Expert test implementation following TESTING_FUNDAMENTALS.md patterns
+
+**When to use**: Implementing test logic for test file skeletons (declarations)
+
+**Invocation**:
+```bash
+/implement-tests tests/unit/core/app.test.ts
+```
+
+**OR**:
+```
+Claude, use the test-implementer agent to implement tests for [file/type/priority]
+```
+
+**What it does**:
+1. **Analyzes test declarations** - Reads test file skeletons with `it('should...')` statements
+2. **Creates implementation plan** - Uses TodoWrite to track tests to implement
+3. **Implements tests incrementally**:
+   - Reads source code to understand behavior
+   - Uses helpers extensively from `tests/helpers/`
+   - Writes clean, maintainable test implementation
+   - Runs test after implementation to verify it passes
+   - Marks todo as completed when passing
+4. **Verifies quality**:
+   - All tests pass (100% pass rate)
+   - Uses test helpers (not custom implementations)
+   - Follows TESTING_FUNDAMENTALS.md patterns
+   - Proper setup/teardown with `setupTestEnvironment()`
+5. **Provides summary** - Statistics, next steps, recommendations
+
+**Test Helpers Available**:
+- `tests/helpers/setup.helper.ts` - Test setup/cleanup/timers
+- `tests/helpers/mocks.helper.ts` - Mock fetch, storage, APIs
+- `tests/helpers/fixtures.helper.ts` - Test data creation
+- `tests/helpers/assertions.helper.ts` - Custom assertions
+- `tests/helpers/wait.helper.ts` - Async wait utilities
+- `tests/helpers/state.helper.ts` - State management
+
+**Usage Examples**:
+```bash
+# Implement single file
+/implement-tests tests/unit/core/app.test.ts
+
+# Implement P0 critical tests
+/implement-tests P0
+
+# Implement all unit tests
+/implement-tests unit
+
+# Implement all integration tests
+/implement-tests integration
+
+# Implement all E2E tests
+/implement-tests e2e
+```
+
+**Quality Standards**:
+- ✅ ALWAYS use `setupTestEnvironment()` in `beforeEach`
+- ✅ ALWAYS use test helpers (never custom implementations)
+- ✅ ALWAYS use `advanceTimers()` (NOT `vi.runAllTimersAsync()`)
+- ✅ Test behavior, not implementation details
+- ✅ One assertion per test when possible
+- ✅ Descriptive test names starting with "should"
+
+**Test Priority**:
+1. **P0 (Critical)**: Core components, managers (~120 tests)
+2. **P1 (Essential)**: Handlers, flows (~140 tests)
+3. **P2 (Advanced)**: Edge cases, advanced features (~50 tests)
+
+**References**:
+- `tests/TESTING_FUNDAMENTALS.md` - Complete testing guide (1,500 lines)
+- `tests/README.md` - Quick reference
+- `tests/helpers/` - All test utilities
+
+---
+
+### 3. **type-safety-enforcer**
 
 **Purpose**: Maintain zero TypeScript errors with strict mode
 
@@ -191,7 +271,7 @@ Claude, use the type-safety-enforcer agent to check types
 
 ---
 
-### 3. **memory-leak-detector**
+### 4. **memory-leak-detector**
 
 **Purpose**: Detect memory leaks in browser environment
 
@@ -217,7 +297,7 @@ Claude, use the memory-leak-detector agent to check for leaks
 
 ---
 
-### 4. **security-privacy-advisor**
+### 5. **security-privacy-advisor**
 
 **Purpose**: GDPR/privacy compliance based on `SECURITY.md`
 
