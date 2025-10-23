@@ -630,6 +630,11 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
 
         localStorage.setItem(CONSENT_KEY, JSON.stringify(consentData));
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          log('warn', 'localStorage quota exceeded, consent not persisted', { error });
+          return;
+        }
+
         log('error', 'Failed to persist consent for all integrations before init', { error });
 
         throw new Error(
@@ -647,14 +652,24 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
       const expiresAt = now + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
       const existingRaw = localStorage.getItem(CONSENT_KEY);
 
-      let existingState: Record<string, boolean> = {};
+      let existingState: Record<string, boolean> = {
+        google: false,
+        custom: false,
+        tracelog: false,
+      };
 
       if (existingRaw !== null && existingRaw.trim() !== '') {
         try {
           const existingData = JSON.parse(existingRaw) as { state?: Record<string, boolean> };
-          existingState = existingData.state ?? {};
+          if (existingData.state) {
+            existingState = {
+              google: Boolean(existingData.state.google),
+              custom: Boolean(existingData.state.custom),
+              tracelog: Boolean(existingData.state.tracelog),
+            };
+          }
         } catch {
-          // Corrupted JSON, start fresh
+          // Corrupted JSON, start fresh with defaults
         }
       }
 
@@ -669,6 +684,11 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
 
       localStorage.setItem(CONSENT_KEY, JSON.stringify(consentData));
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        log('warn', 'localStorage quota exceeded, consent not persisted', { error });
+        return;
+      }
+
       log('error', 'Failed to persist consent before init', { error });
 
       throw new Error(
@@ -913,5 +933,9 @@ export const __getInitState = (): { isInitializing: boolean; isDestroying: boole
 if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {
   void import('./test-bridge').then((module) => {
     module.injectTestBridge();
+  });
+
+  void import('./utils/browser/qa-mode.utils').then((module) => {
+    module.detectQaMode();
   });
 }

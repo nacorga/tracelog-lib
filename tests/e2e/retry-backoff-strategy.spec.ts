@@ -41,7 +41,7 @@ test.describe('Retry Backoff Strategy', () => {
 
       await traceLog.init({
         integrations: {
-          custom: { collectApiUrl: 'http://localhost:8080/custom/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/custom/collect', allowHttp: true },
         },
       });
 
@@ -94,7 +94,7 @@ test.describe('Retry Backoff Strategy', () => {
 
       await traceLog.init({
         integrations: {
-          custom: { collectApiUrl: 'http://localhost:8080/custom/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/custom/collect', allowHttp: true },
         },
       });
 
@@ -131,7 +131,7 @@ test.describe('Retry Backoff Strategy', () => {
 
       await traceLog.init({
         integrations: {
-          custom: { collectApiUrl: 'http://localhost:8080/custom/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/custom/collect', allowHttp: true },
         },
       });
 
@@ -168,7 +168,7 @@ test.describe('Retry Backoff Strategy', () => {
 
       await traceLog.init({
         integrations: {
-          custom: { collectApiUrl: 'http://localhost:8080/custom/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/custom/collect', allowHttp: true },
         },
       });
 
@@ -220,7 +220,7 @@ test.describe('Retry Backoff Strategy', () => {
 
       await traceLog.init({
         integrations: {
-          custom: { collectApiUrl: 'http://localhost:8080/custom/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/custom/collect', allowHttp: true },
         },
       });
 
@@ -286,7 +286,7 @@ test.describe('Multi-Integration Independent Retries', () => {
       await traceLog.init({
         integrations: {
           tracelog: { projectId: 'test-project' },
-          custom: { collectApiUrl: 'http://localhost:8080/custom/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/custom/collect', allowHttp: true },
         },
       });
 
@@ -332,7 +332,7 @@ test.describe('Multi-Integration Independent Retries', () => {
       await traceLog.init({
         integrations: {
           tracelog: { projectId: 'test-project' },
-          custom: { collectApiUrl: 'http://localhost:8080/custom/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/custom/collect', allowHttp: true },
         },
       });
 

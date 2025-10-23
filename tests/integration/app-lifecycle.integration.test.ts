@@ -71,6 +71,8 @@ describe('App Lifecycle Integration', () => {
     });
 
     it('should detect QA mode during initialization', async () => {
+      const originalLocation = window.location;
+
       // Set QA mode via query parameter simulation
       Object.defineProperty(window, 'location', {
         value: {
@@ -78,6 +80,7 @@ describe('App Lifecycle Integration', () => {
           search: '?tlog_mode=qa',
         },
         writable: true,
+        configurable: true,
       });
 
       const config: Config = {};
@@ -85,6 +88,13 @@ describe('App Lifecycle Integration', () => {
 
       // QA mode is internal state, verify through initialization success
       expect(app.initialized).toBe(true);
+
+      // Restore original location
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      });
     });
 
     it('should reject tracelog SaaS integration on localhost', async () => {

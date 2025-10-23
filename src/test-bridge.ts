@@ -3,6 +3,7 @@ import { setConsent as apiSetConsent, destroy as apiDestroy } from './api';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { EventManager } from './managers/event.manager';
 import { State, TraceLogTestBridge } from './types';
+import { setQaMode as setQaModeUtil } from './utils/browser/qa-mode.utils';
 
 /**
  * Test bridge for E2E testing (development only)
@@ -56,9 +57,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
    * QA mode control for debugging tests
    */
   setQaMode(enabled: boolean): void {
-    void import('./api').then(({ setQaMode }) => {
-      setQaMode(enabled);
-    });
+    setQaModeUtil(enabled);
   }
 
   /**
@@ -69,7 +68,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     const config = this.get('config');
 
     return {
-      id: sessionId ?? '',
+      id: sessionId ?? null,
       isActive: sessionId !== null && sessionId !== '',
       timeout: config.sessionTimeout ?? 15 * 60 * 1000,
     };
@@ -104,51 +103,10 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   /**
-   * Consent management (wraps api.ts for pre-init support, delegates to App when initialized)
+   * Consent management (always delegates to api.ts for consistency)
    */
   async setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void> {
-    // Before init: delegate to api.ts (handles persistence)
-    if (!this.initialized) {
-      await apiSetConsent(integration, granted);
-      return;
-    }
-
-    // After init: delegate to ConsentManager
-    const consentManager = this.getConsentManager();
-    if (!consentManager) {
-      throw new Error('Consent manager not available');
-    }
-
-    // Handle 'all' integration by recursion
-    if (integration === 'all') {
-      const config = this.getConfig();
-      const collectApiUrls = this.getCollectApiUrls();
-      const integrations: ('google' | 'custom' | 'tracelog')[] = [];
-
-      if (config.integrations?.google) {
-        integrations.push('google');
-      }
-      if (collectApiUrls?.custom && collectApiUrls.custom !== '') {
-        integrations.push('custom');
-      }
-      if (collectApiUrls?.saas && collectApiUrls.saas !== '') {
-        integrations.push('tracelog');
-      }
-
-      for (const int of integrations) {
-        await this.setConsent(int, granted);
-      }
-      return;
-    }
-
-    // Single integration: use ConsentManager directly
-    const hadConsent = consentManager.hasConsent(integration);
-    consentManager.setConsent(integration, granted);
-
-    // Trigger consent-granted flow (buffered events, etc.)
-    if (granted && !hadConsent) {
-      await this.handleConsentGranted(integration);
-    }
+    await apiSetConsent(integration, granted);
   }
 
   /**

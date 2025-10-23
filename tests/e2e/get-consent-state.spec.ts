@@ -70,7 +70,7 @@ test.describe('getConsentState() API', () => {
       await traceLog.init({
         integrations: {
           google: { measurementId: 'G-TEST123' },
-          custom: { collectApiUrl: 'http://localhost:8080/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/collect', allowHttp: true },
         },
       });
 

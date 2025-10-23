@@ -440,7 +440,7 @@ const detectQaMode = () => {
       });
     } else if (urlParam === QA_MODE_DISABLE_VALUE) {
       newState = false;
-      sessionStorage.removeItem(QA_MODE_KEY);
+      sessionStorage.setItem(QA_MODE_KEY, "false");
       log("info", "QA Mode DISABLED", {
         showToClient: true,
         style: LOG_STYLE_DISABLED
@@ -472,7 +472,7 @@ const setQaMode$1 = (enabled) => {
         style: LOG_STYLE_ACTIVE
       });
     } else {
-      sessionStorage.removeItem(QA_MODE_KEY);
+      sessionStorage.setItem(QA_MODE_KEY, "false");
       log("info", "QA Mode DISABLED", {
         showToClient: true,
         style: LOG_STYLE_DISABLED
@@ -482,6 +482,11 @@ const setQaMode$1 = (enabled) => {
     log("warn", "Cannot set QA mode: sessionStorage unavailable");
   }
 };
+const qaMode_utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  detectQaMode,
+  setQaMode: setQaMode$1
+}, Symbol.toStringTag, { value: "Module" }));
 const getUTMParameters = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const utmParams = {};
@@ -1437,6 +1442,13 @@ class StateManager {
    * @template T - State key type (compile-time validated)
    * @param key - State property key
    * @returns Current value for the given key (may be undefined)
+   *
+   * @example
+   * ```typescript
+   * const userId = this.get('userId');
+   * const config = this.get('config');
+   * const sessionId = this.get('sessionId');
+   * ```
    */
   get(key) {
     return globalState[key];
@@ -1450,6 +1462,13 @@ class StateManager {
    * @template T - State key type (compile-time validated)
    * @param key - State property key
    * @param value - New value (type must match State[T])
+   *
+   * @example
+   * ```typescript
+   * this.set('sessionId', 'session-123');
+   * this.set('mode', Mode.QA);
+   * this.set('hasStartSession', true);
+   * ```
    */
   set(key, value) {
     globalState[key] = value;
@@ -1461,6 +1480,12 @@ class StateManager {
    * Use for debugging or when multiple state properties are needed.
    *
    * @returns Readonly shallow copy of global state
+   *
+   * @example
+   * ```typescript
+   * const snapshot = this.getState();
+   * console.log(snapshot.userId, snapshot.sessionId);
+   * ```
    */
   getState() {
     return { ...globalState };
@@ -1938,6 +1963,27 @@ class SenderManager extends StateManager {
     }
     return false;
   }
+  /**
+   * Sends HTTP POST request with 10-second timeout and AbortController.
+   *
+   * **Purpose**: Wraps fetch() with timeout protection to prevent hanging requests.
+   * Throws PermanentError for 4xx status codes (except 408, 429) to bypass retries.
+   *
+   * **Timeout Behavior**:
+   * - 10-second timeout via AbortController (REQUEST_TIMEOUT_MS constant)
+   * - Aborted requests throw network error (triggers retry in caller)
+   *
+   * **Error Classification**:
+   * - 4xx (except 408, 429): PermanentError thrown → no retries
+   * - 408, 429, 5xx, network: Standard Error thrown → triggers retry
+   *
+   * @param url - API endpoint URL
+   * @param payload - JSON-stringified EventsQueue body
+   * @returns Response object if successful
+   * @throws PermanentError for unrecoverable 4xx errors
+   * @throws Error for transient errors (5xx, timeout, network)
+   * @private
+   */
   async sendWithTimeout(url, payload) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -1966,6 +2012,27 @@ class SenderManager extends StateManager {
       clearTimeout(timeoutId);
     }
   }
+  /**
+   * Internal synchronous send logic using navigator.sendBeacon() for page unload scenarios.
+   *
+   * **Purpose**: Sends events synchronously during page unload when async fetch() is unreliable.
+   * Uses sendBeacon() browser API which queues request even after page closes.
+   *
+   * **Flow**:
+   * 1. Check consent (returns true if denied to prevent retry loops)
+   * 2. Apply beforeSend transformer (per-event transformation)
+   * 3. Apply beforeBatch transformer (batch-level transformation)
+   * 4. Validate payload size (64KB browser limit for sendBeacon)
+   * 5. Send via sendBeacon() or fallback to persistence if unavailable
+   * 6. Persist events on failure for next-page-load recovery
+   *
+   * **Payload Size Limit**: 64KB enforced by browser for sendBeacon()
+   * - Oversized payloads persisted instead of silently failing
+   *
+   * @param body - EventsQueue to send
+   * @returns `true` on success or when events persisted for recovery, `false` on failure
+   * @private
+   */
   sendQueueSyncInternal(body) {
     if (!this.hasConsentForIntegration()) {
       return true;
@@ -2013,6 +2080,19 @@ class SenderManager extends StateManager {
     }
     return accepted;
   }
+  /**
+   * Prepares request by enriching payload with metadata and serializing to JSON.
+   *
+   * **Purpose**: Adds request metadata (referer, timestamp) before transmission.
+   *
+   * **Metadata Enrichment**:
+   * - `referer`: Current page URL (browser only, undefined in Node.js)
+   * - `timestamp`: Request generation time in milliseconds
+   *
+   * @param body - EventsQueue to send
+   * @returns Object with `url` (API endpoint) and `payload` (JSON string)
+   * @private
+   */
   prepareRequest(body) {
     const enrichedBody = {
       ...body,
@@ -2026,6 +2106,18 @@ class SenderManager extends StateManager {
       payload: JSON.stringify(enrichedBody)
     };
   }
+  /**
+   * Retrieves persisted events from localStorage with error recovery.
+   *
+   * **Purpose**: Loads previously failed events from storage for recovery attempt.
+   *
+   * **Error Handling**:
+   * - JSON parse failures logged and storage cleared (corrupted data)
+   * - Missing data returns null (no recovery needed)
+   *
+   * @returns Persisted events object or null if none exist/invalid
+   * @private
+   */
   getPersistedData() {
     try {
       const storageKey = this.getQueueStorageKey();
@@ -2039,6 +2131,19 @@ class SenderManager extends StateManager {
     }
     return null;
   }
+  /**
+   * Checks if persisted events are within the 2-hour expiry window.
+   *
+   * **Purpose**: Prevents recovery of stale events that are too old to be relevant.
+   *
+   * **Expiry Logic**:
+   * - Events older than 2 hours (EVENT_EXPIRY_HOURS) are considered expired
+   * - Invalid/missing timestamps treated as expired
+   *
+   * @param data - Persisted events object with timestamp
+   * @returns `true` if events are recent (< 2 hours old), `false` otherwise
+   * @private
+   */
   isDataRecent(data) {
     if (!data.timestamp || typeof data.timestamp !== "number") {
       return false;
@@ -2046,10 +2151,36 @@ class SenderManager extends StateManager {
     const ageInHours = (Date.now() - data.timestamp) / (1e3 * 60 * 60);
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
+  /**
+   * Creates EventsQueue from persisted data by removing storage-specific timestamp field.
+   *
+   * **Purpose**: Converts PersistedEventsQueue (with timestamp) to EventsQueue for sending.
+   *
+   * @param data - Persisted events with timestamp
+   * @returns EventsQueue ready for transmission (timestamp removed)
+   * @private
+   */
   createRecoveryBody(data) {
     const { timestamp, ...queue } = data;
     return queue;
   }
+  /**
+   * Persists failed events to localStorage for next-page-load recovery.
+   *
+   * **Purpose**: Saves events that couldn't be sent due to network/server errors.
+   * Implements multi-tab protection to prevent data loss during simultaneous failures.
+   *
+   * **Multi-Tab Protection**:
+   * - Throttles persistence (1-second window via PERSISTENCE_THROTTLE_MS)
+   * - If another tab persisted within 1 second, skips write (last-write-wins)
+   * - Prevents redundant storage writes when multiple tabs fail together
+   *
+   * **Storage Format**: PersistedEventsQueue (EventsQueue + timestamp)
+   *
+   * @param body - EventsQueue to persist
+   * @returns `true` on successful persistence or throttled write, `false` on error
+   * @private
+   */
   persistEvents(body) {
     try {
       const existing = this.getPersistedData();
@@ -2131,8 +2262,8 @@ class SenderManager extends StateManager {
    * 5. Return true if consent granted, false otherwise
    *
    * **Called by**:
-   * - `send()` method before async transmission
-   * - `sendQueueSyncInternal()` is NOT called (sync sends skip consent check for performance)
+   * - `send()` method before async transmission (line 542)
+   * - `sendQueueSyncInternal()` method before sync transmission (line 668)
    *
    * **Behavior when false**:
    * - Events NOT sent to backend
@@ -2444,7 +2575,7 @@ class EventManager extends StateManager {
       return;
     }
     if (this.get("mode") === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
-      log("info", "Event", {
+      log("info", `[TraceLog:QA] Custom Event: ${custom_event.name}`, {
         showToClient: true,
         data: {
           name: custom_event.name,
@@ -3235,7 +3366,20 @@ class EventManager extends StateManager {
     }
   }
   /**
-   * Check if events should be buffered due to waiting for consent
+   * Determines if events should be buffered for consent instead of being sent immediately.
+   *
+   * **Purpose**: Implements GDPR/CCPA compliance by preventing event transmission before
+   * user grants consent. Events are buffered and sent later via `flushConsentBuffer()`.
+   *
+   * **Logic**:
+   * 1. QA mode bypasses consent checks (always returns false)
+   * 2. If `waitForConsent` disabled in config, returns false (no buffering)
+   * 3. If no consent manager, returns false (can't check consent)
+   * 4. If no integrations configured, returns false (standalone mode)
+   * 5. Returns true only if integrations exist but none have consent yet
+   *
+   * @returns `true` if events should be buffered, `false` if they can be sent
+   * @private
    */
   shouldBufferForConsent() {
     if (this.get("mode") === Mode.QA) {
@@ -3259,7 +3403,18 @@ class EventManager extends StateManager {
     return !hasAnyConsent;
   }
   /**
-   * Add event to consent buffer with overflow management
+   * Adds event to consent buffer with overflow protection and SESSION_START preservation.
+   *
+   * **Purpose**: Buffers events that were tracked before consent was granted. Events are
+   * later flushed per-integration when consent is granted via `flushConsentBuffer()`.
+   *
+   * **Overflow Strategy**:
+   * - Max buffer size: Configurable via `config.maxConsentBufferSize` (default 500)
+   * - FIFO eviction: Oldest non-critical events removed first when buffer full
+   * - SESSION_START preservation: Critical events always kept, non-critical removed instead
+   *
+   * @param event - Event to buffer (with id, type, timestamp, and event-specific data)
+   * @private
    */
   addToConsentBuffer(event2) {
     const config = this.get("config");
@@ -3302,6 +3457,9 @@ class EventManager extends StateManager {
     }
     const shouldForward = forwardEvents === "all" || Array.isArray(forwardEvents) && forwardEvents.includes(event2.type);
     if (!shouldForward) {
+      log("debug", `Skipping GA event forward: ${event2.type} not in forwardEvents config`, {
+        data: { eventType: event2.type, forwardEvents }
+      });
       return;
     }
     if (event2.type === EventType.CUSTOM && event2.custom_event) {
@@ -3346,6 +3504,11 @@ class EventManager extends StateManager {
         ...event2.viewport_data.name && { element_name: event2.viewport_data.name },
         dwell_time: event2.viewport_data.dwellTime,
         visibility_ratio: event2.viewport_data.visibilityRatio
+      });
+    } else if (event2.type === EventType.SESSION_END) {
+      this.google.trackEvent("session_end", {
+        ...event2.session_end_reason && { session_end_reason: event2.session_end_reason },
+        ...event2.page_url && { page_location: event2.page_url }
       });
     }
   }
@@ -3428,13 +3591,12 @@ class UserManager {
    * @returns Persistent unique user ID (UUID v4 format)
    */
   static getId(storageManager) {
-    const storageKey = USER_ID_KEY;
-    const storedUserId = storageManager.getItem(storageKey);
+    const storedUserId = storageManager.getItem(USER_ID_KEY);
     if (storedUserId) {
       return storedUserId;
     }
     const newUserId = generateUUID();
-    storageManager.setItem(storageKey, newUserId);
+    storageManager.setItem(USER_ID_KEY, newUserId);
     return newUserId;
   }
 }
@@ -3918,6 +4080,9 @@ class ConsentManager {
           tracelog: false
         };
         log("debug", "Consent cleared in another tab, synced locally");
+        if (this.emitter) {
+          this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
+        }
         return;
       }
       try {
@@ -3935,6 +4100,9 @@ class ConsentManager {
               tracelog: this.consentState.tracelog
             }
           });
+          if (this.emitter) {
+            this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
+          }
         }
       } catch (error) {
         log("warn", "Failed to parse consent update from another tab", { error });
@@ -4327,7 +4495,7 @@ class SessionManager extends StateManager {
    * 1. Clears inactivity timeout
    * 2. Removes activity listeners (click, keydown, scroll)
    * 3. Closes BroadcastChannel
-   * 4. Removes lifecycle listeners (visibilitychange, beforeunload, pagehide)
+   * 4. Removes lifecycle listeners (visibilitychange, beforeunload)
    * 5. Resets tracking flags (`isTracking`, `hasStartSession`)
    *
    * **Called by**: `App.destroy()` during application teardown
@@ -5470,6 +5638,8 @@ class ViewportHandler extends StateManager {
   }
 }
 class GoogleAnalyticsIntegration extends StateManager {
+  scriptId = "tracelog-ga-script";
+  configScriptId = "tracelog-ga-config-script";
   isInitialized = false;
   /**
    * Initializes Google Analytics/GTM integration.
@@ -5581,7 +5751,7 @@ class GoogleAnalyticsIntegration extends StateManager {
    *
    * **Cleanup Actions**:
    * - Resets initialization flag
-   * - Removes TraceLog-injected script element
+   * - Removes TraceLog-injected script elements (main + config)
    * - Does NOT remove externally loaded gtag/GTM scripts
    *
    * **Note**: gtag function and dataLayer remain in window even after cleanup.
@@ -5593,9 +5763,13 @@ class GoogleAnalyticsIntegration extends StateManager {
    */
   cleanup() {
     this.isInitialized = false;
-    const script = document.getElementById("tracelog-ga-script");
+    const script = document.getElementById(this.scriptId);
     if (script) {
       script.remove();
+    }
+    const configScript = document.getElementById(this.configScriptId);
+    if (configScript) {
+      configScript.remove();
     }
   }
   /**
@@ -5608,13 +5782,23 @@ class GoogleAnalyticsIntegration extends StateManager {
     return typeof window.gtag === "function" && Array.isArray(window.dataLayer);
   }
   getScriptType(measurementId) {
-    return measurementId.startsWith("GTM-") ? "GTM" : "GA4";
+    return measurementId.startsWith("GTM-") && measurementId.length > 4 ? "GTM" : "GA4";
   }
+  /**
+   * Checks if Google Analytics/GTM script is already loaded.
+   *
+   * Three-tier detection strategy prevents duplicate script injection:
+   * 1. Checks for existing gtag instance + dataLayer (runtime detection)
+   * 2. Checks for TraceLog-injected script (#tracelog-ga-script)
+   * 3. Checks for external GA/GTM scripts by src pattern
+   *
+   * @returns True if any GA/GTM script detected, false otherwise
+   */
   isScriptAlreadyLoaded() {
     if (this.hasExistingGtagInstance()) {
       return true;
     }
-    if (document.getElementById("tracelog-ga-script")) {
+    if (document.getElementById(this.scriptId)) {
       return true;
     }
     const existingScript = document.querySelector(
@@ -5660,7 +5844,8 @@ class GoogleAnalyticsIntegration extends StateManager {
    * **GTM Configuration**:
    * - Only initializes gtag function and dataLayer
    * - No config call (tags configured in GTM UI)
-   * - Allows GTM container to manage configuration
+   * - User tracking: Configure user_id in GTM using dataLayer variables
+   * - Allows GTM container to manage all tag configuration
    *
    * **GA4/Ads/UA Configuration**:
    * - Initializes gtag function and dataLayer
@@ -5672,6 +5857,8 @@ class GoogleAnalyticsIntegration extends StateManager {
    */
   configureGtag(measurementId, userId) {
     const gaScriptConfig = document.createElement("script");
+    gaScriptConfig.id = this.configScriptId;
+    gaScriptConfig.type = "text/javascript";
     if (measurementId.startsWith("GTM-")) {
       gaScriptConfig.innerHTML = `
         window.dataLayer = window.dataLayer || [];
@@ -6476,34 +6663,11 @@ class App extends StateManager {
     return this.isInitialized;
   }
   /**
-   * Initializes TraceLog application with configuration.
-   *
-   * **Initialization flow:**
-   * 1. Create StorageManager (localStorage/sessionStorage wrapper with fallback)
-   * 2. Setup state (config, userId, device, pageUrl, mode detection)
-   * 3. Initialize ConsentManager (loads persisted consent from localStorage, enables emitter)
-   * 4. Log consent state if waitForConsent enabled
-   * 5. Setup integrations (Google Analytics if configured and consented, or deferred)
-   * 6. Initialize EventManager (receives transformers, creates SenderManager instances)
-   * 7. Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
-   * 8. Recover persisted events from localStorage (non-fatal errors logged)
-   * 9. Set isInitialized flag
-   *
-   * **Deferred Integration Initialization:**
-   * - If `waitForConsent: true` and consent not granted, integrations are not initialized
-   * - When consent is later granted via `setConsent()`, integrations initialize via `handleConsentGranted()`
-   *
-   * **Transformers:**
-   * - Transformers stored in `App.transformers` are passed to EventManager constructor
-   * - EventManager applies transformers during event processing
-   *
-   * **Error Handling:**
-   * - If initialization fails, calls `destroy(true)` for cleanup (force=true bypasses isInitialized check)
-   * - Event recovery errors are non-fatal (logged but don't prevent initialization)
+   * Initializes TraceLog with configuration.
    *
    * @param config - Configuration object
    * @throws {Error} If initialization fails
-   * @internal This method is called from api.init() - users should use the API wrapper
+   * @internal Called from api.init()
    */
   async init(config = {}) {
     if (this.isInitialized) {
@@ -6556,16 +6720,9 @@ class App extends StateManager {
   /**
    * Sends a custom event with optional metadata.
    *
-   * **Features:**
-   * - Validates event name and metadata structure
-   * - Sanitizes metadata (PII protection)
-   * - Normalizes DOMStringMap and similar objects to plain objects
-   * - In QA mode: throws validation errors, logs to console (not sent to backend)
-   * - In normal mode: silently drops invalid events
-   *
-   * @param name - Event name identifier
-   * @param metadata - Optional metadata (flat key-value pairs or array of objects)
-   * @internal This method is called from api.event() - users should use the API wrapper
+   * @param name - Event name
+   * @param metadata - Optional metadata
+   * @internal Called from api.event()
    */
   sendCustomEvent(name, metadata) {
     if (!this.managers.event) {
@@ -6613,27 +6770,8 @@ class App extends StateManager {
   /**
    * Destroys the TraceLog instance and cleans up all resources.
    *
-   * **Cleanup sequence:**
-   * 1. Stop all handlers (sends SESSION_END event)
-   * 2. Flush remaining events via EventManager.stop()
-   * 3. Clear timers and intervals
-   * 4. Remove all event listeners (emitter, consent, integrations)
-   * 5. Reset global state flags
-   *
-   * **Force Parameter:**
-   * @param force - If true, forces cleanup even if not initialized
-   *
-   * **Use Cases for `force=true`:**
-   * - **Init Failure**: When `init()` fails partway through, some managers may be initialized
-   *   but `isInitialized` flag is still false. Force cleanup ensures proper resource cleanup.
-   * - **Example**: `init()` → creates StorageManager → error occurs → `destroy(true)` called
-   *   in catch block to cleanup partially initialized state
-   *
-   * **Normal Usage:**
-   * - Users call `api.destroy()` which calls `app.destroy()` (force=false by default)
-   * - Only triggers cleanup if `isInitialized === true`
-   *
-   * @internal This method is called from api.destroy() - users should use the API wrapper
+   * @param force - If true, forces cleanup even if not initialized (used during init failure)
+   * @internal Called from api.destroy()
    */
   destroy(force = false) {
     if (!this.isInitialized && !force) {
@@ -6677,143 +6815,98 @@ class App extends StateManager {
       this.set("mode", mode);
     }
   }
-  /**
-   * Sets up configured integrations (Google Analytics, etc.)
-   *
-   * **Consent-Aware Initialization:**
-   * - If `waitForConsent: true`, checks consent before initializing integrations
-   * - If consent not granted, initialization is **deferred**
-   * - Deferred integrations initialize later when consent is granted via `handleConsentGranted()`
-   *
-   * **Google Analytics Integration:**
-   * - Requires either `measurementId` or `containerId` configuration
-   * - Checks `shouldInitializeIntegration('google')` before initialization
-   * - If deferred, logs "Google Analytics initialization deferred, waiting for consent"
-   * - Later initialization happens when user calls `setConsent('google', true)` or `setConsent('all', true)`
-   *
-   * @private
-   */
   async setupIntegrations() {
-    const config = this.get("config");
-    const googleConfig = config.integrations?.google;
-    if (googleConfig) {
-      const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
-      const hasContainerId = Boolean(googleConfig.containerId?.trim());
-      if (hasMeasurementId || hasContainerId) {
-        const shouldInitializeGoogle = this.shouldInitializeIntegration("google");
-        if (shouldInitializeGoogle) {
-          try {
-            this.integrations.google = new GoogleAnalyticsIntegration();
-            await this.integrations.google.initialize();
-            log("debug", "Google Analytics integration initialized");
-          } catch (error) {
-            this.integrations.google = void 0;
-            log("warn", "Failed to initialize Google Analytics", { error });
-          }
-        } else {
-          log("info", "Google Analytics initialization deferred, waiting for consent");
-        }
-      }
+    if (!this.hasValidGoogleConfig()) {
+      return;
+    }
+    if (this.shouldInitializeIntegration("google")) {
+      await this.initializeGoogleAnalytics();
+    } else {
+      log("info", "Google Analytics initialization deferred, waiting for consent");
     }
   }
   /**
-   * Get consent manager instance.
+   * Returns the ConsentManager instance for consent state management.
    *
-   * @returns ConsentManager instance or undefined if not initialized
+   * @returns The ConsentManager instance, or undefined if not initialized
    * @internal Used by api.ts for consent operations
    */
   getConsentManager() {
     return this.managers.consent;
   }
   /**
-   * Get current configuration.
+   * Returns the current configuration object.
    *
-   * @returns Configuration object
-   * @internal Used by api.ts for config access
+   * @returns The Config object passed to init()
+   * @internal Used by api.ts for configuration access
    */
   getConfig() {
     return this.get("config");
   }
   /**
-   * Get configured API URLs for integrations.
+   * Returns the configured backend API URLs for event collection.
    *
-   * @returns Object with saas and/or custom API URLs
-   * @internal Used by api.ts for integration checks
+   * @returns Object containing optional saas and custom API URLs
+   * @internal Used by api.ts for backend URL access
    */
   getCollectApiUrls() {
     return this.get("collectApiUrls");
   }
   /**
-   * Get event manager instance.
+   * Returns the EventManager instance for event tracking operations.
    *
-   * @returns EventManager instance or undefined if not initialized
-   * @internal Used by api.ts for consent buffer operations
+   * @returns The EventManager instance, or undefined if not initialized
+   * @internal Used by api.ts for event operations
    */
   getEventManager() {
     return this.managers.event;
   }
   /**
-   * Handles consent granted for an integration.
+   * Handles consent granted for a specific integration by initializing the integration (if needed)
+   * and flushing buffered events.
    *
-   * **Orchestration:**
-   * 1. Initialize the integration if not already initialized (deferred initialization)
-   * 2. Flush consent buffer for this integration (sends buffered events)
-   *
-   * **Deferred Initialization Flow:**
-   * - If integration was deferred during `init()` due to missing consent
-   * - This method initializes it when user grants consent via `setConsent()`
-   * - For Google Analytics: Creates integration, initializes, and updates EventManager reference
-   * - For Custom/TraceLog: Handled by EventManager/SenderManager (no explicit initialization needed)
-   *
-   * @param integration - Integration identifier
+   * @param integration - The integration name ('google', 'custom', or 'tracelog')
+   * @returns Promise that resolves when initialization and buffer flush complete
    * @internal Called from api.setConsent() when consent is granted
    */
   async handleConsentGranted(integration) {
     log("info", `Consent granted for ${integration}, initializing and flushing buffer`);
-    await this.initializeIntegration(integration);
+    if (integration === "google" && !this.integrations.google && this.hasValidGoogleConfig()) {
+      const initialized = await this.initializeGoogleAnalytics();
+      if (initialized && this.managers.event && this.integrations.google) {
+        this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
+      }
+    }
     if (this.managers.event) {
       await this.managers.event.flushConsentBuffer(integration);
     }
   }
-  /**
-   * Initialize a specific integration (called when consent is granted)
-   */
-  async initializeIntegration(integration) {
-    if (integration === "google") {
-      const config = this.get("config");
-      const googleConfig = config.integrations?.google;
-      if (googleConfig && !this.integrations.google) {
-        const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
-        const hasContainerId = Boolean(googleConfig.containerId?.trim());
-        if (hasMeasurementId || hasContainerId) {
-          try {
-            this.integrations.google = new GoogleAnalyticsIntegration();
-            await this.integrations.google.initialize();
-            if (this.managers.event) {
-              this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
-            }
-            log("info", "Google Analytics integration initialized after consent");
-          } catch (error) {
-            this.integrations.google = void 0;
-            log("warn", "Failed to initialize Google Analytics after consent", { error });
-          }
-        }
-      }
+  hasValidGoogleConfig() {
+    const googleConfig = this.get("config").integrations?.google;
+    if (!googleConfig) {
+      return false;
+    }
+    const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
+    const hasContainerId = Boolean(googleConfig.containerId?.trim());
+    return hasMeasurementId || hasContainerId;
+  }
+  async initializeGoogleAnalytics() {
+    try {
+      this.integrations.google = new GoogleAnalyticsIntegration();
+      await this.integrations.google.initialize();
+      log("debug", "Google Analytics integration initialized");
+      return true;
+    } catch (error) {
+      log("warn", "Failed to initialize Google Analytics", { error });
+      return false;
     }
   }
-  /**
-   * Check if an integration should be initialized based on consent
-   */
   shouldInitializeIntegration(integration) {
     const config = this.get("config");
-    if (!config?.waitForConsent) {
+    if (!config.waitForConsent) {
       return true;
     }
-    const consentManager = this.managers.consent;
-    if (!consentManager) {
-      return true;
-    }
-    return consentManager.hasConsent(integration);
+    return this.managers.consent?.hasConsent(integration) ?? true;
   }
   initializeHandlers() {
     const config = this.get("config");
@@ -7018,7 +7111,9 @@ const destroy = () => {
     throw new Error("[TraceLog] Destroy operation already in progress");
   }
   if (!app) {
-    throw new Error("[TraceLog] App not initialized");
+    isDestroyed = false;
+    isDestroying = false;
+    return;
   }
   isDestroying = true;
   try {
@@ -7031,16 +7126,17 @@ const destroy = () => {
     if (typeof window !== "undefined" && window.__traceLogBridge) {
       window.__traceLogBridge = void 0;
     }
+    isDestroyed = false;
+    isDestroying = false;
   } catch (error) {
     app = null;
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
     pendingConsents.length = 0;
-    log("warn", "Error during destroy, forced cleanup completed", { error });
-  } finally {
+    isDestroyed = false;
     isDestroying = false;
-    isDestroyed = true;
+    log("warn", "Error during destroy, forced cleanup completed", { error });
   }
 };
 const setConsent = async (integration, granted) => {
@@ -7072,6 +7168,10 @@ const setConsent = async (integration, granted) => {
         };
         localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
       } catch (error) {
+        if (error instanceof DOMException && error.name === "QuotaExceededError") {
+          log("warn", "localStorage quota exceeded, consent not persisted", { error });
+          return;
+        }
         log("error", "Failed to persist consent for all integrations before init", { error });
         throw new Error(
           `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
@@ -7084,11 +7184,21 @@ const setConsent = async (integration, granted) => {
       const now = Date.now();
       const expiresAt = now + CONSENT_EXPIRY_DAYS2 * 24 * 60 * 60 * 1e3;
       const existingRaw = localStorage.getItem(CONSENT_KEY2);
-      let existingState = {};
+      let existingState = {
+        google: false,
+        custom: false,
+        tracelog: false
+      };
       if (existingRaw !== null && existingRaw.trim() !== "") {
         try {
           const existingData = JSON.parse(existingRaw);
-          existingState = existingData.state ?? {};
+          if (existingData.state) {
+            existingState = {
+              google: Boolean(existingData.state.google),
+              custom: Boolean(existingData.state.custom),
+              tracelog: Boolean(existingData.state.tracelog)
+            };
+          }
         } catch {
         }
       }
@@ -7102,6 +7212,10 @@ const setConsent = async (integration, granted) => {
       };
       localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
     } catch (error) {
+      if (error instanceof DOMException && error.name === "QuotaExceededError") {
+        log("warn", "localStorage quota exceeded, consent not persisted", { error });
+        return;
+      }
       log("error", "Failed to persist consent before init", { error });
       throw new Error(
         `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
@@ -7114,13 +7228,13 @@ const setConsent = async (integration, granted) => {
     log("warn", "Consent manager not available");
     return;
   }
-  const config = app.getConfig();
   if (integration === "all") {
+    const config = app.getConfig();
+    const collectApiUrls = app.getCollectApiUrls();
     const integrations = [];
     if (config.integrations?.google) {
       integrations.push("google");
     }
-    const collectApiUrls = app.getCollectApiUrls();
     if (collectApiUrls?.custom) {
       integrations.push("custom");
     }
@@ -7203,9 +7317,10 @@ const __setAppInstance = (instance) => {
 };
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   void Promise.resolve().then(() => testBridge).then((module) => {
-    if (module && typeof module.injectTestBridge === "function") {
-      module.injectTestBridge();
-    }
+    module.injectTestBridge();
+  });
+  void Promise.resolve().then(() => qaMode_utils).then((module) => {
+    module.detectQaMode();
   });
 }
 const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -7439,7 +7554,6 @@ const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePro
   onTTFB: Q
 }, Symbol.toStringTag, { value: "Module" }));
 class TestBridge extends App {
-  _isDestroying = false;
   constructor() {
     super();
   }
@@ -7464,160 +7578,98 @@ class TestBridge extends App {
     }
     super.sendCustomEvent(name, data);
   }
+  /**
+   * Alias for sendCustomEvent (E2E test convenience)
+   */
   event(name, metadata) {
     this.sendCustomEvent(name, metadata);
   }
+  /**
+   * QA mode control for debugging tests
+   */
   setQaMode(enabled) {
-    void Promise.resolve().then(() => api).then(({ setQaMode: setQaMode2 }) => {
-      setQaMode2(enabled);
-    });
+    setQaMode$1(enabled);
   }
+  /**
+   * Session data inspection for E2E tests
+   */
   getSessionData() {
+    const sessionId = this.get("sessionId");
+    const config = this.get("config");
     return {
-      id: this.get("sessionId"),
-      isActive: !!this.get("sessionId"),
-      timeout: this.get("config")?.sessionTimeout ?? 15 * 60 * 1e3
+      id: sessionId ?? null,
+      isActive: sessionId !== null && sessionId !== "",
+      timeout: config.sessionTimeout ?? 15 * 60 * 1e3
     };
   }
-  setSessionTimeout(timeout) {
-    const config = this.get("config");
-    if (config) {
-      this.set("config", { ...config, sessionTimeout: timeout });
-    }
-  }
+  /**
+   * Queue length inspection for E2E tests
+   */
   getQueueLength() {
     return this.managers.event?.getQueueLength() ?? 0;
   }
-  simulatePersistedEvents(events) {
-    const storageManager = this.managers?.storage;
-    if (!storageManager) {
-      throw new Error("Storage manager not available");
-    }
-    const config = this.get("config");
-    const projectId = config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.collectApiUrl ?? "test";
-    const userId = this.get("userId");
-    const sessionId = this.get("sessionId");
-    if (!projectId || !userId) {
-      throw new Error("Project ID or User ID not available. Initialize TraceLog first.");
-    }
-    const persistedData = {
-      userId,
-      sessionId: sessionId || `test-session-${Date.now()}`,
-      device: "desktop",
-      events,
-      timestamp: Date.now()
-    };
-    const storageKey = `${STORAGE_BASE_KEY}:${projectId}:queue:${userId}`;
-    storageManager.setItem(storageKey, JSON.stringify(persistedData));
-  }
-  get(key) {
-    return super.get(key);
-  }
-  getStorageManager() {
-    return this.safeAccess(this.managers?.storage);
-  }
+  /**
+   * Event manager accessor for E2E tests
+   */
   getEventManager() {
     return this.managers.event;
   }
-  getSessionHandler() {
-    return this.safeAccess(this.handlers?.session);
-  }
-  getPageViewHandler() {
-    return this.safeAccess(this.handlers?.pageView);
-  }
-  getClickHandler() {
-    return this.safeAccess(this.handlers?.click);
-  }
-  getScrollHandler() {
-    return this.safeAccess(this.handlers?.scroll);
-  }
+  /**
+   * Performance handler accessor for E2E tests
+   */
   getPerformanceHandler() {
-    return this.safeAccess(this.handlers?.performance);
+    return this.handlers.performance ?? null;
   }
-  getErrorHandler() {
-    return this.safeAccess(this.handlers?.error);
-  }
-  getGoogleAnalytics() {
-    return this.safeAccess(this.integrations?.google);
-  }
-  async setConsent(integration, granted) {
-    if (!this.initialized) {
-      await setConsent(integration, granted);
-      return;
-    }
-    const consentManager = this.managers?.consent;
-    if (!consentManager) {
-      throw new Error("Consent manager not available");
-    }
-    const config = this.get("config");
-    if (integration === "all") {
-      const integrations = [];
-      if (config?.integrations?.google) {
-        integrations.push("google");
-      }
-      const collectApiUrls = this.get("collectApiUrls");
-      if (collectApiUrls?.custom) {
-        integrations.push("custom");
-      }
-      if (collectApiUrls?.saas) {
-        integrations.push("tracelog");
-      }
-      for (const int of integrations) {
-        await this.setConsent(int, granted);
-      }
-      return;
-    }
-    const hadConsent = consentManager.hasConsent(integration);
-    consentManager.setConsent(integration, granted);
-    if (granted && !hadConsent) {
-      await this.handleConsentGranted(integration);
-    }
-  }
-  hasConsent(integration) {
-    const consentManager = this.managers?.consent;
-    if (!consentManager) {
-      return false;
-    }
-    return consentManager.hasConsent(integration);
-  }
-  getConsentState() {
-    const consentManager = this.managers?.consent;
-    if (!consentManager) {
-      return { google: false, custom: false, tracelog: false };
-    }
-    return consentManager.getConsentState();
-  }
+  /**
+   * Consent buffer inspection for E2E tests
+   */
   getConsentBufferLength() {
     return this.managers.event?.getConsentBufferLength() ?? 0;
   }
+  /**
+   * Consent management (always delegates to api.ts for consistency)
+   */
+  async setConsent(integration, granted) {
+    await setConsent(integration, granted);
+  }
+  /**
+   * Consent state check (delegates to ConsentManager)
+   */
+  hasConsent(integration) {
+    const consentManager = this.getConsentManager();
+    return consentManager?.hasConsent(integration) ?? false;
+  }
+  /**
+   * Consent state retrieval (delegates to ConsentManager)
+   */
+  getConsentState() {
+    const consentManager = this.getConsentManager();
+    return consentManager?.getConsentState() ?? { google: false, custom: false, tracelog: false };
+  }
+  /**
+   * State accessor (make public for E2E tests)
+   */
+  get(key) {
+    return super.get(key);
+  }
+  /**
+   * Cleanup (syncs with api.ts)
+   */
   destroy(force = false) {
     if (!this.initialized && !force) {
       return;
     }
-    this.ensureNotDestroying();
-    this._isDestroying = true;
     destroy();
     try {
       super.destroy(force);
       void Promise.resolve().then(() => api).then(({ __setAppInstance: __setAppInstance2 }) => {
         __setAppInstance2(null);
       });
-    } finally {
-      this._isDestroying = false;
-    }
-  }
-  /**
-   * Helper to safely access managers/handlers and convert undefined to null
-   */
-  safeAccess(value) {
-    return value ?? null;
-  }
-  /**
-   * Ensures destroy operation is not in progress, throws if it is
-   */
-  ensureNotDestroying() {
-    if (this._isDestroying) {
-      throw new Error("Destroy operation already in progress");
+    } catch (error) {
+      void Promise.resolve().then(() => api).then(({ __setAppInstance: __setAppInstance2 }) => {
+        __setAppInstance2(null);
+      });
+      throw error;
     }
   }
 }

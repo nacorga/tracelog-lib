@@ -424,7 +424,7 @@ export class EventManager extends StateManager {
     }
 
     if (this.get('mode') === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
-      log('info', 'Event', {
+      log('info', `Custom Event: ${custom_event.name}`, {
         showToClient: true,
         data: {
           name: custom_event.name,

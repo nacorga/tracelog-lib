@@ -180,7 +180,7 @@ test.describe('QA Mode', () => {
       traceLog.setQaMode(false);
       await traceLog.init({
         integrations: {
-          custom: { collectApiUrl: 'http://localhost:8080/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/collect', allowHttp: true },
         },
       });
 
@@ -209,8 +209,8 @@ test.describe('QA Mode', () => {
       let errorMessage = '';
 
       try {
-        // Send event with invalid metadata (nested object)
-        traceLog.event('invalid_event', { nested: { invalid: 'data' } } as Record<string, unknown>);
+        // Send event with invalid metadata (two levels of nesting exceeds MAX_METADATA_NESTING_DEPTH)
+        traceLog.event('invalid_event', { nested: { deep: { invalid: 'data' } } } as Record<string, unknown>);
       } catch (error) {
         errorThrown = true;
         errorMessage = error instanceof Error ? error.message : String(error);
@@ -233,15 +233,15 @@ test.describe('QA Mode', () => {
       traceLog.setQaMode(false);
       await traceLog.init({
         integrations: {
-          custom: { collectApiUrl: 'http://localhost:8080/collect' },
+          custom: { collectApiUrl: 'http://localhost:8080/collect', allowHttp: true },
         },
       });
 
       let errorThrown = false;
 
       try {
-        // Send event with invalid metadata (nested object)
-        traceLog.event('invalid_event', { nested: { invalid: 'data' } } as Record<string, unknown>);
+        // Send event with invalid metadata (two levels of nesting exceeds MAX_METADATA_NESTING_DEPTH)
+        traceLog.event('invalid_event', { nested: { deep: { invalid: 'data' } } } as Record<string, unknown>);
       } catch {
         errorThrown = true;
       }

@@ -218,7 +218,7 @@ describe('QA Mode Detection', () => {
       const isQaMode = detectQaMode();
 
       expect(isQaMode).toBe(false);
-      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBe('false');
     });
 
     it('should remove from sessionStorage when ?tlog_mode=qa_off', () => {
@@ -237,7 +237,7 @@ describe('QA Mode Detection', () => {
 
       detectQaMode();
 
-      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBe('false');
     });
 
     it('should log DISABLED message when deactivating', () => {
@@ -311,7 +311,7 @@ describe('QA Mode Detection', () => {
       });
 
       expect(detectQaMode()).toBe(false);
-      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBe('false');
 
       // Activate again
       Object.defineProperty(window, 'location', {
@@ -373,7 +373,7 @@ describe('QA Mode Detection', () => {
 
       setQaMode(false);
 
-      expect(sessionStorage.getItem(QA_MODE_KEY)).toBeNull();
+      expect(sessionStorage.getItem(QA_MODE_KEY)).toBe('false');
     });
 
     it('should log ENABLED message when activating', () => {
