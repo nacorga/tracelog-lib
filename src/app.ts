@@ -112,6 +112,10 @@ export class App extends StateManager {
         ).catch((error) => {
           log('error', 'Failed to flush consent buffer after consent granted', { error });
         });
+
+        if (consentState.google && this.integrations.google) {
+          this.integrations.google.syncConsentToGoogle('google', consentState.google);
+        }
       });
 
       this.initializeHandlers();

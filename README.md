@@ -524,6 +524,102 @@ const consent = tracelog.getConsentState();
 // }
 ```
 
+### Google Consent Mode v2 Integration
+
+TraceLog supports **Google Consent Mode v2** for granular GDPR/CCPA-compliant consent management with Google Analytics and Google Tag Manager.
+
+#### Simple Mode (All Categories)
+
+Grant or deny all Google Consent Mode categories at once:
+
+```typescript
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      consentCategories: 'all' // Default: grant all categories
+    }
+  }
+});
+
+// Grant all Google consent categories
+await tracelog.setConsent('google', true);
+// → Updates all 5 categories to 'granted'
+```
+
+#### Granular Mode (Per-Category Control)
+
+Configure which categories to grant when consent is given:
+
+```typescript
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      consentCategories: {
+        analytics_storage: true,        // Grant when consent=true
+        ad_storage: false,              // Deny even when consent=true
+        ad_user_data: false,            // Deny even when consent=true
+        ad_personalization: false       // Deny even when consent=true
+        // personalization_storage: omitted = not managed (respects external CMP)
+      }
+    }
+  }
+});
+
+// GDPR typical: Analytics YES, Ads NO
+await tracelog.setConsent('google', true);
+// → analytics_storage: 'granted'
+// → ad_storage: 'denied'
+// → ad_user_data: 'denied'
+// → ad_personalization: 'denied'
+
+// Revoke consent
+await tracelog.setConsent('google', false);
+// → All configured categories set to 'denied'
+```
+
+#### Integration with External CMPs
+
+Perfect for integrating with Consent Management Platforms:
+
+```typescript
+// Example: CookieYes integration
+CookieConsent.init({
+  onAccept: (preferences) => {
+    // Map user preferences to Google Consent Mode
+    await tracelog.init({
+      integrations: {
+        google: {
+          measurementId: 'G-XXXXXX',
+          consentCategories: {
+            analytics_storage: preferences.analytics,
+            ad_storage: preferences.marketing,
+            ad_user_data: preferences.marketing,
+            ad_personalization: preferences.marketing
+          }
+        }
+      }
+    });
+
+    await tracelog.setConsent('google', true);
+  }
+});
+```
+
+**Google Consent Mode v2 Categories**:
+- `analytics_storage` - Google Analytics data storage
+- `ad_storage` - Advertising cookies (Meta, TikTok, Pinterest pixels)
+- `ad_user_data` - User data for advertising purposes
+- `ad_personalization` - Personalized advertising (remarketing)
+- `personalization_storage` - Content personalization
+
+**Notes**:
+- TraceLog automatically detects existing Consent Mode configuration from external CMPs
+- Only `gtag('consent', 'update')` is used (never `'default'`)
+- Omitted categories are not managed by TraceLog (respects external configuration)
+- See [API Reference](#api-reference) for complete documentation
+
 ### Cookie Banner Integration
 
 ```typescript

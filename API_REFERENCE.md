@@ -976,8 +976,8 @@ await tracelog.init({
 - Production must use HTTPS
 
 #### `integrations.google`
-- **Type:** `{ measurementId?: string; containerId?: string }`
-- **Description:** Google Analytics 4 / Google Tag Manager integration
+- **Type:** `{ measurementId?: string; containerId?: string; consentCategories?: 'all' | Partial<Record<GoogleConsentType, boolean>>; forwardEvents?: EventTypeName[] | 'all' }`
+- **Description:** Google Analytics 4 / Google Tag Manager integration with optional Consent Mode v2 support
 - **Note:** At least one of `measurementId` or `containerId` is required
 
 ```typescript
@@ -1004,11 +1004,54 @@ await tracelog.init({
     }
   }
 });
+
+// Option 4: With Google Consent Mode v2 (all categories)
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXXXXXX',
+      consentCategories: 'all' // Grant all 5 categories when consent=true
+    }
+  }
+});
+
+// Option 5: With Google Consent Mode v2 (granular control)
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXXXXXX',
+      consentCategories: {
+        analytics_storage: true,        // Grant when consent=true
+        ad_storage: false,              // Deny even when consent=true
+        ad_user_data: false,            // Deny even when consent=true
+        ad_personalization: false       // Deny even when consent=true
+        // personalization_storage: omitted = not managed (respects external CMP)
+      }
+    }
+  }
+});
 ```
 
 **Supported Formats:**
 - **measurementId**: `G-XXXXXXXXXX` (GA4), `AW-XXXXXXXXXX` (Google Ads), `UA-XXXXXXXXXX` (Universal Analytics - legacy)
 - **containerId**: `GTM-XXXXXXX` (Google Tag Manager)
+
+**Google Consent Mode v2 Categories:**
+- `analytics_storage` - Google Analytics data storage
+- `ad_storage` - Advertising cookies (Meta, TikTok, Pinterest pixels)
+- `ad_user_data` - User data sent to Google for advertising purposes
+- `ad_personalization` - Personalized advertising (remarketing, retargeting)
+- `personalization_storage` - Content personalization preferences
+
+**consentCategories Behavior:**
+- **'all'** (default): Grants all 5 categories when `setConsent('google', true)` is called
+- **Object**: Granular per-category control:
+  - `true`: Grant this category when consent is given
+  - `false`: Deny this category even when consent is given
+  - `undefined`/omitted: Don't manage this category (respects external CMP configuration)
+- When `setConsent('google', false)` is called, all configured categories are denied regardless of their boolean value
+- TraceLog only calls `gtag('consent', 'update')`, never `gtag('consent', 'default')`
+- Automatically detects existing Consent Mode from external CMPs and respects their configuration
 
 **How it works:**
 - **GA4 / Google Ads / UA**: Loads gtag.js and configures with user_id

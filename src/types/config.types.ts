@@ -2,6 +2,7 @@ import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
 import { EventTypeName, WebVitalType } from './event.types';
 import { DisabledEventType } from '../constants';
+import { GoogleConsentCategories } from './google.types';
 
 /**
  * Web Vitals filtering mode
@@ -10,6 +11,30 @@ import { DisabledEventType } from '../constants';
  * - 'poor': Track only poor metrics (minimal data)
  */
 export type WebVitalsMode = 'all' | 'needs-improvement' | 'poor';
+
+/**
+ * Google Analytics / Google Tag Manager integration configuration.
+ */
+export interface GoogleIntegrationConfig {
+  /** GA4 measurement ID. @example 'G-XXXXXXXXXX' */
+  measurementId?: string;
+  /** GTM container ID. @example 'GTM-XXXXXXX' */
+  containerId?: string;
+  /**
+   * Event types to forward to GA4/GTM.
+   * @example ['page_view', 'custom', 'web_vitals']
+   * Supported values: 'page_view', 'click', 'scroll', 'session_start', 'session_end', 'custom', 'web_vitals', 'error', 'viewport_visible', or 'all'
+   */
+  forwardEvents?: EventTypeName[] | 'all';
+  /**
+   * Google Consent Mode v2 categories to synchronize.
+   * Enables synchronization between TraceLog consent and Google Consent Mode.
+   *
+   * @default 'all' - Grant all 5 categories when consent is given
+   * @see https://developers.google.com/tag-platform/security/guides/consent
+   */
+  consentCategories?: GoogleConsentCategories;
+}
 
 export interface Config {
   /** Session inactivity timeout in milliseconds. @default 900000 */
@@ -86,18 +111,7 @@ export interface Config {
      * GA4 / GTM integration.
      * At least one of measurementId or containerId must be provided.
      */
-    google?: {
-      /** GA4 measurement ID. @example 'G-XXXXXXXXXX' */
-      measurementId?: string;
-      /** GTM container ID. @example 'GTM-XXXXXXX' */
-      containerId?: string;
-      /**
-       * Event types to forward to GA4/GTM.
-       * @example ['page_view', 'custom', 'web_vitals']
-       * Supported values: 'page_view', 'click', 'scroll', 'session_start', 'session_end', 'custom', 'web_vitals', 'error', 'viewport_visible', or 'all'
-       */
-      forwardEvents?: EventTypeName[] | 'all';
-    } & ({ measurementId: string } | { containerId: string });
+    google?: GoogleIntegrationConfig;
   };
 }
 

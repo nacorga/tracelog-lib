@@ -1,4 +1,4 @@
-import { MetadataType } from '../types';
+import { GoogleConsentState, GoogleConsentType, MetadataType } from '../types';
 import { log } from '../utils';
 import { StateManager } from '../managers/state.manager';
 
@@ -109,6 +109,16 @@ export class GoogleAnalyticsIntegration extends StateManager {
     }
 
     try {
+      if (this.hasExistingConsentMode()) {
+        log('info', 'Google Consent Mode detected, respecting existing configuration', {
+          showToClient: true,
+        });
+
+        this.isInitialized = true;
+
+        return;
+      }
+
       if (this.hasExistingGtagInstance()) {
         log('info', 'Google Analytics/GTM already loaded by external service, reusing existing script', {
           showToClient: true,
@@ -187,6 +197,85 @@ export class GoogleAnalyticsIntegration extends StateManager {
   }
 
   /**
+   * Synchronizes TraceLog consent state to Google Consent Mode.
+   * Called when `tracelog.setConsent('google', granted)` is invoked.
+   *
+   * **Behavior**:
+   * - 'all': Grants/denies all 5 Google Consent Mode categories
+   * - Object: Granular control per category
+   *   - true: Grant this category when consent=true
+   *   - false: Deny this category even when consent=true
+   *   - undefined: Skip this category (respects external CMP)
+   * - Calls `gtag('consent', 'update')` to sync state with Google
+   *
+   * @param integration - Integration name (must be 'google')
+   * @param granted - true to grant consent, false to revoke
+   *
+   * @example
+   * ```typescript
+   * // Config: consentCategories: 'all'
+   * googleAnalytics.syncConsentToGoogle('google', true);
+   * // → Updates all 5 categories to 'granted'
+   *
+   * // Config: consentCategories: { analytics_storage: true, ad_storage: false }
+   * googleAnalytics.syncConsentToGoogle('google', true);
+   * // → analytics_storage: 'granted', ad_storage: 'denied'
+   *
+   * // Config: consentCategories: { analytics_storage: true, ad_storage: false }
+   * googleAnalytics.syncConsentToGoogle('google', false);
+   * // → Both 'denied' (consent revoked overrides category config)
+   * ```
+   */
+  syncConsentToGoogle(integration: string, granted: boolean): void {
+    if (typeof window === 'undefined' || !window.gtag) {
+      return;
+    }
+
+    if (integration !== 'google') {
+      return;
+    }
+
+    const googleConfig = this.get('config').integrations?.google;
+    const consentCategories = googleConfig?.consentCategories || 'all';
+
+    const updates: Partial<Record<GoogleConsentType, GoogleConsentState>> = {};
+
+    if (consentCategories === 'all') {
+      const allCategories: GoogleConsentType[] = [
+        'analytics_storage',
+        'ad_storage',
+        'ad_user_data',
+        'ad_personalization',
+        'personalization_storage',
+      ];
+
+      allCategories.forEach((category) => {
+        updates[category] = granted ? 'granted' : 'denied';
+      });
+    } else {
+      Object.entries(consentCategories).forEach(([category, shouldGrant]) => {
+        const googleCategory = category as GoogleConsentType;
+
+        if (granted) {
+          updates[googleCategory] = shouldGrant ? 'granted' : 'denied';
+        } else {
+          updates[googleCategory] = 'denied';
+        }
+      });
+    }
+
+    try {
+      window.gtag('consent', 'update', updates);
+
+      log('debug', `Google Consent Mode updated: ${granted ? 'consent granted' : 'consent denied'}`, {
+        data: { granted, categories: Object.keys(updates), updates },
+      });
+    } catch (error) {
+      log('error', 'Failed to sync consent to Google Consent Mode', { error });
+    }
+  }
+
+  /**
    * Cleans up Google Analytics integration resources.
    *
    * **Cleanup Actions**:
@@ -215,6 +304,30 @@ export class GoogleAnalyticsIntegration extends StateManager {
     if (configScript) {
       configScript.remove();
     }
+  }
+
+  /**
+   * Checks if Google Consent Mode is already configured on the page.
+   * Detects existing Consent Mode configuration from external CMPs or manual setup.
+   *
+   * **Detection Strategy**:
+   * - Searches `window.dataLayer` for any `['consent', ...]` commands
+   * - Returns true if found (external CMP or manual Consent Mode setup detected)
+   * - Returns false otherwise (safe to configure Consent Mode)
+   *
+   * **Purpose**: Prevents overwriting existing Consent Mode configuration
+   * from CMPs (CookieYes, OneTrust, Cookiebot, etc.) or manual implementations.
+   *
+   * @returns true if Consent Mode detected, false otherwise
+   *
+   * @private
+   */
+  private hasExistingConsentMode(): boolean {
+    if (typeof window === 'undefined' || !Array.isArray(window.dataLayer)) {
+      return false;
+    }
+
+    return window.dataLayer.some((item) => Array.isArray(item) && item[0] === 'consent');
   }
 
   /**

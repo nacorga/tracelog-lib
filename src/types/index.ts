@@ -5,6 +5,7 @@ export * from './device.types';
 export * from './emitter.types';
 export * from './error.types';
 export * from './event.types';
+export * from './google.types';
 export * from './log.types';
 export * from './mode.types';
 export * from './queue.types';
