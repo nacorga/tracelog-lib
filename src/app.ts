@@ -141,6 +141,7 @@ export class App extends StateManager {
    */
   sendCustomEvent(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
     if (!this.managers.event) {
+      log('warn', 'Cannot send custom event: TraceLog not initialized', { data: { name } });
       return;
     }
 

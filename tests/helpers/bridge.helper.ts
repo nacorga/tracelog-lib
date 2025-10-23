@@ -108,10 +108,7 @@ export function getQueueState(bridge: TraceLogTestBridge) {
 /**
  * Get consent buffer state from TestBridge (for validation)
  */
-export function getConsentBufferState(
-  bridge: TraceLogTestBridge,
-  integration: 'google' | 'custom' | 'tracelog',
-) {
+export function getConsentBufferState(bridge: TraceLogTestBridge, integration: 'google' | 'custom' | 'tracelog') {
   return {
     length: bridge.getConsentBufferLength(),
     events: bridge.getConsentBufferEvents(integration),
@@ -135,13 +132,11 @@ export function getStateSnapshot(bridge: TraceLogTestBridge) {
  * Setup event listener with automatic cleanup
  * Returns unsubscribe function
  */
-export function onEvent(
-  bridge: TraceLogTestBridge,
-  event: string,
-  callback: (data: any) => void,
-): () => void {
+export function onEvent(bridge: TraceLogTestBridge, event: string, callback: (data: any) => void): () => void {
   bridge.on(event, callback);
-  return () => bridge.off(event, callback);
+  return () => {
+    bridge.off(event, callback);
+  };
 }
 
 /**
@@ -154,10 +149,7 @@ export function onEvent(
  * const events = getEvents();
  * cleanup();
  */
-export function collectEvents(
-  bridge: TraceLogTestBridge,
-  eventName: string,
-): [() => any[], () => void] {
+export function collectEvents(bridge: TraceLogTestBridge, eventName: string): [() => any[], () => void] {
   const collected: any[] = [];
 
   const callback = (data: any) => {
