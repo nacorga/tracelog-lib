@@ -70,6 +70,7 @@ User Interaction → Handler captures → EventManager.track() →
   ├── **Managers** (core business logic)
   │   ├── StateManager (global state - base class for all components)
   │   ├── StorageManager (localStorage/sessionStorage wrapper with fallback)
+  │   ├── ConsentManager (GDPR/CCPA consent tracking, per-integration buffering)
   │   ├── EventManager (event queue, deduplication, rate limiting, sending coordination)
   │   ├── SessionManager (session lifecycle, cross-tab sync via BroadcastChannel)
   │   └── UserManager (UUID generation and persistence)
@@ -105,28 +106,43 @@ Runtime event transformation hooks for custom data manipulation:
 - **`beforeSend`**: Per-event transformation (applied in `EventManager.buildEventPayload()` BEFORE deduplication, sampling, and queueing)
 - **`beforeBatch`**: Batch transformation (applied in `SenderManager` BEFORE network transmission)
 
-**Application Timeline**:
+**Application Timeline (Standalone/Custom-Only Mode)**:
 ```
 User Event → Handler → EventManager.buildEventPayload()
   ↓
-  beforeSend transformer applied here (standalone mode OR custom backend only)
+  beforeSend transformer applied HERE (standalone OR custom-only mode)
   ↓
 Deduplication check → Sampling check → Add to queue
   ↓
 Queue flush trigger → EventManager.buildEventsPayload()
   ↓
-  beforeBatch transformer applied here (standalone mode only)
-  ↓
-  [If backend configured] → SenderManager.send() → beforeBatch transformer applied
+  [If custom backend] → SenderManager.send() → beforeBatch transformer applied
+  [If standalone] → Emit to listeners (NO beforeBatch - no SenderManager)
   ↓
 Network transmission (fetch/sendBeacon) OR local emission only
 ```
 
+**Application Timeline (Multi-Integration Mode)**:
+```
+User Event → Handler → EventManager.buildEventPayload()
+  ↓
+  beforeSend transformer SKIPPED in EventManager (multi-integration detected)
+  ↓
+Deduplication check → Sampling check → Add to queue
+  ↓
+Queue flush trigger → SenderManager (parallel per-integration)
+  ↓
+  SaaS Integration: Skip beforeSend → Skip beforeBatch → Send original
+  Custom Integration: Apply beforeSend → Apply beforeBatch → Send transformed
+  ↓
+Network transmission (fetch/sendBeacon) in parallel
+```
+
 **Integration Behavior**:
-- ✅ **Standalone Mode (no backend)**: Both `beforeSend` and `beforeBatch` applied in EventManager, events emitted to local listeners with transformations
-- ✅ **Custom Backend (only)**: Both `beforeSend` and `beforeBatch` applied
+- ⚠️ **Standalone Mode (no backend)**: Only `beforeSend` applied in EventManager. `beforeBatch` NOT supported (no SenderManager created). Events emitted to local listeners with `beforeSend` transformations only.
+- ✅ **Custom Backend (only)**: Both `beforeSend` (EventManager) and `beforeBatch` (SenderManager) applied
 - ❌ **TraceLog SaaS (only)**: Both transformers silently ignored (schema protection)
-- ⚠️ **Multi-Integration (SaaS + Custom)**: SaaS receives original events, custom receives transformed events (per-integration in SenderManager)
+- ⚠️ **Multi-Integration (SaaS + Custom)**: Transformers skipped in EventManager, applied per-integration in SenderManager. SaaS receives original events, custom receives transformed events. `on('event')` listeners receive UNTRANSFORMED events.
 - ❌ **Google Analytics**: Neither transformer applied (forwards `tracelog.event()` calls as-is)
 
 **API Methods**:
@@ -154,6 +170,7 @@ app.getTransformer(hook)                // Get transformer (internal)
      - If `waitForConsent: true` and no consent → deferred initialization
      - Later initialized via `handleConsentGranted()` when consent granted
    - **Step 6**: Initialize EventManager (receives transformers from App, creates SenderManagers)
+   - **Step 6.5**: Register consent-changed event listener (auto-flushes buffered events when consent granted)
    - **Step 7**: Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
      - Handlers are conditionally created based on `disabledEvents` config
    - **Step 8**: Recover persisted events from localStorage (non-fatal errors logged)
@@ -217,7 +234,7 @@ tracelog.init()
 
 ```typescript
 // 1. Standalone (no backend) - DEFAULT
-// Events only emitted to local listeners, transformers applied
+// Events only emitted to local listeners, beforeSend transformer applied
 tracelog.on('event', (event) => console.log('Event:', event));
 tracelog.on('queue', (queue) => console.log('Queue:', queue));
 
@@ -226,13 +243,12 @@ tracelog.setTransformer('beforeSend', (event) => ({
   customField: 'Added by transformer'
 }));
 
-tracelog.setTransformer('beforeBatch', (queue) => ({
-  ...queue,
-  queueCustomField: 'Batch transformed'
-}));
+// Note: beforeBatch NOT supported in standalone mode (no SenderManager)
+// tracelog.setTransformer('beforeBatch', ...) // Would be silently ignored
 
 await tracelog.init();
-// Transformers applied, events visible in listeners with custom fields
+// beforeSend applied, events visible in listeners with custom field
+// beforeBatch NOT available (no backend configured)
 
 // 2. TraceLog SaaS
 await tracelog.init({

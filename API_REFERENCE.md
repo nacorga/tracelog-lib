@@ -93,6 +93,7 @@ Sends a custom event for business-specific tracking.
 **Throws:**
 - `Error` if called before `init()`
 - `Error` if called during `destroy()`
+- `Error` if event validation fails in QA mode
 
 **Examples:**
 
@@ -301,8 +302,11 @@ tracelog.setQaMode(false);
 ```
 
 **Notes:**
-- QA mode events are **not sent to backend** (custom events only logged locally)
-- Automatic events (clicks, scrolls, etc.) still sent normally
+- QA mode custom events (via `tracelog.event()`) are:
+  - **NOT sent to backend** (logged to console only)
+  - **Still emitted to `on('event')` listeners** (for local testing)
+  - Logged with strict validation (throws errors on invalid data)
+- Automatic events (clicks, scrolls, page views, etc.) continue to be sent to backend normally
 - URL parameter auto-removed after detection
 - State persists in sessionStorage across page reloads
 
@@ -317,7 +321,7 @@ Sets a transformer function to modify events at runtime before sending to integr
 - `fn`: Transformer function that receives event/batch data and returns transformed data or `null` to filter
 
 **Throws:**
-- `Error` if called before `init()`
+- `Error` if `fn` is not a function
 - `Error` if called during `destroy()`
 
 **Transformer Hooks:**
@@ -417,7 +421,6 @@ Removes a previously set transformer function.
 - `hook`: Transformer hook type to remove (`'beforeSend'` or `'beforeBatch'`)
 
 **Throws:**
-- `Error` if called before `init()`
 - `Error` if called during `destroy()`
 
 **Example:**
@@ -447,6 +450,10 @@ Grants or revokes consent for a specific integration or all integrations.
 - `granted`: `true` to grant consent, `false` to revoke
 
 **Returns:** Promise that resolves when consent is applied and persisted
+
+**Throws:**
+- `Error` if called while TraceLog is destroyed or being destroyed
+- `Error` if localStorage persistence fails (before init only)
 
 **Examples:**
 
@@ -1012,6 +1019,30 @@ await tracelog.init({
 - **Event forwarding (configurable)**: Use `forwardEvents` option to forward specific event types or `'all'` events
 - **Automatic events**: Clicks, scrolls, page views, etc. are NOT forwarded by default (handled locally)
 
+**Example - Custom event forwarding:**
+
+```typescript
+// Forward specific event types
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXXXXXX',
+      forwardEvents: ['PAGE_VIEW', 'CLICK']  // Forward page views and clicks
+    }
+  }
+});
+
+// Forward all events
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXXXXXX',
+      forwardEvents: 'all'  // Forward all event types to GA
+    }
+  }
+});
+```
+
 **Example with GTM:**
 
 ```typescript
@@ -1413,9 +1444,11 @@ Fires when events are batched and ready to send to backend.
 **EventsQueue Structure:**
 ```typescript
 interface EventsQueue {
-  session_id: string;      // Current session ID
-  user_id: string;         // Anonymous user ID (UUID)
-  events: EventData[];     // Array of events in batch
+  user_id: string;                                // Anonymous user ID (UUID)
+  session_id: string;                             // Current session ID
+  device: 'mobile' | 'tablet' | 'desktop';        // Device type
+  events: EventData[];                            // Array of events in batch
+  global_metadata?: Record<string, MetadataType>; // Global metadata (if configured)
 }
 ```
 
@@ -1425,7 +1458,9 @@ tracelog.on('queue', (batch) => {
   console.log('Batch ready:', {
     sessionId: batch.session_id,
     userId: batch.user_id,
-    eventCount: batch.events.length
+    device: batch.device,
+    eventCount: batch.events.length,
+    hasGlobalMetadata: !!batch.global_metadata
   });
 
   // Send to custom analytics
@@ -1563,19 +1598,28 @@ try {
 
 ### Network Errors
 
-TraceLog uses a **persistence-based recovery model**:
+TraceLog uses a **retry-first, then persistence-based recovery model**:
 
-| Response | Behavior |
-|----------|----------|
-| **2xx** | Events removed from queue, delivery confirmed |
-| **4xx** | Events discarded immediately (invalid data, won't succeed on retry) |
-| **5xx** | Events removed from queue + persisted to localStorage for next-page recovery |
-| **Network failure** | Events removed from queue + persisted to localStorage for next-page recovery |
+| Response | In-Session Retries | Persistence |
+|----------|-------------------|-------------|
+| **2xx** | N/A (success) | Events removed from queue, delivery confirmed |
+| **4xx (except 408/429)** | None (permanent error) | Events discarded immediately (invalid data) |
+| **408/429** | Up to 2 retries with backoff | Persist after exhausting retries |
+| **5xx** | Up to 2 retries with backoff | Persist after exhausting retries |
+| **Network failure** | Up to 2 retries with backoff | Persist after exhausting retries |
 
-**Recovery Flow:**
-1. Page loads → Check localStorage for failed events
+**In-Session Retry Strategy:**
+- **Maximum Retries**: 2 additional attempts per integration (3 total attempts)
+- **Backoff Formula**: `100ms * (2 ^ attempt) + random(0-100ms)`
+- **Delays**: Attempt 1→2: 200-300ms, Attempt 2→3: 400-500ms
+- **Transient Errors**: 5xx, 408 Request Timeout, 429 Too Many Requests, network failures
+- **Permanent Errors**: 4xx (except 408, 429) - no retries, immediate discard
+- **Jitter**: Random 0-100ms added to prevent thundering herd
+
+**Persistence-Based Recovery Flow:**
+1. Page loads → Check localStorage for failed events (per-integration)
 2. If found → Wait for session initialization
-3. Retry sending failed events (once per page)
+3. Retry sending failed events (once per page, NO in-session retries on recovery)
 4. Success → Clear from localStorage
 5. Fail → Re-persist for next page
 
@@ -1584,9 +1628,10 @@ TraceLog uses a **persistence-based recovery model**:
 - Prevents stale data accumulation
 
 **Notes:**
-- No in-session retries (prevents infinite loops during API outages)
-- Multi-tab protection (1-second recovery guard)
+- Multi-integration: Independent retry/persistence (separate localStorage keys)
+- Multi-tab protection (1-second recovery guard prevents concurrent recovery)
 - Automatic cleanup of expired events
+- Optimistic queue removal: Events removed if AT LEAST ONE integration succeeds
 
 ---
 

@@ -272,27 +272,54 @@ export class App extends StateManager {
     }
   }
 
-  /** @internal Used by api.ts */
+  /**
+   * Returns the ConsentManager instance for consent state management.
+   *
+   * @returns The ConsentManager instance, or undefined if not initialized
+   * @internal Used by api.ts for consent operations
+   */
   public getConsentManager(): ConsentManager | undefined {
     return this.managers.consent;
   }
 
-  /** @internal Used by api.ts */
+  /**
+   * Returns the current configuration object.
+   *
+   * @returns The Config object passed to init()
+   * @internal Used by api.ts for configuration access
+   */
   public getConfig(): Config {
     return this.get('config');
   }
 
-  /** @internal Used by api.ts */
+  /**
+   * Returns the configured backend API URLs for event collection.
+   *
+   * @returns Object containing optional saas and custom API URLs
+   * @internal Used by api.ts for backend URL access
+   */
   public getCollectApiUrls(): { saas?: string; custom?: string } {
     return this.get('collectApiUrls');
   }
 
-  /** @internal Used by api.ts */
+  /**
+   * Returns the EventManager instance for event tracking operations.
+   *
+   * @returns The EventManager instance, or undefined if not initialized
+   * @internal Used by api.ts for event operations
+   */
   public getEventManager(): EventManager | undefined {
     return this.managers.event;
   }
 
-  /** @internal Called from api.setConsent() when consent is granted */
+  /**
+   * Handles consent granted for a specific integration by initializing the integration (if needed)
+   * and flushing buffered events.
+   *
+   * @param integration - The integration name ('google', 'custom', or 'tracelog')
+   * @returns Promise that resolves when initialization and buffer flush complete
+   * @internal Called from api.setConsent() when consent is granted
+   */
   public async handleConsentGranted(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
     log('info', `Consent granted for ${integration}, initializing and flushing buffer`);
 

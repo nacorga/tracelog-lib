@@ -219,6 +219,31 @@ tracelog.on('event', (event) => {
 
 ### ✅ DO: Respect user consent
 
+**Modern Approach (Recommended):**
+```typescript
+// Initialize with waitForConsent
+await tracelog.init({
+  waitForConsent: true,  // Buffers events until consent granted
+  integrations: {
+    tracelog: { projectId: 'project-id' },
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com/collect' }
+  }
+});
+
+// Grant consent (flushes buffered events)
+tracelog.setConsent({ tracelog: true, google: true, custom: true });
+
+// Revoke consent (stops sending to specific integrations)
+// Events are still captured and emitted to local listeners
+tracelog.setConsent({ tracelog: false, google: false, custom: false });
+// Buffered events for revoked integrations are discarded
+
+// Complete destruction (stops all tracking)
+tracelog.destroy();
+```
+
+**Legacy Approach (Wait for consent before init):**
 ```typescript
 // Initialize only after consent
 async function initializeAnalytics() {
@@ -236,7 +261,7 @@ async function initializeAnalytics() {
 // Handle consent revocation
 function revokeConsent() {
   tracelog.destroy();
-  localStorage.clear(); // Clear persisted data
+  localStorage.clear(); // Clear all persisted data
 }
 ```
 

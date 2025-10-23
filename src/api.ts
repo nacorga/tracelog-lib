@@ -300,18 +300,20 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
  * Sets a transformer function to modify events at runtime before sending.
  *
  * **Integration-specific behavior:**
- * - **Standalone Mode (no integration)**: Both transformers applied in EventManager
+ * - **Standalone Mode (no integration)**: Only `beforeSend` transformer applied in EventManager
  *   - `beforeSend` applied per-event in `buildEventPayload()` before queueing
- *   - `beforeBatch` applied before emitting to local listeners
- *   - Events visible in `on('event')` and `on('queue')` with transformations
+ *   - `beforeBatch` NOT supported (no SenderManager created in standalone mode)
+ *   - Events visible in `on('event')` and `on('queue')` with `beforeSend` transformations
  * - **TraceLog SaaS (only)**: Transformers silently ignored (schema protection)
  * - **Custom Backend (only)**: Both transformers applied
- *   - `beforeSend` applied per-event in `buildEventPayload()` before queueing
+ *   - `beforeSend` applied per-event in EventManager `buildEventPayload()` before queueing
  *   - `beforeBatch` applied in SenderManager before network transmission
- * - **Multi-Integration (SaaS + Custom)**: Transformers only apply to custom backend
+ * - **Multi-Integration (SaaS + Custom)**: Transformers skipped in EventManager, applied per-integration in SenderManager
+ *   - `beforeSend` NOT applied in EventManager (applied in SenderManager per-integration)
+ *   - `beforeBatch` applied in SenderManager per-integration
  *   - SaaS receives original events (schema protection)
  *   - Custom backend receives transformed events
- *   - Independent processing per integration
+ *   - Events in `on('event')` listeners are UNTRANSFORMED (original)
  * - **Google Analytics**: Transformers NOT applied (forwards `tracelog.event()` as-is)
  *
  * **Available hooks:**

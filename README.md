@@ -226,6 +226,7 @@ Transform events dynamically at runtime before they're sent to integrations. Use
 
 | Integration | `beforeSend` | `beforeBatch` | Notes |
 |-------------|--------------|---------------|-------|
+| **Standalone (no backend)** | ✅ Applied | ⚠️ Not supported | Only local event emission; `beforeBatch` requires backend |
 | **TraceLog SaaS (only)** | ❌ Silently ignored | ❌ Silently ignored | Schema protection |
 | **Custom Backend (only)** | ✅ Applied | ✅ Applied | Full control |
 | **Multi-Integration** | ⚠️ Custom only | ⚠️ Custom only | SaaS gets original events, custom gets transformed |
@@ -243,9 +244,11 @@ Transform events dynamically at runtime before they're sent to integrations. Use
 
 Transform individual events **before** deduplication, sampling, and queueing.
 
-**Timing:**
-- **Custom-only mode**: Runs in `EventManager.buildEventPayload()` (before dedup/sampling)
-- **Multi-integration mode**: Runs in `SenderManager` per-integration (SaaS skipped)
+**Timing (depends on integration mode):**
+- **Standalone mode (no backend)**: Runs in `EventManager.buildEventPayload()` before dedup/sampling/queueing
+- **Custom-only mode**: Runs in `EventManager.buildEventPayload()` before dedup/sampling/queueing
+- **Multi-integration mode (SaaS + Custom)**: Runs in `SenderManager` per-integration (SaaS skipped, Custom applied)
+- **TraceLog SaaS-only mode**: Silently ignored (not applied)
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
@@ -673,6 +676,9 @@ await tracelog.setConsent('google', true);
 TraceLog supports multiple integration modes. Choose what fits your needs:
 
 ### 1. Standalone (No Backend)
+
+**Default mode when no integrations configured.** Events captured and emitted locally without network requests.
+
 ```typescript
 await tracelog.init();
 
@@ -680,7 +686,19 @@ await tracelog.init();
 tracelog.on('event', (event) => {
   myAnalytics.track(event);
 });
+
+tracelog.on('queue', (batch) => {
+  console.log('Batched events:', batch.events.length);
+});
 ```
+
+**Behavior:**
+- ✅ Events captured and queued normally
+- ✅ `beforeSend` transformer applied (per-event transformation)
+- ⚠️ `beforeBatch` transformer **NOT supported** (no SenderManager created)
+- ✅ Events emitted to local listeners every 10 seconds or 50 events
+- ❌ **NO network requests made** (no backends configured)
+- ✅ Perfect for custom analytics pipelines, testing, or privacy-focused implementations
 
 ### 2. TraceLog SaaS
 ```typescript
