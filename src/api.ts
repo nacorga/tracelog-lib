@@ -931,11 +931,23 @@ export const __getInitState = (): { isInitializing: boolean; isDestroying: boole
 };
 
 if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && typeof document !== 'undefined') {
-  void import('./test-bridge').then((module) => {
-    module.injectTestBridge();
-  });
+  void import('./test-bridge')
+    .then((module) => {
+      if (typeof module.injectTestBridge === 'function') {
+        module.injectTestBridge();
+      }
+    })
+    .catch(() => {
+      // Silent fail - TestBridge is optional in test environments
+    });
 
-  void import('./utils/browser/qa-mode.utils').then((module) => {
-    module.detectQaMode();
-  });
+  void import('./utils/browser/qa-mode.utils')
+    .then((module) => {
+      if (typeof module.detectQaMode === 'function') {
+        module.detectQaMode();
+      }
+    })
+    .catch(() => {
+      // Silent fail - QA mode detection is optional
+    });
 }
