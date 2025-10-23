@@ -8,20 +8,19 @@ Use the **test-implementer** agent to implement tests for the TraceLog library.
 ## What This Command Does
 
 Launches the test-implementer agent to:
-1. Read test file declarations (skeletons)
-2. Implement test logic following TESTING_FUNDAMENTALS.md
-3. Use test helpers extensively
-4. Run tests incrementally (one at a time)
-5. Verify all tests pass before completion
+1. Check if test file exists with declarations
+2. **If no skeleton exists**: Analyze source code and generate test skeleton
+3. Read test file declarations (skeletons)
+4. Implement test logic following TESTING_FUNDAMENTALS.md
+5. Use test helpers extensively
+6. Run tests incrementally (one at a time)
+7. Verify all tests pass before completion
 
 ## Usage
 
 ```bash
 # Implement specific test file
 /implement-tests tests/unit/core/app.test.ts
-
-# Implement multiple files (priority order)
-/implement-tests P0
 
 # Implement specific test type
 /implement-tests unit
@@ -33,7 +32,9 @@ Launches the test-implementer agent to:
 
 The agent will:
 
-1. **Analyze test declarations** in the specified file(s)
+1. **Check test file status**:
+   - If skeleton exists → Read test declarations
+   - If no skeleton → Analyze source code and generate skeleton
 2. **Create implementation plan** using TodoWrite
 3. **Implement tests one by one**:
    - Read source code to understand behavior
@@ -44,23 +45,22 @@ The agent will:
 4. **Run full test suite** for the file
 5. **Provide summary** with statistics and next steps
 
-## Test Files Available
+### Skeleton Generation (When File Missing/Empty)
 
-### P0 - Critical (Implement First)
-- `tests/unit/core/app.test.ts` (~14 tests)
-- `tests/unit/core/state-manager.test.ts` (~13 tests)
-- `tests/unit/core/api.test.ts` (~20 tests)
-- `tests/unit/managers/event-manager.test.ts` (~40 tests)
-- `tests/unit/managers/session-manager.test.ts` (~25 tests)
-- `tests/unit/managers/sender-manager.test.ts` (~25 tests)
-- `tests/integration/flows/initialization.test.ts` (~10 tests)
-- `tests/integration/flows/event-pipeline.test.ts` (~15 tests)
-- `tests/e2e/critical-paths/initialization.spec.ts` (~8 tests)
+If the test file doesn't exist or has no test declarations:
 
-### P1 - Essential (Implement Second)
-- All remaining unit tests (handlers, managers)
-- All remaining integration tests (flows)
-- All remaining E2E tests (critical paths)
+1. **Analyze Source Code**: Read the file being tested to understand public API
+2. **Generate Structure**: Create test file with proper imports, describe blocks, and test declarations
+3. **Confirm**: Show skeleton to user for approval before implementation
+4. **Implement**: Proceed with normal test implementation workflow
+
+## Test Files Organization
+
+Tests are organized by type:
+
+- **Unit tests**: `tests/unit/` - Individual component testing
+- **Integration tests**: `tests/integration/` - Component interaction testing
+- **E2E tests**: `tests/e2e/` - Full browser testing with Playwright
 
 ## Examples
 
@@ -71,37 +71,25 @@ The agent will:
 
 **Agent will**:
 - Read app.test.ts declarations
-- Implement ~14 tests
+- Implement all tests in the file
 - Run each test after implementation
 - Verify all pass
 - Provide summary
 
-### Example 2: Implement P0 Tests
-```
-/implement-tests P0
-```
-
-**Agent will**:
-- Implement all 9 P0 test files
-- ~120 tests total
-- Report progress throughout
-- Provide final summary
-
-### Example 3: Implement Unit Tests
+### Example 2: Implement Unit Tests
 ```
 /implement-tests unit
 ```
 
 **Agent will**:
 - Implement all unit test files
-- ~200+ tests total
-- Group by priority (P0 first, then P1)
+- Report progress throughout
+- Provide final summary
 
 ## Requirements
 
 Before running:
-- ✅ Test skeletons exist with declarations
-- ✅ Source code is implemented
+- ✅ Source code is implemented (test skeletons optional - agent can generate)
 - ✅ TESTING_FUNDAMENTALS.md is up to date
 - ✅ Test helpers are complete
 
@@ -138,12 +126,11 @@ Once tests are implemented:
 4. **Commit**:
    ```bash
    git add tests/
-   git commit -m "test: implement P0 unit tests for core components"
+   git commit -m "test: implement unit tests for core components"
    ```
 
 ## Tips
 
-- Start with P0 tests (most critical)
 - Implement one file at a time
 - Run tests frequently to catch issues early
 - Review TESTING_FUNDAMENTALS.md if unsure about patterns

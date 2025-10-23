@@ -278,249 +278,54 @@ The `TestBridge` class (`src/test-bridge.ts`) is the **adapter layer** between t
 
 ### Helper Modules (Always Use These!)
 
-#### 🎯 PRIMARY HELPER: bridge.helper.ts (ALWAYS USE FOR INTEGRATION/E2E)
+For complete helper reference with code examples and usage patterns, see `tests/TESTING_FUNDAMENTALS.md` section "Test Helpers".
 
-**CRITICAL**: For integration tests and E2E tests, you MUST use `bridge.helper.ts` functions. DO NOT write custom bridge initialization code.
+**Quick summary** - All helpers located in `tests/helpers/`:
 
+- **`bridge.helper.ts`** - 🎯 PRIMARY for integration/E2E tests (MUST USE)
+  - `initTestBridge()`, `destroyTestBridge()`, `getManagers()`, `getHandlers()`, `getQueueState()`
+- **`setup.helper.ts`** - Test setup/cleanup/timers
+  - `setupTestEnvironment()`, `cleanupTestEnvironment()`, `advanceTimers()`
+- **`mocks.helper.ts`** - Mock fetch, storage, APIs
+  - `createMockFetch()`, `createMockStorage()`, `setupAllMocks()`
+- **`fixtures.helper.ts`** - Test data creation
+  - `createMockConfig()`, `createMockEvent()`, `createMockQueue()`
+- **`assertions.helper.ts`** - Custom assertions
+  - `expectEventStructure()`, `expectQueueStructure()`, `expectSessionId()`
+- **`wait.helper.ts`** - Async wait utilities
+  - `waitForCondition()`, `waitForEvent()`, `waitForQueueFlush()`
+- **`state.helper.ts`** - State management
+  - `getGlobalState()`, `isStateInitialized()`, `getSessionId()`
+
+**Critical pattern for integration/E2E**:
 ```typescript
-// ✅ CORRECT: Use bridge.helper.ts functions
-import {
-  initTestBridge,             // ✅ Initialize bridge + wait for ready
-  destroyTestBridge,          // ✅ Cleanup bridge
-  getManagers,                // ✅ Get event, storage, consent managers
-  getHandlers,                // ✅ Get all handlers
-  getQueueState,              // ✅ Get queue length + events
-  getStateSnapshot,           // ✅ Get full state for debugging
-  collectEvents,              // ✅ Collect events during test
-  waitForEvents,              // ✅ Wait for N events
-  triggerAndWaitForEvent,     // ✅ Trigger event + wait for queueing
-  onEvent,                    // ✅ Setup listener with auto-cleanup
-} from '../helpers/bridge.helper';
+import { initTestBridge, destroyTestBridge, getManagers } from '../helpers/bridge.helper';
 
-// ✅ CORRECT: Integration test pattern
-describe('Event Pipeline', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    destroyTestBridge();
-    cleanupTestEnvironment();
-  });
-
-  it('should track custom events', async () => {
-    // ✅ Use initTestBridge helper
-    const bridge = await initTestBridge({ sessionTimeout: 5000 });
-
-    // ✅ Use helper to get managers
-    const { event } = getManagers(bridge);
-
-    // ✅ Trigger event via bridge
-    bridge.event('purchase', { amount: 99.99 });
-
-    // ✅ Use helper to get queue state
-    const { events } = getQueueState(bridge);
-
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe('CUSTOM');
-  });
-});
-
-// ❌ WRONG: Manual bridge access
-it('should track events', async () => {
-  const bridge = window.__traceLogBridge; // ❌ Don't do this
-  await bridge.init(); // ❌ Don't do this
-  // Use initTestBridge() instead!
-});
-
-// ❌ WRONG: Manual manager access
-it('should validate queue', () => {
-  const bridge = getTestBridge();
-  const eventManager = bridge.getEventManager(); // ❌ Don't do this
-  const queueLength = eventManager.getQueueLength(); // ❌ Don't do this
-  // Use getManagers(bridge) and getQueueState(bridge) instead!
-});
-
-// Setup & Cleanup
-import {
-  setupTestEnvironment,      // Complete test setup
-  cleanupTestEnvironment,     // Complete cleanup
-  advanceTimers,              // Safe timer advancement
-  setupFakeTimers,            // Enable fake timers
-  restoreRealTimers,          // Restore real timers
-  setupMinimalDOM,            // Basic DOM structure
-  setupBrowserAPIs            // Mock browser APIs
-} from '../helpers/setup.helper';
-
-// Mocks
-import {
-  createMockFetch,            // Mock fetch with options
-  createMockFetchNetworkError,// Mock network failure
-  createMockStorage,          // Mock localStorage/sessionStorage
-  createMockBroadcastChannel, // Mock BroadcastChannel
-  setupMockSendBeacon,        // Mock navigator.sendBeacon
-  setupAllMocks               // Setup all common mocks
-} from '../helpers/mocks.helper';
-
-// Fixtures
-import {
-  createMockConfig,           // Create test config
-  createMockEvent,            // Create test event
-  createMockQueue,            // Create test queue
-  createMockEvents,           // Create multiple events
-  createMockSession,          // Create session data
-  createMockElement,          // Create HTML element
-  createMockForm              // Create form with inputs
-} from '../helpers/fixtures.helper';
-
-// Wait Utilities
-import {
-  waitForCondition,           // Wait for condition
-  waitForEvent,               // Wait for specific event
-  waitForQueueFlush,          // Wait for queue flush (10s + buffer)
-  wait,                       // Wait N milliseconds
-  waitForNextTick,            // Wait next tick
-  waitForElement              // Wait for DOM element
-} from '../helpers/wait.helper';
-
-// Assertions
-import {
-  expectEventStructure,       // Validate event structure
-  expectQueueStructure,        // Validate queue structure
-  expectSessionId,            // Validate sessionId format
-  expectClickEvent,           // Validate click event
-  expectScrollEvent,          // Validate scroll event
-  expectPageViewEvent,        // Validate page view event
-  expectCustomEvent,          // Validate custom event
-  expectSanitizedUrl,         // Validate URL sanitization
-  expectSanitizedText,        // Validate text sanitization
-  expectFetchCall,            // Validate fetch was called
-  expectQueueFlushed          // Validate queue cleared
-} from '../helpers/assertions.helper';
-
-// State Management
-import {
-  getGlobalState,             // Get full state snapshot
-  getGlobalStateValue,        // Get specific state value
-  isStateInitialized,         // Check if initialized
-  getSessionId,               // Get sessionId from state
-  getUserId,                  // Get userId from state
-  waitForStateValue           // Wait for state value
-} from '../helpers/state.helper';
+const bridge = await initTestBridge(); // ✅ Always use this
+const { event, storage } = getManagers(bridge); // ✅ Get managers via helper
+destroyTestBridge(); // ✅ Always cleanup
 ```
 
 ### Test Patterns
 
-#### Unit Test Pattern
-```typescript
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
-import { createMockConfig } from '../../helpers/fixtures.helper';
-
-describe('ComponentName - Feature', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should do X when Y', () => {
-    // Arrange
-    const config = createMockConfig({ /* overrides */ });
-
-    // Act
-    const result = doSomething(config);
-
-    // Assert
-    expect(result).toBe(expected);
-  });
-});
-```
-
-#### Integration Test Pattern
-```typescript
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
-import { createMockFetch } from '../../helpers/mocks.helper';
-import { waitForCondition } from '../../helpers/wait.helper';
-
-describe('Integration: Feature Flow', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should complete flow from A to B', async () => {
-    // Mock external dependencies
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    // Execute flow
-    await executeFlow();
-
-    // Wait for completion
-    await waitForCondition(() => isComplete());
-
-    // Verify
-    expect(mockFetch).toHaveBeenCalled();
-  });
-});
-```
-
-#### E2E Test Pattern
-```typescript
-import { test, expect } from '@playwright/test';
-
-test.describe('Feature Name', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/'); // Uses docs/index.html
-  });
-
-  test('should do X when user does Y', async ({ page }) => {
-    const result = await page.evaluate(async () => {
-      // Wait for bridge (CSP-safe)
-      let retries = 0;
-      while (!window.__traceLogBridge && retries < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        retries++;
-      }
-
-      // Initialize
-      await window.__traceLogBridge!.init();
-
-      // Setup listeners
-      const events: any[] = [];
-      window.__traceLogBridge!.on('event', (event) => {
-        events.push(event);
-      });
-
-      // Perform action
-      document.querySelector('[data-testid="button"]')?.click();
-
-      // Wait
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      return events;
-    });
-
-    expect(result.length).toBeGreaterThan(0);
-  });
-});
-```
+For complete test patterns with detailed examples, see `tests/TESTING_FUNDAMENTALS.md`:
+- Unit Test Pattern (with mocking)
+- Integration Test Pattern (with TestBridge)
+- E2E Test Pattern (with Playwright)
 
 ## Implementation Workflow
 
 ### When Asked to Implement Tests
 
-1. **Read Test Declaration**
-   - Read the test file skeleton
-   - Understand test declarations (the `it('should...')` statements)
-   - Identify test type (unit/integration/e2e)
+1. **Check Test File Status**
+   - Read test file path provided by user
+   - **If file exists and has test declarations** (`it('should...')` statements):
+     - Parse existing declarations
+     - Go to step 2 (Plan Implementation)
+   - **If file doesn't exist OR is empty**:
+     - Generate test skeleton first (see Skeleton Generation below)
+     - Confirm skeleton with user before implementation
+     - Then proceed to step 2
 
 2. **Plan Implementation**
    - Use TodoWrite to list tests to implement
@@ -545,100 +350,125 @@ test.describe('Feature Name', () => {
    - `npm run test:e2e` (all E2E tests)
    - Fix any failures
 
+### Skeleton Generation (When Test File Missing/Empty)
+
+When you need to generate a test skeleton from scratch:
+
+**Step 1: Analyze Source Code**
+- Read the source file being tested (e.g., if test is `app.test.ts`, read `src/app.ts`)
+- Identify:
+  - Public methods and functions
+  - Classes and their constructors
+  - Interfaces and types
+  - Critical behaviors and edge cases
+  - Error handling paths
+
+**Step 2: Generate Test Structure**
+Create test file with:
+- **Proper imports**:
+  - Vitest imports: `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi`
+  - Component being tested
+  - Required helpers from `tests/helpers/`
+- **describe() block** (one per class/module)
+- **beforeEach/afterEach hooks**:
+  - `setupTestEnvironment()` in beforeEach
+  - `cleanupTestEnvironment()` in afterEach
+  - Additional setup for integration/E2E (e.g., `initTestBridge()`)
+- **Test declarations**:
+  - `it('should...')` for each public method
+  - Cover happy path, edge cases, and error scenarios
+  - Group related tests in nested `describe()` blocks
+
+**Step 3: Confirm Before Implementation**
+- Show skeleton to user
+- User can request adjustments
+- Proceed to implementation after approval
+
+**Example: Skeleton for EventManager**
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { EventManager } from '@/managers/event.manager';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
+import { createMockEvent } from '../../helpers/fixtures.helper';
+
+describe('EventManager', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  describe('track', () => {
+    it('should add event to queue');
+    it('should validate event structure');
+    it('should apply deduplication');
+    it('should handle invalid events gracefully');
+  });
+
+  describe('getQueueLength', () => {
+    it('should return current queue size');
+    it('should return 0 for empty queue');
+  });
+
+  describe('clearQueue', () => {
+    it('should remove all events from queue');
+  });
+});
+```
+
+**Example: Agent Workflow for Missing Skeleton**
+```
+User: /implement-tests tests/unit/managers/new-manager.test.ts
+
+Agent:
+📝 Analyzing request...
+
+File check: tests/unit/managers/new-manager.test.ts does not exist.
+
+I'll generate a test skeleton by analyzing the source code first.
+
+Reading source: src/managers/new-manager.ts...
+
+Found the following public API:
+  - constructor(config: Config)
+  - start(): void
+  - stop(): void
+  - process(data: Data): Result
+  - reset(): void
+
+Generating test skeleton...
+
+[Shows skeleton with proper structure]
+
+Confirm: Does this skeleton look correct? Should I add/remove any test cases?
+
+[User confirms]
+
+Proceeding with implementation...
+[Continues with normal workflow from step 2]
+```
+
 ## Critical Rules
 
-### ✅ DO
+For complete DO's and DON'Ts with examples, see `tests/TESTING_FUNDAMENTALS.md`.
 
-1. **Always use setupTestEnvironment() in beforeEach**
-   ```typescript
-   beforeEach(() => {
-     setupTestEnvironment();
-   });
-   ```
+**Key reminders**:
 
-2. **Always use helpers instead of custom code**
-   ```typescript
-   // ✅ GOOD
-   const config = createMockConfig({ sessionTimeout: 5000 });
+✅ **Always DO**:
+- Use `setupTestEnvironment()` in `beforeEach`
+- Use helpers instead of custom code
+- Use `advanceTimers()` for timer operations
+- Clean state with `cleanupTestEnvironment()` in `afterEach`
+- Use descriptive test names starting with "should"
 
-   // ❌ BAD
-   const config = { sessionTimeout: 5000, /* ... manually define all fields */ };
-   ```
-
-3. **Use advanceTimers for async operations**
-   ```typescript
-   vi.useFakeTimers();
-   await advanceTimers(10000);
-   vi.useRealTimers();
-   ```
-
-4. **Clean state between tests**
-   ```typescript
-   afterEach(() => {
-     cleanupTestEnvironment();
-   });
-   ```
-
-5. **Use descriptive test names**
-   ```typescript
-   it('should emit SESSION_START event when starting new session');
-   ```
-
-### ❌ DON'T
-
-1. **NEVER use vi.runAllTimersAsync()**
-   ```typescript
-   // ❌ BAD - Causes infinite loops
-   await vi.runAllTimersAsync();
-
-   // ✅ GOOD
-   await advanceTimers(10000);
-   ```
-
-2. **DON'T test implementation details**
-   ```typescript
-   // ❌ BAD
-   expect(component._internalMethod).toHaveBeenCalled();
-
-   // ✅ GOOD
-   expect(component.emit).toHaveBeenCalledWith('event', data);
-   ```
-
-3. **DON'T share state between tests**
-   ```typescript
-   // ❌ BAD
-   let sharedState: any;
-
-   it('test 1', () => {
-     sharedState = { foo: 'bar' };
-   });
-
-   it('test 2', () => {
-     expect(sharedState.foo).toBe('bar'); // Depends on test 1!
-   });
-   ```
-
-4. **DON'T use hardcoded timeouts**
-   ```typescript
-   // ❌ BAD
-   await new Promise(resolve => setTimeout(resolve, 5000));
-
-   // ✅ GOOD
-   await waitForCondition(() => eventManager.getQueueLength() > 0);
-   ```
-
-5. **DON'T use page.waitForFunction() in E2E**
-   ```typescript
-   // ❌ BAD - CSP-blocked
-   await page.waitForFunction(() => window.__traceLogBridge);
-
-   // ✅ GOOD - Internal waiting
-   await page.evaluate(async () => {
-     while (!window.__traceLogBridge) {
-       await new Promise(r => setTimeout(r, 100));
-     }
-   });
-   ```
+❌ **Never DO**:
+- NEVER use `vi.runAllTimersAsync()` (causes infinite loops)
+- DON'T test implementation details (test behavior)
+- DON'T share state between tests
+- DON'T use hardcoded timeouts (use `waitForCondition()`)
+- DON'T use `page.waitForFunction()` in E2E (CSP-blocked)
 
 ## Commands You Use
 
@@ -663,27 +493,6 @@ npm run test:coverage
 npm run type-check
 npm run check
 ```
-
-## Test Priority Order
-
-### P0 - Critical (Implement First)
-1. `unit/core/app.test.ts`
-2. `unit/core/state-manager.test.ts`
-3. `unit/core/api.test.ts`
-4. `unit/managers/event-manager.test.ts`
-5. `unit/managers/session-manager.test.ts`
-6. `unit/managers/sender-manager.test.ts`
-7. `integration/flows/initialization.test.ts`
-8. `integration/flows/event-pipeline.test.ts`
-9. `e2e/critical-paths/initialization.spec.ts`
-
-### P1 - Essential (Implement Second)
-10. `unit/managers/storage-manager.test.ts`
-11. `unit/managers/consent-manager.test.ts`
-12. `unit/managers/user-manager.test.ts`
-13. All handlers tests
-14. Remaining integration tests
-15. Remaining E2E tests
 
 ## ✅ Acceptance Criteria
 

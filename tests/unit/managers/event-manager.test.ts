@@ -1075,7 +1075,7 @@ describe('EventManager - Consent Integration', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    consentManager = new ConsentManager(storageManager, config, emitter);
+    consentManager = new ConsentManager(storageManager, true, emitter);
     const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
 
     eventManager['set']('config', config);
@@ -1099,7 +1099,7 @@ describe('EventManager - Consent Integration', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    consentManager = new ConsentManager(storageManager, config, emitter);
+    consentManager = new ConsentManager(storageManager, true, emitter);
     const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
 
     eventManager['set']('config', config);
@@ -1132,7 +1132,7 @@ describe('EventManager - Consent Integration', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    consentManager = new ConsentManager(storageManager, config, emitter);
+    consentManager = new ConsentManager(storageManager, true, emitter);
     const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
 
     eventManager['set']('config', config);
@@ -1159,7 +1159,7 @@ describe('EventManager - Consent Integration', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    consentManager = new ConsentManager(storageManager, config, emitter);
+    consentManager = new ConsentManager(storageManager, true, emitter);
     consentManager.setConsent('custom', true);
 
     const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});

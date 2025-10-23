@@ -30,7 +30,8 @@ src/
 │   ├── session.manager.ts      # Session lifecycle management
 │   ├── storage.manager.ts      # localStorage abstraction
 │   ├── state.manager.ts        # Global shared state management
-│   ├── sender.manager.ts       # Event transmission to backend
+│   ├── sender.manager.ts       # Event transmission to backend (per-integration)
+│   ├── consent.manager.ts      # GDPR/CCPA consent tracking
 │   └── user.manager.ts         # User identification and tracking
 ├── listeners/                  # Low-level event listener management
 │   ├── activity-listener-manager.ts    # User activity detection
@@ -49,7 +50,40 @@ src/
 └── types/                      # TypeScript type definitions
 ```
 
-**Main flow**: `init()` → Configure → Activate handlers → EventManager queues → SenderManager sends events
+**Main flow**: `init()` → Configure → Activate handlers → EventManager queues → [Optional: SenderManager sends to backend] → Emit to local listeners
+
+## 📚 Core API
+
+| Method | Description |
+|--------|-------------|
+| `init(config?)` | Initialize tracking (see Configuration) |
+| `event(name, metadata?)` | Track custom events |
+| `on(event, callback)` | Subscribe to events (`'event'`, `'queue'`, `'consent-changed'`) |
+| `off(event, callback)` | Unsubscribe from events |
+| `setTransformer(hook, fn)` | Transform events before sending |
+| `removeTransformer(hook)` | Remove a transformer |
+| `setConsent(integration, granted)` | Grant/revoke consent for integrations |
+| `hasConsent(integration)` | Check if consent granted |
+| `getConsentState()` | Get consent state for all integrations |
+| `isInitialized()` | Check initialization status |
+| `setQaMode(enabled)` | Enable/disable QA mode |
+| `destroy()` | Stop tracking and cleanup |
+
+**Recommended Initialization Order:**
+```typescript
+// 1. Register listeners FIRST (before init)
+tracelog.on('event', eventHandler);
+tracelog.on('queue', queueHandler);
+
+// 2. Configure transformers SECOND (if using custom backend)
+tracelog.setTransformer('beforeSend', transformFn);
+
+// 3. Initialize LAST (starts tracking immediately)
+await tracelog.init({ /* config */ });
+
+// 4. Track custom events AFTER init
+tracelog.event('custom_event', { /* metadata */ });
+```
 
 ## 🛠️ Tech Stack
 
@@ -62,7 +96,7 @@ src/
 
 ## 📦 Current Version
 
-**v0.11.1** - Client-only library with optional backend integrations
+**v1.2.0** - Client-only library with optional backend integrations, consent management, and transformers
 
 ## 🌐 SSR/SSG Support
 
@@ -146,7 +180,7 @@ User activity tracked → `SessionManager` syncs across tabs → recovers sessio
 
 ### 4. Data Sending
 
-Events batched → Validated → Sent via `SenderManager.sendEventsQueue()` → Retries if failure detected
+Events batched (10s or 50 events) → `SenderManager` sends per-integration → Automatic retry on 5xx/timeout (up to 2 retries) → Persist failed events → Recovery on next page
 
 ## 📊 Event Types
 
@@ -191,10 +225,27 @@ await tracelog.init({
   integrations: {
     google: {
       measurementId: 'G-XXXXXX',      // GA4 (optional)
-      containerId: 'GTM-XXXXXXX'       // GTM (optional)
+      containerId: 'GTM-XXXXXXX',      // GTM (optional)
+      forwardEvents: ['PAGE_VIEW', 'CLICK'] // Forward specific events (optional)
     }
   }
 });
+```
+
+### Multi-Integration (TraceLog SaaS + Custom Backend)
+```typescript
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'your-project-id' },           // Analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }    // Data warehouse
+  }
+});
+
+// Events sent to BOTH endpoints independently with:
+// ✅ Independent error handling (4xx/5xx per integration)
+// ✅ Independent retry/persistence (separate localStorage keys)
+// ✅ Parallel sending (non-blocking)
+// ✅ Transformers: SaaS gets original, custom gets transformed
 ```
 
 ## ⚙️ Configuration Options
@@ -207,36 +258,166 @@ interface Config {
   // Metadata
   globalMetadata?: Record<string, any>; // Data added to all events
 
-  // Privacy
+  // Privacy & Consent
   sensitiveQueryParams?: string[];      // URL parameter filtering
+  waitForConsent?: boolean;             // Buffer events until consent granted
+  maxConsentBufferSize?: number;        // Max buffered events (500 default)
 
   // Client-side controls
   samplingRate?: number;                // Event sampling (0-1)
   errorSampling?: number;               // Error sampling (0-1)
+  disabledEvents?: Array<'scroll' | 'web_vitals' | 'error'>; // Disable specific auto-tracked events
 
   // Throttling
-  pageViewThrottleMs?: number;          // Page view throttle
-  clickThrottleMs?: number;             // Click event throttle
-  maxSameEventPerMinute?: number;       // Event rate limiting
+  pageViewThrottleMs?: number;          // Page view throttle (1000ms default)
+  clickThrottleMs?: number;             // Click event throttle (300ms default)
+  maxSameEventPerMinute?: number;       // Event rate limiting (60 default)
 
   // Scroll tracking
-  scrollContainerSelectors?: string[];  // Custom scroll containers
-  primaryScrollSelector?: string;       // Main scroll element
+  primaryScrollSelector?: string;       // CSS selector for primary scroll container
 
   // Viewport tracking
   viewport?: ViewportConfig;            // Element visibility tracking
+
+  // Web Vitals
+  webVitalsMode?: 'all' | 'needs-improvement' | 'poor';
+  webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
 
   // Integrations
   integrations?: {
     tracelog?: { projectId: string; };
     custom?: { collectApiUrl: string; allowHttp?: boolean; };
-    google?: { measurementId?: string; containerId?: string; };
+    google?: {
+      measurementId?: string;           // GA4/Google Ads
+      containerId?: string;              // GTM
+      consentCategories?: 'all' | Partial<Record<GoogleConsentType, boolean>>;
+      forwardEvents?: EventTypeName[] | 'all'; // Event forwarding
+    };
   };
 
   // Testing
   allowHttp?: boolean;                  // Enable HTTP for testing
 }
 ```
+
+## 🔐 Consent Management
+
+GDPR/CCPA-compliant consent with granular per-integration control:
+
+```typescript
+// Initialize with consent waiting
+await tracelog.init({
+  waitForConsent: true,  // Events buffered until consent granted
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// Grant consent (flushes buffered events)
+await tracelog.setConsent('all', true);
+
+// Per-integration consent
+await tracelog.setConsent('google', true);
+await tracelog.setConsent('custom', false);
+
+// Check consent
+if (tracelog.hasConsent('google')) { /* ... */ }
+
+// Get full state
+const state = tracelog.getConsentState(); // { google: true, custom: false, tracelog: true }
+
+// Listen to changes
+tracelog.on('consent-changed', (state) => {
+  console.log('Consent updated:', state);
+});
+```
+
+**Key Features:**
+- Event buffering until consent granted
+- Retroactive send when consent granted (SESSION_START first)
+- Per-integration control (google, custom, tracelog)
+- Persistent in localStorage (365-day expiration)
+- Cross-tab synchronization
+- Can be set before or after `init()`
+
+## 🔄 Transformers
+
+Transform events dynamically before sending to integrations:
+
+```typescript
+// Per-event transformation (before queueing)
+tracelog.setTransformer('beforeSend', (event) => {
+  if ('type' in event) {
+    return {
+      ...event,
+      custom_event: {
+        ...event.custom_event,
+        metadata: {
+          ...event.custom_event?.metadata,
+          environment: 'production'
+        }
+      }
+    };
+  }
+  return event;
+});
+
+// Batch transformation (before network send)
+tracelog.setTransformer('beforeBatch', (batch) => {
+  if ('events' in batch) {
+    return {
+      ...batch,
+      global_metadata: {
+        ...batch.global_metadata,
+        batchSize: batch.events.length
+      }
+    };
+  }
+  return batch;
+});
+
+// Remove transformers
+tracelog.removeTransformer('beforeSend');
+tracelog.removeTransformer('beforeBatch');
+```
+
+**Integration Behavior:**
+- **Standalone (no backend)**: Only `beforeSend` applied, `beforeBatch` NOT supported
+- **Custom Backend**: Both transformers applied
+- **TraceLog SaaS**: Transformers silently ignored (schema protection)
+- **Multi-Integration**: SaaS gets original, custom gets transformed
+- **Google Analytics**: Transformers N/A
+
+**Error Handling:**
+- Exceptions caught and logged
+- Original event/batch used as fallback
+- Returning `null` filters out event/batch
+
+## 🔄 Error Handling & Retry Strategy
+
+**Automatic Retry for Transient Errors:**
+- **Maximum Retries**: 2 additional attempts per integration (3 total)
+- **Backoff Formula**: `100ms * (2 ^ attempt) + random(0-100ms)`
+- **Delays**: Attempt 1→2: 200-300ms, Attempt 2→3: 400-500ms
+- **Transient Errors**: 5xx, 408 Request Timeout, 429 Too Many Requests, network failures
+- **Permanent Errors**: 4xx (except 408, 429) - no retries, immediate discard
+
+**Persistence & Recovery:**
+- Failed events (after exhausting retries) persist to localStorage per-integration
+- Recovery happens automatically on next page load during `init()`
+- Multi-tab protection (1s window prevents concurrent recovery)
+- Events expire after 2 hours in localStorage
+- **Optimistic Queue Removal**: Events removed if AT LEAST ONE integration succeeds
+
+**Error Classification:**
+| Status Code | Type | Retries | Persistence |
+|-------------|------|---------|-------------|
+| 2xx | Success | None | Cleared |
+| 4xx (except 408, 429) | Permanent | None | Discarded |
+| 408, 429 | Transient | Up to 2 | After exhaustion |
+| 5xx | Transient | Up to 2 | After exhaustion |
+| Network Error | Transient | Up to 2 | After exhaustion |
 
 ## ⚠️ WHAT NOT TO DO
 

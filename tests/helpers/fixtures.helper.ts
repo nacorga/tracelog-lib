@@ -4,9 +4,12 @@
  * Test data fixtures for creating consistent test data
  */
 
-import type { Config } from '@/types/config.types';
-import type { EventData, EventType } from '@/types/event.types';
-import type { EventsQueue } from '@/types/sender.types';
+import type { Config } from '../../src/types/config.types';
+import { EventType, ScrollDirection, ErrorType } from '../../src/types/event.types';
+import type { EventData } from '../../src/types/event.types';
+import type { EventsQueue } from '../../src/types/queue.types';
+import { DeviceType } from '../../src/types/device.types';
+import type { SessionEndReason } from '../../src/types/session.types';
 
 /**
  * Create mock configuration with default values
@@ -15,13 +18,16 @@ export function createMockConfig(overrides?: Partial<Config>): Config {
   return {
     sessionTimeout: 900000, // 15 minutes
     globalMetadata: {},
-    scrollContainerSelectors: [],
     sensitiveQueryParams: [],
     samplingRate: 1.0,
     errorSampling: 1.0,
-    allowHttp: false,
     disabledEvents: [],
     waitForConsent: false,
+    maxConsentBufferSize: 500,
+    webVitalsMode: 'needs-improvement',
+    pageViewThrottleMs: 1000,
+    clickThrottleMs: 300,
+    maxSameEventPerMinute: 60,
     integrations: {},
     ...overrides,
   };
@@ -31,131 +37,97 @@ export function createMockConfig(overrides?: Partial<Config>): Config {
  * Create mock event data
  */
 export function createMockEvent(type: EventType, overrides?: Partial<EventData>): EventData {
-  const baseEvent: EventData = {
+  const baseEvent: Partial<EventData> = {
+    id: `evt_${Date.now()}`,
     type,
     timestamp: Date.now(),
     page_url: 'http://localhost:3000/',
-    page_title: 'Test Page',
     referrer: '',
-    user_agent: 'Mozilla/5.0 (Test)',
-    viewport_width: 1920,
-    viewport_height: 1080,
-    screen_width: 1920,
-    screen_height: 1080,
-    device_type: 'desktop',
-    language: 'en-US',
-    timezone: 'UTC',
   };
 
   // Add type-specific data
-  switch (type) {
-    case 'CLICK':
-      return {
-        ...baseEvent,
-        click: {
-          element_tag: 'button',
-          element_id: 'test-button',
-          element_classes: ['btn', 'btn-primary'],
-          element_text: 'Click Me',
-          x: 100,
-          y: 200,
-        },
-        ...overrides,
-      };
+  let typeSpecificData: Partial<EventData> = {};
 
-    case 'SCROLL':
-      return {
-        ...baseEvent,
-        scroll: {
-          depth_percentage: 50,
-          depth_pixels: 500,
-          max_depth_percentage: 50,
-          max_depth_pixels: 500,
-          direction: 'down',
-          velocity: 10,
-          container_selector: null,
-        },
-        ...overrides,
-      };
-
-    case 'PAGE_VIEW':
-      return {
-        ...baseEvent,
-        page_view: {
-          path: '/',
-          utm_source: null,
-          utm_medium: null,
-          utm_campaign: null,
-          utm_term: null,
-          utm_content: null,
-        },
-        ...overrides,
-      };
-
-    case 'SESSION_START':
-      return {
-        ...baseEvent,
-        session: {
-          is_new_user: false,
-          session_count: 1,
-        },
-        ...overrides,
-      };
-
-    case 'SESSION_END':
-      return {
-        ...baseEvent,
-        session: {
-          duration_ms: 30000,
-          page_views: 5,
-          events_count: 20,
-        },
-        ...overrides,
-      };
-
-    case 'CUSTOM':
-      return {
-        ...baseEvent,
-        custom_event: {
-          name: 'test_event',
-          metadata: { key: 'value' },
-        },
-        ...overrides,
-      };
-
-    case 'WEB_VITALS':
-      return {
-        ...baseEvent,
-        web_vitals: {
-          name: 'LCP',
-          value: 2500,
-          rating: 'good',
-          delta: 2500,
-          id: 'test-id',
-        },
-        ...overrides,
-      };
-
-    case 'ERROR':
-      return {
-        ...baseEvent,
-        error: {
-          message: 'Test error',
-          stack: 'Error: Test error\n    at test.js:1:1',
-          type: 'Error',
-          filename: 'test.js',
-          lineno: 1,
-          colno: 1,
-        },
-        ...overrides,
-      };
-
-    default:
-      return {
-        ...baseEvent,
-        ...overrides,
-      };
+  if (type === EventType.CLICK) {
+    typeSpecificData = {
+      click_data: {
+        x: 100,
+        y: 200,
+        relativeX: 0.5,
+        relativeY: 0.5,
+        id: 'test-button',
+        class: 'btn btn-primary',
+        tag: 'button',
+        text: 'Click Me',
+      },
+    };
+  } else if (type === EventType.SCROLL) {
+    typeSpecificData = {
+      scroll_data: {
+        depth: 50,
+        direction: ScrollDirection.DOWN,
+        container_selector: 'body',
+        is_primary: true,
+        velocity: 10,
+        max_depth_reached: 50,
+      },
+    };
+  } else if (type === EventType.PAGE_VIEW) {
+    typeSpecificData = {
+      page_view: {
+        title: 'Test Page',
+        pathname: '/',
+        referrer: '',
+      },
+    };
+  } else if (type === EventType.SESSION_START) {
+    // Session start events don't have additional data
+  } else if (type === EventType.SESSION_END) {
+    typeSpecificData = {
+      session_end_reason: 'inactivity' as SessionEndReason,
+    };
+  } else if (type === EventType.CUSTOM) {
+    typeSpecificData = {
+      custom_event: {
+        name: 'test_event',
+        metadata: { key: 'value' },
+      },
+    };
+  } else if (type === EventType.WEB_VITALS) {
+    typeSpecificData = {
+      web_vitals: {
+        type: 'LCP',
+        value: 2500,
+      },
+    };
+  } else if (type === EventType.ERROR) {
+    typeSpecificData = {
+      error_data: {
+        type: ErrorType.JS_ERROR,
+        message: 'Test error',
+        filename: 'test.js',
+        line: 1,
+        column: 1,
+      },
+    };
+  } else {
+    // EventType.VIEWPORT_VISIBLE
+    typeSpecificData = {
+      viewport_data: {
+        selector: '.test-element',
+        id: 'test-id',
+        name: 'Test Element',
+        dwellTime: 1000,
+        visibilityRatio: 0.75,
+      },
+    };
   }
+
+  return {
+    ...baseEvent,
+    ...typeSpecificData,
+    ...overrides,
+  } as EventData;
 }
 
 /**
@@ -165,7 +137,8 @@ export function createMockQueue(events: EventData[] = [], overrides?: Partial<Ev
   return {
     session_id: 'test-session-id',
     user_id: 'test-user-id',
-    events: events.length > 0 ? events : [createMockEvent('CLICK')],
+    device: DeviceType.Desktop,
+    events: events.length > 0 ? events : [createMockEvent(EventType.CLICK)],
     ...overrides,
   };
 }
@@ -173,7 +146,7 @@ export function createMockQueue(events: EventData[] = [], overrides?: Partial<Ev
 /**
  * Create multiple mock events
  */
-export function createMockEvents(count: number, type: EventType = 'CLICK'): EventData[] {
+export function createMockEvents(count: number, type: EventType = EventType.CLICK): EventData[] {
   return Array.from({ length: count }, (_, i) =>
     createMockEvent(type, {
       timestamp: Date.now() + i * 1000,
@@ -314,7 +287,7 @@ export function createMockStorageData(key: string, data: any): void {
  */
 export function getMockStorageData(key: string): any {
   const data = localStorage.getItem(key);
-  return data ? JSON.parse(data) : null;
+  return data !== null ? JSON.parse(data) : null;
 }
 
 /**

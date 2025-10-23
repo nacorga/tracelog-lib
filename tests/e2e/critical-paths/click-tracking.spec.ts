@@ -5,19 +5,42 @@
  * Focus: Click event capture with PII sanitization
  */
 
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 test.describe('E2E: Click Tracking', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });
 
-  test('should capture click events on buttons');
-  test('should capture element tag, id, classes');
-  test('should capture element text content');
-  test('should capture click coordinates (x, y)');
-  test('should NOT capture input values');
-  test('should sanitize PII from text content');
-  test('should respect data-tlog-ignore attribute');
-  test('should emit CLICK event to listeners');
+  test('should capture click events on buttons', async () => {
+    // TODO: implement
+  });
+
+  test('should capture element tag, id, classes', async () => {
+    // TODO: implement
+  });
+
+  test('should capture element text content', async () => {
+    // TODO: implement
+  });
+
+  test('should capture click coordinates (x, y)', async () => {
+    // TODO: implement
+  });
+
+  test('should NOT capture input values', async () => {
+    // TODO: implement
+  });
+
+  test('should sanitize PII from text content', async () => {
+    // TODO: implement
+  });
+
+  test('should respect data-tlog-ignore attribute', async () => {
+    // TODO: implement
+  });
+
+  test('should emit CLICK event to listeners', async () => {
+    // TODO: implement
+  });
 });

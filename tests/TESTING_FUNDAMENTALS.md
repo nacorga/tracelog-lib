@@ -29,7 +29,7 @@
 
 2. **Test Critical Paths First**
    - Prioritize tests that cover core functionality
-   - Start with P0 (critical), then P1 (essential), finally P2 (advanced)
+   - Focus on critical paths first, then essential features, then advanced edge cases
    - 80/20 rule: 80% of bugs come from 20% of code
 
 3. **Maintain Test Independence**
@@ -518,12 +518,12 @@ tests/
 │   └── state.helper.ts          # State management helpers
 │
 ├── unit/                        # Unit tests (isolated components)
-│   ├── core/                    # P0 - Critical core logic
+│   ├── core/                    # Critical core logic
 │   │   ├── app.test.ts          # App initialization & lifecycle
 │   │   ├── state-manager.test.ts # Global state management
 │   │   └── api.test.ts          # Public API methods
 │   │
-│   ├── managers/                # P0 - Manager components
+│   ├── managers/                # Manager components
 │   │   ├── event-manager.test.ts        # Event tracking & queuing
 │   │   ├── session-manager.test.ts      # Session lifecycle
 │   │   ├── sender-manager.test.ts       # Event transmission
@@ -531,7 +531,7 @@ tests/
 │   │   ├── consent-manager.test.ts      # Consent & buffering
 │   │   └── user-manager.test.ts         # User UUID management
 │   │
-│   └── handlers/                # P1 - Event handlers
+│   └── handlers/                # Event handlers
 │       ├── click-handler.test.ts        # Click tracking
 │       ├── scroll-handler.test.ts       # Scroll depth tracking
 │       ├── pageview-handler.test.ts     # Navigation tracking
@@ -1833,76 +1833,6 @@ beforeEach(() => {
 
 ---
 
-## Test Priority Matrix
-
-### P0 - Critical (Must Have)
-
-**Week 1 Focus** - These tests MUST pass for the library to function
-
-**Unit Tests**:
-- App.init() - Initialization flow
-- EventManager.track() - Event queuing
-- SessionManager - Session lifecycle
-- StateManager - Global state
-- SenderManager - Event transmission
-
-**Integration Tests**:
-- Full initialization flow
-- Event pipeline (capture → queue → send)
-
-**E2E Tests**:
-- Basic initialization
-- Page view tracking
-- Custom event tracking
-
-**Target**: 100% pass rate, 95%+ coverage
-
----
-
-### P1 - Essential (Should Have)
-
-**Week 2 Focus** - Important features for production use
-
-**Unit Tests**:
-- All handlers (Click, Scroll, Performance, Error)
-- ConsentManager - Consent & buffering
-- StorageManager - Storage with fallbacks
-- Deduplication logic
-- Error handling
-
-**Integration Tests**:
-- Consent → buffering → flush
-- Multi-tab session sync
-- Failed event recovery
-
-**E2E Tests**:
-- Click tracking with sanitization
-- Scroll depth tracking
-- Error capture
-
-**Target**: 100% pass rate, 90%+ coverage
-
----
-
-### P2 - Advanced (Nice to Have)
-
-**Week 3 Focus** - Advanced features and edge cases
-
-**Unit Tests**:
-- Transformers
-- Rate limiting
-- Sampling
-- Google Analytics integration
-
-**E2E Tests**:
-- QA mode
-- Complex user journeys
-- Performance impact tests
-
-**Target**: 100% pass rate, 85%+ coverage
-
----
-
 ## Quick Reference
 
 ### Commands
@@ -2043,15 +1973,9 @@ Before merging test changes:
 - [ ] **No format/lint errors** - `npm run fix` executed successfully
 - [ ] **No type errors** - `npm run type-check` shows 0 errors
 - [ ] **No unused imports** - Cleaned by `npm run fix`
-- [ ] **Coverage targets met** - Per priority (P0: 95%, P1: 90%, P2: 85%)
+- [ ] **Coverage targets met** - 90%+ for critical logic, 85%+ for flows
 - [ ] **No flaky tests** - Tests pass consistently (3+ runs)
 - [ ] **Fast execution** - Unit <100ms, Integration <1s, E2E <10s
 - [ ] **Clean code** - No TODOs, no commented code, clear names
 - [ ] **Helpers used** - Especially `bridge.helper.ts` for integration/E2E
 - [ ] **Documentation updated** - If adding new patterns
-
----
-
-**Last Updated**: October 2024
-**Version**: 1.0.0
-**Maintained By**: TraceLog Team

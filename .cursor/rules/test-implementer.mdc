@@ -154,49 +154,71 @@ Would you like me to:
 
 ## 🛠️ Available Test Helpers
 
-### TestBridge (`tests/helpers/bridge.helper.ts`) ⭐ NEW
+### TestBridge (`tests/helpers/bridge.helper.ts`) ⭐ CRITICAL
 ```typescript
 import {
   getTestBridge,              // Get bridge instance from window
+  hasTestBridge,              // Check if bridge exists
   initTestBridge,             // Initialize and wait for completion
-  destroyTestBridge,          // Cleanup bridge
-  getManagers,                // Get all managers (event, storage, consent)
-  getHandlers,                // Get all handlers (click, scroll, etc.)
-  getQueueState,              // Get queue length and events
-  collectEvents,              // Collect events during test execution
-  waitForEvents,              // Wait for specific number of events
-  triggerAndWaitForEvent      // Trigger event and wait for queueing
+  destroyTestBridge,          // Cleanup bridge (force=true for tests)
+  getManagers,                // Get all managers (event, storage, consent, session, user, sender)
+  getHandlers,                // Get all handlers (session, click, scroll, pageView, performance, error, viewport)
+  getQueueState,              // Get queue state { length, events }
+  getConsentBufferState,      // Get consent buffer for specific integration
+  getStateSnapshot,           // Get full state snapshot
+  collectEvents,              // Collect events during test execution [getCollectedEvents, cleanup]
+  onEvent                     // Setup listener with auto-cleanup
 } from '../helpers/bridge.helper';
 
 // Example Usage
 const bridge = await initTestBridge({ sessionTimeout: 5000 });
-const { event, storage } = getManagers(bridge);
-const events = bridge.getQueueEvents();
+const { event, storage, consent } = getManagers(bridge);
+const { session, click } = getHandlers(bridge);
+const { length, events } = getQueueState(bridge);
+const state = getStateSnapshot(bridge);
 destroyTestBridge();
 ```
 
 ### Setup & Cleanup (`tests/helpers/setup.helper.ts`)
 ```typescript
 import {
-  setupTestEnvironment,      // Complete test setup (ALWAYS use in beforeEach)
-  cleanupTestEnvironment,     // Complete cleanup (ALWAYS use in afterEach)
-  advanceTimers,              // Safe timer advancement (NOT vi.runAllTimersAsync!)
-  setupFakeTimers,            // Enable fake timers
-  restoreRealTimers,          // Restore real timers
-  setupMinimalDOM,            // Basic DOM structure
-  setupBrowserAPIs            // Mock browser APIs (IntersectionObserver, etc.)
+  setupTestEnvironment,       // Complete test setup (ALWAYS use in beforeEach)
+  cleanupTestEnvironment,      // Complete cleanup (ALWAYS use in afterEach)
+  setupFakeTimers,             // Enable fake timers (vi.useFakeTimers)
+  restoreRealTimers,           // Restore real timers (vi.useRealTimers)
+  setupMinimalDOM,             // Basic DOM structure
+  setupBrowserAPIs,            // All browser APIs at once
+  setupIntersectionObserver,   // Mock IntersectionObserver
+  setupMutationObserver,       // Mock MutationObserver
+  setupResizeObserver,         // Mock ResizeObserver
+  setupPerformanceAPI,         // Mock Performance API
+  setupNavigationEnvironment,  // Mock navigation (pushState, replaceState)
+  setupMockConsole,            // Mock console (log, warn, error)
+  setupMockSendBeacon,         // Mock navigator.sendBeacon
+  setupMockBroadcastChannel,   // Mock BroadcastChannel
+  setupMockMatchMedia,         // Mock window.matchMedia
+  setupMockRequestAnimationFrame, // Mock requestAnimationFrame
+  setupMockRequestIdleCallback,   // Mock requestIdleCallback
+  setupAllMocks                // Setup all mocks at once
 } from '../helpers/setup.helper';
 ```
 
 ### Mocks (`tests/helpers/mocks.helper.ts`)
 ```typescript
 import {
-  createMockFetch,            // Mock fetch with configurable responses
-  createMockFetchNetworkError,// Mock network failure
-  createMockStorage,          // Mock localStorage/sessionStorage
-  createMockBroadcastChannel, // Mock BroadcastChannel
-  setupMockSendBeacon,        // Mock navigator.sendBeacon
-  setupAllMocks               // Setup all common mocks at once
+  createMockFetch,             // Mock fetch with configurable responses
+  createMockFetchNetworkError, // Mock network failure
+  createMockFetchTimeout,      // Mock fetch timeout
+  createMockStorage,           // Mock localStorage/sessionStorage
+  createMockBroadcastChannel,  // Mock BroadcastChannel
+  createMockSendBeacon,        // Mock navigator.sendBeacon
+  createMockConsole,           // Mock console methods
+  createMockEventEmitter,      // Mock event emitter
+  createMockMatchMedia,        // Mock window.matchMedia
+  createMockRequestAnimationFrame, // Mock requestAnimationFrame
+  createMockRequestIdleCallback,   // Mock requestIdleCallback
+  createMockWebVitals,         // Mock web-vitals library
+  createMockWebVitalsMetric    // Create specific metric (CLS, FID, etc.)
 } from '../helpers/mocks.helper';
 ```
 
@@ -208,55 +230,99 @@ import {
   createMockQueue,            // Create test events queue
   createMockEvents,           // Create multiple events
   createMockSession,          // Create session data
+  createMockState,            // Create state snapshot
+  createMockConsentState,     // Create consent state
   createMockElement,          // Create HTML element
   createMockForm,             // Create form with inputs
   createMockClickEvent,       // Create DOM click event
-  createMockErrorEvent        // Create DOM error event
+  createMockScrollEvent,      // Create DOM scroll event
+  createMockErrorEvent,       // Create DOM error event
+  createConfigWithSuccessSimulation,  // Config with SpecialApiUrl for success
+  createConfigWithFailureSimulation,  // Config with SpecialApiUrl for failure
+  createMockStorageData,      // Create localStorage data
+  getMockStorageData          // Get localStorage data
 } from '../helpers/fixtures.helper';
 ```
 
 ### Wait Utilities (`tests/helpers/wait.helper.ts`)
 ```typescript
 import {
+  wait,                       // Wait N milliseconds
+  waitForNextTick,            // Wait for next tick
   waitForCondition,           // Wait for condition to be true
   waitForEvent,               // Wait for specific event emission
   waitForQueueFlush,          // Wait for queue flush (10s + buffer)
-  wait,                       // Wait N milliseconds
-  waitForNextTick,            // Wait for next tick
   waitForElement,             // Wait for DOM element to appear
   retry,                      // Retry function with backoff
-  poll                        // Poll function until truthy
+  poll,                       // Poll function until truthy
+  withTimeout                 // Wrap promise with timeout
 } from '../helpers/wait.helper';
 ```
 
 ### Assertions (`tests/helpers/assertions.helper.ts`)
 ```typescript
 import {
-  expectEventStructure,       // Validate event has required fields
+  // Event Validation
+  expectEventStructure,        // Validate event has required fields
+  expectEventType,             // Validate event type matches expected
+  expectEventInArray,          // Validate event type exists in array
+  expectEventCountInArray,     // Validate event type count in array
   expectQueueStructure,        // Validate queue structure
-  expectSessionId,            // Validate sessionId format (UUID v4)
-  expectClickEvent,           // Validate click event structure
-  expectScrollEvent,          // Validate scroll event structure
-  expectPageViewEvent,        // Validate page view event structure
-  expectCustomEvent,          // Validate custom event structure
-  expectSanitizedUrl,         // Validate URL sanitization
-  expectSanitizedText,        // Validate text sanitization
-  expectFetchCall,            // Validate fetch was called correctly
-  expectQueueFlushed,         // Validate queue was cleared
-  expectQueuePersisted        // Validate queue was persisted
+
+  // Event Type-Specific
+  expectSessionId,             // Validate sessionId format (UUID v4)
+  expectUserId,                // Validate userId format (UUID v4)
+  expectClickEvent,            // Validate click event structure
+  expectScrollEvent,           // Validate scroll event structure
+  expectPageViewEvent,         // Validate page view event structure
+  expectCustomEvent,           // Validate custom event structure
+  expectSessionStartEvent,     // Validate SESSION_START event
+  expectSessionEndEvent,       // Validate SESSION_END event
+  expectWebVitalsEvent,        // Validate WEB_VITALS event
+  expectErrorEvent,            // Validate ERROR event
+
+  // Sanitization
+  expectSanitizedUrl,          // Validate URL sanitization
+  expectSanitizedText,         // Validate text sanitization
+
+  // Network & Storage
+  expectFetchCall,             // Validate fetch was called correctly
+  expectFetchBody,             // Validate fetch request body
+  expectQueueFlushed,          // Validate queue was cleared
+  expectQueuePersisted,        // Validate queue was persisted
+  expectStorageKey,            // Validate storage key format
+
+  // Config & State
+  expectMergedConfig,          // Validate config merging
+  expectStateShape,            // Validate state has expected keys
+  expectRecentTimestamp,       // Validate timestamp is recent
+
+  // Console
+  expectConsoleCall            // Validate console method called
 } from '../helpers/assertions.helper';
 ```
 
 ### State Management (`tests/helpers/state.helper.ts`)
 ```typescript
 import {
-  getGlobalState,             // Get full state snapshot
-  getGlobalStateValue,        // Get specific state value
-  isStateInitialized,         // Check if app initialized
-  getSessionId,               // Get sessionId from state
-  getUserId,                  // Get userId from state
-  waitForStateValue,          // Wait for state value to change
-  waitForStateInitialized     // Wait for initialization
+  getGlobalState,              // Get full state snapshot (readonly)
+  getGlobalStateValue,         // Get specific state value
+  setGlobalStateValue,         // Set specific state value (for testing)
+  resetGlobalState,            // Reset state to defaults
+  isStateInitialized,          // Check if app initialized
+  getSessionId,                // Get sessionId from state
+  getUserId,                   // Get userId from state
+  getConfig,                   // Get config from state
+  getApiUrl,                   // Get API URL for integration
+  hasIntegration,              // Check if integration is configured
+  isQaMode,                    // Check if QA mode enabled
+  getSpecialApiUrls,           // Get SpecialApiUrl config
+  validateState,               // Validate state matches expected
+  validateStateStructure,      // Validate state has required keys
+  createStateSnapshot,         // Create state snapshot for comparison
+  compareStateSnapshots,       // Compare two state snapshots
+  debugState,                  // Print state to console (debugging)
+  triggerEvent                 // Trigger custom DOM event
 } from '../helpers/state.helper';
 ```
 
@@ -390,22 +456,22 @@ test.describe('Feature Name', () => {
    // ✅ GOOD
    const config = createMockConfig({ sessionTimeout: 5000 });
 
-   // ❌ BAD
+   // ❌ BAD - Manually defining config fields
    const config = {
      sessionTimeout: 5000,
-     globalMetadata: {},
-     scrollContainerSelectors: [],
-     // ... manually defining all fields
+     samplingRate: 1,
+     errorSampling: 1,
+     // ... manually defining all fields (error-prone!)
    };
    ```
 
-3. **ALWAYS use advanceTimers for async timer operations**
+3. **ALWAYS use fake timers properly with vi.advanceTimersByTimeAsync**
    ```typescript
-   import { advanceTimers } from '../helpers/setup.helper';
+   import { setupFakeTimers, restoreRealTimers } from '../helpers/setup.helper';
 
-   vi.useFakeTimers();
-   await advanceTimers(10000); // Safe timer advancement
-   vi.useRealTimers();
+   setupFakeTimers(); // vi.useFakeTimers()
+   await vi.advanceTimersByTimeAsync(10000); // Advance timers
+   restoreRealTimers(); // vi.useRealTimers()
    ```
 
 4. **ALWAYS clean state in afterEach**
@@ -436,8 +502,8 @@ test.describe('Feature Name', () => {
    // ❌ BAD - Causes infinite loops with setInterval
    await vi.runAllTimersAsync();
 
-   // ✅ GOOD - Use helper function
-   await advanceTimers(10000);
+   // ✅ GOOD - Use vi.advanceTimersByTimeAsync with specific time
+   await vi.advanceTimersByTimeAsync(10000);
    ```
 
 2. **NEVER share state between tests**
@@ -638,14 +704,6 @@ test('should sanitize form input values', async ({ page }) => {
 - **Quick Reference**: `tests/README.md`
 - **Helper Docs**: Comments in `tests/helpers/*.ts` files
 - **E2E Patterns**: Comments in existing E2E test files
-
-## 🎯 Priority Order
-
-When implementing tests:
-
-1. **P0 (Critical)**: Core components, managers (App, StateManager, EventManager, SessionManager, SenderManager)
-2. **P1 (Essential)**: Handlers, integration flows, E2E critical paths
-3. **P2 (Advanced)**: Edge cases, advanced features
 
 ## 💡 Tips
 

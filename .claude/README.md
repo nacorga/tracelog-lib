@@ -6,23 +6,23 @@ Comprehensive development automation pipeline for the TraceLog analytics library
 
 ```
 .claude/
-├── agents/                           # Custom subagents (6 total)
+├── agents/                           # Custom subagents
 │   ├── feature-orchestrator.md       # Interactive feature development manager
 │   ├── test-guardian.md              # Test coverage enforcer (90%+ requirement)
-│   ├── test-implementer.md           # Test implementation expert (NEW!)
+│   ├── test-implementer.md           # Test implementation expert
 │   ├── type-safety-enforcer.md       # TypeScript strict mode guardian
 │   ├── memory-leak-detector.md       # Browser memory leak analyzer
 │   └── security-privacy-advisor.md   # GDPR/privacy compliance checker
-├── commands/                         # Custom slash commands (8 total)
+├── commands/                         # Custom slash commands
 │   ├── new-feature.md                # Start interactive feature development
-│   ├── implement-tests.md            # Implement test logic (NEW!)
+│   ├── implement-tests.md            # Implement test logic
 │   ├── precommit.md                  # Full acceptance criteria validation
 │   ├── coverage.md                   # Test coverage analysis
 │   ├── perf.md                       # Bundle size & performance check
 │   ├── security-audit.md             # Security & privacy audit
 │   ├── compare-branch.md             # Branch comparison & pre-merge audit
 │   └── fix.md                        # Auto-fix lint/format issues
-├── hooks/                            # Development lifecycle hooks (4 total)
+├── hooks/                            # Development lifecycle hooks
 │   ├── pre-edit-validation.sh        # Validate types before editing
 │   ├── post-edit-tests.sh            # Run related tests after edits
 │   ├── session-start.sh              # Display project status on start
@@ -171,7 +171,7 @@ Claude, use the test-guardian agent to analyze test coverage
 
 **Purpose**: Expert test implementation following TESTING_FUNDAMENTALS.md patterns
 
-**When to use**: Implementing test logic for test file skeletons (declarations)
+**When to use**: Implementing test logic for test files (with or without existing skeletons)
 
 **Invocation**:
 ```bash
@@ -184,7 +184,9 @@ Claude, use the test-implementer agent to implement tests for [file/type/priorit
 ```
 
 **What it does**:
-1. **Analyzes test declarations** - Reads test file skeletons with `it('should...')` statements
+1. **Checks test file status**:
+   - If skeleton exists → Reads test declarations (`it('should...')` statements)
+   - If no skeleton → Analyzes source code and generates skeleton first
 2. **Creates implementation plan** - Uses TodoWrite to track tests to implement
 3. **Implements tests incrementally**:
    - Reads source code to understand behavior
@@ -199,6 +201,11 @@ Claude, use the test-implementer agent to implement tests for [file/type/priorit
    - Proper setup/teardown with `setupTestEnvironment()`
 5. **Provides summary** - Statistics, next steps, recommendations
 
+**Skeleton Generation** (when test file missing/empty):
+- Analyzes source code to identify public API
+- Generates test file with proper imports, describe blocks, and test declarations
+- Confirms skeleton with user before implementation
+
 **Test Helpers Available**:
 - `tests/helpers/setup.helper.ts` - Test setup/cleanup/timers
 - `tests/helpers/mocks.helper.ts` - Mock fetch, storage, APIs
@@ -211,9 +218,6 @@ Claude, use the test-implementer agent to implement tests for [file/type/priorit
 ```bash
 # Implement single file
 /implement-tests tests/unit/core/app.test.ts
-
-# Implement P0 critical tests
-/implement-tests P0
 
 # Implement all unit tests
 /implement-tests unit
@@ -233,13 +237,8 @@ Claude, use the test-implementer agent to implement tests for [file/type/priorit
 - ✅ One assertion per test when possible
 - ✅ Descriptive test names starting with "should"
 
-**Test Priority**:
-1. **P0 (Critical)**: Core components, managers (~120 tests)
-2. **P1 (Essential)**: Handlers, flows (~140 tests)
-3. **P2 (Advanced)**: Edge cases, advanced features (~50 tests)
-
 **References**:
-- `tests/TESTING_FUNDAMENTALS.md` - Complete testing guide (1,500 lines)
+- `tests/TESTING_FUNDAMENTALS.md` - Complete testing guide
 - `tests/README.md` - Quick reference
 - `tests/helpers/` - All test utilities
 
@@ -940,7 +939,3 @@ This Claude pipeline provides:
 **Result**: Ship faster with higher confidence 🚀
 
 ---
-
-**Last Updated**: 2025-10-09
-**Version**: 1.0.0
-**Maintained By**: TraceLog Development Team

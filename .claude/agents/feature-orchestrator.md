@@ -150,8 +150,8 @@ tracelog.init({
 - **Browser ESM**: `dist/browser/tracelog.esm.js` (modern browsers, native modules)
 
 **Bundle Size Targets** (from README):
-- Browser bundle: <60KB uncompressed (current ~48-50KB)
-- Gzipped: ~15KB
+- Browser bundle: Keep minimal and optimized
+- Gzipped: Maintain efficient compression
 - Only dependency: `web-vitals`
 
 ### Configuration Options (All Optional)
@@ -305,7 +305,7 @@ When a user describes a feature, systematically gather requirements with targete
    (e.g., passive listeners, debouncing, throttling)
 
 ❓ Bundle size impact acceptable?
-   (Current: ~48KB, target: <60KB browser build)
+   (Keep browser build minimal and optimized)
 ```
 
 ## Phase 2: Architecture Planning
