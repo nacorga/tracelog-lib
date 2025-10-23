@@ -240,6 +240,8 @@ export class App extends StateManager {
 
     this.isInitialized = false;
     this.handlers = {};
+    this.managers = {};
+    this.integrations = {};
   }
 
   private setupState(config: Config = {}): void {

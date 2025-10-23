@@ -1,16 +1,26 @@
 import { App } from './app';
 import { setConsent as apiSetConsent, destroy as apiDestroy } from './api';
 import { PerformanceHandler } from './handlers/performance.handler';
+import { ErrorHandler } from './handlers/error.handler';
+import { SessionHandler } from './handlers/session.handler';
+import { PageViewHandler } from './handlers/page-view.handler';
+import { ClickHandler } from './handlers/click.handler';
+import { ScrollHandler } from './handlers/scroll.handler';
+import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
-import { State, TraceLogTestBridge } from './types';
+import { StorageManager } from './managers/storage.manager';
+import { ConsentManager } from './managers/consent.manager';
+import { State, TraceLogTestBridge, EventData } from './types';
 import { setQaMode as setQaModeUtil } from './utils/browser/qa-mode.utils';
 
 /**
- * Test bridge for E2E testing (development only)
+ * Test bridge for E2E and integration testing (development only)
  *
- * Provides minimal test-specific helpers while inheriting core App functionality.
- * Most methods delegate to parent App class to avoid code duplication.
+ * Provides comprehensive test-specific helpers while inheriting core App functionality.
+ * Exposes internal managers and handlers for inspection and validation.
  * Auto-injects into window.__traceLogBridge for Playwright tests.
+ *
+ * **Key Principle**: Library code should NOT adapt to tests. TestBridge adapts tests to library.
  */
 export class TestBridge extends App implements TraceLogTestBridge {
   constructor() {
@@ -89,17 +99,87 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   /**
-   * Performance handler accessor for E2E tests
+   * Performance handler accessor for tests
    */
   getPerformanceHandler(): PerformanceHandler | null {
     return this.handlers.performance ?? null;
   }
 
   /**
-   * Consent buffer inspection for E2E tests
+   * Error handler accessor for tests
+   */
+  getErrorHandler(): ErrorHandler | null {
+    return this.handlers.error ?? null;
+  }
+
+  /**
+   * Session handler accessor for tests
+   */
+  getSessionHandler(): SessionHandler | null {
+    return this.handlers.session ?? null;
+  }
+
+  /**
+   * PageView handler accessor for tests
+   */
+  getPageViewHandler(): PageViewHandler | null {
+    return this.handlers.pageView ?? null;
+  }
+
+  /**
+   * Click handler accessor for tests
+   */
+  getClickHandler(): ClickHandler | null {
+    return this.handlers.click ?? null;
+  }
+
+  /**
+   * Scroll handler accessor for tests
+   */
+  getScrollHandler(): ScrollHandler | null {
+    return this.handlers.scroll ?? null;
+  }
+
+  /**
+   * Viewport handler accessor for tests
+   */
+  getViewportHandler(): ViewportHandler | null {
+    return this.handlers.viewport ?? null;
+  }
+
+  /**
+   * Storage manager accessor for tests
+   */
+  getStorageManager(): StorageManager | null {
+    return this.managers.storage ?? null;
+  }
+
+  /**
+   * Consent manager accessor for tests
+   */
+  override getConsentManager(): ConsentManager | undefined {
+    return this.managers.consent;
+  }
+
+  /**
+   * Consent buffer inspection for tests
    */
   getConsentBufferLength(): number {
     return this.managers.event?.getConsentBufferLength() ?? 0;
+  }
+
+  /**
+   * Get events from queue (for validation in tests)
+   */
+  getQueueEvents(): EventData[] {
+    return this.managers.event?.getQueueEvents() ?? [];
+  }
+
+  /**
+   * Get consent buffer events (for validation in tests)
+   */
+  getConsentBufferEvents(integration: 'google' | 'custom' | 'tracelog'): EventData[] {
+    return this.managers.event?.getConsentBufferEvents(integration) ?? [];
   }
 
   /**
@@ -126,10 +206,44 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   /**
-   * State accessor (make public for E2E tests)
+   * State accessor (make public for tests)
    */
   public override get<T extends keyof State>(key: T): State[T] {
     return super.get(key);
+  }
+
+  /**
+   * Full state snapshot (for test inspection)
+   */
+  public getFullState(): Readonly<State> {
+    return this.getState();
+  }
+
+  /**
+   * Wait for initialization to complete (test utility)
+   */
+  async waitForInitialization(timeout = 5000): Promise<void> {
+    const startTime = Date.now();
+    while (!this.initialized && Date.now() - startTime < timeout) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!this.initialized) {
+      throw new Error('[TraceLog] Initialization timeout');
+    }
+  }
+
+  /**
+   * Trigger manual queue flush (test utility)
+   */
+  async flushQueue(): Promise<void> {
+    await this.managers.event?.flushQueue();
+  }
+
+  /**
+   * Clear event queue (test utility - use with caution)
+   */
+  clearQueue(): void {
+    this.managers.event?.clearQueue();
   }
 
   /**

@@ -643,6 +643,69 @@ export class EventManager extends StateManager {
   }
 
   /**
+   * Returns a copy of current events in the queue.
+   *
+   * **Purpose**: Test utility to inspect queued events for validation.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @returns Shallow copy of events queue
+   * @internal Used by test-bridge.ts for test inspection
+   */
+  getQueueEvents(): EventData[] {
+    return [...this.eventsQueue];
+  }
+
+  /**
+   * Returns a copy of consent buffer events for a specific integration.
+   *
+   * **Purpose**: Test utility to inspect consent-buffered events for validation.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @param integration - Integration to get buffered events for
+   * @returns Filtered array of buffered events for the integration
+   * @internal Used by test-bridge.ts for test inspection
+   */
+  getConsentBufferEvents(integration: 'google' | 'custom' | 'tracelog'): EventData[] {
+    return this.consentEventsBuffer.filter((event) => {
+      const eventId = event.id || `${event.type}-${event.timestamp}`;
+      const sentTo = this.consentEventsSentTo.get(eventId) || new Set();
+      return !sentTo.has(integration);
+    });
+  }
+
+  /**
+   * Triggers immediate queue flush (test utility).
+   *
+   * **Purpose**: Test utility to manually flush event queue for validation.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @returns Promise that resolves when flush completes
+   * @internal Used by test-bridge.ts for test control
+   */
+  async flushQueue(): Promise<void> {
+    await this.flushImmediately();
+  }
+
+  /**
+   * Clears the event queue (test utility - use with caution).
+   *
+   * **Purpose**: Test utility to reset queue state between tests.
+   *
+   * **Warning**: This will discard all queued events without sending them.
+   * Only use in test cleanup or when explicitly required.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @internal Used by test-bridge.ts for test cleanup
+   */
+  clearQueue(): void {
+    this.eventsQueue = [];
+  }
+
+  /**
    * Flushes buffered events to a specific integration when consent is granted.
    *
    * **Purpose**: Sends events that were tracked before consent was granted to the

@@ -55,6 +55,36 @@ npm run test:e2e
 npm run test:e2e -- basic-initialization
 ```
 
+### Testing Bridge (TestBridge)
+
+**Key Principle**: Library code should NOT adapt to tests. TestBridge adapts tests to library.
+
+`TestBridge` (`src/test-bridge.ts`) is the adapter layer between tests and library internals:
+- Only available in `NODE_ENV=development`
+- Auto-injected as `window.__traceLogBridge` for E2E tests
+- Exposes managers, handlers, and state for test validation
+- Production code (App, managers, handlers) NEVER modified for tests
+
+**When to use**:
+- ❌ Unit tests (isolated components) → Test directly with mocks
+- ✅ Unit tests (App initialization) → Need full sequence
+- ✅ Integration tests → Need real manager interactions
+- ✅ E2E tests → Only way to access internals
+
+**Quick Example**:
+```typescript
+// Integration test
+import { initTestBridge, destroyTestBridge } from '../helpers/bridge.helper';
+
+const bridge = await initTestBridge();
+bridge.event('purchase', { amount: 99.99 });
+const events = bridge.getQueueEvents();
+expect(events).toHaveLength(1);
+destroyTestBridge();
+```
+
+**Complete Guide**: See `tests/TESTING_FUNDAMENTALS.md` for comprehensive patterns, helpers, and examples.
+
 ## Architecture
 
 ### Core Flow
@@ -429,6 +459,36 @@ Target: ES2022, Lib: DOM + ES2022
 - ✅ Clear localStorage/sessionStorage in `beforeEach`
 - ✅ Check `queue.session_id` (NOT in individual events)
 - ✅ MUST follow E2E patterns in [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md)
+
+### Test Acceptance Criteria
+
+**ALL tests must meet these criteria before marking a file as complete:**
+
+1. **Tests Must Pass (100% Pass Rate)**
+   ```bash
+   npm run test:unit -- <filename>
+   npm run test:integration -- <filename>
+   npm run test:e2e -- <filename>
+   ```
+
+2. **No Format/Lint Errors**
+   ```bash
+   npm run fix  # MUST RUN before marking complete
+   ```
+
+3. **No Type Errors**
+   ```bash
+   npm run type-check  # Must show: "0 errors"
+   ```
+
+4. **Final Verification Sequence**
+   ```bash
+   npm run fix && npm run type-check && npm test
+   ```
+
+See `tests/TESTING_FUNDAMENTALS.md` for complete acceptance criteria checklist.
+
+---
 
 ## Security & Privacy
 

@@ -144,7 +144,36 @@ Would you like me to:
 - Helper function reference
 - Debugging & troubleshooting
 
+## 🚨 KEY PRINCIPLE: TestBridge Architecture
+
+**Library code should NOT adapt to tests. TestBridge adapts tests to library.**
+
+- ✅ Use `TestBridge` (`src/test-bridge.ts`) to access library internals
+- ✅ Never modify production code for test purposes (except TestBridge itself)
+- ✅ TestBridge exposes managers, handlers, and state for validation
+
 ## 🛠️ Available Test Helpers
+
+### TestBridge (`tests/helpers/bridge.helper.ts`) ⭐ NEW
+```typescript
+import {
+  getTestBridge,              // Get bridge instance from window
+  initTestBridge,             // Initialize and wait for completion
+  destroyTestBridge,          // Cleanup bridge
+  getManagers,                // Get all managers (event, storage, consent)
+  getHandlers,                // Get all handlers (click, scroll, etc.)
+  getQueueState,              // Get queue length and events
+  collectEvents,              // Collect events during test execution
+  waitForEvents,              // Wait for specific number of events
+  triggerAndWaitForEvent      // Trigger event and wait for queueing
+} from '../helpers/bridge.helper';
+
+// Example Usage
+const bridge = await initTestBridge({ sessionTimeout: 5000 });
+const { event, storage } = getManagers(bridge);
+const events = bridge.getQueueEvents();
+destroyTestBridge();
+```
 
 ### Setup & Cleanup (`tests/helpers/setup.helper.ts`)
 ```typescript
@@ -483,6 +512,49 @@ test.describe('Feature Name', () => {
      });
    });
    ```
+
+## ✅ Acceptance Criteria
+
+**ALL tests must meet these criteria before marking a file as complete:**
+
+### 1. Tests Must Pass (100% Pass Rate)
+```bash
+npm run test:unit -- <filename>         # Unit tests
+npm run test:integration -- <filename>  # Integration tests
+npm run test:e2e -- <filename>          # E2E tests
+```
+
+### 2. No Format/Lint Errors (MUST RUN)
+```bash
+npm run fix  # Auto-fix all format and lint issues
+```
+
+### 3. No Type Errors
+```bash
+npm run type-check  # Must show: "0 errors"
+```
+
+### 4. Final Verification Sequence
+
+**Run this before marking any test file as complete:**
+
+```bash
+npm run fix          # Fix format/lint
+npm run type-check   # Check types (0 errors)
+npm test             # Run all tests (100% pass)
+```
+
+### Acceptance Checklist
+
+- [ ] All tests pass (100% pass rate)
+- [ ] `npm run fix` executed successfully
+- [ ] `npm run type-check` shows 0 errors
+- [ ] No unused imports or variables
+- [ ] No ESLint warnings
+- [ ] Tests follow TESTING_FUNDAMENTALS.md patterns
+- [ ] Helpers used correctly (especially `bridge.helper.ts`)
+
+---
 
 ## 🎨 Test Quality Standards
 

@@ -2575,7 +2575,7 @@ class EventManager extends StateManager {
       return;
     }
     if (this.get("mode") === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
-      log("info", `[TraceLog:QA] Custom Event: ${custom_event.name}`, {
+      log("info", `Custom Event: ${custom_event.name}`, {
         showToClient: true,
         data: {
           name: custom_event.name,
@@ -2778,6 +2778,65 @@ class EventManager extends StateManager {
    */
   getConsentBufferLength() {
     return this.consentEventsBuffer.length;
+  }
+  /**
+   * Returns a copy of current events in the queue.
+   *
+   * **Purpose**: Test utility to inspect queued events for validation.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @returns Shallow copy of events queue
+   * @internal Used by test-bridge.ts for test inspection
+   */
+  getQueueEvents() {
+    return [...this.eventsQueue];
+  }
+  /**
+   * Returns a copy of consent buffer events for a specific integration.
+   *
+   * **Purpose**: Test utility to inspect consent-buffered events for validation.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @param integration - Integration to get buffered events for
+   * @returns Filtered array of buffered events for the integration
+   * @internal Used by test-bridge.ts for test inspection
+   */
+  getConsentBufferEvents(integration) {
+    return this.consentEventsBuffer.filter((event2) => {
+      const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
+      const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
+      return !sentTo.has(integration);
+    });
+  }
+  /**
+   * Triggers immediate queue flush (test utility).
+   *
+   * **Purpose**: Test utility to manually flush event queue for validation.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @returns Promise that resolves when flush completes
+   * @internal Used by test-bridge.ts for test control
+   */
+  async flushQueue() {
+    await this.flushImmediately();
+  }
+  /**
+   * Clears the event queue (test utility - use with caution).
+   *
+   * **Purpose**: Test utility to reset queue state between tests.
+   *
+   * **Warning**: This will discard all queued events without sending them.
+   * Only use in test cleanup or when explicitly required.
+   *
+   * **Note**: Only available in development mode via TestBridge.
+   *
+   * @internal Used by test-bridge.ts for test cleanup
+   */
+  clearQueue() {
+    this.eventsQueue = [];
   }
   /**
    * Flushes buffered events to a specific integration when consent is granted.
@@ -5679,6 +5738,13 @@ class GoogleAnalyticsIntegration extends StateManager {
       return;
     }
     try {
+      if (this.hasExistingConsentMode()) {
+        log("info", "Google Consent Mode detected, respecting existing configuration", {
+          showToClient: true
+        });
+        this.isInitialized = true;
+        return;
+      }
       if (this.hasExistingGtagInstance()) {
         log("info", "Google Analytics/GTM already loaded by external service, reusing existing script", {
           showToClient: true
@@ -5747,6 +5813,76 @@ class GoogleAnalyticsIntegration extends StateManager {
     }
   }
   /**
+   * Synchronizes TraceLog consent state to Google Consent Mode.
+   * Called when `tracelog.setConsent('google', granted)` is invoked.
+   *
+   * **Behavior**:
+   * - 'all': Grants/denies all 5 Google Consent Mode categories
+   * - Object: Granular control per category
+   *   - true: Grant this category when consent=true
+   *   - false: Deny this category even when consent=true
+   *   - undefined: Skip this category (respects external CMP)
+   * - Calls `gtag('consent', 'update')` to sync state with Google
+   *
+   * @param integration - Integration name (must be 'google')
+   * @param granted - true to grant consent, false to revoke
+   *
+   * @example
+   * ```typescript
+   * // Config: consentCategories: 'all'
+   * googleAnalytics.syncConsentToGoogle('google', true);
+   * // → Updates all 5 categories to 'granted'
+   *
+   * // Config: consentCategories: { analytics_storage: true, ad_storage: false }
+   * googleAnalytics.syncConsentToGoogle('google', true);
+   * // → analytics_storage: 'granted', ad_storage: 'denied'
+   *
+   * // Config: consentCategories: { analytics_storage: true, ad_storage: false }
+   * googleAnalytics.syncConsentToGoogle('google', false);
+   * // → Both 'denied' (consent revoked overrides category config)
+   * ```
+   */
+  syncConsentToGoogle(integration, granted) {
+    if (typeof window === "undefined" || !window.gtag) {
+      return;
+    }
+    if (integration !== "google") {
+      return;
+    }
+    const googleConfig = this.get("config").integrations?.google;
+    const consentCategories = googleConfig?.consentCategories || "all";
+    const updates = {};
+    if (consentCategories === "all") {
+      const allCategories = [
+        "analytics_storage",
+        "ad_storage",
+        "ad_user_data",
+        "ad_personalization",
+        "personalization_storage"
+      ];
+      allCategories.forEach((category) => {
+        updates[category] = granted ? "granted" : "denied";
+      });
+    } else {
+      Object.entries(consentCategories).forEach(([category, shouldGrant]) => {
+        const googleCategory = category;
+        if (granted) {
+          updates[googleCategory] = shouldGrant ? "granted" : "denied";
+        } else {
+          updates[googleCategory] = "denied";
+        }
+      });
+    }
+    try {
+      window.gtag("consent", "update", updates);
+      log("debug", `Google Consent Mode updated: ${granted ? "consent granted" : "consent denied"}`, {
+        data: { granted, categories: Object.keys(updates), updates }
+      });
+    } catch (error) {
+      log("error", "Failed to sync consent to Google Consent Mode", { error });
+    }
+  }
+  /**
    * Cleans up Google Analytics integration resources.
    *
    * **Cleanup Actions**:
@@ -5771,6 +5907,28 @@ class GoogleAnalyticsIntegration extends StateManager {
     if (configScript) {
       configScript.remove();
     }
+  }
+  /**
+   * Checks if Google Consent Mode is already configured on the page.
+   * Detects existing Consent Mode configuration from external CMPs or manual setup.
+   *
+   * **Detection Strategy**:
+   * - Searches `window.dataLayer` for any `['consent', ...]` commands
+   * - Returns true if found (external CMP or manual Consent Mode setup detected)
+   * - Returns false otherwise (safe to configure Consent Mode)
+   *
+   * **Purpose**: Prevents overwriting existing Consent Mode configuration
+   * from CMPs (CookieYes, OneTrust, Cookiebot, etc.) or manual implementations.
+   *
+   * @returns true if Consent Mode detected, false otherwise
+   *
+   * @private
+   */
+  hasExistingConsentMode() {
+    if (typeof window === "undefined" || !Array.isArray(window.dataLayer)) {
+      return false;
+    }
+    return window.dataLayer.some((item) => Array.isArray(item) && item[0] === "consent");
   }
   /**
    * Checks if gtag is already loaded by external service.
@@ -6705,6 +6863,9 @@ class App extends StateManager {
         ).catch((error) => {
           log("error", "Failed to flush consent buffer after consent granted", { error });
         });
+        if (consentState.google && this.integrations.google) {
+          this.integrations.google.syncConsentToGoogle("google", consentState.google);
+        }
       });
       this.initializeHandlers();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
@@ -6799,6 +6960,8 @@ class App extends StateManager {
     this.set("sessionId", null);
     this.isInitialized = false;
     this.handlers = {};
+    this.managers = {};
+    this.integrations = {};
   }
   setupState(config = {}) {
     this.set("config", config);
@@ -7615,16 +7778,76 @@ class TestBridge extends App {
     return this.managers.event;
   }
   /**
-   * Performance handler accessor for E2E tests
+   * Performance handler accessor for tests
    */
   getPerformanceHandler() {
     return this.handlers.performance ?? null;
   }
   /**
-   * Consent buffer inspection for E2E tests
+   * Error handler accessor for tests
+   */
+  getErrorHandler() {
+    return this.handlers.error ?? null;
+  }
+  /**
+   * Session handler accessor for tests
+   */
+  getSessionHandler() {
+    return this.handlers.session ?? null;
+  }
+  /**
+   * PageView handler accessor for tests
+   */
+  getPageViewHandler() {
+    return this.handlers.pageView ?? null;
+  }
+  /**
+   * Click handler accessor for tests
+   */
+  getClickHandler() {
+    return this.handlers.click ?? null;
+  }
+  /**
+   * Scroll handler accessor for tests
+   */
+  getScrollHandler() {
+    return this.handlers.scroll ?? null;
+  }
+  /**
+   * Viewport handler accessor for tests
+   */
+  getViewportHandler() {
+    return this.handlers.viewport ?? null;
+  }
+  /**
+   * Storage manager accessor for tests
+   */
+  getStorageManager() {
+    return this.managers.storage ?? null;
+  }
+  /**
+   * Consent manager accessor for tests
+   */
+  getConsentManager() {
+    return this.managers.consent;
+  }
+  /**
+   * Consent buffer inspection for tests
    */
   getConsentBufferLength() {
     return this.managers.event?.getConsentBufferLength() ?? 0;
+  }
+  /**
+   * Get events from queue (for validation in tests)
+   */
+  getQueueEvents() {
+    return this.managers.event?.getQueueEvents() ?? [];
+  }
+  /**
+   * Get consent buffer events (for validation in tests)
+   */
+  getConsentBufferEvents(integration) {
+    return this.managers.event?.getConsentBufferEvents(integration) ?? [];
   }
   /**
    * Consent management (always delegates to api.ts for consistency)
@@ -7647,10 +7870,40 @@ class TestBridge extends App {
     return consentManager?.getConsentState() ?? { google: false, custom: false, tracelog: false };
   }
   /**
-   * State accessor (make public for E2E tests)
+   * State accessor (make public for tests)
    */
   get(key) {
     return super.get(key);
+  }
+  /**
+   * Full state snapshot (for test inspection)
+   */
+  getFullState() {
+    return this.getState();
+  }
+  /**
+   * Wait for initialization to complete (test utility)
+   */
+  async waitForInitialization(timeout = 5e3) {
+    const startTime = Date.now();
+    while (!this.initialized && Date.now() - startTime < timeout) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!this.initialized) {
+      throw new Error("[TraceLog] Initialization timeout");
+    }
+  }
+  /**
+   * Trigger manual queue flush (test utility)
+   */
+  async flushQueue() {
+    await this.managers.event?.flushQueue();
+  }
+  /**
+   * Clear event queue (test utility - use with caution)
+   */
+  clearQueue() {
+    this.managers.event?.clearQueue();
   }
   /**
    * Cleanup (syncs with api.ts)

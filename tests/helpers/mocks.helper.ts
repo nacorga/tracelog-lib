@@ -287,3 +287,87 @@ export function setupAllMocks(): void {
   setupMockRequestIdleCallback();
   setupMockRequestAnimationFrame();
 }
+
+/**
+ * SpecialApiUrl Helpers for Network Simulation
+ *
+ * TraceLog includes built-in network simulation URLs for testing:
+ * - SpecialApiUrl.Localhost ('localhost:8080') - Simulates success without real network
+ * - SpecialApiUrl.Fail ('localhost:9999') - Simulates network failure
+ *
+ * These URLs trigger special behavior in SenderManager:
+ * - Localhost: Logs success message, returns true, no actual HTTP request
+ * - Fail: Logs warning, returns false, triggers retry/persistence logic
+ *
+ * @see src/types/config.types.ts (lines 118-121)
+ * @see src/managers/sender.manager.ts (lines 184, 559)
+ */
+
+/**
+ * Create config for testing network success (no real server needed)
+ *
+ * @example
+ * const config = createConfigWithSuccessSimulation();
+ * await tracelog.init(config);
+ * // Events will "succeed" without actual HTTP requests
+ */
+export function createConfigWithSuccessSimulation(): {
+  integrations: {
+    custom: {
+      collectApiUrl: string;
+      allowHttp: boolean;
+    };
+  };
+} {
+  return {
+    integrations: {
+      custom: {
+        collectApiUrl: 'localhost:8080', // SpecialApiUrl.Localhost
+        allowHttp: true, // Required for localhost URLs
+      },
+    },
+  };
+}
+
+/**
+ * Create config for testing network failure (triggers retry/persistence)
+ *
+ * @example
+ * const config = createConfigWithFailureSimulation();
+ * await tracelog.init(config);
+ * // Events will fail, trigger retries, then persist to localStorage
+ */
+export function createConfigWithFailureSimulation(): {
+  integrations: {
+    custom: {
+      collectApiUrl: string;
+      allowHttp: boolean;
+    };
+  };
+} {
+  return {
+    integrations: {
+      custom: {
+        collectApiUrl: 'localhost:9999', // SpecialApiUrl.Fail
+        allowHttp: true, // Required for localhost URLs
+      },
+    },
+  };
+}
+
+/**
+ * Get SpecialApiUrl enum values for test assertions
+ *
+ * @example
+ * const specialUrls = getSpecialApiUrls();
+ * expect(config.integrations.custom.collectApiUrl).toBe(specialUrls.Localhost);
+ */
+export function getSpecialApiUrls(): {
+  Localhost: string;
+  Fail: string;
+} {
+  return {
+    Localhost: 'localhost:8080',
+    Fail: 'localhost:9999',
+  };
+}

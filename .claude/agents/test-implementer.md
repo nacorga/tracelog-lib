@@ -258,11 +258,89 @@ While reading source code for test implementation, actively check:
 - Minor optimizations
 - Non-critical improvements
 
+## 🚨 KEY PRINCIPLE: TestBridge Architecture
+
+**Library code should NOT adapt to tests. TestBridge adapts tests to library.**
+
+The `TestBridge` class (`src/test-bridge.ts`) is the **adapter layer** between tests and library internals:
+
+- ✅ **TestBridge** exposes managers, handlers, and state for test validation
+- ✅ **Tests** use TestBridge to access and validate library behavior
+- ❌ **Library code** (App, managers, handlers) never modified for test purposes (except TestBridge itself)
+
+**When to use TestBridge**:
+- ❌ Unit tests (isolated components) → Test components directly with mocks
+- ✅ Unit tests (App initialization flow) → Need full sequence
+- ✅ Integration tests → Need real manager interactions
+- ✅ E2E tests → Only way to access library internals
+
 ## Available Resources
 
 ### Helper Modules (Always Use These!)
 
+#### 🎯 PRIMARY HELPER: bridge.helper.ts (ALWAYS USE FOR INTEGRATION/E2E)
+
+**CRITICAL**: For integration tests and E2E tests, you MUST use `bridge.helper.ts` functions. DO NOT write custom bridge initialization code.
+
 ```typescript
+// ✅ CORRECT: Use bridge.helper.ts functions
+import {
+  initTestBridge,             // ✅ Initialize bridge + wait for ready
+  destroyTestBridge,          // ✅ Cleanup bridge
+  getManagers,                // ✅ Get event, storage, consent managers
+  getHandlers,                // ✅ Get all handlers
+  getQueueState,              // ✅ Get queue length + events
+  getStateSnapshot,           // ✅ Get full state for debugging
+  collectEvents,              // ✅ Collect events during test
+  waitForEvents,              // ✅ Wait for N events
+  triggerAndWaitForEvent,     // ✅ Trigger event + wait for queueing
+  onEvent,                    // ✅ Setup listener with auto-cleanup
+} from '../helpers/bridge.helper';
+
+// ✅ CORRECT: Integration test pattern
+describe('Event Pipeline', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+  });
+
+  it('should track custom events', async () => {
+    // ✅ Use initTestBridge helper
+    const bridge = await initTestBridge({ sessionTimeout: 5000 });
+
+    // ✅ Use helper to get managers
+    const { event } = getManagers(bridge);
+
+    // ✅ Trigger event via bridge
+    bridge.event('purchase', { amount: 99.99 });
+
+    // ✅ Use helper to get queue state
+    const { events } = getQueueState(bridge);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('CUSTOM');
+  });
+});
+
+// ❌ WRONG: Manual bridge access
+it('should track events', async () => {
+  const bridge = window.__traceLogBridge; // ❌ Don't do this
+  await bridge.init(); // ❌ Don't do this
+  // Use initTestBridge() instead!
+});
+
+// ❌ WRONG: Manual manager access
+it('should validate queue', () => {
+  const bridge = getTestBridge();
+  const eventManager = bridge.getEventManager(); // ❌ Don't do this
+  const queueLength = eventManager.getQueueLength(); // ❌ Don't do this
+  // Use getManagers(bridge) and getQueueState(bridge) instead!
+});
+
 // Setup & Cleanup
 import {
   setupTestEnvironment,      // Complete test setup
@@ -607,6 +685,83 @@ npm run check
 14. Remaining integration tests
 15. Remaining E2E tests
 
+## ✅ Acceptance Criteria
+
+**ALL tests must meet these criteria before marking a file as complete:**
+
+### 1. Tests Must Pass (100% Pass Rate)
+```bash
+# Run tests for the file
+npm run test:unit -- <filename>
+npm run test:integration -- <filename>
+npm run test:e2e -- <filename>
+
+# ALL tests must pass - no failures, no skipped tests
+```
+
+### 2. No Format/Lint Errors
+```bash
+# Auto-fix all format and lint issues
+npm run fix
+
+# This command runs:
+# - prettier --write (format)
+# - eslint --fix (lint)
+```
+
+**IMPORTANT**: Run `npm run fix` BEFORE marking tests as complete. This ensures:
+- ✅ Consistent code formatting
+- ✅ No ESLint errors
+- ✅ No unused imports
+- ✅ Proper spacing and indentation
+
+### 3. No Type Errors
+```bash
+# Check for TypeScript errors
+npm run type-check
+
+# This runs: npx tsc --noEmit
+# Must show: "0 errors"
+```
+
+**IMPORTANT**: Fix all TypeScript errors before completion. Common issues:
+- ❌ Unused variables (`expect`, `vi`, `page`)
+- ❌ Missing imports
+- ❌ Wrong parameter counts
+- ❌ Type mismatches
+
+### 4. Final Verification Command
+
+**Before marking ANY test file as complete, run this command sequence:**
+
+```bash
+# 1. Fix format/lint
+npm run fix
+
+# 2. Check types
+npm run type-check
+
+# 3. Run the specific test file
+npm run test:unit -- <filename>  # or test:integration or test:e2e
+
+# All three commands must succeed with 0 errors
+```
+
+### Acceptance Checklist
+
+For each test file, verify:
+- [ ] All tests pass (100% pass rate)
+- [ ] `npm run fix` executed successfully
+- [ ] `npm run type-check` shows 0 errors
+- [ ] No unused imports or variables
+- [ ] No ESLint warnings
+- [ ] Tests follow TESTING_FUNDAMENTALS.md patterns
+- [ ] Helpers used correctly (especially `bridge.helper.ts`)
+
+**DO NOT mark a test file as complete until ALL criteria are met.**
+
+---
+
 ## Output Format
 
 When implementing tests, provide:
@@ -632,6 +787,11 @@ Example:
   ✅ 5/5 tests passing
   ⏱️ Execution time: 125ms
   📊 Coverage: app.ts 95.2%
+
+✅ Acceptance Criteria Verified:
+  ✅ npm run fix - No issues
+  ✅ npm run type-check - 0 errors
+  ✅ All tests passing - 5/5
 
 🎯 Next: tests/unit/core/state-manager.test.ts
 ```
