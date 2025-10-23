@@ -516,8 +516,10 @@ describe('API Integration - Transformer Methods', () => {
 
         TraceLog.event('test', {});
 
-        // Trigger queue flush
+        // Trigger queue flush - use runOnlyPendingTimersAsync after advancing time
         await vi.advanceTimersByTimeAsync(10100);
+        await vi.runOnlyPendingTimersAsync();
+
         vi.useRealTimers();
         await new Promise((resolve) => setTimeout(resolve, 100));
 
