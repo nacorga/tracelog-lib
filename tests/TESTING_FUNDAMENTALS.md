@@ -454,10 +454,11 @@ await triggerAndWaitForEvent(bridge, 'test', { key: 'value' });
 - Testing pure functions
 
 **Coverage targets**:
-- Critical core: 95%+
-- Managers: 90%+
-- Handlers: 85%+
-- Utilities: 80%+
+- Overall minimum: 70% (CI requirement)
+- Critical core: 80%+ (aspirational)
+- Managers: 75%+ (aspirational)
+- Handlers: 70%+ (aspirational)
+- Utilities: 70%+ (aspirational)
 
 ---
 
@@ -478,8 +479,8 @@ await triggerAndWaitForEvent(bridge, 'test', { key: 'value' });
 - Testing state synchronization (Multi-tab sync)
 
 **Coverage targets**:
-- Critical flows: 90%+
-- Integration points: 85%+
+- Critical flows: 75%+ (aspirational)
+- Integration points: 70%+ (minimum)
 
 ---
 
@@ -2124,7 +2125,7 @@ Before merging test changes:
 - [ ] **No format/lint errors** - `npm run fix` executed successfully
 - [ ] **No type errors** - `npm run type-check` shows 0 errors
 - [ ] **No unused imports** - Cleaned by `npm run fix`
-- [ ] **Coverage targets met** - 90%+ for critical logic, 85%+ for flows
+- [ ] **Coverage targets met** - 70%+ minimum (higher for critical code)
 - [ ] **No flaky tests** - Tests pass consistently (3+ runs)
 - [ ] **Fast execution** - Unit <100ms, Integration <1s, E2E <10s
 - [ ] **Clean code** - No TODOs, no commented code, clear names

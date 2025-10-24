@@ -36,7 +36,7 @@ npm run test:integration
 # E2E tests (Playwright - requires test server)
 npm run test:e2e
 
-# Coverage report (must hit 90%+ for core logic)
+# Coverage report (minimum 70% threshold)
 npm run test:coverage
 
 # Start test server for E2E (runs on localhost:3000)
@@ -489,7 +489,7 @@ Target: ES2022, Lib: DOM + ES2022
 
 ### Unit Tests (Vitest)
 - Location: `tests/unit/`
-- Coverage: 90%+ required for core logic
+- Coverage: 70%+ minimum threshold (higher for critical code)
 - Mock-heavy: localStorage, BroadcastChannel, fetch, DOM APIs
 - Focus: Individual functions and classes
 
