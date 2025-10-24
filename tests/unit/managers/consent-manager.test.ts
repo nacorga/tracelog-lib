@@ -1,7 +1,5 @@
 /**
  * ConsentManager Tests
- *
- * Priority: P1 (Essential)
  * Focus: Consent tracking and event buffering
  */
 

@@ -1,7 +1,5 @@
 /**
  * PerformanceHandler Tests
- *
- * Priority: P1 (Essential)
  * Focus: Web Vitals tracking
  */
 

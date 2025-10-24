@@ -1,7 +1,5 @@
 /**
  * E2E: Custom Events Tests
- *
- * Priority: P0 (Critical)
  * Focus: Custom event tracking via public API
  */
 

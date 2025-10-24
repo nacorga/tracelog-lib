@@ -1,7 +1,5 @@
 /**
  * E2E: Initialization Tests
- *
- * Priority: P0 (Critical)
  * Focus: Basic initialization and config in real browser
  */
 

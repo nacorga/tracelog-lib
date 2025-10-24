@@ -1,7 +1,5 @@
 /**
  * E2E: Page View Tracking Tests
- *
- * Priority: P0 (Critical)
  * Focus: Navigation and page view tracking
  */
 

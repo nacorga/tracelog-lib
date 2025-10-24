@@ -1,7 +1,5 @@
 /**
  * ErrorHandler Tests
- *
- * Priority: P1 (Essential)
  * Focus: JavaScript error tracking
  */
 

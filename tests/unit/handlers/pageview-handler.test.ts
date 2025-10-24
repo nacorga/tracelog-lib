@@ -1,7 +1,5 @@
 /**
  * PageViewHandler Tests
- *
- * Priority: P1 (Essential)
  * Focus: Navigation tracking and SPA support
  */
 

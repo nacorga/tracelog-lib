@@ -148,6 +148,29 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   /**
+   * Get all handlers at once (convenience method)
+   */
+  getHandlers(): {
+    performance: PerformanceHandler | null;
+    error: ErrorHandler | null;
+    session: SessionHandler | null;
+    pageView: PageViewHandler | null;
+    click: ClickHandler | null;
+    scroll: ScrollHandler | null;
+    viewport: ViewportHandler | null;
+  } {
+    return {
+      performance: this.getPerformanceHandler(),
+      error: this.getErrorHandler(),
+      session: this.getSessionHandler(),
+      pageView: this.getPageViewHandler(),
+      click: this.getClickHandler(),
+      scroll: this.getScrollHandler(),
+      viewport: this.getViewportHandler(),
+    };
+  }
+
+  /**
    * Storage manager accessor for tests
    */
   getStorageManager(): StorageManager | null {

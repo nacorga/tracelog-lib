@@ -1,7 +1,5 @@
 /**
  * StorageManager Tests
- *
- * Priority: P0 (Critical)
  * Focus: Storage abstraction with fallbacks
  */
 

@@ -1,7 +1,5 @@
 /**
  * E2E: Click Tracking Tests
- *
- * Priority: P0 (Critical)
  * Focus: Click event capture with PII sanitization
  */
 

@@ -1,7 +1,5 @@
 /**
  * E2E: Error Capture Tests
- *
- * Priority: P1 (Essential)
  * Focus: JavaScript error tracking
  */
 

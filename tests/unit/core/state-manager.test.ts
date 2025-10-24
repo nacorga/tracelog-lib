@@ -1,7 +1,5 @@
 /**
  * StateManager Tests
- *
- * Priority: P0 (Critical)
  * Focus: Global state management for all components
  */
 

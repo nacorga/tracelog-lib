@@ -1,7 +1,5 @@
 /**
  * Event Recovery Integration Tests
- *
- * Priority: P1 (Essential)
  * Focus: Failed event recovery from persistence
  */
 

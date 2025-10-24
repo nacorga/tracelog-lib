@@ -1,7 +1,5 @@
 /**
  * SessionHandler Tests
- *
- * Priority: P1 (Essential)
  * Focus: Session handler wrapper
  */
 

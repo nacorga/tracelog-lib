@@ -11,6 +11,7 @@ import { ConsentManager } from '../managers/consent.manager';
 import { Config } from './config.types';
 import { State } from './state.types';
 import { EventData } from './event.types';
+import { BeforeSendTransformer, BeforeBatchTransformer, TransformerHook } from './transformer.types';
 
 /**
  * Testing bridge interface for E2E and integration tests
@@ -56,6 +57,12 @@ export interface TraceLogTestBridge {
   // QA mode for testing
   setQaMode(enabled: boolean): void;
 
+  // Transformer methods (for testing event transformation)
+  setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
+  setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
+  setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void;
+  removeTransformer(hook: TransformerHook): void;
+
   // Manager accessors (for unit/integration tests)
   getEventManager(): EventManager | undefined;
   getStorageManager(): StorageManager | null;
@@ -69,6 +76,17 @@ export interface TraceLogTestBridge {
   getClickHandler(): ClickHandler | null;
   getScrollHandler(): ScrollHandler | null;
   getViewportHandler(): ViewportHandler | null;
+
+  // Convenience method to get all handlers at once
+  getHandlers(): {
+    performance: PerformanceHandler | null;
+    error: ErrorHandler | null;
+    session: SessionHandler | null;
+    pageView: PageViewHandler | null;
+    click: ClickHandler | null;
+    scroll: ScrollHandler | null;
+    viewport: ViewportHandler | null;
+  };
 
   // Test utilities
   waitForInitialization(timeout?: number): Promise<void>;

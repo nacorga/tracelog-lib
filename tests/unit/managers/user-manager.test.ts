@@ -1,7 +1,5 @@
 /**
  * UserManager Tests
- *
- * Priority: P0 (Critical)
  * Focus: User UUID generation and persistence
  */
 

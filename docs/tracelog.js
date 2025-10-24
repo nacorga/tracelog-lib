@@ -6887,6 +6887,7 @@ class App extends StateManager {
    */
   sendCustomEvent(name, metadata) {
     if (!this.managers.event) {
+      log("warn", "Cannot send custom event: TraceLog not initialized", { data: { name } });
       return;
     }
     let normalizedMetadata = metadata;
@@ -7480,10 +7481,16 @@ const __setAppInstance = (instance) => {
 };
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   void Promise.resolve().then(() => testBridge).then((module) => {
-    module.injectTestBridge();
+    if (typeof module.injectTestBridge === "function") {
+      module.injectTestBridge();
+    }
+  }).catch(() => {
   });
   void Promise.resolve().then(() => qaMode_utils).then((module) => {
-    module.detectQaMode();
+    if (typeof module.detectQaMode === "function") {
+      module.detectQaMode();
+    }
+  }).catch(() => {
   });
 }
 const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -7818,6 +7825,20 @@ class TestBridge extends App {
    */
   getViewportHandler() {
     return this.handlers.viewport ?? null;
+  }
+  /**
+   * Get all handlers at once (convenience method)
+   */
+  getHandlers() {
+    return {
+      performance: this.getPerformanceHandler(),
+      error: this.getErrorHandler(),
+      session: this.getSessionHandler(),
+      pageView: this.getPageViewHandler(),
+      click: this.getClickHandler(),
+      scroll: this.getScrollHandler(),
+      viewport: this.getViewportHandler()
+    };
   }
   /**
    * Storage manager accessor for tests

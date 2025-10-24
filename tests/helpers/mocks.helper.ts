@@ -322,7 +322,7 @@ export function createConfigWithSuccessSimulation(): {
   return {
     integrations: {
       custom: {
-        collectApiUrl: 'localhost:8080', // SpecialApiUrl.Localhost
+        collectApiUrl: 'http://localhost:8080', // SpecialApiUrl.Localhost with protocol
         allowHttp: true, // Required for localhost URLs
       },
     },
@@ -348,7 +348,7 @@ export function createConfigWithFailureSimulation(): {
   return {
     integrations: {
       custom: {
-        collectApiUrl: 'localhost:9999', // SpecialApiUrl.Fail
+        collectApiUrl: 'http://localhost:9999', // SpecialApiUrl.Fail with protocol
         allowHttp: true, // Required for localhost URLs
       },
     },

@@ -93,7 +93,7 @@ export async function waitForStateValue<K extends keyof State>(
  * Wait for state to be initialized
  * Note: isInitialized is part of App, not State. Use tracelog.isInitialized() API instead.
  */
-export function waitForStateInitialized(_timeout = 5000): Promise<void> {
+export async function waitForStateInitialized(_timeout = 5000): Promise<void> {
   // This function is deprecated - isInitialized is not part of State
   throw new Error('Use tracelog.isInitialized() API instead');
 }

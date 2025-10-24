@@ -1,7 +1,5 @@
 /**
  * Multi-Tab Sync Integration Tests
- *
- * Priority: P1 (Essential)
  * Focus: Cross-tab session synchronization
  */
 

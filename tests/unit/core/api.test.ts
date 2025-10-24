@@ -1,11 +1,7 @@
 /**
  * Public API Tests
- *
- * Priority: P0 (Critical)
  * Focus: Public API methods exposed to users
  */
-
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';

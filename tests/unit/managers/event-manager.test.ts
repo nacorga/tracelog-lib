@@ -1,7 +1,5 @@
 /**
  * EventManager Tests
- *
- * Priority: P0 (Critical)
  * Focus: Event tracking, queuing, deduplication, and coordination
  */
 

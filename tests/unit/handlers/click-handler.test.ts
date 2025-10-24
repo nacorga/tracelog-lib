@@ -1,7 +1,5 @@
 /**
  * ClickHandler Tests
- *
- * Priority: P1 (Essential)
  * Focus: Click event tracking with PII sanitization
  */
 

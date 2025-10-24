@@ -1,7 +1,5 @@
 /**
  * App Core Tests
- *
- * Priority: P0 (Critical)
  * Focus: App initialization and lifecycle management
  */
 

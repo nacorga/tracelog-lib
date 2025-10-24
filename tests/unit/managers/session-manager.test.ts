@@ -1,13 +1,6 @@
 /**
  * SessionManager Tests
- *
- * Priority: P0 (Critical)
  * Focus: Session lifecycle, timeout, cross-tab sync
- *
- * Testing Strategy:
- * - Unit tests focus on SessionManager's direct behavior (state, storage, timers)
- * - Event emission tested via EventManager.track() calls (integration concern)
- * - Standalone mode: Events tracked but not queued (no backend)
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';

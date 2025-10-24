@@ -1,7 +1,5 @@
 /**
  * E2E: Scroll Tracking Tests
- *
- * Priority: P1 (Essential)
  * Focus: Scroll depth tracking with debouncing
  */
 

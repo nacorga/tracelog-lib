@@ -1,7 +1,5 @@
 /**
  * SenderManager Tests
- *
- * Priority: P0 (Critical)
  * Focus: Event transmission, retry logic, error handling
  */
 

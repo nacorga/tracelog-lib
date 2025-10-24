@@ -154,7 +154,7 @@ Would you like me to:
 
 ## 🛠️ Available Test Helpers
 
-### TestBridge (`tests/helpers/bridge.helper.ts`) ⭐ CRITICAL
+### TestBridge (`tests/helpers/bridge.helper.ts`) ⭐ CRITICAL (Integration Tests Only)
 ```typescript
 import {
   getTestBridge,              // Get bridge instance from window
@@ -178,6 +178,8 @@ const { length, events } = getQueueState(bridge);
 const state = getStateSnapshot(bridge);
 destroyTestBridge();
 ```
+
+**⚠️ Important**: This helper is for **Integration tests only**. E2E tests use direct `window.__traceLogBridge` access in `page.evaluate()`. See E2E Test Template below for correct E2E patterns.
 
 ### Setup & Cleanup (`tests/helpers/setup.helper.ts`)
 ```typescript
@@ -618,7 +620,7 @@ npm test             # Run all tests (100% pass)
 - [ ] No unused imports or variables
 - [ ] No ESLint warnings
 - [ ] Tests follow TESTING_FUNDAMENTALS.md patterns
-- [ ] Helpers used correctly (especially `bridge.helper.ts`)
+- [ ] Helpers used correctly (especially `bridge.helper.ts` for integration tests)
 
 ---
 

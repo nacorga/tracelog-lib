@@ -68,9 +68,11 @@ The `TestBridge` class (`src/test-bridge.ts`) acts as the **adapter layer** betw
 
 ---
 
-### 🎯 CRITICAL RULE: Always Use `bridge.helper.ts`
+### 🎯 CRITICAL RULE: Always Use `bridge.helper.ts` (Integration Tests Only)
 
-**DO NOT write custom bridge initialization or direct access code. ALWAYS use the provided helper functions from `tests/helpers/bridge.helper.ts`.**
+**For Integration Tests (Vitest)**: DO NOT write custom bridge initialization or direct access code. ALWAYS use the provided helper functions from `tests/helpers/bridge.helper.ts`.
+
+**For E2E Tests (Playwright)**: Use direct `window.__traceLogBridge` access in `page.evaluate()` - see E2E Test Patterns section below.
 
 #### ✅ CORRECT Usage Pattern
 
@@ -104,7 +106,9 @@ const { length, events } = getQueueState(bridge);
 destroyTestBridge();
 ```
 
-#### ❌ WRONG Usage Patterns
+#### ❌ WRONG Usage Patterns (Integration Tests)
+
+**⚠️ Important Note**: The patterns below are WRONG for Integration tests (Vitest), but they are CORRECT for E2E tests (Playwright) where you must use `window.__traceLogBridge` directly inside `page.evaluate()`.
 
 ```typescript
 // ❌ DON'T: Manual bridge access
@@ -422,12 +426,12 @@ await triggerAndWaitForEvent(bridge, 'test', { key: 'value' });
 
 ### When to Use TestBridge
 
-| Test Type | Use TestBridge? | Why |
-|-----------|----------------|-----|
-| Unit (isolated managers/handlers) | ❌ No | Test components directly with mocks |
-| Unit (App initialization flow) | ✅ Yes | Need full initialization sequence |
-| Integration (multi-component) | ✅ Yes | Need real manager interactions |
-| E2E (Playwright browser tests) | ✅ Yes | Only way to access library internals |
+| Test Type | Use TestBridge? | How to Access | Why |
+|-----------|----------------|---------------|-----|
+| Unit (isolated managers/handlers) | ❌ No | - | Test components directly with mocks |
+| Unit (App initialization flow) | ✅ Yes | `bridge.helper.ts` | Need full initialization sequence |
+| Integration (multi-component) | ✅ Yes | `bridge.helper.ts` | Need real manager interactions |
+| **E2E (Playwright browser tests)** | ✅ Yes | **`window.__traceLogBridge`** | Direct access in `page.evaluate()` context |
 
 ---
 
@@ -1977,5 +1981,5 @@ Before merging test changes:
 - [ ] **No flaky tests** - Tests pass consistently (3+ runs)
 - [ ] **Fast execution** - Unit <100ms, Integration <1s, E2E <10s
 - [ ] **Clean code** - No TODOs, no commented code, clear names
-- [ ] **Helpers used** - Especially `bridge.helper.ts` for integration/E2E
+- [ ] **Helpers used** - Especially `bridge.helper.ts` for integration tests
 - [ ] **Documentation updated** - If adding new patterns
