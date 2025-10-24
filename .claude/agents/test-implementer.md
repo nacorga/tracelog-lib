@@ -358,40 +358,78 @@ test('should track events', async ({ page }) => {
    - No access to Node.js imports, helpers, or test variables
    - Must return serializable data (no functions, DOM nodes)
 
-**Pattern Template:**
+4. **🚨 CRITICAL: Test Isolation with destroy()**
+   - ❌ WRONG: Call `init()` without `destroy()` first
+   - ✅ CORRECT: ALWAYS call `destroy(true)` before `init()` to ensure clean state
+   - **Why**: Playwright preserves JavaScript state between tests. Without `destroy()`, the second and subsequent tests fail with "TestBridge cannot sync with existing tracelog instance"
+
+**Pattern Template (ALWAYS USE THIS EXACT STRUCTURE):**
 ```typescript
-test('test name', async ({ page }) => {
-  await page.goto('/');
-
-  const result = await page.evaluate(async () => {
-    // Wait for bridge (CSP-safe)
-    let retries = 0;
-    while (!window.__traceLogBridge && retries < 50) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      retries++;
-    }
-
-    // Use bridge directly
-    await window.__traceLogBridge.init({ /* config */ });
-
-    // Return serializable data only
-    return {
-      initialized: window.__traceLogBridge.initialized,
-      queueLength: window.__traceLogBridge.getQueueLength(),
-      events: window.__traceLogBridge.getQueueEvents()
-    };
+test.describe('E2E: Feature Name', () => {
+  test.beforeEach(async ({ page }) => {
+    // 🚨 REQUIRED: Prevent auto-initialization by script.js
+    await page.goto('/?auto-init=false');
   });
 
-  // Assertions run in Node.js context
-  expect(result.initialized).toBe(true);
+  test('test name', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      // Step 1: Wait for bridge (CSP-safe with timeout)
+      let retries = 0;
+      while (!window.__traceLogBridge && retries < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+      }
+
+      if (!window.__traceLogBridge) {
+        throw new Error('TraceLog bridge not available');
+      }
+
+      // Step 2: 🚨 CRITICAL - Destroy existing instance before init
+      window.__traceLogBridge.destroy(true);
+      await window.__traceLogBridge.init({ /* optional config */ });
+
+      // Step 3: Setup event listeners (BEFORE performing actions)
+      const events: any[] = [];
+      window.__traceLogBridge.on('event', (event) => {
+        events.push(event);
+      });
+
+      // Step 4: Perform action being tested
+      const element = document.querySelector('[data-testid="target"]') as HTMLElement;
+      if (element) {
+        element.click();
+      }
+
+      // Step 5: Wait for event processing (minimum 200ms)
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Step 6: Return serializable data only
+      return events;
+    });
+
+    // Step 7: Assertions run in Node.js context
+    const clickEvent = result.find((e: any) => e.type === 'click');
+    expect(clickEvent).toBeDefined();
+  });
 });
 ```
 
+**Template Checklist (ALL REQUIRED):**
+- ✅ `?auto-init=false` in `beforeEach` (prevents script.js from auto-initializing)
+- ✅ Wait for bridge with timeout + error handling
+- ✅ `destroy(true)` before `init()` (CRITICAL for test isolation)
+- ✅ Event listeners setup BEFORE performing actions
+- ✅ Wait time after action (minimum 200ms for event processing)
+- ✅ Return serializable data from `page.evaluate()` (no functions, DOM nodes)
+- ✅ Assertions outside `page.evaluate()` (in Node.js context)
+
 **Common E2E Mistakes:**
-- Using `bridge.helper.ts` imports (works in Integration, fails in E2E)
-- Using `page.waitForFunction()` (CSP-blocked)
-- Trying to access test variables inside `page.evaluate()`
-- Returning non-serializable data from `page.evaluate()`
+- ❌ **CRITICAL**: Forgetting `destroy(true)` before `init()` → Second test fails with "TestBridge cannot sync with existing tracelog instance"
+- ❌ Using `bridge.helper.ts` imports (works in Integration, fails in E2E)
+- ❌ Using `page.waitForFunction()` (CSP-blocked)
+- ❌ Forgetting `?auto-init=false` in URL → script.js initializes tracelog → TestBridge fails to sync
+- ❌ Trying to access test variables inside `page.evaluate()`
+- ❌ Returning non-serializable data from `page.evaluate()`
 
 ### Test Patterns
 

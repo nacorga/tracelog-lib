@@ -1340,6 +1340,117 @@ test('should include sessionId in queue', async ({ page }) => {
 });
 ```
 
+#### Pattern 5: Test Isolation with destroy()
+
+**🚨 CRITICAL**: Always call `destroy(true)` before `init()` in E2E tests to ensure clean state between tests.
+
+**Why**: Playwright doesn't automatically clear JavaScript state between tests in the same `describe` block. Without `destroy()`, the second and subsequent tests will fail with:
+```
+Error: [TraceLog] TestBridge cannot sync with existing tracelog instance. Call destroy() first.
+```
+
+**Example**:
+```typescript
+test('should track click events', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    // Wait for bridge
+    let retries = 0;
+    while (!window.__traceLogBridge && retries < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      retries++;
+    }
+
+    if (!window.__traceLogBridge) {
+      throw new Error('TraceLog bridge not available');
+    }
+
+    // 🚨 CRITICAL: Destroy existing instance before init
+    window.__traceLogBridge.destroy(true);
+    await window.__traceLogBridge.init();
+
+    // ... rest of test
+  });
+});
+```
+
+**What happens without destroy()**:
+- ✅ First test: Passes (creates new instance)
+- ❌ Second test: Fails with "TestBridge cannot sync with existing tracelog instance"
+- ❌ All subsequent tests: Fail with same error
+
+**When to use `destroy(true)` vs `destroy()`**:
+- `destroy(true)` - Force cleanup even if not initialized (safe for E2E tests)
+- `destroy()` - Only cleanup if initialized (normal usage)
+
+#### Pattern 6: Complete E2E Test Template
+
+Use this template for **ALL E2E tests** to ensure consistency and avoid common pitfalls:
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('E2E: Feature Name', () => {
+  test.beforeEach(async ({ page }) => {
+    // Prevent auto-initialization by script.js
+    await page.goto('/?auto-init=false');
+  });
+
+  test('should do something specific', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      // Step 1: Wait for bridge (with timeout)
+      let retries = 0;
+      while (!window.__traceLogBridge && retries < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+      }
+
+      if (!window.__traceLogBridge) {
+        throw new Error('TraceLog bridge not available');
+      }
+
+      // Step 2: Destroy existing instance + init (CRITICAL)
+      window.__traceLogBridge.destroy(true);
+      await window.__traceLogBridge.init({
+        // Optional config
+      });
+
+      // Step 3: Setup event listeners
+      const events: any[] = [];
+      window.__traceLogBridge.on('event', (event) => {
+        events.push(event);
+      });
+
+      // Step 4: Perform action being tested
+      const element = document.querySelector('[data-testid="target"]') as HTMLElement;
+      if (element) {
+        element.click();
+      }
+
+      // Step 5: Wait for event processing
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Step 6: Return data for assertions
+      return events;
+    });
+
+    // Step 7: Assertions (outside page.evaluate)
+    const clickEvent = result.find((e: any) => e.type === 'click');
+    expect(clickEvent).toBeDefined();
+    expect(clickEvent.click_data).toBeDefined();
+  });
+});
+```
+
+**Template Checklist**:
+- ✅ `?auto-init=false` in `beforeEach`
+- ✅ Wait for bridge with timeout
+- ✅ Error handling if bridge unavailable
+- ✅ `destroy(true)` before `init()`
+- ✅ Event listeners setup before action
+- ✅ Wait time after action (minimum 200ms)
+- ✅ Return data from `page.evaluate()`
+- ✅ Assertions outside `page.evaluate()`
+
 ---
 
 ## Anti-Patterns

@@ -1576,7 +1576,7 @@ class SenderManager extends StateManager {
       );
       return true;
     }
-    if (this.apiUrl === SpecialApiUrl.Fail) {
+    if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
       log(
         "warn",
         `Fail mode: simulating network failure (sync)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
@@ -1585,6 +1585,16 @@ class SenderManager extends StateManager {
         }
       );
       return false;
+    }
+    if (this.apiUrl?.includes(SpecialApiUrl.Localhost)) {
+      log(
+        "debug",
+        `Success mode: simulating successful send (sync)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
+        {
+          data: { events: body.events.length }
+        }
+      );
+      return true;
     }
     return this.sendQueueSyncInternal(body);
   }
@@ -1913,11 +1923,17 @@ class SenderManager extends StateManager {
     if (!transformedBody) {
       return true;
     }
-    if (this.apiUrl === SpecialApiUrl.Fail) {
+    if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
       log("warn", `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
         data: { events: transformedBody.events.length }
       });
       return false;
+    }
+    if (this.apiUrl?.includes(SpecialApiUrl.Localhost)) {
+      log("debug", `Success mode: simulating successful send${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+        data: { events: transformedBody.events.length }
+      });
+      return true;
     }
     const { url, payload } = this.prepareRequest(transformedBody);
     for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
