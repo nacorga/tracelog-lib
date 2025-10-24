@@ -295,3 +295,30 @@ open coverage/lcov-report/index.html
 - 100% pass rating
 - NO type errors (use `npm run type-check` script to verify)
 - NO lint errors (use `npm run lint` script to verify - warnings are acceptable, only errors block acceptance)
+
+---
+
+## 📚 Additional Resources
+
+- **TESTING_FUNDAMENTALS.md** - Complete testing guide with patterns, helpers, and best practices
+  - TestBridge architecture and usage
+  - Test helpers reference
+  - Common patterns and anti-patterns
+  - Acceptance criteria checklist
+- **TESTING_TROUBLESHOOTING.md** - Common test failures and diagnostic techniques
+  - Event count is always 0
+  - BroadcastChannel messages not processing
+  - Queue appears empty
+  - Session state not clearing
+  - Diagnostic patterns (force-fail, queue inspection, isolated tests)
+  - Real-world investigation examples
+- **e2e/README.md** - E2E testing with Playwright
+  - Test isolation patterns and destroy() protocol
+  - CSP-safe waiting strategies
+  - Browser context limitations
+  - Event listener setup timing
+  - Complete test template with checklist
+- **CLAUDE.md** - Critical testing patterns and project guidelines
+  - Event type case sensitivity (always lowercase)
+  - ProjectId validation in BroadcastChannel tests
+  - Testing workflow and commands

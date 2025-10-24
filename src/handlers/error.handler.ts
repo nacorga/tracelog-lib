@@ -15,8 +15,23 @@ import {
 } from '../constants/error.constants';
 
 /**
- * Simplified error handler for tracking JavaScript errors and unhandled promise rejections
- * Includes PII sanitization and sampling support
+ * Captures JavaScript errors and unhandled promise rejections for debugging and monitoring.
+ *
+ * **Events Generated**: `error`
+ *
+ * **Features**:
+ * - Tracks JavaScript runtime errors and unhandled promise rejections
+ * - Configurable error sampling rate (default: 100%)
+ * - PII sanitization (emails, phone numbers, credit cards, API keys, tokens)
+ * - Message truncation (500 character limit)
+ * - Burst detection (>10 errors/second triggers 5-second cooldown)
+ * - Deduplication within 5-second window per error type+message
+ *
+ * **Privacy Protection**:
+ * - Automatically redacts PII from error messages before storage
+ * - Sanitizes emails, phone numbers, credit cards, IBAN, API keys, Bearer tokens
+ *
+ * @see src/handlers/README.md (lines 167-218) for detailed documentation
  */
 export class ErrorHandler extends StateManager {
   private readonly eventManager: EventManager;
@@ -30,11 +45,24 @@ export class ErrorHandler extends StateManager {
     this.eventManager = eventManager;
   }
 
+  /**
+   * Starts tracking JavaScript errors and promise rejections.
+   *
+   * - Registers global error event listener
+   * - Registers unhandledrejection event listener
+   */
   startTracking(): void {
     window.addEventListener('error', this.handleError);
     window.addEventListener('unhandledrejection', this.handleRejection);
   }
 
+  /**
+   * Stops tracking errors and cleans up resources.
+   *
+   * - Removes error event listeners
+   * - Clears recent errors map
+   * - Resets burst detection counters
+   */
   stopTracking(): void {
     window.removeEventListener('error', this.handleError);
     window.removeEventListener('unhandledrejection', this.handleRejection);
@@ -45,27 +73,23 @@ export class ErrorHandler extends StateManager {
   }
 
   /**
-   * Checks sampling rate and burst detection (Phase 3)
+   * Checks sampling rate and burst detection
    * Returns false if in cooldown period after burst detection
    */
   private shouldSample(): boolean {
     const now = Date.now();
 
-    // Check if in backoff period (Phase 3)
     if (now < this.burstBackoffUntil) {
       return false;
     }
 
-    // Reset burst counter if window expired
     if (now - this.burstWindowStart > ERROR_BURST_WINDOW_MS) {
       this.errorBurstCounter = 0;
       this.burstWindowStart = now;
     }
 
-    // Increment burst counter
     this.errorBurstCounter++;
 
-    // Trigger backoff if burst threshold exceeded
     if (this.errorBurstCounter > ERROR_BURST_THRESHOLD) {
       this.burstBackoffUntil = now + ERROR_BURST_BACKOFF_MS;
       log('warn', 'Error burst detected - entering cooldown', {
@@ -77,7 +101,6 @@ export class ErrorHandler extends StateManager {
       return false;
     }
 
-    // Normal sampling logic
     const config = this.get('config');
     const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;

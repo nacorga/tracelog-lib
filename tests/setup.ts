@@ -1,4 +1,5 @@
 import { beforeEach, vi, afterEach } from 'vitest';
+import { injectTestBridge } from '../src/test-bridge';
 
 // Minimal setup for jsdom environment
 
@@ -22,6 +23,15 @@ beforeEach(() => {
 
       close(): void {}
     } as unknown as typeof BroadcastChannel;
+  }
+
+  // Inject TestBridge for unit/integration tests
+  if (typeof window !== 'undefined') {
+    try {
+      injectTestBridge();
+    } catch {
+      // Silently ignore if TestBridge injection fails
+    }
   }
 
   vi.clearAllMocks();

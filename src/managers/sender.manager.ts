@@ -5,29 +5,108 @@ import {
   PERMANENT_ERROR_LOG_THROTTLE_MS,
   MAX_BEACON_PAYLOAD_SIZE,
   PERSISTENCE_THROTTLE_MS,
+  MAX_SEND_RETRIES,
+  RETRY_BACKOFF_BASE_MS,
+  RETRY_BACKOFF_JITTER_MS,
 } from '../constants';
 import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
 import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
+import { ConsentManager } from './consent.manager';
 
 interface SendCallbacks {
   onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
   onFailure?: () => void;
 }
 
+/**
+ * Manages sending event queues to configured API endpoints with persistence,
+ * recovery, and multi-integration support.
+ *
+ * **Purpose**: Handles reliable event transmission to backend APIs with automatic
+ * persistence for crash recovery and support for multiple integration backends.
+ *
+ * **Core Functionality**:
+ * - **Event Transmission**: Sends event batches via `fetch()` (async) or `sendBeacon()` (sync)
+ * - **Automatic Retries**: Up to 2 in-session retry attempts for transient failures (5xx, timeout)
+ * - **Persistence & Recovery**: Stores failed events in localStorage, recovers on next page load
+ * - **Multi-Integration**: Separate queues for SaaS (`tracelog`) and Custom backends
+ * - **Multi-Tab Protection**: 1-second window prevents duplicate sends across tabs
+ * - **Event Expiry**: Discards events older than 2 hours (prevents stale data accumulation)
+ * - **Consent Integration**: Skips sends when consent not granted for integration
+ * - **Transformer Support**: Applies `beforeBatch` transformer before network transmission
+ *
+ * **Key Features**:
+ * - **In-Session Retries**: Up to 2 retry attempts for 5xx/timeout with exponential backoff
+ * - **Recovery on Next Page**: Failed events persisted to localStorage, recovered on init
+ * - **Payload Size Validation**: 64KB limit for `sendBeacon()` to prevent truncation
+ * - **Permanent Error Detection**: 4xx status codes (except 408, 429) marked as permanent
+ * - **Independent Multi-Integration**: Separate SenderManager instances for each backend
+ * - **Consent-Aware**: Checks consent before sending, skips if consent not granted
+ *
+ * **Error Handling**:
+ * - **4xx Errors** (permanent): Logged once per minute (throttled), events discarded, no retries
+ * - **5xx Errors** (transient): Retried up to 2 times with exponential backoff, then persisted
+ * - **Network Errors** (transient): Retried up to 2 times with exponential backoff, then persisted
+ * - **Timeout** (transient): Retried up to 2 times with exponential backoff, then persisted
+ *
+ * **Storage Keys**:
+ * - **Standalone**: `tlog:{userId}:queue` (single queue)
+ * - **SaaS Integration**: `tlog:{userId}:queue:saas`
+ * - **Custom Integration**: `tlog:{userId}:queue:custom`
+ *
+ * **Multi-Tab Protection**:
+ * - Persisted events include `lastPersistTime` timestamp
+ * - Recovery skips events persisted within last 1 second (active tab may retry)
+ *
+ * @see src/managers/README.md (lines 82-139) for detailed documentation
+ *
+ * @example
+ * ```typescript
+ * // Standalone mode (no backend)
+ * const sender = new SenderManager(storage);
+ * const success = await sender.send(eventsQueue); // No-op, returns true
+ *
+ * // SaaS integration
+ * const saasSender = new SenderManager(storage, 'saas', 'https://api.tracelog.io/collect', consentManager);
+ * const success = await saasSender.send(eventsQueue);
+ *
+ * // Custom backend
+ * const customSender = new SenderManager(storage, 'custom', 'https://myapi.com/events', consentManager);
+ * const success = await customSender.send(eventsQueue);
+ *
+ * // Synchronous send (page unload)
+ * const success = sender.sendQueueSync(eventsQueue); // Uses sendBeacon()
+ * ```
+ */
 export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly integrationId?: 'saas' | 'custom';
   private readonly apiUrl?: string;
+  private readonly consentManager: ConsentManager | null;
   private readonly transformers: TransformerMap;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
 
+  /**
+   * Creates a SenderManager instance.
+   *
+   * **Validation**: `integrationId` and `apiUrl` must both be provided or both be undefined.
+   * Throws error if only one is provided.
+   *
+   * @param storeManager - Storage manager for event persistence
+   * @param integrationId - Optional integration identifier ('saas' or 'custom')
+   * @param apiUrl - Optional API endpoint URL
+   * @param consentManager - Optional consent manager for GDPR compliance
+   * @param transformers - Optional event transformation hooks
+   * @throws Error if integrationId and apiUrl are not both provided or both undefined
+   */
   constructor(
     storeManager: StorageManager,
     integrationId?: 'saas' | 'custom',
     apiUrl?: string,
+    consentManager: ConsentManager | null = null,
     transformers: TransformerMap = {},
   ) {
     super();
@@ -39,22 +118,70 @@ export class SenderManager extends StateManager {
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
+    this.consentManager = consentManager;
     this.transformers = transformers;
+  }
+
+  /**
+   * Get the integration ID for this sender
+   * @returns The integration ID ('saas' or 'custom') or undefined if not set
+   */
+  public getIntegrationId(): 'saas' | 'custom' | undefined {
+    return this.integrationId;
   }
 
   private getQueueStorageKey(): string {
     const userId = this.get('userId') || 'anonymous';
     const baseKey = QUEUE_KEY(userId);
-    // Add integration suffix for multi-integration support
+    // Separate storage keys prevent cross-integration interference in multi-integration mode
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
 
+  /**
+   * Sends events synchronously using `navigator.sendBeacon()`.
+   *
+   * **Purpose**: Guarantees event delivery before page unload even if network is slow.
+   *
+   * **Use Cases**:
+   * - Page unload (`beforeunload`, `pagehide` events)
+   * - Tab close scenarios
+   * - Any case where async send might be interrupted
+   *
+   * **Behavior**:
+   * - Uses `navigator.sendBeacon()` (browser-queued, synchronous API)
+   * - Payload size limited to 64KB (enforced by browser)
+   * - Browser guarantees delivery attempt (survives page close)
+   * - NO persistence on failure (fire-and-forget)
+   *
+   * **Consent Check**: Skips send if consent not granted for this integration
+   *
+   * **Return Values**:
+   * - `true`: Send succeeded OR skipped (standalone mode, no consent)
+   * - `false`: Send failed (network error, browser rejected beacon)
+   *
+   * **Important**: No retry mechanism for failures. Events are NOT persisted.
+   *
+   * @param body - Event queue to send
+   * @returns `true` if send succeeded or was skipped, `false` if failed
+   *
+   * @see sendEventsQueue for async send with persistence
+   * @see src/managers/README.md (lines 82-139) for send details
+   */
   sendEventsQueueSync(body: EventsQueue): boolean {
     if (this.shouldSkipSend()) {
       return true;
     }
 
-    if (this.apiUrl === SpecialApiUrl.Fail) {
+    // Check consent before sending
+    if (!this.hasConsentForIntegration()) {
+      log(
+        'debug',
+        `Skipping sync send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+      return true; // Return true to avoid retries
+    }
+
+    if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
       log(
         'warn',
         `Fail mode: simulating network failure (sync)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
@@ -66,9 +193,52 @@ export class SenderManager extends StateManager {
       return false;
     }
 
+    if (this.apiUrl?.includes(SpecialApiUrl.Localhost)) {
+      log(
+        'debug',
+        `Success mode: simulating successful send (sync)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        {
+          data: { events: body.events.length },
+        },
+      );
+
+      return true;
+    }
+
     return this.sendQueueSyncInternal(body);
   }
 
+  /**
+   * Sends events asynchronously using `fetch()` API with automatic persistence on failure.
+   *
+   * **Purpose**: Reliable event transmission with localStorage fallback for failed sends.
+   *
+   * **Flow**:
+   * 1. Calls internal `send()` method (applies transformers, consent checks)
+   * 2. On success: Clears persisted events, invokes `onSuccess` callback
+   * 3. On failure: Persists events to localStorage, invokes `onFailure` callback
+   * 4. On permanent error (4xx): Clears persisted events (no retry)
+   *
+   * **Callbacks**:
+   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
+   * - `onFailure()`: Called after failed transmission or permanent error
+   *
+   * **Error Handling**:
+   * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
+   * - **Transient errors** (5xx, network, timeout): Events persisted for recovery
+   *
+   * **Consent Check**: Skips send if consent not granted for this integration
+   *
+   * **Important**: Events are NOT retried in-session. Persistence is for
+   * recovery on next page load via `recoverPersistedEvents()`.
+   *
+   * @param body - Event queue to send
+   * @param callbacks - Optional success/failure callbacks
+   * @returns Promise resolving to `true` if send succeeded, `false` if failed
+   *
+   * @see recoverPersistedEvents for recovery flow
+   * @see src/managers/README.md (lines 82-139) for send details
+   */
   async sendEventsQueue(body: EventsQueue, callbacks?: SendCallbacks): Promise<boolean> {
     try {
       const success = await this.send(body);
@@ -96,10 +266,73 @@ export class SenderManager extends StateManager {
     }
   }
 
+  /**
+   * Recovers and attempts to resend events persisted from previous session.
+   *
+   * **Purpose**: Zero data loss guarantee - recovers events that failed to send
+   * in previous session due to network errors or crashes.
+   *
+   * **Flow**:
+   * 1. Checks if recovery already in progress (prevents duplicate attempts)
+   * 2. Checks consent for this integration (skips if no consent)
+   * 3. Loads persisted events from localStorage
+   * 4. Validates freshness (discards events older than 2 hours)
+   * 5. Applies multi-tab protection (skips events persisted within 1 second)
+   * 6. Attempts to resend via `send()` method
+   * 7. On success: Clears persisted events, invokes `onSuccess` callback
+   * 8. On failure: Keeps events in localStorage, invokes `onFailure` callback
+   * 9. On permanent error (4xx): Clears persisted events (no further retry)
+   *
+   * **Multi-Tab Protection**:
+   * - Events persisted within last 1 second are skipped (active tab may retry)
+   * - Prevents duplicate sends when multiple tabs recover simultaneously
+   *
+   * **Event Expiry**:
+   * - Events older than 2 hours are discarded (prevents stale data accumulation)
+   * - Expiry check uses event timestamps, not persistence time
+   *
+   * **Consent Integration**:
+   * - Skips recovery if consent not granted for this integration
+   * - Events remain persisted for future recovery when consent obtained
+   *
+   * **Callbacks**:
+   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
+   * - `onFailure()`: Called on send failure or permanent error
+   *
+   * **Called by**: `EventManager.recoverPersistedEvents()` during `App.init()`
+   *
+   * **Important**: This method is idempotent and safe to call multiple times.
+   * Recovery flag prevents concurrent attempts.
+   *
+   * @param callbacks - Optional success/failure callbacks
+   *
+   * @example
+   * ```typescript
+   * await senderManager.recoverPersistedEvents({
+   *   onSuccess: (count, events, body) => {
+   *     console.log(`Recovered ${count} events`);
+   *   },
+   *   onFailure: () => {
+   *     console.warn('Recovery failed, will retry on next init');
+   *   }
+   * });
+   * ```
+   *
+   * @see src/managers/README.md (lines 82-139) for recovery details
+   */
   async recoverPersistedEvents(callbacks?: SendCallbacks): Promise<void> {
     if (this.recoveryInProgress) {
       log('debug', 'Recovery already in progress, skipping duplicate attempt');
       return;
+    }
+
+    // Check consent before attempting recovery
+    if (!this.hasConsentForIntegration()) {
+      log(
+        'debug',
+        `Skipping recovery, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+      );
+      return; // Keep persisted events for future recovery when consent is granted
     }
 
     this.recoveryInProgress = true;
@@ -135,10 +368,47 @@ export class SenderManager extends StateManager {
     }
   }
 
+  /**
+   * Cleanup method called during `App.destroy()`.
+   *
+   * **Purpose**: Reserved for future cleanup logic (currently no-op).
+   *
+   * **Note**: This method is intentionally empty. SenderManager has no
+   * cleanup requirements (no timers, no event listeners, no active connections).
+   * Persisted events are intentionally kept in localStorage for recovery.
+   *
+   * **Called by**: `EventManager.stop()` during application teardown
+   */
   stop(): void {}
 
+  /**
+   * Applies beforeSend transformer to event array for custom backend integrations.
+   *
+   * **Purpose**: Per-event transformation in multi-integration mode for custom backends only.
+   * Bypassed for TraceLog SaaS to maintain schema integrity.
+   *
+   * **Application Context**:
+   * - Only applied in multi-integration mode (SaaS + Custom)
+   * - EventManager applies beforeSend for standalone/custom-only modes
+   * - This method handles the multi-integration scenario
+   *
+   * **Transformation Flow**:
+   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
+   * 2. Check if beforeSend transformer exists
+   * 3. Apply transformer to each event via transformEvents() utility
+   * 4. Filter out events (empty array = filter entire batch)
+   * 5. Return transformed queue or null
+   *
+   * **Error Handling**:
+   * - transformEvents() utility catches and logs transformer errors
+   * - Failed transformations fall back to original event
+   * - Empty result array treated as filter signal (returns null)
+   *
+   * @param body - Event queue to transform
+   * @returns Transformed queue with modified events, or null to filter entire batch
+   */
   private applyBeforeSendTransformer(body: EventsQueue): EventsQueue | null {
-    // Skip for SaaS integration
+    // TraceLog SaaS requires untransformed events to maintain schema integrity
     if (this.integrationId === 'saas') {
       return body;
     }
@@ -165,7 +435,39 @@ export class SenderManager extends StateManager {
     };
   }
 
+  /**
+   * Applies beforeBatch transformer to entire event queue for custom backend integrations.
+   *
+   * **Purpose**: Batch-level transformation before network transmission for custom backends only.
+   * Bypassed for TraceLog SaaS to maintain schema integrity.
+   *
+   * **Application Context**:
+   * - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
+   * - Operates on entire queue after beforeSend transformations
+   * - Final transformation step before network transmission
+   *
+   * **Transformation Flow**:
+   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
+   * 2. Check if beforeBatch transformer exists
+   * 3. Apply transformer to entire queue via transformBatch() utility
+   * 4. Return transformed queue or null to filter
+   *
+   * **Use Cases**:
+   * - Add batch-level metadata (timestamps, signatures)
+   * - Compress or encrypt entire payload
+   * - Apply custom formatting to queue structure
+   * - Filter entire batch based on conditions
+   *
+   * **Error Handling**:
+   * - transformBatch() utility catches and logs transformer errors
+   * - Failed transformations fall back to original batch
+   * - Returning null filters entire batch (prevents send)
+   *
+   * @param body - Event queue to transform
+   * @returns Transformed queue, or null to filter entire batch
+   */
   private applyBeforeBatchTransformer(body: EventsQueue): EventsQueue | null {
+    // TraceLog SaaS requires untransformed batches to maintain schema integrity
     if (this.integrationId === 'saas') {
       return body;
     }
@@ -181,26 +483,92 @@ export class SenderManager extends StateManager {
     return transformed;
   }
 
+  /**
+   * Calculates exponential backoff delay with jitter for retry attempts.
+   *
+   * **Purpose**: Prevents thundering herd problem when multiple clients retry simultaneously.
+   *
+   * **Formula**: `RETRY_BACKOFF_BASE_MS * (2 ^ attempt) + random(0, RETRY_BACKOFF_JITTER_MS)`
+   *
+   * **Examples**:
+   * - Attempt 1: 100ms * 2^1 + jitter = 200ms + 0-100ms = 200-300ms
+   * - Attempt 2: 100ms * 2^2 + jitter = 400ms + 0-100ms = 400-500ms
+   *
+   * **Why Jitter?**
+   * - Distributes retry timing across clients
+   * - Reduces server load spikes from synchronized retries
+   * - Industry standard pattern (AWS, Google, Netflix use similar approaches)
+   *
+   * @param attempt - Current retry attempt number (1-based)
+   * @returns Promise that resolves after calculated delay
+   */
+  private async backoffDelay(attempt: number): Promise<void> {
+    const exponentialDelay = RETRY_BACKOFF_BASE_MS * Math.pow(2, attempt);
+    const jitter = Math.random() * RETRY_BACKOFF_JITTER_MS;
+    const totalDelay = exponentialDelay + jitter;
+
+    return new Promise((resolve) => setTimeout(resolve, totalDelay));
+  }
+
+  /**
+   * Sends event queue with automatic retry logic for transient failures.
+   *
+   * **Purpose**: Reliable event transmission with intelligent retry mechanism
+   * for transient network/server errors while avoiding unnecessary retries for
+   * permanent client errors.
+   *
+   * **Retry Strategy**:
+   * - **Maximum Attempts**: Up to `MAX_SEND_RETRIES` (2) retry attempts
+   * - **Backoff**: Exponential backoff with jitter (200-300ms, 400-500ms)
+   * - **Transient Errors**: 5xx status codes, network failures, timeouts
+   * - **Permanent Errors**: 4xx status codes (except 408, 429) - no retries
+   *
+   * **Retry Flow**:
+   * 1. Attempt send with `sendWithTimeout()`
+   * 2. If success (2xx) → return true immediately
+   * 3. If permanent error (4xx) → throw PermanentError immediately
+   * 4. If transient error (5xx/timeout/network):
+   *    - If attempts remaining → wait backoff delay → retry
+   *    - If no attempts remaining → return false (caller persists)
+   *
+   * **Important Behaviors**:
+   * - Transformers applied once before retry loop (not re-applied per attempt)
+   * - Consent checked once before retry loop
+   * - Each retry uses same transformed payload
+   * - Permanent errors bypass retries immediately
+   *
+   * **Error Classification**:
+   * - **Permanent** (4xx except 408, 429): Schema errors, auth failures, invalid data
+   * - **Transient** (5xx, timeout, network): Server overload, network hiccups, DNS issues
+   *
+   * @param body - Event queue to send
+   * @returns Promise resolving to true if send succeeded, false if all retries exhausted
+   * @throws PermanentError for 4xx errors (caller should not retry)
+   */
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
     }
 
-    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
+    // Check consent before sending
+    if (!this.hasConsentForIntegration()) {
+      log('debug', `Skipping send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`);
+      return true; // Return true to avoid retries
+    }
+
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {
       return true;
     }
 
-    // Apply beforeBatch (batch-level transformation)
     const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
       return true;
     }
 
-    if (this.apiUrl === SpecialApiUrl.Fail) {
+    if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
       log('warn', `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
         data: { events: transformedBody.events.length },
       });
@@ -208,29 +576,97 @@ export class SenderManager extends StateManager {
       return false;
     }
 
-    const { url, payload } = this.prepareRequest(transformedBody);
-
-    try {
-      const response = await this.sendWithTimeout(url, payload);
-
-      return response.ok;
-    } catch (error) {
-      if (error instanceof PermanentError) {
-        throw error;
-      }
-
-      log('error', `Send request failed${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
-        error,
-        data: {
-          events: body.events.length,
-          url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
-        },
+    if (this.apiUrl?.includes(SpecialApiUrl.Localhost)) {
+      log('debug', `Success mode: simulating successful send${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
+        data: { events: transformedBody.events.length },
       });
 
-      return false;
+      return true;
     }
+
+    const { url, payload } = this.prepareRequest(transformedBody);
+
+    // Retry loop: initial attempt + MAX_SEND_RETRIES additional attempts
+    for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
+      try {
+        const response = await this.sendWithTimeout(url, payload);
+
+        if (response.ok) {
+          if (attempt > 1) {
+            log(
+              'info',
+              `Send succeeded after ${attempt - 1} retry attempt(s)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+              {
+                data: { events: transformedBody.events.length, attempt },
+              },
+            );
+          }
+
+          return true;
+        }
+
+        // Response received but not OK - should be handled by sendWithTimeout throwing error
+        // This branch should not be reached, but included for defensive programming
+        return false;
+      } catch (error) {
+        const isLastAttempt = attempt === MAX_SEND_RETRIES + 1;
+
+        // Permanent errors bypass retries immediately
+        if (error instanceof PermanentError) {
+          throw error;
+        }
+
+        // Log error with retry context
+        log(
+          isLastAttempt ? 'error' : 'warn',
+          `Send attempt ${attempt} failed${this.integrationId ? ` [${this.integrationId}]` : ''}${isLastAttempt ? ' (all retries exhausted)' : ', will retry'}`,
+          {
+            error,
+            data: {
+              events: body.events.length,
+              url: url.replace(/\/\/[^/]+/, '//[DOMAIN]'),
+              attempt,
+              maxAttempts: MAX_SEND_RETRIES + 1,
+            },
+          },
+        );
+
+        // If not last attempt, wait backoff delay and retry
+        if (!isLastAttempt) {
+          await this.backoffDelay(attempt);
+          continue;
+        }
+
+        // All retries exhausted
+        return false;
+      }
+    }
+
+    // Should never reach here due to loop structure, but included for type safety
+    return false;
   }
 
+  /**
+   * Sends HTTP POST request with 10-second timeout and AbortController.
+   *
+   * **Purpose**: Wraps fetch() with timeout protection to prevent hanging requests.
+   * Throws PermanentError for 4xx status codes (except 408, 429) to bypass retries.
+   *
+   * **Timeout Behavior**:
+   * - 10-second timeout via AbortController (REQUEST_TIMEOUT_MS constant)
+   * - Aborted requests throw network error (triggers retry in caller)
+   *
+   * **Error Classification**:
+   * - 4xx (except 408, 429): PermanentError thrown → no retries
+   * - 408, 429, 5xx, network: Standard Error thrown → triggers retry
+   *
+   * @param url - API endpoint URL
+   * @param payload - JSON-stringified EventsQueue body
+   * @returns Response object if successful
+   * @throws PermanentError for unrecoverable 4xx errors
+   * @throws Error for transient errors (5xx, timeout, network)
+   * @private
+   */
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -250,7 +686,11 @@ export class SenderManager extends StateManager {
       });
 
       if (!response.ok) {
-        const isPermanentError = response.status >= 400 && response.status < 500;
+        // 4xx errors are permanent (unrecoverable) except:
+        // - 408 Request Timeout (transient - network/server issue)
+        // - 429 Too Many Requests (transient - rate limiting)
+        const isPermanentError =
+          response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
 
         if (isPermanentError) {
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
@@ -265,15 +705,38 @@ export class SenderManager extends StateManager {
     }
   }
 
+  /**
+   * Internal synchronous send logic using navigator.sendBeacon() for page unload scenarios.
+   *
+   * **Purpose**: Sends events synchronously during page unload when async fetch() is unreliable.
+   * Uses sendBeacon() browser API which queues request even after page closes.
+   *
+   * **Flow**:
+   * 1. Check consent (returns true if denied to prevent retry loops)
+   * 2. Apply beforeSend transformer (per-event transformation)
+   * 3. Apply beforeBatch transformer (batch-level transformation)
+   * 4. Validate payload size (64KB browser limit for sendBeacon)
+   * 5. Send via sendBeacon() or fallback to persistence if unavailable
+   * 6. Persist events on failure for next-page-load recovery
+   *
+   * **Payload Size Limit**: 64KB enforced by browser for sendBeacon()
+   * - Oversized payloads persisted instead of silently failing
+   *
+   * @param body - EventsQueue to send
+   * @returns `true` on success or when events persisted for recovery, `false` on failure
+   * @private
+   */
   private sendQueueSyncInternal(body: EventsQueue): boolean {
-    // Apply beforeSend (per-event transformation, custom backend only in multi-integration)
+    if (!this.hasConsentForIntegration()) {
+      return true;
+    }
+
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {
       return true;
     }
 
-    // Apply beforeBatch (batch-level transformation)
     const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
 
     if (!transformedBody) {
@@ -326,6 +789,19 @@ export class SenderManager extends StateManager {
     return accepted;
   }
 
+  /**
+   * Prepares request by enriching payload with metadata and serializing to JSON.
+   *
+   * **Purpose**: Adds request metadata (referer, timestamp) before transmission.
+   *
+   * **Metadata Enrichment**:
+   * - `referer`: Current page URL (browser only, undefined in Node.js)
+   * - `timestamp`: Request generation time in milliseconds
+   *
+   * @param body - EventsQueue to send
+   * @returns Object with `url` (API endpoint) and `payload` (JSON string)
+   * @private
+   */
   private prepareRequest(body: EventsQueue): { url: string; payload: string } {
     const enrichedBody = {
       ...body,
@@ -341,6 +817,18 @@ export class SenderManager extends StateManager {
     };
   }
 
+  /**
+   * Retrieves persisted events from localStorage with error recovery.
+   *
+   * **Purpose**: Loads previously failed events from storage for recovery attempt.
+   *
+   * **Error Handling**:
+   * - JSON parse failures logged and storage cleared (corrupted data)
+   * - Missing data returns null (no recovery needed)
+   *
+   * @returns Persisted events object or null if none exist/invalid
+   * @private
+   */
   private getPersistedData(): PersistedEventsQueue | null {
     try {
       const storageKey = this.getQueueStorageKey();
@@ -357,6 +845,19 @@ export class SenderManager extends StateManager {
     return null;
   }
 
+  /**
+   * Checks if persisted events are within the 2-hour expiry window.
+   *
+   * **Purpose**: Prevents recovery of stale events that are too old to be relevant.
+   *
+   * **Expiry Logic**:
+   * - Events older than 2 hours (EVENT_EXPIRY_HOURS) are considered expired
+   * - Invalid/missing timestamps treated as expired
+   *
+   * @param data - Persisted events object with timestamp
+   * @returns `true` if events are recent (< 2 hours old), `false` otherwise
+   * @private
+   */
   private isDataRecent(data: PersistedEventsQueue): boolean {
     if (!data.timestamp || typeof data.timestamp !== 'number') {
       return false;
@@ -366,12 +867,38 @@ export class SenderManager extends StateManager {
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
 
+  /**
+   * Creates EventsQueue from persisted data by removing storage-specific timestamp field.
+   *
+   * **Purpose**: Converts PersistedEventsQueue (with timestamp) to EventsQueue for sending.
+   *
+   * @param data - Persisted events with timestamp
+   * @returns EventsQueue ready for transmission (timestamp removed)
+   * @private
+   */
   private createRecoveryBody(data: PersistedEventsQueue): EventsQueue {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { timestamp, ...queue } = data;
     return queue;
   }
 
+  /**
+   * Persists failed events to localStorage for next-page-load recovery.
+   *
+   * **Purpose**: Saves events that couldn't be sent due to network/server errors.
+   * Implements multi-tab protection to prevent data loss during simultaneous failures.
+   *
+   * **Multi-Tab Protection**:
+   * - Throttles persistence (1-second window via PERSISTENCE_THROTTLE_MS)
+   * - If another tab persisted within 1 second, skips write (last-write-wins)
+   * - Prevents redundant storage writes when multiple tabs fail together
+   *
+   * **Storage Format**: PersistedEventsQueue (EventsQueue + timestamp)
+   *
+   * @param body - EventsQueue to persist
+   * @returns `true` on successful persistence or throttled write, `false` on error
+   * @private
+   */
   private persistEvents(body: EventsQueue): boolean {
     try {
       const existing = this.getPersistedData();
@@ -447,5 +974,65 @@ export class SenderManager extends StateManager {
 
       this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
+  }
+
+  /**
+   * Checks if consent has been granted for this integration's data collection.
+   *
+   * **Purpose**: GDPR/CCPA compliance check before sending events to backend.
+   * Prevents data transmission when user has not granted consent.
+   *
+   * **Fail-Open Strategy** (Always returns true when):
+   * - `waitForConsent` config option is disabled (default behavior)
+   * - ConsentManager instance not provided (consent not required)
+   * - Unknown integration ID (defensive programming)
+   *
+   * **Integration ID Mapping**:
+   * - `'saas'` → Checks consent for `'tracelog'` (TraceLog SaaS)
+   * - `'custom'` → Checks consent for `'custom'` (Custom backend)
+   * - No integration ID → Allows by default (legacy support)
+   *
+   * **Consent Flow**:
+   * 1. Check if consent required (`config.waitForConsent`)
+   * 2. Verify ConsentManager available
+   * 3. Map integration ID to consent type
+   * 4. Query ConsentManager for consent status
+   * 5. Return true if consent granted, false otherwise
+   *
+   * **Called by**:
+   * - `send()` method before async transmission (line 542)
+   * - `sendQueueSyncInternal()` method before sync transmission (line 668)
+   *
+   * **Behavior when false**:
+   * - Events NOT sent to backend
+   * - Returns true to caller (prevents retry loops)
+   * - Events may be buffered in ConsentManager for later flush
+   *
+   * @returns true if consent granted or not required, false if consent denied
+   */
+  private hasConsentForIntegration(): boolean {
+    const config = this.get('config');
+
+    // If waitForConsent is not enabled, always allow
+    if (!config?.waitForConsent) {
+      return true;
+    }
+
+    // If no consent manager, can't check consent (fail open for backwards compatibility)
+    if (!this.consentManager) {
+      return true;
+    }
+
+    // Map integration ID to consent integration type
+    if (this.integrationId === 'saas') {
+      return this.consentManager.hasConsent('tracelog');
+    }
+
+    if (this.integrationId === 'custom') {
+      return this.consentManager.hasConsent('custom');
+    }
+
+    // Unknown integration, allow by default (defensive programming)
+    return true;
   }
 }

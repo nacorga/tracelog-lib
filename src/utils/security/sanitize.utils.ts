@@ -20,13 +20,10 @@ export const sanitizeString = (value: string): string => {
 
   let sanitized = value;
 
-  // Limit string length
   if (value.length > MAX_STRING_LENGTH) {
     sanitized = value.slice(0, Math.max(0, MAX_STRING_LENGTH));
-    // Silent truncation - this is expected behavior for long strings
   }
 
-  // Remove potential XSS patterns
   let xssPatternMatches = 0;
   for (const pattern of XSS_PATTERNS) {
     const beforeReplace = sanitized;
@@ -45,7 +42,6 @@ export const sanitizeString = (value: string): string => {
     });
   }
 
-  // Basic HTML entity encoding for critical characters
   sanitized = sanitized
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -66,9 +62,7 @@ export const sanitizeString = (value: string): string => {
  * @returns The sanitized value
  */
 const sanitizeValue = (value: unknown, depth = 0): unknown => {
-  // Prevent infinite recursion
   if (depth > MAX_OBJECT_DEPTH) {
-    // Silent depth limit - prevents stack overflow
     return null;
   }
 
@@ -82,7 +76,6 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value < -Number.MAX_SAFE_INTEGER || value > Number.MAX_SAFE_INTEGER) {
-      // Silent normalization - invalid numbers become 0
       return 0;
     }
 
@@ -95,11 +88,8 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 
   if (Array.isArray(value)) {
     const limitedArray = value.slice(0, MAX_ARRAY_LENGTH);
-
-    // Silent array length limit
     const sanitizedArray = limitedArray.map((item) => sanitizeValue(item, depth + 1)).filter((item) => item !== null);
 
-    // Silent filter - empty arrays are valid results
     return sanitizedArray;
   }
 
@@ -108,7 +98,6 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
     const entries = Object.entries(value);
     const limitedEntries = entries.slice(0, MAX_NESTED_OBJECT_KEYS);
 
-    // Silent object keys limit
     for (const [key, value_] of limitedEntries) {
       const sanitizedKey = sanitizeString(key);
 

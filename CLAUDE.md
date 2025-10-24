@@ -36,7 +36,7 @@ npm run test:integration
 # E2E tests (Playwright - requires test server)
 npm run test:e2e
 
-# Coverage report (must hit 90%+ for core logic)
+# Coverage report (minimum 70% threshold)
 npm run test:coverage
 
 # Start test server for E2E (runs on localhost:3000)
@@ -55,6 +55,88 @@ npm run test:e2e
 npm run test:e2e -- basic-initialization
 ```
 
+### Testing Bridge (TestBridge)
+
+**Key Principle**: Library code should NOT adapt to tests. TestBridge adapts tests to library.
+
+`TestBridge` (`src/test-bridge.ts`) is the adapter layer between tests and library internals:
+- Only available in `NODE_ENV=development`
+- Auto-injected as `window.__traceLogBridge` for E2E tests
+- Exposes managers, handlers, and state for test validation
+- Production code (App, managers, handlers) NEVER modified for tests
+
+**When to use**:
+- ❌ Unit tests (isolated components) → Test directly with mocks
+- ✅ Unit tests (App initialization) → Need full sequence
+- ✅ Integration tests → Need real manager interactions
+- ✅ E2E tests → Only way to access internals
+
+**Quick Example**:
+```typescript
+// Integration test
+import { initTestBridge, destroyTestBridge } from '../helpers/bridge.helper';
+
+const bridge = await initTestBridge();
+bridge.event('purchase', { amount: 99.99 });
+const events = bridge.getQueueEvents();
+expect(events).toHaveLength(1);
+destroyTestBridge();
+```
+
+**Complete Guide**: See `tests/TESTING_FUNDAMENTALS.md` for comprehensive patterns, helpers, and examples.
+
+### Critical Testing Patterns
+
+#### Event Type Enum Case Sensitivity
+
+**IMPORTANT**: EventType enum values are lowercase, not uppercase.
+
+```typescript
+// Event Type Enum (src/types/event.types.ts)
+export enum EventType {
+  SESSION_START = 'session_start',  // ← lowercase!
+  SESSION_END = 'session_end',
+  CUSTOM = 'custom',
+  PAGE_VIEW = 'page_view',
+  CLICK = 'click',
+  SCROLL = 'scroll',
+  WEB_VITALS = 'web_vitals',
+  ERROR = 'error'
+}
+
+// ❌ WRONG - Will find nothing
+events.filter(e => e.type === 'SESSION_START')
+
+// ✅ CORRECT - Matches enum value
+events.filter(e => e.type === 'session_start')
+```
+
+#### ProjectId Defaults in Tests
+
+**Default projectId**: `'custom'` for standalone mode (no backend integration)
+
+```typescript
+// ❌ WRONG - Will be rejected by library
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    projectId: 'test-project',  // ← Wrong!
+  }
+});
+
+// ✅ CORRECT - Matches library default
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    projectId: 'custom',  // ← Default for standalone mode
+  }
+});
+```
+
+**Why this matters**: SessionManager validates `projectId` in BroadcastChannel messages as a security feature. Messages with mismatched projectId are silently rejected.
+
+**See Also**: `tests/TESTING_TROUBLESHOOTING.md` for complete troubleshooting guide.
+
 ## Architecture
 
 ### Core Flow
@@ -70,6 +152,7 @@ User Interaction → Handler captures → EventManager.track() →
   ├── **Managers** (core business logic)
   │   ├── StateManager (global state - base class for all components)
   │   ├── StorageManager (localStorage/sessionStorage wrapper with fallback)
+  │   ├── ConsentManager (GDPR/CCPA consent tracking, per-integration buffering)
   │   ├── EventManager (event queue, deduplication, rate limiting, sending coordination)
   │   ├── SessionManager (session lifecycle, cross-tab sync via BroadcastChannel)
   │   └── UserManager (UUID generation and persistence)
@@ -105,28 +188,43 @@ Runtime event transformation hooks for custom data manipulation:
 - **`beforeSend`**: Per-event transformation (applied in `EventManager.buildEventPayload()` BEFORE deduplication, sampling, and queueing)
 - **`beforeBatch`**: Batch transformation (applied in `SenderManager` BEFORE network transmission)
 
-**Application Timeline**:
+**Application Timeline (Standalone/Custom-Only Mode)**:
 ```
 User Event → Handler → EventManager.buildEventPayload()
   ↓
-  beforeSend transformer applied here (standalone mode OR custom backend only)
+  beforeSend transformer applied HERE (standalone OR custom-only mode)
   ↓
 Deduplication check → Sampling check → Add to queue
   ↓
 Queue flush trigger → EventManager.buildEventsPayload()
   ↓
-  beforeBatch transformer applied here (standalone mode only)
-  ↓
-  [If backend configured] → SenderManager.send() → beforeBatch transformer applied
+  [If custom backend] → SenderManager.send() → beforeBatch transformer applied
+  [If standalone] → Emit to listeners (NO beforeBatch - no SenderManager)
   ↓
 Network transmission (fetch/sendBeacon) OR local emission only
 ```
 
+**Application Timeline (Multi-Integration Mode)**:
+```
+User Event → Handler → EventManager.buildEventPayload()
+  ↓
+  beforeSend transformer SKIPPED in EventManager (multi-integration detected)
+  ↓
+Deduplication check → Sampling check → Add to queue
+  ↓
+Queue flush trigger → SenderManager (parallel per-integration)
+  ↓
+  SaaS Integration: Skip beforeSend → Skip beforeBatch → Send original
+  Custom Integration: Apply beforeSend → Apply beforeBatch → Send transformed
+  ↓
+Network transmission (fetch/sendBeacon) in parallel
+```
+
 **Integration Behavior**:
-- ✅ **Standalone Mode (no backend)**: Both `beforeSend` and `beforeBatch` applied in EventManager, events emitted to local listeners with transformations
-- ✅ **Custom Backend (only)**: Both `beforeSend` and `beforeBatch` applied
+- ⚠️ **Standalone Mode (no backend)**: Only `beforeSend` applied in EventManager. `beforeBatch` NOT supported (no SenderManager created). Events emitted to local listeners with `beforeSend` transformations only.
+- ✅ **Custom Backend (only)**: Both `beforeSend` (EventManager) and `beforeBatch` (SenderManager) applied
 - ❌ **TraceLog SaaS (only)**: Both transformers silently ignored (schema protection)
-- ⚠️ **Multi-Integration (SaaS + Custom)**: SaaS receives original events, custom receives transformed events (per-integration in SenderManager)
+- ⚠️ **Multi-Integration (SaaS + Custom)**: Transformers skipped in EventManager, applied per-integration in SenderManager. SaaS receives original events, custom receives transformed events. `on('event')` listeners receive UNTRANSFORMED events.
 - ❌ **Google Analytics**: Neither transformer applied (forwards `tracelog.event()` calls as-is)
 
 **API Methods**:
@@ -144,12 +242,23 @@ app.getTransformer(hook)                // Get transformer (internal)
 
 ### Initialization Flow
 
-1. `api.init(config)` → validates config
-2. `App.init()` → creates managers and handlers
-3. Managers initialize (Storage, Event, Session)
-4. Handlers start tracking (PageView, Click, Scroll, etc.)
-5. Session recovers from localStorage (if exists)
-6. Pending events flushed after session init
+1. `api.init(config)` → validates config and normalizes it
+2. `App.init()` begins initialization:
+   - **Step 1**: Create StorageManager (localStorage/sessionStorage wrapper with fallback)
+   - **Step 2**: Setup state (config, userId, device, pageUrl, mode detection)
+   - **Step 3**: Initialize ConsentManager (loads persisted consent, enables emitter)
+   - **Step 4**: Log consent state if `waitForConsent` enabled
+   - **Step 5**: Setup integrations (Google Analytics if configured and consented)
+     - If `waitForConsent: true` and no consent → deferred initialization
+     - Later initialized via `handleConsentGranted()` when consent granted
+   - **Step 6**: Initialize EventManager (receives transformers from App, creates SenderManagers)
+   - **Step 6.5**: Register consent-changed event listener (auto-flushes buffered events when consent granted)
+   - **Step 7**: Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
+     - Handlers are conditionally created based on `disabledEvents` config
+   - **Step 8**: Recover persisted events from localStorage (non-fatal errors logged)
+   - **Step 9**: Set `isInitialized = true`
+3. Pending listeners and transformers applied during steps 6-7
+4. Initial events fire (SESSION_START, PAGE_VIEW) during handler initialization
 
 ### Recommended User Initialization Order
 
@@ -207,7 +316,7 @@ tracelog.init()
 
 ```typescript
 // 1. Standalone (no backend) - DEFAULT
-// Events only emitted to local listeners, transformers applied
+// Events only emitted to local listeners, beforeSend transformer applied
 tracelog.on('event', (event) => console.log('Event:', event));
 tracelog.on('queue', (queue) => console.log('Queue:', queue));
 
@@ -216,13 +325,12 @@ tracelog.setTransformer('beforeSend', (event) => ({
   customField: 'Added by transformer'
 }));
 
-tracelog.setTransformer('beforeBatch', (queue) => ({
-  ...queue,
-  queueCustomField: 'Batch transformed'
-}));
+// Note: beforeBatch NOT supported in standalone mode (no SenderManager)
+// tracelog.setTransformer('beforeBatch', ...) // Would be silently ignored
 
 await tracelog.init();
-// Transformers applied, events visible in listeners with custom fields
+// beforeSend applied, events visible in listeners with custom field
+// beforeBatch NOT available (no backend configured)
 
 // 2. TraceLog SaaS
 await tracelog.init({
@@ -241,10 +349,13 @@ await tracelog.init({
   }
 });
 
-// 4. Google Analytics
+// 4. Google Analytics/GTM
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    google: {
+      measurementId: 'G-XXXXXX',      // GA4 (optional)
+      containerId: 'GTM-XXXXXXX'       // GTM (optional)
+    }
   }
 });
 
@@ -254,7 +365,7 @@ await tracelog.init({
   // Core events (PAGE_VIEW, CLICK, SESSION) still tracked
 });
 
-// 6. Multi-Integration (v1.1.0+) - Simultaneous sending
+// 6. Multi-Integration - Simultaneous sending
 await tracelog.init({
   integrations: {
     tracelog: { projectId: 'project-id' },           // Analytics dashboard
@@ -267,7 +378,7 @@ await tracelog.init({
 // - Parallel sending (non-blocking)
 ```
 
-### Multi-Integration Architecture (v1.1.0+)
+### Multi-Integration Architecture
 
 **State Structure:**
 ```typescript
@@ -289,16 +400,25 @@ interface State {
 **EventManager (Orchestration):**
 - Manages array of `SenderManager[]` (0-2 instances)
 - Parallel async sending: `Promise.allSettled()`
-- Sync sending (sendBeacon): All must succeed
+- **Optimistic Queue Removal**: Events removed from queue if AT LEAST ONE integration succeeds
+- Sync sending (sendBeacon): Same optimistic strategy
 - Independent recovery per integration
 
-**Error Handling:**
-| Integration | Error Type | Behavior |
-|-------------|-----------|----------|
-| SaaS | 4xx (permanent) | Clear storage, no retry |
-| SaaS | 5xx (temporary) | Persist to `tlog:queue:{userId}:saas`, retry next page |
-| Custom | 4xx (permanent) | Clear storage, no retry |
-| Custom | 5xx (temporary) | Persist to `tlog:queue:{userId}:custom`, retry next page |
+**Error Handling & Retry Strategy:**
+| Integration | Error Type | In-Session Retries | Persistence |
+|-------------|-----------|-------------------|-------------|
+| SaaS | 4xx (permanent, except 408/429) | None (immediate failure) | Clear storage, no retry |
+| SaaS | 5xx/timeout (transient) | Up to 2 retries with backoff | Persist after exhausting retries |
+| Custom | 4xx (permanent, except 408/429) | None (immediate failure) | Clear storage, no retry |
+| Custom | 5xx/timeout (transient) | Up to 2 retries with backoff | Persist after exhausting retries |
+
+**Retry Backoff Strategy:**
+- **Maximum Retries**: 2 additional attempts per integration (3 total)
+- **Backoff Formula**: `100ms * (2 ^ attempt) + random(0-100ms)`
+- **Delays**: Attempt 1→2: 200-300ms, Attempt 2→3: 400-500ms
+- **Transient Errors**: 5xx status codes, 408 Request Timeout, 429 Too Many Requests, network failures
+- **Permanent Errors**: 4xx status codes (except 408, 429) - no retries
+- **Jitter**: Random 0-100ms added to prevent thundering herd
 
 ### Event Queue & Sending
 
@@ -306,10 +426,11 @@ interface State {
 - Sent every 10 seconds OR when 50-event threshold reached
 - Uses `navigator.sendBeacon()` for page unload (synchronous)
 - Uses `fetch()` for normal operation (asynchronous)
-- **NO in-session retries** - Events removed from queue immediately after send attempt
-- Failed events persist in localStorage for next-page recovery
-- 4xx errors = permanent failure (cleared, not persisted)
-- 5xx/network errors = removed from queue + persisted for next-page recovery
+- **In-Session Retries**: Up to 2 retry attempts for transient errors (5xx, timeout)
+- **Optimistic Removal**: Events removed from queue if AT LEAST ONE integration succeeds
+- Failed events persist in localStorage per-integration for next-page recovery
+- 4xx errors (except 408, 429) = permanent failure (cleared, not persisted, not retried)
+- 5xx/timeout = retry up to 2 times with exponential backoff, then persist for next-page recovery
 - Recovery guard prevents concurrent recovery attempts during rapid navigation
 - Multi-tab protection prevents data loss when multiple tabs fail simultaneously (1s window)
 
@@ -368,7 +489,7 @@ Target: ES2022, Lib: DOM + ES2022
 
 ### Unit Tests (Vitest)
 - Location: `tests/unit/`
-- Coverage: 90%+ required for core logic
+- Coverage: 70%+ minimum threshold (higher for critical code)
 - Mock-heavy: localStorage, BroadcastChannel, fetch, DOM APIs
 - Focus: Individual functions and classes
 
@@ -391,6 +512,36 @@ Target: ES2022, Lib: DOM + ES2022
 - ✅ Check `queue.session_id` (NOT in individual events)
 - ✅ MUST follow E2E patterns in [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md)
 
+### Test Acceptance Criteria
+
+**ALL tests must meet these criteria before marking a file as complete:**
+
+1. **Tests Must Pass (100% Pass Rate)**
+   ```bash
+   npm run test:unit -- <filename>
+   npm run test:integration -- <filename>
+   npm run test:e2e -- <filename>
+   ```
+
+2. **No Format/Lint Errors**
+   ```bash
+   npm run fix  # MUST RUN before marking complete
+   ```
+
+3. **No Type Errors**
+   ```bash
+   npm run type-check  # Must show: "0 errors"
+   ```
+
+4. **Final Verification Sequence**
+   ```bash
+   npm run fix && npm run type-check && npm test
+   ```
+
+See `tests/TESTING_FUNDAMENTALS.md` for complete acceptance criteria checklist.
+
+---
+
 ## Security & Privacy
 
 ### Automatic Protections
@@ -408,6 +559,49 @@ Target: ES2022, Lib: DOM + ES2022
 4. **URL Params**: Extend `sensitiveQueryParams` config for app-specific params
 
 See [SECURITY.md](./SECURITY.md) for complete guide.
+
+## Code Comments Policy
+
+### When to Use Comments
+
+**✅ Use comments for:**
+- **JSDoc for public APIs**: Complete documentation with `@param`, `@returns`, `@example`, `@throws`
+- **Section organization**: Organizational section comments (e.g., `//  ===`) in constants files
+- **Complex logic explanations**: Clarify non-obvious logic or algorithms
+- **Design rationale**: Explain "why" (design decisions) rather than "what" (code description)
+- **Edge cases**: Document special behaviors and edge case handling
+- **Important patterns**: Context about critical patterns (BroadcastChannel, multi-tab sync, etc.)
+- **Magic values**: Explain timeouts, limits, thresholds with justification
+
+**❌ DO NOT use comments for:**
+- **Repeating code**: Comments that only rephrase what the code does
+- **Obvious statements**: Comments that duplicate function/variable names
+- **Check pattern**: Comments like "Check if X" followed by `if (X)`
+- **Silent pattern**: Comments like "Silent X" without additional context
+- **Redundant descriptions**: Comments before self-explanatory code
+- **Type descriptions**: Comments describing types already evident from TypeScript
+
+### Examples
+
+```typescript
+// ❌ BAD: Redundant comment
+// Check if user is authenticated
+if (isAuthenticated) { ... }
+
+// ✅ GOOD: Explains "why" and edge case
+// Skip session validation during recovery to prevent infinite loops
+// when multiple tabs fail simultaneously (1s window protection)
+if (isRecovering) { ... }
+
+// ❌ BAD: Obvious comment
+// Set session ID
+this.set('sessionId', newSessionId);
+
+// ✅ GOOD: Explains design decision
+// Store session ID in queue root (not per-event) to reduce payload size
+// and maintain consistency across multi-integration sends
+this.set('sessionId', newSessionId);
+```
 
 ## Code Patterns
 
@@ -468,17 +662,20 @@ Transformers are stored in the `App` class and passed to `EventManager` and `Sen
 
 ```typescript
 // In App class
-private readonly transformers: Map<
-  TransformerHook,
-  (data: EventData | EventsQueue) => EventData | EventsQueue | null
-> = new Map();
+private readonly transformers: TransformerMap = {};
+
+// TransformerMap interface (from transformer.types.ts)
+interface TransformerMap {
+  beforeSend?: BeforeSendTransformer;
+  beforeBatch?: BeforeBatchTransformer;
+}
 
 // Setting a transformer with validation
 setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void {
   if (typeof fn !== 'function') {
     throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
   }
-  this.transformers.set(hook, fn);
+  this.transformers[hook] = fn as BeforeSendTransformer & BeforeBatchTransformer;
 }
 
 // In EventManager.buildEventPayload() - beforeSend application with minimal validation

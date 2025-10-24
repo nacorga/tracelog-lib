@@ -296,6 +296,23 @@ describe('sanitizeString', () => {
 - 💡 Duplicate validation logic across files
 - 💡 Missing test coverage for edge cases
 - 💡 No TypeScript type guards for runtime checks
+- 💡 Redundant comments that describe obvious operations
+- 💡 Comments without added context or value
+
+## Code Comments Policy
+
+**✅ Use comments for:**
+- Security patterns (XSS prevention, PII redaction logic)
+- Complex regex patterns and their purpose
+- Edge case handling in validation logic
+- Browser compatibility workarounds
+- Performance optimizations
+
+**❌ NEVER use comments for:**
+- Obvious type checks (e.g., `// Check if string`)
+- Simple regex applications (e.g., `// Replace pattern`)
+- Return statements (e.g., `// Return sanitized value`)
+- Function descriptions already in JSDoc
 
 ## Security Checklist
 

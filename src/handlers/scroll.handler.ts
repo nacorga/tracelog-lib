@@ -24,6 +24,49 @@ interface ScrollContainer {
   listener: EventListener;
 }
 
+/**
+ * Tracks scroll depth, direction, velocity, and container identification across multiple scrollable elements.
+ *
+ * **Features**:
+ * - Automatic container detection with intelligent retry (5 attempts @ 200ms intervals)
+ * - Manual override via primaryScrollSelector config
+ * - Smart filtering with multiple guardrails:
+ *   - Visibility check (element must be connected to DOM with dimensions)
+ *   - Scrollability check (content must overflow container)
+ *   - Significant movement (minimum 10px position delta)
+ *   - Depth change (minimum 5% depth change between events)
+ *   - Rate limiting (minimum 500ms interval between events per container)
+ *   - Session cap (maximum 120 events per session with single warning)
+ * - Multi-container support with per-container debouncing (250ms)
+ * - Velocity calculation for engagement analysis
+ * - Max depth tracking per session
+ * - Primary vs secondary container classification
+ *
+ * **Events Generated**: `scroll`
+ *
+ * **Analytics Fields**:
+ * - depth: Current scroll depth (0-100%)
+ * - direction: 'up' | 'down'
+ * - container_selector: CSS selector or 'window'
+ * - is_primary: Boolean indicating main scroll container
+ * - velocity: Scroll speed in px/s
+ * - max_depth_reached: Peak engagement per container
+ *
+ * **Container Detection**:
+ * - Uses TreeWalker for performance
+ * - Pre-filters elements with overflow: auto/scroll CSS properties
+ * - Validates visibility and scrollability
+ * - Retries up to 5 times for dynamically loaded content (SPAs)
+ * - Falls back to window-only if no containers found
+ *
+ * @example
+ * ```typescript
+ * const handler = new ScrollHandler(eventManager);
+ * handler.startTracking();
+ * // Automatically detects and tracks scrollable containers
+ * handler.stopTracking();
+ * ```
+ */
 export class ScrollHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly containers: ScrollContainer[] = [];
@@ -39,6 +82,22 @@ export class ScrollHandler extends StateManager {
     this.eventManager = eventManager;
   }
 
+  /**
+   * Starts tracking scroll events across all detected scrollable containers.
+   *
+   * Automatically detects scrollable containers using TreeWalker with retry logic:
+   * - Searches DOM for elements with overflow: auto/scroll
+   * - Validates visibility and scrollability
+   * - Retries up to 5 times with 200ms intervals for dynamic content
+   * - Falls back to window-only tracking if no containers found
+   * - Applies primaryScrollSelector config override if provided
+   *
+   * Attaches debounced scroll listeners (250ms per container) with smart filtering:
+   * - Significant movement (10px minimum)
+   * - Depth change (5% minimum)
+   * - Rate limiting (500ms minimum interval)
+   * - Session cap (120 events maximum)
+   */
   startTracking(): void {
     this.limitWarningLogged = false;
     this.applyConfigOverrides();
@@ -46,6 +105,13 @@ export class ScrollHandler extends StateManager {
     this.tryDetectScrollContainers(0);
   }
 
+  /**
+   * Stops tracking scroll events and cleans up resources.
+   *
+   * Removes all scroll event listeners, clears debounce timers, cancels retry attempts,
+   * and resets session state (event counter, warning flags). Prevents memory leaks by
+   * properly cleaning up all containers and timers.
+   */
   stopTracking(): void {
     if (this.containerDiscoveryTimeoutId !== null) {
       clearTimeout(this.containerDiscoveryTimeoutId);

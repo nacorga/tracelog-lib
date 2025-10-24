@@ -35,7 +35,7 @@ export const detectQaMode = (): boolean => {
       });
     } else if (urlParam === QA_MODE_DISABLE_VALUE) {
       newState = false;
-      sessionStorage.removeItem(QA_MODE_KEY);
+      sessionStorage.setItem(QA_MODE_KEY, 'false');
 
       log('info', 'QA Mode DISABLED', {
         showToClient: true,
@@ -81,7 +81,7 @@ export const setQaMode = (enabled: boolean): void => {
         style: LOG_STYLE_ACTIVE,
       });
     } else {
-      sessionStorage.removeItem(QA_MODE_KEY);
+      sessionStorage.setItem(QA_MODE_KEY, 'false');
 
       log('info', 'QA Mode DISABLED', {
         showToClient: true,

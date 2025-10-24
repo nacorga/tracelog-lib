@@ -121,7 +121,6 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
     const urlObject = new URL(url);
     const searchParams = urlObject.searchParams;
 
-    // Merge default sensitive params with user-provided ones (deduped via Set)
     const allSensitiveParams = [...new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
 
     let hasChanged = false;

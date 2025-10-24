@@ -117,6 +117,22 @@ export class CustomHandler {
 - 💡 Hardcoded values instead of constants
 - 💡 Missing JSDoc comments on public methods
 - 💡 Duplicate code across multiple handlers
+- 💡 Redundant comments that only repeat code
+- 💡 Comments without value (e.g., `// Check if X` before `if (X)`)
+
+## Code Comments Policy
+
+**✅ Use comments for:**
+- Complex event processing logic that's non-obvious
+- Edge case handling and special behaviors
+- Performance optimizations (e.g., "Debounced to prevent main thread blocking")
+- Browser compatibility workarounds
+
+**❌ NEVER use comments for:**
+- Obvious event listener registration (e.g., `// Add click listener`)
+- Repeating method names (e.g., `// Start tracking` before `startTracking()`)
+- Simple conditional checks (e.g., `// Check if element exists` before `if (element)`)
+- Type information already in TypeScript signatures
 
 ## Example Review Comments
 

@@ -19,7 +19,12 @@ export type ClickCoordinates = Pick<ClickData, 'x' | 'y' | 'relativeX' | 'relati
 export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
 
 /**
- * Core event types tracked by TraceLog
+ * Event type name
+ */
+export type EventTypeName = (typeof EventType)[keyof typeof EventType];
+
+/**
+ * Event type enum
  */
 export enum EventType {
   /** Page navigation and view tracking */

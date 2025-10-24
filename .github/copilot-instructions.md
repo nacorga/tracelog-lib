@@ -16,7 +16,7 @@
 
 ### 3. Client-Only Architecture
 - **Autonomous Operation**: Library must work without backend dependencies
-- **Optional Integrations**: Backend integrations (tracelog, custom, googleAnalytics) are optional
+- **Optional Integrations**: Backend integrations (tracelog, custom, google) are optional
 - **No Required Network**: No required network calls for core functionality
 - **Event Emission**: Events always emitted via `on('event')` regardless of backend config
 
@@ -89,8 +89,40 @@
 - 💡 Complex logic without explanatory comments → Maintainability concern
 - 💡 Magic numbers without constants → Readability issue
 - 💡 Duplicate code → Refactoring opportunity
+- 💡 Redundant comments that repeat code → Remove for clarity
+- 💡 Obvious comments without value → Replace with self-documenting code
 
 ## Code Style
+
+### Code Comments Policy
+
+**✅ Use comments for:**
+- JSDoc on public APIs with `@param`, `@returns`, `@example`, `@throws`
+- Complex/non-obvious logic explanations
+- Design rationale ("why" decisions, not "what" code does)
+- Edge cases and special behavior documentation
+- Magic values justification (timeouts, limits, thresholds)
+- Important patterns context (BroadcastChannel, multi-tab sync)
+
+**❌ NEVER use comments for:**
+- Repeating what code does (e.g., `// Set sessionId`)
+- Obvious statements that duplicate function/variable names
+- Pattern `// Check if X` followed by `if (X)`
+- Pattern `// Silent X` without additional context
+- Redundant descriptions before self-explanatory code
+- Type descriptions already evident from TypeScript
+
+**Examples:**
+```typescript
+// ❌ BAD: Redundant
+// Check if user exists
+if (user) { }
+
+// ✅ GOOD: Explains edge case
+// Skip validation during recovery to prevent infinite loops
+// when multiple tabs fail simultaneously (1s window protection)
+if (isRecovering) { }
+```
 
 ### Dependencies
 - **Runtime**: Single runtime dependency allowed: `web-vitals` only
@@ -149,10 +181,10 @@ All configuration options are optional. Review for:
   - **minDwellTime**: Min time visible before tracking (default: 2000ms)
   - **cooldownPeriod**: Time before re-tracking (default: 30000ms)
   - **maxTrackedElements**: Max elements to track (default: 50)
-- **integrations**: Optional backend integrations (tracelog, custom, googleAnalytics)
+- **integrations**: Optional backend integrations (tracelog, custom, google)
   - **tracelog**: `{ projectId: string }` - TraceLog SaaS integration
   - **custom**: `{ collectApiUrl: string; allowHttp?: boolean }` - Custom backend
-  - **googleAnalytics**: `{ measurementId: string }` - Google Analytics forwarding
+  - **google**: `{ measurementId?: string; containerId?: string }` - Google Analytics (GA4) / Google Tag Manager (GTM) forwarding
 
 ## Security & Privacy
 

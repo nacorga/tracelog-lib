@@ -6,6 +6,7 @@ Lightweight web analytics library for tracking user behavior. Works standalone o
 
 - **Zero-config** - Auto-captures clicks, scrolls, page views, sessions, and performance metrics
 - **Standalone** - No backend required; optional integrations (TraceLog SaaS, custom API, GA4)
+- **Consent Management** - GDPR/CCPA-compliant with granular per-integration control
 - **Privacy-first** - PII sanitization, client-side sampling, `data-tlog-ignore` attribute
 - **Cross-tab sessions** - BroadcastChannel sync with localStorage recovery
 - **Event-driven** - Subscribe via `on()`/`off()` for real-time events
@@ -140,7 +141,10 @@ await tracelog.init({
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
     custom: { collectApiUrl: 'https://api.com' },    // Custom backend
-    googleAnalytics: { measurementId: 'G-XXXXXX' },  // GA4 forwarding
+    google: {                                         // Google Analytics/GTM
+      measurementId: 'G-XXXXXX',                     // GA4 measurement ID (optional)
+      containerId: 'GTM-XXXXXXX'                      // GTM container ID (optional)
+    },
 
     // Multi-integration: Send to multiple backends simultaneously
     // tracelog: { projectId: 'proj-123' },          // Analytics dashboard
@@ -222,6 +226,7 @@ Transform events dynamically at runtime before they're sent to integrations. Use
 
 | Integration | `beforeSend` | `beforeBatch` | Notes |
 |-------------|--------------|---------------|-------|
+| **Standalone (no backend)** | ✅ Applied | ⚠️ Not supported | Only local event emission; `beforeBatch` requires backend |
 | **TraceLog SaaS (only)** | ❌ Silently ignored | ❌ Silently ignored | Schema protection |
 | **Custom Backend (only)** | ✅ Applied | ✅ Applied | Full control |
 | **Multi-Integration** | ⚠️ Custom only | ⚠️ Custom only | SaaS gets original events, custom gets transformed |
@@ -239,9 +244,11 @@ Transform events dynamically at runtime before they're sent to integrations. Use
 
 Transform individual events **before** deduplication, sampling, and queueing.
 
-**Timing:**
-- **Custom-only mode**: Runs in `EventManager.buildEventPayload()` (before dedup/sampling)
-- **Multi-integration mode**: Runs in `SenderManager` per-integration (SaaS skipped)
+**Timing (depends on integration mode):**
+- **Standalone mode (no backend)**: Runs in `EventManager.buildEventPayload()` before dedup/sampling/queueing
+- **Custom-only mode**: Runs in `EventManager.buildEventPayload()` before dedup/sampling/queueing
+- **Multi-integration mode (SaaS + Custom)**: Runs in `SenderManager` per-integration (SaaS skipped, Custom applied)
+- **TraceLog SaaS-only mode**: Silently ignored (not applied)
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
@@ -415,11 +422,359 @@ tracelog.setTransformer('beforeSend', (data) => {
 
 ---
 
+## Consent Management
+
+TraceLog provides **GDPR/CCPA-compliant consent management** with granular control per integration. Perfect for cookie banners and privacy compliance.
+
+### Quick Start
+
+```typescript
+// 1. Initialize with consent waiting
+await tracelog.init({
+  waitForConsent: true,  // Events buffered until consent granted
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// 2. User accepts cookie banner
+await tracelog.setConsent('all', true);
+// ✅ All buffered events sent retroactively
+
+// 3. User manages preferences later
+await tracelog.setConsent('google', false);
+// ❌ Google Analytics stops receiving events
+```
+
+### Key Features
+
+- ✅ **Event Buffering**: Events captured but not sent until consent granted
+- ✅ **Retroactive Send**: Buffered events sent when consent granted (SESSION_START first)
+- ✅ **Granular Control**: Per-integration consent (Google, Custom, TraceLog)
+- ✅ **Persistent**: Stored in localStorage with 365-day expiration
+- ✅ **Cross-Tab Sync**: Consent changes propagate across browser tabs
+- ✅ **Before Init**: Can call `setConsent()` before `init()` (persisted)
+
+### API Methods
+
+#### `setConsent(integration, granted)`
+
+Grant or revoke consent for specific integration or all.
+
+```typescript
+// Grant consent for specific integrations
+await tracelog.setConsent('google', true);
+await tracelog.setConsent('custom', true);
+await tracelog.setConsent('tracelog', true);
+
+// Grant consent for ALL configured integrations
+await tracelog.setConsent('all', true);
+
+// Revoke consent
+await tracelog.setConsent('google', false);
+```
+
+**⚠️ Important**: If `setConsent()` fails to persist to localStorage (e.g., quota exceeded) **before** `init()`, it will throw an error. After `init()`, persistence failures are logged but don't throw (graceful degradation). Handle errors appropriately:
+
+```typescript
+try {
+  await tracelog.setConsent('all', true);
+} catch (error) {
+  console.error('Failed to save consent:', error);
+  // Show user notification
+}
+
+await tracelog.init({ waitForConsent: true });
+```
+
+#### `hasConsent(integration)`
+
+Check if consent has been granted.
+
+```typescript
+if (tracelog.hasConsent('google')) {
+  console.log('Google Analytics enabled');
+}
+
+// Check if ALL integrations have consent (strict AND logic)
+// Returns true ONLY if google=true AND custom=true AND tracelog=true
+// Regardless of which integrations are configured
+if (tracelog.hasConsent('all')) {
+  console.log('Full tracking consent granted for all possible integrations');
+}
+
+// For checking "at least one configured integration has consent", check individually:
+const hasAnyConsent =
+  tracelog.hasConsent('google') ||
+  tracelog.hasConsent('custom') ||
+  tracelog.hasConsent('tracelog');
+```
+
+#### `getConsentState()`
+
+Get current consent state for all integrations.
+
+```typescript
+const consent = tracelog.getConsentState();
+// {
+//   google: true,
+//   custom: false,
+//   tracelog: true
+// }
+```
+
+### Google Consent Mode v2 Integration
+
+TraceLog supports **Google Consent Mode v2** for granular GDPR/CCPA-compliant consent management with Google Analytics and Google Tag Manager.
+
+#### Simple Mode (All Categories)
+
+Grant or deny all Google Consent Mode categories at once:
+
+```typescript
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      consentCategories: 'all' // Default: grant all categories
+    }
+  }
+});
+
+// Grant all Google consent categories
+await tracelog.setConsent('google', true);
+// → Updates all 5 categories to 'granted'
+```
+
+#### Granular Mode (Per-Category Control)
+
+Configure which categories to grant when consent is given:
+
+```typescript
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      consentCategories: {
+        analytics_storage: true,        // Grant when consent=true
+        ad_storage: false,              // Deny even when consent=true
+        ad_user_data: false,            // Deny even when consent=true
+        ad_personalization: false       // Deny even when consent=true
+        // personalization_storage: omitted = not managed (respects external CMP)
+      }
+    }
+  }
+});
+
+// GDPR typical: Analytics YES, Ads NO
+await tracelog.setConsent('google', true);
+// → analytics_storage: 'granted'
+// → ad_storage: 'denied'
+// → ad_user_data: 'denied'
+// → ad_personalization: 'denied'
+
+// Revoke consent
+await tracelog.setConsent('google', false);
+// → All configured categories set to 'denied'
+```
+
+#### Integration with External CMPs
+
+Perfect for integrating with Consent Management Platforms:
+
+```typescript
+// Example: CookieYes integration
+CookieConsent.init({
+  onAccept: (preferences) => {
+    // Map user preferences to Google Consent Mode
+    await tracelog.init({
+      integrations: {
+        google: {
+          measurementId: 'G-XXXXXX',
+          consentCategories: {
+            analytics_storage: preferences.analytics,
+            ad_storage: preferences.marketing,
+            ad_user_data: preferences.marketing,
+            ad_personalization: preferences.marketing
+          }
+        }
+      }
+    });
+
+    await tracelog.setConsent('google', true);
+  }
+});
+```
+
+**Google Consent Mode v2 Categories**:
+- `analytics_storage` - Google Analytics data storage
+- `ad_storage` - Advertising cookies (Meta, TikTok, Pinterest pixels)
+- `ad_user_data` - User data for advertising purposes
+- `ad_personalization` - Personalized advertising (remarketing)
+- `personalization_storage` - Content personalization
+
+**Notes**:
+- TraceLog automatically detects existing Consent Mode configuration from external CMPs
+- Only `gtag('consent', 'update')` is used (never `'default'`)
+- Omitted categories are not managed by TraceLog (respects external configuration)
+- See [API Reference](#api-reference) for complete documentation
+
+### Cookie Banner Integration
+
+```typescript
+// Example with popular consent libraries
+import CookieConsent from 'cookie-consent-banner';
+
+// 1. Initialize TraceLog in waiting mode
+await tracelog.init({
+  waitForConsent: true,
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' },
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
+});
+
+// 2. Connect to cookie banner
+CookieConsent.init({
+  onAccept: async (preferences) => {
+    if (preferences.analytics) {
+      await tracelog.setConsent('all', true);
+    }
+  },
+  onReject: async () => {
+    await tracelog.setConsent('all', false);
+  }
+});
+```
+
+### Privacy Dashboard Example
+
+```typescript
+// React component for privacy settings (reactive)
+function PrivacySettings() {
+  const [consent, setConsent] = useState(tracelog.getConsentState());
+  
+  // Reactive: Listen to consent changes from anywhere in the app
+  useEffect(() => {
+    const handleConsentChange = (newConsent) => {
+      setConsent(newConsent);
+    };
+    
+    tracelog.on('consent-changed', handleConsentChange);
+    
+    return () => {
+      tracelog.off('consent-changed', handleConsentChange);
+    };
+  }, []);
+  
+  const handleToggle = async (integration, value) => {
+    await tracelog.setConsent(integration, value);
+    // State updates automatically via 'consent-changed' event
+  };
+  
+  return (
+    <div>
+      <h2>Privacy Preferences</h2>
+      
+      <Toggle
+        label="Google Analytics"
+        checked={consent.google}
+        onChange={(v) => handleToggle('google', v)}
+      />
+      
+      <Toggle
+        label="Custom Analytics"
+        checked={consent.custom}
+        onChange={(v) => handleToggle('custom', v)}
+      />
+      
+      <Toggle
+        label="TraceLog Analytics"
+        checked={consent.tracelog}
+        onChange={(v) => handleToggle('tracelog', v)}
+      />
+    </div>
+  );
+}
+```
+
+**Reactive UI Pattern:**
+
+The `'consent-changed'` event enables reactive consent management without polling:
+
+```typescript
+// Consent changes propagate automatically across components
+tracelog.on('consent-changed', (state) => {
+  console.log('Consent updated:', state);
+  // Update any UI that depends on consent state
+  updateCookieBanner(state);
+  updatePrivacyDashboard(state);
+  updateAnalyticsIndicators(state);
+});
+
+// Changes from cookie banner automatically update dashboard
+await tracelog.setConsent('google', true);
+// ✅ All subscribed components receive the update
+```
+
+### Configuration Options
+
+```typescript
+await tracelog.init({
+  // Enable consent mode
+  waitForConsent: true,
+  
+  // Buffer size (default: 500 events)
+  maxConsentBufferSize: 1000,
+  
+  integrations: { /* ... */ }
+});
+```
+
+**Buffer Overflow Behavior:**
+- FIFO (First In, First Out) eviction when limit reached
+- `SESSION_START` events preserved (critical for analytics)
+- Non-critical events (clicks, scrolls) removed first
+- Warning logged when buffer overflows
+
+### Before Init
+
+Consent can be set **before** `init()` - it's persisted to localStorage:
+
+```typescript
+// User previously accepted consent
+await tracelog.setConsent('all', true);
+
+// Later (e.g., after page reload)
+await tracelog.init({ waitForConsent: true });
+// ✅ Consent auto-loaded, events sent immediately
+```
+
+### Cross-Tab Synchronization
+
+Consent changes propagate across all browser tabs automatically:
+
+```typescript
+// Tab 1: User accepts consent
+await tracelog.setConsent('google', true);
+
+// Tab 2: Consent automatically updated via StorageEvent
+// Events start sending without user action
+```
+
+**→ [Full Consent API Reference](./API_REFERENCE.md#consent-management)**
+
+---
+
 ## Integration Modes
 
 TraceLog supports multiple integration modes. Choose what fits your needs:
 
 ### 1. Standalone (No Backend)
+
+**Default mode when no integrations configured.** Events captured and emitted locally without network requests.
+
 ```typescript
 await tracelog.init();
 
@@ -427,7 +782,19 @@ await tracelog.init();
 tracelog.on('event', (event) => {
   myAnalytics.track(event);
 });
+
+tracelog.on('queue', (batch) => {
+  console.log('Batched events:', batch.events.length);
+});
 ```
+
+**Behavior:**
+- ✅ Events captured and queued normally
+- ✅ `beforeSend` transformer applied (per-event transformation)
+- ⚠️ `beforeBatch` transformer **NOT supported** (no SenderManager created)
+- ✅ Events emitted to local listeners every 10 seconds or 50 events
+- ❌ **NO network requests made** (no backends configured)
+- ✅ Perfect for custom analytics pipelines, testing, or privacy-focused implementations
 
 ### 2. TraceLog SaaS
 ```typescript
@@ -450,14 +817,38 @@ await tracelog.init({
 });
 ```
 
-### 4. Google Analytics
+### 4. Google Analytics / Google Tag Manager
 ```typescript
+// Option 1: GA4 only
 await tracelog.init({
   integrations: {
-    googleAnalytics: { measurementId: 'G-XXXXXX' }
+    google: { measurementId: 'G-XXXXXX' }
+  }
+});
+
+// Option 2: GTM only
+await tracelog.init({
+  integrations: {
+    google: { containerId: 'GTM-XXXXXXX' }
+  }
+});
+
+// Option 3: Both (GTM takes priority for script loading)
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      containerId: 'GTM-XXXXXXX'
+    }
   }
 });
 ```
+
+**Supported formats:**
+- **measurementId**: `G-XXXXXX` (GA4), `AW-XXXXXX` (Google Ads), `UA-XXXXXX` (Universal Analytics - legacy)
+- **containerId**: `GTM-XXXXXX` (Google Tag Manager)
+
+**Note:** TraceLog automatically detects the format and loads the appropriate script (gtag.js or gtm.js). If gtag/GTM is already loaded on your site, TraceLog will reuse the existing instance.
 
 ### 5. Multi-Integration (TraceLog SaaS + Custom Backend)
 ```typescript
@@ -475,6 +866,87 @@ await tracelog.init({
 ```
 
 **→ [Integration Setup Guide](./API_REFERENCE.md#integration-configuration)**
+
+---
+
+## Error Handling & Reliability
+
+TraceLog implements intelligent error handling with automatic retries for transient failures:
+
+### Automatic Retry Strategy
+
+**Transient Errors** (5xx, timeouts, network failures):
+- **Up to 2 retry attempts** per integration (3 total attempts)
+- **Exponential backoff with jitter**: 200-300ms, 400-500ms
+- **Independent retries** per integration (SaaS and Custom retry separately)
+- **Persistence after exhaustion**: Events saved to localStorage for next-page recovery
+
+**Permanent Errors** (4xx except 408, 429):
+- **No retries** (immediate failure)
+- **Events discarded** (not persisted)
+- **Exceptions**: 408 Request Timeout and 429 Too Many Requests are treated as transient
+
+```typescript
+// Multi-backend example with automatic retries
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'project-id' },
+    custom: { collectApiUrl: 'https://api.example.com/collect' }
+  }
+});
+
+// If tracelog SaaS returns 500:
+// - Retries 2 times with backoff (200-300ms, 400-500ms)
+// - If all fail → persists to localStorage for next page
+
+// If custom backend succeeds:
+// - Events removed from queue (optimistic removal)
+// - Failed integration recovered on next page load
+```
+
+### Error Classification
+
+| Status Code | Type | Retries | Persistence |
+|-------------|------|---------|-------------|
+| **2xx** | Success | None | Cleared |
+| **4xx** (except 408, 429) | Permanent | ❌ None | ❌ Discarded |
+| **408** Request Timeout | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **429** Too Many Requests | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **5xx** | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **Network Error** | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **Timeout** | Transient | ✅ Up to 2 | ✅ After exhaustion |
+
+### Optimistic Queue Management
+
+**Multi-Integration Behavior:**
+- Events removed from queue if **AT LEAST ONE** integration succeeds
+- Failed integrations persist independently for next-page recovery
+- Successful integration doesn't retry (performance optimization)
+
+**Example Scenario:**
+```typescript
+// SaaS succeeds immediately → no retry needed
+// Custom fails with 503 → retries 2 times → persists for recovery
+// Events removed from queue (SaaS succeeded)
+// Next page load → only Custom integration recovers persisted events
+```
+
+### Recovery on Page Load
+
+Failed events automatically recovered on next `init()`:
+
+```typescript
+// Page 1: Events fail to send (5xx error after retries)
+// → Persisted to localStorage per-integration
+
+// Page 2: User navigates to new page
+await tracelog.init({ /* same config */ });
+// ✅ Automatically recovers and resends persisted events
+// ✅ Independent recovery per integration
+// ✅ Multi-tab protection (1s window prevents duplicates)
+```
+
+**→ [Full Error Handling Reference](./API_REFERENCE.md#error-handling)**
 
 ---
 

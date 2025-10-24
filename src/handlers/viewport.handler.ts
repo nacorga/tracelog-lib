@@ -48,7 +48,6 @@ export class ViewportHandler extends StateManager {
       return;
     }
 
-    // Set defaults
     const threshold = this.config.threshold ?? 0.5;
     const minDwellTime = this.config.minDwellTime ?? 1000;
 
@@ -62,21 +61,17 @@ export class ViewportHandler extends StateManager {
       return;
     }
 
-    // Check IntersectionObserver support
     if (typeof IntersectionObserver === 'undefined') {
       log('warn', 'ViewportHandler: IntersectionObserver not supported in this browser');
       return;
     }
 
-    // Create observer
     this.observer = new IntersectionObserver(this.handleIntersection, {
       threshold,
     });
 
-    // Find and observe all matching elements
     this.observeElements();
 
-    // Set up MutationObserver to detect dynamically added elements
     this.setupMutationObserver();
   }
 
@@ -84,7 +79,6 @@ export class ViewportHandler extends StateManager {
    * Stops tracking and cleans up resources
    */
   stopTracking(): void {
-    // Disconnect observers
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
@@ -95,13 +89,11 @@ export class ViewportHandler extends StateManager {
       this.mutationObserver = null;
     }
 
-    // Clear debounce timer
     if (this.mutationDebounceTimer !== null) {
       window.clearTimeout(this.mutationDebounceTimer);
       this.mutationDebounceTimer = null;
     }
 
-    // Clear all timers and tracked elements
     for (const tracked of this.trackedElements.values()) {
       if (tracked.timeoutId !== null) {
         window.clearTimeout(tracked.timeoutId);
@@ -125,7 +117,6 @@ export class ViewportHandler extends StateManager {
         const elements = document.querySelectorAll(elementConfig.selector);
 
         for (const element of Array.from(elements)) {
-          // Check max limit (Phase 3)
           if (totalTracked >= maxTrackedElements) {
             log('warn', 'ViewportHandler: Maximum tracked elements reached', {
               data: {
@@ -134,20 +125,17 @@ export class ViewportHandler extends StateManager {
                 message: 'Some elements will not be tracked. Consider more specific selectors.',
               },
             });
-            return; // Stop tracking more elements
+            return;
           }
 
-          // Skip if element has data-tlog-ignore attribute
           if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
             continue;
           }
 
-          // Skip if already tracked
           if (this.trackedElements.has(element)) {
             continue;
           }
 
-          // Track and observe element with identifiers
           this.trackedElements.set(element, {
             element,
             selector: elementConfig.selector,
@@ -184,20 +172,16 @@ export class ViewportHandler extends StateManager {
       if (!tracked) continue;
 
       if (entry.isIntersecting) {
-        // Element became visible
         if (tracked.startTime === null) {
           tracked.startTime = performance.now();
 
-          // Set timer to fire event after minDwellTime
           tracked.timeoutId = window.setTimeout(() => {
             const visibilityRatio = Math.round(entry.intersectionRatio * 100) / 100;
             this.fireViewportEvent(tracked, visibilityRatio);
           }, minDwellTime);
         }
       } else {
-        // Element became hidden
         if (tracked.startTime !== null) {
-          // Clear timer if element hidden before minDwellTime elapsed
           if (tracked.timeoutId !== null) {
             window.clearTimeout(tracked.timeoutId);
             tracked.timeoutId = null;
@@ -216,12 +200,10 @@ export class ViewportHandler extends StateManager {
 
     const dwellTime = Math.round(performance.now() - tracked.startTime);
 
-    // Check data-tlog-ignore again (element might have changed)
-    if (tracked.element.hasAttribute('data-tlog-ignore')) {
+    if (tracked.element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
       return;
     }
 
-    // Check cooldown period to prevent repeated events from carousels/sticky elements
     const cooldownPeriod = this.config?.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD;
     const now = Date.now();
     if (tracked.lastFiredTime !== null && now - tracked.lastFiredTime < cooldownPeriod) {
@@ -249,7 +231,6 @@ export class ViewportHandler extends StateManager {
       viewport_data: eventData,
     });
 
-    // Reset tracking state after firing event and record timestamp
     tracked.startTime = null;
     tracked.timeoutId = null;
     tracked.lastFiredTime = now;
@@ -263,7 +244,6 @@ export class ViewportHandler extends StateManager {
       return;
     }
 
-    // Check if document.body exists
     if (!document.body) {
       log('warn', 'ViewportHandler: document.body not available, skipping MutationObserver setup');
       return;
@@ -272,20 +252,17 @@ export class ViewportHandler extends StateManager {
     this.mutationObserver = new MutationObserver((mutations) => {
       let hasAddedNodes = false;
 
-      // Check what changed
       for (const mutation of mutations) {
         if (mutation.type === 'childList') {
           if (mutation.addedNodes.length > 0) {
             hasAddedNodes = true;
           }
           if (mutation.removedNodes.length > 0) {
-            // Clean up removed nodes immediately
             this.cleanupRemovedNodes(mutation.removedNodes);
           }
         }
       }
 
-      // Debounce re-observing for added nodes (batch multiple mutations)
       if (hasAddedNodes) {
         if (this.mutationDebounceTimer !== null) {
           window.clearTimeout(this.mutationDebounceTimer);
@@ -297,7 +274,6 @@ export class ViewportHandler extends StateManager {
       }
     });
 
-    // Observe the entire document for added/removed nodes
     this.mutationObserver.observe(document.body, {
       childList: true,
       subtree: true,
@@ -315,17 +291,14 @@ export class ViewportHandler extends StateManager {
       const tracked = this.trackedElements.get(element);
 
       if (tracked) {
-        // Clear pending timer
         if (tracked.timeoutId !== null) {
           window.clearTimeout(tracked.timeoutId);
         }
 
-        // Unobserve and remove from tracking
         this.observer?.unobserve(element);
         this.trackedElements.delete(element);
       }
 
-      // Also check descendants
       const descendants = Array.from(this.trackedElements.keys()).filter((el) => element.contains(el));
       descendants.forEach((el) => {
         const descendantTracked = this.trackedElements.get(el);

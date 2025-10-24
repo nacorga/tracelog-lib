@@ -11,3 +11,6 @@
 /test-reports
 /playwright-report
 /coverage-integration
+
+
+/.tests_backup

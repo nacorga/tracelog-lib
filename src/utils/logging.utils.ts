@@ -1,3 +1,44 @@
+/**
+ * Formats log messages with optional error information and environment-specific sanitization
+ *
+ * **Purpose**: Creates consistent log message format across the library with automatic
+ * error handling and production-safe output.
+ *
+ * **Behavior**:
+ * - **Production**: Sanitizes stack traces and file paths from error messages
+ * - **Development**: Preserves full error messages for debugging
+ * - **Fallback**: Handles non-Error objects gracefully
+ *
+ * **Format**: `[TraceLog] {message}: {error}` or `[TraceLog] {message}` if no error
+ *
+ * **Stack Trace Sanitization** (production only):
+ * - Removes "at function (...)" stack lines
+ * - Removes file paths with line/column numbers
+ * - Prevents leaking internal file structure
+ *
+ * @param msg - Base log message
+ * @param error - Optional error object (Error, string, object, or unknown type)
+ * @returns Formatted log message string
+ *
+ * @example
+ * ```typescript
+ * // Basic message
+ * formatLogMsg('Session started');
+ * // → "[TraceLog] Session started"
+ *
+ * // With Error object (development)
+ * formatLogMsg('Failed to init', new Error('Network timeout'));
+ * // → "[TraceLog] Failed to init: Network timeout"
+ *
+ * // With Error object (production - sanitized)
+ * formatLogMsg('Failed to init', new Error('Network timeout at handleRequest (app.ts:42:10)'));
+ * // → "[TraceLog] Failed to init: Network timeout"
+ *
+ * // With string error
+ * formatLogMsg('Config invalid', 'Missing API key');
+ * // → "[TraceLog] Config invalid: Missing API key"
+ * ```
+ */
 export const formatLogMsg = (msg: string, error?: unknown): string => {
   if (error) {
     if (process.env.NODE_ENV !== 'development' && error instanceof Error) {
@@ -88,7 +129,48 @@ export const log = (
 
 /**
  * Sanitizes log data in production to prevent sensitive information leakage
- * Recursively redacts sensitive keys and deep clones objects to preserve expandability
+ *
+ * **Purpose**: Recursively redacts sensitive keys while preserving object expandability
+ * in browser console for debugging.
+ *
+ * **Sensitive Keys Detected** (case-insensitive substring matching):
+ * - `token`, `password`, `secret`, `key`, `apikey`, `api_key`, `sessionid`, `session_id`
+ *
+ * **Behavior**:
+ * - **Redaction**: Replaces values with `'[REDACTED]'` string
+ * - **Deep Cloning**: Creates new objects to avoid mutating originals
+ * - **Recursive**: Handles nested objects and arrays
+ * - **Preserves Structure**: Maintains object hierarchy for console inspection
+ *
+ * **Use Cases**:
+ * - Production logging where sensitive data might be present
+ * - Debugging with potentially sensitive configuration objects
+ * - Error logging with user or session data
+ *
+ * @param data - Object to sanitize
+ * @returns New object with sensitive keys redacted
+ *
+ * @example
+ * ```typescript
+ * const data = {
+ *   userId: '123',
+ *   apiKey: 'secret-key-123',
+ *   config: {
+ *     endpoint: 'https://api.com',
+ *     token: 'bearer-xyz'
+ *   }
+ * };
+ *
+ * const sanitized = sanitizeLogData(data);
+ * // {
+ * //   userId: '123',
+ * //   apiKey: '[REDACTED]',
+ * //   config: {
+ * //     endpoint: 'https://api.com',
+ * //     token: '[REDACTED]'
+ * //   }
+ * // }
+ * ```
  */
 const sanitizeLogData = (data: Record<string, unknown>): Record<string, unknown> => {
   const sanitized: Record<string, unknown> = {};

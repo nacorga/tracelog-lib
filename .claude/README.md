@@ -6,21 +6,23 @@ Comprehensive development automation pipeline for the TraceLog analytics library
 
 ```
 .claude/
-├── agents/                           # Custom subagents (5 total)
+├── agents/                           # Custom subagents
 │   ├── feature-orchestrator.md       # Interactive feature development manager
 │   ├── test-guardian.md              # Test coverage enforcer (90%+ requirement)
+│   ├── test-implementer.md           # Test implementation expert
 │   ├── type-safety-enforcer.md       # TypeScript strict mode guardian
 │   ├── memory-leak-detector.md       # Browser memory leak analyzer
 │   └── security-privacy-advisor.md   # GDPR/privacy compliance checker
-├── commands/                         # Custom slash commands (7 total)
+├── commands/                         # Custom slash commands
 │   ├── new-feature.md                # Start interactive feature development
+│   ├── implement-tests.md            # Implement test logic
 │   ├── precommit.md                  # Full acceptance criteria validation
 │   ├── coverage.md                   # Test coverage analysis
 │   ├── perf.md                       # Bundle size & performance check
 │   ├── security-audit.md             # Security & privacy audit
 │   ├── compare-branch.md             # Branch comparison & pre-merge audit
 │   └── fix.md                        # Auto-fix lint/format issues
-├── hooks/                            # Development lifecycle hooks (4 total)
+├── hooks/                            # Development lifecycle hooks
 │   ├── pre-edit-validation.sh        # Validate types before editing
 │   ├── post-edit-tests.sh            # Run related tests after edits
 │   ├── session-start.sh              # Display project status on start
@@ -165,7 +167,84 @@ Claude, use the test-guardian agent to analyze test coverage
 
 ---
 
-### 2. **type-safety-enforcer**
+### 2. **test-implementer**
+
+**Purpose**: Expert test implementation following TESTING_FUNDAMENTALS.md patterns
+
+**When to use**: Implementing test logic for test files (with or without existing skeletons)
+
+**Invocation**:
+```bash
+/implement-tests tests/unit/core/app.test.ts
+```
+
+**OR**:
+```
+Claude, use the test-implementer agent to implement tests for [file/type/priority]
+```
+
+**What it does**:
+1. **Checks test file status**:
+   - If skeleton exists → Reads test declarations (`it('should...')` statements)
+   - If no skeleton → Analyzes source code and generates skeleton first
+2. **Creates implementation plan** - Uses TodoWrite to track tests to implement
+3. **Implements tests incrementally**:
+   - Reads source code to understand behavior
+   - Uses helpers extensively from `tests/helpers/`
+   - Writes clean, maintainable test implementation
+   - Runs test after implementation to verify it passes
+   - Marks todo as completed when passing
+4. **Verifies quality**:
+   - All tests pass (100% pass rate)
+   - Uses test helpers (not custom implementations)
+   - Follows TESTING_FUNDAMENTALS.md patterns
+   - Proper setup/teardown with `setupTestEnvironment()`
+5. **Provides summary** - Statistics, next steps, recommendations
+
+**Skeleton Generation** (when test file missing/empty):
+- Analyzes source code to identify public API
+- Generates test file with proper imports, describe blocks, and test declarations
+- Confirms skeleton with user before implementation
+
+**Test Helpers Available**:
+- `tests/helpers/setup.helper.ts` - Test setup/cleanup/timers
+- `tests/helpers/mocks.helper.ts` - Mock fetch, storage, APIs
+- `tests/helpers/fixtures.helper.ts` - Test data creation
+- `tests/helpers/assertions.helper.ts` - Custom assertions
+- `tests/helpers/wait.helper.ts` - Async wait utilities
+- `tests/helpers/state.helper.ts` - State management
+
+**Usage Examples**:
+```bash
+# Implement single file
+/implement-tests tests/unit/core/app.test.ts
+
+# Implement all unit tests
+/implement-tests unit
+
+# Implement all integration tests
+/implement-tests integration
+
+# Implement all E2E tests
+/implement-tests e2e
+```
+
+**Quality Standards**:
+- ✅ ALWAYS use `setupTestEnvironment()` in `beforeEach`
+- ✅ ALWAYS use test helpers (never custom implementations)
+- ✅ ALWAYS use `advanceTimers()` (NOT `vi.runAllTimersAsync()`)
+- ✅ Test behavior, not implementation details
+- ✅ One assertion per test when possible
+- ✅ Descriptive test names starting with "should"
+
+**References**:
+- `tests/TESTING_FUNDAMENTALS.md` - Complete testing guide
+- `tests/README.md` - Quick reference
+- `tests/helpers/` - All test utilities
+
+---
+
+### 3. **type-safety-enforcer**
 
 **Purpose**: Maintain zero TypeScript errors with strict mode
 
@@ -191,7 +270,7 @@ Claude, use the type-safety-enforcer agent to check types
 
 ---
 
-### 3. **memory-leak-detector**
+### 4. **memory-leak-detector**
 
 **Purpose**: Detect memory leaks in browser environment
 
@@ -217,7 +296,7 @@ Claude, use the memory-leak-detector agent to check for leaks
 
 ---
 
-### 4. **security-privacy-advisor**
+### 5. **security-privacy-advisor**
 
 **Purpose**: GDPR/privacy compliance based on `SECURITY.md`
 
@@ -860,7 +939,3 @@ This Claude pipeline provides:
 **Result**: Ship faster with higher confidence 🚀
 
 ---
-
-**Last Updated**: 2025-10-09
-**Version**: 1.0.0
-**Maintained By**: TraceLog Development Team

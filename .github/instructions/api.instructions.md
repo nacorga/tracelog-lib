@@ -358,6 +358,23 @@ async init(config: Config = {}): Promise<void> {
 - 💡 Missing JSDoc comments on public API
 - 💡 No logging for important state changes
 - 💡 Duplicate code across API methods
+- 💡 Redundant comments that describe obvious operations
+- 💡 Comments without contextual value
+
+## Code Comments Policy
+
+**✅ Use comments for:**
+- SSR compatibility rationale and edge cases
+- Complex initialization flow steps
+- State guard patterns (prevent race conditions)
+- Error recovery strategies
+- Listener buffering mechanism
+
+**❌ NEVER use comments for:**
+- Obvious SSR checks (e.g., `// Check window exists`)
+- Simple flag checks (e.g., `// Check if initialized`)
+- Method call descriptions (e.g., `// Initialize app`)
+- Type information in function signatures
 
 ## API Layer Checklist
 

@@ -13,6 +13,35 @@ import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { log } from '../utils';
 
+/**
+ * Captures mouse clicks and converts them into analytics events with element context and coordinates.
+ *
+ * **Features**:
+ * - Smart element detection via INTERACTIVE_SELECTORS (29 selectors including buttons, links, form elements, ARIA roles)
+ * - Relative coordinates calculation (0-1 scale, 3 decimal precision, clamped)
+ * - Custom event tracking via `data-tlog-name` attributes
+ * - Text extraction with length limits (255 chars max) and priority logic
+ * - PII sanitization (emails, phone numbers, credit cards, API keys, tokens)
+ * - Privacy controls via `data-tlog-ignore` attribute
+ * - Per-element click throttling (default 300ms) with memory management (TTL + LRU)
+ *
+ * **Events Generated**: `click`, `custom` (for elements with data-tlog-name)
+ *
+ * **Triggers**: Capture-phase click events on document
+ *
+ * **Memory Management**:
+ * - TTL-based pruning: 5-minute TTL with automatic cleanup
+ * - LRU eviction: Maintains maximum 1000 throttle entries
+ * - Rate-limited pruning: Runs every 30 seconds
+ *
+ * @example
+ * ```typescript
+ * const handler = new ClickHandler(eventManager);
+ * handler.startTracking();
+ * // Clicks are now tracked automatically
+ * handler.stopTracking();
+ * ```
+ */
 export class ClickHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly lastClickTimes: Map<string, number> = new Map();
@@ -25,6 +54,19 @@ export class ClickHandler extends StateManager {
     this.eventManager = eventManager;
   }
 
+  /**
+   * Starts tracking click events on the document.
+   *
+   * Attaches a single capture-phase click listener to window that:
+   * - Detects interactive elements or falls back to clicked element
+   * - Applies click throttling per element (configurable, default 300ms)
+   * - Extracts custom tracking data from data-tlog-name attributes
+   * - Generates both custom events (for tracked elements) and click events
+   * - Respects data-tlog-ignore privacy controls
+   * - Sanitizes text content for PII protection
+   *
+   * Idempotent: Safe to call multiple times (early return if already tracking).
+   */
   startTracking(): void {
     if (this.clickHandler) {
       return;
@@ -86,6 +128,12 @@ export class ClickHandler extends StateManager {
     window.addEventListener('click', this.clickHandler, true);
   }
 
+  /**
+   * Stops tracking click events and cleans up resources.
+   *
+   * Removes the click event listener, clears throttle cache, and resets prune timer.
+   * Prevents memory leaks by properly cleaning up all state.
+   */
   stopTracking(): void {
     if (this.clickHandler) {
       window.removeEventListener('click', this.clickHandler, true);
@@ -113,7 +161,6 @@ export class ClickHandler extends StateManager {
     const signature = this.getElementSignature(element);
     const now = Date.now();
 
-    // Prune cache periodically to prevent unbounded growth
     this.pruneThrottleCache(now);
 
     const lastClickTime = this.lastClickTimes.get(signature);
@@ -145,16 +192,14 @@ export class ClickHandler extends StateManager {
     this.lastPruneTime = now;
     const cutoff = now - THROTTLE_ENTRY_TTL_MS;
 
-    // Remove entries older than TTL
     for (const [key, timestamp] of this.lastClickTimes.entries()) {
       if (timestamp < cutoff) {
         this.lastClickTimes.delete(key);
       }
     }
 
-    // Enforce max size limit (LRU eviction)
     if (this.lastClickTimes.size > MAX_THROTTLE_CACHE_ENTRIES) {
-      const entries = Array.from(this.lastClickTimes.entries()).sort((a, b) => a[1] - b[1]); // Sort by timestamp (oldest first)
+      const entries = Array.from(this.lastClickTimes.entries()).sort((a, b) => a[1] - b[1]);
 
       const excessCount = this.lastClickTimes.size - MAX_THROTTLE_CACHE_ENTRIES;
       const toDelete = entries.slice(0, excessCount);
@@ -177,24 +222,20 @@ export class ClickHandler extends StateManager {
    * Priority: id > data-testid > data-tlog-name > DOM path
    */
   private getElementSignature(element: HTMLElement): string {
-    // Priority 1: Element ID (most stable)
     if (element.id) {
       return `#${element.id}`;
     }
 
-    // Priority 2: data-testid (common in tests)
     const testId = element.getAttribute('data-testid');
     if (testId) {
       return `[data-testid="${testId}"]`;
     }
 
-    // Priority 3: data-tlog-name (our own tracking attribute)
     const tlogName = element.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
     if (tlogName) {
       return `[${HTML_DATA_ATTR_PREFIX}-name="${tlogName}"]`;
     }
 
-    // Priority 4: Generate DOM path as fallback
     return this.getElementPath(element);
   }
 
@@ -208,7 +249,6 @@ export class ClickHandler extends StateManager {
     while (current && current !== document.body) {
       let selector = current.tagName.toLowerCase();
 
-      // Add class if available (first class only for brevity)
       if (current.className) {
         const firstClass = current.className.split(' ')[0];
         if (firstClass) {
@@ -254,6 +294,17 @@ export class ClickHandler extends StateManager {
     return element;
   }
 
+  /**
+   * Clamps relative coordinate values to [0, 1] range with 3 decimal precision.
+   *
+   * @param value - Raw relative coordinate value
+   * @returns Clamped value between 0 and 1 with 3 decimal places (e.g., 0.123)
+   *
+   * @example
+   * clamp(1.234)   // returns 1.000
+   * clamp(0.12345) // returns 0.123
+   * clamp(-0.5)    // returns 0.000
+   */
   private clamp(value: number): number {
     return Math.max(0, Math.min(1, Number(value.toFixed(3))));
   }
@@ -310,6 +361,25 @@ export class ClickHandler extends StateManager {
     };
   }
 
+  /**
+   * Sanitizes text by replacing PII patterns with [REDACTED].
+   *
+   * Protects against:
+   * - Email addresses
+   * - Phone numbers (US format)
+   * - Credit card numbers
+   * - IBAN numbers
+   * - API keys/tokens
+   * - Bearer tokens
+   *
+   * @param text - Raw text content from element
+   * @returns Sanitized text with PII replaced by [REDACTED]
+   *
+   * @example
+   * sanitizeText('Email: user@example.com')      // returns 'Email: [REDACTED]'
+   * sanitizeText('Card: 1234-5678-9012-3456')    // returns 'Card: [REDACTED]'
+   * sanitizeText('Bearer token123')              // returns '[REDACTED]'
+   */
   private sanitizeText(text: string): string {
     let sanitized = text;
 

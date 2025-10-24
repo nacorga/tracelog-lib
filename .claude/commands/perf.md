@@ -92,7 +92,7 @@ Compare with previous builds (if available):
 
 - **ESM Bundle**: < 50 KB uncompressed
 - **Browser Bundle**: < 60 KB uncompressed
-- **Gzipped**: < 20 KB (target: ~15 KB)
+- **Gzipped**: < 20 KB
 - **Runtime Dependency**: Only `web-vitals` allowed
 
 ## Size Optimization Tips

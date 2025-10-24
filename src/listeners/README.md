@@ -26,7 +26,6 @@ Captures touch-based interactions on mobile and touch-enabled devices.
 **Key Features**:
 - Essential touch event coverage
 - Orientation change detection for mobile devices
-- Simplified v1 implementation (removed device motion complexity)
 - Passive listeners for smooth touch performance
 
 ## VisibilityListenerManager
@@ -44,7 +43,6 @@ Monitors page visibility state and window focus for session lifecycle management
 - Page Visibility API integration (`visibilitychange`)
 - Window focus/blur detection
 - Basic network status monitoring (`online`/`offline`)
-- Simplified v1 architecture (removed mobile-specific complexity)
 - Passive listeners for optimal performance
 
 **Callback Routing**:
@@ -128,6 +126,3 @@ interface EventListenerManager {
 
 - **Passive listeners**: All events use `{ passive: true }` where possible
 - **Memory management**: Proper cleanup prevents memory leaks
-- **Minimal overhead**: Focused on essential events only for v1
-
-All listener managers are designed for v1 simplicity, removing over-engineered features while maintaining essential functionality for comprehensive user activity tracking.

@@ -64,6 +64,9 @@ export const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
 export const MAX_PENDING_EVENTS_BUFFER = 100; // Maximum events to buffer before session init
+export const MAX_CONSENT_BUFFER_LENGTH = 500; // Maximum events to buffer while waiting for consent
+export const CONSENT_FLUSH_BATCH_SIZE = 50; // Batch size when flushing consent buffer
+export const CONSENT_FLUSH_DELAY_MS = 100; // Delay between batches when flushing consent buffer
 
 // Session timeout validation limits
 export const MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds minimum
@@ -104,9 +107,24 @@ export const MAX_FINGERPRINTS_HARD_LIMIT = 2000; // Hard limit for aggressive cl
 // BROWSER & HTML
 // ============================================================================
 
+/**
+ * Prefix for all HTML data attributes used by TraceLog
+ * Used for features like data-tlog-ignore, data-tlog-event, etc.
+ */
 export const HTML_DATA_ATTR_PREFIX = 'data-tlog';
 
-// Interactive element selectors for click tracking
+/**
+ * CSS selectors for interactive elements to track in click events
+ *
+ * Covers:
+ * - Standard HTML interactive elements (button, a, input, select, textarea)
+ * - ARIA roles (button, link, tab, menuitem, option, checkbox, radio, switch)
+ * - Framework-specific attributes (routerLink, ng-click)
+ * - Data attributes for actions (data-action, data-click, data-navigate, data-toggle)
+ * - Common CSS classes (.btn, .button, .clickable, .nav-link, .menu-item)
+ * - Testing attributes (data-testid)
+ * - Accessibility (tabindex="0")
+ */
 export const INTERACTIVE_SELECTORS = [
   'button',
   'a',
@@ -141,10 +159,22 @@ export const INTERACTIVE_SELECTORS = [
   '[tabindex="0"]',
 ] as const;
 
-// UTM parameters for tracking
+/**
+ * Standard UTM (Urchin Tracking Module) parameters for marketing attribution
+ * These parameters are preserved in URLs for campaign tracking
+ */
 export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 
-// Default sensitive query parameters to remove from URLs (privacy protection)
+/**
+ * Default list of sensitive URL query parameters to filter out for privacy protection
+ *
+ * Includes:
+ * - Authentication tokens (token, auth, key, session, access_token, refresh_token)
+ * - Password reset links (reset, password, verification, code, otp)
+ * - API keys (api_key, apikey, secret)
+ *
+ * These parameters are removed from tracked URLs to prevent PII leakage
+ */
 export const DEFAULT_SENSITIVE_QUERY_PARAMS = [
   'token',
   'auth',
@@ -204,10 +234,45 @@ export const SCROLL_SUPPRESS_MULTIPLIER = 2;
 export const RATE_LIMIT_INTERVAL = 1000; // 1 second
 
 // ============================================================================
+// RETRY CONFIGURATION
+// ============================================================================
+
+/**
+ * Maximum number of retry attempts for failed event transmissions
+ * Applied to 5xx errors and network timeouts (transient failures)
+ * 4xx errors (permanent) are not retried
+ */
+export const MAX_SEND_RETRIES = 2;
+
+/**
+ * Base delay for exponential backoff retry strategy (in milliseconds)
+ * Formula: RETRY_BACKOFF_BASE_MS * (2 ^ attempt) + jitter
+ * Example: attempt 1 = 100ms + jitter, attempt 2 = 200ms + jitter
+ */
+export const RETRY_BACKOFF_BASE_MS = 100;
+
+/**
+ * Maximum random jitter added to retry backoff delay (in milliseconds)
+ * Prevents thundering herd problem when multiple clients retry simultaneously
+ * Jitter range: 0 to RETRY_BACKOFF_JITTER_MS
+ */
+export const RETRY_BACKOFF_JITTER_MS = 100;
+
+// ============================================================================
 // VALIDATION
 // ============================================================================
 
-// Validation error messages - standardized across all layers
+/**
+ * Standardized validation error messages for TraceLog configuration
+ *
+ * Centralizes all validation messages to ensure consistency across:
+ * - API layer validation
+ * - Configuration validation
+ * - Runtime validation
+ *
+ * Messages include contextual information (e.g., min/max values) to help developers
+ * quickly identify and fix configuration issues.
+ */
 export const VALIDATION_MESSAGES = {
   MISSING_PROJECT_ID: 'Project ID is required',
   PROJECT_ID_EMPTY_AFTER_TRIM: 'Project ID is required',
@@ -240,7 +305,17 @@ export const VALIDATION_MESSAGES = {
 // SECURITY
 // ============================================================================
 
-// XSS protection patterns
+/**
+ * Regular expressions for detecting and sanitizing XSS (Cross-Site Scripting) attacks
+ *
+ * Patterns detect:
+ * - Script tags (<script>)
+ * - JavaScript protocol URLs (javascript:)
+ * - Inline event handlers (onclick=, onload=, etc.)
+ * - Embedded content (<iframe>, <embed>, <object>)
+ *
+ * Used to sanitize user-provided data before storage or transmission
+ */
 export const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
   /javascript:/gi,

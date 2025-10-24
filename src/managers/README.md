@@ -8,7 +8,7 @@ Core business logic components that handle analytics data processing, state mana
 
 **Core Functionality**:
 - **Event Tracking**: Captures user interactions (clicks, scrolls, page views, custom events, web vitals, errors)
-- **Queue Management**: Batches events and manages sending intervals (10-second intervals) to optimize network requests
+- **Queue Management**: Batches events and manages sending intervals (configurable, default 10 seconds via `SEND_EVENTS_INTERVAL_MS`) to optimize network requests
 - **Deduplication**: Prevents duplicate events using LRU cache with 1000-entry fingerprint storage
 - **Rate Limiting**: Client-side rate limiting (50 events/second) with exemptions for critical events
 - **Per-Event Rate Limiting**: Prevents infinite loops with per-event-name limits (60/minute default)
@@ -74,8 +74,6 @@ Core business logic components that handle analytics data processing, state mana
 
 ## SamplingManager
 
-**Status**: **REMOVED** in v1 refactoring.
-
 **Reason**: Dead code elimination - the SamplingManager was completely unused throughout the codebase. Event sampling is now handled directly in EventManager using simple random sampling (`Math.random() < samplingRate`), providing consistent behavior across all event types while reducing bundle size and architectural complexity.
 
 ## SenderManager
@@ -95,10 +93,12 @@ Core business logic components that handle analytics data processing, state mana
 - **Integration-aware architecture** - Constructor accepts `integrationId` and `apiUrl` parameters
   - Multiple instances can coexist (one per integration)
   - Independent storage keys prevent cross-integration interference
-- **No in-session retries** - Events removed from queue immediately after send failure
-  - Prevents infinite retry loops during API outages (critical fix)
-  - Failed events persist to localStorage for next-page-load recovery
-  - Dramatically reduces server load and network traffic during failures
+- **In-session retry with exponential backoff** - Up to 2 additional attempts for transient errors
+  - Transient errors (5xx, 408, 429, network failures) trigger retry with exponential backoff
+  - Backoff formula: `100ms * 2^attempt + random(0-100ms)` (delays: 200-300ms, 400-500ms)
+  - Permanent errors (4xx except 408/429) bypass retries immediately
+  - Failed events persist to localStorage after exhausting retries for next-page-load recovery
+  - Dramatically reduces data loss while preventing infinite retry loops
 - **Multi-tab protection** - Checks for recent persistence by other tabs (1-second window)
   - Prevents data loss when multiple tabs fail simultaneously
   - Last-write-wins protection via timestamp validation
@@ -160,6 +160,8 @@ Core business logic components that handle analytics data processing, state mana
 - **Concurrent endSession() protection**: Guard flag (`isEnding`) with try-finally pattern prevents duplicate SESSION_END events when timeout and page_unload fire simultaneously
 - Five session end reasons: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
 - Graceful BroadcastChannel fallback (sessions work without cross-tab sync if API unavailable)
+- **Project-scoped session storage**: Session data stored with key `tlog:session:{projectId}` to prevent cross-project conflicts
+- **Error rollback**: On initialization error in `startTracking()`, all setup is rolled back (cleanup listeners, timers, state) and error re-thrown to caller
 
 **Critical Implementation Details**:
 - **Initialization Order**: `initCrossTabSync()` MUST be called before `eventManager.track(SESSION_START)` to prevent message loss during session initialization
@@ -189,6 +191,8 @@ Core business logic components that handle analytics data processing, state mana
 - **Control Flags**: `mode` (QA/production), `hasStartSession`, `suppressNextScroll`
 - **Runtime Counters**: `scrollEventCount` (optional)
 
+See `src/types/state.types.ts` for complete `State` interface definition.
+
 **Implementation Details**:
 - Abstract class pattern - all managers/handlers extend StateManager
 - Access pattern: `this.get('key')`, `this.set('key', value)`, `this.getState()`
@@ -217,12 +221,72 @@ Core business logic components that handle analytics data processing, state mana
 - Separate automatic fallback Maps for each storage type
 - SSR-safe initialization with window availability checks
 - Storage quota error handling with automatic cleanup and retry
-- Intelligent cleanup strategy: prioritizes removing persisted events and non-critical data while preserving session, user, device, and config keys
+- Intelligent cleanup strategy: prioritizes removing persisted events and non-critical data while preserving critical keys (`tracelog_session_*`, `tracelog_user_id`, `tracelog_device_id`, `tracelog_config`)
 - Quota error detection via `hasQuotaError()` method for silent data loss prevention
 - Explicit `clear()` method for TraceLog-namespaced data (`tracelog_*` prefix only)
 - Public `isAvailable()` checking for conditional logic
 - Consistent API regardless of underlying storage mechanism
 - Test key validation during initialization (`__tracelog_test__`)
+
+## ConsentManager
+
+**Purpose**: GDPR/CCPA-compliant consent management with cross-tab synchronization and automatic consent persistence.
+
+**Core Functionality**:
+- **Consent State Management**: Tracks consent status per integration (TraceLog SaaS, Custom Backend, Google Analytics)
+- **Cross-Tab Synchronization**: Syncs consent state across browser tabs via storage events
+- **Automatic Persistence**: Debounced localStorage persistence with 50ms delay to prevent thrashing
+- **Consent Expiration**: Stored consent expires after 365 days requiring re-consent
+- **Event Emission**: Emits `CONSENT_CHANGED` events for integration with EventManager
+- **Browser Environment Checks**: Verifies browser context before consent operations
+
+**Key Features**:
+- Per-integration consent tracking (`tracelog`, `custom`, `google`)
+- Debounced persistence (50ms) to optimize localStorage writes during rapid consent changes
+- Cross-tab sync via storage events with message validation
+- Consent expiration after 365 days (configurable via `CONSENT_EXPIRY_DAYS`)
+- SSR-safe operations with browser environment detection
+- Storage quota error detection and recovery
+- Event-driven architecture with `EmitterEvent.CONSENT_CHANGED` emissions
+- Automatic cleanup with `cleanup()` method for memory leak prevention
+
+**Public API Methods**:
+- `setConsent(integration: 'tracelog' | 'custom' | 'google' | 'all', granted: boolean)`: Grants or revokes consent for specific integration or all integrations at once
+- `hasConsent(integration: 'tracelog' | 'custom' | 'google')`: Checks if consent granted for integration
+- `getConsentState()`: Returns full consent state object with all integrations
+- `getGrantedIntegrations()`: Returns array of integration names that have consent granted
+- `flush(throwOnError?: boolean)`: Immediately persist pending consent (for page unload or pre-init scenarios)
+- `cleanup()`: Cleans up resources (timers, listeners) without clearing persisted consent
+
+**Integration with EventManager**:
+- EventManager checks consent via `ConsentManager.hasConsent()` before tracking events
+- Events tracked before consent granted are buffered in `EventManager.consentEventsBuffer`
+- When consent granted, EventManager calls `flushConsentBuffer()` to send buffered events
+- When consent revoked, EventManager calls `clearConsentBufferForIntegration()` to discard buffered events
+- Per-integration consent allows mixed scenarios (e.g., TraceLog SaaS consent granted, Custom Backend denied)
+
+**Consent Persistence**:
+- Storage key: `tracelog_consent`
+- Format:
+  ```json
+  {
+    "state": {
+      "tracelog": true,
+      "custom": false,
+      "google": true
+    },
+    "timestamp": 1704896400000,
+    "expiresAt": 1736432400000
+  }
+  ```
+- Expiration: 365 days from grant timestamp
+- Cross-tab sync: Automatic via storage event listener
+
+**Important Implementation Details**:
+- **Does NOT extend StateManager**: ConsentManager is intentionally standalone (doesn't need global state access)
+- **Debouncing Strategy**: 50ms delay provides optimal balance between responsiveness and localStorage write performance
+- **SSR Safety**: All operations check `typeof window !== 'undefined'` before DOM/storage access
+- **Error Recovery**: Corrupted consent data automatically cleared from storage with fallback to default (no consent)
 
 ## UserManager
 
@@ -247,7 +311,3 @@ static getId(storageManager: StorageManager): string
 ```
 
 **Storage Key**: `tlog:uid` (fixed, not project-scoped)
-
----
-
-All managers extend `StateManager` for global state access and follow clean code principles with comprehensive error handling, TypeScript strict mode compliance, and production-ready reliability for the v1 release.

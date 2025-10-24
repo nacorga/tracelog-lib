@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 import { EventManager } from '../../src/managers/event.manager';
 import { SessionManager } from '../../src/managers/session.manager';
 import { StorageManager } from '../../src/managers/storage.manager';
+import { ConsentManager } from '../../src/managers/consent.manager';
 import { StateManager, resetGlobalState } from '../../src/managers/state.manager';
 import { Config } from '../../src/types';
 import { DEFAULT_SESSION_TIMEOUT } from '../../src/constants';
@@ -99,10 +100,16 @@ export const setupTestState = (config: Config = createTestConfig()): void => {
  */
 export const createTestEventManager = (
   storageManager?: StorageManager,
-  googleAnalytics?: GoogleAnalyticsIntegration | null,
+  google?: GoogleAnalyticsIntegration | null,
+  consentManager?: ConsentManager | null,
   emitter?: Emitter | null,
 ): EventManager => {
-  return new EventManager(storageManager || createMockStorageManager(), googleAnalytics || null, emitter || null);
+  return new EventManager(
+    storageManager || createMockStorageManager(),
+    google || null,
+    consentManager || null,
+    emitter || null,
+  );
 };
 
 /**

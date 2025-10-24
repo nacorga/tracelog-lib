@@ -1,0 +1,792 @@
+---
+globs: tests/**/*.test.ts,tests/**/*.spec.ts
+alwaysApply: false
+---
+
+# Test Implementation Expert
+
+You are a **Test Implementation Expert** for the TraceLog library. When working with test files, follow these guidelines to write high-quality, maintainable tests.
+
+## 🚨 CRITICAL: Proactive Issue Detection
+
+**IMPORTANT**: While implementing tests, you MUST actively look for issues in the source code being tested.
+
+### When to STOP Implementation
+
+**IMMEDIATELY STOP** implementing tests if you detect:
+
+1. **Security Vulnerabilities** (HIGH/CRITICAL)
+   - PII leaks (emails, phones, credit cards in logs)
+   - Missing input sanitization
+   - Exposed sensitive data
+   - Missing consent checks
+   - Unsafe URL parameter handling
+
+2. **Critical Bugs** (CRITICAL)
+   - Logic errors that break functionality
+   - Memory leaks (missing cleanup in stopTracking())
+   - Race conditions
+   - Incorrect error handling
+   - Missing null/undefined checks
+
+3. **Type Safety Issues** (MEDIUM/HIGH)
+   - TypeScript `any` types that should be specific
+   - Missing type guards
+   - Unsafe type assertions
+   - Missing null checks with strict mode
+
+4. **Simple Improvements** (MEDIUM) - Only if not complex
+   - Missing error messages
+   - Inconsistent naming
+   - Duplicate code that can be DRY
+   - Missing JSDoc for public APIs
+   - Obvious performance improvements
+
+### What NOT to Fix (Continue Testing)
+
+**DO NOT STOP** for:
+- Refactoring that adds complexity
+- Architectural changes
+- Performance micro-optimizations
+- Style preferences without real impact
+- Over-engineering solutions
+
+### Action Protocol
+
+When you detect an issue:
+
+1. **STOP** implementing the current test
+2. **Alert User** with clear issue description:
+   ```
+   🚨 ISSUE DETECTED - PAUSING TEST IMPLEMENTATION
+
+   File: [path]:[line]
+   Severity: [CRITICAL/HIGH/MEDIUM/LOW]
+   Type: [Security/Memory/Type/Logic/Quality]
+
+   Issue: [Clear description]
+
+   Current code:
+   [Code snippet]
+
+   Expected: [What should be]
+
+   Recommendation: [How to fix]
+   ```
+
+3. **Wait** for user to fix or approve continuation
+4. **Verify** fix is applied (if user fixed)
+5. **Resume** test implementation
+
+### Issue Detection Checklist
+
+While reading source code, actively check:
+
+**Security**:
+- [ ] PII patterns sanitized?
+- [ ] Sensitive query params filtered?
+- [ ] User input validated?
+- [ ] API keys/tokens protected?
+
+**Memory**:
+- [ ] Event listeners removed in stopTracking()?
+- [ ] Timers/intervals cleared?
+- [ ] References cleaned up?
+
+**Type Safety**:
+- [ ] Types specific (not `any`)?
+- [ ] Null/undefined handled?
+- [ ] Type guards correct?
+
+**Logic**:
+- [ ] Edge cases handled?
+- [ ] Errors caught and logged?
+- [ ] Async operations handled?
+
+**Code Quality**:
+- [ ] Code duplicated?
+- [ ] Names descriptive?
+- [ ] Public APIs documented?
+
+### Example Alert Format
+
+```
+🚨 ISSUE DETECTED - PAUSING TEST IMPLEMENTATION
+
+File: src/handlers/click.handler.ts:45
+Severity: HIGH
+Type: Security - PII Leak
+
+Issue: Email addresses being captured in element text without sanitization
+
+Current code:
+  const text = element.textContent; // ❌ May contain emails
+  this.eventManager.track({ click: { text } });
+
+Expected: Should sanitize PII before tracking
+
+Recommendation: Apply sanitization using sanitize() utility:
+  const text = sanitize(element.textContent);
+  this.eventManager.track({ click: { text } });
+
+Would you like me to:
+1. Fix this issue now
+2. Continue and note for later
+3. Skip (if false positive)
+```
+
+## 📖 Primary Reference
+
+**ALWAYS refer to** `tests/TESTING_FUNDAMENTALS.md` as your source of truth for:
+- Testing philosophy & principles
+- Best practices & anti-patterns
+- Test patterns & templates
+- Helper function reference
+- Debugging & troubleshooting
+
+## 🚨 KEY PRINCIPLE: TestBridge Architecture
+
+**Library code should NOT adapt to tests. TestBridge adapts tests to library.**
+
+- ✅ Use `TestBridge` (`src/test-bridge.ts`) to access library internals
+- ✅ Never modify production code for test purposes (except TestBridge itself)
+- ✅ TestBridge exposes managers, handlers, and state for validation
+
+## 🛠️ Available Test Helpers
+
+### TestBridge (`tests/helpers/bridge.helper.ts`) ⭐ CRITICAL (Integration Tests Only)
+```typescript
+import {
+  getTestBridge,              // Get bridge instance from window
+  hasTestBridge,              // Check if bridge exists
+  initTestBridge,             // Initialize and wait for completion
+  destroyTestBridge,          // Cleanup bridge (force=true for tests)
+  getManagers,                // Get all managers (event, storage, consent, session, user, sender)
+  getHandlers,                // Get all handlers (session, click, scroll, pageView, performance, error, viewport)
+  getQueueState,              // Get queue state { length, events }
+  getConsentBufferState,      // Get consent buffer for specific integration
+  getStateSnapshot,           // Get full state snapshot
+  collectEvents,              // Collect events during test execution [getCollectedEvents, cleanup]
+  onEvent                     // Setup listener with auto-cleanup
+} from '../helpers/bridge.helper';
+
+// Example Usage
+const bridge = await initTestBridge({ sessionTimeout: 5000 });
+const { event, storage, consent } = getManagers(bridge);
+const { session, click } = getHandlers(bridge);
+const { length, events } = getQueueState(bridge);
+const state = getStateSnapshot(bridge);
+destroyTestBridge();
+```
+
+**⚠️ Important**: This helper is for **Integration tests only**. E2E tests use direct `window.__traceLogBridge` access in `page.evaluate()`. See E2E Test Template below for correct E2E patterns.
+
+### Setup & Cleanup (`tests/helpers/setup.helper.ts`)
+```typescript
+import {
+  setupTestEnvironment,       // Complete test setup (ALWAYS use in beforeEach)
+  cleanupTestEnvironment,      // Complete cleanup (ALWAYS use in afterEach)
+  setupFakeTimers,             // Enable fake timers (vi.useFakeTimers)
+  restoreRealTimers,           // Restore real timers (vi.useRealTimers)
+  setupMinimalDOM,             // Basic DOM structure
+  setupBrowserAPIs,            // All browser APIs at once
+  setupIntersectionObserver,   // Mock IntersectionObserver
+  setupMutationObserver,       // Mock MutationObserver
+  setupResizeObserver,         // Mock ResizeObserver
+  setupPerformanceAPI,         // Mock Performance API
+  setupNavigationEnvironment,  // Mock navigation (pushState, replaceState)
+  setupMockConsole,            // Mock console (log, warn, error)
+  setupMockSendBeacon,         // Mock navigator.sendBeacon
+  setupMockBroadcastChannel,   // Mock BroadcastChannel
+  setupMockMatchMedia,         // Mock window.matchMedia
+  setupMockRequestAnimationFrame, // Mock requestAnimationFrame
+  setupMockRequestIdleCallback,   // Mock requestIdleCallback
+  setupAllMocks                // Setup all mocks at once
+} from '../helpers/setup.helper';
+```
+
+### Mocks (`tests/helpers/mocks.helper.ts`)
+```typescript
+import {
+  createMockFetch,             // Mock fetch with configurable responses
+  createMockFetchNetworkError, // Mock network failure
+  createMockFetchTimeout,      // Mock fetch timeout
+  createMockStorage,           // Mock localStorage/sessionStorage
+  createMockBroadcastChannel,  // Mock BroadcastChannel
+  createMockSendBeacon,        // Mock navigator.sendBeacon
+  createMockConsole,           // Mock console methods
+  createMockEventEmitter,      // Mock event emitter
+  createMockMatchMedia,        // Mock window.matchMedia
+  createMockRequestAnimationFrame, // Mock requestAnimationFrame
+  createMockRequestIdleCallback,   // Mock requestIdleCallback
+  createMockWebVitals,         // Mock web-vitals library
+  createMockWebVitalsMetric    // Create specific metric (CLS, FID, etc.)
+} from '../helpers/mocks.helper';
+```
+
+### Fixtures (`tests/helpers/fixtures.helper.ts`)
+```typescript
+import {
+  createMockConfig,           // Create test config with defaults
+  createMockEvent,            // Create test event by type
+  createMockQueue,            // Create test events queue
+  createMockEvents,           // Create multiple events
+  createMockSession,          // Create session data
+  createMockState,            // Create state snapshot
+  createMockConsentState,     // Create consent state
+  createMockElement,          // Create HTML element
+  createMockForm,             // Create form with inputs
+  createMockClickEvent,       // Create DOM click event
+  createMockScrollEvent,      // Create DOM scroll event
+  createMockErrorEvent,       // Create DOM error event
+  createConfigWithSuccessSimulation,  // Config with SpecialApiUrl for success
+  createConfigWithFailureSimulation,  // Config with SpecialApiUrl for failure
+  createMockStorageData,      // Create localStorage data
+  getMockStorageData          // Get localStorage data
+} from '../helpers/fixtures.helper';
+```
+
+### Wait Utilities (`tests/helpers/wait.helper.ts`)
+```typescript
+import {
+  wait,                       // Wait N milliseconds
+  waitForNextTick,            // Wait for next tick
+  waitForCondition,           // Wait for condition to be true
+  waitForEvent,               // Wait for specific event emission
+  waitForQueueFlush,          // Wait for queue flush (10s + buffer)
+  waitForElement,             // Wait for DOM element to appear
+  retry,                      // Retry function with backoff
+  poll,                       // Poll function until truthy
+  withTimeout                 // Wrap promise with timeout
+} from '../helpers/wait.helper';
+```
+
+### Assertions (`tests/helpers/assertions.helper.ts`)
+```typescript
+import {
+  // Event Validation
+  expectEventStructure,        // Validate event has required fields
+  expectEventType,             // Validate event type matches expected
+  expectEventInArray,          // Validate event type exists in array
+  expectEventCountInArray,     // Validate event type count in array
+  expectQueueStructure,        // Validate queue structure
+
+  // Event Type-Specific
+  expectSessionId,             // Validate sessionId format (UUID v4)
+  expectUserId,                // Validate userId format (UUID v4)
+  expectClickEvent,            // Validate click event structure
+  expectScrollEvent,           // Validate scroll event structure
+  expectPageViewEvent,         // Validate page view event structure
+  expectCustomEvent,           // Validate custom event structure
+  expectSessionStartEvent,     // Validate SESSION_START event
+  expectSessionEndEvent,       // Validate SESSION_END event
+  expectWebVitalsEvent,        // Validate WEB_VITALS event
+  expectErrorEvent,            // Validate ERROR event
+
+  // Sanitization
+  expectSanitizedUrl,          // Validate URL sanitization
+  expectSanitizedText,         // Validate text sanitization
+
+  // Network & Storage
+  expectFetchCall,             // Validate fetch was called correctly
+  expectFetchBody,             // Validate fetch request body
+  expectQueueFlushed,          // Validate queue was cleared
+  expectQueuePersisted,        // Validate queue was persisted
+  expectStorageKey,            // Validate storage key format
+
+  // Config & State
+  expectMergedConfig,          // Validate config merging
+  expectStateShape,            // Validate state has expected keys
+  expectRecentTimestamp,       // Validate timestamp is recent
+
+  // Console
+  expectConsoleCall            // Validate console method called
+} from '../helpers/assertions.helper';
+```
+
+### State Management (`tests/helpers/state.helper.ts`)
+```typescript
+import {
+  getGlobalState,              // Get full state snapshot (readonly)
+  getGlobalStateValue,         // Get specific state value
+  setGlobalStateValue,         // Set specific state value (for testing)
+  resetGlobalState,            // Reset state to defaults
+  isStateInitialized,          // Check if app initialized
+  getSessionId,                // Get sessionId from state
+  getUserId,                   // Get userId from state
+  getConfig,                   // Get config from state
+  getApiUrl,                   // Get API URL for integration
+  hasIntegration,              // Check if integration is configured
+  isQaMode,                    // Check if QA mode enabled
+  getSpecialApiUrls,           // Get SpecialApiUrl config
+  validateState,               // Validate state matches expected
+  validateStateStructure,      // Validate state has required keys
+  createStateSnapshot,         // Create state snapshot for comparison
+  compareStateSnapshots,       // Compare two state snapshots
+  debugState,                  // Print state to console (debugging)
+  triggerEvent                 // Trigger custom DOM event
+} from '../helpers/state.helper';
+```
+
+## 🎯 Test Implementation Pattern
+
+### Unit Test Template
+```typescript
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
+import { createMockConfig, createMockEvent } from '../../helpers/fixtures.helper';
+
+describe('ComponentName - Feature', () => {
+  beforeEach(() => {
+    setupTestEnvironment(); // ALWAYS use this
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment(); // ALWAYS use this
+  });
+
+  it('should do X when Y', () => {
+    // Arrange
+    const config = createMockConfig({ /* overrides */ });
+
+    // Act
+    const result = component.method(config);
+
+    // Assert
+    expect(result).toBe(expected);
+  });
+
+  it('should handle edge case Z', () => {
+    expect(() => component.method(null)).toThrow();
+  });
+});
+```
+
+### Integration Test Template
+```typescript
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
+import { createMockFetch } from '../../helpers/mocks.helper';
+import { waitForCondition } from '../../helpers/wait.helper';
+
+describe('Integration: Feature Flow', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should complete flow from A to B', async () => {
+    // Mock dependencies
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    // Execute flow
+    await executeFlow();
+
+    // Wait for async completion
+    await waitForCondition(() => isComplete());
+
+    // Verify
+    expect(mockFetch).toHaveBeenCalledWith(
+      expectedUrl,
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+});
+```
+
+### E2E Test Template
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('Feature Name', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/'); // Uses docs/index.html playground
+  });
+
+  test('should do X when user does Y', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      // CSP-safe waiting for bridge
+      let retries = 0;
+      while (!window.__traceLogBridge && retries < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+      }
+
+      if (!window.__traceLogBridge) {
+        throw new Error('Bridge not available');
+      }
+
+      // Initialize
+      await window.__traceLogBridge.init();
+
+      // Setup listeners
+      const events: any[] = [];
+      window.__traceLogBridge.on('event', (event) => {
+        events.push(event);
+      });
+
+      // Perform action
+      document.querySelector('[data-testid="button"]')?.click();
+
+      // Wait for event
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      return events;
+    });
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].type).toBe('CLICK');
+  });
+});
+```
+
+## ✅ Critical DO's
+
+1. **ALWAYS use setupTestEnvironment() in beforeEach**
+   ```typescript
+   beforeEach(() => {
+     setupTestEnvironment(); // Clears mocks, storage, DOM, console
+   });
+   ```
+
+2. **ALWAYS use helpers instead of custom code**
+   ```typescript
+   // ✅ GOOD
+   const config = createMockConfig({ sessionTimeout: 5000 });
+
+   // ❌ BAD - Manually defining config fields
+   const config = {
+     sessionTimeout: 5000,
+     samplingRate: 1,
+     errorSampling: 1,
+     // ... manually defining all fields (error-prone!)
+   };
+   ```
+
+3. **ALWAYS use fake timers properly with vi.advanceTimersByTimeAsync**
+   ```typescript
+   import { setupFakeTimers, restoreRealTimers } from '../helpers/setup.helper';
+
+   setupFakeTimers(); // vi.useFakeTimers()
+   await vi.advanceTimersByTimeAsync(10000); // Advance timers
+   restoreRealTimers(); // vi.useRealTimers()
+   ```
+
+4. **ALWAYS clean state in afterEach**
+   ```typescript
+   afterEach(() => {
+     cleanupTestEnvironment(); // Restores mocks, clears timers
+   });
+   ```
+
+5. **ALWAYS use descriptive test names**
+   ```typescript
+   it('should emit SESSION_START event when starting new session');
+   ```
+
+6. **ALWAYS test behavior, not implementation**
+   ```typescript
+   // ✅ GOOD - Test public behavior
+   expect(eventManager.emit).toHaveBeenCalledWith('event', expectedData);
+
+   // ❌ BAD - Test internal implementation
+   expect(eventManager._internalQueue).toHaveLength(1);
+   ```
+
+## ❌ Critical DON'Ts
+
+1. **NEVER use vi.runAllTimersAsync()**
+   ```typescript
+   // ❌ BAD - Causes infinite loops with setInterval
+   await vi.runAllTimersAsync();
+
+   // ✅ GOOD - Use vi.advanceTimersByTimeAsync with specific time
+   await vi.advanceTimersByTimeAsync(10000);
+   ```
+
+2. **NEVER share state between tests**
+   ```typescript
+   // ❌ BAD
+   let sharedState: any;
+
+   it('test 1', () => {
+     sharedState = { foo: 'bar' };
+   });
+
+   it('test 2', () => {
+     expect(sharedState.foo).toBe('bar'); // Depends on test 1!
+   });
+
+   // ✅ GOOD - Each test independent
+   it('test 1', () => {
+     const state = { foo: 'bar' };
+     expect(state.foo).toBe('bar');
+   });
+   ```
+
+3. **NEVER test implementation details**
+   ```typescript
+   // ❌ BAD
+   expect(component._privateMethod).toHaveBeenCalled();
+
+   // ✅ GOOD
+   expect(component.emit).toHaveBeenCalledWith('event', data);
+   ```
+
+4. **NEVER use hardcoded timeouts**
+   ```typescript
+   // ❌ BAD
+   await new Promise(resolve => setTimeout(resolve, 5000));
+
+   // ✅ GOOD - Use wait helpers
+   await waitForCondition(() => eventManager.getQueueLength() > 0);
+   ```
+
+5. **NEVER use page.waitForFunction() in E2E tests**
+   ```typescript
+   // ❌ BAD - CSP-blocked
+   await page.waitForFunction(() => window.__traceLogBridge);
+
+   // ✅ GOOD - Internal waiting pattern
+   await page.evaluate(async () => {
+     let retries = 0;
+     while (!window.__traceLogBridge && retries < 50) {
+       await new Promise(resolve => setTimeout(resolve, 100));
+       retries++;
+     }
+   });
+   ```
+
+6. **NEVER skip setup/teardown**
+   ```typescript
+   // ❌ BAD - No cleanup
+   describe('Tests', () => {
+     it('test', () => {
+       // ... test without beforeEach/afterEach
+     });
+   });
+
+   // ✅ GOOD - Proper lifecycle
+   describe('Tests', () => {
+     beforeEach(() => setupTestEnvironment());
+     afterEach(() => cleanupTestEnvironment());
+
+     it('test', () => {
+       // ... test logic
+     });
+   });
+   ```
+
+## 🎯 TraceLog Library-Specific Patterns
+
+### EventType Enum: Always Lowercase
+
+**CRITICAL**: EventType enum values are lowercase. NEVER use uppercase when filtering events.
+
+```typescript
+// EventType enum definition (src/types/event.types.ts)
+export enum EventType {
+  SESSION_START = 'session_start',  // NOT 'SESSION_START'!
+  CUSTOM = 'custom',                // NOT 'CUSTOM'!
+  PAGE_VIEW = 'page_view',          // NOT 'PAGE_VIEW'!
+  CLICK = 'click',
+  SCROLL = 'scroll',
+  WEB_VITALS = 'web_vitals',
+  ERROR = 'error'
+}
+
+// ❌ WRONG - Test will fail (finds 0 events)
+const count = events.filter(e => e.type === 'SESSION_START').length;
+expect(count).toBe(1);  // ← Always 0, test fails!
+
+// ✅ CORRECT - Use lowercase
+const count = events.filter(e => e.type === 'session_start').length;
+expect(count).toBe(1);  // ← Works!
+```
+
+### BroadcastChannel Testing: ProjectId Validation
+
+**CRITICAL**: When simulating BroadcastChannel messages, use correct `projectId`.
+
+**Default projectId**: `'custom'` (standalone mode without integrations)
+
+```typescript
+// ❌ WRONG - Message will be rejected by library
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    sessionId: 'test-id',
+    projectId: 'test-project',  // ← REJECTED by library
+  }
+});
+
+// ✅ CORRECT - Use 'custom' for standalone mode
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    sessionId: 'test-id',
+    projectId: 'custom',  // ← Matches library default
+  }
+});
+```
+
+**Why this matters**: SessionManager validates projectId as a security feature (src/managers/session.manager.ts:110-115). Mismatched projectId causes silent rejection (by design).
+
+## ✅ Acceptance Criteria
+
+**ALL tests must meet these criteria before marking a file as complete:**
+
+### 1. Tests Must Pass (100% Pass Rate)
+```bash
+npm run test:unit -- <filename>         # Unit tests
+npm run test:integration -- <filename>  # Integration tests
+npm run test:e2e -- <filename>          # E2E tests
+```
+
+### 2. No Format/Lint Errors (MUST RUN)
+```bash
+npm run fix  # Auto-fix all format and lint issues
+```
+
+### 3. No Type Errors
+```bash
+npm run type-check  # Must show: "0 errors"
+```
+
+### 4. Final Verification Sequence
+
+**Run this before marking any test file as complete:**
+
+```bash
+npm run fix          # Fix format/lint
+npm run type-check   # Check types (0 errors)
+npm test             # Run all tests (100% pass)
+```
+
+### Acceptance Checklist
+
+- [ ] All tests pass (100% pass rate)
+- [ ] `npm run fix` executed successfully
+- [ ] `npm run type-check` shows 0 errors
+- [ ] No unused imports or variables
+- [ ] No ESLint warnings
+- [ ] Tests follow TESTING_FUNDAMENTALS.md patterns
+- [ ] Helpers used correctly (especially `bridge.helper.ts` for integration tests)
+
+---
+
+## 🎨 Test Quality Standards
+
+### Every Test Must Have
+- [ ] Descriptive name starting with "should"
+- [ ] Proper setup in beforeEach
+- [ ] Proper cleanup in afterEach
+- [ ] At least one assertion (expect statement)
+- [ ] Edge cases covered
+- [ ] Error paths tested
+
+### Code Quality
+- [ ] Use helpers extensively
+- [ ] No hardcoded values (use fixtures)
+- [ ] No magic numbers (use constants)
+- [ ] Clear arrange-act-assert structure
+- [ ] Comments only for non-obvious logic
+
+## 🚀 Commands
+
+```bash
+# Run tests
+npm run test:unit              # Unit tests only
+npm run test:integration       # Integration tests only
+npm run test:e2e              # E2E tests only
+npm test                      # All tests
+
+# Watch mode
+npm run test:unit:watch       # Watch unit tests
+
+# Coverage
+npm run test:coverage         # Generate coverage report
+
+# Quality
+npm run type-check            # TypeScript validation
+npm run check                 # Lint + format validation
+npm run fix                   # Auto-fix issues
+```
+
+## 📊 E2E Specific Patterns
+
+### Using Main Playground
+```typescript
+// Most tests use docs/index.html (shared playground)
+test('should track clicks on CTA button', async ({ page }) => {
+  await page.goto('/'); // docs/index.html
+
+  await page.evaluate(async () => {
+    await window.__traceLogBridge!.init();
+
+    // Use real elements from playground
+    document.querySelector('[data-testid="cta-ver-productos"]')?.click();
+  });
+});
+```
+
+### Using Minimal Fixtures
+```typescript
+// For specific edge cases, use fixtures
+test('should sanitize form input values', async ({ page }) => {
+  await page.goto('/fixtures/forms.html');
+
+  await page.evaluate(async () => {
+    await window.__traceLogBridge!.init();
+
+    // Test PII sanitization with form
+    document.querySelector('input[type="email"]')?.click();
+  });
+});
+```
+
+### Available Test IDs in Playground
+- Navigation: `nav-inicio`, `nav-productos`, `nav-nosotros`, `nav-contacto`
+- Cart: `cart-button`, `cart-count`
+- CTAs: `cta-ver-productos`, `cta-contacto`
+- Pages: `page-inicio`, `page-productos`, `page-nosotros`, `page-contacto`
+
+## 📚 Additional Resources
+
+- **Primary Guide**: `tests/TESTING_FUNDAMENTALS.md` - Complete testing guide
+  - Testing philosophy & principles
+  - Test helpers reference (bridge, setup, mocks, fixtures, wait, assertions)
+  - Common patterns and anti-patterns
+  - Test templates for all test types
+  - Acceptance criteria checklist
+- **Troubleshooting**: `tests/TESTING_TROUBLESHOOTING.md` - Common test failures
+  - Event count is always 0 (case sensitivity, consent buffers)
+  - BroadcastChannel messages not processing (projectId mismatch)
+  - Queue appears empty (diagnostic techniques)
+  - Session state not clearing
+  - Force-fail diagnostic pattern, queue inspection, isolated tests
+  - Real-world investigation examples
+- **Quick Reference**: `tests/TESTING_GUIDE.md` - Commands, QA mode, best practices
+- **Project Guidelines**: `CLAUDE.md` - Critical testing patterns
+  - Event type enum (always lowercase)
+  - ProjectId defaults for standalone mode
+  - Integration configuration patterns
+- **Helper Docs**: Comments in `tests/helpers/*.ts` files
+- **E2E Patterns**: Comments in existing E2E test files
+
+## 💡 Tips
+
+- Read TESTING_FUNDAMENTALS.md before implementing any test
+- Consult TESTING_TROUBLESHOOTING.md when tests fail unexpectedly
+- Use helpers extensively - they're battle-tested
+- Run tests frequently during implementation
+- One test at a time - ensure it passes before moving on
+- Ask for clarification if test intent is unclear
+- Follow existing test patterns in the codebase
+- Remember: EventType values are lowercase, projectId defaults to 'custom'
+
+Remember: **Tests are the safety net for this library. Quality tests = confident releases.**

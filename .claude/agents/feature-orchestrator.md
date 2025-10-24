@@ -30,7 +30,7 @@ You MUST follow these project-specific guidelines from `CLAUDE.md`:
 
 ### Architecture Principles
 - **Standalone Mode**: No integrations config = local-only operation (no network requests)
-- **Backend Integration**: Optional `tracelog`/`custom`/`googleAnalytics` integrations
+- **Backend Integration**: Optional `tracelog`/`custom`/`google` integrations
 - **Client-Side Controls**: All validation, sampling, deduplication happen in browser
 - **Event Flow**: Capture → Validate → Emit locally AND/OR send to backend (if configured)
 
@@ -137,7 +137,7 @@ tracelog.init({
 tracelog.init({
   integrations: {
     tracelog: { projectId: 'abc' },
-    googleAnalytics: { measurementId: 'G-XXX' }
+    google: { measurementId: 'G-XXX' }
   }
 });
 ```
@@ -150,8 +150,8 @@ tracelog.init({
 - **Browser ESM**: `dist/browser/tracelog.esm.js` (modern browsers, native modules)
 
 **Bundle Size Targets** (from README):
-- Browser bundle: <60KB uncompressed (current ~48-50KB)
-- Gzipped: ~15KB
+- Browser bundle: Keep minimal and optimized
+- Gzipped: Maintain efficient compression
 - Only dependency: `web-vitals`
 
 ### Configuration Options (All Optional)
@@ -167,7 +167,7 @@ interface Config {
   integrations?: {
     tracelog?: { projectId: string };
     custom?: { collectApiUrl: string; allowHttp?: boolean };
-    googleAnalytics?: { measurementId: string };
+    google?: { measurementId?: string; containerId?: string };
   };
 }
 ```
@@ -305,7 +305,7 @@ When a user describes a feature, systematically gather requirements with targete
    (e.g., passive listeners, debouncing, throttling)
 
 ❓ Bundle size impact acceptable?
-   (Current: ~48KB, target: <60KB browser build)
+   (Keep browser build minimal and optimized)
 ```
 
 ## Phase 2: Architecture Planning

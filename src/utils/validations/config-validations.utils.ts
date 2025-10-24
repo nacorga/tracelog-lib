@@ -12,6 +12,7 @@ import {
   DEFAULT_VISIBILITY_TIMEOUT_MS,
   DEFAULT_ERROR_SAMPLING_RATE,
   DISABLEABLE_EVENT_TYPES,
+  MAX_CONSENT_BUFFER_LENGTH,
 } from '../../constants';
 import {
   Config,
@@ -19,6 +20,7 @@ import {
   SessionTimeoutValidationError,
   SamplingRateValidationError,
   IntegrationValidationError,
+  EventType,
 } from '../../types';
 
 /**
@@ -197,6 +199,23 @@ export const validateAppConfig = (config?: Config): void => {
       }
     }
   }
+
+  if (config.waitForConsent !== undefined) {
+    if (typeof config.waitForConsent !== 'boolean') {
+      throw new AppConfigValidationError('waitForConsent must be a boolean', 'config');
+    }
+  }
+
+  if (config.maxConsentBufferSize !== undefined) {
+    if (
+      typeof config.maxConsentBufferSize !== 'number' ||
+      !Number.isFinite(config.maxConsentBufferSize) ||
+      config.maxConsentBufferSize <= 0 ||
+      !Number.isInteger(config.maxConsentBufferSize)
+    ) {
+      throw new AppConfigValidationError('maxConsentBufferSize must be a positive integer', 'config');
+    }
+  }
 };
 
 /**
@@ -322,19 +341,84 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
     }
   }
 
-  if (integrations.googleAnalytics) {
-    if (
-      !integrations.googleAnalytics.measurementId ||
-      typeof integrations.googleAnalytics.measurementId !== 'string' ||
-      integrations.googleAnalytics.measurementId.trim() === ''
-    ) {
-      throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_GOOGLE_ANALYTICS_ID, 'config');
+  if (integrations.google) {
+    const { measurementId, containerId, forwardEvents } = integrations.google;
+    const isValidMeasurementId = typeof measurementId === 'string' && measurementId.trim() !== '';
+    const isValidContainerId = typeof containerId === 'string' && containerId.trim() !== '';
+
+    if (!isValidMeasurementId && !isValidContainerId) {
+      throw new IntegrationValidationError(
+        'Google integration requires at least one of: measurementId (GA4) or containerId (GTM)',
+        'config',
+      );
     }
 
-    const measurementId = integrations.googleAnalytics.measurementId.trim();
+    if (isValidMeasurementId) {
+      const trimmedMeasurementId = measurementId.trim();
+      const isGA4 = /^G-[A-Z0-9]{10}$/.test(trimmedMeasurementId);
+      const isUA = /^UA-[0-9]{6,9}-[0-9]{1}$/.test(trimmedMeasurementId);
+      const isAW = /^AW-[0-9]{10}$/.test(trimmedMeasurementId);
 
-    if (!measurementId.match(/^(G-|UA-)/)) {
-      throw new IntegrationValidationError('Google Analytics measurement ID must start with "G-" or "UA-"', 'config');
+      if (!isGA4 && !isUA && !isAW) {
+        throw new IntegrationValidationError(
+          'Google Analytics measurement ID must match one of: "G-XXXXXXXXXX" (GA4), "UA-XXXXXXXXX-X" (Universal Analytics), or "AW-XXXXXXXXXX" (Google Ads)',
+          'config',
+        );
+      }
+    }
+
+    if (isValidContainerId) {
+      const trimmedContainerId = containerId.trim();
+
+      if (!trimmedContainerId.match(/^GTM-[A-Z0-9]+$/)) {
+        throw new IntegrationValidationError(
+          'Google Tag Manager container ID must match the format "GTM-XXXXXX" (uppercase letters and digits only)',
+          'config',
+        );
+      }
+    }
+
+    if (forwardEvents !== undefined) {
+      if (forwardEvents === 'all') {
+        // 'all' is valid
+      } else if (Array.isArray(forwardEvents)) {
+        if (forwardEvents.length === 0) {
+          throw new IntegrationValidationError(
+            'Google integration forwardEvents cannot be an empty array. Use undefined to use default or specify event types.',
+            'config',
+          );
+        }
+
+        const validEventTypes = Object.values(EventType);
+        const uniqueEvents = new Set<string>();
+
+        for (const eventType of forwardEvents) {
+          if (typeof eventType !== 'string') {
+            throw new IntegrationValidationError('All forwarded event types must be strings', 'config');
+          }
+
+          if (!validEventTypes.includes(eventType as EventType)) {
+            throw new IntegrationValidationError(
+              `Invalid forwarded event type: "${eventType}". Must be one of: ${validEventTypes.join(', ')}`,
+              'config',
+            );
+          }
+
+          if (uniqueEvents.has(eventType)) {
+            throw new IntegrationValidationError(
+              `Duplicate forwarded event type found: "${eventType}". Each event type should appear only once.`,
+              'config',
+            );
+          }
+
+          uniqueEvents.add(eventType);
+        }
+      } else {
+        throw new IntegrationValidationError(
+          'Google integration forwardEvents must be an array of event types or the string "all"',
+          'config',
+        );
+      }
     }
   }
 };
@@ -361,9 +445,10 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
     disabledEvents: config?.disabledEvents ?? [],
+    waitForConsent: config?.waitForConsent ?? false,
+    maxConsentBufferSize: config?.maxConsentBufferSize ?? MAX_CONSENT_BUFFER_LENGTH,
   };
 
-  // Normalize integrations
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
       ...normalizedConfig.integrations.custom,
@@ -371,7 +456,6 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     };
   }
 
-  // Normalize viewport config
   if (normalizedConfig.viewport) {
     normalizedConfig.viewport = {
       ...normalizedConfig.viewport,

@@ -1,6 +1,7 @@
 import { EventManager } from './managers/event.manager';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
+import { ConsentManager } from './managers/consent.manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
@@ -11,6 +12,8 @@ import {
   EventType,
   EmitterCallback,
   EmitterMap,
+  EmitterEvent,
+  ConsentState,
   Mode,
   TransformerHook,
   TransformerMap,
@@ -34,6 +37,7 @@ export class App extends StateManager {
   protected managers: {
     storage?: StorageManager;
     event?: EventManager;
+    consent?: ConsentManager;
   } = {};
 
   protected handlers: {
@@ -47,13 +51,20 @@ export class App extends StateManager {
   } = {};
 
   protected integrations: {
-    googleAnalytics?: GoogleAnalyticsIntegration;
+    google?: GoogleAnalyticsIntegration;
   } = {};
 
   get initialized(): boolean {
     return this.isInitialized;
   }
 
+  /**
+   * Initializes TraceLog with configuration.
+   *
+   * @param config - Configuration object
+   * @throws {Error} If initialization fails
+   * @internal Called from api.init()
+   */
   async init(config: Config = {}): Promise<void> {
     if (this.isInitialized) {
       return;
@@ -63,14 +74,49 @@ export class App extends StateManager {
 
     try {
       this.setupState(config);
+
+      this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
+
+      if (config.waitForConsent) {
+        const consentState = this.managers.consent.getConsentState();
+        log('info', 'Consent mode enabled', {
+          data: {
+            google: consentState.google,
+            custom: consentState.custom,
+            tracelog: consentState.tracelog,
+          },
+        });
+      }
+
       await this.setupIntegrations();
 
       this.managers.event = new EventManager(
         this.managers.storage,
-        this.integrations.googleAnalytics,
+        this.integrations.google,
+        this.managers.consent,
         this.emitter,
         this.transformers,
       );
+
+      this.emitter.on(EmitterEvent.CONSENT_CHANGED, (consentState: ConsentState) => {
+        if (!this.managers.event || !this.managers.consent) {
+          return;
+        }
+
+        const integrations: Array<'google' | 'custom' | 'tracelog'> = ['google', 'custom', 'tracelog'];
+
+        void Promise.all(
+          integrations
+            .filter((integration) => consentState[integration] === true)
+            .map(async (integration) => this.managers.event!.flushConsentBuffer(integration)),
+        ).catch((error) => {
+          log('error', 'Failed to flush consent buffer after consent granted', { error });
+        });
+
+        if (consentState.google && this.integrations.google) {
+          this.integrations.google.syncConsentToGoogle('google', consentState.google);
+        }
+      });
 
       this.initializeHandlers();
 
@@ -86,8 +132,16 @@ export class App extends StateManager {
     }
   }
 
+  /**
+   * Sends a custom event with optional metadata.
+   *
+   * @param name - Event name
+   * @param metadata - Optional metadata
+   * @internal Called from api.event()
+   */
   sendCustomEvent(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
     if (!this.managers.event) {
+      log('warn', 'Cannot send custom event: TraceLog not initialized', { data: { name } });
       return;
     }
 
@@ -146,12 +200,18 @@ export class App extends StateManager {
     return this.transformers[hook];
   }
 
+  /**
+   * Destroys the TraceLog instance and cleans up all resources.
+   *
+   * @param force - If true, forces cleanup even if not initialized (used during init failure)
+   * @internal Called from api.destroy()
+   */
   destroy(force = false): void {
     if (!this.isInitialized && !force) {
       return;
     }
 
-    this.integrations.googleAnalytics?.cleanup();
+    this.integrations.google?.cleanup();
 
     Object.values(this.handlers)
       .filter(Boolean)
@@ -169,6 +229,7 @@ export class App extends StateManager {
     }
 
     this.managers.event?.stop();
+    this.managers.consent?.cleanup();
 
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = undefined;
@@ -180,6 +241,8 @@ export class App extends StateManager {
 
     this.isInitialized = false;
     this.handlers = {};
+    this.managers = {};
+    this.integrations = {};
   }
 
   private setupState(config: Config = {}): void {
@@ -205,17 +268,113 @@ export class App extends StateManager {
   }
 
   private async setupIntegrations(): Promise<void> {
-    const config = this.get('config');
-    const measurementId = config.integrations?.googleAnalytics?.measurementId;
+    if (!this.hasValidGoogleConfig()) {
+      return;
+    }
 
-    if (measurementId?.trim()) {
-      try {
-        this.integrations.googleAnalytics = new GoogleAnalyticsIntegration();
-        await this.integrations.googleAnalytics.initialize();
-      } catch {
-        this.integrations.googleAnalytics = undefined;
+    if (this.shouldInitializeIntegration('google')) {
+      await this.initializeGoogleAnalytics();
+    } else {
+      log('info', 'Google Analytics initialization deferred, waiting for consent');
+    }
+  }
+
+  /**
+   * Returns the ConsentManager instance for consent state management.
+   *
+   * @returns The ConsentManager instance, or undefined if not initialized
+   * @internal Used by api.ts for consent operations
+   */
+  public getConsentManager(): ConsentManager | undefined {
+    return this.managers.consent;
+  }
+
+  /**
+   * Returns the current configuration object.
+   *
+   * @returns The Config object passed to init()
+   * @internal Used by api.ts for configuration access
+   */
+  public getConfig(): Config {
+    return this.get('config');
+  }
+
+  /**
+   * Returns the configured backend API URLs for event collection.
+   *
+   * @returns Object containing optional saas and custom API URLs
+   * @internal Used by api.ts for backend URL access
+   */
+  public getCollectApiUrls(): { saas?: string; custom?: string } {
+    return this.get('collectApiUrls');
+  }
+
+  /**
+   * Returns the EventManager instance for event tracking operations.
+   *
+   * @returns The EventManager instance, or undefined if not initialized
+   * @internal Used by api.ts for event operations
+   */
+  public getEventManager(): EventManager | undefined {
+    return this.managers.event;
+  }
+
+  /**
+   * Handles consent granted for a specific integration by initializing the integration (if needed)
+   * and flushing buffered events.
+   *
+   * @param integration - The integration name ('google', 'custom', or 'tracelog')
+   * @returns Promise that resolves when initialization and buffer flush complete
+   * @internal Called from api.setConsent() when consent is granted
+   */
+  public async handleConsentGranted(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
+    log('info', `Consent granted for ${integration}, initializing and flushing buffer`);
+
+    if (integration === 'google' && !this.integrations.google && this.hasValidGoogleConfig()) {
+      const initialized = await this.initializeGoogleAnalytics();
+
+      if (initialized && this.managers.event && this.integrations.google) {
+        this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
       }
     }
+
+    if (this.managers.event) {
+      await this.managers.event.flushConsentBuffer(integration);
+    }
+  }
+
+  private hasValidGoogleConfig(): boolean {
+    const googleConfig = this.get('config').integrations?.google;
+    if (!googleConfig) {
+      return false;
+    }
+
+    const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
+    const hasContainerId = Boolean(googleConfig.containerId?.trim());
+
+    return hasMeasurementId || hasContainerId;
+  }
+
+  private async initializeGoogleAnalytics(): Promise<boolean> {
+    try {
+      this.integrations.google = new GoogleAnalyticsIntegration();
+      await this.integrations.google.initialize();
+      log('debug', 'Google Analytics integration initialized');
+      return true;
+    } catch (error) {
+      log('warn', 'Failed to initialize Google Analytics', { error });
+      return false;
+    }
+  }
+
+  private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
+    const config = this.get('config');
+
+    if (!config.waitForConsent) {
+      return true;
+    }
+
+    return this.managers.consent?.hasConsent(integration) ?? true;
   }
 
   private initializeHandlers(): void {

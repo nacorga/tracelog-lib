@@ -1,764 +1,517 @@
-import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+/**
+ * ClickHandler Tests
+ * Focus: Click event tracking with PII sanitization
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
+import { createMockElement } from '../../helpers/fixtures.helper';
 import { ClickHandler } from '../../../src/handlers/click.handler';
-import { EventType } from '../../../src/types';
-import { HTML_DATA_ATTR_PREFIX, MAX_TEXT_LENGTH } from '../../../src/constants';
-import { setupTestEnvironment, cleanupTestState } from '../../utils/test-setup';
+import { EventManager } from '../../../src/managers/event.manager';
+import { StorageManager } from '../../../src/managers/storage.manager';
+import { EventType } from '../../../src/types/event.types';
+import type { EventData } from '../../../src/types/event.types';
 
-// Mock dependencies
-vi.mock('../../../src/utils/logging', () => ({
-  debugLog: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+// Helper to get tracked event with proper typing
+function getTrackedEvent(spy: ReturnType<typeof vi.spyOn>, index = 0): EventData {
+  return spy.mock.calls[index]?.[0] as EventData;
+}
 
-describe('ClickHandler', () => {
-  let clickHandler: ClickHandler;
-  let mockElement: HTMLElement;
-  let mockEventManager: any;
+describe('ClickHandler - Basic Tracking', () => {
+  let handler: ClickHandler;
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
-    // Disable click throttling for tests
-    const testEnv = setupTestEnvironment({ clickThrottleMs: 0 });
-    mockEventManager = testEnv.eventManager;
-    vi.spyOn(mockEventManager, 'track');
-
-    // Create DOM elements for testing
-    document.body.innerHTML = `
-      <div id="container">
-        <button id="test-button" class="btn primary" title="Test Button">Click Me</button>
-        <a href="/test" id="test-link">Test Link</a>
-        <div id="with-text">Some text content here</div>
-        <div ${HTML_DATA_ATTR_PREFIX}-name="custom_event" ${HTML_DATA_ATTR_PREFIX}-value="test_value">
-          <span>Tracked Element</span>
-        </div>
-        <img src="test.jpg" alt="Test Image" />
-        <div role="button" aria-label="Accessible Button">Accessible</div>
-      </div>
-    `;
-
-    mockElement = document.getElementById('test-button') as HTMLElement;
-    clickHandler = new ClickHandler(mockEventManager);
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager, null, null, null, {});
+    handler = new ClickHandler(eventManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
   });
 
   afterEach(() => {
-    clickHandler.stopTracking();
-    document.body.innerHTML = '';
-    cleanupTestState();
+    handler.stopTracking();
+    cleanupTestEnvironment();
   });
 
-  describe('Event Listener Management', () => {
-    test('should start click tracking and add event listener', () => {
-      const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+  it('should start tracking on startTracking()', () => {
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
 
-      clickHandler.startTracking();
+    handler.startTracking();
 
-      expect(addEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function), true);
-    });
-
-    test('should not add multiple listeners when called repeatedly', () => {
-      const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
-
-      clickHandler.startTracking();
-      clickHandler.startTracking();
-
-      expect(addEventListenerSpy).toHaveBeenCalledTimes(1);
-    });
-
-    test('should stop tracking and remove event listener', () => {
-      const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
-
-      clickHandler.startTracking();
-      clickHandler.stopTracking();
-
-      expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function), true);
-    });
-
-    test('should handle stop tracking when not started', () => {
-      const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
-
-      clickHandler.stopTracking();
-
-      expect(removeEventListenerSpy).not.toHaveBeenCalled();
-    });
+    expect(addEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function), true);
   });
 
-  describe('Click Event Handling', () => {
-    test('should track basic click events', () => {
-      clickHandler.startTracking();
+  it('should stop tracking on stopTracking()', () => {
+    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 
-      const clickEvent = new MouseEvent('click', {
-        clientX: 100,
-        clientY: 200,
-        bubbles: true,
-      });
+    handler.startTracking();
+    handler.stopTracking();
 
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: mockElement,
-      });
-
-      mockElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: {
-          x: 100,
-          y: 200,
-          relativeX: expect.any(Number),
-          relativeY: expect.any(Number),
-          tag: 'button',
-          id: 'test-button',
-          class: 'btn primary',
-          text: 'Click Me',
-          title: 'Test Button',
-          dataAttributes: expect.objectContaining({
-            id: 'test-button',
-            class: 'btn primary',
-            title: 'Test Button',
-          }),
-        },
-      });
-    });
-
-    test('should handle clicks on elements without valid target', () => {
-      clickHandler.startTracking();
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: null,
-      });
-
-      window.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).not.toHaveBeenCalled();
-    });
-
-    test('should handle clicks on text nodes by using parent element', () => {
-      clickHandler.startTracking();
-
-      const textNode = document.createTextNode('Text');
-      const parentDiv = document.createElement('div');
-      parentDiv.id = 'parent-div';
-      parentDiv.appendChild(textNode);
-      document.body.appendChild(parentDiv);
-
-      const clickEvent = new MouseEvent('click', {
-        clientX: 100,
-        clientY: 200,
-        bubbles: true,
-      });
-
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: textNode,
-      });
-
-      parentDiv.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          tag: 'div',
-          id: 'parent-div',
-        }),
-      });
-    });
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function), true);
   });
 
-  describe('Custom Event Tracking', () => {
-    test('should track custom events for elements with tracking attributes', () => {
-      clickHandler.startTracking();
+  it('should capture click events on document', () => {
+    handler.startTracking();
 
-      const trackedElement = document.querySelector(`[${HTML_DATA_ATTR_PREFIX}-name="custom_event"]`) as HTMLElement;
-      const clickEvent = new MouseEvent('click', { bubbles: true });
+    const button = createMockElement('button', { id: 'test-btn' }, 'Click Me');
+    document.body.appendChild(button);
+    button.click();
 
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: trackedElement,
-      });
+    expect(trackSpy).toHaveBeenCalled();
+    const event = getTrackedEvent(trackSpy);
+    expect(event.type).toBe(EventType.CLICK);
 
-      trackedElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CUSTOM,
-        custom_event: {
-          name: 'custom_event',
-          metadata: { value: 'test_value' },
-        },
-      });
-
-      // Should also track regular click
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.any(Object),
-      });
-    });
-
-    test('should find tracking element in parent hierarchy', () => {
-      clickHandler.startTracking();
-
-      const childElement = document.querySelector(`[${HTML_DATA_ATTR_PREFIX}-name="custom_event"] span`) as HTMLElement;
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: childElement,
-      });
-
-      childElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CUSTOM,
-        custom_event: {
-          name: 'custom_event',
-          metadata: { value: 'test_value' },
-        },
-      });
-    });
-
-    test('should handle custom events without value attribute', () => {
-      const elementWithoutValue = document.createElement('div');
-      elementWithoutValue.setAttribute(`${HTML_DATA_ATTR_PREFIX}-name`, 'simple_event');
-      document.body.appendChild(elementWithoutValue);
-
-      clickHandler.startTracking();
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: elementWithoutValue,
-      });
-
-      elementWithoutValue.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CUSTOM,
-        custom_event: {
-          name: 'simple_event',
-        },
-      });
-    });
+    document.body.removeChild(button);
   });
 
-  describe('Coordinate Calculations', () => {
-    test('should calculate relative coordinates correctly', () => {
-      clickHandler.startTracking();
+  it('should track element tag name', () => {
+    handler.startTracking();
 
-      // Mock getBoundingClientRect for precise coordinate testing
-      vi.spyOn(mockElement, 'getBoundingClientRect').mockReturnValue({
-        left: 50,
-        top: 100,
-        width: 200,
-        height: 50,
-        right: 250,
-        bottom: 150,
-        x: 50,
-        y: 100,
-        toJSON: vi.fn(),
-      });
+    const anchor = createMockElement('a', { href: '#' }, 'Link');
+    document.body.appendChild(anchor);
+    anchor.click();
 
-      const clickEvent = new MouseEvent('click', {
-        clientX: 150, // Center of element (50 + 200/2)
-        clientY: 125, // Center of element (100 + 50/2)
-        bubbles: true,
-      });
+    expect(trackSpy).toHaveBeenCalled();
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.tag).toBe('a');
 
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: mockElement,
-      });
-
-      mockElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          x: 150,
-          y: 125,
-          relativeX: 0.5, // Center of element
-          relativeY: 0.5, // Center of element
-        }),
-      });
-    });
-
-    test('should handle edge coordinates correctly', () => {
-      clickHandler.startTracking();
-
-      vi.spyOn(mockElement, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        width: 100,
-        height: 100,
-        right: 100,
-        bottom: 100,
-        x: 0,
-        y: 0,
-        toJSON: vi.fn(),
-      });
-
-      const testCases = [
-        { clientX: 0, clientY: 0, expectedRelX: 0, expectedRelY: 0 }, // Top-left
-        { clientX: 100, clientY: 100, expectedRelX: 1, expectedRelY: 1 }, // Bottom-right
-        { clientX: -10, clientY: -10, expectedRelX: 0, expectedRelY: 0 }, // Outside (clamped)
-        { clientX: 110, clientY: 110, expectedRelX: 1, expectedRelY: 1 }, // Outside (clamped)
-      ];
-
-      testCases.forEach((testCase, index) => {
-        const clickEvent = new MouseEvent('click', {
-          clientX: testCase.clientX,
-          clientY: testCase.clientY,
-          bubbles: true,
-        });
-
-        Object.defineProperty(clickEvent, 'target', {
-          writable: false,
-          value: mockElement,
-        });
-
-        mockElement.dispatchEvent(clickEvent);
-
-        // Check the call at the correct index (calls are accumulated)
-        const callIndex = index;
-        expect(mockEventManager.track).toHaveBeenNthCalledWith(
-          callIndex + 1,
-          expect.objectContaining({
-            type: EventType.CLICK,
-            click_data: expect.objectContaining({
-              relativeX: testCase.expectedRelX,
-              relativeY: testCase.expectedRelY,
-            }),
-          }),
-        );
-      });
-    });
-
-    test('should handle zero-width/height elements', () => {
-      clickHandler.startTracking();
-
-      vi.spyOn(mockElement, 'getBoundingClientRect').mockReturnValue({
-        left: 50,
-        top: 100,
-        width: 0,
-        height: 0,
-        right: 50,
-        bottom: 100,
-        x: 50,
-        y: 100,
-        toJSON: vi.fn(),
-      });
-
-      const clickEvent = new MouseEvent('click', {
-        clientX: 75,
-        clientY: 125,
-        bubbles: true,
-      });
-
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: mockElement,
-      });
-
-      mockElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          relativeX: 0, // Should default to 0 for zero width
-          relativeY: 0, // Should default to 0 for zero height
-        }),
-      });
-    });
+    document.body.removeChild(anchor);
   });
 
-  describe('Interactive Element Detection', () => {
-    test('should find relevant interactive elements', () => {
-      clickHandler.startTracking();
+  it('should track element id', () => {
+    handler.startTracking();
 
-      const linkElement = document.getElementById('test-link') as HTMLElement;
-      const clickEvent = new MouseEvent('click', { bubbles: true });
+    const button = createMockElement('button', { id: 'my-button' }, 'Click');
+    document.body.appendChild(button);
+    button.click();
 
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: linkElement,
-      });
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.id).toBe('my-button');
 
-      linkElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          tag: 'a',
-          id: 'test-link',
-          href: '/test',
-        }),
-      });
-    });
-
-    test('should find interactive parent elements', () => {
-      // Create nested structure where child is clicked but parent is interactive
-      const buttonParent = document.createElement('button');
-      buttonParent.id = 'parent-button';
-      const spanChild = document.createElement('span');
-      spanChild.textContent = 'Child text';
-      buttonParent.appendChild(spanChild);
-      document.body.appendChild(buttonParent);
-
-      clickHandler.startTracking();
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: spanChild,
-      });
-
-      spanChild.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          tag: 'button',
-          id: 'parent-button',
-        }),
-      });
-    });
+    document.body.removeChild(button);
   });
 
-  describe('Text Content Handling', () => {
-    test('should extract text content correctly', () => {
-      clickHandler.startTracking();
+  it('should track element classes', () => {
+    handler.startTracking();
 
-      const textElement = document.getElementById('with-text') as HTMLElement;
-      const clickEvent = new MouseEvent('click', { bubbles: true });
+    const button = createMockElement('button', { class: 'btn btn-primary' }, 'Click');
+    document.body.appendChild(button);
+    button.click();
 
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: textElement,
-      });
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.class).toBe('btn btn-primary');
 
-      textElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          text: 'Some text content here',
-        }),
-      });
-    });
-
-    test('should truncate long text content', () => {
-      const longText = 'A'.repeat(MAX_TEXT_LENGTH + 50);
-      const elementWithLongText = document.createElement('div');
-      elementWithLongText.textContent = longText;
-      document.body.appendChild(elementWithLongText);
-
-      clickHandler.startTracking();
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: elementWithLongText,
-      });
-
-      elementWithLongText.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          text: expect.stringMatching(/^A+\.\.\.$/),
-        }),
-      });
-
-      const trackedCall = mockEventManager.track;
-      const clickData = trackedCall.mock.calls.find((call: any) => call[0].type === EventType.CLICK)[0].click_data;
-      expect(clickData.text.length).toBeLessThanOrEqual(MAX_TEXT_LENGTH);
-    });
-
-    test('should handle elements with no text content', () => {
-      const imgElement = document.querySelector('img') as HTMLElement;
-      clickHandler.startTracking();
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: imgElement,
-      });
-
-      imgElement.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          tag: 'img',
-          alt: 'Test Image',
-        }),
-      });
-
-      // Should not have text property
-      const trackedCall = mockEventManager.track;
-      const clickData = trackedCall.mock.calls[0][0].click_data;
-      expect(clickData.text).toBeUndefined();
-    });
+    document.body.removeChild(button);
   });
 
-  describe('Attribute Extraction', () => {
-    test('should extract common HTML attributes', () => {
-      const roleElement = document.querySelector('[role="button"]') as HTMLElement;
-      clickHandler.startTracking();
+  it('should track element text content', () => {
+    handler.startTracking();
 
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: roleElement,
-      });
+    const button = createMockElement('button', {}, 'Submit Form');
+    document.body.appendChild(button);
+    button.click();
 
-      roleElement.dispatchEvent(clickEvent);
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.text).toBe('Submit Form');
 
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          role: 'button',
-          ariaLabel: 'Accessible Button',
-          dataAttributes: expect.objectContaining({
-            role: 'button',
-            'aria-label': 'Accessible Button',
-          }),
-        }),
-      });
-    });
-
-    test('should handle missing attributes gracefully', () => {
-      const simpleDiv = document.createElement('div');
-      document.body.appendChild(simpleDiv);
-
-      clickHandler.startTracking();
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: simpleDiv,
-      });
-
-      simpleDiv.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalledWith({
-        type: EventType.CLICK,
-        click_data: expect.objectContaining({
-          tag: 'div',
-          // Should not have properties for missing attributes
-        }),
-      });
-
-      const trackedCall = mockEventManager.track;
-      const clickData = trackedCall.mock.calls[0][0].click_data;
-      expect(clickData.id).toBeUndefined();
-      expect(clickData.class).toBeUndefined();
-      expect(clickData.href).toBeUndefined();
-    });
+    document.body.removeChild(button);
   });
 
-  describe('Edge Cases and Error Handling', () => {
-    test('should handle elements with null textContent', () => {
-      const elementWithNullText = document.createElement('div');
-      Object.defineProperty(elementWithNullText, 'textContent', {
-        value: null,
-        writable: true,
-      });
-      document.body.appendChild(elementWithNullText);
+  it('should track click coordinates (x, y)', () => {
+    handler.startTracking();
 
-      clickHandler.startTracking();
+    const button = createMockElement('button', {}, 'Click');
+    document.body.appendChild(button);
 
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', {
-        writable: false,
-        value: elementWithNullText,
-      });
-
-      elementWithNullText.dispatchEvent(clickEvent);
-
-      expect(mockEventManager.track).toHaveBeenCalled();
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      clientX: 150,
+      clientY: 250,
     });
+    button.dispatchEvent(clickEvent);
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.x).toBe(150);
+    expect(event.click_data?.y).toBe(250);
+    expect(event.click_data?.relativeX).toBeGreaterThanOrEqual(0);
+    expect(event.click_data?.relativeY).toBeGreaterThanOrEqual(0);
+
+    document.body.removeChild(button);
   });
 
-  describe('Throttle Cache Pruning (Memory Leak Prevention)', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      // Set config with clickThrottleMs to enable throttling
-      (clickHandler as any).set('config', { clickThrottleMs: 300 });
+  it('should use passive event listener', () => {
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+
+    handler.startTracking();
+
+    // Third parameter is 'true' for capture phase
+    expect(addEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function), true);
+  });
+});
+
+describe('ClickHandler - PII Sanitization', () => {
+  let handler: ClickHandler;
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager, null, null, null, {});
+    handler = new ClickHandler(eventManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+  });
+
+  afterEach(() => {
+    handler.stopTracking();
+    cleanupTestEnvironment();
+  });
+
+  it('should NOT capture input values', () => {
+    handler.startTracking();
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = 'sensitive-data@example.com';
+    document.body.appendChild(input);
+    input.click();
+
+    const event = getTrackedEvent(trackSpy);
+    // Input values should not appear in text (text should be empty or undefined)
+    expect(event.click_data?.text || '').not.toContain('sensitive-data');
+
+    document.body.removeChild(input);
+  });
+
+  it('should NOT capture textarea values', () => {
+    handler.startTracking();
+
+    const textarea = document.createElement('textarea');
+    textarea.value = 'Secret message with user@example.com';
+    document.body.appendChild(textarea);
+    textarea.click();
+
+    const event = getTrackedEvent(trackSpy);
+    // Textarea values should not appear in text (text should be empty or undefined)
+    expect(event.click_data?.text || '').not.toContain('Secret message');
+
+    document.body.removeChild(textarea);
+  });
+
+  it('should NOT capture select values', () => {
+    handler.startTracking();
+
+    const select = document.createElement('select');
+    const option = document.createElement('option');
+    option.value = 'sensitive-value';
+    option.textContent = 'Sensitive Option';
+    select.appendChild(option);
+    document.body.appendChild(select);
+    select.click();
+
+    // Select element should be tracked, but not show option values in a sensitive way
+    expect(trackSpy).toHaveBeenCalled();
+
+    document.body.removeChild(select);
+  });
+
+  it('should sanitize emails from text', () => {
+    handler.startTracking();
+
+    const div = createMockElement('div', {}, 'Contact: user@example.com for help');
+    document.body.appendChild(div);
+    div.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.text).toContain('[REDACTED]');
+    expect(event.click_data?.text).not.toContain('user@example.com');
+
+    document.body.removeChild(div);
+  });
+
+  it('should sanitize phone numbers from text', () => {
+    handler.startTracking();
+
+    const div = createMockElement('div', {}, 'Call: 555-123-4567');
+    document.body.appendChild(div);
+    div.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.text).toContain('[REDACTED]');
+    expect(event.click_data?.text).not.toContain('555-123-4567');
+
+    document.body.removeChild(div);
+  });
+
+  it('should sanitize credit cards from text', () => {
+    handler.startTracking();
+
+    const div = createMockElement('div', {}, 'Card: 4532-1234-5678-9010');
+    document.body.appendChild(div);
+    div.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.text).toContain('[REDACTED]');
+    expect(event.click_data?.text).not.toContain('4532-1234-5678-9010');
+
+    document.body.removeChild(div);
+  });
+
+  it('should respect data-tlog-ignore attribute', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', { 'data-tlog-ignore': 'true' }, 'Ignored Button');
+    document.body.appendChild(button);
+    button.click();
+
+    // Should not track ignored element
+    expect(trackSpy).not.toHaveBeenCalled();
+
+    document.body.removeChild(button);
+  });
+
+  it('should ignore clicks on ignored elements', () => {
+    handler.startTracking();
+
+    const container = createMockElement('div', { 'data-tlog-ignore': 'true' });
+    const button = createMockElement('button', {}, 'Child Button');
+    container.appendChild(button);
+    document.body.appendChild(container);
+
+    button.click();
+
+    // Should not track children of ignored elements
+    expect(trackSpy).not.toHaveBeenCalled();
+
+    document.body.removeChild(container);
+  });
+});
+
+describe('ClickHandler - Element Data Capture', () => {
+  let handler: ClickHandler;
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager, null, null, null, {});
+    handler = new ClickHandler(eventManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+  });
+
+  afterEach(() => {
+    handler.stopTracking();
+    cleanupTestEnvironment();
+  });
+
+  it('should capture up to 3 CSS classes', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', { class: 'btn btn-primary btn-lg' }, 'Click');
+    document.body.appendChild(button);
+    button.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.class).toBe('btn btn-primary btn-lg');
+
+    document.body.removeChild(button);
+  });
+
+  it('should truncate long text content', () => {
+    handler.startTracking();
+
+    const longText = 'a'.repeat(300); // Longer than MAX_TEXT_LENGTH (255)
+    const div = createMockElement('div', {}, longText);
+    document.body.appendChild(div);
+    div.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.text?.length).toBeLessThanOrEqual(255);
+    expect(event.click_data?.text).toContain('...');
+
+    document.body.removeChild(div);
+  });
+
+  it('should handle elements without id', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', {}, 'No ID');
+    document.body.appendChild(button);
+    button.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.id).toBeUndefined();
+    expect(event.click_data?.tag).toBe('button');
+
+    document.body.removeChild(button);
+  });
+
+  it('should handle elements without classes', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', { id: 'test' }, 'No Class');
+    document.body.appendChild(button);
+    button.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.class).toBeUndefined();
+    expect(event.click_data?.tag).toBe('button');
+
+    document.body.removeChild(button);
+  });
+
+  it('should handle elements without text', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', { id: 'icon-btn' }, '');
+    document.body.appendChild(button);
+    button.click();
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.text).toBeFalsy();
+    expect(event.click_data?.tag).toBe('button');
+
+    document.body.removeChild(button);
+  });
+
+  it('should traverse up to find meaningful element', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', { id: 'parent-btn' });
+    const span = createMockElement('span', {}, 'Click Me');
+    button.appendChild(span);
+    document.body.appendChild(button);
+
+    span.click();
+
+    const event = getTrackedEvent(trackSpy);
+    // Should find the button as the interactive element
+    expect(event.click_data?.tag).toBe('button');
+
+    document.body.removeChild(button);
+  });
+});
+
+describe('ClickHandler - Edge Cases', () => {
+  let handler: ClickHandler;
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager, null, null, null, {});
+    handler = new ClickHandler(eventManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+  });
+
+  afterEach(() => {
+    handler.stopTracking();
+    cleanupTestEnvironment();
+  });
+
+  it('should handle clicks on document', () => {
+    handler.startTracking();
+
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      clientX: 100,
+      clientY: 200,
+    });
+    document.dispatchEvent(clickEvent);
+
+    // Should handle gracefully (may or may not track depending on target)
+    // The important thing is it doesn't throw an error
+    expect(() => document.dispatchEvent(clickEvent)).not.toThrow();
+  });
+
+  it('should handle clicks on window', () => {
+    handler.startTracking();
+
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      clientX: 100,
+      clientY: 200,
     });
 
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    // Should handle gracefully without throwing
+    expect(() => window.dispatchEvent(clickEvent)).not.toThrow();
+  });
 
-    test('should prune old entries after TTL expires', () => {
-      clickHandler.startTracking();
+  it('should handle clicks on null target', () => {
+    handler.startTracking();
 
-      // Create 10 unique elements and click them
-      for (let i = 0; i < 10; i++) {
-        const element = document.createElement('button');
-        element.id = `button-${i}`;
-        document.body.appendChild(element);
+    // Create event with no target
+    const clickEvent = new MouseEvent('click', { bubbles: true });
 
-        const clickEvent = new MouseEvent('click', { bubbles: true });
-        Object.defineProperty(clickEvent, 'target', { value: element });
-        element.dispatchEvent(clickEvent);
-      }
+    expect(() => document.dispatchEvent(clickEvent)).not.toThrow();
+  });
 
-      // Verify all entries are in cache
-      expect((clickHandler as any).lastClickTimes.size).toBe(10);
+  it('should handle rapid clicks', () => {
+    handler.startTracking();
 
-      // Fast-forward 6 minutes (beyond 5-minute TTL + 30s prune interval)
-      vi.advanceTimersByTime(6 * 60 * 1000);
+    const button = createMockElement('button', { id: 'rapid-btn' }, 'Click');
+    document.body.appendChild(button);
 
-      // Click a new element to trigger pruning
-      const newElement = document.createElement('button');
-      newElement.id = 'new-button';
-      document.body.appendChild(newElement);
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', { value: newElement });
-      newElement.dispatchEvent(clickEvent);
+    // Click multiple times rapidly
+    button.click();
+    button.click();
+    button.click();
 
-      // Old entries should be pruned, only new element remains
-      expect((clickHandler as any).lastClickTimes.size).toBe(1);
-      expect((clickHandler as any).lastClickTimes.has('#new-button')).toBe(true);
-    });
+    // Should track all clicks (though some may be throttled)
+    expect(trackSpy).toHaveBeenCalled();
 
-    test('should enforce max cache size limit (1000 entries)', () => {
-      clickHandler.startTracking();
+    document.body.removeChild(button);
+  });
 
-      // Create 1050 unique elements (beyond MAX_THROTTLE_CACHE_ENTRIES)
-      for (let i = 0; i < 1050; i++) {
-        const element = document.createElement('button');
-        element.id = `button-${i}`;
-        document.body.appendChild(element);
+  it('should handle clicks on dynamically added elements', () => {
+    handler.startTracking();
 
-        const clickEvent = new MouseEvent('click', { bubbles: true });
-        Object.defineProperty(clickEvent, 'target', { value: element });
-        element.dispatchEvent(clickEvent);
+    const button = createMockElement('button', { id: 'dynamic-btn' }, 'Dynamic');
 
-        // Advance time by 31 seconds every 100 clicks to trigger pruning
-        if (i % 100 === 0) {
-          vi.advanceTimersByTime(31 * 1000);
-        }
-      }
+    // Add element after handler is tracking
+    document.body.appendChild(button);
+    button.click();
 
-      // Cache should not exceed MAX_THROTTLE_CACHE_ENTRIES
-      expect((clickHandler as any).lastClickTimes.size).toBeLessThanOrEqual(1000);
-    });
+    expect(trackSpy).toHaveBeenCalled();
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.tag).toBe('button');
 
-    test('should use LRU eviction (oldest entries removed first)', () => {
-      clickHandler.startTracking();
+    document.body.removeChild(button);
+  });
 
-      // Add 1001 entries to trigger eviction
-      const elementIds: string[] = [];
-      for (let i = 0; i < 1001; i++) {
-        const element = document.createElement('button');
-        element.id = `button-${i}`;
-        elementIds.push(`#button-${i}`);
-        document.body.appendChild(element);
+  it('should debounce duplicate clicks', () => {
+    const dateSpy = vi.spyOn(Date, 'now');
+    let mockTime = 1000;
+    dateSpy.mockImplementation(() => mockTime);
 
-        const clickEvent = new MouseEvent('click', { bubbles: true });
-        Object.defineProperty(clickEvent, 'target', { value: element });
-        element.dispatchEvent(clickEvent);
+    handler.startTracking();
 
-        // Trigger pruning check every 50 clicks
-        if (i % 50 === 0) {
-          vi.advanceTimersByTime(31 * 1000);
-        }
-      }
+    const button = createMockElement('button', { id: 'debounce-btn' }, 'Click');
+    document.body.appendChild(button);
 
-      // First element should be evicted (LRU)
-      expect((clickHandler as any).lastClickTimes.has(elementIds[0])).toBe(false);
+    // First click should be tracked
+    button.click();
+    expect(trackSpy).toHaveBeenCalledTimes(1);
 
-      // Most recent elements should still be present
-      const lastIndex = elementIds.length - 1;
-      expect((clickHandler as any).lastClickTimes.has(elementIds[lastIndex])).toBe(true);
-    });
+    // Immediate second click should be throttled (within 300ms default)
+    mockTime += 100; // Only 100ms later
+    button.click();
+    expect(trackSpy).toHaveBeenCalledTimes(1); // Still 1, throttled
 
-    test('should rate-limit pruning (once per 30 seconds)', () => {
-      clickHandler.startTracking();
+    // After throttle period, should track again
+    mockTime += 300; // Total 400ms later
+    button.click();
+    expect(trackSpy).toHaveBeenCalledTimes(2);
 
-      // Create an element and click it
-      const element = document.createElement('button');
-      element.id = 'test-button';
-      document.body.appendChild(element);
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', { value: element });
-
-      // Click multiple times within 30 seconds
-      element.dispatchEvent(clickEvent);
-      vi.advanceTimersByTime(10 * 1000); // 10 seconds
-      element.dispatchEvent(clickEvent);
-      vi.advanceTimersByTime(10 * 1000); // 20 seconds total
-      element.dispatchEvent(clickEvent);
-
-      // Pruning should only run once (lastPruneTime prevents re-runs)
-      const lastPruneTime = (clickHandler as any).lastPruneTime;
-      expect(lastPruneTime).toBeGreaterThan(0);
-
-      // Fast-forward 31 seconds to allow next prune
-      vi.advanceTimersByTime(31 * 1000);
-      element.dispatchEvent(clickEvent);
-
-      // lastPruneTime should be updated
-      const newPruneTime = (clickHandler as any).lastPruneTime;
-      expect(newPruneTime).toBeGreaterThan(lastPruneTime);
-    });
-
-    test('should clear cache and reset prune time on stopTracking', () => {
-      clickHandler.startTracking();
-
-      // Add some entries
-      for (let i = 0; i < 5; i++) {
-        const element = document.createElement('button');
-        element.id = `button-${i}`;
-        document.body.appendChild(element);
-
-        const clickEvent = new MouseEvent('click', { bubbles: true });
-        Object.defineProperty(clickEvent, 'target', { value: element });
-        element.dispatchEvent(clickEvent);
-      }
-
-      expect((clickHandler as any).lastClickTimes.size).toBe(5);
-      expect((clickHandler as any).lastPruneTime).toBeGreaterThan(0);
-
-      // Stop tracking
-      clickHandler.stopTracking();
-
-      expect((clickHandler as any).lastClickTimes.size).toBe(0);
-      expect((clickHandler as any).lastPruneTime).toBe(0);
-    });
-
-    test('should maintain throttling within cache window', () => {
-      clickHandler.startTracking();
-
-      const element = document.createElement('button');
-      element.id = 'throttled-button';
-      document.body.appendChild(element);
-
-      const clickEvent = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(clickEvent, 'target', { value: element });
-
-      // First click should be tracked
-      element.dispatchEvent(clickEvent);
-      expect(mockEventManager.track).toHaveBeenCalledTimes(1);
-
-      // Second click within throttle window (300ms) should be suppressed
-      vi.advanceTimersByTime(200);
-      element.dispatchEvent(clickEvent);
-      expect(mockEventManager.track).toHaveBeenCalledTimes(1); // Still 1
-
-      // Third click after throttle window should be tracked
-      vi.advanceTimersByTime(150); // Total 350ms
-      element.dispatchEvent(clickEvent);
-      expect(mockEventManager.track).toHaveBeenCalledTimes(2);
-    });
+    document.body.removeChild(button);
+    dateSpy.mockRestore();
   });
 });

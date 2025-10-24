@@ -4,6 +4,24 @@ import { StateManager } from '../managers/state.manager';
 import { EventManager } from '../managers/event.manager';
 import { DEFAULT_PAGE_VIEW_THROTTLE_MS } from '../constants/config.constants';
 
+/**
+ * Tracks page navigation and route changes in single-page applications.
+ *
+ * **Events Generated**: `page_view`
+ *
+ * **Features**:
+ * - Tracks initial page load, browser navigation, hash changes, and History API calls
+ * - URL normalization with automatic filtering of sensitive query parameters
+ * - Deduplication to prevent consecutive duplicate events
+ * - Configurable throttling (default: 1 second)
+ * - SPA navigation detection via History API patching
+ *
+ * **Privacy Protection**:
+ * - Automatically removes 15 common sensitive params (token, auth, key, password, etc.)
+ * - User-configurable additional sensitive parameters via config
+ *
+ * @see src/handlers/README.md (lines 5-63) for detailed documentation
+ */
 export class PageViewHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly onTrack: () => void;
@@ -19,6 +37,17 @@ export class PageViewHandler extends StateManager {
     this.onTrack = onTrack;
   }
 
+  /**
+   * Starts tracking page views.
+   *
+   * - Tracks initial page load first (via trackInitialPageView)
+   * - Attaches popstate and hashchange event listeners
+   * - Patches History API methods (pushState, replaceState) for SPA navigation
+   * - All setup happens synchronously
+   *
+   * **Note**: onTrack() callback is invoked AFTER initial page view but BEFORE
+   * subsequent navigation events for session management coordination.
+   */
   startTracking(): void {
     this.trackInitialPageView();
 
@@ -29,6 +58,13 @@ export class PageViewHandler extends StateManager {
     this.patchHistory('replaceState');
   }
 
+  /**
+   * Stops tracking page views and restores original History API methods.
+   *
+   * - Removes event listeners (popstate, hashchange)
+   * - Restores original pushState and replaceState methods
+   * - Resets throttling state
+   */
   stopTracking(): void {
     window.removeEventListener('popstate', this.trackCurrentPage, true);
     window.removeEventListener('hashchange', this.trackCurrentPage, true);
@@ -67,7 +103,6 @@ export class PageViewHandler extends StateManager {
       return;
     }
 
-    // Throttle: Prevent rapid navigation spam
     const now = Date.now();
     const throttleMs = this.get('config').pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS;
 
@@ -112,7 +147,6 @@ export class PageViewHandler extends StateManager {
     const { referrer } = document;
     const { title } = document;
 
-    // Early return if no meaningful data
     if (!referrer && !title && !pathname && !search && !hash) {
       return undefined;
     }

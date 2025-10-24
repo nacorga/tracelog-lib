@@ -1,202 +1,310 @@
 import { App } from './app';
-import { ClickHandler } from './handlers/click.handler';
-import { ErrorHandler } from './handlers/error.handler';
-import { PageViewHandler } from './handlers/page-view.handler';
+import { setConsent as apiSetConsent, destroy as apiDestroy } from './api';
 import { PerformanceHandler } from './handlers/performance.handler';
-import { ScrollHandler } from './handlers/scroll.handler';
+import { ErrorHandler } from './handlers/error.handler';
 import { SessionHandler } from './handlers/session.handler';
-import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
+import { PageViewHandler } from './handlers/page-view.handler';
+import { ClickHandler } from './handlers/click.handler';
+import { ScrollHandler } from './handlers/scroll.handler';
+import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
-import { State, TraceLogTestBridge } from './types';
-import { __setAppInstance } from './api';
-import { STORAGE_BASE_KEY } from './constants';
+import { ConsentManager } from './managers/consent.manager';
+import { State, TraceLogTestBridge, EventData } from './types';
+import { setQaMode as setQaModeUtil } from './utils/browser/qa-mode.utils';
 
 /**
- * Test bridge for E2E testing
+ * Test bridge for E2E and integration testing (development only)
+ *
+ * Provides comprehensive test-specific helpers while inheriting core App functionality.
+ * Exposes internal managers and handlers for inspection and validation.
+ * Auto-injects into window.__traceLogBridge for Playwright tests.
+ *
+ * **Key Principle**: Library code should NOT adapt to tests. TestBridge adapts tests to library.
  */
 export class TestBridge extends App implements TraceLogTestBridge {
-  private _isInitializing: boolean;
-  private _isDestroying = false;
-
-  constructor(isInitializing: boolean, isDestroying: boolean) {
+  constructor() {
     super();
-    this._isInitializing = isInitializing;
-    this._isDestroying = isDestroying;
   }
 
   override async init(config?: any): Promise<void> {
-    // Guard: TestBridge should only be used in development
     if (process.env.NODE_ENV !== 'development') {
       throw new Error('[TraceLog] TestBridge is only available in development mode');
     }
 
-    // First sync with window.tracelog BEFORE initializing
-    // This ensures both APIs point to the same instance from the start
-    if (!__setAppInstance) {
-      throw new Error('[TraceLog] __setAppInstance is not available (production build?)');
-    }
-
     try {
+      const { __setAppInstance } = await import('./api');
       __setAppInstance(this);
     } catch {
-      // If __setAppInstance fails (e.g., already initialized), throw clear error
       throw new Error('[TraceLog] TestBridge cannot sync with existing tracelog instance. Call destroy() first.');
     }
 
     try {
       await super.init(config);
     } catch (error) {
-      // If init fails, clear the sync
-      if (__setAppInstance) {
-        __setAppInstance(null);
-      }
+      const { __setAppInstance } = await import('./api');
+      __setAppInstance(null);
       throw error;
     }
   }
 
-  isInitializing(): boolean {
-    return this._isInitializing;
-  }
-
   override sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void {
-    // Silently ignore events after destroy instead of throwing error
     if (!this.initialized) {
       return;
     }
+
     super.sendCustomEvent(name, data);
   }
 
+  /**
+   * Alias for sendCustomEvent (E2E test convenience)
+   */
+  event(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
+    this.sendCustomEvent(name, metadata);
+  }
+
+  /**
+   * QA mode control for debugging tests
+   */
+  setQaMode(enabled: boolean): void {
+    setQaModeUtil(enabled);
+  }
+
+  /**
+   * Session data inspection for E2E tests
+   */
   getSessionData(): Record<string, unknown> | null {
+    const sessionId = this.get('sessionId');
+    const config = this.get('config');
+
     return {
-      id: this.get('sessionId') as string,
-      isActive: !!this.get('sessionId'),
-      timeout: this.get('config')?.sessionTimeout ?? 15 * 60 * 1000,
+      id: sessionId ?? null,
+      isActive: sessionId !== null && sessionId !== '',
+      timeout: config.sessionTimeout ?? 15 * 60 * 1000,
     };
   }
 
-  setSessionTimeout(timeout: number): void {
-    const config = this.get('config');
-    if (config) {
-      this.set('config', { ...config, sessionTimeout: timeout });
-    }
-  }
-
+  /**
+   * Queue length inspection for E2E tests
+   */
   getQueueLength(): number {
     return this.managers.event?.getQueueLength() ?? 0;
   }
 
-  forceInitLock(enabled = true): void {
-    this._isInitializing = enabled;
+  /**
+   * Event manager accessor for E2E tests
+   */
+  override getEventManager(): EventManager | undefined {
+    return this.managers.event;
   }
 
-  simulatePersistedEvents(events: any[]): void {
-    const storageManager = this.managers?.storage;
-    if (!storageManager) {
-      throw new Error('Storage manager not available');
-    }
+  /**
+   * Performance handler accessor for tests
+   */
+  getPerformanceHandler(): PerformanceHandler | null {
+    return this.handlers.performance ?? null;
+  }
 
-    const config = this.get('config');
-    const projectId =
-      config?.integrations?.tracelog?.projectId ?? config?.integrations?.custom?.collectApiUrl ?? 'test';
-    const userId = this.get('userId');
-    const sessionId = this.get('sessionId');
+  /**
+   * Error handler accessor for tests
+   */
+  getErrorHandler(): ErrorHandler | null {
+    return this.handlers.error ?? null;
+  }
 
-    if (!projectId || !userId) {
-      throw new Error('Project ID or User ID not available. Initialize TraceLog first.');
-    }
+  /**
+   * Session handler accessor for tests
+   */
+  getSessionHandler(): SessionHandler | null {
+    return this.handlers.session ?? null;
+  }
 
-    // Build the persisted data structure matching what SenderManager expects
-    const persistedData = {
-      userId,
-      sessionId: sessionId || `test-session-${Date.now()}`,
-      device: 'desktop',
-      events,
-      timestamp: Date.now(),
+  /**
+   * PageView handler accessor for tests
+   */
+  getPageViewHandler(): PageViewHandler | null {
+    return this.handlers.pageView ?? null;
+  }
+
+  /**
+   * Click handler accessor for tests
+   */
+  getClickHandler(): ClickHandler | null {
+    return this.handlers.click ?? null;
+  }
+
+  /**
+   * Scroll handler accessor for tests
+   */
+  getScrollHandler(): ScrollHandler | null {
+    return this.handlers.scroll ?? null;
+  }
+
+  /**
+   * Viewport handler accessor for tests
+   */
+  getViewportHandler(): ViewportHandler | null {
+    return this.handlers.viewport ?? null;
+  }
+
+  /**
+   * Get all handlers at once (convenience method)
+   */
+  getHandlers(): {
+    performance: PerformanceHandler | null;
+    error: ErrorHandler | null;
+    session: SessionHandler | null;
+    pageView: PageViewHandler | null;
+    click: ClickHandler | null;
+    scroll: ScrollHandler | null;
+    viewport: ViewportHandler | null;
+  } {
+    return {
+      performance: this.getPerformanceHandler(),
+      error: this.getErrorHandler(),
+      session: this.getSessionHandler(),
+      pageView: this.getPageViewHandler(),
+      click: this.getClickHandler(),
+      scroll: this.getScrollHandler(),
+      viewport: this.getViewportHandler(),
     };
-
-    // Store in the same format as SenderManager.persistEvents()
-    const storageKey = `${STORAGE_BASE_KEY}:${projectId}:queue:${userId}`;
-    storageManager.setItem(storageKey, JSON.stringify(persistedData));
   }
 
-  override get<T extends keyof State>(key: T): State[T] {
+  /**
+   * Storage manager accessor for tests
+   */
+  getStorageManager(): StorageManager | null {
+    return this.managers.storage ?? null;
+  }
+
+  /**
+   * Consent manager accessor for tests
+   */
+  override getConsentManager(): ConsentManager | undefined {
+    return this.managers.consent;
+  }
+
+  /**
+   * Consent buffer inspection for tests
+   */
+  getConsentBufferLength(): number {
+    return this.managers.event?.getConsentBufferLength() ?? 0;
+  }
+
+  /**
+   * Get events from queue (for validation in tests)
+   */
+  getQueueEvents(): EventData[] {
+    return this.managers.event?.getQueueEvents() ?? [];
+  }
+
+  /**
+   * Get consent buffer events (for validation in tests)
+   */
+  getConsentBufferEvents(integration: 'google' | 'custom' | 'tracelog'): EventData[] {
+    return this.managers.event?.getConsentBufferEvents(integration) ?? [];
+  }
+
+  /**
+   * Consent management (always delegates to api.ts for consistency)
+   */
+  async setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void> {
+    await apiSetConsent(integration, granted);
+  }
+
+  /**
+   * Consent state check (delegates to ConsentManager)
+   */
+  hasConsent(integration: 'google' | 'custom' | 'tracelog' | 'all'): boolean {
+    const consentManager = this.getConsentManager();
+    return consentManager?.hasConsent(integration) ?? false;
+  }
+
+  /**
+   * Consent state retrieval (delegates to ConsentManager)
+   */
+  getConsentState(): { google: boolean; custom: boolean; tracelog: boolean } {
+    const consentManager = this.getConsentManager();
+    return consentManager?.getConsentState() ?? { google: false, custom: false, tracelog: false };
+  }
+
+  /**
+   * State accessor (make public for tests)
+   */
+  public override get<T extends keyof State>(key: T): State[T] {
     return super.get(key);
   }
 
-  // Manager accessors
-  getStorageManager(): StorageManager | null {
-    return this.safeAccess(this.managers?.storage);
+  /**
+   * Full state snapshot (for test inspection)
+   */
+  public getFullState(): Readonly<State> {
+    return this.getState();
   }
 
-  getEventManager(): EventManager | null {
-    return this.safeAccess(this.managers?.event);
+  /**
+   * Wait for initialization to complete (test utility)
+   */
+  async waitForInitialization(timeout = 5000): Promise<void> {
+    const startTime = Date.now();
+    while (!this.initialized && Date.now() - startTime < timeout) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!this.initialized) {
+      throw new Error('[TraceLog] Initialization timeout');
+    }
   }
 
-  // Handler accessors
-  getSessionHandler(): SessionHandler | null {
-    return this.safeAccess(this.handlers?.session);
+  /**
+   * Trigger manual queue flush (test utility)
+   */
+  async flushQueue(): Promise<void> {
+    await this.managers.event?.flushQueue();
   }
 
-  getPageViewHandler(): PageViewHandler | null {
-    return this.safeAccess(this.handlers?.pageView);
+  /**
+   * Clear event queue (test utility - use with caution)
+   */
+  clearQueue(): void {
+    this.managers.event?.clearQueue();
   }
 
-  getClickHandler(): ClickHandler | null {
-    return this.safeAccess(this.handlers?.click);
-  }
-
-  getScrollHandler(): ScrollHandler | null {
-    return this.safeAccess(this.handlers?.scroll);
-  }
-
-  getPerformanceHandler(): PerformanceHandler | null {
-    return this.safeAccess(this.handlers?.performance);
-  }
-
-  getErrorHandler(): ErrorHandler | null {
-    return this.safeAccess(this.handlers?.error);
-  }
-
-  // Integration accessors
-  getGoogleAnalytics(): GoogleAnalyticsIntegration | null {
-    return this.safeAccess(this.integrations?.googleAnalytics);
-  }
-
+  /**
+   * Cleanup (syncs with api.ts)
+   */
   override destroy(force = false): void {
-    // If not initialized and not forcing, silently return (no-op)
     if (!this.initialized && !force) {
       return;
     }
 
-    this.ensureNotDestroying();
-
-    this._isDestroying = true;
+    apiDestroy();
 
     try {
       super.destroy(force);
-      // Clear window.tracelog API reference (only in dev mode)
-      if (__setAppInstance) {
+      void import('./api').then(({ __setAppInstance }) => {
         __setAppInstance(null);
-      }
-    } finally {
-      this._isDestroying = false;
-    }
-  }
-
-  /**
-   * Helper to safely access managers/handlers and convert undefined to null
-   */
-  private safeAccess<T>(value: T | undefined): T | null {
-    return value ?? null;
-  }
-
-  /**
-   * Ensures destroy operation is not in progress, throws if it is
-   */
-  private ensureNotDestroying(): void {
-    if (this._isDestroying) {
-      throw new Error('Destroy operation already in progress');
+      });
+    } catch (error) {
+      void import('./api').then(({ __setAppInstance }) => {
+        __setAppInstance(null);
+      });
+      throw error;
     }
   }
 }
+
+/**
+ * Injects TestBridge into window.__traceLogBridge for E2E tests
+ * @internal Called by api.ts in development mode
+ */
+export const injectTestBridge = (): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  try {
+    window.__traceLogBridge = new TestBridge();
+  } catch (error) {
+    console.error('[TraceLog] Failed to inject TestBridge', error);
+  }
+};
