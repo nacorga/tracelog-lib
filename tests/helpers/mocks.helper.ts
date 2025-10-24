@@ -29,8 +29,10 @@ export function createMockFetch(
       ok,
       status,
       statusText: ok ? 'OK' : 'Error',
-      json: async () => json,
-      text: async () => JSON.stringify(json),
+      // eslint-disable-next-line @typescript-eslint/promise-function-async
+      json: () => Promise.resolve(json),
+      // eslint-disable-next-line @typescript-eslint/promise-function-async
+      text: () => Promise.resolve(JSON.stringify(json)),
       headers: new Headers(),
       redirected: false,
       type: 'basic' as ResponseType,
@@ -38,9 +40,12 @@ export function createMockFetch(
       clone: () => ({}),
       body: null,
       bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
+      // eslint-disable-next-line @typescript-eslint/promise-function-async
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      // eslint-disable-next-line @typescript-eslint/promise-function-async
+      blob: () => Promise.resolve(new Blob()),
+      // eslint-disable-next-line @typescript-eslint/promise-function-async
+      formData: () => Promise.resolve(new FormData()),
     };
   });
 }
@@ -152,16 +157,16 @@ export function createMockWebVitals(): {
  * Create mock EventEmitter
  */
 export function createMockEventEmitter(): any {
-  const listeners = new Map<string, Function[]>();
+  const listeners = new Map<string, Array<(...args: any[]) => void>>();
 
   return {
-    on: vi.fn((event: string, callback: Function) => {
+    on: vi.fn((event: string, callback: (...args: any[]) => void) => {
       if (!listeners.has(event)) {
         listeners.set(event, []);
       }
       listeners.get(event)!.push(callback);
     }),
-    off: vi.fn((event: string, callback: Function) => {
+    off: vi.fn((event: string, callback: (...args: any[]) => void) => {
       if (listeners.has(event)) {
         const callbacks = listeners.get(event)!;
         const index = callbacks.indexOf(callback);
@@ -172,7 +177,9 @@ export function createMockEventEmitter(): any {
     }),
     emit: vi.fn((event: string, ...args: any[]) => {
       if (listeners.has(event)) {
-        listeners.get(event)!.forEach((callback) => callback(...args));
+        listeners.get(event)!.forEach((callback) => {
+          callback(...args);
+        });
       }
     }),
     removeAllListeners: vi.fn(() => {

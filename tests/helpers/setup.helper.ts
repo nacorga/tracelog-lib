@@ -50,6 +50,10 @@ export function cleanupTestEnvironment(): void {
   // Restore all mocks
   vi.restoreAllMocks();
 
+  // Reset global.fetch to undefined (clean slate for next test)
+  // Note: vi.restoreAllMocks() doesn't restore direct property assignments
+  delete (global as any).fetch;
+
   // Ensure real timers
   vi.useRealTimers();
 

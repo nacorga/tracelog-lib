@@ -29,7 +29,7 @@ beforeEach(() => {
   if (typeof window !== 'undefined') {
     try {
       injectTestBridge();
-    } catch (error) {
+    } catch {
       // Silently ignore if TestBridge injection fails
     }
   }

@@ -15,11 +15,10 @@ export default defineConfig({
     hookTimeout: 10000,
     teardownTimeout: 10000,
     silent: true,
-    pool: 'threads',
+    pool: 'forks',
     poolOptions: {
-      threads: {
-        maxThreads: 4,
-        minThreads: 1,
+      forks: {
+        singleFork: true,
       },
     },
     coverage: {
