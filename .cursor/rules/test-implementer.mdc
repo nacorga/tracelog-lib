@@ -581,6 +581,61 @@ test.describe('Feature Name', () => {
    });
    ```
 
+## 🎯 TraceLog Library-Specific Patterns
+
+### EventType Enum: Always Lowercase
+
+**CRITICAL**: EventType enum values are lowercase. NEVER use uppercase when filtering events.
+
+```typescript
+// EventType enum definition (src/types/event.types.ts)
+export enum EventType {
+  SESSION_START = 'session_start',  // NOT 'SESSION_START'!
+  CUSTOM = 'custom',                // NOT 'CUSTOM'!
+  PAGE_VIEW = 'page_view',          // NOT 'PAGE_VIEW'!
+  CLICK = 'click',
+  SCROLL = 'scroll',
+  WEB_VITALS = 'web_vitals',
+  ERROR = 'error'
+}
+
+// ❌ WRONG - Test will fail (finds 0 events)
+const count = events.filter(e => e.type === 'SESSION_START').length;
+expect(count).toBe(1);  // ← Always 0, test fails!
+
+// ✅ CORRECT - Use lowercase
+const count = events.filter(e => e.type === 'session_start').length;
+expect(count).toBe(1);  // ← Works!
+```
+
+### BroadcastChannel Testing: ProjectId Validation
+
+**CRITICAL**: When simulating BroadcastChannel messages, use correct `projectId`.
+
+**Default projectId**: `'custom'` (standalone mode without integrations)
+
+```typescript
+// ❌ WRONG - Message will be rejected by library
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    sessionId: 'test-id',
+    projectId: 'test-project',  // ← REJECTED by library
+  }
+});
+
+// ✅ CORRECT - Use 'custom' for standalone mode
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    sessionId: 'test-id',
+    projectId: 'custom',  // ← Matches library default
+  }
+});
+```
+
+**Why this matters**: SessionManager validates projectId as a security feature (src/managers/session.manager.ts:110-115). Mismatched projectId causes silent rejection (by design).
+
 ## ✅ Acceptance Criteria
 
 **ALL tests must meet these criteria before marking a file as complete:**
@@ -702,18 +757,36 @@ test('should sanitize form input values', async ({ page }) => {
 
 ## 📚 Additional Resources
 
-- **Primary Guide**: `tests/TESTING_FUNDAMENTALS.md` (1,500+ lines)
-- **Quick Reference**: `tests/README.md`
+- **Primary Guide**: `tests/TESTING_FUNDAMENTALS.md` - Complete testing guide
+  - Testing philosophy & principles
+  - Test helpers reference (bridge, setup, mocks, fixtures, wait, assertions)
+  - Common patterns and anti-patterns
+  - Test templates for all test types
+  - Acceptance criteria checklist
+- **Troubleshooting**: `tests/TESTING_TROUBLESHOOTING.md` - Common test failures
+  - Event count is always 0 (case sensitivity, consent buffers)
+  - BroadcastChannel messages not processing (projectId mismatch)
+  - Queue appears empty (diagnostic techniques)
+  - Session state not clearing
+  - Force-fail diagnostic pattern, queue inspection, isolated tests
+  - Real-world investigation examples
+- **Quick Reference**: `tests/TESTING_GUIDE.md` - Commands, QA mode, best practices
+- **Project Guidelines**: `CLAUDE.md` - Critical testing patterns
+  - Event type enum (always lowercase)
+  - ProjectId defaults for standalone mode
+  - Integration configuration patterns
 - **Helper Docs**: Comments in `tests/helpers/*.ts` files
 - **E2E Patterns**: Comments in existing E2E test files
 
 ## 💡 Tips
 
 - Read TESTING_FUNDAMENTALS.md before implementing any test
+- Consult TESTING_TROUBLESHOOTING.md when tests fail unexpectedly
 - Use helpers extensively - they're battle-tested
 - Run tests frequently during implementation
 - One test at a time - ensure it passes before moving on
 - Ask for clarification if test intent is unclear
 - Follow existing test patterns in the codebase
+- Remember: EventType values are lowercase, projectId defaults to 'custom'
 
 Remember: **Tests are the safety net for this library. Quality tests = confident releases.**

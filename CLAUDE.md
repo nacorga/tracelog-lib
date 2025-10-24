@@ -85,6 +85,58 @@ destroyTestBridge();
 
 **Complete Guide**: See `tests/TESTING_FUNDAMENTALS.md` for comprehensive patterns, helpers, and examples.
 
+### Critical Testing Patterns
+
+#### Event Type Enum Case Sensitivity
+
+**IMPORTANT**: EventType enum values are lowercase, not uppercase.
+
+```typescript
+// Event Type Enum (src/types/event.types.ts)
+export enum EventType {
+  SESSION_START = 'session_start',  // ← lowercase!
+  SESSION_END = 'session_end',
+  CUSTOM = 'custom',
+  PAGE_VIEW = 'page_view',
+  CLICK = 'click',
+  SCROLL = 'scroll',
+  WEB_VITALS = 'web_vitals',
+  ERROR = 'error'
+}
+
+// ❌ WRONG - Will find nothing
+events.filter(e => e.type === 'SESSION_START')
+
+// ✅ CORRECT - Matches enum value
+events.filter(e => e.type === 'session_start')
+```
+
+#### ProjectId Defaults in Tests
+
+**Default projectId**: `'custom'` for standalone mode (no backend integration)
+
+```typescript
+// ❌ WRONG - Will be rejected by library
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    projectId: 'test-project',  // ← Wrong!
+  }
+});
+
+// ✅ CORRECT - Matches library default
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    projectId: 'custom',  // ← Default for standalone mode
+  }
+});
+```
+
+**Why this matters**: SessionManager validates `projectId` in BroadcastChannel messages as a security feature. Messages with mismatched projectId are silently rejected.
+
+**See Also**: `tests/TESTING_TROUBLESHOOTING.md` for complete troubleshooting guide.
+
 ## Architecture
 
 ### Core Flow

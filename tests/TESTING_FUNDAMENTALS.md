@@ -510,6 +510,8 @@ await triggerAndWaitForEvent(bridge, 'test', { key: 'value' });
 ```
 tests/
 ├── TESTING_FUNDAMENTALS.md      # This guide
+├── TESTING_TROUBLESHOOTING.md   # Common failures & diagnostics
+├── TESTING_GUIDE.md              # Quick reference
 ├── setup.ts                      # Vitest global setup
 ├── vitest-setup.ts              # Vitest config
 │
@@ -1362,6 +1364,100 @@ test('should include sessionId in queue', async ({ page }) => {
 5. **NEVER ignore flaky tests**
    - Fix the root cause
    - Flaky tests erode trust
+   - **Common causes & solutions**:
+
+     **a) Unpredictable Randomness (Math.random())**
+     ```typescript
+     // ❌ BAD - Flaky due to real randomness
+     it('should sample at 50% rate', () => {
+       eventManager['set']('config', { samplingRate: 0.5 });
+       for (let i = 0; i < 100; i++) {
+         eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `e${i}` } });
+       }
+       // Flaky: might be 45, 50, 55, etc.
+       expect(eventManager.getQueueLength()).toBeGreaterThan(40);
+       expect(eventManager.getQueueLength()).toBeLessThan(60);
+     });
+
+     // ✅ GOOD - Deterministic with mocked randomness
+     it('should sample at 50% rate', () => {
+       const mockRandom = vi.spyOn(Math, 'random').mockImplementation(() => {
+         return callIndex++ % 2 === 0 ? 0.3 : 0.7; // Alternates below/above 0.5
+       });
+
+       eventManager['set']('config', { samplingRate: 0.5 });
+       for (let i = 0; i < 50; i++) {  // Note: 50 events, not 100 (see rate limiting below)
+         eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `e${i}` } });
+       }
+
+       // Deterministic: exactly 25 pass sampling
+       expect(eventManager.getQueueLength()).toBe(25);
+       mockRandom.mockRestore();
+     });
+     ```
+
+     **b) Rate Limiting Interference**
+
+     EventManager applies rate limiting (50 events/sec) BEFORE sampling. When testing sampling, you must account for this:
+
+     ```typescript
+     // ❌ BAD - Rate limiting interferes with sampling test
+     it('should sample at 50% rate', () => {
+       eventManager['set']('config', { samplingRate: 0.5 });
+       // Track 100 events in tight loop
+       for (let i = 0; i < 100; i++) {
+         eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `e${i}` } });
+       }
+       // Expected: 50 (100 * 0.5)
+       // Actual: 25 (50 pass rate limit, then 50 * 0.5 = 25)
+       expect(eventManager.getQueueLength()).toBe(50); // FAILS
+     });
+
+     // ✅ GOOD - Account for rate limiting
+     it('should sample at 50% rate', () => {
+       eventManager['set']('config', { samplingRate: 0.5 });
+       // Track 50 events (stays under 50/sec rate limit)
+       for (let i = 0; i < 50; i++) {
+         eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `e${i}` } });
+       }
+       // Correct expectation: 50 * 0.5 = 25
+       expect(eventManager.getQueueLength()).toBe(25); // PASSES
+     });
+     ```
+
+     **c) Event Pipeline Filters**
+
+     EventManager applies filters in this order:
+     1. **Rate Limiting** (50 events/sec global, per-event-name limits)
+     2. **Session Limits** (MAX_EVENTS_PER_SESSION, per-type limits)
+     3. **Sampling** (samplingRate, errorSampling)
+     4. **Deduplication** (LRU cache, 500ms threshold)
+
+     When writing tests, consider which filters apply:
+
+     ```typescript
+     // ✅ GOOD - Test accounts for all filters
+     it('should track events with all filters', () => {
+       // Mock randomness for deterministic sampling
+       vi.spyOn(Math, 'random').mockReturnValue(0.3);
+
+       // Configure sampling
+       eventManager['set']('config', { samplingRate: 0.5 });
+
+       // Track events under rate limit
+       for (let i = 0; i < 30; i++) {
+         eventManager.track({
+           type: EventType.CUSTOM,
+           custom_event: { name: `unique_${i}` } // Unique to avoid deduplication
+         });
+       }
+
+       // All 30 pass: rate limit OK, sampling OK (mocked < 0.5), no duplicates
+       expect(eventManager.getQueueLength()).toBe(30);
+     });
+     ```
+
+     **Key Takeaway**: Always mock `Math.random()` and stay under rate limits (50 events) when testing sampling behavior.
 
 6. **NEVER use `page.waitForFunction()` in E2E**
    - CSP-blocked
@@ -1374,6 +1470,57 @@ test('should include sessionId in queue', async ({ page }) => {
 8. **NEVER commit commented-out tests**
    - Delete or fix them
    - Clean codebase
+
+9. **NEVER use uppercase event types when filtering**
+   - EventType enum values are lowercase
+   - This is one of the most common test failures
+
+   ```typescript
+   // ❌ BAD - Will always find 0 events (enum values are lowercase)
+   const sessionStartCount = events.filter(e => e.type === 'SESSION_START').length;
+   const customEvents = events.filter(e => e.type === 'CUSTOM');
+   expect(sessionStartCount).toBe(1);  // Always fails!
+
+   // ✅ GOOD - Use lowercase to match EventType enum values
+   const sessionStartCount = events.filter(e => e.type === 'session_start').length;
+   const customEvents = events.filter(e => e.type === 'custom');
+   expect(sessionStartCount).toBe(1);  // Works correctly
+   ```
+
+   **Why**: EventType enum is defined as:
+   ```typescript
+   export enum EventType {
+     SESSION_START = 'session_start',  // lowercase value!
+     CUSTOM = 'custom',
+     PAGE_VIEW = 'page_view',
+   }
+   ```
+
+10. **NEVER use wrong projectId in BroadcastChannel test messages**
+    - Default projectId is `'custom'` for standalone mode
+    - SessionManager validates and rejects mismatched projectId
+
+    ```typescript
+    // ❌ BAD - Message silently rejected by library
+    onMessageHandler!({
+      data: {
+        action: 'session_start',
+        sessionId: 'test-id',
+        projectId: 'test-project',  // Wrong! Library expects 'custom'
+      }
+    });
+
+    // ✅ GOOD - Use correct default projectId
+    onMessageHandler!({
+      data: {
+        action: 'session_start',
+        sessionId: 'test-id',
+        projectId: 'custom',  // Matches library default
+      }
+    });
+    ```
+
+    **Why**: SessionManager validates projectId as a security feature (src/managers/session.manager.ts:110-115). Mismatched projectId causes silent rejection by design.
 
 ### ❌ TestBridge Anti-Patterns
 
@@ -1983,3 +2130,16 @@ Before merging test changes:
 - [ ] **Clean code** - No TODOs, no commented code, clear names
 - [ ] **Helpers used** - Especially `bridge.helper.ts` for integration tests
 - [ ] **Documentation updated** - If adding new patterns
+
+---
+
+## See Also
+
+- **TESTING_TROUBLESHOOTING.md** - Comprehensive troubleshooting guide for common test failures
+  - Event count is always 0
+  - BroadcastChannel messages not processing
+  - Queue appears empty
+  - Session state not clearing
+  - Diagnostic techniques and real-world examples
+- **TESTING_GUIDE.md** - Quick reference for commands, patterns, and QA mode
+- **CLAUDE.md** - Critical testing patterns (event types, projectId validation) and project guidelines

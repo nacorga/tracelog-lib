@@ -400,6 +400,29 @@ For complete test patterns with detailed examples, see `tests/TESTING_FUNDAMENTA
 - Integration Test Pattern (with TestBridge)
 - E2E Test Pattern (with Playwright)
 
+### Documentation
+
+**Primary References**:
+- **tests/TESTING_FUNDAMENTALS.md** - Your source of truth for patterns, helpers, and best practices
+  - Complete test helpers reference with examples
+  - Common patterns and anti-patterns
+  - Test templates for all test types
+  - Acceptance criteria checklist
+- **tests/TESTING_TROUBLESHOOTING.md** - Troubleshooting guide for common test failures
+  - Event type case sensitivity issues (lowercase vs uppercase)
+  - ProjectId validation in BroadcastChannel tests
+  - Diagnostic techniques (force-fail pattern, queue inspection, isolated tests)
+  - Real-world examples from multi-tab sync investigation
+  - When to suspect library bugs vs test configuration issues
+- **tests/TESTING_GUIDE.md** - Quick reference for commands and QA mode
+  - Test commands and coverage
+  - QA mode activation patterns
+  - Best practices summary
+- **CLAUDE.md** - Critical testing patterns and library-specific rules
+  - Event type enum (always lowercase)
+  - ProjectId defaults for standalone mode
+  - Integration configuration patterns
+
 ## Implementation Workflow
 
 ### When Asked to Implement Tests
@@ -558,6 +581,76 @@ For complete DO's and DON'Ts with examples, see `tests/TESTING_FUNDAMENTALS.md`.
 - DON'T use hardcoded timeouts (use `waitForCondition()`)
 - DON'T use `page.waitForFunction()` in E2E (CSP-blocked)
 
+## 🎯 TraceLog Library-Specific Patterns
+
+### EventType Enum: Always Lowercase
+
+**CRITICAL**: EventType enum values are lowercase. NEVER use uppercase when filtering events.
+
+```typescript
+// EventType enum definition (src/types/event.types.ts)
+export enum EventType {
+  SESSION_START = 'session_start',  // NOT 'SESSION_START'!
+  CUSTOM = 'custom',                // NOT 'CUSTOM'!
+  PAGE_VIEW = 'page_view',          // NOT 'PAGE_VIEW'!
+  CLICK = 'click',
+  SCROLL = 'scroll',
+  WEB_VITALS = 'web_vitals',
+  ERROR = 'error'
+}
+
+// ❌ WRONG - Test will fail (finds 0 events)
+const count = events.filter(e => e.type === 'SESSION_START').length;
+expect(count).toBe(1);  // ← Always 0, test fails!
+
+// ✅ CORRECT - Use lowercase
+const count = events.filter(e => e.type === 'session_start').length;
+expect(count).toBe(1);  // ← Works!
+```
+
+### BroadcastChannel Testing: ProjectId Validation
+
+**CRITICAL**: When simulating BroadcastChannel messages, use correct `projectId`.
+
+**Default projectId**: `'custom'` (standalone mode without integrations)
+
+```typescript
+// ❌ WRONG - Message will be rejected by library
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    sessionId: 'test-id',
+    projectId: 'test-project',  // ← REJECTED by library
+  }
+});
+
+// ✅ CORRECT - Use 'custom' for standalone mode
+onMessageHandler!({
+  data: {
+    action: 'session_start',
+    sessionId: 'test-id',
+    projectId: 'custom',  // ← Matches library default
+  }
+});
+
+// ✅ CORRECT - Use configured projectId if integration configured
+// (when config.integrations.tracelog.projectId is set)
+```
+
+**Why this matters**: SessionManager validates projectId as a security feature (src/managers/session.manager.ts:110-115). Mismatched projectId causes silent rejection (by design).
+
+### When Generating Test Skeletons
+
+**Always check** when generating integration tests for:
+1. **Event type filters** → Use lowercase (`'session_start'` not `'SESSION_START'`)
+2. **BroadcastChannel message data** → Use `projectId: 'custom'` for standalone mode
+3. **Queue inspection** → Events have lowercase types
+
+**Common mistakes to avoid**:
+- ❌ Filtering for `e.type === 'SESSION_START'` (uppercase)
+- ❌ Using `projectId: 'test-project'` in broadcast messages
+- ❌ Expecting events to match `EventType.SESSION_START` literal (it's `'session_start'`)
+
 ## Commands You Use
 
 ```bash
@@ -706,10 +799,12 @@ If tests fail:
 
 ## Remember
 
-- **TESTING_FUNDAMENTALS.md is your source of truth**
+- **TESTING_FUNDAMENTALS.md is your source of truth** - patterns, helpers, best practices
+- **TESTING_TROUBLESHOOTING.md for debugging** - common failures, diagnostic techniques
 - **Helpers are your friends** - use them extensively
 - **One test at a time** - don't rush, ensure quality
 - **Run tests frequently** - catch issues early
 - **Ask for clarification** - if test intent is unclear
+- **When tests fail unexpectedly** - consult TESTING_TROUBLESHOOTING.md before assuming library bug
 
 Your goal: Write clean, maintainable, passing tests that provide confidence in the TraceLog library's quality and correctness.

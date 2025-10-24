@@ -448,18 +448,30 @@ describe('EventManager - Sampling', () => {
   });
 
   it('should use random sampling', () => {
+    // Mock Math.random with controlled values to test sampling behavior
+    // Note: Rate limiting is 50 events/sec, so tracking 50 events to avoid rate limiting
+    const randomValues = [
+      ...Array(25).fill(0.3), // These pass (0.3 < 0.5)
+      ...Array(25).fill(0.7), // These fail (0.7 >= 0.5)
+    ];
+    let callIndex = 0;
+    const mockRandom = vi.spyOn(Math, 'random').mockImplementation(() => {
+      return randomValues[callIndex++] ?? 0.5;
+    });
+
     // Set sampling to 50%
     eventManager['set']('config', { samplingRate: 0.5 });
 
-    // Track many events
-    for (let i = 0; i < 100; i++) {
+    // Track 50 events (to stay under rate limit of 50/sec)
+    for (let i = 0; i < 50; i++) {
       eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `event_${i}` } });
     }
 
-    // Should have roughly 50 events (with wider variance for randomness)
+    // With 50% sampling rate, 25 should pass (50 * 0.5 = 25)
     const queueLength = eventManager.getQueueLength();
-    expect(queueLength).toBeGreaterThan(20);
-    expect(queueLength).toBeLessThan(80);
+    expect(queueLength).toBe(25);
+
+    mockRandom.mockRestore();
   });
 
   it('should never sample SESSION_START', () => {
