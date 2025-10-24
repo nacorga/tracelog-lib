@@ -2254,4 +2254,5 @@ Before merging test changes:
   - Session state not clearing
   - Diagnostic techniques and real-world examples
 - **TESTING_GUIDE.md** - Quick reference for commands, patterns, and QA mode
+- **e2e/README.md** - E2E testing with Playwright (test isolation, CSP-safe patterns, browser context)
 - **CLAUDE.md** - Critical testing patterns (event types, projectId validation) and project guidelines

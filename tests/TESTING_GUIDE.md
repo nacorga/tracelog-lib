@@ -312,6 +312,12 @@ open coverage/lcov-report/index.html
   - Session state not clearing
   - Diagnostic patterns (force-fail, queue inspection, isolated tests)
   - Real-world investigation examples
+- **e2e/README.md** - E2E testing with Playwright
+  - Test isolation patterns and destroy() protocol
+  - CSP-safe waiting strategies
+  - Browser context limitations
+  - Event listener setup timing
+  - Complete test template with checklist
 - **CLAUDE.md** - Critical testing patterns and project guidelines
   - Event type case sensitivity (always lowercase)
   - ProjectId validation in BroadcastChannel tests

@@ -534,6 +534,9 @@ return {
 
 - **Template**: See `TEMPLATE.spec.ts` for complete examples
 - **Helpers**: See `helpers/bridge.helper.ts` and `helpers/assertions.helper.ts`
+- **TESTING_FUNDAMENTALS.md** - Complete testing guide with patterns, helpers, and best practices
+- **TESTING_TROUBLESHOOTING.md** - Troubleshooting guide for common test failures
+- **TESTING_GUIDE.md** - Quick reference for commands, patterns, and QA mode
 - **Playwright Docs**: https://playwright.dev/docs/intro
 - **Project CLAUDE.md**: See root CLAUDE.md for full testing strategy
 

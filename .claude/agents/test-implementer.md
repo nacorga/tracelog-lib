@@ -452,6 +452,12 @@ For complete test patterns with detailed examples, see `tests/TESTING_FUNDAMENTA
   - Diagnostic techniques (force-fail pattern, queue inspection, isolated tests)
   - Real-world examples from multi-tab sync investigation
   - When to suspect library bugs vs test configuration issues
+- **tests/e2e/README.md** - E2E testing with Playwright
+  - Test isolation patterns and destroy() protocol
+  - CSP-safe waiting strategies
+  - Browser context limitations
+  - Event listener setup timing
+  - Complete test template with checklist
 - **tests/TESTING_GUIDE.md** - Quick reference for commands and QA mode
   - Test commands and coverage
   - QA mode activation patterns
