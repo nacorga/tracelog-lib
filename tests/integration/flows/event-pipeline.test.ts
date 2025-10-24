@@ -5,9 +5,8 @@
  * Focus: Event flow from capture to send
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { setupTestEnvironment, cleanupTestEnvironment, advanceTimers } from '../../helpers/setup.helper';
-import { createMockFetch } from '../../helpers/mocks.helper';
+import { describe, it, beforeEach, afterEach } from 'vitest';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 
 describe('Integration: Event Pipeline', () => {
   beforeEach(() => {

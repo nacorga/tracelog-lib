@@ -5,7 +5,7 @@
  * Focus: Cross-tab session synchronization
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 
 describe('Integration: Multi-Tab Session Sync', () => {

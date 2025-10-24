@@ -124,7 +124,7 @@ describe('SenderManager - Event Sending (fetch)', () => {
     expect(body.session_id).toBe('test-session-id');
     expect(body.user_id).toBe('test-user-id');
     expect(body.events).toHaveLength(1);
-    expect(body.events[0].type).toBe('CUSTOM');
+    expect(body.events[0].type).toBe('custom');
     expect(body._metadata).toBeDefined();
     expect(body._metadata.timestamp).toBeTypeOf('number');
   });
@@ -771,7 +771,7 @@ describe('SenderManager - beforeBatch Transformer', () => {
     const body = JSON.parse(options.body as string);
 
     expect(body.events).toHaveLength(1);
-    expect(body.events[0].type).toBe('CUSTOM');
+    expect(body.events[0].type).toBe('custom');
   });
 
   it('should use original batch if transformer returns invalid', async () => {
@@ -813,7 +813,7 @@ describe('SenderManager - beforeBatch Transformer', () => {
     const body = JSON.parse(options.body as string);
 
     expect(body.events).toHaveLength(1);
-    expect(body.events[0].type).toBe('CUSTOM');
+    expect(body.events[0].type).toBe('custom');
   });
 
   it('should filter batch if transformer returns null', async () => {

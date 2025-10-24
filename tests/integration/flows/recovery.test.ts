@@ -5,7 +5,7 @@
  * Focus: Failed event recovery from persistence
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 
 describe('Integration: Event Recovery', () => {

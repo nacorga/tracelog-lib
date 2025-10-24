@@ -34,27 +34,27 @@ test.describe('E2E: Initialization', () => {
     expect(result.initialized).toBe(true);
   });
 
-  test('should initialize with custom backend integration', async ({ page }) => {
+  test('should initialize with custom backend integration', async ({ page: _page }) => {
     // Test initialization with custom backend config
   });
 
-  test('should initialize with tracelog integration', async ({ page }) => {
+  test('should initialize with tracelog integration', async ({ page: _page }) => {
     // Test initialization with tracelog SaaS config
   });
 
-  test('should initialize with multiple integrations', async ({ page }) => {
+  test('should initialize with multiple integrations', async ({ page: _page }) => {
     // Test initialization with both tracelog and custom
   });
 
-  test('should generate userId on first init', async ({ page }) => {
+  test('should generate userId on first init', async ({ page: _page }) => {
     // Test userId generation
   });
 
-  test('should restore userId from storage', async ({ page }) => {
+  test('should restore userId from storage', async ({ page: _page }) => {
     // Test userId persistence across page loads
   });
 
-  test('should generate sessionId on init', async ({ page }) => {
+  test('should generate sessionId on init', async ({ page: _page }) => {
     // Test sessionId generation
   });
 });

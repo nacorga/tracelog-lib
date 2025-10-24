@@ -5,8 +5,7 @@
  */
 
 import { expect } from 'vitest';
-import type { EventData, EventType } from '@/types/event.types';
-import type { EventsQueue } from '@/types/sender.types';
+import { EventType } from '../../src/types/event.types';
 
 /**
  * Validate event structure has all required fields
@@ -77,7 +76,7 @@ export function expectEventType(event: any, expectedType: EventType): void {
  */
 export function expectClickEvent(event: any): void {
   expectEventStructure(event);
-  expectEventType(event, 'CLICK');
+  expectEventType(event, EventType.CLICK);
   expect(event.click).toBeDefined();
   expect(event.click.element_tag).toBeTypeOf('string');
   expect(event.click.x).toBeTypeOf('number');
@@ -89,7 +88,7 @@ export function expectClickEvent(event: any): void {
  */
 export function expectScrollEvent(event: any): void {
   expectEventStructure(event);
-  expectEventType(event, 'SCROLL');
+  expectEventType(event, EventType.SCROLL);
   expect(event.scroll).toBeDefined();
   expect(event.scroll.depth_percentage).toBeTypeOf('number');
   expect(event.scroll.depth_pixels).toBeTypeOf('number');
@@ -101,7 +100,7 @@ export function expectScrollEvent(event: any): void {
  */
 export function expectPageViewEvent(event: any): void {
   expectEventStructure(event);
-  expectEventType(event, 'PAGE_VIEW');
+  expectEventType(event, EventType.PAGE_VIEW);
   expect(event.page_view).toBeDefined();
   expect(event.page_view.path).toBeTypeOf('string');
 }
@@ -111,7 +110,7 @@ export function expectPageViewEvent(event: any): void {
  */
 export function expectSessionStartEvent(event: any): void {
   expectEventStructure(event);
-  expectEventType(event, 'SESSION_START');
+  expectEventType(event, EventType.SESSION_START);
   expect(event.session).toBeDefined();
   expect(event.session.is_new_user).toBeTypeOf('boolean');
   expect(event.session.session_count).toBeTypeOf('number');
@@ -122,7 +121,7 @@ export function expectSessionStartEvent(event: any): void {
  */
 export function expectSessionEndEvent(event: any): void {
   expectEventStructure(event);
-  expectEventType(event, 'SESSION_END');
+  expectEventType(event, EventType.SESSION_END);
   expect(event.session).toBeDefined();
   expect(event.session.duration_ms).toBeTypeOf('number');
   expect(event.session.page_views).toBeTypeOf('number');
@@ -134,7 +133,7 @@ export function expectSessionEndEvent(event: any): void {
  */
 export function expectCustomEvent(event: any, expectedName?: string): void {
   expectEventStructure(event);
-  expectEventType(event, 'CUSTOM');
+  expectEventType(event, EventType.CUSTOM);
   expect(event.custom_event).toBeDefined();
   expect(event.custom_event.name).toBeTypeOf('string');
 
@@ -148,7 +147,7 @@ export function expectCustomEvent(event: any, expectedName?: string): void {
  */
 export function expectWebVitalsEvent(event: any, expectedMetric?: string): void {
   expectEventStructure(event);
-  expectEventType(event, 'WEB_VITALS');
+  expectEventType(event, EventType.WEB_VITALS);
   expect(event.web_vitals).toBeDefined();
   expect(event.web_vitals.name).toBeTypeOf('string');
   expect(event.web_vitals.value).toBeTypeOf('number');
@@ -164,7 +163,7 @@ export function expectWebVitalsEvent(event: any, expectedMetric?: string): void 
  */
 export function expectErrorEvent(event: any): void {
   expectEventStructure(event);
-  expectEventType(event, 'ERROR');
+  expectEventType(event, EventType.ERROR);
   expect(event.error).toBeDefined();
   expect(event.error.message).toBeTypeOf('string');
   expect(event.error.type).toBeTypeOf('string');

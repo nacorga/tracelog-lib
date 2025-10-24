@@ -4,13 +4,13 @@
  * Utilities for managing and inspecting state in tests
  */
 
-import type { State } from '@/types/state.types';
+import type { State } from '../../src/types/state.types';
 
 /**
  * Get current global state (read-only)
  * Use this to inspect state without modifying it
  */
-export function getGlobalState(): Readonly<State> {
+export function getGlobalState(): Readonly<State> | null {
   // Access via window for testing
   const stateManager = (window as any).__traceLogState;
   return stateManager ? stateManager.getState() : null;
@@ -23,15 +23,16 @@ export function getGlobalState(): Readonly<State> {
 export function resetGlobalState(): void {
   const stateManager = (window as any).__traceLogState;
   if (stateManager) {
+    // Reset to default state values (only valid State keys)
     stateManager.setState({
-      config: null,
       sessionId: null,
-      userId: null,
-      isInitialized: false,
+      userId: '',
       collectApiUrls: {},
       pageUrl: '',
-      referrer: '',
-      mode: null,
+      mode: undefined,
+      device: 'desktop',
+      hasStartSession: false,
+      suppressNextScroll: false,
     });
   }
 }
@@ -50,7 +51,7 @@ export function setGlobalStateValue<K extends keyof State>(key: K, value: State[
 /**
  * Get specific state value
  */
-export function getGlobalStateValue<K extends keyof State>(key: K): State[K] {
+export function getGlobalStateValue<K extends keyof State>(key: K): State[K] | null {
   const stateManager = (window as any).__traceLogState;
   return stateManager ? stateManager.get(key) : null;
 }
@@ -90,16 +91,20 @@ export async function waitForStateValue<K extends keyof State>(
 
 /**
  * Wait for state to be initialized
+ * Note: isInitialized is part of App, not State. Use tracelog.isInitialized() API instead.
  */
-export async function waitForStateInitialized(timeout = 5000): Promise<void> {
-  await waitForStateValue('isInitialized', true, timeout);
+export function waitForStateInitialized(_timeout = 5000): Promise<void> {
+  // This function is deprecated - isInitialized is not part of State
+  throw new Error('Use tracelog.isInitialized() API instead');
 }
 
 /**
  * Check if state is initialized
+ * Note: isInitialized is part of App, not State. Use tracelog.isInitialized() API instead.
  */
 export function isStateInitialized(): boolean {
-  return getGlobalStateValue('isInitialized') === true;
+  // This function is deprecated - isInitialized is not part of State
+  throw new Error('Use tracelog.isInitialized() API instead');
 }
 
 /**
@@ -193,11 +198,11 @@ export function validateStateStructure(): boolean {
     'config',
     'sessionId',
     'userId',
-    'isInitialized',
     'collectApiUrls',
     'pageUrl',
-    'referrer',
-    'mode',
+    'device',
+    'hasStartSession',
+    'suppressNextScroll',
   ];
 
   return requiredKeys.every((key) => key in state);

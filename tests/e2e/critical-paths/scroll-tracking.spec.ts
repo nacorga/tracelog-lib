@@ -5,18 +5,18 @@
  * Focus: Scroll depth tracking with debouncing
  */
 
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 test.describe('E2E: Scroll Tracking', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });
 
-  test('should track scroll depth percentage');
-  test('should track scroll depth pixels');
-  test('should track scroll direction (up/down)');
-  test('should track max depth reached');
-  test('should debounce scroll events (250ms)');
-  test('should suppress scroll for 500ms after init');
-  test('should emit SCROLL event to listeners');
+  test.skip('should track scroll depth percentage', () => {});
+  test.skip('should track scroll depth pixels', () => {});
+  test.skip('should track scroll direction (up/down)', () => {});
+  test.skip('should track max depth reached', () => {});
+  test.skip('should debounce scroll events (250ms)', () => {});
+  test.skip('should suppress scroll for 500ms after init', () => {});
+  test.skip('should emit SCROLL event to listeners', () => {});
 });
