@@ -23,6 +23,83 @@
 
 
 
+
+## [1.3.0] - 2025-10-25
+
+### ✨ Features
+
+- Add browser environment check in ConsentManager and improve error logging in consent utilities ([e137dee](../../commit/e137dee5af9152aa24c6979f237ebe4d039478a6))
+- Implement consent management system for GDPR/CCPA compliance with granular control per integration ([7b13b30](../../commit/7b13b309c99cf4a252160900166ec4c9e9f47fa5))
+- Update Google Analytics integration to support optional container ID and improve configuration validation ([fa5abfe](../../commit/fa5abfeba71e387cbe3610246bf363432c7ecf37))
+- Enhance Google Analytics integration to support GTM ([701363e](../../commit/701363e7eb40cd896aaa3578ea0ce318dd2b0dbe))
+
+### 🐛 Bug Fixes
+
+- Update consent persistence wait time to use a constant for improved readability ([9823bf6](../../commit/9823bf66d1bc24110674c9ce54ae1bfa09a5a41d))
+- Enhance validation for Google Analytics and GTM IDs, ensuring correct format and type checks ([1797234](../../commit/1797234f03e8ee525cd8dc559f6a4ec475e6a6b5))
+- Improve condition for checking Google Analytics event forwarding configuration ([58e8e2d](../../commit/58e8e2ddb080e75da208a15f14809d365d343b85))
+
+### 🧪 Tests
+
+- Add comprehensive E2E tests for event tracking, including click, custom, error, page view, and scroll events; introduce assertion helpers and bridge utilities for improved test reliability and maintainability ([530fbe9](../../commit/530fbe9dfc4a62722e92a7327fc3488d0ea7cdb8))
+- Update coverage thresholds and add new unit tests for viewport and activity listener managers; enhance testing documentation for consistency and clarity ([db91040](../../commit/db91040a2f17078f4170f54ad3130ffb16e3adf9))
+- Unit and integration pass ([9de1d0a](../../commit/9de1d0a877014fdf45c9818e5d0c6152032975c7))
+- Add comprehensive integration tests for consent flow, event pipeline, and multi-integration scenarios ([2ca045e](../../commit/2ca045e2c80438f425476b5f4a0a0c15899a9060))
+- All unit tests pass ([b708633](../../commit/b708633a210a53d8b6641fdd9696e6514d4fe59b))
+- Expand SessionManager unit tests to cover session lifecycle, timeout handling, and cross-tab synchronization; enhance event tracking and localStorage management for improved reliability and recovery scenarios ([63f294f](../../commit/63f294fd05a4540ea6f78b03e141262ee067e762))
+- Update API integration tests to improve timer handling by adding runOnlyPendingTimersAsync after advancing time for better accuracy in event processing ([cf256b8](../../commit/cf256b8a3f52539c9601e74731bbbb78d2aef499))
+- Add end-to-end tests for cleanup, memory management, concurrency, race conditions, and error recovery scenarios ([5147946](../../commit/5147946b269b047b55f1b664ea4e2b830dfeaaae))
+- Add end-to-end tests for global metadata propagation, session timeout behavior, and web vitals thresholds configuration ([fb851e9](../../commit/fb851e9efbddd785e18f396fdafb379b2322f253))
+- Enhance end-to-end tests for consent quota handling and introduce client-side sampling rate tests ([53649b2](../../commit/53649b27d293012d58a5a2ad32fc58a78067b61c))
+- Add end-to-end tests for multiple integrations, rate limiting, and URL sensitive params filtering ([851da44](../../commit/851da44b7870a034014a0d0eb511daedcbe6b5d5))
+- Add end-to-end tests for consent persistence and quota handling scenarios ([16b8f35](../../commit/16b8f357882391d71e2416cd03bc8139de2a6530))
+
+### 📚 Documentation
+
+- Update testing documentation to include comprehensive E2E testing strategies with Playwright, detailing test isolation patterns, CSP-safe waiting strategies, and a complete test template ([78e0a51](../../commit/78e0a51db1c361e373fdaf56149e233f296549e5))
+- Enhance testing documentation with critical patterns for event type case sensitivity and projectId validation; add comprehensive troubleshooting guide for common test failures and diagnostic techniques ([930c0b0](../../commit/930c0b0d47b58d1d285a55c0a33ccc355bfca9a2))
+- Enhance initialization flow documentation and add consent management details ([7e14baa](../../commit/7e14baa1f2b16c9393983f6dc2b76d73393b6829))
+- Managers doc improves ([753dd2f](../../commit/753dd2fe7210099c00f35adcf2a9fecac321a37c))
+- Establish comprehensive code comments policy and enhance documentation in multiple files ([17fdaed](../../commit/17fdaed9e7777d9d708218532f945880ef920376))
+- Enhance documentation across app ([d0d6360](../../commit/d0d636038eec44543244e60cb0f9d2c80ea52f71))
+
+### ♻️ Refactoring
+
+- Update README and agent documentation for clarity; enhance test-implementer agent functionality to generate test skeletons when missing, and improve command descriptions for better usability ([e6ee06d](../../commit/e6ee06ddda1b5538084c3a2aaa122cf547e84caf))
+- Improve API error handling and event management by adding optional silent failure for test bridge imports, enhancing state management tests with comprehensive coverage for various scenarios, and refining transformer behavior with robust validation and error handling ([f8e473f](../../commit/f8e473f86da7ac296ce41ce6924d3e2bdf843cfa))
+- Enhance test setup by injecting TestBridge for better unit and integration testing, and streamline function signatures in bridge helper for consistency ([1369210](../../commit/1369210b17cf78140bac6c8e7ce59a1cc28f379d))
+- Implement TestBridge architecture for enhanced testing capabilities; add comprehensive documentation and utilities for integration and E2E tests, ensuring library code remains unmodified for test purposes ([0b93aeb](../../commit/0b93aeb2ebb02eae3140ebdf6d22c43a37fb47ab))
+- Enhance testing framework by adding comprehensive test cases for event handling, consent management, and session lifecycle; improve documentation for clarity and maintainability ([d39bbab](../../commit/d39bbabb7f6fcce36770f5ddc13aa8d5d670bd02))
+- Enhance Google Consent Mode v2 integration by adding granular consent management options, improving documentation, and implementing synchronization with existing consent configurations ([1d4bf4d](../../commit/1d4bf4d27c0f79193374fd45b5fb7a07868fe371))
+- Update QA mode handling by ensuring consistent sessionStorage management, enhance event logging for custom events, and improve consent state management with better error handling and documentation ([4f0f3fc](../../commit/4f0f3fc2f0114685347f1401d53f38c3666d1432))
+- Enhance API documentation for event handling, consent management, and error handling; clarify transformer behavior across integration modes and improve examples for better understanding ([f9f6a0b](../../commit/f9f6a0bf83458dc2fa591217fe48e3da7bf05cb5))
+- Enhance consent and event management logic with improved event emission on consent changes, update documentation for clarity, and refine error handling in sender manager ([2fc6b2e](../../commit/2fc6b2e39c746bfbfba1bb9896292a2d8bebb1f7))
+- Enhance Google Analytics integration by adding configurable event forwarding options, improving script management, and updating documentation for clarity ([c8d3688](../../commit/c8d36884d352ff8678b635d17d242d0fcde6ea32))
+- Update error handling and retry logic for event transmission; implement exponential backoff strategy with jitter for transient errors; enhance documentation for error classification and retry behavior ([37ddd61](../../commit/37ddd61a9b0e2a92500d005f0d9bac2a2a954848))
+- Enhance consent management logic with improved error handling, update consent persistence mechanism, and add comprehensive documentation; introduce new constants for storage keys ([0beef67](../../commit/0beef672596b7462e5617b9b5e5fe79eb60a5152))
+- Enhance click, scroll, and performance handlers with improved documentation and consent management logic; add end-to-end tests for consent management scenarios ([d2acc4f](../../commit/d2acc4fc73c784327b13e4c88a5af69fd426396d))
+- Improve Google Analytics integration handling and validation, enhance consent checks, and update measurement ID validation logic ([0e9da6f](../../commit/0e9da6fdcdbd0ce31c61338c2fc354d8a8c10c92))
+- Streamline TestBridge implementation for development mode and enhance API integration ([91a6547](../../commit/91a654734837fd424c0bc2a78569d00678b0650d))
+- Add documentation for consent persistence wait time and improve browser environment handling in ConsentManager ([57dd397](../../commit/57dd39771f4f0df92b2bd3e988a02910f940f707))
+- Streamline Google Analytics integration by encapsulating gtag checks and improving script loading logic ([a9b0bc8](../../commit/a9b0bc81e39605fa0eb3f3ff9f2681755cb9de17))
+
+### 🔧 Other Changes
+
+- Merge pull request #55 from nacorga/release/20251022.1 ([0b8c8fd](../../commit/0b8c8fd176b381f93e469188f755c91ca9886d70))
+- Merge pull request #54 from nacorga/feature/consent ([9f53c11](../../commit/9f53c11218c584990d2b6c3919a31cbd7eb5658e))
+- Merge branch 'develop' of github.com:nacorga/tracelog-lib into feature/consent ([699e0fc](../../commit/699e0fc19401dde8c9050bee4da40ae4c7e3e651))
+- Merge pull request #53 from nacorga/feature/gtag-gtm ([0cb1a07](../../commit/0cb1a07d7b9f7f8d319951973825150e2374db53))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.2.0...v1.3.0
+
+
 ## [1.2.0] - 2025-10-21
 
 ### ✨ Features
