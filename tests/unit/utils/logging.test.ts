@@ -66,8 +66,7 @@ describe('formatLogMsg', () => {
       const error = new Error('Failed (utils.ts:123:45)');
       const result = formatLogMsg('Error', error);
       expect(result).not.toContain('utils.ts:123:45');
-      // Note: Regex leaves trailing space after removing file path
-      expect(result).toBe('[TraceLog] Error: Failed ');
+      expect(result).toBe('[TraceLog] Error: Failed');
     });
 
     it('should handle Error with no stack trace in production', () => {

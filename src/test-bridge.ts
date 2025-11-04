@@ -10,7 +10,7 @@ import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { ConsentManager } from './managers/consent.manager';
-import { State, TraceLogTestBridge, EventData } from './types';
+import { State, TraceLogTestBridge, EventData, GoogleConsentCategories } from './types';
 import { setQaMode as setQaModeUtil } from './utils/browser/qa-mode.utils';
 
 /**
@@ -211,7 +211,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
   async setConsent(
     integration: 'google' | 'custom' | 'tracelog' | 'all',
     granted: boolean,
-    googleConsentCategories?: any,
+    googleConsentCategories?: GoogleConsentCategories,
   ): Promise<void> {
     await apiSetConsent(integration, granted, googleConsentCategories);
   }

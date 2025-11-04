@@ -74,16 +74,16 @@ describe('Integration - Google Consent Categories', () => {
         },
       });
 
-      // Invalid categories should throw
-      await expect(bridge.setConsent('google', true, { invalid_key: true } as any)).rejects.toThrow(
-        /Invalid googleConsentCategories/,
-      );
+      // Data-driven invalid cases
+      const invalidCases = [{ invalid_key: true }, { analytics_storage: 'yes' }, null];
 
-      await expect(bridge.setConsent('google', true, { analytics_storage: 'yes' } as any)).rejects.toThrow(
-        /Invalid googleConsentCategories/,
-      );
-
-      await expect(bridge.setConsent('google', true, null as any)).rejects.toThrow(/Invalid googleConsentCategories/);
+      for (const testCase of invalidCases) {
+        // Use 'as any' to bypass type checking for invalid input
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await expect(bridge.setConsent('google', true, testCase as any)).rejects.toThrow(
+          /Invalid googleConsentCategories/,
+        );
+      }
     });
 
     it('should ignore categories provided for non-google integration', async () => {

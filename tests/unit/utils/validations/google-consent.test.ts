@@ -196,10 +196,15 @@ describe('isValidGoogleConsentCategories', () => {
     });
 
     it('should ignore __proto__ (Object.keys does not enumerate it)', () => {
-      const categories = {
-        __proto__: true as unknown as boolean,
-        analytics_storage: false,
-      };
+      // Create an object with a non-enumerable __proto__ property
+      const categories = Object.create(null);
+      Object.defineProperty(categories, '__proto__', {
+        value: true,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      });
+      categories.analytics_storage = false;
       // __proto__ is not enumerated by Object.keys(), so it's ignored
       expect(isValidGoogleConsentCategories(categories)).toBe(true);
     });
