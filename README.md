@@ -673,6 +673,67 @@ await tracelog.setConsent('google', false);
 // → All configured categories set to 'denied'
 ```
 
+#### Dynamic Configuration
+
+Configure consent categories **after initialization** based on user cookie banner selections:
+
+```typescript
+// 1. Initialize library first (no categories defined yet)
+await tracelog.init({
+  waitForConsent: true,
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX'
+    }
+  }
+});
+
+// 2. User interacts with cookie banner and selects preferences
+const userSelections = {
+  analytics: true,   // User accepts analytics
+  advertising: false, // User rejects ads
+  personalization: false
+};
+
+// 3. Grant consent WITH categories based on user selection (single call!)
+await tracelog.setConsent('google', true, {
+  analytics_storage: userSelections.analytics,
+  ad_storage: userSelections.advertising,
+  ad_user_data: userSelections.advertising,
+  ad_personalization: userSelections.advertising,
+  personalization_storage: userSelections.personalization
+});
+// → Categories stored in config
+// → Categories persisted to localStorage (365-day expiration)
+// → Google Consent Mode synced
+// → Buffered events flushed
+
+// 4. Later: User revokes consent
+await tracelog.setConsent('google', false);
+// → Categories preserved in localStorage for future use
+
+// 5. User closes browser and returns days later...
+// Refresh page or new session
+await tracelog.init({
+  waitForConsent: true,
+  integrations: { google: { measurementId: 'G-XXXXXX' } }
+});
+// → Categories automatically restored from localStorage!
+
+// 6. User re-grants consent (reuses persisted categories)
+await tracelog.setConsent('google', true);
+// → Previous categories automatically applied from localStorage!
+```
+
+**Benefits**:
+- ✅ Initialize library before user interacts with cookie banner
+- ✅ Capture and buffer events while waiting for user decision
+- ✅ Apply granular consent based on user selections
+- ✅ **Categories persist for 365 days** (automatically restored on page reload)
+- ✅ **Works across browser sessions** (survives browser close/reopen)
+- ✅ No need to re-initialize or re-configure
+- ✅ Invalid categories from localStorage automatically rejected (corruption protection)
+
 #### Integration with External CMPs
 
 Perfect for integrating with Consent Management Platforms:
@@ -710,8 +771,10 @@ CookieConsent.init({
 
 **Notes**:
 - TraceLog automatically detects existing Consent Mode configuration from external CMPs
-- Only `gtag('consent', 'update')` is used (never `'default'`)
+- When `waitForConsent: true`, `gtag('consent', 'default', { all: 'denied' })` is called automatically (GDPR-compliant)
+- `gtag('consent', 'update')` is used when consent is granted via `setConsent()`
 - Omitted categories are not managed by TraceLog (respects external configuration)
+- Categories can be configured dynamically via the 3rd parameter of `setConsent()`
 - See [API Reference](#api-reference) for complete documentation
 
 ### Cookie Banner Integration

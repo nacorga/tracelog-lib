@@ -208,8 +208,12 @@ export class TestBridge extends App implements TraceLogTestBridge {
   /**
    * Consent management (always delegates to api.ts for consistency)
    */
-  async setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void> {
-    await apiSetConsent(integration, granted);
+  async setConsent(
+    integration: 'google' | 'custom' | 'tracelog' | 'all',
+    granted: boolean,
+    googleConsentCategories?: any,
+  ): Promise<void> {
+    await apiSetConsent(integration, granted, googleConsentCategories);
   }
 
   /**
