@@ -497,7 +497,7 @@ describe('Integration - Consent Category Persistence', () => {
       // Try to set categories for custom integration (should be ignored)
       await bridge.setConsent('custom', true, {
         analytics_storage: true,
-      } as any);
+      });
 
       // Wait for persistence
       await new Promise((resolve) => setTimeout(resolve, 100));

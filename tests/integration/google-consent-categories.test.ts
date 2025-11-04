@@ -78,11 +78,8 @@ describe('Integration - Google Consent Categories', () => {
       const invalidCases = [{ invalid_key: true }, { analytics_storage: 'yes' }, null];
 
       for (const testCase of invalidCases) {
-        // Use 'as any' to bypass type checking for invalid input
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await expect(bridge.setConsent('google', true, testCase as any)).rejects.toThrow(
-          /Invalid googleConsentCategories/,
-        );
+        // @ts-expect-error: Intentionally passing invalid categories to test runtime behavior
+        await expect(bridge.setConsent('google', true, testCase)).rejects.toThrow(/Invalid googleConsentCategories/);
       }
     });
 
@@ -96,7 +93,7 @@ describe('Integration - Google Consent Categories', () => {
       });
 
       // Should not throw, just ignore the parameter
-      await expect(bridge.setConsent('custom', true, { analytics_storage: true } as any)).resolves.not.toThrow();
+      await expect(bridge.setConsent('custom', true, { analytics_storage: true })).resolves.not.toThrow();
 
       // Consent should still be granted
       expect(bridge.hasConsent('custom')).toBe(true);

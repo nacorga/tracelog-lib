@@ -42,7 +42,7 @@
 export const formatLogMsg = (msg: string, error?: unknown): string => {
   if (error) {
     if (process.env.NODE_ENV !== 'development' && error instanceof Error) {
-      const sanitizedMessage = error.message.replace(/\s+at\s+.*$/gm, '').replace(/\s*\(.*?:\d+:\d+\)/g, '');
+      const sanitizedMessage = error.message.replace(/\s+at\s+.*$/gm, '').replace(/\s*\([^()]+:\d+:\d+\)/g, '');
       return `[TraceLog] ${msg}: ${sanitizedMessage}`;
     }
 
