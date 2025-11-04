@@ -1,3 +1,5 @@
+import { GoogleConsentCategories } from './google.types';
+
 /**
  * Consent integration identifiers
  * - 'google': Google Analytics / Google Tag Manager
@@ -27,6 +29,10 @@ export interface ConsentState {
 export interface PersistedConsent {
   /** Consent state by integration */
   state: ConsentState;
+  /** Google Consent Mode categories (optional, only for google integration) */
+  categories?: {
+    google?: GoogleConsentCategories;
+  };
   /** Timestamp when consent was last updated */
   timestamp: number;
   /** Expiration timestamp (timestamp + CONSENT_EXPIRY_DAYS) */

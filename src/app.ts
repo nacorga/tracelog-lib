@@ -20,6 +20,7 @@ import {
   BeforeSendTransformer,
   BeforeBatchTransformer,
   MetadataType,
+  GoogleConsentCategories,
 } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import {
@@ -87,6 +88,27 @@ export class App extends StateManager {
 
       this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
 
+      const persistedGoogleCategories = this.managers.consent.getGoogleConsentCategories();
+      if (persistedGoogleCategories && config.integrations?.google) {
+        const currentConfig = this.get('config');
+        if (currentConfig.integrations?.google) {
+          const updatedConfig: Config = {
+            ...currentConfig,
+            integrations: {
+              ...currentConfig.integrations,
+              google: {
+                ...currentConfig.integrations.google,
+                consentCategories: persistedGoogleCategories,
+              },
+            },
+          };
+          this.set('config', updatedConfig);
+          log('debug', 'Restored persisted Google Consent Mode categories', {
+            data: { categories: persistedGoogleCategories },
+          });
+        }
+      }
+
       if (config.waitForConsent) {
         const consentState = this.managers.consent.getConsentState();
         log('info', 'Consent mode enabled', {
@@ -96,6 +118,11 @@ export class App extends StateManager {
             tracelog: consentState.tracelog,
           },
         });
+
+        if (this.hasValidGoogleConfig()) {
+          const googleIntegration = new GoogleAnalyticsIntegration();
+          googleIntegration.setDefaultConsent();
+        }
       }
 
       await this.setupIntegrations();
@@ -436,6 +463,56 @@ export class App extends StateManager {
     this.set('config', updatedConfig);
 
     log('debug', 'Global metadata updated (merged)', { data: { keys: Object.keys(metadata) } });
+  }
+
+  /**
+   * Updates Google Consent Mode v2 categories configuration.
+   *
+   * Categories persist in config state for future consent operations.
+   * If consent is already granted, automatically re-syncs with Google.
+   *
+   * @param categories - Consent categories ('all' or granular object)
+   * @throws {Error} If Google integration not configured
+   * @internal Called from api.setConsent()
+   */
+  public updateGoogleConsentCategories(categories: GoogleConsentCategories): void {
+    const currentConfig = this.get('config');
+
+    if (!currentConfig.integrations?.google) {
+      throw new Error('[TraceLog] Google integration not configured');
+    }
+
+    const updatedConfig: Config = {
+      ...currentConfig,
+      integrations: {
+        ...currentConfig.integrations,
+        google: {
+          ...currentConfig.integrations.google,
+          consentCategories: categories,
+        },
+      },
+    };
+
+    this.set('config', updatedConfig);
+
+    log('debug', 'Google Consent Mode categories updated', {
+      data: { categories },
+    });
+
+    if (this.managers.consent?.hasConsent('google') && this.integrations.google) {
+      this.integrations.google.syncConsentToGoogle('google', true);
+      log('debug', 'Re-synced Google Consent Mode with updated categories');
+    }
+  }
+
+  /**
+   * Returns the Google Analytics integration instance.
+   *
+   * @returns GoogleAnalyticsIntegration instance or undefined if not initialized
+   * @internal Called from api.setConsent()
+   */
+  public getGoogleAnalyticsIntegration(): GoogleAnalyticsIntegration | undefined {
+    return this.integrations.google;
   }
 
   private hasValidGoogleConfig(): boolean {

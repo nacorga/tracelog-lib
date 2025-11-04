@@ -548,13 +548,27 @@ tracelog.mergeGlobalMetadata({
 
 TraceLog provides GDPR/CCPA-compliant consent management with granular control per integration. When `waitForConsent` is enabled, events are buffered until explicit consent is granted.
 
-### `setConsent(integration: ConsentIntegration, granted: boolean): Promise<void>`
+### `setConsent(integration: ConsentIntegration, granted: boolean, googleConsentCategories?: GoogleConsentCategories): Promise<void>`
 
 Grants or revokes consent for a specific integration or all integrations.
 
 **Parameters:**
 - `integration`: Integration identifier (`'google'`, `'custom'`, `'tracelog'`, or `'all'`)
 - `granted`: `true` to grant consent, `false` to revoke
+- `googleConsentCategories` (optional): Google Consent Mode v2 categories to configure when granting consent for Google integration. Can be `'all'` or an object with granular category settings. Only applies when `integration` is `'google'`. Categories are persisted to localStorage for 365 days.
+
+**GoogleConsentCategories Type:**
+```typescript
+type GoogleConsentCategories =
+  | 'all'
+  | Partial<{
+      analytics_storage: boolean;
+      ad_storage: boolean;
+      ad_user_data: boolean;
+      ad_personalization: boolean;
+      personalization_storage: boolean;
+    }>;
+```
 
 **Returns:** Promise that resolves when consent is applied and persisted
 
@@ -580,6 +594,70 @@ await tracelog.setConsent('all', true);
 // Revoke consent
 await tracelog.setConsent('google', false);
 ```
+
+**Google Consent Mode v2 - Dynamic Configuration:**
+
+Configure Google Consent Mode categories **after initialization** based on user cookie banner selections:
+
+```typescript
+// 1. Initialize library first (no categories defined yet)
+await tracelog.init({
+  waitForConsent: true,
+  integrations: {
+    google: { measurementId: 'G-XXXXXX' }
+  }
+});
+
+// 2. User interacts with cookie banner and selects preferences
+const userSelections = {
+  analytics: true,
+  advertising: false,
+  personalization: false
+};
+
+// 3. Grant consent WITH categories in a single call
+await tracelog.setConsent('google', true, {
+  analytics_storage: userSelections.analytics,
+  ad_storage: userSelections.advertising,
+  ad_user_data: userSelections.advertising,
+  ad_personalization: userSelections.advertising,
+  personalization_storage: userSelections.personalization
+});
+// → Categories persisted to localStorage (365-day expiration)
+// → Google Consent Mode updated via gtag('consent', 'update')
+// → Buffered events flushed
+
+// 4. User revokes consent (categories preserved for future use)
+await tracelog.setConsent('google', false);
+// → All categories set to 'denied'
+// → Categories remain persisted in localStorage
+
+// 5. User closes browser and returns days later
+await tracelog.init({
+  waitForConsent: true,
+  integrations: { google: { measurementId: 'G-XXXXXX' } }
+});
+// → Categories automatically restored from localStorage!
+
+// 6. User re-grants consent (reuses persisted categories)
+await tracelog.setConsent('google', true);
+// → Previous categories automatically applied from localStorage
+```
+
+**Consent + Categories - Alternative "all" Shorthand:**
+
+```typescript
+// Grant all Google Consent Mode categories at once
+await tracelog.setConsent('google', true, 'all');
+// → Equivalent to setting all 5 categories to true
+// → Persisted to localStorage for 365 days
+```
+
+**Persistence Behavior:**
+- **365-day expiration**: Categories automatically restored on page reload
+- **Cross-session**: Survives browser close/reopen
+- **Validation**: Invalid categories from localStorage automatically rejected
+- **Category-only updates**: Call `setConsent()` with new categories to update without changing consent state
 
 **Consent Flow:**
 

@@ -12,6 +12,7 @@ import { Config } from './config.types';
 import { State } from './state.types';
 import { EventData } from './event.types';
 import { BeforeSendTransformer, BeforeBatchTransformer, TransformerHook } from './transformer.types';
+import { GoogleConsentCategories } from './google.types';
 
 /**
  * Testing bridge interface for E2E and integration tests
@@ -55,7 +56,11 @@ export interface TraceLogTestBridge {
   getConsentBufferEvents(integration: 'google' | 'custom' | 'tracelog'): EventData[];
 
   // Consent management (for testing)
-  setConsent(integration: 'google' | 'custom' | 'tracelog' | 'all', granted: boolean): Promise<void>;
+  setConsent(
+    integration: 'google' | 'custom' | 'tracelog' | 'all',
+    granted: boolean,
+    googleConsentCategories?: GoogleConsentCategories,
+  ): Promise<void>;
   hasConsent(integration: 'google' | 'custom' | 'tracelog' | 'all'): boolean;
   getConsentState(): { google: boolean; custom: boolean; tracelog: boolean };
 

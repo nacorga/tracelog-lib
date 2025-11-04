@@ -10,8 +10,15 @@ import {
   ConsentIntegration,
   ConsentState,
   PendingConsent,
+  GoogleConsentCategories,
 } from './types';
-import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil, loadConsentFromStorage } from './utils';
+import {
+  log,
+  validateAndNormalizeConfig,
+  setQaMode as setQaModeUtil,
+  loadConsentFromStorage,
+  isValidGoogleConsentCategories,
+} from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
 
@@ -405,27 +412,62 @@ export const destroy = (): void => {
  *
  * Consent is persisted to localStorage and synced across tabs. Can be called before init().
  *
+ * **Google Consent Mode v2**:
+ * - Optional 3rd parameter allows granular consent category control
+ * - Categories persist in config state for future setConsent() calls
+ * - Only applicable to 'google' integration
+ *
  * @param integration - Integration identifier ('google', 'custom', 'tracelog', or 'all')
  * @param granted - true to grant consent, false to revoke
+ * @param googleConsentCategories - (Google only) Consent categories for Google Consent Mode v2
  * @returns Promise that resolves when consent is applied
  * @throws {Error} If called during destroy()
  * @throws {Error} If localStorage persistence fails (before init only)
+ * @throws {Error} If googleConsentCategories is invalid
  *
  * @example
  * ```typescript
+ * // Simple consent
  * await tracelog.setConsent('google', true);
- * await tracelog.setConsent('all', false); // Revoke all
+ *
+ * // Granular Google Consent Mode
+ * await tracelog.setConsent('google', true, {
+ *   analytics_storage: true,
+ *   ad_storage: false,
+ *   ad_user_data: false,
+ *   ad_personalization: false
+ * });
+ *
+ * // Revoke (categories preserved for future calls)
+ * await tracelog.setConsent('google', false);
+ *
+ * // Re-grant (reuses categories from previous call)
+ * await tracelog.setConsent('google', true);
  * ```
  *
  * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#setconsent} for consent workflow
  */
-export const setConsent = async (integration: ConsentIntegration, granted: boolean): Promise<void> => {
+export const setConsent = async (
+  integration: ConsentIntegration,
+  granted: boolean,
+  googleConsentCategories?: GoogleConsentCategories,
+): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
 
   if (isDestroyed || isDestroying) {
     throw new Error('[TraceLog] Cannot set consent while TraceLog is destroyed or being destroyed');
+  }
+
+  if (googleConsentCategories !== undefined) {
+    if (integration !== 'google') {
+      log('warn', 'googleConsentCategories parameter only applicable to google integration, ignoring');
+    } else if (!isValidGoogleConsentCategories(googleConsentCategories)) {
+      throw new Error(
+        '[TraceLog] Invalid googleConsentCategories. Must be "all" or an object with valid GoogleConsentType keys and boolean values',
+      );
+    }
   }
 
   if (!app || isInitializing) {
@@ -554,6 +596,15 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
     }
 
     return;
+  }
+
+  if (integration === 'google' && googleConsentCategories !== undefined) {
+    try {
+      app.updateGoogleConsentCategories(googleConsentCategories);
+      consentManager.setGoogleConsentCategories(googleConsentCategories);
+    } catch (error) {
+      log('warn', 'Failed to update Google consent categories', { error });
+    }
   }
 
   const hadConsent = consentManager.hasConsent(integration);
