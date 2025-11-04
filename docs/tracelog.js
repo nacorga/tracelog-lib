@@ -1153,7 +1153,7 @@ const isValidEventName = (eventName) => {
 };
 const validateSingleMetadata = (eventName, metadata, type) => {
   const sanitizedMetadata = sanitizeMetadata(metadata);
-  const intro = `${type} "${eventName}" metadata error`;
+  const intro = type && type === "customEvent" ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
   if (!isOnlyPrimitiveFields(sanitizedMetadata)) {
     return {
       valid: false,
@@ -1214,7 +1214,7 @@ const validateSingleMetadata = (eventName, metadata, type) => {
 const isValidMetadata = (eventName, metadata, type) => {
   if (Array.isArray(metadata)) {
     const sanitizedArray = [];
-    const intro = `${type} "${eventName}" metadata error`;
+    const intro = type && type === "customEvent" ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
     for (let i = 0; i < metadata.length; i++) {
       const item = metadata[i];
       if (typeof item !== "object" || item === null || Array.isArray(item)) {
@@ -7061,6 +7061,74 @@ class App extends StateManager {
       await this.managers.event.flushConsentBuffer(integration);
     }
   }
+  /**
+   * Validates metadata object structure and values.
+   *
+   * @param metadata - The metadata object to validate
+   * @returns Validation result with error message if invalid
+   * @internal Helper for updateGlobalMetadata and mergeGlobalMetadata
+   */
+  validateGlobalMetadata(metadata) {
+    if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+      return {
+        valid: false,
+        error: "Global metadata must be a plain object"
+      };
+    }
+    const validation = isValidMetadata("globalMetadata", metadata, "globalMetadata");
+    if (!validation.valid) {
+      return {
+        valid: false,
+        error: validation.error
+      };
+    }
+    return { valid: true };
+  }
+  /**
+   * Replaces global metadata with new values.
+   *
+   * @param metadata - New global metadata object
+   * @throws {Error} If metadata validation fails
+   * @internal Called from api.updateGlobalMetadata()
+   */
+  updateGlobalMetadata(metadata) {
+    const validation = this.validateGlobalMetadata(metadata);
+    if (!validation.valid) {
+      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
+    }
+    const currentConfig = this.get("config");
+    const updatedConfig = {
+      ...currentConfig,
+      globalMetadata: metadata
+    };
+    this.set("config", updatedConfig);
+    log("debug", "Global metadata updated (replaced)", { data: { keys: Object.keys(metadata) } });
+  }
+  /**
+   * Merges new metadata with existing global metadata.
+   *
+   * @param metadata - Metadata to merge with existing values
+   * @throws {Error} If metadata validation fails
+   * @internal Called from api.mergeGlobalMetadata()
+   */
+  mergeGlobalMetadata(metadata) {
+    const validation = this.validateGlobalMetadata(metadata);
+    if (!validation.valid) {
+      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
+    }
+    const currentConfig = this.get("config");
+    const existingMetadata = currentConfig.globalMetadata ?? {};
+    const mergedMetadata = {
+      ...existingMetadata,
+      ...metadata
+    };
+    const updatedConfig = {
+      ...currentConfig,
+      globalMetadata: mergedMetadata
+    };
+    this.set("config", updatedConfig);
+    log("debug", "Global metadata updated (merged)", { data: { keys: Object.keys(metadata) } });
+  }
   hasValidGoogleConfig() {
     const googleConfig = this.get("config").integrations?.google;
     if (!googleConfig) {
@@ -7483,6 +7551,30 @@ const setQaMode = (enabled) => {
   }
   setQaMode$1(enabled);
 };
+const updateGlobalMetadata = (metadata) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!app) {
+    throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
+  }
+  if (isDestroying) {
+    throw new Error("[TraceLog] Cannot update metadata while TraceLog is being destroyed");
+  }
+  app.updateGlobalMetadata(metadata);
+};
+const mergeGlobalMetadata = (metadata) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!app) {
+    throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
+  }
+  if (isDestroying) {
+    throw new Error("[TraceLog] Cannot update metadata while TraceLog is being destroyed");
+  }
+  app.mergeGlobalMetadata(metadata);
+};
 const __setAppInstance = (instance) => {
   if (instance !== null) {
     const hasRequiredMethods = typeof instance === "object" && "init" in instance && "destroy" in instance && "on" in instance && "off" in instance;
@@ -7518,12 +7610,14 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   hasConsent,
   init,
   isInitialized,
+  mergeGlobalMetadata,
   off,
   on,
   removeTransformer,
   setConsent,
   setQaMode,
-  setTransformer
+  setTransformer,
+  updateGlobalMetadata
 }, Symbol.toStringTag, { value: "Module" }));
 const tracelog = {
   init,
@@ -7537,7 +7631,9 @@ const tracelog = {
   setQaMode,
   setConsent,
   hasConsent,
-  getConsentState
+  getConsentState,
+  updateGlobalMetadata,
+  mergeGlobalMetadata
 };
 var e, o = -1, a = function(e3) {
   addEventListener("pageshow", (function(n) {
@@ -7917,6 +8013,24 @@ class TestBridge extends App {
    */
   getFullState() {
     return this.getState();
+  }
+  /**
+   * Update global metadata (delegates to App method)
+   */
+  updateGlobalMetadata(metadata) {
+    super.updateGlobalMetadata(metadata);
+  }
+  /**
+   * Merge global metadata (delegates to App method)
+   */
+  mergeGlobalMetadata(metadata) {
+    super.mergeGlobalMetadata(metadata);
+  }
+  /**
+   * Get state object (alias for getFullState with convenience)
+   */
+  getState() {
+    return super.getState();
   }
   /**
    * Wait for initialization to complete (test utility)

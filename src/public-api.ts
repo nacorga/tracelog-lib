@@ -11,6 +11,8 @@ import {
   setConsent,
   hasConsent,
   getConsentState,
+  updateGlobalMetadata,
+  mergeGlobalMetadata,
 } from './api';
 
 // Constants
@@ -33,4 +35,6 @@ export const tracelog = {
   setConsent,
   hasConsent,
   getConsentState,
+  updateGlobalMetadata,
+  mergeGlobalMetadata,
 };

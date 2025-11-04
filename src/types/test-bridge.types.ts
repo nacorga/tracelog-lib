@@ -41,6 +41,11 @@ export interface TraceLogTestBridge {
   // State access for testing
   get<T extends keyof State>(key: T): State[T];
   getFullState(): Readonly<State>;
+  getState(): Readonly<State>;
+
+  // Global metadata management (for testing)
+  updateGlobalMetadata(metadata: Record<string, unknown>): void;
+  mergeGlobalMetadata(metadata: Record<string, unknown>): void;
 
   // Test inspection methods
   getSessionData(): Record<string, unknown> | null;
