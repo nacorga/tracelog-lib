@@ -437,6 +437,113 @@ tracelog.removeTransformer('beforeBatch');
 
 ---
 
+### `updateGlobalMetadata(metadata: Record<string, MetadataType>): void`
+
+Replaces all global metadata with new values. Global metadata is automatically appended to every event sent to the backend.
+
+**Parameters:**
+- `metadata`: New global metadata object (replaces existing)
+
+**Throws:**
+- `Error` if TraceLog not initialized
+- `Error` if called during `destroy()`
+- `Error` if metadata validation fails
+
+**Examples:**
+
+```typescript
+// Initialize with metadata
+await tracelog.init({
+  globalMetadata: { env: 'production', version: '1.0.0' }
+});
+
+// Later: Replace ALL metadata
+tracelog.updateGlobalMetadata({
+  env: 'staging',
+  version: '1.1.0',
+  userId: 'user-123'
+});
+// Previous 'env' and 'version' values replaced, 'userId' added
+
+// User login: Replace with user context
+tracelog.updateGlobalMetadata({
+  userId: 'user-456',
+  plan: 'premium',
+  cohort: 'beta-testers'
+});
+
+// User logout: Clear all metadata
+tracelog.updateGlobalMetadata({});
+```
+
+**Validation Limits:**
+- Max 100 keys per metadata object
+- Max 10KB serialized size
+- Max 500 items per array field
+- Max 1000 characters per string field
+- Max 2 levels of nesting for objects
+
+**Notes:**
+- Completely replaces existing global metadata
+- Takes effect immediately on next event batch
+- Use `mergeGlobalMetadata()` to preserve existing keys
+
+---
+
+### `mergeGlobalMetadata(metadata: Record<string, MetadataType>): void`
+
+Merges new metadata with existing global metadata (shallow merge). Global metadata is automatically appended to every event.
+
+**Parameters:**
+- `metadata`: Metadata to merge with existing values
+
+**Throws:**
+- `Error` if TraceLog not initialized
+- `Error` if called during `destroy()`
+- `Error` if metadata validation fails
+
+**Examples:**
+
+```typescript
+// Initialize with metadata
+await tracelog.init({
+  globalMetadata: { env: 'production', version: '1.0.0' }
+});
+
+// Add user ID while preserving env and version
+tracelog.mergeGlobalMetadata({ userId: 'user-123' });
+// Result: { env: 'production', version: '1.0.0', userId: 'user-123' }
+
+// Update version while preserving others
+tracelog.mergeGlobalMetadata({ version: '1.1.0' });
+// Result: { env: 'production', version: '1.1.0', userId: 'user-123' }
+
+// Add experiment flag
+tracelog.mergeGlobalMetadata({ experiment: 'new-checkout-v2' });
+// Result: { env: 'production', version: '1.1.0', userId: 'user-123', experiment: 'new-checkout-v2' }
+
+// Feature flags
+tracelog.mergeGlobalMetadata({
+  feature_new_ui: true,
+  feature_dark_mode: false
+});
+```
+
+**Validation Limits:**
+- Max 100 keys per metadata object
+- Max 10KB serialized size
+- Max 500 items per array field
+- Max 1000 characters per string field
+- Max 2 levels of nesting for objects
+
+**Notes:**
+- Shallow merge: new keys added, existing keys overwritten
+- Preserves unspecified keys from existing metadata
+- Takes effect immediately on next event batch
+- Use `updateGlobalMetadata()` to replace all metadata
+
+---
+
 ## Consent Management
 
 TraceLog provides GDPR/CCPA-compliant consent management with granular control per integration. When `waitForConsent` is enabled, events are buffered until explicit consent is granted.

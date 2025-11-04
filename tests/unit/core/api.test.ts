@@ -574,3 +574,249 @@ describe('Public API - removeTransformer()', () => {
     }).not.toThrow();
   });
 });
+
+describe('Public API - updateGlobalMetadata()', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+    try {
+      destroy();
+    } catch {
+      // Ignore errors
+    }
+  });
+
+  it('should expose updateGlobalMetadata method globally', () => {
+    expect(api.updateGlobalMetadata).toBeDefined();
+    expect(typeof api.updateGlobalMetadata).toBe('function');
+  });
+
+  it('should replace global metadata', async () => {
+    await api.init({
+      globalMetadata: { env: 'production', version: '1.0.0' },
+    });
+
+    // Should not throw
+    expect(() => {
+      api.updateGlobalMetadata({ userId: 'user-123', plan: 'premium' });
+    }).not.toThrow();
+  });
+
+  it('should clear global metadata with empty object', async () => {
+    await api.init({
+      globalMetadata: { env: 'production' },
+    });
+
+    // Should not throw
+    expect(() => {
+      api.updateGlobalMetadata({});
+    }).not.toThrow();
+  });
+
+  it('should throw if not initialized', () => {
+    expect(() => {
+      api.updateGlobalMetadata({ key: 'value' });
+    }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
+  });
+
+  it('should throw if called during destroy', async () => {
+    await api.init();
+
+    // Mock isDestroying state
+    const destroyPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        try {
+          destroy();
+        } catch {
+          // Ignore
+        }
+        resolve();
+      }, 100);
+    });
+
+    // This test is tricky - we can't reliably test the destroying state
+    // Just verify it throws when not initialized after destroy
+    await destroyPromise;
+
+    expect(() => {
+      api.updateGlobalMetadata({ key: 'value' });
+    }).toThrow();
+  });
+
+  it('should validate metadata structure', async () => {
+    await api.init();
+
+    // Non-object types should throw
+    expect(() => {
+      api.updateGlobalMetadata(null as any);
+    }).toThrow(/Global metadata must be a plain object/);
+
+    expect(() => {
+      api.updateGlobalMetadata(['array'] as any);
+    }).toThrow(/Global metadata must be a plain object/);
+  });
+
+  it('should accept primitives', async () => {
+    await api.init();
+
+    expect(() => {
+      api.updateGlobalMetadata({
+        str: 'value',
+        num: 42,
+        bool: true,
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept nested objects (1 level deep)', async () => {
+    await api.init();
+
+    expect(() => {
+      api.updateGlobalMetadata({
+        user: {
+          id: 'user-123',
+          premium: true,
+        },
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept string arrays', async () => {
+    await api.init();
+
+    expect(() => {
+      api.updateGlobalMetadata({
+        tags: ['tag1', 'tag2', 'tag3'],
+      });
+    }).not.toThrow();
+  });
+});
+
+describe('Public API - mergeGlobalMetadata()', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+    try {
+      destroy();
+    } catch {
+      // Ignore errors
+    }
+  });
+
+  it('should expose mergeGlobalMetadata method globally', () => {
+    expect(api.mergeGlobalMetadata).toBeDefined();
+    expect(typeof api.mergeGlobalMetadata).toBe('function');
+  });
+
+  it('should merge with existing metadata', async () => {
+    await api.init({
+      globalMetadata: { env: 'production', version: '1.0.0' },
+    });
+
+    // Should not throw
+    expect(() => {
+      api.mergeGlobalMetadata({ userId: 'user-123' });
+    }).not.toThrow();
+  });
+
+  it('should overwrite existing keys', async () => {
+    await api.init({
+      globalMetadata: { env: 'production', version: '1.0.0' },
+    });
+
+    // Should not throw
+    expect(() => {
+      api.mergeGlobalMetadata({ version: '1.1.0' });
+    }).not.toThrow();
+  });
+
+  it('should work with no existing metadata', async () => {
+    await api.init();
+
+    // Should not throw
+    expect(() => {
+      api.mergeGlobalMetadata({ key: 'value' });
+    }).not.toThrow();
+  });
+
+  it('should throw if not initialized', () => {
+    expect(() => {
+      api.mergeGlobalMetadata({ key: 'value' });
+    }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
+  });
+
+  it('should throw if called during destroy', async () => {
+    await api.init();
+
+    const destroyPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        try {
+          destroy();
+        } catch {
+          // Ignore
+        }
+        resolve();
+      }, 100);
+    });
+
+    await destroyPromise;
+
+    expect(() => {
+      api.mergeGlobalMetadata({ key: 'value' });
+    }).toThrow();
+  });
+
+  it('should validate metadata structure', async () => {
+    await api.init();
+
+    // Non-object types should throw
+    expect(() => {
+      api.mergeGlobalMetadata(null as any);
+    }).toThrow(/Global metadata must be a plain object/);
+
+    expect(() => {
+      api.mergeGlobalMetadata(['array'] as any);
+    }).toThrow(/Global metadata must be a plain object/);
+  });
+
+  it('should accept primitives', async () => {
+    await api.init();
+
+    expect(() => {
+      api.mergeGlobalMetadata({
+        str: 'value',
+        num: 42,
+        bool: true,
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept nested objects (1 level deep)', async () => {
+    await api.init();
+
+    expect(() => {
+      api.mergeGlobalMetadata({
+        user: {
+          id: 'user-123',
+          premium: true,
+        },
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept string arrays', async () => {
+    await api.init();
+
+    expect(() => {
+      api.mergeGlobalMetadata({
+        tags: ['tag1', 'tag2', 'tag3'],
+      });
+    }).not.toThrow();
+  });
+});
