@@ -19,9 +19,19 @@ import {
   TransformerMap,
   BeforeSendTransformer,
   BeforeBatchTransformer,
+  MetadataType,
 } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
-import { isEventValid, getDeviceType, normalizeUrl, Emitter, getCollectApiUrls, detectQaMode, log } from './utils';
+import {
+  isEventValid,
+  getDeviceType,
+  normalizeUrl,
+  Emitter,
+  getCollectApiUrls,
+  detectQaMode,
+  log,
+  isValidMetadata,
+} from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
@@ -341,6 +351,91 @@ export class App extends StateManager {
     if (this.managers.event) {
       await this.managers.event.flushConsentBuffer(integration);
     }
+  }
+
+  /**
+   * Validates metadata object structure and values.
+   *
+   * @param metadata - The metadata object to validate
+   * @returns Validation result with error message if invalid
+   * @internal Helper for updateGlobalMetadata and mergeGlobalMetadata
+   */
+  private validateGlobalMetadata(metadata: Record<string, unknown>): { valid: boolean; error?: string } {
+    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+      return {
+        valid: false,
+        error: 'Global metadata must be a plain object',
+      };
+    }
+
+    const validation = isValidMetadata('globalMetadata', metadata, 'globalMetadata');
+
+    if (!validation.valid) {
+      return {
+        valid: false,
+        error: validation.error,
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Replaces global metadata with new values.
+   *
+   * @param metadata - New global metadata object
+   * @throws {Error} If metadata validation fails
+   * @internal Called from api.updateGlobalMetadata()
+   */
+  public updateGlobalMetadata(metadata: Record<string, unknown>): void {
+    const validation = this.validateGlobalMetadata(metadata);
+
+    if (!validation.valid) {
+      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
+    }
+
+    const currentConfig = this.get('config');
+
+    const updatedConfig: Config = {
+      ...currentConfig,
+      globalMetadata: metadata as Record<string, MetadataType>,
+    };
+
+    this.set('config', updatedConfig);
+
+    log('debug', 'Global metadata updated (replaced)', { data: { keys: Object.keys(metadata) } });
+  }
+
+  /**
+   * Merges new metadata with existing global metadata.
+   *
+   * @param metadata - Metadata to merge with existing values
+   * @throws {Error} If metadata validation fails
+   * @internal Called from api.mergeGlobalMetadata()
+   */
+  public mergeGlobalMetadata(metadata: Record<string, unknown>): void {
+    const validation = this.validateGlobalMetadata(metadata);
+
+    if (!validation.valid) {
+      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
+    }
+
+    const currentConfig = this.get('config');
+    const existingMetadata = currentConfig.globalMetadata ?? {};
+
+    const mergedMetadata: Record<string, MetadataType> = {
+      ...existingMetadata,
+      ...(metadata as Record<string, MetadataType>),
+    };
+
+    const updatedConfig: Config = {
+      ...currentConfig,
+      globalMetadata: mergedMetadata,
+    };
+
+    this.set('config', updatedConfig);
+
+    log('debug', 'Global metadata updated (merged)', { data: { keys: Object.keys(metadata) } });
   }
 
   private hasValidGoogleConfig(): boolean {

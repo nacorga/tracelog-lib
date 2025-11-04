@@ -37,41 +37,22 @@ let isDestroyed = false;
 /**
  * Initializes TraceLog and begins tracking user interactions.
  *
- * Safe to call in SSR environments (no-ops in Node.js).
- * Idempotent - subsequent calls are ignored if already initialized.
- *
- * **Initialization Order Best Practice:**
- * 1. Register event listeners with `on()` FIRST (before init)
- * 2. Configure transformers with `setTransformer()` SECOND (if using custom backend)
- * 3. Call `init()` LAST (starts tracking immediately)
- * 4. Send custom events with `event()` AFTER initialization
- *
- * This order ensures no events are missed (SESSION_START and PAGE_VIEW fire during init).
+ * Important: Register listeners with on() before calling init() to capture initial events.
  *
  * @param config - Optional configuration object
- * @throws {Error} If initialization fails or times out (5 seconds)
+ * @returns Promise that resolves when initialization completes (5s timeout)
+ * @throws {Error} If initialization fails or times out
  *
  * @example
  * ```typescript
- * // Standalone mode (no backend)
- * await tracelog.init();
- *
- * // With TraceLog SaaS
  * await tracelog.init({
  *   integrations: {
  *     tracelog: { projectId: 'your-project-id' }
  *   }
  * });
- *
- * // With custom backend
- * await tracelog.init({
- *   integrations: {
- *     custom: {
- *       collectApiUrl: 'https://api.example.com/collect'
- *     }
- *   }
- * });
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#init} for configuration options
  */
 export const init = async (config?: Config): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -161,31 +142,19 @@ export const init = async (config?: Config): Promise<void> => {
 /**
  * Tracks a custom analytics event with optional metadata.
  *
- * Events are subject to rate limiting (60 events/minute per event name by default).
- * In QA mode, events are logged to console instead of being sent to backend.
- *
- * @param name - Unique event identifier (e.g., 'checkout_completed', 'product_viewed')
- * @param metadata - Optional event data (flat key-value pairs or array of objects)
+ * @param name - Event identifier (e.g., 'checkout_completed')
+ * @param metadata - Optional event data (object or array of objects)
  * @throws {Error} If called before init() or during destroy()
  *
  * @example
  * ```typescript
- * // Simple event
- * tracelog.event('button_clicked');
- *
- * // With metadata
  * tracelog.event('product_viewed', {
  *   productId: 'abc-123',
- *   price: 299.99,
- *   category: 'electronics'
+ *   price: 299.99
  * });
- *
- * // With array metadata
- * tracelog.event('cart_updated', [
- *   { productId: 'abc-123', quantity: 2 },
- *   { productId: 'def-456', quantity: 1 }
- * ]);
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#event} for rate limiting details
  */
 export const event = (name: string, metadata?: Record<string, MetadataType> | Record<string, MetadataType>[]): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -204,51 +173,20 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
 };
 
 /**
- * Subscribes to TraceLog events for real-time event consumption.
+ * Subscribes to TraceLog events for real-time consumption.
  *
- * **Critical Timing Requirement:**
- * Register listeners **BEFORE calling `init()`** to capture initial events like
- * SESSION_START and PAGE_VIEW that fire during initialization.
+ * Important: Register listeners BEFORE calling init() to capture SESSION_START and PAGE_VIEW.
  *
- * **What Happens:**
- * - ✅ Listeners registered **before `tracelog.init()`**: Buffered and attached during init,
- *   will receive SESSION_START and PAGE_VIEW events
- * - ❌ Listeners registered **during or after `init()` starts**: Attached after init completes,
- *   will MISS SESSION_START and PAGE_VIEW events
- *
- * **Timing Window:**
- * ```
- * tracelog.on('event', handler);  // ✅ Register FIRST
- * await tracelog.init();           // Then initialize
- * // SESSION_START and PAGE_VIEW fire here during init
- * ```
- *
- * Available event types:
- * - `'event'`: Individual events as they're captured (real-time)
- * - `'queue'`: Batched events ready to send (every 10s or 50 events)
- * - `'consent-changed'`: Consent state changes for any integration
- *
- * @param event - Event type to subscribe to
- * @param callback - Function called when event fires
+ * @param event - Event type ('event', 'queue', or 'consent-changed')
+ * @param callback - Handler function called when event fires
  *
  * @example
  * ```typescript
- * // CORRECT: Register listener before init
- * tracelog.on('event', (event) => {
- *   console.log('Event:', event.type, event);
- * });
- * await tracelog.init();  // Will receive SESSION_START and PAGE_VIEW
- *
- * // Listen to batches
- * tracelog.on('queue', (batch) => {
- *   console.log('Batch:', batch.events.length, 'events');
- * });
- *
- * // Listen to consent changes
- * tracelog.on('consent-changed', (state) => {
- *   console.log('Consent:', state);
- * });
+ * tracelog.on('event', (event) => console.log(event.type));
+ * await tracelog.init();
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib#event-listeners} for timing details
  */
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -266,17 +204,13 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
 /**
  * Unsubscribes from TraceLog events.
  *
- * Must pass the **exact same function reference** used in `on()`.
- *
  * @param event - Event type to unsubscribe from
- * @param callback - Exact callback function reference
+ * @param callback - Exact callback function reference used in on()
  *
  * @example
  * ```typescript
  * const handler = (event) => console.log(event.type);
- *
  * tracelog.on('event', handler);
- * // Later...
  * tracelog.off('event', handler);
  * ```
  */
@@ -297,85 +231,26 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
 };
 
 /**
- * Sets a transformer function to modify events at runtime before sending.
+ * Transforms events at runtime before sending to custom backend.
  *
- * **Integration-specific behavior:**
- * - **Standalone Mode (no integration)**: Only `beforeSend` transformer applied in EventManager
- *   - `beforeSend` applied per-event in `buildEventPayload()` before queueing
- *   - `beforeBatch` NOT supported (no SenderManager created in standalone mode)
- *   - Events visible in `on('event')` and `on('queue')` with `beforeSend` transformations
- * - **TraceLog SaaS (only)**: Transformers silently ignored (schema protection)
- * - **Custom Backend (only)**: Both transformers applied
- *   - `beforeSend` applied per-event in EventManager `buildEventPayload()` before queueing
- *   - `beforeBatch` applied in SenderManager before network transmission
- * - **Multi-Integration (SaaS + Custom)**: Transformers skipped in EventManager, applied per-integration in SenderManager
- *   - `beforeSend` NOT applied in EventManager (applied in SenderManager per-integration)
- *   - `beforeBatch` applied in SenderManager per-integration
- *   - SaaS receives original events (schema protection)
- *   - Custom backend receives transformed events
- *   - Events in `on('event')` listeners are UNTRANSFORMED (original)
- * - **Google Analytics**: Transformers NOT applied (forwards `tracelog.event()` as-is)
+ * Note: Only applies to custom backend integration. TraceLog SaaS ignores transformers.
  *
- * **Available hooks:**
- * - `beforeSend`: Per-event transformation (before dedup/sampling/queueing)
- * - `beforeBatch`: Batch transformation (before network transmission or local emit)
- *
- * **Timing:**
- * - Transformers are passed to EventManager during App initialization
- * - Can be registered BEFORE or DURING `init()` - both work for initial events
- * - Recommended: Register BEFORE `init()` for clarity and consistency
- *
- * @param hook - Transformer hook type
- * @param fn - Transformer function (return null to filter out event/batch)
+ * @param hook - 'beforeSend' (per-event) or 'beforeBatch' (batch-level)
+ * @param fn - Transformer function. Return null to filter event/batch.
  * @throws {Error} If called during destroy()
  * @throws {Error} If fn is not a function
  *
  * @example
  * ```typescript
- * // Standalone mode - transformers applied locally
  * tracelog.setTransformer('beforeSend', (data) => {
  *   if ('type' in data) {
- *     return { ...data, customField: 'added' };
- *   }
- *   return data;
- * });
- *
- * await tracelog.init(); // No integration - standalone mode
- * tracelog.on('event', (event) => {
- *   console.log(event.customField); // 'added'
- * });
- *
- * // Custom backend - transformers applied before sending
- * tracelog.setTransformer('beforeSend', (data) => {
- *   if ('type' in data) {
- *     return {
- *       ...data,
- *       custom_event: {
- *         ...data.custom_event,
- *         metadata: {
- *           ...data.custom_event?.metadata,
- *           appVersion: '1.0.0'
- *         }
- *       }
- *     };
- *   }
- *   return data;
- * });
- *
- * await tracelog.init({
- *   integrations: {
- *     custom: { collectApiUrl: 'https://api.example.com' }
- *   }
- * });
- *
- * // Filter batch
- * tracelog.setTransformer('beforeBatch', (data) => {
- *   if ('events' in data && data.events.length < 5) {
- *     return null; // Don't send small batches
+ *     return { ...data, appVersion: '1.0.0' };
  *   }
  *   return data;
  * });
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#settransformer} for integration behavior
  */
 export function setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
 export function setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
@@ -414,15 +289,12 @@ export function setTransformer(hook: TransformerHook, fn: BeforeSendTransformer 
 /**
  * Removes a previously set transformer function.
  *
- * Safe to call even if no transformer is set for the hook.
- *
- * @param hook - Transformer hook type to remove
+ * @param hook - Transformer hook type to remove ('beforeSend' or 'beforeBatch')
  * @throws {Error} If called during destroy()
  *
  * @example
  * ```typescript
  * tracelog.removeTransformer('beforeSend');
- * tracelog.removeTransformer('beforeBatch');
  * ```
  */
 export const removeTransformer = (hook: TransformerHook): void => {
@@ -454,8 +326,8 @@ export const removeTransformer = (hook: TransformerHook): void => {
  *
  * @example
  * ```typescript
- * if (!tracelog.isInitialized()) {
- *   await tracelog.init();
+ * if (tracelog.isInitialized()) {
+ *   tracelog.event('app_ready');
  * }
  * ```
  */
@@ -470,27 +342,16 @@ export const isInitialized = (): boolean => {
 /**
  * Stops all tracking, cleans up listeners, and flushes pending events.
  *
- * Sends remaining events synchronously with sendBeacon before cleanup.
- * Safe to call multiple times (idempotent after first call).
- *
- * **When to call:**
- * - User revokes consent
- * - User logs out
- * - Component/app unmount in SPAs
+ * Sends remaining events with sendBeacon before cleanup.
  *
  * @throws {Error} If destroy operation is already in progress
- * @throws {Error} If app not initialized
  *
  * @example
  * ```typescript
- * // On consent revoke
  * tracelog.destroy();
- *
- * // In framework cleanup hooks
- * onDestroy(() => {
- *   tracelog.destroy();
- * });
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#destroy} for usage patterns
  */
 export const destroy = (): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -542,56 +403,21 @@ export const destroy = (): void => {
 /**
  * Grants or revokes consent for a specific integration or all integrations.
  *
- * **Features:**
- * - Persistent storage (localStorage, 365-day expiration)
- * - Cross-tab synchronization via storage events
- * - Can be called before init() - consent is persisted and auto-loaded
- * - When granted: buffered events sent retroactively (SESSION_START first)
- * - When revoked: stops future sends and **clears buffered events** for that integration
- *
- * **'all' Integration Behavior:**
- * - **Before init()**: Sets consent for google, custom, AND tracelog (all three)
- * - **After init()**: Sets consent only for CONFIGURED integrations
- * - **Rationale**: Before init, we don't know which integrations will be configured,
- *   so we persist consent for all possible integrations. After init, we only modify
- *   configured integrations to avoid touching unused integration consent state.
- *
- * **Consent Revocation Behavior:**
- * When consent is revoked (`granted: false`):
- * 1. Consent state updated in ConsentManager and persisted to localStorage
- * 2. **Buffered events cleared**: All events waiting for this integration are removed from memory
- *    - Events exclusively for this integration are discarded
- *    - Events needed by other integrations are preserved
- * 3. Future event sends to this integration are blocked
- * 4. Emits `'consent-changed'` event for reactive UI updates
- *
- * **Memory Management:**
- * Clearing buffered events on revoke prevents memory buildup and ensures privacy compliance
- * (user doesn't want data sent, so we don't keep it in memory)
+ * Consent is persisted to localStorage and synced across tabs. Can be called before init().
  *
  * @param integration - Integration identifier ('google', 'custom', 'tracelog', or 'all')
  * @param granted - true to grant consent, false to revoke
+ * @returns Promise that resolves when consent is applied
  * @throws {Error} If called during destroy()
  * @throws {Error} If localStorage persistence fails (before init only)
  *
  * @example
  * ```typescript
- * // Grant consent for specific integrations
  * await tracelog.setConsent('google', true);
- * await tracelog.setConsent('custom', true);
- *
- * // Grant consent for ALL integrations (behavior depends on timing)
- * await tracelog.setConsent('all', true);
- * // Before init: sets google=true, custom=true, tracelog=true
- * // After init: sets consent only for configured integrations
- *
- * // Revoke consent (clears buffered events)
- * await tracelog.setConsent('google', false);
- *
- * // Set before init (persisted to localStorage)
- * await tracelog.setConsent('all', true);
- * await tracelog.init({ waitForConsent: true });
+ * await tracelog.setConsent('all', false); // Revoke all
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#setconsent} for consent workflow
  */
 export const setConsent = async (integration: ConsentIntegration, granted: boolean): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -759,19 +585,8 @@ export const setConsent = async (integration: ConsentIntegration, granted: boole
  *
  * @example
  * ```typescript
- * // Check specific integration
  * if (tracelog.hasConsent('google')) {
- *   console.log('Google Analytics enabled');
- * }
- *
- * // Check if ALL integrations have consent
- * if (tracelog.hasConsent('all')) {
- *   console.log('Full tracking enabled');
- * }
- *
- * // Conditional tracking
- * if (tracelog.hasConsent('custom')) {
- *   tracelog.event('premium_feature_used');
+ *   tracelog.event('premium_feature');
  * }
  * ```
  */
@@ -813,32 +628,15 @@ export const hasConsent = (integration: ConsentIntegration): boolean => {
  *
  * Can be called before init() - reads directly from localStorage.
  *
- * @returns Object with consent status for each integration
+ * @returns Object with consent status (google, custom, tracelog)
  *
  * @example
  * ```typescript
  * const state = tracelog.getConsentState();
- * // {
- * //   google: true,
- * //   custom: false,
- * //   tracelog: true
- * // }
- *
- * // Build privacy dashboard
- * function PrivacySettings() {
- *   const consent = tracelog.getConsentState();
- *   return (
- *     <div>
- *       <Toggle checked={consent.google} onChange={(v) => tracelog.setConsent('google', v)}>
- *         Google Analytics
- *       </Toggle>
- *       <Toggle checked={consent.custom} onChange={(v) => tracelog.setConsent('custom', v)}>
- *         Custom Analytics
- *       </Toggle>
- *     </div>
- *   );
- * }
+ * // { google: true, custom: false, tracelog: true }
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#getconsentstate} for examples
  */
 export const getConsentState = (): ConsentState => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -862,27 +660,17 @@ export const getConsentState = (): ConsentState => {
 /**
  * Enables or disables QA (Quality Assurance) mode for debugging.
  *
- * **QA Mode Features:**
- * - Custom events logged to browser console (not sent to backend)
- * - Strict validation (throws errors instead of warnings)
- * - Session state visible in console
- * - Persistent across page reloads (sessionStorage)
- *
- * **Alternative activation via URL:** `?tlog_mode=qa` or `?tlog_mode=qa_off`
+ * QA mode logs custom events to console instead of sending to backend.
  *
  * @param enabled - true to enable, false to disable
  *
  * @example
  * ```typescript
- * // Enable QA mode
  * tracelog.setQaMode(true);
- *
- * // Send test event (will be logged to console)
- * tracelog.event('test_event', { key: 'value' });
- *
- * // Disable QA mode
- * tracelog.setQaMode(false);
+ * tracelog.event('test', { key: 'value' }); // Logged to console
  * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#setqamode} for URL activation
  */
 export const setQaMode = (enabled: boolean): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -890,6 +678,74 @@ export const setQaMode = (enabled: boolean): void => {
   }
 
   setQaModeUtil(enabled);
+};
+
+/**
+ * Replaces all global metadata with new values.
+ *
+ * Global metadata is automatically appended to every event.
+ *
+ * @param metadata - New metadata object (replaces existing)
+ * @throws {Error} If TraceLog not initialized
+ * @throws {Error} If called during destroy()
+ * @throws {Error} If validation fails (max 100 keys, 10KB limit)
+ *
+ * @example
+ * ```typescript
+ * tracelog.updateGlobalMetadata({ userId: 'user-123', plan: 'pro' });
+ * // Replaces all existing metadata
+ * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#updateglobalmetadata} for validation rules
+ */
+export const updateGlobalMetadata = (metadata: Record<string, MetadataType>): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot update metadata while TraceLog is being destroyed');
+  }
+
+  app.updateGlobalMetadata(metadata);
+};
+
+/**
+ * Merges new metadata with existing global metadata (shallow merge).
+ *
+ * Global metadata is automatically appended to every event.
+ *
+ * @param metadata - Metadata to merge with existing values
+ * @throws {Error} If TraceLog not initialized
+ * @throws {Error} If called during destroy()
+ * @throws {Error} If validation fails (max 100 keys, 10KB limit)
+ *
+ * @example
+ * ```typescript
+ * tracelog.mergeGlobalMetadata({ userId: 'user-123' });
+ * // Preserves existing keys, adds/overwrites specified keys
+ * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#mergeglobalmetadata} for validation rules
+ */
+export const mergeGlobalMetadata = (metadata: Record<string, MetadataType>): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot update metadata while TraceLog is being destroyed');
+  }
+
+  app.mergeGlobalMetadata(metadata);
 };
 
 /**

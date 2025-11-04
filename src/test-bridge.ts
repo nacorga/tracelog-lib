@@ -243,6 +243,27 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   /**
+   * Update global metadata (delegates to App method)
+   */
+  override updateGlobalMetadata(metadata: Record<string, unknown>): void {
+    super.updateGlobalMetadata(metadata);
+  }
+
+  /**
+   * Merge global metadata (delegates to App method)
+   */
+  override mergeGlobalMetadata(metadata: Record<string, unknown>): void {
+    super.mergeGlobalMetadata(metadata);
+  }
+
+  /**
+   * Get state object (alias for getFullState with convenience)
+   */
+  override getState(): Readonly<State> {
+    return super.getState();
+  }
+
+  /**
    * Wait for initialization to complete (test utility)
    */
   async waitForInitialization(timeout = 5000): Promise<void> {

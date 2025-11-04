@@ -108,6 +108,8 @@ tracelog.destroy();
 |--------|-------------|
 | `init(config?)` | Initialize tracking (see [Configuration](#configuration)) |
 | `event(name, metadata?)` | Track custom events |
+| `updateGlobalMetadata(metadata)` | Replace all global metadata |
+| `mergeGlobalMetadata(metadata)` | Merge with existing global metadata |
 | `on(event, callback)` | Subscribe to events (`'event'` or `'queue'`) |
 | `off(event, callback)` | Unsubscribe from events |
 | `setTransformer(hook, fn)` | Transform events before sending (see [Transformers](#transformers)) |
@@ -215,6 +217,98 @@ tracelog.event('purchase_completed', {
 ```
 
 **→ [Event Types Reference](./API_REFERENCE.md#event-types)**
+
+---
+
+## Global Metadata
+
+Global metadata is automatically attached to **every event** sent to your backend, making it ideal for user context, environment info, or app-wide properties.
+
+### Setting Initial Metadata
+
+Configure global metadata during initialization:
+
+```typescript
+await tracelog.init({
+  globalMetadata: {
+    env: 'production',
+    version: '1.2.0',
+    appName: 'MyApp'
+  }
+});
+```
+
+### Updating Metadata at Runtime
+
+**Replace all metadata** (previous keys removed):
+
+```typescript
+// User login: Replace with user context
+tracelog.updateGlobalMetadata({
+  userId: 'user-456',
+  plan: 'premium',
+  cohort: 'beta-testers'
+});
+
+// User logout: Clear all metadata
+tracelog.updateGlobalMetadata({});
+```
+
+**Merge with existing metadata** (preserves other keys):
+
+```typescript
+// Add user ID while preserving env and version
+tracelog.mergeGlobalMetadata({ userId: 'user-123' });
+
+// Update version while preserving others
+tracelog.mergeGlobalMetadata({ version: '1.3.0' });
+
+// Add feature flags
+tracelog.mergeGlobalMetadata({
+  feature_new_ui: true,
+  feature_dark_mode: false
+});
+```
+
+### Use Cases
+
+**User Authentication:**
+```typescript
+// Login
+tracelog.mergeGlobalMetadata({
+  userId: user.id,
+  email: user.email,
+  plan: user.subscription.plan
+});
+
+// Logout
+tracelog.updateGlobalMetadata({});
+```
+
+**A/B Testing:**
+```typescript
+tracelog.mergeGlobalMetadata({
+  experiment_checkout: 'variant-b',
+  experiment_pricing: 'control'
+});
+```
+
+**Environment Context:**
+```typescript
+tracelog.mergeGlobalMetadata({
+  build: process.env.BUILD_NUMBER,
+  region: user.location.region,
+  language: navigator.language
+});
+```
+
+### Validation Rules
+
+- **Allowed Types**: Primitives (string, number, boolean), string arrays, nested objects (1 level deep)
+- **NOT Allowed**: Functions, symbols, undefined, deeply nested objects
+- **Limits**: Max 100 keys, 10KB serialized size, 500 items per array, 1000 chars per string
+
+**→ [Metadata API Reference](./API_REFERENCE.md#global-metadata)**
 
 ---
 
