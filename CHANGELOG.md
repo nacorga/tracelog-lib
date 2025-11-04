@@ -24,6 +24,32 @@
 
 
 
+
+## [1.4.0] - 2025-11-04
+
+### ✨ Features
+
+- Add global metadata management methods to API ([5a1412c](../../commit/5a1412c5b0e64bb2ddabd2d03005fa987e7d969f))
+
+### 🐛 Bug Fixes
+
+- Correct metadata validation key and update getState method documentation for clarity ([5e84106](../../commit/5e841068b9924d82d87438225ff6d0729435b00e))
+
+### 🔧 Other Changes
+
+- Merge pull request #57 from nacorga/release/20251104.1 ([0069972](../../commit/0069972b88c30f2472b60d5b4303a0d746859223))
+- Merge pull request #56 from nacorga/feature/update-global-metadata ([4ff488c](../../commit/4ff488cd6db1e1ec46a429637cfb6a67cbbda044))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.3.0...v1.4.0
+
+
 ## [1.3.0] - 2025-10-25
 
 ### ✨ Features
