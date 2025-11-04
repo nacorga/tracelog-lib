@@ -368,7 +368,7 @@ export class App extends StateManager {
       };
     }
 
-    const validation = isValidMetadata('globalMetadata', metadata, 'globalMetadata');
+    const validation = isValidMetadata('Global', metadata, 'globalMetadata');
 
     if (!validation.valid) {
       return {
