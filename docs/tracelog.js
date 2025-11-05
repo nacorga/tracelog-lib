@@ -1265,6 +1265,31 @@ const isEventValid = (eventName, metadata) => {
   }
   return metadataValidation;
 };
+function isValidGoogleConsentCategories(categories) {
+  if (categories === "all") {
+    return true;
+  }
+  if (typeof categories !== "object" || categories === null || Array.isArray(categories)) {
+    return false;
+  }
+  const validKeys = [
+    "analytics_storage",
+    "ad_storage",
+    "ad_user_data",
+    "ad_personalization",
+    "personalization_storage"
+  ];
+  const categoriesObj = categories;
+  for (const key of Object.keys(categoriesObj)) {
+    if (!validKeys.includes(key)) {
+      return false;
+    }
+    if (typeof categoriesObj[key] !== "boolean") {
+      return false;
+    }
+  }
+  return true;
+}
 class Emitter {
   listeners = /* @__PURE__ */ new Map();
   /**
@@ -3679,6 +3704,7 @@ class ConsentManager {
   storageManager;
   emitter;
   consentState;
+  persistedCategories = {};
   storageListener = null;
   persistDebounceTimer = null;
   /**
@@ -3893,6 +3919,71 @@ class ConsentManager {
     return granted;
   }
   /**
+   * Sets Google Consent Mode categories to be persisted with consent state.
+   *
+   * **Purpose**: Allow dynamic configuration of Google Consent Mode categories
+   * that persist across browser sessions (365 days).
+   *
+   * **Behavior**:
+   * - Stores categories in memory and triggers debounced persistence
+   * - Categories saved to localStorage with consent state
+   * - Persists across page reloads and browser sessions
+   * - Same 365-day expiration as consent state
+   *
+   * **Use Cases**:
+   * - User selects cookie preferences in banner
+   * - Dynamic consent configuration after init
+   * - Updating categories when user changes preferences
+   *
+   * @param categories - Google Consent Mode categories to persist
+   *
+   * @example
+   * ```typescript
+   * consentManager.setGoogleConsentCategories({
+   *   analytics_storage: true,
+   *   ad_storage: false
+   * });
+   * // → Saved to localStorage with consent state
+   * // → Reloaded automatically on next page load
+   * ```
+   */
+  setGoogleConsentCategories(categories) {
+    this.persistedCategories.google = categories;
+    this.persistConsentDebounced();
+    log("debug", "Google consent categories set for persistence", {
+      data: { categories }
+    });
+  }
+  /**
+   * Retrieves persisted Google Consent Mode categories from memory.
+   *
+   * **Purpose**: Access categories loaded from localStorage during initialization.
+   *
+   * **Behavior**:
+   * - Returns categories loaded from localStorage
+   * - Returns undefined if no categories persisted
+   * - Categories automatically loaded during ConsentManager initialization
+   *
+   * **Use Cases**:
+   * - Apply persisted categories to config during App.init()
+   * - Display saved preferences in UI
+   * - Restore user's consent selections
+   *
+   * @returns Persisted Google Consent Mode categories or undefined
+   *
+   * @example
+   * ```typescript
+   * const categories = consentManager.getGoogleConsentCategories();
+   * if (categories) {
+   *   // Apply to config
+   *   config.integrations.google.consentCategories = categories;
+   * }
+   * ```
+   */
+  getGoogleConsentCategories() {
+    return this.persistedCategories.google;
+  }
+  /**
    * Cleans up ConsentManager resources and event listeners.
    *
    * **Purpose**: Releases memory and detaches event listeners to prevent memory leaks
@@ -3991,11 +4082,22 @@ class ConsentManager {
         custom: Boolean(parsed.state.custom),
         tracelog: Boolean(parsed.state.tracelog)
       };
+      if (parsed.categories?.google) {
+        if (isValidGoogleConsentCategories(parsed.categories.google)) {
+          this.persistedCategories = { ...parsed.categories };
+          log("debug", "Restored valid persisted Google consent categories");
+        } else {
+          log("warn", "Invalid persisted Google consent categories detected, ignoring", {
+            data: { categories: parsed.categories.google }
+          });
+        }
+      }
       log("debug", "Loaded persisted consent state", {
         data: {
           google: this.consentState.google,
           custom: this.consentState.custom,
           tracelog: this.consentState.tracelog,
+          hasGoogleCategories: Boolean(this.persistedCategories.google),
           daysUntilExpiry: Math.floor((parsed.expiresAt - now) / (1e3 * 60 * 60 * 24))
         }
       });
@@ -4082,6 +4184,9 @@ class ConsentManager {
         timestamp: now,
         expiresAt
       };
+      if (Object.keys(this.persistedCategories).length > 0) {
+        data.categories = { ...this.persistedCategories };
+      }
       this.storageManager.setItem(CONSENT_KEY, JSON.stringify(data));
     } catch (error) {
       log("error", "Failed to persist consent state", { error });
@@ -5899,6 +6004,66 @@ class GoogleAnalyticsIntegration extends StateManager {
     }
   }
   /**
+   * Sets default consent state to 'denied' for all Google Consent Mode categories.
+   * Called during initialization when `waitForConsent: true` is configured.
+   *
+   * **Purpose**: GDPR/privacy-first approach - explicitly deny all categories
+   * until user grants consent. Prevents any Google tags from firing before consent.
+   *
+   * **Behavior**:
+   * - Sets all 5 Google Consent Mode categories to 'denied'
+   * - Uses `gtag('consent', 'default', ...)` command
+   * - Only called if `waitForConsent: true` and no existing Consent Mode detected
+   * - Safe to call before gtag script loads (queued in dataLayer)
+   *
+   * **Categories Set to 'denied'**:
+   * - analytics_storage
+   * - ad_storage
+   * - ad_user_data
+   * - ad_personalization
+   * - personalization_storage
+   *
+   * @example
+   * ```typescript
+   * // During App initialization with waitForConsent
+   * googleAnalytics.setDefaultConsent();
+   * // → gtag('consent', 'default', { all: 'denied' })
+   * ```
+   */
+  setDefaultConsent() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (this.hasExistingConsentMode()) {
+      log("info", "Google Consent Mode already configured, skipping default consent setup", {
+        showToClient: true
+      });
+      return;
+    }
+    if (!window.dataLayer) {
+      window.dataLayer = [];
+    }
+    if (typeof window.gtag !== "function") {
+      window.gtag = function gtag(...args) {
+        window.dataLayer.push(args);
+      };
+    }
+    try {
+      window.gtag("consent", "default", {
+        analytics_storage: "denied",
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        ad_personalization: "denied",
+        personalization_storage: "denied"
+      });
+      log("debug", "Google Consent Mode default state set to denied (waitForConsent enabled)", {
+        data: { allCategories: "denied" }
+      });
+    } catch (error) {
+      log("error", "Failed to set default consent state", { error });
+    }
+  }
+  /**
    * Cleans up Google Analytics integration resources.
    *
    * **Cleanup Actions**:
@@ -6851,6 +7016,26 @@ class App extends StateManager {
     try {
       this.setupState(config);
       this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
+      const persistedGoogleCategories = this.managers.consent.getGoogleConsentCategories();
+      if (persistedGoogleCategories && config.integrations?.google) {
+        const currentConfig = this.get("config");
+        if (currentConfig.integrations?.google) {
+          const updatedConfig = {
+            ...currentConfig,
+            integrations: {
+              ...currentConfig.integrations,
+              google: {
+                ...currentConfig.integrations.google,
+                consentCategories: persistedGoogleCategories
+              }
+            }
+          };
+          this.set("config", updatedConfig);
+          log("debug", "Restored persisted Google Consent Mode categories", {
+            data: { categories: persistedGoogleCategories }
+          });
+        }
+      }
       if (config.waitForConsent) {
         const consentState = this.managers.consent.getConsentState();
         log("info", "Consent mode enabled", {
@@ -6860,6 +7045,10 @@ class App extends StateManager {
             tracelog: consentState.tracelog
           }
         });
+        if (this.hasValidGoogleConfig()) {
+          const googleIntegration = new GoogleAnalyticsIntegration();
+          googleIntegration.setDefaultConsent();
+        }
       }
       await this.setupIntegrations();
       this.managers.event = new EventManager(
@@ -7075,7 +7264,7 @@ class App extends StateManager {
         error: "Global metadata must be a plain object"
       };
     }
-    const validation = isValidMetadata("globalMetadata", metadata, "globalMetadata");
+    const validation = isValidMetadata("Global", metadata, "globalMetadata");
     if (!validation.valid) {
       return {
         valid: false,
@@ -7128,6 +7317,49 @@ class App extends StateManager {
     };
     this.set("config", updatedConfig);
     log("debug", "Global metadata updated (merged)", { data: { keys: Object.keys(metadata) } });
+  }
+  /**
+   * Updates Google Consent Mode v2 categories configuration.
+   *
+   * Categories persist in config state for future consent operations.
+   * If consent is already granted, automatically re-syncs with Google.
+   *
+   * @param categories - Consent categories ('all' or granular object)
+   * @throws {Error} If Google integration not configured
+   * @internal Called from api.setConsent()
+   */
+  updateGoogleConsentCategories(categories) {
+    const currentConfig = this.get("config");
+    if (!currentConfig.integrations?.google) {
+      throw new Error("[TraceLog] Google integration not configured");
+    }
+    const updatedConfig = {
+      ...currentConfig,
+      integrations: {
+        ...currentConfig.integrations,
+        google: {
+          ...currentConfig.integrations.google,
+          consentCategories: categories
+        }
+      }
+    };
+    this.set("config", updatedConfig);
+    log("debug", "Google Consent Mode categories updated", {
+      data: { categories }
+    });
+    if (this.managers.consent?.hasConsent("google") && this.integrations.google) {
+      this.integrations.google.syncConsentToGoogle("google", true);
+      log("debug", "Re-synced Google Consent Mode with updated categories");
+    }
+  }
+  /**
+   * Returns the Google Analytics integration instance.
+   *
+   * @returns GoogleAnalyticsIntegration instance or undefined if not initialized
+   * @internal Called from api.setConsent()
+   */
+  getGoogleAnalyticsIntegration() {
+    return this.integrations.google;
   }
   hasValidGoogleConfig() {
     const googleConfig = this.get("config").integrations?.google;
@@ -7387,12 +7619,21 @@ const destroy = () => {
     log("warn", "Error during destroy, forced cleanup completed", { error });
   }
 };
-const setConsent = async (integration, granted) => {
+const setConsent = async (integration, granted, googleConsentCategories) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
   if (isDestroyed || isDestroying) {
     throw new Error("[TraceLog] Cannot set consent while TraceLog is destroyed or being destroyed");
+  }
+  if (googleConsentCategories !== void 0) {
+    if (integration !== "google") {
+      log("warn", "googleConsentCategories parameter only applicable to google integration, ignoring");
+    } else if (!isValidGoogleConsentCategories(googleConsentCategories)) {
+      throw new Error(
+        '[TraceLog] Invalid googleConsentCategories. Must be "all" or an object with valid GoogleConsentType keys and boolean values'
+      );
+    }
   }
   if (!app || isInitializing) {
     if (integration === "all") {
@@ -7493,6 +7734,14 @@ const setConsent = async (integration, granted) => {
       await setConsent(int, granted);
     }
     return;
+  }
+  if (integration === "google" && googleConsentCategories !== void 0) {
+    try {
+      app.updateGoogleConsentCategories(googleConsentCategories);
+      consentManager.setGoogleConsentCategories(googleConsentCategories);
+    } catch (error) {
+      log("warn", "Failed to update Google consent categories", { error });
+    }
   }
   const hadConsent = consentManager.hasConsent(integration);
   consentManager.setConsent(integration, granted);
@@ -7985,8 +8234,8 @@ class TestBridge extends App {
   /**
    * Consent management (always delegates to api.ts for consistency)
    */
-  async setConsent(integration, granted) {
-    await setConsent(integration, granted);
+  async setConsent(integration, granted, googleConsentCategories) {
+    await setConsent(integration, granted, googleConsentCategories);
   }
   /**
    * Consent state check (delegates to ConsentManager)
@@ -8027,7 +8276,11 @@ class TestBridge extends App {
     super.mergeGlobalMetadata(metadata);
   }
   /**
-   * Get state object (alias for getFullState with convenience)
+   * Get state object (public override for test access)
+   *
+   * Exposes protected StateManager.getState() as public for integration tests.
+   * Equivalent to getFullState() but maintains consistency with test patterns
+   * that use bridge.getState().config pattern.
    */
   getState() {
     return super.getState();

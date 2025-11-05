@@ -276,6 +276,72 @@ export class GoogleAnalyticsIntegration extends StateManager {
   }
 
   /**
+   * Sets default consent state to 'denied' for all Google Consent Mode categories.
+   * Called during initialization when `waitForConsent: true` is configured.
+   *
+   * **Purpose**: GDPR/privacy-first approach - explicitly deny all categories
+   * until user grants consent. Prevents any Google tags from firing before consent.
+   *
+   * **Behavior**:
+   * - Sets all 5 Google Consent Mode categories to 'denied'
+   * - Uses `gtag('consent', 'default', ...)` command
+   * - Only called if `waitForConsent: true` and no existing Consent Mode detected
+   * - Safe to call before gtag script loads (queued in dataLayer)
+   *
+   * **Categories Set to 'denied'**:
+   * - analytics_storage
+   * - ad_storage
+   * - ad_user_data
+   * - ad_personalization
+   * - personalization_storage
+   *
+   * @example
+   * ```typescript
+   * // During App initialization with waitForConsent
+   * googleAnalytics.setDefaultConsent();
+   * // → gtag('consent', 'default', { all: 'denied' })
+   * ```
+   */
+  setDefaultConsent(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (this.hasExistingConsentMode()) {
+      log('info', 'Google Consent Mode already configured, skipping default consent setup', {
+        showToClient: true,
+      });
+      return;
+    }
+
+    if (!window.dataLayer) {
+      window.dataLayer = [];
+    }
+
+    if (typeof window.gtag !== 'function') {
+      window.gtag = function gtag(...args: unknown[]): void {
+        window.dataLayer!.push(args);
+      };
+    }
+
+    try {
+      window.gtag('consent', 'default', {
+        analytics_storage: 'denied',
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        personalization_storage: 'denied',
+      });
+
+      log('debug', 'Google Consent Mode default state set to denied (waitForConsent enabled)', {
+        data: { allCategories: 'denied' },
+      });
+    } catch (error) {
+      log('error', 'Failed to set default consent state', { error });
+    }
+  }
+
+  /**
    * Cleans up Google Analytics integration resources.
    *
    * **Cleanup Actions**:

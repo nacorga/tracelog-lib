@@ -4,11 +4,12 @@ import {
   IndividualConsentIntegration,
   PersistedConsent,
 } from '../types/consent.types';
+import { GoogleConsentCategories } from '../types/google.types';
 import { CONSENT_KEY, CONSENT_EXPIRY_DAYS } from '../constants/storage.constants';
 import { StorageManager } from './storage.manager';
 import { Emitter } from '../utils/emitter.utils';
 import { EmitterEvent } from '../types/emitter.types';
-import { log } from '../utils';
+import { log, isValidGoogleConsentCategories } from '../utils';
 
 /**
  * Manages GDPR/CCPA-compliant consent state with granular per-integration control.
@@ -88,6 +89,7 @@ export class ConsentManager {
   private readonly storageManager: StorageManager;
   private readonly emitter: Emitter | null;
   private consentState: ConsentState;
+  private persistedCategories: { google?: GoogleConsentCategories } = {};
   private storageListener: ((event: StorageEvent) => void) | null = null;
   private persistDebounceTimer: number | null = null;
 
@@ -323,6 +325,74 @@ export class ConsentManager {
   }
 
   /**
+   * Sets Google Consent Mode categories to be persisted with consent state.
+   *
+   * **Purpose**: Allow dynamic configuration of Google Consent Mode categories
+   * that persist across browser sessions (365 days).
+   *
+   * **Behavior**:
+   * - Stores categories in memory and triggers debounced persistence
+   * - Categories saved to localStorage with consent state
+   * - Persists across page reloads and browser sessions
+   * - Same 365-day expiration as consent state
+   *
+   * **Use Cases**:
+   * - User selects cookie preferences in banner
+   * - Dynamic consent configuration after init
+   * - Updating categories when user changes preferences
+   *
+   * @param categories - Google Consent Mode categories to persist
+   *
+   * @example
+   * ```typescript
+   * consentManager.setGoogleConsentCategories({
+   *   analytics_storage: true,
+   *   ad_storage: false
+   * });
+   * // → Saved to localStorage with consent state
+   * // → Reloaded automatically on next page load
+   * ```
+   */
+  setGoogleConsentCategories(categories: GoogleConsentCategories): void {
+    this.persistedCategories.google = categories;
+    this.persistConsentDebounced();
+
+    log('debug', 'Google consent categories set for persistence', {
+      data: { categories },
+    });
+  }
+
+  /**
+   * Retrieves persisted Google Consent Mode categories from memory.
+   *
+   * **Purpose**: Access categories loaded from localStorage during initialization.
+   *
+   * **Behavior**:
+   * - Returns categories loaded from localStorage
+   * - Returns undefined if no categories persisted
+   * - Categories automatically loaded during ConsentManager initialization
+   *
+   * **Use Cases**:
+   * - Apply persisted categories to config during App.init()
+   * - Display saved preferences in UI
+   * - Restore user's consent selections
+   *
+   * @returns Persisted Google Consent Mode categories or undefined
+   *
+   * @example
+   * ```typescript
+   * const categories = consentManager.getGoogleConsentCategories();
+   * if (categories) {
+   *   // Apply to config
+   *   config.integrations.google.consentCategories = categories;
+   * }
+   * ```
+   */
+  getGoogleConsentCategories(): GoogleConsentCategories | undefined {
+    return this.persistedCategories.google;
+  }
+
+  /**
    * Cleans up ConsentManager resources and event listeners.
    *
    * **Purpose**: Releases memory and detaches event listeners to prevent memory leaks
@@ -430,11 +500,23 @@ export class ConsentManager {
         tracelog: Boolean(parsed.state.tracelog),
       };
 
+      if (parsed.categories?.google) {
+        if (isValidGoogleConsentCategories(parsed.categories.google)) {
+          this.persistedCategories = { ...parsed.categories };
+          log('debug', 'Restored valid persisted Google consent categories');
+        } else {
+          log('warn', 'Invalid persisted Google consent categories detected, ignoring', {
+            data: { categories: parsed.categories.google },
+          });
+        }
+      }
+
       log('debug', 'Loaded persisted consent state', {
         data: {
           google: this.consentState.google,
           custom: this.consentState.custom,
           tracelog: this.consentState.tracelog,
+          hasGoogleCategories: Boolean(this.persistedCategories.google),
           daysUntilExpiry: Math.floor((parsed.expiresAt - now) / (1000 * 60 * 60 * 24)),
         },
       });
@@ -529,6 +611,10 @@ export class ConsentManager {
         timestamp: now,
         expiresAt,
       };
+
+      if (Object.keys(this.persistedCategories).length > 0) {
+        data.categories = { ...this.persistedCategories };
+      }
 
       this.storageManager.setItem(CONSENT_KEY, JSON.stringify(data));
     } catch (error) {

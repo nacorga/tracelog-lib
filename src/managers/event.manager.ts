@@ -1424,6 +1424,29 @@ export class EventManager extends StateManager {
   }
 
   /**
+   * Resolves waitForConsent requirement for a specific integration.
+   * Per-integration config takes precedence over root-level config.
+   * @param integration - The integration to check
+   * @returns true if consent is required, false otherwise
+   * @private
+   */
+  private getIntegrationConsentRequirement(integration: 'google' | 'custom' | 'tracelog'): boolean {
+    const config = this.get('config');
+
+    if (integration === 'google') {
+      return config.integrations?.google?.waitForConsent ?? false;
+    }
+    if (integration === 'custom') {
+      return config.integrations?.custom?.waitForConsent ?? false;
+    }
+    if (integration === 'tracelog') {
+      return config.integrations?.tracelog?.waitForConsent ?? false;
+    }
+
+    return false;
+  }
+
+  /**
    * Determines if events should be buffered for consent instead of being sent immediately.
    *
    * **Purpose**: Implements GDPR/CCPA compliance by preventing event transmission before
@@ -1431,24 +1454,24 @@ export class EventManager extends StateManager {
    *
    * **Logic**:
    * 1. QA mode bypasses consent checks (always returns false)
-   * 2. If `waitForConsent` disabled in config, returns false (no buffering)
-   * 3. If no consent manager, returns false (can't check consent)
-   * 4. If no integrations configured, returns false (standalone mode)
-   * 5. Returns true only if integrations exist but none have consent yet
+   * 2. If no consent manager, returns false (can't check consent)
+   * 3. If no backend integrations configured, returns false (standalone mode)
+   * 4. Check BACKEND integrations (custom, tracelog) consent requirements
+   * 5. Google Analytics handled separately (not buffered, uses GoogleAnalyticsIntegration)
+   * 6. Buffer ONLY if ALL backend integrations require consent AND none have it yet
    *
-   * @returns `true` if events should be buffered, `false` if they can be sent
+   * **Key Behavior**:
+   * - Mixed requirements (custom no consent, tracelog needs consent):
+   *   → NO buffering, events go to queue
+   *   → SenderManager for tracelog skips send (no consent)
+   *   → SenderManager for custom sends normally
+   *
+   * @returns `true` if events should be buffered, `false` if they can be sent to queue
    * @private
    */
   private shouldBufferForConsent(): boolean {
     // QA mode bypasses consent checks
     if (this.get('mode') === Mode.QA) {
-      return false;
-    }
-
-    const config = this.get('config');
-
-    // If waitForConsent is not enabled, don't buffer
-    if (!config?.waitForConsent) {
       return false;
     }
 
@@ -1458,21 +1481,38 @@ export class EventManager extends StateManager {
     }
 
     const collectApiUrls = this.get('collectApiUrls');
-    const hasGoogleIntegration = Boolean(config.integrations?.google);
     const hasCustomIntegration = Boolean(collectApiUrls?.custom);
     const hasTracelogIntegration = Boolean(collectApiUrls?.saas);
 
-    if (!hasGoogleIntegration && !hasCustomIntegration && !hasTracelogIntegration) {
+    // Only consider backend integrations for buffering (Google Analytics handled separately)
+    if (!hasCustomIntegration && !hasTracelogIntegration) {
       return false;
     }
 
-    const hasAnyConsent =
-      (hasGoogleIntegration && this.consentManager.hasConsent('google')) ||
-      (hasCustomIntegration && this.consentManager.hasConsent('custom')) ||
-      (hasTracelogIntegration && this.consentManager.hasConsent('tracelog'));
+    // Check which BACKEND integrations require consent
+    const customRequiresConsent = hasCustomIntegration && this.getIntegrationConsentRequirement('custom');
+    const tracelogRequiresConsent = hasTracelogIntegration && this.getIntegrationConsentRequirement('tracelog');
 
-    // Buffer if we don't have any consent yet
-    return !hasAnyConsent;
+    // If NO backend integration requires consent, don't buffer
+    if (!customRequiresConsent && !tracelogRequiresConsent) {
+      return false;
+    }
+
+    // Buffer ONLY if ALL requiring backend integrations are missing consent
+    // This allows mixed consent scenarios: custom sends immediately, tracelog waits
+    const customNeedsConsentAndMissing = customRequiresConsent && !this.consentManager.hasConsent('custom');
+    const tracelogNeedsConsentAndMissing = tracelogRequiresConsent && !this.consentManager.hasConsent('tracelog');
+
+    // Buffer if:
+    // - Custom requires consent and doesn't have it AND (no tracelog OR tracelog also missing)
+    // - Tracelog requires consent and doesn't have it AND (no custom OR custom also missing)
+    if (customRequiresConsent && tracelogRequiresConsent) {
+      // Both require consent: buffer if EITHER is missing
+      return customNeedsConsentAndMissing || tracelogNeedsConsentAndMissing;
+    }
+
+    // Only one requires consent: buffer if that one is missing
+    return customNeedsConsentAndMissing || tracelogNeedsConsentAndMissing;
   }
 
   /**
@@ -1529,7 +1569,11 @@ export class EventManager extends StateManager {
 
     const config = this.get('config');
 
-    if (config?.waitForConsent && this.consentManager && !this.consentManager.hasConsent('google')) {
+    if (
+      config?.integrations?.google?.waitForConsent &&
+      this.consentManager &&
+      !this.consentManager.hasConsent('google')
+    ) {
       return;
     }
 

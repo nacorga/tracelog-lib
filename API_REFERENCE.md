@@ -546,15 +546,29 @@ tracelog.mergeGlobalMetadata({
 
 ## Consent Management
 
-TraceLog provides GDPR/CCPA-compliant consent management with granular control per integration. When `waitForConsent` is enabled, events are buffered until explicit consent is granted.
+TraceLog provides GDPR/CCPA-compliant consent management with granular control per integration. Each integration can specify `waitForConsent: true` in its configuration to buffer events until explicit consent is granted.
 
-### `setConsent(integration: ConsentIntegration, granted: boolean): Promise<void>`
+### `setConsent(integration: ConsentIntegration, granted: boolean, googleConsentCategories?: GoogleConsentCategories): Promise<void>`
 
 Grants or revokes consent for a specific integration or all integrations.
 
 **Parameters:**
 - `integration`: Integration identifier (`'google'`, `'custom'`, `'tracelog'`, or `'all'`)
 - `granted`: `true` to grant consent, `false` to revoke
+- `googleConsentCategories` (optional): Google Consent Mode v2 categories to configure when granting consent for Google integration. Can be `'all'` or an object with granular category settings. Only applies when `integration` is `'google'`. Categories are persisted to localStorage for 365 days.
+
+**GoogleConsentCategories Type:**
+```typescript
+type GoogleConsentCategories =
+  | 'all'
+  | Partial<{
+      analytics_storage: boolean;
+      ad_storage: boolean;
+      ad_user_data: boolean;
+      ad_personalization: boolean;
+      personalization_storage: boolean;
+    }>;
+```
 
 **Returns:** Promise that resolves when consent is applied and persisted
 
@@ -581,15 +595,90 @@ await tracelog.setConsent('all', true);
 await tracelog.setConsent('google', false);
 ```
 
+**Google Consent Mode v2 - Dynamic Configuration:**
+
+Configure Google Consent Mode categories **after initialization** based on user cookie banner selections:
+
+```typescript
+// 1. Initialize library first (no categories defined yet)
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true
+    }
+  }
+});
+
+// 2. User interacts with cookie banner and selects preferences
+const userSelections = {
+  analytics: true,
+  advertising: false,
+  personalization: false
+};
+
+// 3. Grant consent WITH categories in a single call
+await tracelog.setConsent('google', true, {
+  analytics_storage: userSelections.analytics,
+  ad_storage: userSelections.advertising,
+  ad_user_data: userSelections.advertising,
+  ad_personalization: userSelections.advertising,
+  personalization_storage: userSelections.personalization
+});
+// → Categories persisted to localStorage (365-day expiration)
+// → Google Consent Mode updated via gtag('consent', 'update')
+// → Buffered events flushed
+
+// 4. User revokes consent (categories preserved for future use)
+await tracelog.setConsent('google', false);
+// → All categories set to 'denied'
+// → Categories remain persisted in localStorage
+
+// 5. User closes browser and returns days later
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true
+    }
+  }
+});
+// → Categories automatically restored from localStorage!
+
+// 6. User re-grants consent (reuses persisted categories)
+await tracelog.setConsent('google', true);
+// → Previous categories automatically applied from localStorage
+```
+
+**Consent + Categories - Alternative "all" Shorthand:**
+
+```typescript
+// Grant all Google Consent Mode categories at once
+await tracelog.setConsent('google', true, 'all');
+// → Equivalent to setting all 5 categories to true
+// → Persisted to localStorage for 365 days
+```
+
+**Persistence Behavior:**
+- **365-day expiration**: Categories automatically restored on page reload
+- **Cross-session**: Survives browser close/reopen
+- **Validation**: Invalid categories from localStorage automatically rejected
+- **Category-only updates**: Call `setConsent()` with new categories to update without changing consent state
+
 **Consent Flow:**
 
 ```typescript
 // 1. Initialize with consent waiting
 await tracelog.init({
-  waitForConsent: true,
   integrations: {
-    google: { measurementId: 'G-XXXXXX' },
-    custom: { collectApiUrl: 'https://api.example.com' }
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true
+    },
+    custom: {
+      collectApiUrl: 'https://api.example.com',
+      waitForConsent: true
+    }
   }
 });
 // Events are buffered, not sent yet
@@ -610,7 +699,14 @@ await tracelog.setConsent('google', false);
 await tracelog.setConsent('google', true);
 
 // Later, consent is auto-loaded
-await tracelog.init({ waitForConsent: true });
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true
+    }
+  }
+});
 ```
 
 **Notes:**
@@ -742,14 +838,13 @@ interface Config {
   pageViewThrottleMs?: number;
   clickThrottleMs?: number;
   maxSameEventPerMinute?: number;
-  waitForConsent?: boolean;
   maxConsentBufferSize?: number;
   webVitalsMode?: WebVitalsMode;
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
   integrations?: {
-    tracelog?: { projectId: string };
-    custom?: { collectApiUrl: string; allowHttp?: boolean };
-    google?: { measurementId?: string; containerId?: string };
+    tracelog?: { projectId: string; waitForConsent?: boolean };
+    custom?: { collectApiUrl: string; allowHttp?: boolean; waitForConsent?: boolean };
+    google?: { measurementId?: string; containerId?: string; waitForConsent?: boolean };
   };
 }
 ```
@@ -820,31 +915,37 @@ await tracelog.init({
 });
 ```
 
-#### `waitForConsent`
+#### `integrations.*.waitForConsent`
 - **Type:** `boolean`
 - **Default:** `false`
-- **Description:** Wait for explicit consent before initializing integrations and sending events. When enabled, events are buffered until `setConsent()` is called.
+- **Location:** Per-integration configuration (not root-level)
+- **Description:** Wait for explicit consent before sending events to a specific integration. When enabled, events for that integration are buffered until `setConsent()` is called. Each integration (tracelog, custom, google) can have its own consent requirement.
 
 ```typescript
-// Enable consent mode
+// Per-integration consent requirements
 await tracelog.init({
-  waitForConsent: true,
   integrations: {
-    google: { measurementId: 'G-XXXXXX' },
-    custom: { collectApiUrl: 'https://api.example.com' }
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true  // Google requires consent
+    },
+    custom: {
+      collectApiUrl: 'https://api.example.com',
+      waitForConsent: false  // Custom sends immediately
+    }
   }
 });
-// Events buffered, not sent yet
+// Google events buffered, custom events sent immediately
 
-// User accepts consent
-await tracelog.setConsent('all', true);
-// All buffered events sent retroactively
+// User accepts Google consent
+await tracelog.setConsent('google', true);
+// All buffered Google events sent retroactively
 ```
 
 **Key Features:**
-- Events buffered in memory until consent granted
+- Per-integration consent control (mix consented and non-consented backends)
+- Events buffered in memory until consent granted for requiring integrations
 - Retroactive send when consent granted (SESSION_START sent first)
-- Integration-specific control (e.g., consent for Google but not Custom)
 - Persisted to localStorage with 365-day expiration
 - Cross-tab synchronized via StorageEvent
 - Consent can be set before or after `init()`
@@ -858,8 +959,13 @@ await tracelog.setConsent('all', true);
 
 ```typescript
 await tracelog.init({
-  waitForConsent: true,
-  maxConsentBufferSize: 1000  // Buffer up to 1000 events
+  maxConsentBufferSize: 1000,  // Buffer up to 1000 events
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com',
+      waitForConsent: true  // Enables buffering for this integration
+    }
+  }
 });
 ```
 

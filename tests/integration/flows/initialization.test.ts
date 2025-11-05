@@ -67,7 +67,14 @@ describe('Integration: Initialization Flow', () => {
   });
 
   it('should initialize ConsentManager', async () => {
-    bridge = await initTestBridge({ waitForConsent: true });
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+          waitForConsent: true,
+        },
+      },
+    });
 
     const { consent } = getManagers(bridge);
     expect(consent).toBeDefined();
@@ -214,7 +221,12 @@ describe('Integration: Config Propagation', () => {
     const customConfig = {
       sessionTimeout: 7000,
       globalMetadata: { env: 'test' },
-      waitForConsent: true,
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+          waitForConsent: true,
+        },
+      },
     };
 
     bridge = await initTestBridge(customConfig);

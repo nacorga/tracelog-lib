@@ -221,26 +221,91 @@ tracelog.on('event', (event) => {
 
 **Modern Approach (Recommended):**
 ```typescript
-// Initialize with waitForConsent
+// Initialize with per-integration consent requirements
 await tracelog.init({
-  waitForConsent: true,  // Buffers events until consent granted
   integrations: {
-    tracelog: { projectId: 'project-id' },
-    google: { measurementId: 'G-XXXXXX' },
-    custom: { collectApiUrl: 'https://api.example.com/collect' }
+    tracelog: {
+      projectId: 'project-id',
+      waitForConsent: true  // TraceLog SaaS requires consent
+    },
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true  // Google Analytics requires consent
+    },
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      waitForConsent: true  // Custom backend requires consent
+    }
   }
 });
 
-// Grant consent (flushes buffered events)
-tracelog.setConsent({ tracelog: true, google: true, custom: true });
+// Grant consent for specific integrations
+await tracelog.setConsent('tracelog', true);
+await tracelog.setConsent('google', true);
+await tracelog.setConsent('custom', true);
+
+// Or grant consent for ALL integrations at once
+await tracelog.setConsent('all', true);
 
 // Revoke consent (stops sending to specific integrations)
 // Events are still captured and emitted to local listeners
-tracelog.setConsent({ tracelog: false, google: false, custom: false });
-// Buffered events for revoked integrations are discarded
+await tracelog.setConsent('google', false);
+// Buffered events for revoked integration are discarded
 
 // Complete destruction (stops all tracking)
 tracelog.destroy();
+```
+
+**Google Consent Mode v2 - Dynamic Configuration:**
+
+Configure granular Google Consent Mode categories based on user cookie banner selections:
+
+```typescript
+// 1. Initialize with waitForConsent per integration
+await tracelog.init({
+  integrations: {
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true
+    }
+  }
+});
+
+// 2. User selects preferences in cookie banner
+const userSelections = {
+  analytics: true,     // User accepts analytics
+  advertising: false,  // User rejects ads
+  personalization: false
+};
+
+// 3. Grant consent WITH Google Consent Mode categories (single call!)
+await tracelog.setConsent('google', true, {
+  analytics_storage: userSelections.analytics,
+  ad_storage: userSelections.advertising,
+  ad_user_data: userSelections.advertising,
+  ad_personalization: userSelections.advertising,
+  personalization_storage: userSelections.personalization
+});
+// → Categories persisted to localStorage (365-day expiration)
+// → Google Consent Mode updated via gtag('consent', 'update')
+// → Buffered events flushed
+// → Categories automatically restored on next page load
+
+// 4. User revokes consent (categories preserved for future use)
+await tracelog.setConsent('google', false);
+
+// 5. User re-grants consent later (reuses persisted categories)
+await tracelog.setConsent('google', true);
+// → Previous categories automatically applied!
+```
+
+**Alternative: Grant all Google Consent Mode categories at once:**
+
+```typescript
+// Grant consent with all categories enabled
+await tracelog.setConsent('google', true, 'all');
+// → Equivalent to setting all 5 categories to true
+// → Persisted to localStorage for 365 days
 ```
 
 **Legacy Approach (Wait for consent before init):**

@@ -20,6 +20,7 @@ import {
   BeforeSendTransformer,
   BeforeBatchTransformer,
   MetadataType,
+  GoogleConsentCategories,
 } from './types';
 import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import {
@@ -87,7 +88,33 @@ export class App extends StateManager {
 
       this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
 
-      if (config.waitForConsent) {
+      const persistedGoogleCategories = this.managers.consent.getGoogleConsentCategories();
+      if (persistedGoogleCategories && config.integrations?.google) {
+        const currentConfig = this.get('config');
+        if (currentConfig.integrations?.google) {
+          const updatedConfig: Config = {
+            ...currentConfig,
+            integrations: {
+              ...currentConfig.integrations,
+              google: {
+                ...currentConfig.integrations.google,
+                consentCategories: persistedGoogleCategories,
+              },
+            },
+          };
+          this.set('config', updatedConfig);
+          log('debug', 'Restored persisted Google Consent Mode categories', {
+            data: { categories: persistedGoogleCategories },
+          });
+        }
+      }
+
+      const anyIntegrationRequiresConsent =
+        this.getIntegrationConsentRequirement('google') ||
+        this.getIntegrationConsentRequirement('custom') ||
+        this.getIntegrationConsentRequirement('tracelog');
+
+      if (anyIntegrationRequiresConsent) {
         const consentState = this.managers.consent.getConsentState();
         log('info', 'Consent mode enabled', {
           data: {
@@ -96,6 +123,11 @@ export class App extends StateManager {
             tracelog: consentState.tracelog,
           },
         });
+
+        if (this.hasValidGoogleConfig() && this.getIntegrationConsentRequirement('google')) {
+          const googleIntegration = new GoogleAnalyticsIntegration();
+          googleIntegration.setDefaultConsent();
+        }
       }
 
       await this.setupIntegrations();
@@ -438,6 +470,56 @@ export class App extends StateManager {
     log('debug', 'Global metadata updated (merged)', { data: { keys: Object.keys(metadata) } });
   }
 
+  /**
+   * Updates Google Consent Mode v2 categories configuration.
+   *
+   * Categories persist in config state for future consent operations.
+   * If consent is already granted, automatically re-syncs with Google.
+   *
+   * @param categories - Consent categories ('all' or granular object)
+   * @throws {Error} If Google integration not configured
+   * @internal Called from api.setConsent()
+   */
+  public updateGoogleConsentCategories(categories: GoogleConsentCategories): void {
+    const currentConfig = this.get('config');
+
+    if (!currentConfig.integrations?.google) {
+      throw new Error('[TraceLog] Google integration not configured');
+    }
+
+    const updatedConfig: Config = {
+      ...currentConfig,
+      integrations: {
+        ...currentConfig.integrations,
+        google: {
+          ...currentConfig.integrations.google,
+          consentCategories: categories,
+        },
+      },
+    };
+
+    this.set('config', updatedConfig);
+
+    log('debug', 'Google Consent Mode categories updated', {
+      data: { categories },
+    });
+
+    if (this.managers.consent?.hasConsent('google') && this.integrations.google) {
+      this.integrations.google.syncConsentToGoogle('google', true);
+      log('debug', 'Re-synced Google Consent Mode with updated categories');
+    }
+  }
+
+  /**
+   * Returns the Google Analytics integration instance.
+   *
+   * @returns GoogleAnalyticsIntegration instance or undefined if not initialized
+   * @internal Called from api.setConsent()
+   */
+  public getGoogleAnalyticsIntegration(): GoogleAnalyticsIntegration | undefined {
+    return this.integrations.google;
+  }
+
   private hasValidGoogleConfig(): boolean {
     const googleConfig = this.get('config').integrations?.google;
     if (!googleConfig) {
@@ -462,10 +544,32 @@ export class App extends StateManager {
     }
   }
 
-  private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
+  /**
+   * Resolves waitForConsent requirement for a specific integration.
+   * Checks waitForConsent flag in integration-specific config.
+   * @param integration - The integration to check
+   * @returns true if consent is required, false otherwise
+   */
+  private getIntegrationConsentRequirement(integration: 'google' | 'custom' | 'tracelog'): boolean {
     const config = this.get('config');
 
-    if (!config.waitForConsent) {
+    if (integration === 'google') {
+      return config.integrations?.google?.waitForConsent ?? false;
+    }
+    if (integration === 'custom') {
+      return config.integrations?.custom?.waitForConsent ?? false;
+    }
+    if (integration === 'tracelog') {
+      return config.integrations?.tracelog?.waitForConsent ?? false;
+    }
+
+    return false;
+  }
+
+  private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
+    const requiresConsent = this.getIntegrationConsentRequirement(integration);
+
+    if (!requiresConsent) {
       return true;
     }
 

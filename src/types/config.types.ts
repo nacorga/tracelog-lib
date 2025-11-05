@@ -34,6 +34,13 @@ export interface GoogleIntegrationConfig {
    * @see https://developers.google.com/tag-platform/security/guides/consent
    */
   consentCategories?: GoogleConsentCategories;
+  /**
+   * Wait for explicit consent before initializing Google Analytics/GTM and sending events.
+   * When enabled, events are buffered until consent is granted via setConsent('google', true).
+   * Falls back to root-level waitForConsent if not specified.
+   * @default undefined (inherits from root config)
+   */
+  waitForConsent?: boolean;
 }
 
 export interface Config {
@@ -57,12 +64,6 @@ export interface Config {
   clickThrottleMs?: number;
   /** Maximum number of same custom event name allowed per minute to prevent infinite loops. @default 60 */
   maxSameEventPerMinute?: number;
-  /**
-   * Wait for explicit consent before initializing integrations and sending events.
-   * When enabled, events are buffered until consent is granted via setConsent().
-   * @default false
-   */
-  waitForConsent?: boolean;
   /**
    * Maximum number of events to buffer while waiting for consent.
    * Older events are discarded (FIFO) when limit is reached.
@@ -99,6 +100,13 @@ export interface Config {
     tracelog?: {
       /** Required project ID TraceLog SaaS integration. */
       projectId: string;
+      /**
+       * Wait for explicit consent before initializing TraceLog SaaS and sending events.
+       * When enabled, events are buffered until consent is granted via setConsent('tracelog', true).
+       * Falls back to root-level waitForConsent if not specified.
+       * @default undefined (inherits from root config)
+       */
+      waitForConsent?: boolean;
     };
     /** Custom integration options. */
     custom?: {
@@ -106,6 +114,13 @@ export interface Config {
       collectApiUrl: string;
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
+      /**
+       * Wait for explicit consent before sending events to custom backend.
+       * When enabled, events are buffered until consent is granted via setConsent('custom', true).
+       * Falls back to root-level waitForConsent if not specified.
+       * @default undefined (inherits from root config)
+       */
+      waitForConsent?: boolean;
     };
     /**
      * GA4 / GTM integration.
