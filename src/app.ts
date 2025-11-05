@@ -109,7 +109,12 @@ export class App extends StateManager {
         }
       }
 
-      if (config.waitForConsent) {
+      const anyIntegrationRequiresConsent =
+        this.getIntegrationConsentRequirement('google') ||
+        this.getIntegrationConsentRequirement('custom') ||
+        this.getIntegrationConsentRequirement('tracelog');
+
+      if (anyIntegrationRequiresConsent) {
         const consentState = this.managers.consent.getConsentState();
         log('info', 'Consent mode enabled', {
           data: {
@@ -119,7 +124,7 @@ export class App extends StateManager {
           },
         });
 
-        if (this.hasValidGoogleConfig()) {
+        if (this.hasValidGoogleConfig() && this.getIntegrationConsentRequirement('google')) {
           const googleIntegration = new GoogleAnalyticsIntegration();
           googleIntegration.setDefaultConsent();
         }
@@ -539,10 +544,32 @@ export class App extends StateManager {
     }
   }
 
-  private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
+  /**
+   * Resolves waitForConsent requirement for a specific integration.
+   * Checks waitForConsent flag in integration-specific config.
+   * @param integration - The integration to check
+   * @returns true if consent is required, false otherwise
+   */
+  private getIntegrationConsentRequirement(integration: 'google' | 'custom' | 'tracelog'): boolean {
     const config = this.get('config');
 
-    if (!config.waitForConsent) {
+    if (integration === 'google') {
+      return config.integrations?.google?.waitForConsent ?? false;
+    }
+    if (integration === 'custom') {
+      return config.integrations?.custom?.waitForConsent ?? false;
+    }
+    if (integration === 'tracelog') {
+      return config.integrations?.tracelog?.waitForConsent ?? false;
+    }
+
+    return false;
+  }
+
+  private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
+    const requiresConsent = this.getIntegrationConsentRequirement(integration);
+
+    if (!requiresConsent) {
       return true;
     }
 

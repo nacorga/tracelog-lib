@@ -221,13 +221,21 @@ tracelog.on('event', (event) => {
 
 **Modern Approach (Recommended):**
 ```typescript
-// Initialize with waitForConsent
+// Initialize with per-integration consent requirements
 await tracelog.init({
-  waitForConsent: true,  // Buffers events until consent granted
   integrations: {
-    tracelog: { projectId: 'project-id' },
-    google: { measurementId: 'G-XXXXXX' },
-    custom: { collectApiUrl: 'https://api.example.com/collect' }
+    tracelog: {
+      projectId: 'project-id',
+      waitForConsent: true  // TraceLog SaaS requires consent
+    },
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true  // Google Analytics requires consent
+    },
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      waitForConsent: true  // Custom backend requires consent
+    }
   }
 });
 
@@ -253,11 +261,13 @@ tracelog.destroy();
 Configure granular Google Consent Mode categories based on user cookie banner selections:
 
 ```typescript
-// 1. Initialize with waitForConsent
+// 1. Initialize with waitForConsent per integration
 await tracelog.init({
-  waitForConsent: true,
   integrations: {
-    google: { measurementId: 'G-XXXXXX' }
+    google: {
+      measurementId: 'G-XXXXXX',
+      waitForConsent: true
+    }
   }
 });
 

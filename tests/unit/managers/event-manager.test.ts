@@ -1081,8 +1081,7 @@ describe('EventManager - Consent Integration', () => {
 
   it('should buffer events when consent not granted', () => {
     const config = createMockConfig({
-      waitForConsent: true,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1105,8 +1104,7 @@ describe('EventManager - Consent Integration', () => {
 
   it('should flush buffered events when consent granted', async () => {
     const config = createMockConfig({
-      waitForConsent: true,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1138,8 +1136,7 @@ describe('EventManager - Consent Integration', () => {
 
   it('should clear buffer when consent revoked', () => {
     const config = createMockConfig({
-      waitForConsent: false,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: false } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1165,8 +1162,7 @@ describe('EventManager - Consent Integration', () => {
 
   it('should track events normally when consent granted', () => {
     const config = createMockConfig({
-      waitForConsent: false,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: false } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1443,8 +1439,7 @@ describe('EventManager - Consent Buffer Flush', () => {
 
   it('should flush consent buffer in batches of 10', async () => {
     const config = createMockConfig({
-      waitForConsent: true,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1478,8 +1473,7 @@ describe('EventManager - Consent Buffer Flush', () => {
 
   it('should prioritize SESSION_START when flushing consent buffer', async () => {
     const config = createMockConfig({
-      waitForConsent: true,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1511,8 +1505,7 @@ describe('EventManager - Consent Buffer Flush', () => {
 
   it('should handle concurrent flush attempts', async () => {
     const config = createMockConfig({
-      waitForConsent: true,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1560,10 +1553,9 @@ describe('EventManager - Consent Buffer Flush', () => {
 
   it('should support consent buffer flush for different integrations', async () => {
     const config = createMockConfig({
-      waitForConsent: true,
       integrations: {
-        tracelog: { projectId: 'test-project' },
-        custom: { collectApiUrl: 'https://api.example.com' },
+        tracelog: { projectId: 'test-project', waitForConsent: true },
+        custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true },
       },
     });
 
@@ -1593,8 +1585,7 @@ describe('EventManager - Consent Buffer Flush', () => {
 
   it('should clear consent buffer for specific integration on revoke', () => {
     const config = createMockConfig({
-      waitForConsent: true,
-      integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
+      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
     });
 
     consentManager = new ConsentManager(storageManager, true, emitter);
@@ -1622,10 +1613,9 @@ describe('EventManager - Consent Buffer Flush', () => {
 
   it('should support clearing consent buffer for multiple integrations', () => {
     const config = createMockConfig({
-      waitForConsent: true,
       integrations: {
-        tracelog: { projectId: 'test-project' },
-        custom: { collectApiUrl: 'https://api.example.com' },
+        tracelog: { projectId: 'test-project', waitForConsent: true },
+        custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true },
       },
     });
 

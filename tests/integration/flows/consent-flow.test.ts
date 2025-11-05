@@ -20,10 +20,10 @@ describe('Integration: Consent Flow', () => {
     global.fetch = mockFetch;
 
     bridge = await initTestBridge({
-      waitForConsent: true,
       integrations: {
         custom: {
           collectApiUrl: 'https://api.test.com/collect',
+          waitForConsent: true,
         },
       },
     });
@@ -197,13 +197,14 @@ describe('Integration: Per-Integration Consent', () => {
     // Initialize with custom backend only (can't use tracelog on localhost)
     // We'll test per-integration logic using custom and google integrations
     bridge = await initTestBridge({
-      waitForConsent: true,
       integrations: {
         custom: {
           collectApiUrl: 'https://api.custom.com/collect',
+          waitForConsent: true,
         },
         google: {
           measurementId: 'G-TEST123',
+          waitForConsent: true,
         },
       },
     });

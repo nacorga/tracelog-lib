@@ -167,10 +167,10 @@ describe('Integration - Google Consent Categories', () => {
 
     it('should handle categories set before first consent grant', async () => {
       const bridge = await initTestBridge({
-        waitForConsent: true,
         integrations: {
           google: {
             measurementId: 'G-TEST123',
+            waitForConsent: true,
           },
         },
       });
@@ -195,10 +195,10 @@ describe('Integration - Google Consent Categories', () => {
   describe('Integration with waitForConsent', () => {
     it('should set default consent to denied when waitForConsent enabled', async () => {
       await initTestBridge({
-        waitForConsent: true,
         integrations: {
           google: {
             measurementId: 'G-TEST123',
+            waitForConsent: true,
           },
         },
       });
@@ -215,10 +215,10 @@ describe('Integration - Google Consent Categories', () => {
 
     it('should store categories in config when consent granted', async () => {
       const bridge = await initTestBridge({
-        waitForConsent: true,
         integrations: {
           google: {
             measurementId: 'G-TEST123',
+            waitForConsent: true,
           },
         },
       });

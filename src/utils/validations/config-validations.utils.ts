@@ -200,12 +200,6 @@ export const validateAppConfig = (config?: Config): void => {
     }
   }
 
-  if (config.waitForConsent !== undefined) {
-    if (typeof config.waitForConsent !== 'boolean') {
-      throw new AppConfigValidationError('waitForConsent must be a boolean', 'config');
-    }
-  }
-
   if (config.maxConsentBufferSize !== undefined) {
     if (
       typeof config.maxConsentBufferSize !== 'number' ||
@@ -445,7 +439,6 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
     disabledEvents: config?.disabledEvents ?? [],
-    waitForConsent: config?.waitForConsent ?? false,
     maxConsentBufferSize: config?.maxConsentBufferSize ?? MAX_CONSENT_BUFFER_LENGTH,
   };
 

@@ -977,13 +977,36 @@ export class SenderManager extends StateManager {
   }
 
   /**
+   * Resolves waitForConsent requirement for this integration.
+   * Checks waitForConsent flag in integration-specific config.
+   * @returns true if consent is required, false otherwise
+   * @private
+   */
+  private getIntegrationConsentRequirement(): boolean {
+    const config = this.get('config');
+
+    if (!config) {
+      return false;
+    }
+
+    if (this.integrationId === 'saas') {
+      return config.integrations?.tracelog?.waitForConsent ?? false;
+    }
+    if (this.integrationId === 'custom') {
+      return config.integrations?.custom?.waitForConsent ?? false;
+    }
+
+    return false;
+  }
+
+  /**
    * Checks if consent has been granted for this integration's data collection.
    *
    * **Purpose**: GDPR/CCPA compliance check before sending events to backend.
    * Prevents data transmission when user has not granted consent.
    *
    * **Fail-Open Strategy** (Always returns true when):
-   * - `waitForConsent` config option is disabled (default behavior)
+   * - `waitForConsent` not required for this integration (per-integration or root config)
    * - ConsentManager instance not provided (consent not required)
    * - Unknown integration ID (defensive programming)
    *
@@ -993,7 +1016,7 @@ export class SenderManager extends StateManager {
    * - No integration ID → Allows by default (legacy support)
    *
    * **Consent Flow**:
-   * 1. Check if consent required (`config.waitForConsent`)
+   * 1. Check if consent required for this integration (per-integration or root config)
    * 2. Verify ConsentManager available
    * 3. Map integration ID to consent type
    * 4. Query ConsentManager for consent status
@@ -1011,10 +1034,9 @@ export class SenderManager extends StateManager {
    * @returns true if consent granted or not required, false if consent denied
    */
   private hasConsentForIntegration(): boolean {
-    const config = this.get('config');
-
-    // If waitForConsent is not enabled, always allow
-    if (!config?.waitForConsent) {
+    // Check if this integration requires consent (per-integration or root config)
+    const requiresConsent = this.getIntegrationConsentRequirement();
+    if (!requiresConsent) {
       return true;
     }
 
