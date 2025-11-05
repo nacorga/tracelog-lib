@@ -25,6 +25,37 @@
 
 
 
+
+## [1.5.0] - 2025-11-05
+
+### ✨ Features
+
+- Implement per-integration consent management allowing granular control over event buffering based on consent requirements ([3c39517](../../commit/3c395173fafd93e2a7c8bf9ac7e07e98aba0e64a))
+- Enhance Google Consent Mode integration with dynamic category management ([cb33b9d](../../commit/cb33b9db71fd55920dc47ecd1510f6a1c71762f6))
+
+### 🐛 Bug Fixes
+
+- Refine error message sanitization in logging utility and clean up test cases for consent handling ([8f1ab8f](../../commit/8f1ab8f6fb6bae6e9bc18bf3a2ec947311bb9e36))
+
+### ♻️ Refactoring
+
+- Improve Google Consent handling and logging utilities ([4e02970](../../commit/4e029709e19b91650f3f9565b49463aa3f1e0948))
+
+### 🔧 Other Changes
+
+- Merge pull request #59 from nacorga/release/20251104.2 ([a25c765](../../commit/a25c765ce0173c4ce62f392e0fd4d647cf2a5385))
+- Merge pull request #58 from nacorga/feature/google-dynamic-configuration ([1c67dc1](../../commit/1c67dc11b44f00629d7179aae67db52a02de85a1))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.4.0...v1.5.0
+
+
 ## [1.4.0] - 2025-11-04
 
 ### ✨ Features
