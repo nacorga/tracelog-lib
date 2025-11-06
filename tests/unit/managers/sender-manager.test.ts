@@ -665,7 +665,7 @@ describe('SenderManager - beforeBatch Transformer', () => {
       custom_field: 'transformed',
     }));
 
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', null, {
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -706,7 +706,7 @@ describe('SenderManager - beforeBatch Transformer', () => {
       custom_field: 'should_not_appear',
     }));
 
-    const sender = new SenderManager(storage, 'saas', 'https://saas.test.com/collect', null, {
+    const sender = new SenderManager(storage, 'saas', 'https://saas.test.com/collect', {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -747,7 +747,7 @@ describe('SenderManager - beforeBatch Transformer', () => {
       throw new Error('Transformer error');
     });
 
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', null, {
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -789,7 +789,7 @@ describe('SenderManager - beforeBatch Transformer', () => {
       invalid: 'data',
     })) as any;
 
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', null, {
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -829,7 +829,7 @@ describe('SenderManager - beforeBatch Transformer', () => {
     // Transformer that filters batch
     const beforeBatchTransformer = vi.fn(() => null);
 
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', null, {
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -963,7 +963,7 @@ describe('SenderManager - Error Handling', () => {
       throw new Error('Transformer error');
     });
 
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', null, {
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
       beforeBatch: beforeBatchTransformer,
     });
 

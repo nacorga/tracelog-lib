@@ -1,5 +1,4 @@
 export * from './browser';
-export * from './consent.utils';
 export * from './data';
 export * from './network';
 export * from './security';

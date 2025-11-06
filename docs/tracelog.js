@@ -31,9 +31,6 @@ const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
 const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 const BATCH_SIZE_THRESHOLD = 50;
 const MAX_PENDING_EVENTS_BUFFER = 100;
-const MAX_CONSENT_BUFFER_LENGTH = 500;
-const CONSENT_FLUSH_BATCH_SIZE = 50;
-const CONSENT_FLUSH_DELAY_MS = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
 const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
@@ -154,7 +151,6 @@ var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
 var EmitterEvent = /* @__PURE__ */ ((EmitterEvent2) => {
   EmitterEvent2["EVENT"] = "event";
   EmitterEvent2["QUEUE"] = "queue";
-  EmitterEvent2["CONSENT_CHANGED"] = "consent-changed";
   return EmitterEvent2;
 })(EmitterEvent || {});
 class PermanentError extends Error {
@@ -351,22 +347,6 @@ const QA_MODE_DISABLE_VALUE = "qa_off";
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
-const CONSENT_KEY = `${STORAGE_BASE_KEY}:consent`;
-const CONSENT_EXPIRY_DAYS = 365;
-const storage_constants = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  BROADCAST_CHANNEL_NAME,
-  CONSENT_EXPIRY_DAYS,
-  CONSENT_KEY,
-  QA_MODE_DISABLE_VALUE,
-  QA_MODE_ENABLE_VALUE,
-  QA_MODE_KEY,
-  QA_MODE_URL_PARAM,
-  QUEUE_KEY,
-  SESSION_STORAGE_KEY,
-  STORAGE_BASE_KEY,
-  USER_ID_KEY
-}, Symbol.toStringTag, { value: "Module" }));
 const WEB_VITALS_GOOD_THRESHOLDS = {
   LCP: 2500,
   // Good: ≤ 2.5s
@@ -499,32 +479,6 @@ const getUTMParameters = () => {
   });
   const result = Object.keys(utmParams).length ? utmParams : void 0;
   return result;
-};
-const loadConsentFromStorage = () => {
-  if (typeof window === "undefined" || typeof localStorage === "undefined") {
-    return null;
-  }
-  try {
-    const storedData = localStorage.getItem(CONSENT_KEY);
-    if (!storedData) {
-      return null;
-    }
-    const parsed = JSON.parse(storedData);
-    if (!parsed.state || !parsed.expiresAt) {
-      return null;
-    }
-    if (Date.now() > parsed.expiresAt) {
-      return null;
-    }
-    return {
-      google: Boolean(parsed.state.google),
-      custom: Boolean(parsed.state.custom),
-      tracelog: Boolean(parsed.state.tracelog)
-    };
-  } catch (err) {
-    log("error", "Failed to load consent from storage", { error: err });
-    return null;
-  }
 };
 const generateUUID = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -861,16 +815,6 @@ const validateAppConfig = (config) => {
       }
     }
   }
-  if (config.waitForConsent !== void 0) {
-    if (typeof config.waitForConsent !== "boolean") {
-      throw new AppConfigValidationError("waitForConsent must be a boolean", "config");
-    }
-  }
-  if (config.maxConsentBufferSize !== void 0) {
-    if (typeof config.maxConsentBufferSize !== "number" || !Number.isFinite(config.maxConsentBufferSize) || config.maxConsentBufferSize <= 0 || !Number.isInteger(config.maxConsentBufferSize)) {
-      throw new AppConfigValidationError("maxConsentBufferSize must be a positive integer", "config");
-    }
-  }
 };
 const validateViewportConfig = (viewport) => {
   if (typeof viewport !== "object" || viewport === null) {
@@ -951,74 +895,6 @@ const validateIntegrations = (integrations) => {
       );
     }
   }
-  if (integrations.google) {
-    const { measurementId, containerId, forwardEvents } = integrations.google;
-    const isValidMeasurementId = typeof measurementId === "string" && measurementId.trim() !== "";
-    const isValidContainerId = typeof containerId === "string" && containerId.trim() !== "";
-    if (!isValidMeasurementId && !isValidContainerId) {
-      throw new IntegrationValidationError(
-        "Google integration requires at least one of: measurementId (GA4) or containerId (GTM)",
-        "config"
-      );
-    }
-    if (isValidMeasurementId) {
-      const trimmedMeasurementId = measurementId.trim();
-      const isGA4 = /^G-[A-Z0-9]{10}$/.test(trimmedMeasurementId);
-      const isUA = /^UA-[0-9]{6,9}-[0-9]{1}$/.test(trimmedMeasurementId);
-      const isAW = /^AW-[0-9]{10}$/.test(trimmedMeasurementId);
-      if (!isGA4 && !isUA && !isAW) {
-        throw new IntegrationValidationError(
-          'Google Analytics measurement ID must match one of: "G-XXXXXXXXXX" (GA4), "UA-XXXXXXXXX-X" (Universal Analytics), or "AW-XXXXXXXXXX" (Google Ads)',
-          "config"
-        );
-      }
-    }
-    if (isValidContainerId) {
-      const trimmedContainerId = containerId.trim();
-      if (!trimmedContainerId.match(/^GTM-[A-Z0-9]+$/)) {
-        throw new IntegrationValidationError(
-          'Google Tag Manager container ID must match the format "GTM-XXXXXX" (uppercase letters and digits only)',
-          "config"
-        );
-      }
-    }
-    if (forwardEvents !== void 0) {
-      if (forwardEvents === "all") ;
-      else if (Array.isArray(forwardEvents)) {
-        if (forwardEvents.length === 0) {
-          throw new IntegrationValidationError(
-            "Google integration forwardEvents cannot be an empty array. Use undefined to use default or specify event types.",
-            "config"
-          );
-        }
-        const validEventTypes = Object.values(EventType);
-        const uniqueEvents = /* @__PURE__ */ new Set();
-        for (const eventType of forwardEvents) {
-          if (typeof eventType !== "string") {
-            throw new IntegrationValidationError("All forwarded event types must be strings", "config");
-          }
-          if (!validEventTypes.includes(eventType)) {
-            throw new IntegrationValidationError(
-              `Invalid forwarded event type: "${eventType}". Must be one of: ${validEventTypes.join(", ")}`,
-              "config"
-            );
-          }
-          if (uniqueEvents.has(eventType)) {
-            throw new IntegrationValidationError(
-              `Duplicate forwarded event type found: "${eventType}". Each event type should appear only once.`,
-              "config"
-            );
-          }
-          uniqueEvents.add(eventType);
-        }
-      } else {
-        throw new IntegrationValidationError(
-          'Google integration forwardEvents must be an array of event types or the string "all"',
-          "config"
-        );
-      }
-    }
-  }
 };
 const validateAndNormalizeConfig = (config) => {
   validateAppConfig(config);
@@ -1032,9 +908,7 @@ const validateAndNormalizeConfig = (config) => {
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
-    disabledEvents: config?.disabledEvents ?? [],
-    waitForConsent: config?.waitForConsent ?? false,
-    maxConsentBufferSize: config?.maxConsentBufferSize ?? MAX_CONSENT_BUFFER_LENGTH
+    disabledEvents: config?.disabledEvents ?? []
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -1265,31 +1139,6 @@ const isEventValid = (eventName, metadata) => {
   }
   return metadataValidation;
 };
-function isValidGoogleConsentCategories(categories) {
-  if (categories === "all") {
-    return true;
-  }
-  if (typeof categories !== "object" || categories === null || Array.isArray(categories)) {
-    return false;
-  }
-  const validKeys = [
-    "analytics_storage",
-    "ad_storage",
-    "ad_user_data",
-    "ad_personalization",
-    "personalization_storage"
-  ];
-  const categoriesObj = categories;
-  for (const key of Object.keys(categoriesObj)) {
-    if (!validKeys.includes(key)) {
-      return false;
-    }
-    if (typeof categoriesObj[key] !== "boolean") {
-      return false;
-    }
-  }
-  return true;
-}
 class Emitter {
   listeners = /* @__PURE__ */ new Map();
   /**
@@ -1520,7 +1369,6 @@ class SenderManager extends StateManager {
   storeManager;
   integrationId;
   apiUrl;
-  consentManager;
   transformers;
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
@@ -1533,11 +1381,10 @@ class SenderManager extends StateManager {
    * @param storeManager - Storage manager for event persistence
    * @param integrationId - Optional integration identifier ('saas' or 'custom')
    * @param apiUrl - Optional API endpoint URL
-   * @param consentManager - Optional consent manager for GDPR compliance
    * @param transformers - Optional event transformation hooks
    * @throws Error if integrationId and apiUrl are not both provided or both undefined
    */
-  constructor(storeManager, integrationId, apiUrl, consentManager = null, transformers = {}) {
+  constructor(storeManager, integrationId, apiUrl, transformers = {}) {
     super();
     if (integrationId && !apiUrl || !integrationId && apiUrl) {
       throw new Error("SenderManager: integrationId and apiUrl must either both be provided or both be undefined");
@@ -1545,7 +1392,6 @@ class SenderManager extends StateManager {
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
-    this.consentManager = consentManager;
     this.transformers = transformers;
   }
   /**
@@ -1576,10 +1422,8 @@ class SenderManager extends StateManager {
    * - Browser guarantees delivery attempt (survives page close)
    * - NO persistence on failure (fire-and-forget)
    *
-   * **Consent Check**: Skips send if consent not granted for this integration
-   *
    * **Return Values**:
-   * - `true`: Send succeeded OR skipped (standalone mode, no consent)
+   * - `true`: Send succeeded OR skipped (standalone mode)
    * - `false`: Send failed (network error, browser rejected beacon)
    *
    * **Important**: No retry mechanism for failures. Events are NOT persisted.
@@ -1592,13 +1436,6 @@ class SenderManager extends StateManager {
    */
   sendEventsQueueSync(body) {
     if (this.shouldSkipSend()) {
-      return true;
-    }
-    if (!this.hasConsentForIntegration()) {
-      log(
-        "debug",
-        `Skipping sync send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ""}`
-      );
       return true;
     }
     if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
@@ -1642,8 +1479,6 @@ class SenderManager extends StateManager {
    * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
    * - **Transient errors** (5xx, network, timeout): Events persisted for recovery
    *
-   * **Consent Check**: Skips send if consent not granted for this integration
-   *
    * **Important**: Events are NOT retried in-session. Persistence is for
    * recovery on next page load via `recoverPersistedEvents()`.
    *
@@ -1685,14 +1520,13 @@ class SenderManager extends StateManager {
    *
    * **Flow**:
    * 1. Checks if recovery already in progress (prevents duplicate attempts)
-   * 2. Checks consent for this integration (skips if no consent)
-   * 3. Loads persisted events from localStorage
-   * 4. Validates freshness (discards events older than 2 hours)
-   * 5. Applies multi-tab protection (skips events persisted within 1 second)
-   * 6. Attempts to resend via `send()` method
-   * 7. On success: Clears persisted events, invokes `onSuccess` callback
-   * 8. On failure: Keeps events in localStorage, invokes `onFailure` callback
-   * 9. On permanent error (4xx): Clears persisted events (no further retry)
+   * 2. Loads persisted events from localStorage
+   * 3. Validates freshness (discards events older than 2 hours)
+   * 4. Applies multi-tab protection (skips events persisted within 1 second)
+   * 5. Attempts to resend via `send()` method
+   * 6. On success: Clears persisted events, invokes `onSuccess` callback
+   * 7. On failure: Keeps events in localStorage, invokes `onFailure` callback
+   * 8. On permanent error (4xx): Clears persisted events (no further retry)
    *
    * **Multi-Tab Protection**:
    * - Events persisted within last 1 second are skipped (active tab may retry)
@@ -1701,10 +1535,6 @@ class SenderManager extends StateManager {
    * **Event Expiry**:
    * - Events older than 2 hours are discarded (prevents stale data accumulation)
    * - Expiry check uses event timestamps, not persistence time
-   *
-   * **Consent Integration**:
-   * - Skips recovery if consent not granted for this integration
-   * - Events remain persisted for future recovery when consent obtained
    *
    * **Callbacks**:
    * - `onSuccess(eventCount, events, body)`: Called after successful transmission
@@ -1734,13 +1564,6 @@ class SenderManager extends StateManager {
   async recoverPersistedEvents(callbacks) {
     if (this.recoveryInProgress) {
       log("debug", "Recovery already in progress, skipping duplicate attempt");
-      return;
-    }
-    if (!this.hasConsentForIntegration()) {
-      log(
-        "debug",
-        `Skipping recovery, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ""}`
-      );
       return;
     }
     this.recoveryInProgress = true;
@@ -1920,7 +1743,6 @@ class SenderManager extends StateManager {
    *
    * **Important Behaviors**:
    * - Transformers applied once before retry loop (not re-applied per attempt)
-   * - Consent checked once before retry loop
    * - Each retry uses same transformed payload
    * - Permanent errors bypass retries immediately
    *
@@ -1935,10 +1757,6 @@ class SenderManager extends StateManager {
   async send(body) {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
-    }
-    if (!this.hasConsentForIntegration()) {
-      log("debug", `Skipping send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ""}`);
-      return true;
     }
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
     if (!afterBeforeSend) {
@@ -2060,12 +1878,11 @@ class SenderManager extends StateManager {
    * Uses sendBeacon() browser API which queues request even after page closes.
    *
    * **Flow**:
-   * 1. Check consent (returns true if denied to prevent retry loops)
-   * 2. Apply beforeSend transformer (per-event transformation)
-   * 3. Apply beforeBatch transformer (batch-level transformation)
-   * 4. Validate payload size (64KB browser limit for sendBeacon)
-   * 5. Send via sendBeacon() or fallback to persistence if unavailable
-   * 6. Persist events on failure for next-page-load recovery
+   * 1. Apply beforeSend transformer (per-event transformation)
+   * 2. Apply beforeBatch transformer (batch-level transformation)
+   * 3. Validate payload size (64KB browser limit for sendBeacon)
+   * 4. Send via sendBeacon() or fallback to persistence if unavailable
+   * 5. Persist events on failure for next-page-load recovery
    *
    * **Payload Size Limit**: 64KB enforced by browser for sendBeacon()
    * - Oversized payloads persisted instead of silently failing
@@ -2075,9 +1892,6 @@ class SenderManager extends StateManager {
    * @private
    */
   sendQueueSyncInternal(body) {
-    if (!this.hasConsentForIntegration()) {
-      return true;
-    }
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
     if (!afterBeforeSend) {
       return true;
@@ -2279,60 +2093,8 @@ class SenderManager extends StateManager {
       this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
   }
-  /**
-   * Checks if consent has been granted for this integration's data collection.
-   *
-   * **Purpose**: GDPR/CCPA compliance check before sending events to backend.
-   * Prevents data transmission when user has not granted consent.
-   *
-   * **Fail-Open Strategy** (Always returns true when):
-   * - `waitForConsent` config option is disabled (default behavior)
-   * - ConsentManager instance not provided (consent not required)
-   * - Unknown integration ID (defensive programming)
-   *
-   * **Integration ID Mapping**:
-   * - `'saas'` → Checks consent for `'tracelog'` (TraceLog SaaS)
-   * - `'custom'` → Checks consent for `'custom'` (Custom backend)
-   * - No integration ID → Allows by default (legacy support)
-   *
-   * **Consent Flow**:
-   * 1. Check if consent required (`config.waitForConsent`)
-   * 2. Verify ConsentManager available
-   * 3. Map integration ID to consent type
-   * 4. Query ConsentManager for consent status
-   * 5. Return true if consent granted, false otherwise
-   *
-   * **Called by**:
-   * - `send()` method before async transmission (line 542)
-   * - `sendQueueSyncInternal()` method before sync transmission (line 668)
-   *
-   * **Behavior when false**:
-   * - Events NOT sent to backend
-   * - Returns true to caller (prevents retry loops)
-   * - Events may be buffered in ConsentManager for later flush
-   *
-   * @returns true if consent granted or not required, false if consent denied
-   */
-  hasConsentForIntegration() {
-    const config = this.get("config");
-    if (!config?.waitForConsent) {
-      return true;
-    }
-    if (!this.consentManager) {
-      return true;
-    }
-    if (this.integrationId === "saas") {
-      return this.consentManager.hasConsent("tracelog");
-    }
-    if (this.integrationId === "custom") {
-      return this.consentManager.hasConsent("custom");
-    }
-    return true;
-  }
 }
 class EventManager extends StateManager {
-  google;
-  consentManager;
   dataSenders;
   emitter;
   transformers;
@@ -2340,10 +2102,6 @@ class EventManager extends StateManager {
   perEventRateLimits = /* @__PURE__ */ new Map();
   eventsQueue = [];
   pendingEventsBuffer = [];
-  consentEventsBuffer = [];
-  consentEventsSentTo = /* @__PURE__ */ new Map();
-  // eventId -> Set<integration>
-  isFlushingConsentBuffer = false;
   sendIntervalId = null;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
@@ -2361,31 +2119,23 @@ class EventManager extends StateManager {
    *
    * **Initialization**:
    * - Creates SenderManager instances for configured integrations (SaaS/Custom)
-   * - Sets up Google Analytics forwarding if configured
-   * - Configures consent management if enabled
    * - Initializes event emitter for local consumption
    *
    * @param storeManager - Storage manager for persistence
-   * @param google - Optional Google Analytics integration
-   * @param consentManager - Optional consent manager for GDPR compliance
    * @param emitter - Optional event emitter for local event consumption
    * @param transformers - Optional event transformation hooks
    */
-  constructor(storeManager, google = null, consentManager = null, emitter = null, transformers = {}) {
+  constructor(storeManager, emitter = null, transformers = {}) {
     super();
-    this.google = google;
-    this.consentManager = consentManager;
     this.emitter = emitter;
     this.transformers = transformers;
     this.dataSenders = [];
     const collectApiUrls = this.get("collectApiUrls");
     if (collectApiUrls?.saas) {
-      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas, consentManager, transformers));
+      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas, transformers));
     }
     if (collectApiUrls?.custom) {
-      this.dataSenders.push(
-        new SenderManager(storeManager, "custom", collectApiUrls.custom, consentManager, transformers)
-      );
+      this.dataSenders.push(new SenderManager(storeManager, "custom", collectApiUrls.custom, transformers));
     }
   }
   /**
@@ -2440,7 +2190,6 @@ class EventManager extends StateManager {
    * **Validation & Buffering**:
    * - Validates `type` is provided (required)
    * - If session not initialized: Buffers in `pendingEventsBuffer` (max 100 events, FIFO)
-   * - If consent pending: Buffers in `consentEventsBuffer` (flushed when consent granted)
    *
    * **Rate Limiting** (non-critical events only):
    * - Global: 50 events/second sliding window (critical events exempted)
@@ -2468,7 +2217,6 @@ class EventManager extends StateManager {
    * - Periodic flush: Every 10 seconds
    *
    * **Multi-Integration**:
-   * - Google Analytics: Forwards custom events to GA/GTM
    * - Backend integrations: Handled by SenderManager instances
    *
    * **QA Mode**:
@@ -2645,7 +2393,6 @@ class EventManager extends StateManager {
    * 2. **Clear all queues and buffers**:
    *    - `eventsQueue`: Discarded (not sent)
    *    - `pendingEventsBuffer`: Discarded (events before session init)
-   *    - `consentEventsBuffer`: Discarded with warning (events awaiting consent)
    * 3. **Reset rate limiting state**: Clears rate limit counters and per-event limits
    * 4. **Reset session counters**: Clears per-session event counts
    * 5. **Reset `hasStartSession` flag**: Allows SESSION_START in next init cycle
@@ -2654,11 +2401,9 @@ class EventManager extends StateManager {
    * **Important Behavior**:
    * - **No final flush**: Events in queue are NOT sent before stopping
    * - For flush before destroy, call `flushImmediatelySync()` first
-   * - Consent buffer discarded: Events awaiting consent are lost (logged as warning)
    *
    * **Multi-Integration**:
    * - Stops all SenderManager instances (SaaS + Custom)
-   * - Clears per-integration consent tracking
    *
    * **Called by**: `App.destroy()` during application teardown
    *
@@ -2676,16 +2421,8 @@ class EventManager extends StateManager {
       clearInterval(this.sendIntervalId);
       this.sendIntervalId = null;
     }
-    if (this.consentEventsBuffer.length > 0) {
-      log("warn", "Discarding consent buffer on destroy", {
-        data: { bufferedEvents: this.consentEventsBuffer.length }
-      });
-    }
     this.eventsQueue = [];
     this.pendingEventsBuffer = [];
-    this.consentEventsBuffer = [];
-    this.consentEventsSentTo.clear();
-    this.isFlushingConsentBuffer = false;
     this.recentEventFingerprints.clear();
     this.rateLimitCounter = 0;
     this.rateLimitWindowStart = 0;
@@ -2800,27 +2537,6 @@ class EventManager extends StateManager {
     return this.eventsQueue.length;
   }
   /**
-   * Returns the current number of events in the consent buffer.
-   *
-   * **Purpose**: Debugging and monitoring utility to check consent buffer length.
-   *
-   * **Use Cases**:
-   * - Verify events are being buffered when consent is pending
-   * - Monitor consent buffer growth before consent decision
-   * - Testing consent workflows
-   *
-   * @returns Number of events currently awaiting consent
-   *
-   * @example
-   * ```typescript
-   * const consentBufferSize = eventManager.getConsentBufferLength();
-   * console.log(`${consentBufferSize} events awaiting consent`);
-   * ```
-   */
-  getConsentBufferLength() {
-    return this.consentEventsBuffer.length;
-  }
-  /**
    * Returns a copy of current events in the queue.
    *
    * **Purpose**: Test utility to inspect queued events for validation.
@@ -2832,24 +2548,6 @@ class EventManager extends StateManager {
    */
   getQueueEvents() {
     return [...this.eventsQueue];
-  }
-  /**
-   * Returns a copy of consent buffer events for a specific integration.
-   *
-   * **Purpose**: Test utility to inspect consent-buffered events for validation.
-   *
-   * **Note**: Only available in development mode via TestBridge.
-   *
-   * @param integration - Integration to get buffered events for
-   * @returns Filtered array of buffered events for the integration
-   * @internal Used by test-bridge.ts for test inspection
-   */
-  getConsentBufferEvents(integration) {
-    return this.consentEventsBuffer.filter((event2) => {
-      const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
-      const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
-      return !sentTo.has(integration);
-    });
   }
   /**
    * Triggers immediate queue flush (test utility).
@@ -2878,239 +2576,6 @@ class EventManager extends StateManager {
    */
   clearQueue() {
     this.eventsQueue = [];
-  }
-  /**
-   * Flushes buffered events to a specific integration when consent is granted.
-   *
-   * **Purpose**: Sends events that were tracked before consent was granted to the
-   * specified integration. Events are batched and sent with delays to prevent
-   * overwhelming the backend.
-   *
-   * **Behavior**:
-   * - Filters events that haven't been sent to this integration yet
-   * - Sorts events: SESSION_START first, then chronological by timestamp
-   * - Sends in batches of 10 events (CONSENT_FLUSH_BATCH_SIZE)
-   * - 100ms delay between batches (CONSENT_FLUSH_DELAY_MS)
-   * - Tracks sent events per-integration to support multi-integration scenarios
-   * - Removes events from buffer when sent to all configured integrations
-   *
-   * **Concurrency Protection**:
-   * - Guard flag `isFlushingConsentBuffer` prevents concurrent flushes
-   * - Returns early if flush already in progress
-   *
-   * **Multi-Integration Support**:
-   * - Tracks which integrations each event has been sent to
-   * - Allows partial sending (e.g., sent to TraceLog but not Custom yet)
-   * - Events only removed from buffer when sent to ALL configured integrations
-   *
-   * **Called by**: ConsentManager when consent is granted for an integration
-   *
-   * @param integration - Integration to flush events to ('google' | 'custom' | 'tracelog')
-   * @returns Promise<void> - Resolves when all batches sent or error occurs
-   *
-   * @example
-   * ```typescript
-   * // User grants consent for TraceLog SaaS
-   * await eventManager.flushConsentBuffer('tracelog');
-   * // → Sends buffered events to TraceLog in batches of 10
-   * // → 100ms delay between batches
-   * ```
-   */
-  async flushConsentBuffer(integration) {
-    if (this.consentEventsBuffer.length === 0) {
-      return;
-    }
-    if (this.isFlushingConsentBuffer) {
-      log("debug", "Consent buffer flush already in progress, skipping");
-      return;
-    }
-    this.isFlushingConsentBuffer = true;
-    try {
-      const config = this.get("config");
-      const collectApiUrls = this.get("collectApiUrls");
-      const configuredIntegrations = /* @__PURE__ */ new Set();
-      if (config?.integrations?.google) {
-        configuredIntegrations.add("google");
-      }
-      if (collectApiUrls?.custom) {
-        configuredIntegrations.add("custom");
-      }
-      if (collectApiUrls?.saas) {
-        configuredIntegrations.add("tracelog");
-      }
-      const eventsToSend = this.consentEventsBuffer.filter((event2) => {
-        const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
-        const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
-        return !sentTo.has(integration);
-      });
-      if (eventsToSend.length === 0) {
-        log("debug", `No new events to flush for ${integration}`);
-        this.isFlushingConsentBuffer = false;
-        return;
-      }
-      log("info", "Flushing consent buffer", {
-        data: {
-          totalEvents: eventsToSend.length,
-          integration,
-          bufferedTotal: this.consentEventsBuffer.length
-        }
-      });
-      eventsToSend.sort((a2, b2) => {
-        if (a2.type === EventType.SESSION_START && b2.type !== EventType.SESSION_START) {
-          return -1;
-        }
-        if (b2.type === EventType.SESSION_START && a2.type !== EventType.SESSION_START) {
-          return 1;
-        }
-        return a2.timestamp - b2.timestamp;
-      });
-      const batchSize = CONSENT_FLUSH_BATCH_SIZE;
-      let flushedCount = 0;
-      for (let i = 0; i < eventsToSend.length; i += batchSize) {
-        const batch = eventsToSend.slice(i, i + batchSize);
-        if (integration === "google" && this.google) {
-          batch.forEach((event2) => {
-            this.handleGoogleAnalyticsIntegration(event2);
-          });
-        }
-        if (integration === "custom" || integration === "tracelog") {
-          const targetSender = this.dataSenders.find((sender) => {
-            const senderId = sender.getIntegrationId();
-            if (integration === "custom") {
-              return senderId === "custom";
-            }
-            return senderId === "saas";
-          });
-          if (targetSender) {
-            const batchPayload = {
-              user_id: this.get("userId"),
-              session_id: this.get("sessionId"),
-              device: this.get("device"),
-              events: batch,
-              ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata }
-            };
-            const success = await targetSender.sendEventsQueue(batchPayload);
-            if (!success) {
-              log(
-                "warn",
-                `Failed to send consent buffer batch for ${integration} after retries, events persisted for recovery`,
-                {
-                  data: { batchSize: batch.length, integration }
-                }
-              );
-            }
-          }
-        }
-        batch.forEach((event2) => {
-          const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
-          if (!this.consentEventsSentTo.has(eventId)) {
-            this.consentEventsSentTo.set(eventId, /* @__PURE__ */ new Set());
-          }
-          this.consentEventsSentTo.get(eventId).add(integration);
-        });
-        flushedCount += batch.length;
-        if (i + batchSize < eventsToSend.length) {
-          await new Promise((resolve) => setTimeout(resolve, CONSENT_FLUSH_DELAY_MS));
-        }
-      }
-      this.consentEventsBuffer = this.consentEventsBuffer.filter((event2) => {
-        const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
-        const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
-        const allSent = Array.from(configuredIntegrations).every((int) => sentTo.has(int));
-        if (allSent) {
-          this.consentEventsSentTo.delete(eventId);
-          return false;
-        }
-        return true;
-      });
-      log("info", "Consent buffer flushed successfully", {
-        data: {
-          flushedEvents: flushedCount,
-          integration,
-          remainingInBuffer: this.consentEventsBuffer.length
-        }
-      });
-    } catch (error) {
-      log("error", "Failed to flush consent buffer", { error });
-    } finally {
-      this.isFlushingConsentBuffer = false;
-    }
-  }
-  /**
-   * Clears consent buffer entries for a specific integration when consent is revoked.
-   *
-   * **Purpose**: Removes tracking data for events that were waiting to be sent to
-   * an integration when the user revokes consent. Events remain in buffer if they're
-   * waiting for other integrations.
-   *
-   * **Behavior**:
-   * - Removes the integration from each event's "sent to" tracking map
-   * - Events removed from buffer if they've been sent to all OTHER configured integrations
-   * - Events kept in buffer if still waiting for other integrations
-   * - Logs removed count for debugging
-   *
-   * **Multi-Integration Support**:
-   * - In multi-integration mode, events may wait for multiple integrations
-   * - Revoking consent for one integration doesn't affect others
-   * - Example: Event sent to TraceLog but waiting for Custom → kept in buffer when TraceLog consent revoked
-   *
-   * **Called by**: ConsentManager when consent is revoked for an integration
-   *
-   * @param integration - Integration to clear tracking for ('google' | 'custom' | 'tracelog')
-   * @returns void
-   *
-   * @example
-   * ```typescript
-   * // User revokes consent for Google Analytics
-   * eventManager.clearConsentBufferForIntegration('google');
-   * // → Removes Google from event tracking
-   * // → Events still waiting for TraceLog/Custom remain in buffer
-   * ```
-   */
-  clearConsentBufferForIntegration(integration) {
-    const initialLength = this.consentEventsBuffer.length;
-    if (initialLength === 0) {
-      return;
-    }
-    this.consentEventsSentTo.forEach((sentTo, eventId) => {
-      sentTo.delete(integration);
-      if (sentTo.size === 0) {
-        this.consentEventsSentTo.delete(eventId);
-      }
-    });
-    const config = this.get("config");
-    const collectApiUrls = this.get("collectApiUrls");
-    const remainingIntegrations = /* @__PURE__ */ new Set();
-    if (config?.integrations?.google && integration !== "google") {
-      remainingIntegrations.add("google");
-    }
-    if (collectApiUrls?.custom && integration !== "custom") {
-      remainingIntegrations.add("custom");
-    }
-    if (collectApiUrls?.saas && integration !== "tracelog") {
-      remainingIntegrations.add("tracelog");
-    }
-    if (remainingIntegrations.size === 0) {
-      this.consentEventsBuffer = [];
-      this.consentEventsSentTo.clear();
-      log("info", `Cleared entire consent buffer (${initialLength} events) - no remaining integrations`);
-    } else {
-      this.consentEventsBuffer = this.consentEventsBuffer.filter((event2) => {
-        const eventId = event2.id || `${event2.type}-${event2.timestamp}`;
-        const sentTo = this.consentEventsSentTo.get(eventId) || /* @__PURE__ */ new Set();
-        return Array.from(remainingIntegrations).some((int) => !sentTo.has(int));
-      });
-      const removed = initialLength - this.consentEventsBuffer.length;
-      if (removed > 0) {
-        log("info", `Cleared ${removed} buffered events for revoked ${integration} consent`, {
-          data: {
-            removed,
-            remaining: this.consentEventsBuffer.length,
-            otherIntegrations: Array.from(remainingIntegrations)
-          }
-        });
-      }
-    }
   }
   /**
    * Flushes buffered events to the main queue after session initialization.
@@ -3395,10 +2860,6 @@ class EventManager extends StateManager {
   }
   addToQueue(event2) {
     this.emitEvent(event2);
-    if (this.shouldBufferForConsent()) {
-      this.addToConsentBuffer(event2);
-      return;
-    }
     this.eventsQueue.push(event2);
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
       const nonCriticalIndex = this.eventsQueue.findIndex(
@@ -3420,117 +2881,6 @@ class EventManager extends StateManager {
     if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
       void this.sendEventsQueue();
     }
-    this.handleGoogleAnalyticsIntegration(event2);
-  }
-  /**
-   * Updates the Google Analytics integration instance.
-   *
-   * **Purpose**: Sets or removes the Google Analytics integration instance used
-   * for forwarding custom events to GA4/GTM. Called when consent is granted or revoked.
-   *
-   * **Behavior**:
-   * - Sets `this.google` to the provided instance or null
-   * - Enables/disables Google Analytics event forwarding
-   * - Logs integration status change for debugging
-   *
-   * **Consent Integration**:
-   * - Called by ConsentManager when Google consent is granted → passes GoogleAnalyticsIntegration
-   * - Called by ConsentManager when Google consent is revoked → passes null
-   *
-   * **Use Cases**:
-   * - Consent granted: Start forwarding custom events to Google Analytics
-   * - Consent revoked: Stop forwarding events to Google Analytics
-   * - Runtime control: Enable/disable Google Analytics without reinitialization
-   *
-   * @param google - GoogleAnalyticsIntegration instance or null to disable
-   * @returns void
-   *
-   * @example
-   * ```typescript
-   * // Consent granted - enable Google Analytics
-   * const gaIntegration = new GoogleAnalyticsIntegration(config);
-   * eventManager.setGoogleAnalyticsIntegration(gaIntegration);
-   * // → Custom events now forwarded to GA4
-   *
-   * // Consent revoked - disable Google Analytics
-   * eventManager.setGoogleAnalyticsIntegration(null);
-   * // → Custom events no longer forwarded to GA4
-   * ```
-   */
-  setGoogleAnalyticsIntegration(google) {
-    this.google = google;
-    if (google) {
-      log("debug", "Google Analytics integration updated in EventManager");
-    } else {
-      log("debug", "Google Analytics integration removed from EventManager");
-    }
-  }
-  /**
-   * Determines if events should be buffered for consent instead of being sent immediately.
-   *
-   * **Purpose**: Implements GDPR/CCPA compliance by preventing event transmission before
-   * user grants consent. Events are buffered and sent later via `flushConsentBuffer()`.
-   *
-   * **Logic**:
-   * 1. QA mode bypasses consent checks (always returns false)
-   * 2. If `waitForConsent` disabled in config, returns false (no buffering)
-   * 3. If no consent manager, returns false (can't check consent)
-   * 4. If no integrations configured, returns false (standalone mode)
-   * 5. Returns true only if integrations exist but none have consent yet
-   *
-   * @returns `true` if events should be buffered, `false` if they can be sent
-   * @private
-   */
-  shouldBufferForConsent() {
-    if (this.get("mode") === Mode.QA) {
-      return false;
-    }
-    const config = this.get("config");
-    if (!config?.waitForConsent) {
-      return false;
-    }
-    if (!this.consentManager) {
-      return false;
-    }
-    const collectApiUrls = this.get("collectApiUrls");
-    const hasGoogleIntegration = Boolean(config.integrations?.google);
-    const hasCustomIntegration = Boolean(collectApiUrls?.custom);
-    const hasTracelogIntegration = Boolean(collectApiUrls?.saas);
-    if (!hasGoogleIntegration && !hasCustomIntegration && !hasTracelogIntegration) {
-      return false;
-    }
-    const hasAnyConsent = hasGoogleIntegration && this.consentManager.hasConsent("google") || hasCustomIntegration && this.consentManager.hasConsent("custom") || hasTracelogIntegration && this.consentManager.hasConsent("tracelog");
-    return !hasAnyConsent;
-  }
-  /**
-   * Adds event to consent buffer with overflow protection and SESSION_START preservation.
-   *
-   * **Purpose**: Buffers events that were tracked before consent was granted. Events are
-   * later flushed per-integration when consent is granted via `flushConsentBuffer()`.
-   *
-   * **Overflow Strategy**:
-   * - Max buffer size: Configurable via `config.maxConsentBufferSize` (default 500)
-   * - FIFO eviction: Oldest non-critical events removed first when buffer full
-   * - SESSION_START preservation: Critical events always kept, non-critical removed instead
-   *
-   * @param event - Event to buffer (with id, type, timestamp, and event-specific data)
-   * @private
-   */
-  addToConsentBuffer(event2) {
-    const config = this.get("config");
-    const maxBufferSize = config?.maxConsentBufferSize ?? 500;
-    this.consentEventsBuffer.push(event2);
-    if (this.consentEventsBuffer.length > maxBufferSize) {
-      const nonCriticalIndex = this.consentEventsBuffer.findIndex((e3) => e3.type !== EventType.SESSION_START);
-      const removedEvent = nonCriticalIndex >= 0 ? this.consentEventsBuffer.splice(nonCriticalIndex, 1)[0] : this.consentEventsBuffer.shift();
-      log("warn", "Consent buffer overflow, oldest non-critical event discarded", {
-        data: {
-          maxBufferSize,
-          currentSize: this.consentEventsBuffer.length,
-          removedEventType: removedEvent?.type
-        }
-      });
-    }
   }
   startSendInterval() {
     this.sendIntervalId = window.setInterval(() => {
@@ -3538,79 +2888,6 @@ class EventManager extends StateManager {
         void this.sendEventsQueue();
       }
     }, EVENT_SENT_INTERVAL_MS);
-  }
-  handleGoogleAnalyticsIntegration(event2) {
-    if (!this.google) {
-      return;
-    }
-    const config = this.get("config");
-    if (config?.waitForConsent && this.consentManager && !this.consentManager.hasConsent("google")) {
-      return;
-    }
-    if (this.get("mode") === Mode.QA) {
-      return;
-    }
-    const googleConfig = this.get("config").integrations?.google;
-    const forwardEvents = googleConfig?.forwardEvents;
-    if (forwardEvents == null || Array.isArray(forwardEvents) && forwardEvents.length === 0) {
-      return;
-    }
-    const shouldForward = forwardEvents === "all" || Array.isArray(forwardEvents) && forwardEvents.includes(event2.type);
-    if (!shouldForward) {
-      log("debug", `Skipping GA event forward: ${event2.type} not in forwardEvents config`, {
-        data: { eventType: event2.type, forwardEvents }
-      });
-      return;
-    }
-    if (event2.type === EventType.CUSTOM && event2.custom_event) {
-      this.google.trackEvent(event2.custom_event.name, event2.custom_event.metadata ?? {});
-    } else if (event2.type === EventType.PAGE_VIEW) {
-      this.google.trackEvent("page_view", {
-        page_location: event2.page_url,
-        page_title: document.title,
-        ...event2.from_page_url && { page_referrer: event2.from_page_url }
-      });
-    } else if (event2.type === EventType.SESSION_START) {
-      this.google.trackEvent("session_start", {
-        engagement_time_msec: 0,
-        ...event2.referrer && { referrer: event2.referrer },
-        ...event2.utm && event2.utm
-      });
-    } else if (event2.type === EventType.WEB_VITALS && event2.web_vitals) {
-      const metricName = event2.web_vitals.type.toLowerCase();
-      this.google.trackEvent(metricName, {
-        value: event2.web_vitals.value
-      });
-    } else if (event2.type === EventType.ERROR && event2.error_data) {
-      this.google.trackEvent("exception", {
-        description: event2.error_data.message,
-        fatal: false
-      });
-    } else if (event2.type === EventType.SCROLL && event2.scroll_data) {
-      this.google.trackEvent("scroll", {
-        depth: event2.scroll_data.depth,
-        direction: event2.scroll_data.direction
-      });
-    } else if (event2.type === EventType.CLICK && event2.click_data) {
-      this.google.trackEvent("click", {
-        ...event2.click_data.id && { element_id: event2.click_data.id },
-        ...event2.click_data.text && { text: event2.click_data.text },
-        ...event2.click_data.tag && { tag: event2.click_data.tag }
-      });
-    } else if (event2.type === EventType.VIEWPORT_VISIBLE && event2.viewport_data) {
-      this.google.trackEvent("viewport_visible", {
-        selector: event2.viewport_data.selector,
-        ...event2.viewport_data.id && { element_id: event2.viewport_data.id },
-        ...event2.viewport_data.name && { element_name: event2.viewport_data.name },
-        dwell_time: event2.viewport_data.dwellTime,
-        visibility_ratio: event2.viewport_data.visibilityRatio
-      });
-    } else if (event2.type === EventType.SESSION_END) {
-      this.google.trackEvent("session_end", {
-        ...event2.session_end_reason && { session_end_reason: event2.session_end_reason },
-        ...event2.page_url && { page_location: event2.page_url }
-      });
-    }
   }
   shouldSample() {
     const samplingRate = this.get("config")?.samplingRate ?? 1;
@@ -3698,597 +2975,6 @@ class UserManager {
     const newUserId = generateUUID();
     storageManager.setItem(USER_ID_KEY, newUserId);
     return newUserId;
-  }
-}
-class ConsentManager {
-  storageManager;
-  emitter;
-  consentState;
-  persistedCategories = {};
-  storageListener = null;
-  persistDebounceTimer = null;
-  /**
-   * Debounce delay for localStorage persistence (50ms).
-   *
-   * **Rationale**: Balances responsiveness with localStorage write performance.
-   * - Long enough to batch rapid UI interactions (e.g., programmatic consent setup)
-   * - Short enough to feel instant to users (< 100ms threshold)
-   * - Prevents localStorage thrashing during rapid consent changes
-   *
-   * **Performance Impact**: 10 rapid changes = 1 write instead of 10 writes
-   */
-  PERSIST_DEBOUNCE_MS = 50;
-  /**
-   * Creates a ConsentManager instance.
-   *
-   * **Side Effects**:
-   * - Loads persisted consent from localStorage
-   * - Sets up cross-tab synchronization (if `enableCrossTabSync` is true)
-   *
-   * **SSR Safety**: No-op in Node.js environments
-   *
-   * @param storageManager - Storage manager for consent persistence
-   * @param enableCrossTabSync - Enable cross-tab synchronization (default: true)
-   * @param emitter - Optional event emitter for consent-changed events
-   */
-  constructor(storageManager, enableCrossTabSync = true, emitter = null) {
-    this.storageManager = storageManager;
-    this.emitter = emitter;
-    this.consentState = {
-      google: false,
-      custom: false,
-      tracelog: false
-    };
-    if (typeof window === "undefined") {
-      return;
-    }
-    this.loadPersistedConsent();
-    if (enableCrossTabSync) {
-      this.setupCrossTabSync();
-    }
-  }
-  /**
-   * Checks if consent has been granted for a specific integration.
-   *
-   * **Purpose**: Query consent state before sending events to integrations.
-   *
-   * **Behavior**:
-   * - `'all'`: Returns `true` only if ALL integrations have consent
-   * - Specific integration: Returns consent state for that integration
-   * - SSR: Always returns `false` in Node.js environments
-   *
-   * **Use Cases**:
-   * - EventManager: Checks before sending events to backends
-   * - SenderManager: Validates consent before network requests
-   * - External code: Conditional rendering based on consent
-   *
-   * @param integration - Integration to check ('all', 'google', 'custom', 'tracelog')
-   * @returns `true` if consent granted, `false` otherwise
-   *
-   * @example
-   * ```typescript
-   * if (consentManager.hasConsent('google')) {
-   *   // Send events to Google Analytics
-   * }
-   *
-   * if (consentManager.hasConsent('all')) {
-   *   // All integrations have consent
-   * }
-   * ```
-   */
-  hasConsent(integration) {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    if (integration === "all") {
-      return this.consentState.google && this.consentState.custom && this.consentState.tracelog;
-    }
-    return this.consentState[integration];
-  }
-  /**
-   * Grants or revokes consent for one or all integrations.
-   *
-   * **Purpose**: Update consent state and trigger buffered event flush.
-   *
-   * **Behavior**:
-   * - `'all'`: Grants/revokes consent for ALL integrations
-   * - Specific integration: Updates consent for that integration only
-   * - Persists to localStorage with 50ms debounce
-   * - Emits `consent-changed` event
-   * - Triggers flush of buffered events (if consent granted)
-   * - SSR: No-op in Node.js environments
-   *
-   * **Persistence**:
-   * - Stored in localStorage with 365-day expiration
-   * - Debounced 50ms to prevent excessive writes
-   * - Cross-tab synchronized via `storage` events
-   *
-   * **Event Emission**:
-   * - Emits `consent-changed` event with current consent state
-   * - EventManager listens and flushes buffered events for granted integration
-   *
-   * **Important**: Revoking consent does NOT delete already-sent events.
-   * It only prevents future events from being sent.
-   *
-   * @param integration - Integration to update ('all', 'google', 'custom', 'tracelog')
-   * @param granted - `true` to grant consent, `false` to revoke
-   *
-   * @example
-   * ```typescript
-   * // Grant consent for Google Analytics
-   * consentManager.setConsent('google', true);
-   * // → Buffered Google Analytics events sent
-   *
-   * // Revoke consent for custom backend
-   * consentManager.setConsent('custom', false);
-   * // → Future events NOT sent to custom backend
-   *
-   * // Grant consent for all integrations
-   * consentManager.setConsent('all', true);
-   * // → All buffered events sent
-   * ```
-   */
-  setConsent(integration, granted) {
-    if (typeof window === "undefined") {
-      return;
-    }
-    if (integration === "all") {
-      this.consentState.google = granted;
-      this.consentState.custom = granted;
-      this.consentState.tracelog = granted;
-      log("info", `Consent ${granted ? "granted" : "revoked"} for all integrations`);
-    } else {
-      this.consentState[integration] = granted;
-      log("info", `Consent ${granted ? "granted" : "revoked"} for ${integration} integration`);
-    }
-    this.persistConsentDebounced();
-    if (this.emitter) {
-      this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
-    }
-  }
-  /**
-   * Returns a snapshot of the current consent state for all integrations.
-   *
-   * **Purpose**: Retrieve consent state for display in UI or for external logic.
-   *
-   * **Behavior**:
-   * - Returns shallow copy (prevents external mutations)
-   * - Always includes all integrations (`google`, `custom`, `tracelog`)
-   * - Each integration is `true` (granted) or `false` (not granted)
-   *
-   * **Use Cases**:
-   * - Display consent status in UI
-   * - Sync consent to external systems
-   * - Conditional logic based on multiple integrations
-   *
-   * @returns Snapshot of current consent state
-   *
-   * @example
-   * ```typescript
-   * const state = consentManager.getConsentState();
-   * // → { google: true, custom: false, tracelog: true }
-   *
-   * // Display in UI
-   * console.log(`Google: ${state.google ? 'Granted' : 'Not granted'}`);
-   * console.log(`Custom: ${state.custom ? 'Granted' : 'Not granted'}`);
-   * console.log(`TraceLog: ${state.tracelog ? 'Granted' : 'Not granted'}`);
-   * ```
-   */
-  getConsentState() {
-    return { ...this.consentState };
-  }
-  /**
-   * Returns a list of integrations that have been granted consent.
-   *
-   * **Purpose**: Get only granted integrations for conditional logic.
-   *
-   * **Behavior**:
-   * - Returns array of integration names with `true` consent
-   * - Empty array if no consent granted
-   * - Excludes `'all'` (not a real integration)
-   *
-   * **Use Cases**:
-   * - Iterate over granted integrations
-   * - Display granted integrations in UI
-   * - Conditional initialization of integrations
-   *
-   * @returns Array of granted integration names
-   *
-   * @example
-   * ```typescript
-   * const granted = consentManager.getGrantedIntegrations();
-   * // → ['google', 'tracelog']
-   *
-   * // Iterate over granted integrations
-   * granted.forEach(integration => {
-   *   console.log(`${integration} has consent`);
-   * });
-   * ```
-   */
-  getGrantedIntegrations() {
-    const granted = [];
-    if (this.consentState.google) {
-      granted.push("google");
-    }
-    if (this.consentState.custom) {
-      granted.push("custom");
-    }
-    if (this.consentState.tracelog) {
-      granted.push("tracelog");
-    }
-    return granted;
-  }
-  /**
-   * Sets Google Consent Mode categories to be persisted with consent state.
-   *
-   * **Purpose**: Allow dynamic configuration of Google Consent Mode categories
-   * that persist across browser sessions (365 days).
-   *
-   * **Behavior**:
-   * - Stores categories in memory and triggers debounced persistence
-   * - Categories saved to localStorage with consent state
-   * - Persists across page reloads and browser sessions
-   * - Same 365-day expiration as consent state
-   *
-   * **Use Cases**:
-   * - User selects cookie preferences in banner
-   * - Dynamic consent configuration after init
-   * - Updating categories when user changes preferences
-   *
-   * @param categories - Google Consent Mode categories to persist
-   *
-   * @example
-   * ```typescript
-   * consentManager.setGoogleConsentCategories({
-   *   analytics_storage: true,
-   *   ad_storage: false
-   * });
-   * // → Saved to localStorage with consent state
-   * // → Reloaded automatically on next page load
-   * ```
-   */
-  setGoogleConsentCategories(categories) {
-    this.persistedCategories.google = categories;
-    this.persistConsentDebounced();
-    log("debug", "Google consent categories set for persistence", {
-      data: { categories }
-    });
-  }
-  /**
-   * Retrieves persisted Google Consent Mode categories from memory.
-   *
-   * **Purpose**: Access categories loaded from localStorage during initialization.
-   *
-   * **Behavior**:
-   * - Returns categories loaded from localStorage
-   * - Returns undefined if no categories persisted
-   * - Categories automatically loaded during ConsentManager initialization
-   *
-   * **Use Cases**:
-   * - Apply persisted categories to config during App.init()
-   * - Display saved preferences in UI
-   * - Restore user's consent selections
-   *
-   * @returns Persisted Google Consent Mode categories or undefined
-   *
-   * @example
-   * ```typescript
-   * const categories = consentManager.getGoogleConsentCategories();
-   * if (categories) {
-   *   // Apply to config
-   *   config.integrations.google.consentCategories = categories;
-   * }
-   * ```
-   */
-  getGoogleConsentCategories() {
-    return this.persistedCategories.google;
-  }
-  /**
-   * Cleans up ConsentManager resources and event listeners.
-   *
-   * **Purpose**: Releases memory and detaches event listeners to prevent memory leaks
-   * when ConsentManager is no longer needed.
-   *
-   * **Cleanup Operations**:
-   * 1. Clears pending debounce timer (prevents delayed persistence after cleanup)
-   * 2. Removes cross-tab storage event listener
-   * 3. Sets references to null for garbage collection
-   *
-   * **Important Notes**:
-   * - Does NOT clear persisted consent from localStorage
-   * - Consent state remains accessible in future sessions
-   * - SSR-safe: Browser environment check before removing storage listener
-   *
-   * **Use Cases**:
-   * - Called during `App.destroy()` lifecycle
-   * - Test cleanup between test cases
-   * - Manual cleanup when consent management no longer needed
-   *
-   * **After Cleanup**:
-   * - ConsentManager instance should not be reused
-   * - Consent state persists in localStorage
-   * - Cross-tab sync stops (other tabs unaffected)
-   *
-   * @returns void
-   *
-   * @example
-   * ```typescript
-   * consentManager.cleanup();
-   * // → Debounce timer cleared
-   * // → Storage listener removed
-   * // → Consent data remains in localStorage
-   * ```
-   */
-  cleanup() {
-    if (this.persistDebounceTimer) {
-      clearTimeout(this.persistDebounceTimer);
-      this.persistDebounceTimer = null;
-    }
-    if (this.storageListener && typeof window !== "undefined") {
-      window.removeEventListener("storage", this.storageListener);
-      this.storageListener = null;
-    }
-  }
-  /**
-   * Loads and validates persisted consent state from localStorage with expiration check.
-   *
-   * **Purpose**: Restores consent preferences from previous sessions, ensuring they haven't
-   * expired (365 days default).
-   *
-   * **Validation Flow**:
-   * 1. SSR safety check (returns early in Node.js)
-   * 2. Retrieves consent data from localStorage
-   * 3. Parses JSON and validates structure (state, timestamp, expiresAt fields required)
-   * 4. Checks expiration against current time
-   * 5. Loads consent state into memory if valid
-   *
-   * **Error Recovery**:
-   * - Invalid JSON → Clears storage, starts fresh
-   * - Missing required fields → Clears storage, logs warning
-   * - Expired consent → Clears storage, logs info
-   * - Parse errors → Clears storage, logs warning, starts with default (no consent)
-   *
-   * **Expiration Calculation**:
-   * - Consent expires after CONSENT_EXPIRY_DAYS (365 days)
-   * - Logs days until expiry for debugging
-   *
-   * **Called by**: Constructor during ConsentManager initialization
-   *
-   * @private
-   */
-  loadPersistedConsent() {
-    if (typeof window === "undefined") {
-      return;
-    }
-    try {
-      const persistedData = this.storageManager.getItem(CONSENT_KEY);
-      if (!persistedData) {
-        return;
-      }
-      const parsed = JSON.parse(persistedData);
-      if (!parsed.state || !parsed.timestamp || !parsed.expiresAt) {
-        log("warn", "Invalid consent data structure, ignoring");
-        this.clearPersistedConsent();
-        return;
-      }
-      const now = Date.now();
-      if (now > parsed.expiresAt) {
-        log("info", "Persisted consent has expired, clearing");
-        this.clearPersistedConsent();
-        return;
-      }
-      this.consentState = {
-        google: Boolean(parsed.state.google),
-        custom: Boolean(parsed.state.custom),
-        tracelog: Boolean(parsed.state.tracelog)
-      };
-      if (parsed.categories?.google) {
-        if (isValidGoogleConsentCategories(parsed.categories.google)) {
-          this.persistedCategories = { ...parsed.categories };
-          log("debug", "Restored valid persisted Google consent categories");
-        } else {
-          log("warn", "Invalid persisted Google consent categories detected, ignoring", {
-            data: { categories: parsed.categories.google }
-          });
-        }
-      }
-      log("debug", "Loaded persisted consent state", {
-        data: {
-          google: this.consentState.google,
-          custom: this.consentState.custom,
-          tracelog: this.consentState.tracelog,
-          hasGoogleCategories: Boolean(this.persistedCategories.google),
-          daysUntilExpiry: Math.floor((parsed.expiresAt - now) / (1e3 * 60 * 60 * 24))
-        }
-      });
-    } catch (error) {
-      log("warn", "Failed to load persisted consent, starting fresh", { error });
-      this.clearPersistedConsent();
-    }
-  }
-  /**
-   * Debounces consent persistence to prevent excessive localStorage writes during rapid consent changes.
-   *
-   * **Purpose**: Optimizes localStorage write performance by batching multiple consent changes
-   * into a single write operation after 50ms of inactivity.
-   *
-   * **Debouncing Strategy**:
-   * - Clears existing timer if called while timer pending
-   * - Sets new 50ms timer to delay persistence
-   * - Only persists once after rapid sequence of consent changes completes
-   *
-   * **Performance Impact**:
-   * - Without debouncing: N consent changes = N localStorage writes
-   * - With debouncing: N consent changes = 1 localStorage write
-   * - Example: 10 rapid grants/revokes = 1 write instead of 10
-   *
-   * **Delay Rationale** (50ms):
-   * - Long enough to batch rapid UI interactions
-   * - Short enough to feel instant to users
-   * - Prevents localStorage thrashing during programmatic consent setup
-   *
-   * **SSR Safety**: Returns early in Node.js environments
-   *
-   * **Called by**: `setConsent()` after each consent state change
-   *
-   * @private
-   */
-  persistConsentDebounced() {
-    if (typeof window === "undefined") {
-      return;
-    }
-    if (this.persistDebounceTimer) {
-      clearTimeout(this.persistDebounceTimer);
-    }
-    this.persistDebounceTimer = window.setTimeout(() => {
-      this.persistConsent();
-      this.persistDebounceTimer = null;
-    }, this.PERSIST_DEBOUNCE_MS);
-  }
-  /**
-   * Immediately flush any pending consent persistence to localStorage.
-   * Clears debounce timer and persists immediately.
-   *
-   * **Use Cases:**
-   * - Before navigation/page unload
-   * - When consent must be persisted synchronously (e.g., before init)
-   *
-   * **Error Handling:**
-   * - If `throwOnError` is true, storage errors are rethrown (useful for before-init scenarios)
-   * - If `throwOnError` is false (default), storage errors are logged but not thrown
-   *
-   * @param throwOnError - Whether to throw storage errors (default: false)
-   * @public
-   */
-  flush(throwOnError = false) {
-    if (this.persistDebounceTimer !== null) {
-      clearTimeout(this.persistDebounceTimer);
-      this.persistDebounceTimer = null;
-    }
-    this.persistConsent(throwOnError);
-  }
-  /**
-   * Immediately persist consent state to localStorage
-   *
-   * @param throwOnError - Whether to throw storage errors (default: false)
-   */
-  persistConsent(throwOnError = false) {
-    if (typeof window === "undefined") {
-      return;
-    }
-    try {
-      const now = Date.now();
-      const expiresAt = now + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1e3;
-      const data = {
-        state: { ...this.consentState },
-        timestamp: now,
-        expiresAt
-      };
-      if (Object.keys(this.persistedCategories).length > 0) {
-        data.categories = { ...this.persistedCategories };
-      }
-      this.storageManager.setItem(CONSENT_KEY, JSON.stringify(data));
-    } catch (error) {
-      log("error", "Failed to persist consent state", { error });
-      if (error instanceof Error && error.name === "QuotaExceededError") {
-        log("warn", "localStorage quota exceeded, consent will be volatile for this session");
-      }
-      if (throwOnError) {
-        throw error;
-      }
-    }
-  }
-  /**
-   * Clear persisted consent from localStorage
-   */
-  clearPersistedConsent() {
-    if (typeof window === "undefined") {
-      return;
-    }
-    try {
-      this.storageManager.removeItem(CONSENT_KEY);
-    } catch (error) {
-      log("warn", "Failed to clear persisted consent", { error });
-    }
-  }
-  /**
-   * Establishes cross-tab consent synchronization using storage events.
-   *
-   * **Purpose**: Keeps consent state synchronized across all browser tabs/windows
-   * by listening to localStorage changes made by other tabs.
-   *
-   * **How It Works**:
-   * 1. Listens to `storage` event (fires when localStorage changes in other tab)
-   * 2. Filters events to CONSENT_KEY only
-   * 3. Validates new consent data structure
-   * 4. Updates in-memory consent state
-   * 5. Emits CONSENT_CHANGED event to notify EventManager
-   *
-   * **Cross-Tab Scenarios**:
-   * - Tab A grants consent → Tab B/C/D receive update via storage event
-   * - Tab A revokes consent → Tab B/C/D stop sending events immediately
-   * - New tab opened → Loads existing consent from localStorage
-   *
-   * **Event Filtering**:
-   * - Only processes events for CONSENT_KEY ('tracelog_consent')
-   * - Ignores other localStorage changes
-   * - Validates data structure before applying
-   *
-   * **Error Handling**:
-   * - Invalid JSON → Ignored (keeps current state)
-   * - Missing required fields → Ignored (logs warning)
-   * - Parse errors → Ignored (logs warning, maintains stability)
-   *
-   * **SSR Safety**: Returns early in Node.js environments
-   *
-   * **Called by**: Constructor during ConsentManager initialization
-   *
-   * @private
-   */
-  setupCrossTabSync() {
-    if (typeof window === "undefined") {
-      return;
-    }
-    this.storageListener = (event2) => {
-      if (event2.key !== CONSENT_KEY || event2.storageArea !== window.localStorage) {
-        return;
-      }
-      if (!event2.newValue) {
-        this.consentState = {
-          google: false,
-          custom: false,
-          tracelog: false
-        };
-        log("debug", "Consent cleared in another tab, synced locally");
-        if (this.emitter) {
-          this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
-        }
-        return;
-      }
-      try {
-        const parsed = JSON.parse(event2.newValue);
-        if (parsed.state) {
-          this.consentState = {
-            google: Boolean(parsed.state.google),
-            custom: Boolean(parsed.state.custom),
-            tracelog: Boolean(parsed.state.tracelog)
-          };
-          log("debug", "Consent updated in another tab, synced locally", {
-            data: {
-              google: this.consentState.google,
-              custom: this.consentState.custom,
-              tracelog: this.consentState.tracelog
-            }
-          });
-          if (this.emitter) {
-            this.emitter.emit(EmitterEvent.CONSENT_CHANGED, this.getConsentState());
-          }
-        }
-      } catch (error) {
-        log("warn", "Failed to parse consent update from another tab", { error });
-      }
-    };
-    window.addEventListener("storage", this.storageListener);
   }
 }
 class SessionManager extends StateManager {
@@ -5817,406 +4503,6 @@ class ViewportHandler extends StateManager {
     });
   }
 }
-class GoogleAnalyticsIntegration extends StateManager {
-  scriptId = "tracelog-ga-script";
-  configScriptId = "tracelog-ga-config-script";
-  isInitialized = false;
-  /**
-   * Initializes Google Analytics/GTM integration.
-   *
-   * **Initialization Flow**:
-   * 1. Validates configuration (measurementId or containerId required)
-   * 2. Checks for existing gtag instance (auto-detection)
-   * 3. Checks if script already loaded (avoids duplicate loading)
-   * 4. Loads appropriate script (GTM or gtag.js)
-   * 5. Configures gtag with user_id
-   *
-   * **Script Priority**:
-   * - If `containerId` provided: Loads GTM script (`gtm.js`)
-   * - Otherwise: Loads GA4 script (`gtag/js`)
-   *
-   * **Auto-detection**:
-   * - Reuses existing gtag/dataLayer if found
-   * - Logs info message when reusing external scripts
-   *
-   * **Error Handling**:
-   * - Initialization failures are logged but don't throw
-   * - Safe to call multiple times (idempotent)
-   *
-   * @returns Promise that resolves when initialization completes
-   */
-  async initialize() {
-    if (this.isInitialized) {
-      return;
-    }
-    const googleConfig = this.get("config").integrations?.google;
-    const userId = this.get("userId");
-    if (!googleConfig || !userId?.trim()) {
-      return;
-    }
-    const { measurementId, containerId } = googleConfig;
-    if (!measurementId?.trim() && !containerId?.trim()) {
-      return;
-    }
-    try {
-      if (this.hasExistingConsentMode()) {
-        log("info", "Google Consent Mode detected, respecting existing configuration", {
-          showToClient: true
-        });
-        this.isInitialized = true;
-        return;
-      }
-      if (this.hasExistingGtagInstance()) {
-        log("info", "Google Analytics/GTM already loaded by external service, reusing existing script", {
-          showToClient: true
-        });
-        this.isInitialized = true;
-        return;
-      }
-      if (this.isScriptAlreadyLoaded()) {
-        this.isInitialized = true;
-        return;
-      }
-      const scriptId = containerId?.trim() || measurementId?.trim();
-      if (scriptId) {
-        await this.loadScript(scriptId);
-        this.configureGtag(scriptId, userId);
-      }
-      this.isInitialized = true;
-    } catch (error) {
-      log("error", "Google Analytics/GTM initialization failed", { error });
-    }
-  }
-  /**
-   * Sends a custom event to Google Analytics/GTM via gtag.
-   *
-   * **Event Flow**:
-   * - Called by EventManager when custom event (`tracelog.event()`) is tracked
-   * - Only custom events are forwarded (automatic events like clicks are NOT sent)
-   * - Events pushed to dataLayer via `gtag('event', eventName, metadata)`
-   *
-   * **Metadata Handling**:
-   * - Arrays are wrapped in `{ items: [...] }` for GA4 compatibility
-   * - Objects passed directly to gtag
-   *
-   * **Requirements**:
-   * - Integration must be initialized (`initialize()` called successfully)
-   * - `window.gtag` function must exist
-   * - Event name must be non-empty string
-   *
-   * **Error Handling**:
-   * - Silent failures (logs error but doesn't throw)
-   * - Safe to call before initialization (no-op)
-   *
-   * @param eventName - Event name (e.g., 'button_click', 'purchase_completed')
-   * @param metadata - Event metadata (flat key-value object or array of objects)
-   *
-   * @example
-   * ```typescript
-   * // Object metadata
-   * trackEvent('button_click', { button_id: 'cta', page: 'home' });
-   * // → gtag('event', 'button_click', { button_id: 'cta', page: 'home' })
-   *
-   * // Array metadata (wrapped for GA4 e-commerce)
-   * trackEvent('purchase', [{ id: '123', name: 'Product', price: 99 }]);
-   * // → gtag('event', 'purchase', { items: [{ id: '123', name: 'Product', price: 99 }] })
-   * ```
-   */
-  trackEvent(eventName, metadata) {
-    if (!eventName?.trim() || !this.isInitialized || typeof window.gtag !== "function") {
-      return;
-    }
-    try {
-      const normalizedMetadata = Array.isArray(metadata) ? { items: metadata } : metadata;
-      window.gtag("event", eventName, normalizedMetadata);
-    } catch (error) {
-      log("error", "Google Analytics event tracking failed", { error });
-    }
-  }
-  /**
-   * Synchronizes TraceLog consent state to Google Consent Mode.
-   * Called when `tracelog.setConsent('google', granted)` is invoked.
-   *
-   * **Behavior**:
-   * - 'all': Grants/denies all 5 Google Consent Mode categories
-   * - Object: Granular control per category
-   *   - true: Grant this category when consent=true
-   *   - false: Deny this category even when consent=true
-   *   - undefined: Skip this category (respects external CMP)
-   * - Calls `gtag('consent', 'update')` to sync state with Google
-   *
-   * @param integration - Integration name (must be 'google')
-   * @param granted - true to grant consent, false to revoke
-   *
-   * @example
-   * ```typescript
-   * // Config: consentCategories: 'all'
-   * googleAnalytics.syncConsentToGoogle('google', true);
-   * // → Updates all 5 categories to 'granted'
-   *
-   * // Config: consentCategories: { analytics_storage: true, ad_storage: false }
-   * googleAnalytics.syncConsentToGoogle('google', true);
-   * // → analytics_storage: 'granted', ad_storage: 'denied'
-   *
-   * // Config: consentCategories: { analytics_storage: true, ad_storage: false }
-   * googleAnalytics.syncConsentToGoogle('google', false);
-   * // → Both 'denied' (consent revoked overrides category config)
-   * ```
-   */
-  syncConsentToGoogle(integration, granted) {
-    if (typeof window === "undefined" || !window.gtag) {
-      return;
-    }
-    if (integration !== "google") {
-      return;
-    }
-    const googleConfig = this.get("config").integrations?.google;
-    const consentCategories = googleConfig?.consentCategories || "all";
-    const updates = {};
-    if (consentCategories === "all") {
-      const allCategories = [
-        "analytics_storage",
-        "ad_storage",
-        "ad_user_data",
-        "ad_personalization",
-        "personalization_storage"
-      ];
-      allCategories.forEach((category) => {
-        updates[category] = granted ? "granted" : "denied";
-      });
-    } else {
-      Object.entries(consentCategories).forEach(([category, shouldGrant]) => {
-        const googleCategory = category;
-        if (granted) {
-          updates[googleCategory] = shouldGrant ? "granted" : "denied";
-        } else {
-          updates[googleCategory] = "denied";
-        }
-      });
-    }
-    try {
-      window.gtag("consent", "update", updates);
-      log("debug", `Google Consent Mode updated: ${granted ? "consent granted" : "consent denied"}`, {
-        data: { granted, categories: Object.keys(updates), updates }
-      });
-    } catch (error) {
-      log("error", "Failed to sync consent to Google Consent Mode", { error });
-    }
-  }
-  /**
-   * Sets default consent state to 'denied' for all Google Consent Mode categories.
-   * Called during initialization when `waitForConsent: true` is configured.
-   *
-   * **Purpose**: GDPR/privacy-first approach - explicitly deny all categories
-   * until user grants consent. Prevents any Google tags from firing before consent.
-   *
-   * **Behavior**:
-   * - Sets all 5 Google Consent Mode categories to 'denied'
-   * - Uses `gtag('consent', 'default', ...)` command
-   * - Only called if `waitForConsent: true` and no existing Consent Mode detected
-   * - Safe to call before gtag script loads (queued in dataLayer)
-   *
-   * **Categories Set to 'denied'**:
-   * - analytics_storage
-   * - ad_storage
-   * - ad_user_data
-   * - ad_personalization
-   * - personalization_storage
-   *
-   * @example
-   * ```typescript
-   * // During App initialization with waitForConsent
-   * googleAnalytics.setDefaultConsent();
-   * // → gtag('consent', 'default', { all: 'denied' })
-   * ```
-   */
-  setDefaultConsent() {
-    if (typeof window === "undefined") {
-      return;
-    }
-    if (this.hasExistingConsentMode()) {
-      log("info", "Google Consent Mode already configured, skipping default consent setup", {
-        showToClient: true
-      });
-      return;
-    }
-    if (!window.dataLayer) {
-      window.dataLayer = [];
-    }
-    if (typeof window.gtag !== "function") {
-      window.gtag = function gtag(...args) {
-        window.dataLayer.push(args);
-      };
-    }
-    try {
-      window.gtag("consent", "default", {
-        analytics_storage: "denied",
-        ad_storage: "denied",
-        ad_user_data: "denied",
-        ad_personalization: "denied",
-        personalization_storage: "denied"
-      });
-      log("debug", "Google Consent Mode default state set to denied (waitForConsent enabled)", {
-        data: { allCategories: "denied" }
-      });
-    } catch (error) {
-      log("error", "Failed to set default consent state", { error });
-    }
-  }
-  /**
-   * Cleans up Google Analytics integration resources.
-   *
-   * **Cleanup Actions**:
-   * - Resets initialization flag
-   * - Removes TraceLog-injected script elements (main + config)
-   * - Does NOT remove externally loaded gtag/GTM scripts
-   *
-   * **Note**: gtag function and dataLayer remain in window even after cleanup.
-   * This is intentional to avoid breaking external scripts that may depend on them.
-   *
-   * Called by:
-   * - `App.destroy()` - When destroying entire TraceLog instance
-   * - Error scenarios during initialization
-   */
-  cleanup() {
-    this.isInitialized = false;
-    const script = document.getElementById(this.scriptId);
-    if (script) {
-      script.remove();
-    }
-    const configScript = document.getElementById(this.configScriptId);
-    if (configScript) {
-      configScript.remove();
-    }
-  }
-  /**
-   * Checks if Google Consent Mode is already configured on the page.
-   * Detects existing Consent Mode configuration from external CMPs or manual setup.
-   *
-   * **Detection Strategy**:
-   * - Searches `window.dataLayer` for any `['consent', ...]` commands
-   * - Returns true if found (external CMP or manual Consent Mode setup detected)
-   * - Returns false otherwise (safe to configure Consent Mode)
-   *
-   * **Purpose**: Prevents overwriting existing Consent Mode configuration
-   * from CMPs (CookieYes, OneTrust, Cookiebot, etc.) or manual implementations.
-   *
-   * @returns true if Consent Mode detected, false otherwise
-   *
-   * @private
-   */
-  hasExistingConsentMode() {
-    if (typeof window === "undefined" || !Array.isArray(window.dataLayer)) {
-      return false;
-    }
-    return window.dataLayer.some((item) => Array.isArray(item) && item[0] === "consent");
-  }
-  /**
-   * Checks if gtag is already loaded by external service.
-   *
-   * Auto-detection prevents duplicate script loading when GA/GTM
-   * is already present (e.g., loaded by Consent Management Platform).
-   */
-  hasExistingGtagInstance() {
-    return typeof window.gtag === "function" && Array.isArray(window.dataLayer);
-  }
-  getScriptType(measurementId) {
-    return measurementId.startsWith("GTM-") && measurementId.length > 4 ? "GTM" : "GA4";
-  }
-  /**
-   * Checks if Google Analytics/GTM script is already loaded.
-   *
-   * Three-tier detection strategy prevents duplicate script injection:
-   * 1. Checks for existing gtag instance + dataLayer (runtime detection)
-   * 2. Checks for TraceLog-injected script (#tracelog-ga-script)
-   * 3. Checks for external GA/GTM scripts by src pattern
-   *
-   * @returns True if any GA/GTM script detected, false otherwise
-   */
-  isScriptAlreadyLoaded() {
-    if (this.hasExistingGtagInstance()) {
-      return true;
-    }
-    if (document.getElementById(this.scriptId)) {
-      return true;
-    }
-    const existingScript = document.querySelector(
-      'script[src*="googletagmanager.com/gtag/js"], script[src*="googletagmanager.com/gtm.js"]'
-    );
-    return !!existingScript;
-  }
-  /**
-   * Dynamically loads Google Analytics/GTM script into page.
-   *
-   * Script URLs:
-   * - GTM: https://www.googletagmanager.com/gtm.js?id=GTM-XXXXXXX
-   * - GA4/Ads/UA: https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX
-   *
-   * @param measurementId - GA4/GTM/Ads/UA ID
-   * @returns Promise that resolves when script loads successfully
-   * @throws Error if script fails to load
-   */
-  async loadScript(measurementId) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.id = "tracelog-ga-script";
-      script.async = true;
-      const scriptType = this.getScriptType(measurementId);
-      if (scriptType === "GTM") {
-        script.src = `https://www.googletagmanager.com/gtm.js?id=${measurementId}`;
-      } else {
-        script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-      }
-      script.onload = () => {
-        resolve();
-      };
-      script.onerror = () => {
-        const type = scriptType === "GTM" ? "GTM" : "Google Analytics";
-        reject(new Error(`Failed to load ${type} script`));
-      };
-      document.head.appendChild(script);
-    });
-  }
-  /**
-   * Configures gtag function and dataLayer.
-   *
-   * **GTM Configuration**:
-   * - Only initializes gtag function and dataLayer
-   * - No config call (tags configured in GTM UI)
-   * - User tracking: Configure user_id in GTM using dataLayer variables
-   * - Allows GTM container to manage all tag configuration
-   *
-   * **GA4/Ads/UA Configuration**:
-   * - Initializes gtag function and dataLayer
-   * - Calls `gtag('config')` with measurement ID
-   * - Sets `user_id` for cross-device tracking
-   *
-   * @param measurementId - GA4/GTM/Ads/UA ID
-   * @param userId - TraceLog user ID for user tracking
-   */
-  configureGtag(measurementId, userId) {
-    const gaScriptConfig = document.createElement("script");
-    gaScriptConfig.id = this.configScriptId;
-    gaScriptConfig.type = "text/javascript";
-    if (measurementId.startsWith("GTM-")) {
-      gaScriptConfig.innerHTML = `
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-      `;
-    } else {
-      gaScriptConfig.innerHTML = `
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', '${measurementId}', {
-          'user_id': '${userId}'
-        });
-      `;
-    }
-    document.head.appendChild(gaScriptConfig);
-  }
-}
 class StorageManager {
   storage;
   sessionStorageRef;
@@ -6997,7 +5283,6 @@ class App extends StateManager {
   transformers = {};
   managers = {};
   handlers = {};
-  integrations = {};
   get initialized() {
     return this.isInitialized;
   }
@@ -7015,63 +5300,7 @@ class App extends StateManager {
     this.managers.storage = new StorageManager();
     try {
       this.setupState(config);
-      this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
-      const persistedGoogleCategories = this.managers.consent.getGoogleConsentCategories();
-      if (persistedGoogleCategories && config.integrations?.google) {
-        const currentConfig = this.get("config");
-        if (currentConfig.integrations?.google) {
-          const updatedConfig = {
-            ...currentConfig,
-            integrations: {
-              ...currentConfig.integrations,
-              google: {
-                ...currentConfig.integrations.google,
-                consentCategories: persistedGoogleCategories
-              }
-            }
-          };
-          this.set("config", updatedConfig);
-          log("debug", "Restored persisted Google Consent Mode categories", {
-            data: { categories: persistedGoogleCategories }
-          });
-        }
-      }
-      if (config.waitForConsent) {
-        const consentState = this.managers.consent.getConsentState();
-        log("info", "Consent mode enabled", {
-          data: {
-            google: consentState.google,
-            custom: consentState.custom,
-            tracelog: consentState.tracelog
-          }
-        });
-        if (this.hasValidGoogleConfig()) {
-          const googleIntegration = new GoogleAnalyticsIntegration();
-          googleIntegration.setDefaultConsent();
-        }
-      }
-      await this.setupIntegrations();
-      this.managers.event = new EventManager(
-        this.managers.storage,
-        this.integrations.google,
-        this.managers.consent,
-        this.emitter,
-        this.transformers
-      );
-      this.emitter.on(EmitterEvent.CONSENT_CHANGED, (consentState) => {
-        if (!this.managers.event || !this.managers.consent) {
-          return;
-        }
-        const integrations = ["google", "custom", "tracelog"];
-        void Promise.all(
-          integrations.filter((integration) => consentState[integration] === true).map(async (integration) => this.managers.event.flushConsentBuffer(integration))
-        ).catch((error) => {
-          log("error", "Failed to flush consent buffer after consent granted", { error });
-        });
-        if (consentState.google && this.integrations.google) {
-          this.integrations.google.syncConsentToGoogle("google", consentState.google);
-        }
-      });
+      this.managers.event = new EventManager(this.managers.storage, this.emitter, this.transformers);
       this.initializeHandlers();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log("warn", "Failed to recover persisted events", { error });
@@ -7144,7 +5373,6 @@ class App extends StateManager {
     if (!this.isInitialized && !force) {
       return;
     }
-    this.integrations.google?.cleanup();
     Object.values(this.handlers).filter(Boolean).forEach((handler) => {
       try {
         handler.stopTracking();
@@ -7157,7 +5385,6 @@ class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
     this.managers.event?.stop();
-    this.managers.consent?.cleanup();
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = void 0;
     this.transformers.beforeBatch = void 0;
@@ -7167,7 +5394,6 @@ class App extends StateManager {
     this.isInitialized = false;
     this.handlers = {};
     this.managers = {};
-    this.integrations = {};
   }
   setupState(config = {}) {
     this.set("config", config);
@@ -7183,25 +5409,6 @@ class App extends StateManager {
     if (mode) {
       this.set("mode", mode);
     }
-  }
-  async setupIntegrations() {
-    if (!this.hasValidGoogleConfig()) {
-      return;
-    }
-    if (this.shouldInitializeIntegration("google")) {
-      await this.initializeGoogleAnalytics();
-    } else {
-      log("info", "Google Analytics initialization deferred, waiting for consent");
-    }
-  }
-  /**
-   * Returns the ConsentManager instance for consent state management.
-   *
-   * @returns The ConsentManager instance, or undefined if not initialized
-   * @internal Used by api.ts for consent operations
-   */
-  getConsentManager() {
-    return this.managers.consent;
   }
   /**
    * Returns the current configuration object.
@@ -7229,26 +5436,6 @@ class App extends StateManager {
    */
   getEventManager() {
     return this.managers.event;
-  }
-  /**
-   * Handles consent granted for a specific integration by initializing the integration (if needed)
-   * and flushing buffered events.
-   *
-   * @param integration - The integration name ('google', 'custom', or 'tracelog')
-   * @returns Promise that resolves when initialization and buffer flush complete
-   * @internal Called from api.setConsent() when consent is granted
-   */
-  async handleConsentGranted(integration) {
-    log("info", `Consent granted for ${integration}, initializing and flushing buffer`);
-    if (integration === "google" && !this.integrations.google && this.hasValidGoogleConfig()) {
-      const initialized = await this.initializeGoogleAnalytics();
-      if (initialized && this.managers.event && this.integrations.google) {
-        this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
-      }
-    }
-    if (this.managers.event) {
-      await this.managers.event.flushConsentBuffer(integration);
-    }
   }
   /**
    * Validates metadata object structure and values.
@@ -7318,76 +5505,6 @@ class App extends StateManager {
     this.set("config", updatedConfig);
     log("debug", "Global metadata updated (merged)", { data: { keys: Object.keys(metadata) } });
   }
-  /**
-   * Updates Google Consent Mode v2 categories configuration.
-   *
-   * Categories persist in config state for future consent operations.
-   * If consent is already granted, automatically re-syncs with Google.
-   *
-   * @param categories - Consent categories ('all' or granular object)
-   * @throws {Error} If Google integration not configured
-   * @internal Called from api.setConsent()
-   */
-  updateGoogleConsentCategories(categories) {
-    const currentConfig = this.get("config");
-    if (!currentConfig.integrations?.google) {
-      throw new Error("[TraceLog] Google integration not configured");
-    }
-    const updatedConfig = {
-      ...currentConfig,
-      integrations: {
-        ...currentConfig.integrations,
-        google: {
-          ...currentConfig.integrations.google,
-          consentCategories: categories
-        }
-      }
-    };
-    this.set("config", updatedConfig);
-    log("debug", "Google Consent Mode categories updated", {
-      data: { categories }
-    });
-    if (this.managers.consent?.hasConsent("google") && this.integrations.google) {
-      this.integrations.google.syncConsentToGoogle("google", true);
-      log("debug", "Re-synced Google Consent Mode with updated categories");
-    }
-  }
-  /**
-   * Returns the Google Analytics integration instance.
-   *
-   * @returns GoogleAnalyticsIntegration instance or undefined if not initialized
-   * @internal Called from api.setConsent()
-   */
-  getGoogleAnalyticsIntegration() {
-    return this.integrations.google;
-  }
-  hasValidGoogleConfig() {
-    const googleConfig = this.get("config").integrations?.google;
-    if (!googleConfig) {
-      return false;
-    }
-    const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
-    const hasContainerId = Boolean(googleConfig.containerId?.trim());
-    return hasMeasurementId || hasContainerId;
-  }
-  async initializeGoogleAnalytics() {
-    try {
-      this.integrations.google = new GoogleAnalyticsIntegration();
-      await this.integrations.google.initialize();
-      log("debug", "Google Analytics integration initialized");
-      return true;
-    } catch (error) {
-      log("warn", "Failed to initialize Google Analytics", { error });
-      return false;
-    }
-  }
-  shouldInitializeIntegration(integration) {
-    const config = this.get("config");
-    if (!config.waitForConsent) {
-      return true;
-    }
-    return this.managers.consent?.hasConsent(integration) ?? true;
-  }
   initializeHandlers() {
     const config = this.get("config");
     const disabledEvents = config.disabledEvents ?? [];
@@ -7431,16 +5548,13 @@ class App extends StateManager {
 }
 const pendingListeners = [];
 const pendingTransformers = [];
-const pendingConsents = [];
 let app = null;
 let isInitializing = false;
 let isDestroying = false;
-let isDestroyed = false;
 const init = async (config) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
-  isDestroyed = false;
   isDestroying = false;
   if (window.__traceLogDisabled === true) {
     return;
@@ -7476,17 +5590,6 @@ const init = async (config) => {
       });
       await Promise.race([initPromise, timeoutPromise]);
       app = instance;
-      if (pendingConsents.length > 0) {
-        const consents = [...pendingConsents];
-        pendingConsents.length = 0;
-        for (const { integration, granted } of consents) {
-          try {
-            await setConsent(integration, granted);
-          } catch (error) {
-            log("warn", `Failed to apply pending consent for ${integration}`, { error });
-          }
-        }
-      }
     } catch (error) {
       try {
         instance.destroy(true);
@@ -7591,7 +5694,6 @@ const destroy = () => {
     throw new Error("[TraceLog] Destroy operation already in progress");
   }
   if (!app) {
-    isDestroyed = false;
     isDestroying = false;
     return;
   }
@@ -7602,197 +5704,18 @@ const destroy = () => {
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
-    pendingConsents.length = 0;
     if (typeof window !== "undefined" && window.__traceLogBridge) {
       window.__traceLogBridge = void 0;
     }
-    isDestroyed = false;
     isDestroying = false;
   } catch (error) {
     app = null;
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
-    pendingConsents.length = 0;
-    isDestroyed = false;
     isDestroying = false;
     log("warn", "Error during destroy, forced cleanup completed", { error });
   }
-};
-const setConsent = async (integration, granted, googleConsentCategories) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  if (isDestroyed || isDestroying) {
-    throw new Error("[TraceLog] Cannot set consent while TraceLog is destroyed or being destroyed");
-  }
-  if (googleConsentCategories !== void 0) {
-    if (integration !== "google") {
-      log("warn", "googleConsentCategories parameter only applicable to google integration, ignoring");
-    } else if (!isValidGoogleConsentCategories(googleConsentCategories)) {
-      throw new Error(
-        '[TraceLog] Invalid googleConsentCategories. Must be "all" or an object with valid GoogleConsentType keys and boolean values'
-      );
-    }
-  }
-  if (!app || isInitializing) {
-    if (integration === "all") {
-      const existingIndex = pendingConsents.findIndex((c2) => c2.integration === integration);
-      if (existingIndex !== -1) {
-        pendingConsents.splice(existingIndex, 1);
-      }
-      pendingConsents.push({ integration, granted });
-      try {
-        const { CONSENT_KEY: CONSENT_KEY2, CONSENT_EXPIRY_DAYS: CONSENT_EXPIRY_DAYS2 } = await Promise.resolve().then(() => storage_constants);
-        const now = Date.now();
-        const expiresAt = now + CONSENT_EXPIRY_DAYS2 * 24 * 60 * 60 * 1e3;
-        const consentData = {
-          state: {
-            google: granted,
-            custom: granted,
-            tracelog: granted
-          },
-          timestamp: now,
-          expiresAt
-        };
-        localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "QuotaExceededError") {
-          log("warn", "localStorage quota exceeded, consent not persisted", { error });
-          return;
-        }
-        log("error", "Failed to persist consent for all integrations before init", { error });
-        throw new Error(
-          `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-      return;
-    }
-    try {
-      const { CONSENT_KEY: CONSENT_KEY2, CONSENT_EXPIRY_DAYS: CONSENT_EXPIRY_DAYS2 } = await Promise.resolve().then(() => storage_constants);
-      const now = Date.now();
-      const expiresAt = now + CONSENT_EXPIRY_DAYS2 * 24 * 60 * 60 * 1e3;
-      const existingRaw = localStorage.getItem(CONSENT_KEY2);
-      let existingState = {
-        google: false,
-        custom: false,
-        tracelog: false
-      };
-      if (existingRaw !== null && existingRaw.trim() !== "") {
-        try {
-          const existingData = JSON.parse(existingRaw);
-          if (existingData.state) {
-            existingState = {
-              google: Boolean(existingData.state.google),
-              custom: Boolean(existingData.state.custom),
-              tracelog: Boolean(existingData.state.tracelog)
-            };
-          }
-        } catch {
-        }
-      }
-      const consentData = {
-        state: {
-          ...existingState,
-          [integration]: granted
-        },
-        timestamp: now,
-        expiresAt
-      };
-      localStorage.setItem(CONSENT_KEY2, JSON.stringify(consentData));
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "QuotaExceededError") {
-        log("warn", "localStorage quota exceeded, consent not persisted", { error });
-        return;
-      }
-      log("error", "Failed to persist consent before init", { error });
-      throw new Error(
-        `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-    return;
-  }
-  const consentManager = app.getConsentManager();
-  if (!consentManager) {
-    log("warn", "Consent manager not available");
-    return;
-  }
-  if (integration === "all") {
-    const config = app.getConfig();
-    const collectApiUrls = app.getCollectApiUrls();
-    const integrations = [];
-    if (config.integrations?.google) {
-      integrations.push("google");
-    }
-    if (collectApiUrls?.custom) {
-      integrations.push("custom");
-    }
-    if (collectApiUrls?.saas) {
-      integrations.push("tracelog");
-    }
-    for (const int of integrations) {
-      await setConsent(int, granted);
-    }
-    return;
-  }
-  if (integration === "google" && googleConsentCategories !== void 0) {
-    try {
-      app.updateGoogleConsentCategories(googleConsentCategories);
-      consentManager.setGoogleConsentCategories(googleConsentCategories);
-    } catch (error) {
-      log("warn", "Failed to update Google consent categories", { error });
-    }
-  }
-  const hadConsent = consentManager.hasConsent(integration);
-  consentManager.setConsent(integration, granted);
-  if (granted && !hadConsent) {
-    await app.handleConsentGranted(integration);
-  }
-  if (!granted && hadConsent) {
-    log("info", `Consent revoked for ${integration}`);
-    const eventManager = app.getEventManager();
-    if (eventManager) {
-      eventManager.clearConsentBufferForIntegration(integration);
-    }
-  }
-};
-const hasConsent = (integration) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return false;
-  }
-  if (!app) {
-    if (integration === "all") {
-      const state2 = loadConsentFromStorage();
-      if (state2 === null) {
-        return false;
-      }
-      return Boolean(state2.google === true && state2.custom === true && state2.tracelog === true);
-    }
-    const state = loadConsentFromStorage();
-    if (state === null) {
-      return false;
-    }
-    return Boolean(state[integration] === true);
-  }
-  const consentManager = app.getConsentManager();
-  if (consentManager === void 0) {
-    return false;
-  }
-  return consentManager.hasConsent(integration);
-};
-const getConsentState = () => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return { google: false, custom: false, tracelog: false };
-  }
-  if (!app) {
-    const state = loadConsentFromStorage();
-    return state ?? { google: false, custom: false, tracelog: false };
-  }
-  const consentManager = app.getConsentManager();
-  if (!consentManager) {
-    return { google: false, custom: false, tracelog: false };
-  }
-  return consentManager.getConsentState();
 };
 const setQaMode = (enabled) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -7855,15 +5778,12 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   __setAppInstance,
   destroy,
   event,
-  getConsentState,
-  hasConsent,
   init,
   isInitialized,
   mergeGlobalMetadata,
   off,
   on,
   removeTransformer,
-  setConsent,
   setQaMode,
   setTransformer,
   updateGlobalMetadata
@@ -7878,9 +5798,6 @@ const tracelog = {
   isInitialized,
   destroy,
   setQaMode,
-  setConsent,
-  hasConsent,
-  getConsentState,
   updateGlobalMetadata,
   mergeGlobalMetadata
 };
@@ -8208,48 +6125,10 @@ class TestBridge extends App {
     return this.managers.storage ?? null;
   }
   /**
-   * Consent manager accessor for tests
-   */
-  getConsentManager() {
-    return this.managers.consent;
-  }
-  /**
-   * Consent buffer inspection for tests
-   */
-  getConsentBufferLength() {
-    return this.managers.event?.getConsentBufferLength() ?? 0;
-  }
-  /**
    * Get events from queue (for validation in tests)
    */
   getQueueEvents() {
     return this.managers.event?.getQueueEvents() ?? [];
-  }
-  /**
-   * Get consent buffer events (for validation in tests)
-   */
-  getConsentBufferEvents(integration) {
-    return this.managers.event?.getConsentBufferEvents(integration) ?? [];
-  }
-  /**
-   * Consent management (always delegates to api.ts for consistency)
-   */
-  async setConsent(integration, granted, googleConsentCategories) {
-    await setConsent(integration, granted, googleConsentCategories);
-  }
-  /**
-   * Consent state check (delegates to ConsentManager)
-   */
-  hasConsent(integration) {
-    const consentManager = this.getConsentManager();
-    return consentManager?.hasConsent(integration) ?? false;
-  }
-  /**
-   * Consent state retrieval (delegates to ConsentManager)
-   */
-  getConsentState() {
-    const consentManager = this.getConsentManager();
-    return consentManager?.getConsentState() ?? { google: false, custom: false, tracelog: false };
   }
   /**
    * State accessor (make public for tests)

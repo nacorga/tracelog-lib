@@ -75,9 +75,6 @@ describe('App - Initialization', () => {
           custom: {
             collectApiUrl: 'https://api.custom.com/collect',
           },
-          google: {
-            measurementId: 'G-TEST123',
-          },
         },
       });
 
@@ -127,10 +124,9 @@ describe('App - Initialization', () => {
     it('should initialize all managers in correct order', async () => {
       const bridge = await initTestBridge();
 
-      const { storage, consent, event } = getManagers(bridge);
+      const { storage, event } = getManagers(bridge);
 
       expect(storage).toBeDefined();
-      expect(consent).toBeDefined();
       expect(event).toBeDefined();
     });
 
@@ -206,15 +202,13 @@ describe('App - Initialization', () => {
 
     it('should cleanup all managers', async () => {
       const bridge = await initTestBridge();
-      const { event, consent } = getManagers(bridge);
+      const { event } = getManagers(bridge);
 
       const eventStopSpy = vi.spyOn(event!, 'stop');
-      const consentCleanupSpy = vi.spyOn(consent!, 'cleanup');
 
       bridge.destroy();
 
       expect(eventStopSpy).toHaveBeenCalled();
-      expect(consentCleanupSpy).toHaveBeenCalled();
     });
 
     it('should emit SESSION_END event', async () => {

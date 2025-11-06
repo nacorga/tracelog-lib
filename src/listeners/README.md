@@ -53,55 +53,7 @@ constructor(
 )
 ```
 
-## UnloadListenerManager
-
-Detects page unload events for session termination and data persistence.
-
-**Events Tracked**: `beforeunload`, `pagehide`
-
-**Purpose**: Ensures proper session ending and final data transmission before page closes.
-
-**Key Features**:
-- Reliable unload detection across browsers
-- Throws errors on setup failure (fail-fast approach)
-- Essential for session boundary tracking
-- **Note**: Currently unused in production - SessionManager handles `beforeunload` directly
-
-## MouseListenerManager
-
-Captures mouse-based user interactions on desktop devices.
-
-**Events Tracked**: `mousemove`, `mousedown`, `wheel`
-
-**Purpose**: Desktop user activity detection through mouse interactions.
-
-**Key Features**:
-- Core mouse events coverage
-- Wheel/scroll wheel detection
-- Optimized for desktop interaction patterns
-
-## KeyboardListenerManager
-
-Monitors keyboard input for user activity detection.
-
-**Events Tracked**: `keydown`
-
-**Purpose**: Keyboard-based user activity tracking.
-
-**Key Features**:
-- Modern event handling (`keydown` only)
-- Essential for detecting typing activity
-
 ## Architecture Notes
-
-### BaseInputListenerManager
-
-Abstract base class that eliminates code duplication between `MouseListenerManager` and `KeyboardListenerManager`.
-
-**Benefits**:
-- DRY principle implementation
-- Consistent error handling across input managers
-- Simplified maintenance and updates
 
 ### Common Interface
 
@@ -117,10 +69,10 @@ interface EventListenerManager {
 ### Error Handling Strategy
 
 - **Setup errors**:
-  - **Critical managers** (Activity, Touch, Unload): Log error and throw to prevent incomplete initialization
-  - **Input/Visibility managers** (Mouse, Keyboard, Visibility): Log error with graceful degradation (no throw)
+  - **Critical managers** (Activity, Touch): Log error and throw to prevent incomplete initialization
+  - **Visibility managers**: Log error with graceful degradation (no throw)
 - **Cleanup errors**: All managers log as warnings without throwing
-- **Rationale**: Critical activity detection failures should halt initialization, while input-specific failures allow partial functionality
+- **Rationale**: Critical activity detection failures should halt initialization, while visibility-specific failures allow partial functionality
 
 ### Performance Considerations
 

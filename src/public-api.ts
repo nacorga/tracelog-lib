@@ -8,9 +8,6 @@ import {
   setQaMode,
   setTransformer,
   removeTransformer,
-  setConsent,
-  hasConsent,
-  getConsentState,
   updateGlobalMetadata,
   mergeGlobalMetadata,
 } from './api';
@@ -32,9 +29,6 @@ export const tracelog = {
   isInitialized,
   destroy,
   setQaMode,
-  setConsent,
-  hasConsent,
-  getConsentState,
   updateGlobalMetadata,
   mergeGlobalMetadata,
 };

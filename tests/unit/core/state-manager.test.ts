@@ -274,10 +274,9 @@ describe('StateManager - Inheritance', () => {
 
   it('should allow managers to extend StateManager', async () => {
     const bridge = await initTestBridge();
-    const { event, storage, consent } = {
+    const { event, storage } = {
       event: bridge.getEventManager(),
       storage: bridge.getStorageManager(),
-      consent: bridge.getConsentManager(),
     };
 
     // EventManager extends StateManager
@@ -285,9 +284,6 @@ describe('StateManager - Inheritance', () => {
 
     // StorageManager extends StateManager
     expect(storage).toBeDefined();
-
-    // ConsentManager extends StateManager
-    expect(consent).toBeDefined();
 
     destroyTestBridge();
   });

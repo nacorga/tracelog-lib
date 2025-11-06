@@ -187,56 +187,6 @@ describe('config-validations.utils', () => {
           }).toThrow(IntegrationValidationError);
         });
       });
-
-      describe('google integration', () => {
-        it('should accept valid GA4 measurementId', () => {
-          expect(() => {
-            validateAppConfig({
-              integrations: { google: { measurementId: 'G-XXXXXXXXXX' } },
-            });
-          }).not.toThrow();
-        });
-
-        it('should accept valid GTM containerId', () => {
-          expect(() => {
-            validateAppConfig({
-              integrations: { google: { containerId: 'GTM-XXXXXX' } },
-            });
-          }).not.toThrow();
-        });
-
-        it('should accept both measurementId and containerId', () => {
-          expect(() => {
-            validateAppConfig({
-              integrations: { google: { measurementId: 'G-XXXXXXXXXX', containerId: 'GTM-XXXXXX' } },
-            });
-          }).not.toThrow();
-        });
-
-        it('should throw error for missing both measurementId and containerId', () => {
-          expect(() => {
-            validateAppConfig({
-              integrations: { google: {} },
-            });
-          }).toThrow(IntegrationValidationError);
-        });
-
-        it('should throw error for invalid GA4 measurementId format', () => {
-          expect(() => {
-            validateAppConfig({
-              integrations: { google: { measurementId: 'invalid-id' } },
-            });
-          }).toThrow(IntegrationValidationError);
-        });
-
-        it('should throw error for invalid GTM containerId format', () => {
-          expect(() => {
-            validateAppConfig({
-              integrations: { google: { containerId: 'invalid-id' } },
-            });
-          }).toThrow(IntegrationValidationError);
-        });
-      });
     });
 
     describe('sensitiveQueryParams validation', () => {

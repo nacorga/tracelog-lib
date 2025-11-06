@@ -1,7 +1,6 @@
 import { EventManager } from './managers/event.manager';
 import { UserManager } from './managers/user.manager';
 import { StateManager } from './managers/state.manager';
-import { ConsentManager } from './managers/consent.manager';
 import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
@@ -12,17 +11,13 @@ import {
   EventType,
   EmitterCallback,
   EmitterMap,
-  EmitterEvent,
-  ConsentState,
   Mode,
   TransformerHook,
   TransformerMap,
   BeforeSendTransformer,
   BeforeBatchTransformer,
   MetadataType,
-  GoogleConsentCategories,
 } from './types';
-import { GoogleAnalyticsIntegration } from './integrations/google-analytics.integration';
 import {
   isEventValid,
   getDeviceType,
@@ -48,7 +43,6 @@ export class App extends StateManager {
   protected managers: {
     storage?: StorageManager;
     event?: EventManager;
-    consent?: ConsentManager;
   } = {};
 
   protected handlers: {
@@ -59,10 +53,6 @@ export class App extends StateManager {
     performance?: PerformanceHandler;
     error?: ErrorHandler;
     viewport?: ViewportHandler;
-  } = {};
-
-  protected integrations: {
-    google?: GoogleAnalyticsIntegration;
   } = {};
 
   get initialized(): boolean {
@@ -86,79 +76,7 @@ export class App extends StateManager {
     try {
       this.setupState(config);
 
-      this.managers.consent = new ConsentManager(this.managers.storage, true, this.emitter);
-
-      const persistedGoogleCategories = this.managers.consent.getGoogleConsentCategories();
-      if (persistedGoogleCategories && config.integrations?.google) {
-        const currentConfig = this.get('config');
-        if (currentConfig.integrations?.google) {
-          const updatedConfig: Config = {
-            ...currentConfig,
-            integrations: {
-              ...currentConfig.integrations,
-              google: {
-                ...currentConfig.integrations.google,
-                consentCategories: persistedGoogleCategories,
-              },
-            },
-          };
-          this.set('config', updatedConfig);
-          log('debug', 'Restored persisted Google Consent Mode categories', {
-            data: { categories: persistedGoogleCategories },
-          });
-        }
-      }
-
-      const anyIntegrationRequiresConsent =
-        this.getIntegrationConsentRequirement('google') ||
-        this.getIntegrationConsentRequirement('custom') ||
-        this.getIntegrationConsentRequirement('tracelog');
-
-      if (anyIntegrationRequiresConsent) {
-        const consentState = this.managers.consent.getConsentState();
-        log('info', 'Consent mode enabled', {
-          data: {
-            google: consentState.google,
-            custom: consentState.custom,
-            tracelog: consentState.tracelog,
-          },
-        });
-
-        if (this.hasValidGoogleConfig() && this.getIntegrationConsentRequirement('google')) {
-          const googleIntegration = new GoogleAnalyticsIntegration();
-          googleIntegration.setDefaultConsent();
-        }
-      }
-
-      await this.setupIntegrations();
-
-      this.managers.event = new EventManager(
-        this.managers.storage,
-        this.integrations.google,
-        this.managers.consent,
-        this.emitter,
-        this.transformers,
-      );
-
-      this.emitter.on(EmitterEvent.CONSENT_CHANGED, (consentState: ConsentState) => {
-        if (!this.managers.event || !this.managers.consent) {
-          return;
-        }
-
-        const integrations: Array<'google' | 'custom' | 'tracelog'> = ['google', 'custom', 'tracelog'];
-
-        void Promise.all(
-          integrations
-            .filter((integration) => consentState[integration] === true)
-            .map(async (integration) => this.managers.event!.flushConsentBuffer(integration)),
-        ).catch((error) => {
-          log('error', 'Failed to flush consent buffer after consent granted', { error });
-        });
-
-        if (consentState.google && this.integrations.google) {
-          this.integrations.google.syncConsentToGoogle('google', consentState.google);
-        }
-      });
+      this.managers.event = new EventManager(this.managers.storage, this.emitter, this.transformers);
 
       this.initializeHandlers();
 
@@ -253,8 +171,6 @@ export class App extends StateManager {
       return;
     }
 
-    this.integrations.google?.cleanup();
-
     Object.values(this.handlers)
       .filter(Boolean)
       .forEach((handler) => {
@@ -271,7 +187,6 @@ export class App extends StateManager {
     }
 
     this.managers.event?.stop();
-    this.managers.consent?.cleanup();
 
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = undefined;
@@ -284,7 +199,6 @@ export class App extends StateManager {
     this.isInitialized = false;
     this.handlers = {};
     this.managers = {};
-    this.integrations = {};
   }
 
   private setupState(config: Config = {}): void {
@@ -307,28 +221,6 @@ export class App extends StateManager {
     if (mode) {
       this.set('mode', mode);
     }
-  }
-
-  private async setupIntegrations(): Promise<void> {
-    if (!this.hasValidGoogleConfig()) {
-      return;
-    }
-
-    if (this.shouldInitializeIntegration('google')) {
-      await this.initializeGoogleAnalytics();
-    } else {
-      log('info', 'Google Analytics initialization deferred, waiting for consent');
-    }
-  }
-
-  /**
-   * Returns the ConsentManager instance for consent state management.
-   *
-   * @returns The ConsentManager instance, or undefined if not initialized
-   * @internal Used by api.ts for consent operations
-   */
-  public getConsentManager(): ConsentManager | undefined {
-    return this.managers.consent;
   }
 
   /**
@@ -359,30 +251,6 @@ export class App extends StateManager {
    */
   public getEventManager(): EventManager | undefined {
     return this.managers.event;
-  }
-
-  /**
-   * Handles consent granted for a specific integration by initializing the integration (if needed)
-   * and flushing buffered events.
-   *
-   * @param integration - The integration name ('google', 'custom', or 'tracelog')
-   * @returns Promise that resolves when initialization and buffer flush complete
-   * @internal Called from api.setConsent() when consent is granted
-   */
-  public async handleConsentGranted(integration: 'google' | 'custom' | 'tracelog'): Promise<void> {
-    log('info', `Consent granted for ${integration}, initializing and flushing buffer`);
-
-    if (integration === 'google' && !this.integrations.google && this.hasValidGoogleConfig()) {
-      const initialized = await this.initializeGoogleAnalytics();
-
-      if (initialized && this.managers.event && this.integrations.google) {
-        this.managers.event.setGoogleAnalyticsIntegration(this.integrations.google);
-      }
-    }
-
-    if (this.managers.event) {
-      await this.managers.event.flushConsentBuffer(integration);
-    }
   }
 
   /**
@@ -468,112 +336,6 @@ export class App extends StateManager {
     this.set('config', updatedConfig);
 
     log('debug', 'Global metadata updated (merged)', { data: { keys: Object.keys(metadata) } });
-  }
-
-  /**
-   * Updates Google Consent Mode v2 categories configuration.
-   *
-   * Categories persist in config state for future consent operations.
-   * If consent is already granted, automatically re-syncs with Google.
-   *
-   * @param categories - Consent categories ('all' or granular object)
-   * @throws {Error} If Google integration not configured
-   * @internal Called from api.setConsent()
-   */
-  public updateGoogleConsentCategories(categories: GoogleConsentCategories): void {
-    const currentConfig = this.get('config');
-
-    if (!currentConfig.integrations?.google) {
-      throw new Error('[TraceLog] Google integration not configured');
-    }
-
-    const updatedConfig: Config = {
-      ...currentConfig,
-      integrations: {
-        ...currentConfig.integrations,
-        google: {
-          ...currentConfig.integrations.google,
-          consentCategories: categories,
-        },
-      },
-    };
-
-    this.set('config', updatedConfig);
-
-    log('debug', 'Google Consent Mode categories updated', {
-      data: { categories },
-    });
-
-    if (this.managers.consent?.hasConsent('google') && this.integrations.google) {
-      this.integrations.google.syncConsentToGoogle('google', true);
-      log('debug', 'Re-synced Google Consent Mode with updated categories');
-    }
-  }
-
-  /**
-   * Returns the Google Analytics integration instance.
-   *
-   * @returns GoogleAnalyticsIntegration instance or undefined if not initialized
-   * @internal Called from api.setConsent()
-   */
-  public getGoogleAnalyticsIntegration(): GoogleAnalyticsIntegration | undefined {
-    return this.integrations.google;
-  }
-
-  private hasValidGoogleConfig(): boolean {
-    const googleConfig = this.get('config').integrations?.google;
-    if (!googleConfig) {
-      return false;
-    }
-
-    const hasMeasurementId = Boolean(googleConfig.measurementId?.trim());
-    const hasContainerId = Boolean(googleConfig.containerId?.trim());
-
-    return hasMeasurementId || hasContainerId;
-  }
-
-  private async initializeGoogleAnalytics(): Promise<boolean> {
-    try {
-      this.integrations.google = new GoogleAnalyticsIntegration();
-      await this.integrations.google.initialize();
-      log('debug', 'Google Analytics integration initialized');
-      return true;
-    } catch (error) {
-      log('warn', 'Failed to initialize Google Analytics', { error });
-      return false;
-    }
-  }
-
-  /**
-   * Resolves waitForConsent requirement for a specific integration.
-   * Checks waitForConsent flag in integration-specific config.
-   * @param integration - The integration to check
-   * @returns true if consent is required, false otherwise
-   */
-  private getIntegrationConsentRequirement(integration: 'google' | 'custom' | 'tracelog'): boolean {
-    const config = this.get('config');
-
-    if (integration === 'google') {
-      return config.integrations?.google?.waitForConsent ?? false;
-    }
-    if (integration === 'custom') {
-      return config.integrations?.custom?.waitForConsent ?? false;
-    }
-    if (integration === 'tracelog') {
-      return config.integrations?.tracelog?.waitForConsent ?? false;
-    }
-
-    return false;
-  }
-
-  private shouldInitializeIntegration(integration: 'google' | 'custom' | 'tracelog'): boolean {
-    const requiresConsent = this.getIntegrationConsentRequirement(integration);
-
-    if (!requiresConsent) {
-      return true;
-    }
-
-    return this.managers.consent?.hasConsent(integration) ?? true;
   }
 
   private initializeHandlers(): void {

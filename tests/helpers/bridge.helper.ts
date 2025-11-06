@@ -76,7 +76,6 @@ export function getManagers(bridge: TraceLogTestBridge) {
   return {
     event: bridge.getEventManager(),
     storage: bridge.getStorageManager(),
-    consent: bridge.getConsentManager(),
   };
 }
 
@@ -106,16 +105,6 @@ export function getQueueState(bridge: TraceLogTestBridge) {
 }
 
 /**
- * Get consent buffer state from TestBridge (for validation)
- */
-export function getConsentBufferState(bridge: TraceLogTestBridge, integration: 'google' | 'custom' | 'tracelog') {
-  return {
-    length: bridge.getConsentBufferLength(),
-    events: bridge.getConsentBufferEvents(integration),
-  };
-}
-
-/**
  * Get full state snapshot from TestBridge (for debugging)
  */
 export function getStateSnapshot(bridge: TraceLogTestBridge) {
@@ -124,7 +113,6 @@ export function getStateSnapshot(bridge: TraceLogTestBridge) {
     state: bridge.getFullState(),
     session: bridge.getSessionData(),
     queue: getQueueState(bridge),
-    consent: bridge.getConsentState(),
   };
 }
 
