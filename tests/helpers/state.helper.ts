@@ -90,25 +90,6 @@ export async function waitForStateValue<K extends keyof State>(
 }
 
 /**
- * Wait for state to be initialized
- * Note: isInitialized is part of App, not State. Use tracelog.isInitialized() API instead.
- */
-// eslint-disable-next-line @typescript-eslint/promise-function-async
-export function waitForStateInitialized(_timeout = 5000): Promise<void> {
-  // This function is deprecated - isInitialized is not part of State
-  throw new Error('Use tracelog.isInitialized() API instead');
-}
-
-/**
- * Check if state is initialized
- * Note: isInitialized is part of App, not State. Use tracelog.isInitialized() API instead.
- */
-export function isStateInitialized(): boolean {
-  // This function is deprecated - isInitialized is not part of State
-  throw new Error('Use tracelog.isInitialized() API instead');
-}
-
-/**
  * Get session ID from state
  */
 export function getSessionId(): string | null {

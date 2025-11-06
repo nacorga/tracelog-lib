@@ -162,13 +162,6 @@ await tracelog.init({
     }
   }
 });
-
-// Google Analytics
-await tracelog.init({
-  integrations: {
-    google: { measurementId: 'G-XXXXXXXXXX' }
-  }
-});
 ```
 
 ## QA Mode

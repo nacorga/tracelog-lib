@@ -152,22 +152,18 @@ User Interaction → Handler captures → EventManager.track() →
   ├── **Managers** (core business logic)
   │   ├── StateManager (global state - base class for all components)
   │   ├── StorageManager (localStorage/sessionStorage wrapper with fallback)
-  │   ├── ConsentManager (GDPR/CCPA consent tracking, per-integration buffering)
   │   ├── EventManager (event queue, deduplication, rate limiting, sending coordination)
   │   ├── SessionManager (session lifecycle, cross-tab sync via BroadcastChannel)
   │   └── UserManager (UUID generation and persistence)
   │
-  ├── **Handlers** (event capture - extend StateManager)
-  │   ├── SessionHandler (wrapper around SessionManager)
-  │   ├── PageViewHandler (navigation, SPA route changes)
-  │   ├── ClickHandler (click interactions with PII sanitization)
-  │   ├── ScrollHandler (scroll depth, velocity, multi-container)
-  │   ├── PerformanceHandler (Web Vitals via web-vitals library)
-  │   ├── ErrorHandler (JS errors, promise rejections)
-  │   └── ViewportHandler (element visibility via IntersectionObserver)
-  │
-  └── **Integrations** (optional)
-      └── GoogleAnalyticsIntegration (forwards custom events to GA4)
+  └── **Handlers** (event capture - extend StateManager)
+      ├── SessionHandler (wrapper around SessionManager)
+      ├── PageViewHandler (navigation, SPA route changes)
+      ├── ClickHandler (click interactions with PII sanitization)
+      ├── ScrollHandler (scroll depth, velocity, multi-container)
+      ├── PerformanceHandler (Web Vitals via web-vitals library)
+      ├── ErrorHandler (JS errors, promise rejections)
+      └── ViewportHandler (element visibility via IntersectionObserver)
 
 ### State Management Pattern
 
@@ -225,7 +221,6 @@ Network transmission (fetch/sendBeacon) in parallel
 - ✅ **Custom Backend (only)**: Both `beforeSend` (EventManager) and `beforeBatch` (SenderManager) applied
 - ❌ **TraceLog SaaS (only)**: Both transformers silently ignored (schema protection)
 - ⚠️ **Multi-Integration (SaaS + Custom)**: Transformers skipped in EventManager, applied per-integration in SenderManager. SaaS receives original events, custom receives transformed events. `on('event')` listeners receive UNTRANSFORMED events.
-- ❌ **Google Analytics**: Neither transformer applied (forwards `tracelog.event()` calls as-is)
 
 **API Methods**:
 ```typescript
@@ -246,18 +241,12 @@ app.getTransformer(hook)                // Get transformer (internal)
 2. `App.init()` begins initialization:
    - **Step 1**: Create StorageManager (localStorage/sessionStorage wrapper with fallback)
    - **Step 2**: Setup state (config, userId, device, pageUrl, mode detection)
-   - **Step 3**: Initialize ConsentManager (loads persisted consent, enables emitter)
-   - **Step 4**: Log consent state if `waitForConsent` enabled
-   - **Step 5**: Setup integrations (Google Analytics if configured and consented)
-     - If `waitForConsent: true` and no consent → deferred initialization
-     - Later initialized via `handleConsentGranted()` when consent granted
-   - **Step 6**: Initialize EventManager (receives transformers from App, creates SenderManagers)
-   - **Step 6.5**: Register consent-changed event listener (auto-flushes buffered events when consent granted)
-   - **Step 7**: Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
+   - **Step 3**: Initialize EventManager (receives transformers from App, creates SenderManagers)
+   - **Step 4**: Initialize handlers (Session, PageView, Click, Scroll, Performance, Error, Viewport)
      - Handlers are conditionally created based on `disabledEvents` config
-   - **Step 8**: Recover persisted events from localStorage (non-fatal errors logged)
-   - **Step 9**: Set `isInitialized = true`
-3. Pending listeners and transformers applied during steps 6-7
+   - **Step 5**: Recover persisted events from localStorage (non-fatal errors logged)
+   - **Step 6**: Set `isInitialized = true`
+3. Pending listeners and transformers applied during steps 3-4
 4. Initial events fire (SESSION_START, PAGE_VIEW) during handler initialization
 
 ### Recommended User Initialization Order
@@ -349,23 +338,13 @@ await tracelog.init({
   }
 });
 
-// 4. Google Analytics/GTM
-await tracelog.init({
-  integrations: {
-    google: {
-      measurementId: 'G-XXXXXX',      // GA4 (optional)
-      containerId: 'GTM-XXXXXXX'       // GTM (optional)
-    }
-  }
-});
-
-// 5. With Event Control (disable optional events)
+// 4. With Event Control (disable optional events)
 await tracelog.init({
   disabledEvents: ['scroll', 'web_vitals', 'error']
   // Core events (PAGE_VIEW, CLICK, SESSION) still tracked
 });
 
-// 6. Multi-Integration - Simultaneous sending
+// 5. Multi-Integration - Simultaneous sending
 await tracelog.init({
   integrations: {
     tracelog: { projectId: 'project-id' },           // Analytics dashboard
@@ -553,7 +532,7 @@ See `tests/TESTING_FUNDAMENTALS.md` for complete acceptance criteria checklist.
 
 ### Developer Responsibilities
 
-1. **Consent Management**: Only call `init()` after user grants consent
+1. **User Consent**: Obtain user consent before calling `init()` (GDPR/CCPA compliance is your responsibility)
 2. **Custom Event Sanitization**: YOU must sanitize metadata passed to `tracelog.event()`
 3. **Sensitive Elements**: Mark payment forms, admin actions with `data-tlog-ignore`
 4. **URL Params**: Extend `sensitiveQueryParams` config for app-specific params
@@ -884,7 +863,6 @@ TraceLog is designed to work **without any backend** to maximize flexibility:
 - Use as standalone analytics (local event consumption)
 - Integrate with TraceLog SaaS (optional)
 - Send to custom backend (optional)
-- Forward to Google Analytics (optional)
 
 This means network requests are **opt-in**, not required.
 

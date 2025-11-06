@@ -8,7 +8,7 @@ alwaysApply: true
 
 ## 🎯 Purpose
 
-Event tracking library that automatically captures user interactions (clicks, scrolls, navigation, web performance) and supports custom events. Features cross-tab session management, session recovery, Google Analytics integration, and event sampling.
+Event tracking library that automatically captures user interactions (clicks, scrolls, navigation, web performance) and supports custom events. Features cross-tab session management, session recovery, and event sampling.
 
 ## 🏗️ Architecture
 
@@ -219,19 +219,6 @@ await tracelog.init({
 });
 ```
 
-### Google Analytics / Google Tag Manager
-```typescript
-await tracelog.init({
-  integrations: {
-    google: {
-      measurementId: 'G-XXXXXX',      // GA4 (optional)
-      containerId: 'GTM-XXXXXXX',      // GTM (optional)
-      forwardEvents: ['PAGE_VIEW', 'CLICK'] // Forward specific events (optional)
-    }
-  }
-});
-```
-
 ### Multi-Integration (TraceLog SaaS + Custom Backend)
 ```typescript
 await tracelog.init({
@@ -287,12 +274,6 @@ interface Config {
   integrations?: {
     tracelog?: { projectId: string; };
     custom?: { collectApiUrl: string; allowHttp?: boolean; };
-    google?: {
-      measurementId?: string;           // GA4/Google Ads
-      containerId?: string;              // GTM
-      consentCategories?: 'all' | Partial<Record<GoogleConsentType, boolean>>;
-      forwardEvents?: EventTypeName[] | 'all'; // Event forwarding
-    };
   };
 
   // Testing
@@ -309,7 +290,7 @@ GDPR/CCPA-compliant consent with granular per-integration control:
 await tracelog.init({
   waitForConsent: true,  // Events buffered until consent granted
   integrations: {
-    google: { measurementId: 'G-XXXXXX' },
+    tracelog: { projectId: 'your-project-id' },
     custom: { collectApiUrl: 'https://api.example.com' }
   }
 });
@@ -318,14 +299,14 @@ await tracelog.init({
 await tracelog.setConsent('all', true);
 
 // Per-integration consent
-await tracelog.setConsent('google', true);
+await tracelog.setConsent('tracelog', true);
 await tracelog.setConsent('custom', false);
 
 // Check consent
-if (tracelog.hasConsent('google')) { /* ... */ }
+if (tracelog.hasConsent('tracelog')) { /* ... */ }
 
 // Get full state
-const state = tracelog.getConsentState(); // { google: true, custom: false, tracelog: true }
+const state = tracelog.getConsentState(); // { tracelog: true, custom: false }
 
 // Listen to changes
 tracelog.on('consent-changed', (state) => {
@@ -336,7 +317,7 @@ tracelog.on('consent-changed', (state) => {
 **Key Features:**
 - Event buffering until consent granted
 - Retroactive send when consent granted (SESSION_START first)
-- Per-integration control (google, custom, tracelog)
+- Per-integration control (tracelog, custom)
 - Persistent in localStorage (365-day expiration)
 - Cross-tab synchronization
 - Can be set before or after `init()`
@@ -387,7 +368,6 @@ tracelog.removeTransformer('beforeBatch');
 - **Custom Backend**: Both transformers applied
 - **TraceLog SaaS**: Transformers silently ignored (schema protection)
 - **Multi-Integration**: SaaS gets original, custom gets transformed
-- **Google Analytics**: Transformers N/A
 
 **Error Handling:**
 - Exceptions caught and logged

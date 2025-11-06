@@ -19,7 +19,6 @@ Core business logic components that handle analytics data processing, state mana
 - **Multi-Integration Orchestration**: Manages 0-2 SenderManager instances (SaaS + Custom) with parallel async sending
 - **Standalone Mode Support**: Emits queue events without network requests when no integrations configured
 - **Event Emitter**: Emits events locally for standalone mode and external integrations
-- **Integration Support**: Forwards custom events to Google Analytics when configured
 
 **Key Features**:
 - **LRU Cache Deduplication**: 1000-entry fingerprint cache with automatic cleanup
@@ -233,7 +232,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 **Purpose**: GDPR/CCPA-compliant consent management with cross-tab synchronization and automatic consent persistence.
 
 **Core Functionality**:
-- **Consent State Management**: Tracks consent status per integration (TraceLog SaaS, Custom Backend, Google Analytics)
+- **Consent State Management**: Tracks consent status per integration (TraceLog SaaS, Custom Backend)
 - **Cross-Tab Synchronization**: Syncs consent state across browser tabs via storage events
 - **Automatic Persistence**: Debounced localStorage persistence with 50ms delay to prevent thrashing
 - **Consent Expiration**: Stored consent expires after 365 days requiring re-consent
@@ -241,7 +240,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - **Browser Environment Checks**: Verifies browser context before consent operations
 
 **Key Features**:
-- Per-integration consent tracking (`tracelog`, `custom`, `google`)
+- Per-integration consent tracking (`tracelog`, `custom`)
 - Debounced persistence (50ms) to optimize localStorage writes during rapid consent changes
 - Cross-tab sync via storage events with message validation
 - Consent expiration after 365 days (configurable via `CONSENT_EXPIRY_DAYS`)
@@ -251,8 +250,8 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - Automatic cleanup with `cleanup()` method for memory leak prevention
 
 **Public API Methods**:
-- `setConsent(integration: 'tracelog' | 'custom' | 'google' | 'all', granted: boolean)`: Grants or revokes consent for specific integration or all integrations at once
-- `hasConsent(integration: 'tracelog' | 'custom' | 'google')`: Checks if consent granted for integration
+- `setConsent(integration: 'tracelog' | 'custom' | 'all', granted: boolean)`: Grants or revokes consent for specific integration or all integrations at once
+- `hasConsent(integration: 'tracelog' | 'custom')`: Checks if consent granted for integration
 - `getConsentState()`: Returns full consent state object with all integrations
 - `getGrantedIntegrations()`: Returns array of integration names that have consent granted
 - `flush(throwOnError?: boolean)`: Immediately persist pending consent (for page unload or pre-init scenarios)
@@ -272,8 +271,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
   {
     "state": {
       "tracelog": true,
-      "custom": false,
-      "google": true
+      "custom": false
     },
     "timestamp": 1704896400000,
     "expiresAt": 1736432400000

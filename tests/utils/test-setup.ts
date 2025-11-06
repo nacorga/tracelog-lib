@@ -2,11 +2,9 @@ import { vi } from 'vitest';
 import { EventManager } from '../../src/managers/event.manager';
 import { SessionManager } from '../../src/managers/session.manager';
 import { StorageManager } from '../../src/managers/storage.manager';
-import { ConsentManager } from '../../src/managers/consent.manager';
 import { StateManager, resetGlobalState } from '../../src/managers/state.manager';
 import { Config } from '../../src/types';
 import { DEFAULT_SESSION_TIMEOUT } from '../../src/constants';
-import { GoogleAnalyticsIntegration } from '../../src/integrations/google-analytics.integration';
 import { Emitter } from '../../src/utils';
 
 vi.mock('../../src/managers/sender.manager', () => {
@@ -45,16 +43,6 @@ export const createMockStorageManager = (): StorageManager =>
     removeSessionItem: vi.fn(),
     clearSessionStorage: vi.fn(),
   }) as unknown as StorageManager;
-
-/**
- * Mock GoogleAnalyticsIntegration factory
- */
-export const createMockGoogleAnalytics = (): GoogleAnalyticsIntegration =>
-  ({
-    initialize: vi.fn().mockResolvedValue(undefined),
-    cleanup: vi.fn(),
-    trackEvent: vi.fn(),
-  }) as unknown as GoogleAnalyticsIntegration;
 
 /**
  * Mock Emitter factory
@@ -98,18 +86,8 @@ export const setupTestState = (config: Config = createTestConfig()): void => {
 /**
  * Create EventManager with proper dependencies for testing
  */
-export const createTestEventManager = (
-  storageManager?: StorageManager,
-  google?: GoogleAnalyticsIntegration | null,
-  consentManager?: ConsentManager | null,
-  emitter?: Emitter | null,
-): EventManager => {
-  return new EventManager(
-    storageManager || createMockStorageManager(),
-    google || null,
-    consentManager || null,
-    emitter || null,
-  );
+export const createTestEventManager = (storageManager?: StorageManager, emitter?: Emitter | null): EventManager => {
+  return new EventManager(storageManager || createMockStorageManager(), emitter || null);
 };
 
 /**

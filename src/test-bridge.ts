@@ -1,5 +1,5 @@
 import { App } from './app';
-import { setConsent as apiSetConsent, destroy as apiDestroy } from './api';
+import { destroy as apiDestroy } from './api';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 import { SessionHandler } from './handlers/session.handler';
@@ -9,8 +9,7 @@ import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
-import { ConsentManager } from './managers/consent.manager';
-import { State, TraceLogTestBridge, EventData, GoogleConsentCategories } from './types';
+import { State, TraceLogTestBridge, EventData } from './types';
 import { setQaMode as setQaModeUtil } from './utils/browser/qa-mode.utils';
 
 /**
@@ -178,58 +177,10 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   /**
-   * Consent manager accessor for tests
-   */
-  override getConsentManager(): ConsentManager | undefined {
-    return this.managers.consent;
-  }
-
-  /**
-   * Consent buffer inspection for tests
-   */
-  getConsentBufferLength(): number {
-    return this.managers.event?.getConsentBufferLength() ?? 0;
-  }
-
-  /**
    * Get events from queue (for validation in tests)
    */
   getQueueEvents(): EventData[] {
     return this.managers.event?.getQueueEvents() ?? [];
-  }
-
-  /**
-   * Get consent buffer events (for validation in tests)
-   */
-  getConsentBufferEvents(integration: 'google' | 'custom' | 'tracelog'): EventData[] {
-    return this.managers.event?.getConsentBufferEvents(integration) ?? [];
-  }
-
-  /**
-   * Consent management (always delegates to api.ts for consistency)
-   */
-  async setConsent(
-    integration: 'google' | 'custom' | 'tracelog' | 'all',
-    granted: boolean,
-    googleConsentCategories?: GoogleConsentCategories,
-  ): Promise<void> {
-    await apiSetConsent(integration, granted, googleConsentCategories);
-  }
-
-  /**
-   * Consent state check (delegates to ConsentManager)
-   */
-  hasConsent(integration: 'google' | 'custom' | 'tracelog' | 'all'): boolean {
-    const consentManager = this.getConsentManager();
-    return consentManager?.hasConsent(integration) ?? false;
-  }
-
-  /**
-   * Consent state retrieval (delegates to ConsentManager)
-   */
-  getConsentState(): { google: boolean; custom: boolean; tracelog: boolean } {
-    const consentManager = this.getConsentManager();
-    return consentManager?.getConsentState() ?? { google: false, custom: false, tracelog: false };
   }
 
   /**

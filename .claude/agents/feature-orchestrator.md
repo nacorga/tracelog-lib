@@ -30,7 +30,7 @@ You MUST follow these project-specific guidelines from `CLAUDE.md`:
 
 ### Architecture Principles
 - **Standalone Mode**: No integrations config = local-only operation (no network requests)
-- **Backend Integration**: Optional `tracelog`/`custom`/`google` integrations
+- **Backend Integration**: Optional `tracelog`/`custom` integrations
 - **Client-Side Controls**: All validation, sampling, deduplication happen in browser
 - **Event Flow**: Capture → Validate → Emit locally AND/OR send to backend (if configured)
 
@@ -137,7 +137,7 @@ tracelog.init({
 tracelog.init({
   integrations: {
     tracelog: { projectId: 'abc' },
-    google: { measurementId: 'G-XXX' }
+    custom: { collectApiUrl: 'https://api.example.com' }
   }
 });
 ```
@@ -167,7 +167,6 @@ interface Config {
   integrations?: {
     tracelog?: { projectId: string };
     custom?: { collectApiUrl: string; allowHttp?: boolean };
-    google?: { measurementId?: string; containerId?: string };
   };
 }
 ```
@@ -602,7 +601,7 @@ export function sanitizeSelector(selector: string): string {
 - ✅ Comprehensive unit tests (all edge cases)
 - ✅ No DOM manipulation or global state access
 
-#### Integration Feature (e.g., Google Analytics, external APIs)
+#### Integration Feature (e.g., external APIs)
 
 **Indicators**: External APIs, 3rd party libraries, network requests
 
@@ -616,13 +615,13 @@ export function sanitizeSelector(selector: string): string {
 **CLAUDE.md Pattern Requirements**:
 ```typescript
 // ✅ CORRECT Integration Pattern
-export class GoogleAnalyticsIntegration {
+export class ThirdPartyIntegration {
   private scriptLoaded = false;
 
   // Conditional loading (consent-based)
   async load(withConsent: boolean): Promise<void> {
     if (!withConsent) {
-      console.warn('GA not loaded - consent required');
+      console.warn('Integration not loaded - consent required');
       return;
     }
 
@@ -633,10 +632,10 @@ export class GoogleAnalyticsIntegration {
   // Fallback if 3rd party unavailable
   sendEvent(event: Event): void {
     if (!this.scriptLoaded) {
-      console.warn('GA not available - event not sent');
+      console.warn('Integration not available - event not sent');
       return;
     }
-    // Send to GA
+    // Send to third-party service
   }
 }
 ```

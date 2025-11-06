@@ -26,7 +26,7 @@ describe('ClickHandler - Basic Tracking', () => {
   beforeEach(() => {
     setupTestEnvironment();
     storageManager = new StorageManager();
-    eventManager = new EventManager(storageManager, null, null, null, {});
+    eventManager = new EventManager(storageManager, null, {});
     handler = new ClickHandler(eventManager);
     trackSpy = vi.spyOn(eventManager, 'track');
   });
@@ -161,7 +161,7 @@ describe('ClickHandler - PII Sanitization', () => {
   beforeEach(() => {
     setupTestEnvironment();
     storageManager = new StorageManager();
-    eventManager = new EventManager(storageManager, null, null, null, {});
+    eventManager = new EventManager(storageManager, null, {});
     handler = new ClickHandler(eventManager);
     trackSpy = vi.spyOn(eventManager, 'track');
   });
@@ -300,7 +300,7 @@ describe('ClickHandler - Element Data Capture', () => {
   beforeEach(() => {
     setupTestEnvironment();
     storageManager = new StorageManager();
-    eventManager = new EventManager(storageManager, null, null, null, {});
+    eventManager = new EventManager(storageManager, null, {});
     handler = new ClickHandler(eventManager);
     trackSpy = vi.spyOn(eventManager, 'track');
   });
@@ -407,7 +407,7 @@ describe('ClickHandler - Edge Cases', () => {
   beforeEach(() => {
     setupTestEnvironment();
     storageManager = new StorageManager();
-    eventManager = new EventManager(storageManager, null, null, null, {});
+    eventManager = new EventManager(storageManager, null, {});
     handler = new ClickHandler(eventManager);
     trackSpy = vi.spyOn(eventManager, 'track');
   });

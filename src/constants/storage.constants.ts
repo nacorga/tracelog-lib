@@ -99,15 +99,3 @@ export const SESSION_RECOVERY_KEY = (id: string): string =>
  */
 export const BROADCAST_CHANNEL_NAME = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
-
-/**
- * Storage key for consent state in localStorage
- * Format: 'tlog:consent'
- */
-export const CONSENT_KEY = `${STORAGE_BASE_KEY}:consent`;
-
-/**
- * Expiration period for stored consent preferences in days
- * After 365 days, consent is cleared and must be re-granted
- */
-export const CONSENT_EXPIRY_DAYS = 365;

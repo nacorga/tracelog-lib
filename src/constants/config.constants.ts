@@ -64,9 +64,6 @@ export const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
 export const MAX_PENDING_EVENTS_BUFFER = 100; // Maximum events to buffer before session init
-export const MAX_CONSENT_BUFFER_LENGTH = 500; // Maximum events to buffer while waiting for consent
-export const CONSENT_FLUSH_BATCH_SIZE = 50; // Batch size when flushing consent buffer
-export const CONSENT_FLUSH_DELAY_MS = 100; // Delay between batches when flushing consent buffer
 
 // Session timeout validation limits
 export const MIN_SESSION_TIMEOUT_MS = 30000; // 30 seconds minimum
@@ -281,7 +278,6 @@ export const VALIDATION_MESSAGES = {
   INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
   INVALID_TRACELOG_PROJECT_ID: 'TraceLog project ID is required when integration is enabled',
   INVALID_CUSTOM_API_URL: 'Custom API URL is required when integration is enabled',
-  INVALID_GOOGLE_ANALYTICS_ID: 'Google Analytics measurement ID is required when integration is enabled',
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
   INVALID_GLOBAL_METADATA: 'Global metadata must be an object',
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',

@@ -364,7 +364,6 @@ tracelog.setTransformer('beforeSend', (data) => {
 **Critical Security Note:**
 - **TraceLog SaaS**: Transformers silently ignored (schema protection)
 - **Custom Backend**: Transformers applied (YOUR responsibility to secure)
-- **Google Analytics**: Transformers NOT applied (events sent as-is)
 
 ```typescript
 // Custom backend - transformers applied (YOU control security)

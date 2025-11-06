@@ -215,154 +215,83 @@ tracelog.on('event', (event) => {
 
 ---
 
-## Consent & Privacy
+## User Consent & Privacy
 
-### ✅ DO: Respect user consent
+### ✅ DO: Obtain user consent BEFORE initialization
 
-**Modern Approach (Recommended):**
+TraceLog requires you to manage user consent externally. Only call `init()` after obtaining explicit user consent:
+
 ```typescript
-// Initialize with per-integration consent requirements
-await tracelog.init({
-  integrations: {
-    tracelog: {
-      projectId: 'project-id',
-      waitForConsent: true  // TraceLog SaaS requires consent
-    },
-    google: {
-      measurementId: 'G-XXXXXX',
-      waitForConsent: true  // Google Analytics requires consent
-    },
-    custom: {
-      collectApiUrl: 'https://api.example.com/collect',
-      waitForConsent: true  // Custom backend requires consent
+// Your responsibility: Show consent banner and obtain consent
+const userConsent = await showCookieBanner(); // Your consent management system
+
+if (userConsent.analytics) {
+  // Only initialize after consent is granted
+  await tracelog.init({
+    integrations: {
+      tracelog: { projectId: 'your-project-id' }
     }
-  }
-});
-
-// Grant consent for specific integrations
-await tracelog.setConsent('tracelog', true);
-await tracelog.setConsent('google', true);
-await tracelog.setConsent('custom', true);
-
-// Or grant consent for ALL integrations at once
-await tracelog.setConsent('all', true);
-
-// Revoke consent (stops sending to specific integrations)
-// Events are still captured and emitted to local listeners
-await tracelog.setConsent('google', false);
-// Buffered events for revoked integration are discarded
-
-// Complete destruction (stops all tracking)
-tracelog.destroy();
-```
-
-**Google Consent Mode v2 - Dynamic Configuration:**
-
-Configure granular Google Consent Mode categories based on user cookie banner selections:
-
-```typescript
-// 1. Initialize with waitForConsent per integration
-await tracelog.init({
-  integrations: {
-    google: {
-      measurementId: 'G-XXXXXX',
-      waitForConsent: true
-    }
-  }
-});
-
-// 2. User selects preferences in cookie banner
-const userSelections = {
-  analytics: true,     // User accepts analytics
-  advertising: false,  // User rejects ads
-  personalization: false
-};
-
-// 3. Grant consent WITH Google Consent Mode categories (single call!)
-await tracelog.setConsent('google', true, {
-  analytics_storage: userSelections.analytics,
-  ad_storage: userSelections.advertising,
-  ad_user_data: userSelections.advertising,
-  ad_personalization: userSelections.advertising,
-  personalization_storage: userSelections.personalization
-});
-// → Categories persisted to localStorage (365-day expiration)
-// → Google Consent Mode updated via gtag('consent', 'update')
-// → Buffered events flushed
-// → Categories automatically restored on next page load
-
-// 4. User revokes consent (categories preserved for future use)
-await tracelog.setConsent('google', false);
-
-// 5. User re-grants consent later (reuses persisted categories)
-await tracelog.setConsent('google', true);
-// → Previous categories automatically applied!
-```
-
-**Alternative: Grant all Google Consent Mode categories at once:**
-
-```typescript
-// Grant consent with all categories enabled
-await tracelog.setConsent('google', true, 'all');
-// → Equivalent to setting all 5 categories to true
-// → Persisted to localStorage for 365 days
-```
-
-**Legacy Approach (Wait for consent before init):**
-```typescript
-// Initialize only after consent
-async function initializeAnalytics() {
-  const consent = await getUserConsent();
-
-  if (consent.analytics) {
-    await tracelog.init({
-      integrations: {
-        tracelog: { projectId: 'project-id' }
-      }
-    });
-  }
-}
-
-// Handle consent revocation
-function revokeConsent() {
-  tracelog.destroy();
-  localStorage.clear(); // Clear all persisted data
+  });
+} else {
+  console.log('User declined tracking - TraceLog not initialized');
 }
 ```
 
-### ✅ DO: Mark sensitive elements
+### ✅ DO: Handle consent revocation
 
-```html
-<!-- Payment forms -->
+If the user revokes consent, stop tracking immediately:
+
+```typescript
+function handleConsentRevoke() {
+  tracelog.destroy();           // Stop all tracking
+  localStorage.clear();          // Clear stored session data
+  sessionStorage.clear();        // Clear temporary data
+}
+```
+
+### ✅ DO: Respect sensitive data boundaries
+
+Mark sensitive areas with `data-tlog-ignore`:
+
+```typescript
+// Exclude payment forms, admin panels, etc.
 <div data-tlog-ignore>
-  <input type="text" name="card_number">
-  <input type="text" name="cvv">
-  <button>Pay Now</button>
+  <input type="password" name="password">
+  <input type="text" name="credit_card">
 </div>
-
-<!-- Admin actions -->
-<button data-tlog-ignore onclick="deleteUser()">
-  Delete User
-</button>
-
-<!-- Password fields -->
-<form data-tlog-ignore action="/reset-password">
-  <input type="password" name="new_password">
-  <button>Reset Password</button>
-</form>
 ```
 
-### ✅ DO: Configure sensitive URL params
+### ✅ DO: Filter sensitive URL parameters
+
+Extend the default sensitive query params list:
 
 ```typescript
 await tracelog.init({
   sensitiveQueryParams: [
-    'affiliate_id',   // Your custom params
-    'promo_code',
-    'referral_token',
-    'campaign_id'
+    'auth_token',        // App-specific params
+    'api_key',
+    'reset_token'
+    // Merged with defaults: token, auth, key, password, etc.
   ]
-  // Merged with defaults: token, auth, key, password, etc.
+});
+```
+
+### ❌ DON'T: Pass PII in custom events
+
+YOU are responsible for sanitizing metadata passed to `tracelog.event()`:
+
+```typescript
+// ❌ BAD: Contains PII
+tracelog.event('purchase', {
+  email: 'user@example.com',      // ❌ Email
+  phone: '+1-555-123-4567'         // ❌ Phone number
+});
+
+// ✅ GOOD: Generic identifiers only
+tracelog.event('purchase', {
+  userId: 'usr_abc123',            // ✅ Hashed/anonymized ID
+  amount: 99.99,                   // ✅ Non-PII data
+  currency: 'USD'
 });
 ```
 
@@ -494,14 +423,7 @@ await tracelog.init({
   }
 });
 
-// 4. Google Analytics - parallel tracking
-await tracelog.init({
-  integrations: {
-    google: { measurementId: 'G-XXXXXX' }
-  }
-});
-
-// 5. Multi-Integration - simultaneous sending
+// 4. Multi-Integration - simultaneous sending
 await tracelog.init({
   integrations: {
     tracelog: { projectId: 'project-id' },           // Analytics dashboard
@@ -731,7 +653,6 @@ tracelog.setTransformer('beforeBatch', transformFn); // Ignored
 **Key Points:**
 - **TraceLog SaaS**: Transformers silently ignored (no errors thrown)
 - **Custom Backend**: Transformers applied as configured
-- **Google Analytics**: `beforeSend` applied, `beforeBatch` N/A
 - **Multi-Integration**: Transformers only apply to custom backend
 
 ### ❌ DON'T: Rely on transformers for TraceLog SaaS
