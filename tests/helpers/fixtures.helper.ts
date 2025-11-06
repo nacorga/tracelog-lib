@@ -22,7 +22,6 @@ export function createMockConfig(overrides?: Partial<Config>): Config {
     samplingRate: 1.0,
     errorSampling: 1.0,
     disabledEvents: [],
-    maxConsentBufferSize: 500,
     webVitalsMode: 'needs-improvement',
     pageViewThrottleMs: 1000,
     clickThrottleMs: 300,

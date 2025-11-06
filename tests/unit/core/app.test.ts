@@ -75,9 +75,6 @@ describe('App - Initialization', () => {
           custom: {
             collectApiUrl: 'https://api.custom.com/collect',
           },
-          google: {
-            measurementId: 'G-TEST123',
-          },
         },
       });
 

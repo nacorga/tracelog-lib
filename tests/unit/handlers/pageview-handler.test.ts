@@ -30,7 +30,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       setupNavigationEnvironment();
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, null, null, {});
+      eventManager = new EventManager(storageManager, null, {});
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -107,7 +107,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       setupNavigationEnvironment();
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, null, null, {});
+      eventManager = new EventManager(storageManager, null, {});
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -185,7 +185,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       previousUrl = 'http://localhost:3000/';
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, null, null, {});
+      eventManager = new EventManager(storageManager, null, {});
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -308,7 +308,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       previousUrl = 'http://localhost:3000/';
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, null, null, {});
+      eventManager = new EventManager(storageManager, null, {});
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -456,7 +456,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       previousUrl = 'http://localhost:3000/';
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, null, null, {});
+      eventManager = new EventManager(storageManager, null, {});
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
