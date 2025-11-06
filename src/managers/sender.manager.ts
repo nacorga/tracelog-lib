@@ -66,11 +66,11 @@ interface SendCallbacks {
  * const success = await sender.send(eventsQueue); // No-op, returns true
  *
  * // SaaS integration
- * const saasSender = new SenderManager(storage, 'saas', 'https://api.tracelog.io/collect');
+ * const saasSender = new SenderManager(storage, 'saas', 'https://api.tracelog.io/collect', {});
  * const success = await saasSender.send(eventsQueue);
  *
  * // Custom backend
- * const customSender = new SenderManager(storage, 'custom', 'https://myapi.com/events');
+ * const customSender = new SenderManager(storage, 'custom', 'https://myapi.com/events', {});
  * const success = await customSender.send(eventsQueue);
  *
  * // Synchronous send (page unload)
