@@ -26,6 +26,37 @@
 
 
 
+
+## [1.6.0] - 2025-11-06
+
+### ✨ Features
+
+- Remove google integration ([3a73e39](../../commit/3a73e392cdd81dac346b6a6644efe98feccf6ff3))
+
+### 🐛 Bug Fixes
+
+- Update SenderManager instantiation to include an empty options object for SaaS and custom backends ([bbadfd5](../../commit/bbadfd5485d89f9cf4e32ca1e5248509b2f9c513))
+
+### ♻️ Refactoring
+
+- Remove Google Analytics integration references and update documentation for consent management ([436cdfa](../../commit/436cdfa120f76e8506d8e579005d0390d2f5a4fb))
+- Remove input listener managers and related tests, update event listener manager interface ([6f285d3](../../commit/6f285d3aceadaae196cc3b957fe411d10a505258))
+
+### 🔧 Other Changes
+
+- Merge pull request #61 from nacorga/release/20251106.1 ([375161c](../../commit/375161c3b1587f77784afc0e8c28585c1cef1882))
+- Merge pull request #60 from nacorga/feat/consent-system-overhaul ([9b27c4b](../../commit/9b27c4be3749f598d0874562f5bd1f206c7793a0))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.5.0...v1.6.0
+
+
 ## [1.5.0] - 2025-11-05
 
 ### ✨ Features
