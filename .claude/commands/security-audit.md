@@ -59,7 +59,6 @@ Review these files manually:
 @src/handlers/click.handler.ts
 @src/utils/security/sanitize.utils.ts
 @src/constants/config.constants.ts
-@src/integrations/google-analytics.integration.ts
 
 ## Report Format
 

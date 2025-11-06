@@ -5,7 +5,7 @@ applyTo:
 
 ## Integration Architecture Pattern
 
-Integrations are **optional third-party service connectors** (Google Analytics, custom backends):
+Integrations are **optional third-party service connectors** (custom backends):
 
 ```typescript
 export class CustomIntegration {
@@ -47,7 +47,7 @@ export class CustomIntegration {
 - ❌ **BLOCK**: Duplicate script injection → Multiple instances
 
 ### 3. Third-Party API Safety (HIGH)
-- ✅ Validate third-party API availability (`window.gtag`, `window.dataLayer`, etc.)
+- ✅ Validate third-party API availability
 - ✅ Check for ad blockers (graceful degradation)
 - ✅ Rate limiting for API calls (prevent abuse)
 - ⚠️ **HIGH**: Assuming third-party API exists → Crashes when blocked
@@ -57,103 +57,6 @@ export class CustomIntegration {
 - ✅ Silent failures (no throw) - integrations are optional
 - ✅ Log errors with context via `log()` utility
 - ⚠️ **HIGH**: Throwing errors from integrations → Breaks core functionality
-
-## Google Analytics Integration Specific
-
-### Configuration Validation
-```typescript
-// ✅ GOOD: Validate measurement ID
-if (!measurementId || typeof measurementId !== 'string') {
-  throw new Error('Google Analytics measurement ID is required');
-}
-
-if (!measurementId.match(/^(G-|UA-)/)) {
-  throw new Error('Measurement ID must start with "G-" or "UA-"');
-}
-```
-
-### Script Injection
-```typescript
-// ✅ GOOD: Safe script injection
-private injectGoogleAnalyticsScript(measurementId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Check if already loaded
-    if (document.querySelector(`script[src*="googletagmanager"]`)) {
-      resolve();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-    script.async = true;
-    script.defer = true;
-
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Analytics script'));
-
-    document.head.appendChild(script);
-  });
-}
-
-// ❌ BAD: No duplicate check, no error handling
-private injectGoogleAnalyticsScript(measurementId: string): void {
-  const script = document.createElement('script');
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-  document.head.appendChild(script); // No error handling!
-}
-```
-
-### Event Forwarding
-```typescript
-// ✅ GOOD: Safe event forwarding
-sendEvent(event: Event): void {
-  if (!this.isInitialized) {
-    return;
-  }
-
-  if (typeof window === 'undefined' || !window.gtag) {
-    return; // Silently skip if gtag not available
-  }
-
-  try {
-    window.gtag('event', event.type, {
-      event_category: event.custom_event?.name || event.type,
-      event_label: event.page_url,
-      // ... more params
-    });
-  } catch (error) {
-    log('warn', 'Failed to send event to Google Analytics', { error });
-  }
-}
-
-// ❌ BAD: No safety checks
-sendEvent(event: Event): void {
-  window.gtag('event', event.type); // Crashes if gtag undefined!
-}
-```
-
-### Cleanup Pattern
-```typescript
-// ✅ GOOD: Proper cleanup
-cleanup(): void {
-  this.isInitialized = false;
-
-  // Remove injected scripts
-  const scripts = document.querySelectorAll('script[src*="googletagmanager"]');
-  scripts.forEach((script) => script.remove());
-
-  // Clear global state
-  if (typeof window !== 'undefined') {
-    delete window.gtag;
-    delete window.dataLayer;
-  }
-}
-
-// ❌ BAD: No cleanup
-cleanup(): void {
-  // Scripts remain in DOM, state persists
-}
-```
 
 ## Custom Backend Integration
 
@@ -247,28 +150,7 @@ async sendBatch(events: Event[]): Promise<void> {
 - Test ad blocker scenarios (graceful degradation)
 
 ### E2E Tests
-```typescript
-test('Google Analytics integration forwards events', async ({ page }) => {
-  // Mock gtag to capture calls
-  await page.addInitScript(() => {
-    window.__gtagCalls = [];
-    window.gtag = (...args) => {
-      window.__gtagCalls.push(args);
-    };
-  });
-
-  await tracelog.init({
-    integrations: {
-      google: { measurementId: 'G-TEST123' }
-    }
-  });
-
-  await page.click('button');
-
-  const gtagCalls = await page.evaluate(() => window.__gtagCalls);
-  expect(gtagCalls).toContainEqual(['event', 'CLICK', expect.any(Object)]);
-});
-```
+Test integration behavior with actual script loading and third-party API interaction.
 
 ## Common Issues
 
@@ -277,7 +159,7 @@ test('Google Analytics integration forwards events', async ({ page }) => {
 - ❌ No duplicate script injection prevention
 - ❌ Throwing errors from integration code (should be silent)
 - ❌ Missing cleanup in `cleanup()` method
-- ❌ Assuming third-party API exists (`window.gtag` without check)
+- ❌ Assuming third-party API exists without check
 - ❌ Allowing HTTP in production without explicit opt-in
 
 ### High Priority
@@ -306,7 +188,7 @@ test('Google Analytics integration forwards events', async ({ page }) => {
 
 **❌ NEVER use comments for:**
 - Obvious initialization checks (e.g., `// Check if initialized`)
-- Simple API existence checks (e.g., `// Check if gtag exists`)
+- Simple API existence checks (e.g., `// Check if API exists`)
 - Script element creation (e.g., `// Create script tag`)
 - Type information in TypeScript signatures
 
@@ -322,15 +204,15 @@ test('Google Analytics integration forwards events', async ({ page }) => {
 - [ ] Proper cleanup in `cleanup()` method
 - [ ] SSR-safe (`typeof window === 'undefined'` checks)
 - [ ] HTTPS enforcement (unless `allowHttp: true`)
-- [ ] Third-party API validation (`window.gtag` exists)
+- [ ] Third-party API validation (check existence before use)
 - [ ] Error logging with context
 
 ## Example Review Comments
 
-**Good**: "BLOCKING: Missing initialization check at line 67. Add `if (!this.isInitialized) { return; }` before calling `window.gtag()`. Without this, events will be sent before Google Analytics is ready, causing errors."
+**Good**: "BLOCKING: Missing initialization check at line 67. Add `if (!this.isInitialized) { return; }` before calling third-party API. Without this, events will be sent before integration is ready, causing errors."
 
-**Good**: "HIGH: The script injection at line 45 doesn't check for duplicates. Add `if (document.querySelector('script[src*=\"googletagmanager\"]')) { return; }` before creating the script element to prevent loading Google Analytics multiple times."
+**Good**: "HIGH: The script injection at line 45 doesn't check for duplicates. Add duplicate check before creating the script element to prevent loading integration scripts multiple times."
 
 **Good**: "MEDIUM: The `sendEvent()` method at line 89 doesn't log failures. Add a catch block: `catch (error) { log('warn', 'Failed to send event', { error }); }` for debugging integration issues."
 
-**Good**: "The Google Analytics integration looks solid. Consider adding a test case for ad blocker scenarios where `window.gtag` is undefined to ensure graceful degradation."
+**Good**: "The integration looks solid. Consider adding a test case for ad blocker scenarios where third-party API is undefined to ensure graceful degradation."

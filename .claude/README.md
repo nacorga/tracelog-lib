@@ -311,7 +311,6 @@ Claude, use the security-privacy-advisor agent to run audit
 - Scans for PII leaks in click tracking
 - Validates sensitive query parameter filtering
 - Checks consent management implementation
-- Verifies Google Analytics conditional loading
 - Provides compliance status against GDPR requirements
 
 **References**: `SECURITY.md` for security and privacy guidelines
@@ -471,7 +470,6 @@ Commit message: "feat: add viewport tracking..."
 - Sensitive query parameter handling
 - Consent management implementation
 - localStorage security
-- Google Analytics loading
 
 **References**: `SECURITY.md` priorities
 

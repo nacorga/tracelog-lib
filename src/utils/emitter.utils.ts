@@ -10,6 +10,9 @@ import { EmitterCallback, EmitterMap } from '../types';
  * - `event`: Individual events as they are tracked (EventData)
  * - `queue`: Complete event batches before transmission (EventsQueue)
  *
+ * **Note**: Developers are responsible for implementing consent logic
+ * before calling `init()` and filtering events as needed.
+ *
  * **Key Features**:
  * - **Type Safety**: Callbacks receive correctly typed data based on event name
  * - **Memory Management**: Listeners stored in Map for efficient lookup and cleanup

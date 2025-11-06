@@ -278,7 +278,6 @@ export const VALIDATION_MESSAGES = {
   INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
   INVALID_TRACELOG_PROJECT_ID: 'TraceLog project ID is required when integration is enabled',
   INVALID_CUSTOM_API_URL: 'Custom API URL is required when integration is enabled',
-  INVALID_GOOGLE_ANALYTICS_ID: 'Google Analytics measurement ID is required when integration is enabled',
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
   INVALID_GLOBAL_METADATA: 'Global metadata must be an object',
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',

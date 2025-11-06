@@ -62,6 +62,7 @@ await tracelog.init({
 
 ```typescript
 // 1. Obtain user consent FIRST (your responsibility)
+// See "User Consent Management" section below for implementation details
 const hasConsent = await getUserConsent(); // Your consent management system
 
 if (!hasConsent) {
@@ -181,8 +182,8 @@ await tracelog.init({
     custom: { collectApiUrl: 'https://api.com' },    // Custom backend
 
     // Multi-integration: Send to multiple backends simultaneously
-    // tracelog: { projectId: 'proj-123' },          // Analytics dashboard
-    // custom: { collectApiUrl: 'https://warehouse.com' }  // Data warehouse
+    // tracelog: { projectId: 'proj-123' },                    // Analytics dashboard
+    // custom: { collectApiUrl: 'https://warehouse.com' }      // Data warehouse
     // Events sent to BOTH independently with separate error handling
   },
 
