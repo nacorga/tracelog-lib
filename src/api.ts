@@ -7,18 +7,8 @@ import {
   TransformerHook,
   BeforeSendTransformer,
   BeforeBatchTransformer,
-  ConsentIntegration,
-  ConsentState,
-  PendingConsent,
-  GoogleConsentCategories,
 } from './types';
-import {
-  log,
-  validateAndNormalizeConfig,
-  setQaMode as setQaModeUtil,
-  loadConsentFromStorage,
-  isValidGoogleConsentCategories,
-} from './utils';
+import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import './types/window.types';
 
@@ -34,12 +24,10 @@ interface PendingTransformer {
 
 const pendingListeners: PendingListener[] = [];
 const pendingTransformers: PendingTransformer[] = [];
-const pendingConsents: PendingConsent[] = [];
 
 let app: App | null = null;
 let isInitializing = false;
 let isDestroying = false;
-let isDestroyed = false;
 
 /**
  * Initializes TraceLog and begins tracking user interactions.
@@ -66,7 +54,6 @@ export const init = async (config?: Config): Promise<void> => {
     return;
   }
 
-  isDestroyed = false;
   isDestroying = false;
 
   if (window.__traceLogDisabled === true) {
@@ -115,20 +102,6 @@ export const init = async (config?: Config): Promise<void> => {
       await Promise.race([initPromise, timeoutPromise]);
 
       app = instance;
-
-      if (pendingConsents.length > 0) {
-        const consents = [...pendingConsents];
-
-        pendingConsents.length = 0;
-
-        for (const { integration, granted } of consents) {
-          try {
-            await setConsent(integration, granted);
-          } catch (error) {
-            log('warn', `Failed to apply pending consent for ${integration}`, { error });
-          }
-        }
-      }
     } catch (error) {
       try {
         instance.destroy(true);
@@ -184,7 +157,7 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
  *
  * Important: Register listeners BEFORE calling init() to capture SESSION_START and PAGE_VIEW.
  *
- * @param event - Event type ('event', 'queue', or 'consent-changed')
+ * @param event - Event type ('event' or 'queue')
  * @param callback - Handler function called when event fires
  *
  * @example
@@ -370,7 +343,6 @@ export const destroy = (): void => {
   }
 
   if (!app) {
-    isDestroyed = false;
     isDestroying = false;
 
     return;
@@ -384,13 +356,11 @@ export const destroy = (): void => {
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
-    pendingConsents.length = 0;
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__traceLogBridge) {
       window.__traceLogBridge = undefined;
     }
 
-    isDestroyed = false;
     isDestroying = false;
   } catch (error) {
     app = null;
@@ -398,314 +368,11 @@ export const destroy = (): void => {
 
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
-    pendingConsents.length = 0;
 
-    isDestroyed = false;
     isDestroying = false;
 
     log('warn', 'Error during destroy, forced cleanup completed', { error });
   }
-};
-
-/**
- * Grants or revokes consent for a specific integration or all integrations.
- *
- * Consent is persisted to localStorage and synced across tabs. Can be called before init().
- *
- * **Google Consent Mode v2**:
- * - Optional 3rd parameter allows granular consent category control
- * - Categories persist in config state for future setConsent() calls
- * - Only applicable to 'google' integration
- *
- * @param integration - Integration identifier ('google', 'custom', 'tracelog', or 'all')
- * @param granted - true to grant consent, false to revoke
- * @param googleConsentCategories - (Google only) Consent categories for Google Consent Mode v2
- * @returns Promise that resolves when consent is applied
- * @throws {Error} If called during destroy()
- * @throws {Error} If localStorage persistence fails (before init only)
- * @throws {Error} If googleConsentCategories is invalid
- *
- * @example
- * ```typescript
- * // Simple consent
- * await tracelog.setConsent('google', true);
- *
- * // Granular Google Consent Mode
- * await tracelog.setConsent('google', true, {
- *   analytics_storage: true,
- *   ad_storage: false,
- *   ad_user_data: false,
- *   ad_personalization: false
- * });
- *
- * // Revoke (categories preserved for future calls)
- * await tracelog.setConsent('google', false);
- *
- * // Re-grant (reuses categories from previous call)
- * await tracelog.setConsent('google', true);
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#setconsent} for consent workflow
- */
-export const setConsent = async (
-  integration: ConsentIntegration,
-  granted: boolean,
-  googleConsentCategories?: GoogleConsentCategories,
-): Promise<void> => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (isDestroyed || isDestroying) {
-    throw new Error('[TraceLog] Cannot set consent while TraceLog is destroyed or being destroyed');
-  }
-
-  if (googleConsentCategories !== undefined) {
-    if (integration !== 'google') {
-      log('warn', 'googleConsentCategories parameter only applicable to google integration, ignoring');
-    } else if (!isValidGoogleConsentCategories(googleConsentCategories)) {
-      throw new Error(
-        '[TraceLog] Invalid googleConsentCategories. Must be "all" or an object with valid GoogleConsentType keys and boolean values',
-      );
-    }
-  }
-
-  if (!app || isInitializing) {
-    if (integration === 'all') {
-      const existingIndex = pendingConsents.findIndex((c) => c.integration === integration);
-
-      if (existingIndex !== -1) {
-        pendingConsents.splice(existingIndex, 1);
-      }
-
-      pendingConsents.push({ integration, granted });
-
-      try {
-        const { CONSENT_KEY, CONSENT_EXPIRY_DAYS } = await import('./constants/storage.constants');
-
-        const now = Date.now();
-        const expiresAt = now + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-
-        const consentData = {
-          state: {
-            google: granted,
-            custom: granted,
-            tracelog: granted,
-          },
-          timestamp: now,
-          expiresAt,
-        };
-
-        localStorage.setItem(CONSENT_KEY, JSON.stringify(consentData));
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-          log('warn', 'localStorage quota exceeded, consent not persisted', { error });
-          return;
-        }
-
-        log('error', 'Failed to persist consent for all integrations before init', { error });
-
-        throw new Error(
-          `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-
-      return;
-    }
-
-    try {
-      const { CONSENT_KEY, CONSENT_EXPIRY_DAYS } = await import('./constants/storage.constants');
-
-      const now = Date.now();
-      const expiresAt = now + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-      const existingRaw = localStorage.getItem(CONSENT_KEY);
-
-      let existingState: Record<string, boolean> = {
-        google: false,
-        custom: false,
-        tracelog: false,
-      };
-
-      if (existingRaw !== null && existingRaw.trim() !== '') {
-        try {
-          const existingData = JSON.parse(existingRaw) as { state?: Record<string, boolean> };
-          if (existingData.state) {
-            existingState = {
-              google: Boolean(existingData.state.google),
-              custom: Boolean(existingData.state.custom),
-              tracelog: Boolean(existingData.state.tracelog),
-            };
-          }
-        } catch {
-          // Corrupted JSON, start fresh with defaults
-        }
-      }
-
-      const consentData = {
-        state: {
-          ...existingState,
-          [integration]: granted,
-        },
-        timestamp: now,
-        expiresAt,
-      };
-
-      localStorage.setItem(CONSENT_KEY, JSON.stringify(consentData));
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-        log('warn', 'localStorage quota exceeded, consent not persisted', { error });
-        return;
-      }
-
-      log('error', 'Failed to persist consent before init', { error });
-
-      throw new Error(
-        `[TraceLog] Failed to persist consent to localStorage: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    return;
-  }
-
-  const consentManager = app.getConsentManager();
-
-  if (!consentManager) {
-    log('warn', 'Consent manager not available');
-    return;
-  }
-
-  if (integration === 'all') {
-    const config = app.getConfig();
-    const collectApiUrls = app.getCollectApiUrls();
-    const integrations: ('google' | 'custom' | 'tracelog')[] = [];
-
-    if (config.integrations?.google) {
-      integrations.push('google');
-    }
-
-    if (collectApiUrls?.custom) {
-      integrations.push('custom');
-    }
-
-    if (collectApiUrls?.saas) {
-      integrations.push('tracelog');
-    }
-
-    for (const int of integrations) {
-      await setConsent(int, granted);
-    }
-
-    return;
-  }
-
-  if (integration === 'google' && googleConsentCategories !== undefined) {
-    try {
-      app.updateGoogleConsentCategories(googleConsentCategories);
-      consentManager.setGoogleConsentCategories(googleConsentCategories);
-    } catch (error) {
-      log('warn', 'Failed to update Google consent categories', { error });
-    }
-  }
-
-  const hadConsent = consentManager.hasConsent(integration);
-
-  consentManager.setConsent(integration, granted);
-
-  if (granted && !hadConsent) {
-    await app.handleConsentGranted(integration);
-  }
-
-  if (!granted && hadConsent) {
-    log('info', `Consent revoked for ${integration}`);
-
-    const eventManager = app.getEventManager();
-
-    if (eventManager) {
-      eventManager.clearConsentBufferForIntegration(integration);
-    }
-  }
-};
-
-/**
- * Checks if consent has been granted for a specific integration.
- *
- * Can be called before init() - reads directly from localStorage.
- *
- * @param integration - Integration identifier ('google', 'custom', 'tracelog', or 'all')
- * @returns true if consent granted, false otherwise
- *
- * @example
- * ```typescript
- * if (tracelog.hasConsent('google')) {
- *   tracelog.event('premium_feature');
- * }
- * ```
- */
-export const hasConsent = (integration: ConsentIntegration): boolean => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return false;
-  }
-
-  if (!app) {
-    if (integration === 'all') {
-      const state = loadConsentFromStorage();
-
-      if (state === null) {
-        return false;
-      }
-
-      return Boolean(state.google === true && state.custom === true && state.tracelog === true);
-    }
-
-    const state = loadConsentFromStorage();
-    if (state === null) {
-      return false;
-    }
-
-    return Boolean(state[integration] === true);
-  }
-
-  const consentManager = app.getConsentManager();
-
-  if (consentManager === undefined) {
-    return false;
-  }
-
-  return consentManager.hasConsent(integration);
-};
-
-/**
- * Retrieves the current consent state for all integrations.
- *
- * Can be called before init() - reads directly from localStorage.
- *
- * @returns Object with consent status (google, custom, tracelog)
- *
- * @example
- * ```typescript
- * const state = tracelog.getConsentState();
- * // { google: true, custom: false, tracelog: true }
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#getconsentstate} for examples
- */
-export const getConsentState = (): ConsentState => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return { google: false, custom: false, tracelog: false };
-  }
-
-  if (!app) {
-    const state = loadConsentFromStorage();
-    return state ?? { google: false, custom: false, tracelog: false };
-  }
-
-  const consentManager = app.getConsentManager();
-
-  if (!consentManager) {
-    return { google: false, custom: false, tracelog: false };
-  }
-
-  return consentManager.getConsentState();
 };
 
 /**

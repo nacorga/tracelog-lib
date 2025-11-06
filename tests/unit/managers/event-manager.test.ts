@@ -8,7 +8,6 @@ import { setupTestEnvironment, cleanupTestEnvironment, advanceTimers } from '../
 import { createMockConfig } from '../../helpers/fixtures.helper';
 import { EventManager } from '../../../src/managers/event.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
-import { ConsentManager } from '../../../src/managers/consent.manager';
 import { EventType, DeviceType, EmitterEvent, ScrollDirection, ErrorType } from '../../../src/types';
 import { Emitter } from '../../../src/utils';
 
@@ -21,7 +20,7 @@ describe('EventManager - Event Tracking', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     // Setup required state using protected methods
     eventManager['set']('sessionId', 'test-session-id');
@@ -267,7 +266,7 @@ describe('EventManager - Deduplication', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
@@ -401,7 +400,7 @@ describe('EventManager - Sampling', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
@@ -513,7 +512,7 @@ describe('EventManager - Rate Limiting', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
@@ -621,7 +620,7 @@ describe('EventManager - Queue Flushing', () => {
       },
     });
 
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('config', config);
     eventManager['set']('sessionId', 'test-session-id');
@@ -756,7 +755,7 @@ describe('EventManager - Integration Coordination', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {});
+    const eventManager = new EventManager(storageManager, emitter, {});
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -782,7 +781,7 @@ describe('EventManager - Integration Coordination', () => {
       },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {});
+    const eventManager = new EventManager(storageManager, emitter, {});
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', {
       saas: 'https://saas.tracelog.com',
@@ -810,7 +809,7 @@ describe('EventManager - Integration Coordination', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {});
+    const eventManager = new EventManager(storageManager, emitter, {});
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -838,7 +837,7 @@ describe('EventManager - Integration Coordination', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -863,7 +862,7 @@ describe('EventManager - Integration Coordination', () => {
       },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', {
       saas: 'https://saas.tracelog.com',
@@ -900,7 +899,7 @@ describe('EventManager - Transformers', () => {
   it('should apply beforeSend transformer in standalone mode', () => {
     const transformer = vi.fn((event) => ({ ...event, transformed: true }));
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
@@ -922,7 +921,7 @@ describe('EventManager - Transformers', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -944,7 +943,7 @@ describe('EventManager - Transformers', () => {
       integrations: { tracelog: { projectId: 'test-project' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { saas: 'https://saas.tracelog.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -970,7 +969,7 @@ describe('EventManager - Transformers', () => {
       },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', {
       saas: 'https://saas.tracelog.com',
@@ -998,7 +997,7 @@ describe('EventManager - Transformers', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -1024,7 +1023,7 @@ describe('EventManager - Transformers', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -1047,7 +1046,7 @@ describe('EventManager - Transformers', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const eventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -1064,129 +1063,6 @@ describe('EventManager - Transformers', () => {
   });
 });
 
-describe('EventManager - Consent Integration', () => {
-  let storageManager: StorageManager;
-  let consentManager: ConsentManager;
-  let emitter: Emitter;
-
-  beforeEach(() => {
-    setupTestEnvironment();
-    storageManager = new StorageManager();
-    emitter = new Emitter();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should buffer events when consent not granted', () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    // Event should be buffered
-    expect(eventManager.getConsentBufferLength()).toBeGreaterThan(0);
-
-    eventManager.stop();
-  });
-
-  it('should flush buffered events when consent granted', async () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    expect(eventManager.getConsentBufferLength()).toBeGreaterThan(0);
-
-    // Grant consent
-    consentManager.setConsent('custom', true);
-
-    // Buffer should be flushed (wait for async flush)
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 200);
-    });
-
-    eventManager.stop();
-  });
-
-  it('should clear buffer when consent revoked', () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: false } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    // Revoke consent
-    consentManager.setConsent('custom', false);
-
-    // Events should still be in queue (consent revocation doesn't clear queue)
-    expect(eventManager.getQueueLength()).toBeGreaterThanOrEqual(0);
-
-    eventManager.stop();
-  });
-
-  it('should track events normally when consent granted', () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: false } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    consentManager.setConsent('custom', true);
-
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    // Event should be in queue, not buffered
-    expect(eventManager.getQueueLength()).toBe(1);
-    expect(eventManager.getConsentBufferLength()).toBe(0);
-
-    eventManager.stop();
-  });
-});
-
 describe('EventManager - Error Handling', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
@@ -1196,7 +1072,7 @@ describe('EventManager - Error Handling', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
@@ -1216,7 +1092,7 @@ describe('EventManager - Error Handling', () => {
       throw new Error('Emitter error');
     });
 
-    const errorEventManager = new EventManager(storageManager, null, null, errorEmitter, {});
+    const errorEventManager = new EventManager(storageManager, errorEmitter, {});
     errorEventManager['set']('sessionId', 'test-session');
     errorEventManager['set']('userId', 'test-user');
     errorEventManager['set']('pageUrl', 'https://example.com');
@@ -1250,7 +1126,7 @@ describe('EventManager - Error Handling', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const transformEventManager = new EventManager(storageManager, null, null, emitter, { beforeSend: transformer });
+    const transformEventManager = new EventManager(storageManager, emitter, { beforeSend: transformer });
     transformEventManager['set']('config', config);
     transformEventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     transformEventManager['set']('sessionId', 'test-session');
@@ -1310,7 +1186,7 @@ describe('EventManager - Pending Events Buffer', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
@@ -1421,233 +1297,6 @@ describe('EventManager - Pending Events Buffer', () => {
   });
 });
 
-describe('EventManager - Consent Buffer Flush', () => {
-  let storageManager: StorageManager;
-  let emitter: Emitter;
-  let consentManager: ConsentManager;
-
-  beforeEach(() => {
-    setupTestEnvironment();
-    storageManager = new StorageManager();
-    emitter = new Emitter();
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should flush consent buffer in batches of 10', async () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    // Add 25 events to consent buffer
-    for (let i = 0; i < 25; i++) {
-      eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `event_${i}` } });
-    }
-
-    expect(eventManager.getConsentBufferLength()).toBe(25);
-
-    // Flush for custom integration
-    await eventManager.flushConsentBuffer('custom');
-
-    // Wait for batches to complete (100ms delay between batches)
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    // Buffer should be cleared
-    expect(eventManager.getConsentBufferLength()).toBe(0);
-
-    eventManager.stop();
-  });
-
-  it('should prioritize SESSION_START when flushing consent buffer', async () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    // Track events in non-optimal order
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'first' } });
-    eventManager.track({ type: EventType.SESSION_START });
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'second' } });
-
-    // Flush should complete without error and prioritize SESSION_START
-    await expect(eventManager.flushConsentBuffer('custom')).resolves.toBeUndefined();
-
-    // Wait for flush
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
-    // Buffer should be cleared after flush
-    expect(eventManager.getConsentBufferLength()).toBe(0);
-
-    eventManager.stop();
-  });
-
-  it('should handle concurrent flush attempts', async () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    // Trigger concurrent flushes
-    const flush1 = eventManager.flushConsentBuffer('custom');
-    const flush2 = eventManager.flushConsentBuffer('custom');
-
-    await Promise.all([flush1, flush2]);
-
-    // Both should complete without error (second one returns early)
-    expect(eventManager.getConsentBufferLength()).toBe(0);
-
-    eventManager.stop();
-  });
-
-  it('should skip flush when buffer empty', async () => {
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', {});
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    // No events tracked
-    expect(eventManager.getConsentBufferLength()).toBe(0);
-
-    // Flush should complete immediately
-    await expect(eventManager.flushConsentBuffer('custom')).resolves.toBeUndefined();
-
-    eventManager.stop();
-  });
-
-  it('should support consent buffer flush for different integrations', async () => {
-    const config = createMockConfig({
-      integrations: {
-        tracelog: { projectId: 'test-project', waitForConsent: true },
-        custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true },
-      },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', {
-      saas: 'https://saas.tracelog.com',
-      custom: 'https://api.example.com',
-    });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    expect(eventManager.getConsentBufferLength()).toBe(1);
-
-    // Test that flush method can be called for different integrations without error
-    await expect(eventManager.flushConsentBuffer('custom')).resolves.toBeUndefined();
-    await expect(eventManager.flushConsentBuffer('tracelog')).resolves.toBeUndefined();
-
-    eventManager.stop();
-  });
-
-  it('should clear consent buffer for specific integration on revoke', () => {
-    const config = createMockConfig({
-      integrations: { custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true } },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    expect(eventManager.getConsentBufferLength()).toBe(1);
-
-    // Revoke consent
-    eventManager.clearConsentBufferForIntegration('custom');
-
-    // Buffer should be cleared
-    expect(eventManager.getConsentBufferLength()).toBe(0);
-
-    eventManager.stop();
-  });
-
-  it('should support clearing consent buffer for multiple integrations', () => {
-    const config = createMockConfig({
-      integrations: {
-        tracelog: { projectId: 'test-project', waitForConsent: true },
-        custom: { collectApiUrl: 'https://api.example.com', waitForConsent: true },
-      },
-    });
-
-    consentManager = new ConsentManager(storageManager, true, emitter);
-    const eventManager = new EventManager(storageManager, null, consentManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('collectApiUrls', {
-      saas: 'https://saas.tracelog.com',
-      custom: 'https://api.example.com',
-    });
-    eventManager['set']('sessionId', 'test-session');
-    eventManager['set']('userId', 'test-user');
-    eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
-
-    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
-
-    expect(eventManager.getConsentBufferLength()).toBe(1);
-
-    // Test that clearConsentBufferForIntegration can be called without error
-    expect(() => {
-      eventManager.clearConsentBufferForIntegration('custom');
-    }).not.toThrow();
-
-    // Buffer length should be managed correctly
-    expect(eventManager.getConsentBufferLength()).toBeGreaterThanOrEqual(0);
-
-    eventManager.stop();
-  });
-});
-
 describe('EventManager - Session Event Counters', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
@@ -1657,7 +1306,7 @@ describe('EventManager - Session Event Counters', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
@@ -1778,7 +1427,7 @@ describe('EventManager - Advanced Deduplication', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, null, null, emitter, {});
+    eventManager = new EventManager(storageManager, emitter, {});
 
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
@@ -1868,7 +1517,7 @@ describe('EventManager - beforeBatch Transformer', () => {
       transformed: true,
     }));
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {
+    const eventManager = new EventManager(storageManager, emitter, {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -1893,7 +1542,7 @@ describe('EventManager - beforeBatch Transformer', () => {
     const queueCallback = vi.fn();
     emitter.on(EmitterEvent.QUEUE, queueCallback);
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {
+    const eventManager = new EventManager(storageManager, emitter, {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -1922,7 +1571,7 @@ describe('EventManager - beforeBatch Transformer', () => {
       throw new Error('Transform error');
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {
+    const eventManager = new EventManager(storageManager, emitter, {
       beforeBatch: beforeBatchTransformer,
     });
 
@@ -1960,7 +1609,7 @@ describe('EventManager - Recovery Edge Cases', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {});
+    const eventManager = new EventManager(storageManager, emitter, {});
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -1984,7 +1633,7 @@ describe('EventManager - Recovery Edge Cases', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {});
+    const eventManager = new EventManager(storageManager, emitter, {});
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');
@@ -2007,7 +1656,7 @@ describe('EventManager - Recovery Edge Cases', () => {
       integrations: { custom: { collectApiUrl: 'https://api.example.com' } },
     });
 
-    const eventManager = new EventManager(storageManager, null, null, emitter, {});
+    const eventManager = new EventManager(storageManager, emitter, {});
     eventManager['set']('config', config);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
     eventManager['set']('sessionId', 'test-session');

@@ -13,7 +13,6 @@ import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, Trans
 import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
-import { ConsentManager } from './consent.manager';
 
 interface SendCallbacks {
   onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
@@ -34,7 +33,6 @@ interface SendCallbacks {
  * - **Multi-Integration**: Separate queues for SaaS (`tracelog`) and Custom backends
  * - **Multi-Tab Protection**: 1-second window prevents duplicate sends across tabs
  * - **Event Expiry**: Discards events older than 2 hours (prevents stale data accumulation)
- * - **Consent Integration**: Skips sends when consent not granted for integration
  * - **Transformer Support**: Applies `beforeBatch` transformer before network transmission
  *
  * **Key Features**:
@@ -43,7 +41,6 @@ interface SendCallbacks {
  * - **Payload Size Validation**: 64KB limit for `sendBeacon()` to prevent truncation
  * - **Permanent Error Detection**: 4xx status codes (except 408, 429) marked as permanent
  * - **Independent Multi-Integration**: Separate SenderManager instances for each backend
- * - **Consent-Aware**: Checks consent before sending, skips if consent not granted
  *
  * **Error Handling**:
  * - **4xx Errors** (permanent): Logged once per minute (throttled), events discarded, no retries
@@ -69,11 +66,11 @@ interface SendCallbacks {
  * const success = await sender.send(eventsQueue); // No-op, returns true
  *
  * // SaaS integration
- * const saasSender = new SenderManager(storage, 'saas', 'https://api.tracelog.io/collect', consentManager);
+ * const saasSender = new SenderManager(storage, 'saas', 'https://api.tracelog.io/collect');
  * const success = await saasSender.send(eventsQueue);
  *
  * // Custom backend
- * const customSender = new SenderManager(storage, 'custom', 'https://myapi.com/events', consentManager);
+ * const customSender = new SenderManager(storage, 'custom', 'https://myapi.com/events');
  * const success = await customSender.send(eventsQueue);
  *
  * // Synchronous send (page unload)
@@ -84,7 +81,6 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly integrationId?: 'saas' | 'custom';
   private readonly apiUrl?: string;
-  private readonly consentManager: ConsentManager | null;
   private readonly transformers: TransformerMap;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
@@ -98,7 +94,6 @@ export class SenderManager extends StateManager {
    * @param storeManager - Storage manager for event persistence
    * @param integrationId - Optional integration identifier ('saas' or 'custom')
    * @param apiUrl - Optional API endpoint URL
-   * @param consentManager - Optional consent manager for GDPR compliance
    * @param transformers - Optional event transformation hooks
    * @throws Error if integrationId and apiUrl are not both provided or both undefined
    */
@@ -106,7 +101,6 @@ export class SenderManager extends StateManager {
     storeManager: StorageManager,
     integrationId?: 'saas' | 'custom',
     apiUrl?: string,
-    consentManager: ConsentManager | null = null,
     transformers: TransformerMap = {},
   ) {
     super();
@@ -118,7 +112,6 @@ export class SenderManager extends StateManager {
     this.storeManager = storeManager;
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
-    this.consentManager = consentManager;
     this.transformers = transformers;
   }
 
@@ -153,10 +146,8 @@ export class SenderManager extends StateManager {
    * - Browser guarantees delivery attempt (survives page close)
    * - NO persistence on failure (fire-and-forget)
    *
-   * **Consent Check**: Skips send if consent not granted for this integration
-   *
    * **Return Values**:
-   * - `true`: Send succeeded OR skipped (standalone mode, no consent)
+   * - `true`: Send succeeded OR skipped (standalone mode)
    * - `false`: Send failed (network error, browser rejected beacon)
    *
    * **Important**: No retry mechanism for failures. Events are NOT persisted.
@@ -170,15 +161,6 @@ export class SenderManager extends StateManager {
   sendEventsQueueSync(body: EventsQueue): boolean {
     if (this.shouldSkipSend()) {
       return true;
-    }
-
-    // Check consent before sending
-    if (!this.hasConsentForIntegration()) {
-      log(
-        'debug',
-        `Skipping sync send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`,
-      );
-      return true; // Return true to avoid retries
     }
 
     if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
@@ -227,8 +209,6 @@ export class SenderManager extends StateManager {
    * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
    * - **Transient errors** (5xx, network, timeout): Events persisted for recovery
    *
-   * **Consent Check**: Skips send if consent not granted for this integration
-   *
    * **Important**: Events are NOT retried in-session. Persistence is for
    * recovery on next page load via `recoverPersistedEvents()`.
    *
@@ -274,14 +254,13 @@ export class SenderManager extends StateManager {
    *
    * **Flow**:
    * 1. Checks if recovery already in progress (prevents duplicate attempts)
-   * 2. Checks consent for this integration (skips if no consent)
-   * 3. Loads persisted events from localStorage
-   * 4. Validates freshness (discards events older than 2 hours)
-   * 5. Applies multi-tab protection (skips events persisted within 1 second)
-   * 6. Attempts to resend via `send()` method
-   * 7. On success: Clears persisted events, invokes `onSuccess` callback
-   * 8. On failure: Keeps events in localStorage, invokes `onFailure` callback
-   * 9. On permanent error (4xx): Clears persisted events (no further retry)
+   * 2. Loads persisted events from localStorage
+   * 3. Validates freshness (discards events older than 2 hours)
+   * 4. Applies multi-tab protection (skips events persisted within 1 second)
+   * 5. Attempts to resend via `send()` method
+   * 6. On success: Clears persisted events, invokes `onSuccess` callback
+   * 7. On failure: Keeps events in localStorage, invokes `onFailure` callback
+   * 8. On permanent error (4xx): Clears persisted events (no further retry)
    *
    * **Multi-Tab Protection**:
    * - Events persisted within last 1 second are skipped (active tab may retry)
@@ -290,10 +269,6 @@ export class SenderManager extends StateManager {
    * **Event Expiry**:
    * - Events older than 2 hours are discarded (prevents stale data accumulation)
    * - Expiry check uses event timestamps, not persistence time
-   *
-   * **Consent Integration**:
-   * - Skips recovery if consent not granted for this integration
-   * - Events remain persisted for future recovery when consent obtained
    *
    * **Callbacks**:
    * - `onSuccess(eventCount, events, body)`: Called after successful transmission
@@ -324,15 +299,6 @@ export class SenderManager extends StateManager {
     if (this.recoveryInProgress) {
       log('debug', 'Recovery already in progress, skipping duplicate attempt');
       return;
-    }
-
-    // Check consent before attempting recovery
-    if (!this.hasConsentForIntegration()) {
-      log(
-        'debug',
-        `Skipping recovery, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`,
-      );
-      return; // Keep persisted events for future recovery when consent is granted
     }
 
     this.recoveryInProgress = true;
@@ -533,7 +499,6 @@ export class SenderManager extends StateManager {
    *
    * **Important Behaviors**:
    * - Transformers applied once before retry loop (not re-applied per attempt)
-   * - Consent checked once before retry loop
    * - Each retry uses same transformed payload
    * - Permanent errors bypass retries immediately
    *
@@ -548,12 +513,6 @@ export class SenderManager extends StateManager {
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
       return this.simulateSuccessfulSend();
-    }
-
-    // Check consent before sending
-    if (!this.hasConsentForIntegration()) {
-      log('debug', `Skipping send, no consent for integration${this.integrationId ? ` [${this.integrationId}]` : ''}`);
-      return true; // Return true to avoid retries
     }
 
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
@@ -712,12 +671,11 @@ export class SenderManager extends StateManager {
    * Uses sendBeacon() browser API which queues request even after page closes.
    *
    * **Flow**:
-   * 1. Check consent (returns true if denied to prevent retry loops)
-   * 2. Apply beforeSend transformer (per-event transformation)
-   * 3. Apply beforeBatch transformer (batch-level transformation)
-   * 4. Validate payload size (64KB browser limit for sendBeacon)
-   * 5. Send via sendBeacon() or fallback to persistence if unavailable
-   * 6. Persist events on failure for next-page-load recovery
+   * 1. Apply beforeSend transformer (per-event transformation)
+   * 2. Apply beforeBatch transformer (batch-level transformation)
+   * 3. Validate payload size (64KB browser limit for sendBeacon)
+   * 4. Send via sendBeacon() or fallback to persistence if unavailable
+   * 5. Persist events on failure for next-page-load recovery
    *
    * **Payload Size Limit**: 64KB enforced by browser for sendBeacon()
    * - Oversized payloads persisted instead of silently failing
@@ -727,10 +685,6 @@ export class SenderManager extends StateManager {
    * @private
    */
   private sendQueueSyncInternal(body: EventsQueue): boolean {
-    if (!this.hasConsentForIntegration()) {
-      return true;
-    }
-
     const afterBeforeSend = this.applyBeforeSendTransformer(body);
 
     if (!afterBeforeSend) {
@@ -974,87 +928,5 @@ export class SenderManager extends StateManager {
 
       this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
-  }
-
-  /**
-   * Resolves waitForConsent requirement for this integration.
-   * Checks waitForConsent flag in integration-specific config.
-   * @returns true if consent is required, false otherwise
-   * @private
-   */
-  private getIntegrationConsentRequirement(): boolean {
-    const config = this.get('config');
-
-    if (!config) {
-      return false;
-    }
-
-    if (this.integrationId === 'saas') {
-      return config.integrations?.tracelog?.waitForConsent ?? false;
-    }
-    if (this.integrationId === 'custom') {
-      return config.integrations?.custom?.waitForConsent ?? false;
-    }
-
-    return false;
-  }
-
-  /**
-   * Checks if consent has been granted for this integration's data collection.
-   *
-   * **Purpose**: GDPR/CCPA compliance check before sending events to backend.
-   * Prevents data transmission when user has not granted consent.
-   *
-   * **Fail-Open Strategy** (Always returns true when):
-   * - `waitForConsent` not required for this integration (per-integration or root config)
-   * - ConsentManager instance not provided (consent not required)
-   * - Unknown integration ID (defensive programming)
-   *
-   * **Integration ID Mapping**:
-   * - `'saas'` → Checks consent for `'tracelog'` (TraceLog SaaS)
-   * - `'custom'` → Checks consent for `'custom'` (Custom backend)
-   * - No integration ID → Allows by default (legacy support)
-   *
-   * **Consent Flow**:
-   * 1. Check if consent required for this integration (per-integration or root config)
-   * 2. Verify ConsentManager available
-   * 3. Map integration ID to consent type
-   * 4. Query ConsentManager for consent status
-   * 5. Return true if consent granted, false otherwise
-   *
-   * **Called by**:
-   * - `send()` method before async transmission (line 542)
-   * - `sendQueueSyncInternal()` method before sync transmission (line 668)
-   *
-   * **Behavior when false**:
-   * - Events NOT sent to backend
-   * - Returns true to caller (prevents retry loops)
-   * - Events may be buffered in ConsentManager for later flush
-   *
-   * @returns true if consent granted or not required, false if consent denied
-   */
-  private hasConsentForIntegration(): boolean {
-    // Check if this integration requires consent (per-integration or root config)
-    const requiresConsent = this.getIntegrationConsentRequirement();
-    if (!requiresConsent) {
-      return true;
-    }
-
-    // If no consent manager, can't check consent (fail open for backwards compatibility)
-    if (!this.consentManager) {
-      return true;
-    }
-
-    // Map integration ID to consent integration type
-    if (this.integrationId === 'saas') {
-      return this.consentManager.hasConsent('tracelog');
-    }
-
-    if (this.integrationId === 'custom') {
-      return this.consentManager.hasConsent('custom');
-    }
-
-    // Unknown integration, allow by default (defensive programming)
-    return true;
   }
 }

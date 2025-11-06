@@ -9,7 +9,6 @@ import { EmitterCallback, EmitterMap } from '../types';
  * **Supported Events** (defined in `EmitterMap`):
  * - `event`: Individual events as they are tracked (EventData)
  * - `queue`: Complete event batches before transmission (EventsQueue)
- * - `consent-changed`: Consent state changes for all integrations (ConsentState)
  *
  * **Key Features**:
  * - **Type Safety**: Callbacks receive correctly typed data based on event name

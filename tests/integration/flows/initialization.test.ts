@@ -24,9 +24,8 @@ describe('Integration: Initialization Flow', () => {
     bridge = await initTestBridge();
 
     // Verify all managers initialized
-    const { event, storage, consent } = getManagers(bridge);
+    const { event, storage } = getManagers(bridge);
     expect(storage).toBeDefined();
-    expect(consent).toBeDefined();
     expect(event).toBeDefined();
 
     // Verify all core handlers initialized
@@ -64,25 +63,6 @@ describe('Integration: Initialization Flow', () => {
     expect(state.userId).toBeDefined();
     expect(state.device).toBeDefined();
     expect(state.pageUrl).toBeDefined();
-  });
-
-  it('should initialize ConsentManager', async () => {
-    bridge = await initTestBridge({
-      integrations: {
-        custom: {
-          collectApiUrl: 'https://api.test.com/collect',
-          waitForConsent: true,
-        },
-      },
-    });
-
-    const { consent } = getManagers(bridge);
-    expect(consent).toBeDefined();
-
-    const consentState = bridge.getConsentState();
-    expect(consentState).toHaveProperty('google');
-    expect(consentState).toHaveProperty('custom');
-    expect(consentState).toHaveProperty('tracelog');
   });
 
   it('should initialize EventManager', async () => {
@@ -236,9 +216,8 @@ describe('Integration: Config Propagation', () => {
     expect(state.config).toEqual(customConfig);
 
     // Verify managers can access config
-    const { event, consent } = getManagers(bridge);
+    const { event } = getManagers(bridge);
     expect(event).toBeDefined();
-    expect(consent).toBeDefined();
   });
 
   it('should propagate config to all handlers', async () => {

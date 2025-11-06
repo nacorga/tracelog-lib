@@ -76,7 +76,6 @@ export function getManagers(bridge: TraceLogTestBridge) {
   return {
     event: bridge.getEventManager(),
     storage: bridge.getStorageManager(),
-    consent: bridge.getConsentManager(),
   };
 }
 
