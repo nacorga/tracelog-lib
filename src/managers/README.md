@@ -156,8 +156,11 @@ Core business logic components that handle analytics data processing, state mana
 - Graceful cleanup and resource management with passive event listeners for optimal performance
 - Unique session ID generation: `{timestamp}-{9-char-base36}` format (e.g., `1728488234567-kx9f2m1bq`)
 - Synchronous event flush on session end with automatic localStorage persistence fallback for recovery
-- **Concurrent endSession() protection**: Guard flag (`isEnding`) with try-finally pattern prevents duplicate SESSION_END events when timeout and page_unload fire simultaneously
+- **Dual endSession() protection**: Two guard flags prevent duplicate SESSION_END events:
+  - `isEnding`: Prevents concurrent calls (e.g., timeout + pagehide firing simultaneously)
+  - `hasEndedSession`: Prevents multiple SESSION_END per session lifecycle
 - Five session end reasons: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
+- **Smart page unload detection**: Uses `pagehide` event with `event.persisted` check to only fire SESSION_END on actual tab/browser close (not same-site navigation)
 - Graceful BroadcastChannel fallback (sessions work without cross-tab sync if API unavailable)
 - **Project-scoped session storage**: Session data stored with key `tlog:session:{projectId}` to prevent cross-project conflicts
 - **Error rollback**: On initialization error in `startTracking()`, all setup is rolled back (cleanup listeners, timers, state) and error re-thrown to caller
@@ -165,8 +168,11 @@ Core business logic components that handle analytics data processing, state mana
 **Critical Implementation Details**:
 - **Initialization Order**: `initCrossTabSync()` MUST be called before `eventManager.track(SESSION_START)` to prevent message loss during session initialization
 - **Cross-Tab Message Handling**: Secondary tabs receiving session broadcasts do NOT set `hasStartSession` flag - this flag is managed exclusively by EventManager when SESSION_START event is tracked
-- **Concurrency Guard**: `isEnding` flag prevents race conditions between timeout-triggered and user-triggered session end (e.g., timeout + beforeunload firing simultaneously)
-- **Guard Reset**: `isEnding` flag reset in finally block ensures flag is cleared even if endSession() throws an error
+- **Dual Guard System**:
+  - `isEnding`: Short-lived flag prevents concurrent execution (reset in finally block)
+  - `hasEndedSession`: Session-scoped flag prevents multiple SESSION_END per session (reset on new session start)
+- **Guard Reset Timing**: `isEnding` reset in finally block ensures immediate cleanup, while `hasEndedSession` persists until `startTracking()` creates new session
+- **pagehide vs beforeunload**: Uses `pagehide` event to avoid SESSION_END on same-site navigation (beforeunload fires on every navigation)
 
 ## StateManager
 

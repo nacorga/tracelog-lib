@@ -2983,11 +2983,12 @@ class SessionManager extends StateManager {
   projectId;
   activityHandler = null;
   visibilityChangeHandler = null;
-  beforeUnloadHandler = null;
+  pageHideHandler = null;
   sessionTimeoutId = null;
   broadcastChannel = null;
   isTracking = false;
   isEnding = false;
+  hasEndedSession = false;
   /**
    * Creates a SessionManager instance.
    *
@@ -3171,6 +3172,7 @@ class SessionManager extends StateManager {
     const sessionId = recoveredSessionId ?? this.generateSessionId();
     const isRecovered = Boolean(recoveredSessionId);
     this.isTracking = true;
+    this.hasEndedSession = false;
     try {
       this.set("sessionId", sessionId);
       this.persistSession(sessionId);
@@ -3186,6 +3188,7 @@ class SessionManager extends StateManager {
       this.setupLifecycleListeners();
     } catch (error) {
       this.isTracking = false;
+      this.hasEndedSession = false;
       this.clearSessionTimeout();
       this.cleanupActivityListeners();
       this.cleanupLifecycleListeners();
@@ -3234,7 +3237,7 @@ class SessionManager extends StateManager {
     }
   }
   setupLifecycleListeners() {
-    if (this.visibilityChangeHandler || this.beforeUnloadHandler) {
+    if (this.visibilityChangeHandler || this.pageHideHandler) {
       return;
     }
     this.visibilityChangeHandler = () => {
@@ -3247,24 +3250,26 @@ class SessionManager extends StateManager {
         }
       }
     };
-    this.beforeUnloadHandler = () => {
-      this.endSession("page_unload");
+    this.pageHideHandler = (event2) => {
+      if (!event2.persisted) {
+        this.endSession("page_unload");
+      }
     };
     document.addEventListener("visibilitychange", this.visibilityChangeHandler);
-    window.addEventListener("beforeunload", this.beforeUnloadHandler);
+    window.addEventListener("pagehide", this.pageHideHandler);
   }
   cleanupLifecycleListeners() {
     if (this.visibilityChangeHandler) {
       document.removeEventListener("visibilitychange", this.visibilityChangeHandler);
       this.visibilityChangeHandler = null;
     }
-    if (this.beforeUnloadHandler) {
-      window.removeEventListener("beforeunload", this.beforeUnloadHandler);
-      this.beforeUnloadHandler = null;
+    if (this.pageHideHandler) {
+      window.removeEventListener("pagehide", this.pageHideHandler);
+      this.pageHideHandler = null;
     }
   }
   endSession(reason) {
-    if (this.isEnding) {
+    if (this.isEnding || this.hasEndedSession) {
       return;
     }
     const sessionId = this.get("sessionId");
@@ -3274,6 +3279,7 @@ class SessionManager extends StateManager {
       return;
     }
     this.isEnding = true;
+    this.hasEndedSession = true;
     try {
       this.eventManager.track({
         type: EventType.SESSION_END,

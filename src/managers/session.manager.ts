@@ -24,7 +24,7 @@ interface StoredSessionData {
  * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
  * - **Persistence**: Stores session data in localStorage for recovery
  * - **Inactivity Detection**: Automatic session end after timeout (default 15 minutes)
- * - **Page Unload Handling**: Immediate session end on page close
+ * - **Page Unload Handling**: Session end ONLY on actual tab/browser close (not same-site navigation)
  * - **Lifecycle Events**: Emits SESSION_START and SESSION_END events
  *
  * **Key Features**:
@@ -33,7 +33,8 @@ interface StoredSessionData {
  * - **Cross-Tab Sharing**: Primary tab creates session, shares via BroadcastChannel
  * - **Secondary Tab Behavior**: Receives session from primary tab, no SESSION_START event
  * - **Session End Reasons**: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
- * - **State Guard**: `isEnding` flag with try-finally prevents duplicate SESSION_END events
+ * - **Dual Guards**: `isEnding` (prevents concurrent calls) + `hasEndedSession` (prevents multiple SESSION_END per session)
+ * - **pagehide Event**: Only fires SESSION_END if `event.persisted === false` (actual navigation, not BFCache)
  *
  * **BroadcastChannel Integration**:
  * - **Initialized BEFORE SESSION_START**: Prevents race condition with secondary tabs
@@ -78,11 +79,12 @@ export class SessionManager extends StateManager {
 
   private activityHandler: (() => void) | null = null;
   private visibilityChangeHandler: (() => void) | null = null;
-  private beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
+  private pageHideHandler: ((event: PageTransitionEvent) => void) | null = null;
   private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private isTracking = false;
   private isEnding = false;
+  private hasEndedSession = false;
 
   /**
    * Creates a SessionManager instance.
@@ -293,6 +295,7 @@ export class SessionManager extends StateManager {
     const isRecovered = Boolean(recoveredSessionId);
 
     this.isTracking = true;
+    this.hasEndedSession = false;
 
     try {
       this.set('sessionId', sessionId);
@@ -311,6 +314,7 @@ export class SessionManager extends StateManager {
       this.setupLifecycleListeners();
     } catch (error) {
       this.isTracking = false;
+      this.hasEndedSession = false;
       this.clearSessionTimeout();
       this.cleanupActivityListeners();
       this.cleanupLifecycleListeners();
@@ -370,7 +374,7 @@ export class SessionManager extends StateManager {
   }
 
   private setupLifecycleListeners(): void {
-    if (this.visibilityChangeHandler || this.beforeUnloadHandler) {
+    if (this.visibilityChangeHandler || this.pageHideHandler) {
       return;
     }
 
@@ -385,12 +389,14 @@ export class SessionManager extends StateManager {
       }
     };
 
-    this.beforeUnloadHandler = (): void => {
-      this.endSession('page_unload');
+    this.pageHideHandler = (event: PageTransitionEvent): void => {
+      if (!event.persisted) {
+        this.endSession('page_unload');
+      }
     };
 
     document.addEventListener('visibilitychange', this.visibilityChangeHandler);
-    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+    window.addEventListener('pagehide', this.pageHideHandler);
   }
 
   private cleanupLifecycleListeners(): void {
@@ -399,14 +405,14 @@ export class SessionManager extends StateManager {
       this.visibilityChangeHandler = null;
     }
 
-    if (this.beforeUnloadHandler) {
-      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
-      this.beforeUnloadHandler = null;
+    if (this.pageHideHandler) {
+      window.removeEventListener('pagehide', this.pageHideHandler);
+      this.pageHideHandler = null;
     }
   }
 
   private endSession(reason: SessionEndReason): void {
-    if (this.isEnding) {
+    if (this.isEnding || this.hasEndedSession) {
       return;
     }
 
@@ -419,6 +425,7 @@ export class SessionManager extends StateManager {
     }
 
     this.isEnding = true;
+    this.hasEndedSession = true;
 
     try {
       this.eventManager.track({

@@ -633,7 +633,7 @@ describe('SessionManager - Cross-Tab Sync', () => {
   });
 });
 
-describe('SessionManager - beforeunload Handler', () => {
+describe('SessionManager - pagehide Handler', () => {
   beforeEach(() => {
     setupTestEnvironment();
   });
@@ -643,21 +643,22 @@ describe('SessionManager - beforeunload Handler', () => {
     cleanupTestEnvironment();
   });
 
-  it('should register beforeunload handler', async () => {
+  it('should register pagehide handler', async () => {
     const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
 
     await initTestBridge();
 
-    expect(addEventListenerSpy).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+    expect(addEventListenerSpy).toHaveBeenCalledWith('pagehide', expect.any(Function));
 
     addEventListenerSpy.mockRestore();
   });
 
-  it('should handle beforeunload callback', async () => {
+  it('should end session on pagehide with persisted=false (actual navigation)', async () => {
     const bridge = await initTestBridge();
     const sessionIdBefore = bridge.get('sessionId');
 
-    window.dispatchEvent(new Event('beforeunload'));
+    // Simulate actual tab close (NOT entering BFCache)
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -667,29 +668,30 @@ describe('SessionManager - beforeunload Handler', () => {
     expect(sessionIdAfter).toBeNull();
   });
 
-  it('should end session on beforeunload', async () => {
+  it('should NOT end session on pagehide with persisted=true (BFCache)', async () => {
     const bridge = await initTestBridge();
-
     const sessionIdBefore = bridge.get('sessionId');
 
-    window.dispatchEvent(new Event('beforeunload'));
+    // Simulate entering BFCache (NOT actual navigation)
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
+    // Session should still be active
     const sessionIdAfter = bridge.get('sessionId');
-
-    expect(sessionIdAfter).toBeNull();
-    expect(sessionIdBefore).not.toBeNull();
+    expect(sessionIdBefore).toBeTruthy();
+    expect(sessionIdAfter).toBe(sessionIdBefore);
   });
 
-  it('should preserve session in storage for recovery', async () => {
+  it('should preserve session in storage for recovery on actual navigation', async () => {
     const bridge = await initTestBridge();
     const { storage } = getManagers(bridge);
     const sessionId = bridge.get('sessionId');
 
     expect(storage).toBeDefined();
 
-    window.dispatchEvent(new Event('beforeunload'));
+    // Actual navigation (not BFCache)
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -710,9 +712,124 @@ describe('SessionManager - beforeunload Handler', () => {
 
     bridge.destroy();
 
-    expect(removeEventListenerSpy).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('pagehide', expect.any(Function));
 
     removeEventListenerSpy.mockRestore();
+  });
+});
+
+describe('SessionManager - hasEndedSession Guard', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+  });
+
+  it('should prevent multiple SESSION_END events per session lifecycle', async () => {
+    const bridge = await initTestBridge();
+    const sessionIdBefore = bridge.get('sessionId');
+
+    // First pagehide (should end session)
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const sessionIdAfter = bridge.get('sessionId');
+    expect(sessionIdBefore).toBeTruthy();
+    expect(sessionIdAfter).toBeNull();
+
+    // Second pagehide (should NOT create another SESSION_END - already ended)
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Session should still be null (no errors)
+    expect(bridge.get('sessionId')).toBeNull();
+  });
+
+  it('should reset hasEndedSession flag on new session start', async () => {
+    // First session
+    const bridge1 = await initTestBridge();
+    const sessionId1 = bridge1.get('sessionId');
+
+    // End first session
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(bridge1.get('sessionId')).toBeNull();
+
+    // Destroy bridge
+    bridge1.destroy(false);
+
+    // Clear storage to simulate new session (not recovery)
+    const projectId = 'custom';
+    const storageKey = SESSION_STORAGE_KEY(projectId);
+    localStorage.removeItem(storageKey);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Start new session
+    const bridge2 = await initTestBridge();
+    const sessionId2 = bridge2.get('sessionId');
+
+    // Should have new session ID
+    expect(sessionId2).toBeTruthy();
+    expect(sessionId2).not.toBe(sessionId1);
+
+    // New session should be able to end normally
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(bridge2.get('sessionId')).toBeNull();
+  });
+
+  it('should allow SESSION_END after timeout expires', async () => {
+    vi.useFakeTimers();
+
+    const bridge = await initTestBridge({ sessionTimeout: 1000 });
+    const initialSessionId = bridge.get('sessionId');
+
+    // Wait for timeout
+    await advanceTimers(1100);
+
+    // Session should be ended by timeout
+    const sessionIdAfterTimeout = bridge.get('sessionId');
+    expect(sessionIdAfterTimeout).not.toBe(initialSessionId);
+
+    vi.useRealTimers();
+  });
+
+  it('should prevent SESSION_END if already ending (concurrent calls)', async () => {
+    const bridge = await initTestBridge();
+    const sessionIdBefore = bridge.get('sessionId');
+
+    // Simulate concurrent pagehide events
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Session should be ended once
+    const sessionIdAfter = bridge.get('sessionId');
+    expect(sessionIdBefore).toBeTruthy();
+    expect(sessionIdAfter).toBeNull();
+  });
+
+  it('should handle destroy() after pagehide gracefully', async () => {
+    const bridge = await initTestBridge();
+
+    // End session via pagehide
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(bridge.get('sessionId')).toBeNull();
+
+    // Destroy should not error
+    expect(() => {
+      bridge.destroy();
+    }).not.toThrow();
   });
 });
 
