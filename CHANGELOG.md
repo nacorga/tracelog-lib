@@ -27,6 +27,28 @@
 
 
 
+
+## [1.6.1] - 2025-11-11
+
+### ♻️ Refactoring
+
+- Enhance page unload handling documentation and tests for SessionManager to clarify BFCache behavior ([9489c1a](../../commit/9489c1a993c3db2fdef7534e00bf896c6cc3fc6d))
+- Update SessionManager to use pagehide event for session end handling and enhance documentation ([1a97144](../../commit/1a97144eca3b305da3c6d440a2d02ce2575be78e))
+
+### 🔧 Other Changes
+
+- Merge pull request #62 from nacorga/hotfix/20251111.1 ([b251b60](../../commit/b251b6071e956a8b0806fc793c76063eb0d7b747))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.6.0...v1.6.1
+
+
 ## [1.6.0] - 2025-11-06
 
 ### ✨ Features
