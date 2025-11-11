@@ -24,7 +24,7 @@ interface StoredSessionData {
  * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
  * - **Persistence**: Stores session data in localStorage for recovery
  * - **Inactivity Detection**: Automatic session end after timeout (default 15 minutes)
- * - **Page Unload Handling**: Session end ONLY on actual tab/browser close (not same-site navigation)
+ * - **Page Unload Handling**: Session end when page is permanently unloaded (pagehide with persisted=false), not when entering BFCache
  * - **Lifecycle Events**: Emits SESSION_START and SESSION_END events
  *
  * **Key Features**:
@@ -34,7 +34,7 @@ interface StoredSessionData {
  * - **Secondary Tab Behavior**: Receives session from primary tab, no SESSION_START event
  * - **Session End Reasons**: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
  * - **Dual Guards**: `isEnding` (prevents concurrent calls) + `hasEndedSession` (prevents multiple SESSION_END per session)
- * - **pagehide Event**: Only fires SESSION_END if `event.persisted === false` (actual navigation, not BFCache)
+ * - **pagehide Event**: Only fires SESSION_END if `event.persisted === false` (page permanently unloaded, not cached in BFCache)
  *
  * **BroadcastChannel Integration**:
  * - **Initialized BEFORE SESSION_START**: Prevents race condition with secondary tabs

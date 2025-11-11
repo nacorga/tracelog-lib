@@ -672,7 +672,7 @@ describe('SessionManager - pagehide Handler', () => {
     const bridge = await initTestBridge();
     const sessionIdBefore = bridge.get('sessionId');
 
-    // Simulate entering BFCache (NOT actual navigation)
+    // Simulate entering BFCache (page cached, not permanently unloaded)
     window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
 
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -690,7 +690,7 @@ describe('SessionManager - pagehide Handler', () => {
 
     expect(storage).toBeDefined();
 
-    // Actual navigation (not BFCache)
+    // Permanent page unload (not BFCache)
     window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
 
     await new Promise((resolve) => setTimeout(resolve, 50));

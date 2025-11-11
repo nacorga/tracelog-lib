@@ -160,7 +160,7 @@ Core business logic components that handle analytics data processing, state mana
   - `isEnding`: Prevents concurrent calls (e.g., timeout + pagehide firing simultaneously)
   - `hasEndedSession`: Prevents multiple SESSION_END per session lifecycle
 - Five session end reasons: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
-- **Smart page unload detection**: Uses `pagehide` event with `event.persisted` check to only fire SESSION_END on actual tab/browser close (not same-site navigation)
+- **Smart page unload detection**: Uses `pagehide` event with `event.persisted` check to only fire SESSION_END when the page is permanently unloaded (`persisted=false`), not when entering BFCache (`persisted=true`)
 - Graceful BroadcastChannel fallback (sessions work without cross-tab sync if API unavailable)
 - **Project-scoped session storage**: Session data stored with key `tlog:session:{projectId}` to prevent cross-project conflicts
 - **Error rollback**: On initialization error in `startTracking()`, all setup is rolled back (cleanup listeners, timers, state) and error re-thrown to caller
@@ -172,7 +172,10 @@ Core business logic components that handle analytics data processing, state mana
   - `isEnding`: Short-lived flag prevents concurrent execution (reset in finally block)
   - `hasEndedSession`: Session-scoped flag prevents multiple SESSION_END per session (reset on new session start)
 - **Guard Reset Timing**: `isEnding` reset in finally block ensures immediate cleanup, while `hasEndedSession` persists until `startTracking()` creates new session
-- **pagehide vs beforeunload**: Uses `pagehide` event to avoid SESSION_END on same-site navigation (beforeunload fires on every navigation)
+- **pagehide vs beforeunload**: Uses `pagehide` event instead of `beforeunload` because:
+  - `beforeunload` fires on EVERY navigation (including back/forward with BFCache), causing false SESSION_END events
+  - `pagehide` allows checking `event.persisted` to distinguish between permanent unload and BFCache entry
+  - This prevents SESSION_END when user navigates back/forward using browser history (preserving user session)
 
 ## StateManager
 
