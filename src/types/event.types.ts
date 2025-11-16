@@ -48,6 +48,46 @@ export enum EventType {
 }
 
 /**
+ * Per-session event counts structure for rate limiting
+ *
+ * **Purpose**: Tracks how many events of each type have been generated
+ * during the current session to enforce per-session limits and prevent
+ * runaway event generation.
+ *
+ * **Usage**:
+ * - Persisted to localStorage: `tlog:{userId}:session_counts:{sessionId}`
+ * - Restored on page reload to maintain limits across navigations
+ * - Debounced writes for performance (500ms delay)
+ *
+ * **Limits** (from config.constants.ts):
+ * - Total: 1000 events per session
+ * - Clicks: 500 per session
+ * - Page Views: 100 per session
+ * - Custom: 500 per session
+ * - Viewport: 200 per session
+ * - Scroll: 120 per session
+ *
+ * @see src/managers/event.manager.ts for implementation
+ * @see src/constants/config.constants.ts for limit values
+ */
+export interface SessionEventCounts {
+  /** Total events across all types */
+  total: number;
+  /** Click events count */
+  [EventType.CLICK]: number;
+  /** Page view events count */
+  [EventType.PAGE_VIEW]: number;
+  /** Custom events count */
+  [EventType.CUSTOM]: number;
+  /** Viewport visibility events count */
+  [EventType.VIEWPORT_VISIBLE]: number;
+  /** Scroll events count */
+  [EventType.SCROLL]: number;
+  /** Index signature for dynamic event type access */
+  [key: string]: number;
+}
+
+/**
  * Scroll direction indicators
  */
 export enum ScrollDirection {

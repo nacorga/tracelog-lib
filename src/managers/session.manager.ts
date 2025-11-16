@@ -1,4 +1,4 @@
-import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
+import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY, SESSION_COUNTS_KEY } from '../constants';
 import { EventType } from '../types';
 import { SessionEndReason } from '../types/session.types';
 import { log } from '../utils';
@@ -292,7 +292,13 @@ export class SessionManager extends StateManager {
 
     const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
-    const isRecovered = Boolean(recoveredSessionId);
+
+    // IMPORTANT: Always send SESSION_START on new app instance
+    // Even if we recover a session ID, this is a NEW instance of the application
+    // (page reload, new tab, browser restart, etc.)
+    // This prevents anomalous session durations (e.g., 12+ days between START and END)
+    // Recovered session ID is kept for analytics continuity, but START event marks new instance
+    const isRecovered = false; // Always false to force SESSION_START
 
     this.isTracking = true;
     this.hasEndedSession = false;
@@ -303,6 +309,7 @@ export class SessionManager extends StateManager {
       this.initCrossTabSync();
       this.shareSession(sessionId);
 
+      // ALWAYS send SESSION_START on new app instance
       if (!isRecovered) {
         this.eventManager.track({
           type: EventType.SESSION_START,
@@ -442,9 +449,59 @@ export class SessionManager extends StateManager {
       }
 
       this.broadcastSessionEnd(sessionId, reason);
+      this.cleanupSessionCounts(sessionId); // Cleanup counts for ended session
       this.resetSessionState(reason);
     } finally {
       this.isEnding = false;
+    }
+  }
+
+  /**
+   * Cleans up persisted session event counts from localStorage.
+   *
+   * **Purpose**: Removes session counts for the current session after it ends
+   * to prevent localStorage pollution over time.
+   *
+   * **Behavior**:
+   * - Removes counts for the provided session ID
+   * - Fails silently if localStorage unavailable or key doesn't exist
+   * - Called automatically from `endSession()` after SESSION_END event
+   *
+   * **Storage Key**: `tlog:{userId}:session_counts:{sessionId}`
+   *
+   * **Why Not More Aggressive Cleanup**:
+   * - Only cleans current session (not old sessions from previous days/weeks)
+   * - Browser localStorage quota management handles very old data (FIFO)
+   * - Keeps implementation simple and avoids complex timestamp-based cleanup
+   *
+   * **Future Enhancement**: Could scan and delete counts older than N days,
+   * but current approach is sufficient for most use cases (~100 bytes per session).
+   *
+   * @param sessionId - Session identifier to cleanup counts for
+   *
+   * @internal
+   */
+  private cleanupSessionCounts(sessionId: string): void {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
+
+    try {
+      const userId = this.get('userId');
+      if (!userId) {
+        log('debug', 'Cannot cleanup session counts without userId');
+        return;
+      }
+
+      const storageKey = SESSION_COUNTS_KEY(userId, sessionId);
+      localStorage.removeItem(storageKey);
+
+      log('debug', 'Session counts cleaned up', { data: { sessionId } });
+    } catch (error) {
+      log('warn', 'Failed to cleanup session counts', {
+        error,
+        data: { sessionId },
+      });
     }
   }
 

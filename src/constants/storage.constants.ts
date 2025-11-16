@@ -99,3 +99,16 @@ export const SESSION_RECOVERY_KEY = (id: string): string =>
  */
 export const BROADCAST_CHANNEL_NAME = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
+
+/**
+ * Generates storage key for per-session event counts
+ *
+ * Used to persist rate limiting counters across page reloads within the same session.
+ * This prevents users from bypassing per-session event limits by refreshing the page.
+ *
+ * @param userId - User identifier
+ * @param sessionId - Session identifier
+ * @returns localStorage key for session counts (e.g., 'tlog:user123:session_counts:session456')
+ */
+export const SESSION_COUNTS_KEY = (userId: string, sessionId: string): string =>
+  `${STORAGE_BASE_KEY}:${userId}:session_counts:${sessionId}`;

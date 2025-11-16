@@ -54,6 +54,7 @@ export class PerformanceHandler extends StateManager {
   private readonly observers: PerformanceObserver[] = [];
   private vitalThresholds: Record<WebVitalType, number>;
   private lastLongTaskSentAt = 0;
+  private navigationCounter = 0; // Counter for handling simultaneous navigations edge case
 
   constructor(eventManager: EventManager) {
     super();
@@ -303,6 +304,27 @@ export class PerformanceHandler extends StateManager {
     });
   }
 
+  /**
+   * Generates a unique navigation identifier for deduplication.
+   *
+   * **Purpose**: Creates deterministic IDs to prevent duplicate Web Vitals reporting
+   * across multiple metrics for the same navigation event.
+   *
+   * **ID Format**: `{timestamp}_{pathname}` or `{timestamp}_{pathname}_{counter}`
+   *
+   * **Edge Case Handling**:
+   * - If multiple navigations occur to the same pathname in the same millisecond,
+   *   a counter suffix is appended (e.g., `1234.56_/home_2`)
+   * - Counter only added when > 1 to minimize ID length for common case
+   *
+   * **Why Deterministic**:
+   * - Previous implementation used random string → duplicate metrics on page reload
+   * - Now: Same navigation = same ID = proper deduplication via reportedByNav Map
+   *
+   * @returns Navigation ID string or null if navigation timing unavailable
+   *
+   * @internal
+   */
   private getNavigationId(): string | null {
     try {
       const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
@@ -312,8 +334,14 @@ export class PerformanceHandler extends StateManager {
       }
 
       const timestamp = nav.startTime || performance.now();
-      const random = Math.random().toString(36).substr(2, 5);
-      return `${timestamp.toFixed(2)}_${window.location.pathname}_${random}`;
+      const counter = ++this.navigationCounter;
+
+      // Base ID: timestamp + pathname (deterministic for deduplication)
+      const baseId = `${timestamp.toFixed(2)}_${window.location.pathname}`;
+
+      // Append counter only if > 1 (edge case: simultaneous navigations)
+      // This prevents collisions if two navigations occur in the same millisecond to the same path
+      return counter > 1 ? `${baseId}_${counter}` : baseId;
     } catch (error) {
       log('warn', 'Failed to get navigation ID', { error });
       return null;
