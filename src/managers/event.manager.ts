@@ -1194,6 +1194,10 @@ export class EventManager extends StateManager {
    * @internal
    */
   private loadSessionCounts(sessionId: string): SessionEventCounts {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return this.getInitialCounts();
+    }
+
     const userId = this.get('userId') || 'anonymous';
     const storageKey = SESSION_COUNTS_KEY(userId, sessionId);
 
@@ -1254,9 +1258,9 @@ export class EventManager extends StateManager {
    * **Performance**: Debouncing reduces localStorage writes from ~1000 per session
    * to ~20-30 (96-97% reduction) while maintaining data integrity.
    *
-   * **Cleanup**: Counts are NOT automatically deleted when session ends.
-   * Old session data will eventually be cleared by browser localStorage limits (FIFO).
-   * This is acceptable as the data is small (~100 bytes per session).
+   * **Cleanup**: Counts are automatically deleted when the session ends via
+   * SessionManager.cleanupSessionCounts(). This prevents localStorage pollution
+   * and maintains a clean storage footprint (~100 bytes per active session only).
    *
    * @param sessionId - Current session identifier
    *

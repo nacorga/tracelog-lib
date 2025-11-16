@@ -482,6 +482,10 @@ export class SessionManager extends StateManager {
    * @internal
    */
   private cleanupSessionCounts(sessionId: string): void {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
+
     try {
       const userId = this.get('userId');
       if (!userId) {
