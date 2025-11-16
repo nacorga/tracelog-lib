@@ -28,6 +28,31 @@
 
 
 
+
+## [1.7.0] - 2025-11-16
+
+### ✨ Features
+
+- Implement session event counts tracking and persistence ([387f4d3](../../commit/387f4d3f320d16d5be48219d25c04f253f88607f))
+
+### 🐛 Bug Fixes
+
+- Enhance session management with localStorage checks ([d3220cc](../../commit/d3220ccd4ec2ffcb3fc7331f9e416d04c2a7c04d))
+
+### 🔧 Other Changes
+
+- Merge pull request #63 from nacorga/release/20251116.1 ([f12e2fb](../../commit/f12e2fb6f531c1d0a7ea6d6cd243a707e4df800d))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v1.6.1...v1.7.0
+
+
 ## [1.6.1] - 2025-11-11
 
 ### ♻️ Refactoring
