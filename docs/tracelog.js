@@ -403,7 +403,8 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const LIB_VERSION = "1.7.0";
+const version = "1.8.0";
+const LIB_VERSION = version;
 const detectQaMode = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return false;
@@ -495,13 +496,16 @@ const generateUUID = () => {
 let eventSequence = 0;
 let lastEventTimestamp = 0;
 const generateEventId = () => {
-  const timestamp = Date.now();
+  let timestamp = Date.now();
+  if (timestamp < lastEventTimestamp) {
+    timestamp = lastEventTimestamp;
+  }
   if (timestamp === lastEventTimestamp) {
     eventSequence = (eventSequence + 1) % 1e3;
   } else {
     eventSequence = 0;
-    lastEventTimestamp = timestamp;
   }
+  lastEventTimestamp = timestamp;
   const sequence = eventSequence.toString().padStart(3, "0");
   let random = "";
   try {
@@ -1383,6 +1387,7 @@ class SenderManager extends StateManager {
   transformers;
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
+  lastMetadataTimestamp = 0;
   /**
    * Creates a SenderManager instance.
    *
@@ -1956,17 +1961,20 @@ class SenderManager extends StateManager {
    * - `timestamp`: Request generation time in milliseconds
    *
    * **Idempotency Token**:
-   * - Uses token from EventsQueue (generated in EventManager.buildEventsPayload())
-   * - Same token persists across all retry attempts of the same batch
+   * - Generated in this method using generateEventId()
+   * - Same token persists across all retry attempts of the same batch (same payload string)
    * - Backend can use this to distinguish retries from genuine duplicates
-   * - Fallback: Generates new token if missing (backward compatibility)
    *
    * @param body - EventsQueue to send
    * @returns Object with `url` (API endpoint) and `payload` (JSON string)
    * @private
    */
   prepareRequest(body) {
-    const timestamp = Date.now();
+    let timestamp = Date.now();
+    if (timestamp < this.lastMetadataTimestamp) {
+      timestamp = this.lastMetadataTimestamp;
+    }
+    this.lastMetadataTimestamp = timestamp;
     const idempotencyToken = generateEventId();
     const enrichedBody = {
       ...body,
@@ -2115,7 +2123,7 @@ class SenderManager extends StateManager {
     }
   }
 }
-class TimeManager {
+class TimeManager extends StateManager {
   bootTime;
   bootTimestamp;
   hasPerformanceNow;
@@ -2132,8 +2140,17 @@ class TimeManager {
    * **Boot Time**: Reference point for all subsequent timestamp calculations
    * - All timestamps are relative to this boot time
    * - Immune to system clock changes after initialization
+   *
+   * **SSR Safety**: In non-browser environments (Node.js, SSR), falls back to Date.now()
    */
   constructor() {
+    super();
+    if (typeof window === "undefined") {
+      this.hasPerformanceNow = false;
+      this.bootTime = 0;
+      this.bootTimestamp = 0;
+      return;
+    }
     this.hasPerformanceNow = typeof performance !== "undefined" && typeof performance.now === "function";
     if (this.hasPerformanceNow) {
       this.bootTime = performance.now();

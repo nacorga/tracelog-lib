@@ -55,8 +55,10 @@ export const generateEventId = (): string => {
     eventSequence = (eventSequence + 1) % 1000; // Reset at 1000 to keep 3 digits
   } else {
     eventSequence = 0;
-    lastEventTimestamp = timestamp;
   }
+
+  // Always update lastEventTimestamp to track current (possibly adjusted) timestamp
+  lastEventTimestamp = timestamp;
 
   const sequence = eventSequence.toString().padStart(3, '0');
 
