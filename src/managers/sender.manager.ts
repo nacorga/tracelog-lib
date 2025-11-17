@@ -85,6 +85,7 @@ export class SenderManager extends StateManager {
   private readonly transformers: TransformerMap;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
+  private lastMetadataTimestamp = 0;
 
   /**
    * Creates a SenderManager instance.
@@ -763,7 +764,14 @@ export class SenderManager extends StateManager {
    * @private
    */
   private prepareRequest(body: EventsQueue): { url: string; payload: string } {
-    const timestamp = Date.now();
+    let timestamp = Date.now();
+
+    // Protect against clock skew (same pattern as generateEventId)
+    // Ensures _metadata.timestamp is monotonically increasing
+    if (timestamp < this.lastMetadataTimestamp) {
+      timestamp = this.lastMetadataTimestamp;
+    }
+    this.lastMetadataTimestamp = timestamp;
 
     // Generate idempotency token for this batch (persists across retries)
     // Uses same robust ID generation as events (timestamp + sequence + crypto random)
