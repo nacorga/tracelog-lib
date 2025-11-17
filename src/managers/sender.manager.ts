@@ -754,10 +754,9 @@ export class SenderManager extends StateManager {
    * - `timestamp`: Request generation time in milliseconds
    *
    * **Idempotency Token**:
-   * - Uses token from EventsQueue (generated in EventManager.buildEventsPayload())
-   * - Same token persists across all retry attempts of the same batch
+   * - Generated in this method using generateEventId()
+   * - Same token persists across all retry attempts of the same batch (same payload string)
    * - Backend can use this to distinguish retries from genuine duplicates
-   * - Fallback: Generates new token if missing (backward compatibility)
    *
    * @param body - EventsQueue to send
    * @returns Object with `url` (API endpoint) and `payload` (JSON string)

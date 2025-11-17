@@ -8,7 +8,7 @@ import { EventData } from './event.types';
  * **Purpose**: Batches multiple events for efficient transmission to analytics backend.
  *
  * **Idempotency Token**:
- * - Format: `{timestamp}-{random8hex}` (e.g., "1731783421234-a3f8e2c1")
+ * - Format: `{timestamp}-{sequence}-{random6hex}` (e.g., "1731783421234-001-a3f8e2")
  * - Generated once per batch in SenderManager.prepareRequest()
  * - Persists across all retry attempts of the same batch (same payload string)
  * - Placed in `_metadata.idempotency_token` field (not in EventsQueue root)

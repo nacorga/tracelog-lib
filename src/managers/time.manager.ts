@@ -61,8 +61,18 @@ export class TimeManager {
    * **Boot Time**: Reference point for all subsequent timestamp calculations
    * - All timestamps are relative to this boot time
    * - Immune to system clock changes after initialization
+   *
+   * **SSR Safety**: In non-browser environments (Node.js, SSR), falls back to Date.now()
    */
   constructor() {
+    // SSR safety: TimeManager is no-op in non-browser environments
+    if (typeof window === 'undefined') {
+      this.hasPerformanceNow = false;
+      this.bootTime = 0;
+      this.bootTimestamp = 0;
+      return;
+    }
+
     this.hasPerformanceNow = typeof performance !== 'undefined' && typeof performance.now === 'function';
 
     if (this.hasPerformanceNow) {
