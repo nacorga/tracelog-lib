@@ -1,4 +1,5 @@
 import { log } from '../utils';
+import { StateManager } from './state.manager';
 
 /**
  * Manages accurate timestamp generation using monotonic clock (performance.now())
@@ -43,7 +44,7 @@ import { log } from '../utils';
  * }
  * ```
  */
-export class TimeManager {
+export class TimeManager extends StateManager {
   private readonly bootTime: number;
   private readonly bootTimestamp: number;
   private readonly hasPerformanceNow: boolean;
@@ -65,6 +66,8 @@ export class TimeManager {
    * **SSR Safety**: In non-browser environments (Node.js, SSR), falls back to Date.now()
    */
   constructor() {
+    super();
+
     // SSR safety: TimeManager is no-op in non-browser environments
     if (typeof window === 'undefined') {
       this.hasPerformanceNow = false;
