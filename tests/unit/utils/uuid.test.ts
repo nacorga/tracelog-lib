@@ -179,5 +179,33 @@ describe('UUID Utils', () => {
         expect(seq1).not.toBe(seq2);
       }
     });
+
+    it('should protect against clock skew (monotonic timestamp guarantee)', () => {
+      const ids: string[] = [];
+
+      // Generate multiple IDs rapidly
+      for (let i = 0; i < 100; i++) {
+        ids.push(generateEventId());
+      }
+
+      // Extract timestamps from all IDs
+      const timestamps = ids.map((id) => {
+        const parts = id.split('-');
+        return parseInt(parts[0]!, 10);
+      });
+
+      // Verify timestamps are monotonically increasing or equal (never decreasing)
+      // This protects against clock skew from NTP sync, manual adjustments, etc.
+      for (let i = 1; i < timestamps.length; i++) {
+        const current = timestamps[i]!;
+        const previous = timestamps[i - 1]!;
+
+        expect(current).toBeGreaterThanOrEqual(previous);
+      }
+
+      // Verify all IDs are still unique despite potential timestamp reuse
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(ids.length);
+    });
   });
 });

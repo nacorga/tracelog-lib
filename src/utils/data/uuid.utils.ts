@@ -37,19 +37,28 @@ let lastEventTimestamp = 0;
  * - ✅ No collisions across tabs (crypto random)
  * - ✅ Temporal ordering preserved (timestamp first)
  * - ✅ Works in high-frequency bursts (1000 events/ms capacity)
+ * - ✅ Clock skew protection (monotonic timestamp guarantee)
  *
  * @returns Unique event ID string
  */
 export const generateEventId = (): string => {
-  const timestamp = Date.now();
+  let timestamp = Date.now();
+
+  // Protect against clock skew (NTP sync, manual time adjustments, timezone changes)
+  // If clock moves backward, use last valid timestamp to prevent ID collisions
+  if (timestamp < lastEventTimestamp) {
+    timestamp = lastEventTimestamp;
+  }
 
   // Increment sequence counter for events in same millisecond
   if (timestamp === lastEventTimestamp) {
     eventSequence = (eventSequence + 1) % 1000; // Reset at 1000 to keep 3 digits
   } else {
     eventSequence = 0;
-    lastEventTimestamp = timestamp;
   }
+
+  // Always update lastEventTimestamp to track current (possibly adjusted) timestamp
+  lastEventTimestamp = timestamp;
 
   const sequence = eventSequence.toString().padStart(3, '0');
 
