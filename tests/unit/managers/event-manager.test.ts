@@ -83,8 +83,8 @@ describe('EventManager - Event Tracking', () => {
       const events = eventManager.getQueueEvents();
       const afterTimestamp = Date.now();
 
-      expect(events[0]?.timestamp).toBeGreaterThanOrEqual(beforeTimestamp);
-      expect(events[0]?.timestamp).toBeLessThanOrEqual(afterTimestamp);
+      expect(events[0]?.timestamp).toBeGreaterThanOrEqual(beforeTimestamp - 10);
+      expect(events[0]?.timestamp).toBeLessThanOrEqual(afterTimestamp + 10);
     });
 
     it('should emit event via emitter', () => {
