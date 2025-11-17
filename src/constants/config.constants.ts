@@ -8,7 +8,7 @@
 // ============================================================================
 
 export const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-export const DUPLICATE_EVENT_THRESHOLD_MS = 500; // 500ms
+export const DUPLICATE_EVENT_THRESHOLD_MS = 1000; // 1 second (increased from 500ms to reduce duplicate events)
 export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds
 
 // Throttling and debouncing
@@ -95,10 +95,10 @@ export const SYNC_XHR_TIMEOUT_MS = 2000; // 2 seconds
 // sendBeacon payload size limit (Phase 3)
 export const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024; // 64KB browser limit
 
-// Event fingerprint management
-export const MAX_FINGERPRINTS = 1000; // Maximum fingerprints stored before cleanup
-export const FINGERPRINT_CLEANUP_MULTIPLIER = 10; // Cleanup fingerprints older than 10x threshold
-export const MAX_FINGERPRINTS_HARD_LIMIT = 2000; // Hard limit for aggressive cleanup
+// Event fingerprint management (moderately increased for high-frequency sessions)
+export const MAX_FINGERPRINTS = 1500; // Maximum fingerprints stored before cleanup (increased from 1000)
+export const FINGERPRINT_CLEANUP_MULTIPLIER = 10; // Cleanup fingerprints older than 10x threshold (10 seconds)
+export const MAX_FINGERPRINTS_HARD_LIMIT = 3000; // Hard limit for aggressive cleanup (increased from 2000)
 
 // ============================================================================
 // BROWSER & HTML

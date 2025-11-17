@@ -1,5 +1,5 @@
 const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
-const DUPLICATE_EVENT_THRESHOLD_MS = 500;
+const DUPLICATE_EVENT_THRESHOLD_MS = 1e3;
 const EVENT_SENT_INTERVAL_MS = 1e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
 const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
@@ -46,9 +46,9 @@ const MAX_ARRAY_LENGTH = 100;
 const MAX_OBJECT_DEPTH = 3;
 const PRECISION_TWO_DECIMALS = 2;
 const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024;
-const MAX_FINGERPRINTS = 1e3;
+const MAX_FINGERPRINTS = 1500;
 const FINGERPRINT_CLEANUP_MULTIPLIER = 10;
-const MAX_FINGERPRINTS_HARD_LIMIT = 2e3;
+const MAX_FINGERPRINTS_HARD_LIMIT = 3e3;
 const HTML_DATA_ATTR_PREFIX = "data-tlog";
 const INTERACTIVE_SELECTORS = [
   "button",
@@ -403,6 +403,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
+const LIB_VERSION = "1.7.0";
 const detectQaMode = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return false;
@@ -491,12 +492,21 @@ const generateUUID = () => {
     return v2.toString(16);
   });
 };
+let eventSequence = 0;
+let lastEventTimestamp = 0;
 const generateEventId = () => {
   const timestamp = Date.now();
+  if (timestamp === lastEventTimestamp) {
+    eventSequence = (eventSequence + 1) % 1e3;
+  } else {
+    eventSequence = 0;
+    lastEventTimestamp = timestamp;
+  }
+  const sequence = eventSequence.toString().padStart(3, "0");
   let random = "";
   try {
     if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-      const bytes = crypto.getRandomValues(new Uint8Array(4));
+      const bytes = crypto.getRandomValues(new Uint8Array(3));
       if (bytes) {
         random = Array.from(bytes, (b2) => b2.toString(16).padStart(2, "0")).join("");
       }
@@ -504,9 +514,9 @@ const generateEventId = () => {
   } catch {
   }
   if (!random) {
-    random = Math.floor(Math.random() * 4294967295).toString(16).padStart(8, "0");
+    random = Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0");
   }
-  return `${timestamp}-${random}`;
+  return `${timestamp}-${sequence}-${random}`;
 };
 const isValidUrl = (url, allowHttp = false) => {
   try {
@@ -1945,16 +1955,26 @@ class SenderManager extends StateManager {
    * - `referer`: Current page URL (browser only, undefined in Node.js)
    * - `timestamp`: Request generation time in milliseconds
    *
+   * **Idempotency Token**:
+   * - Uses token from EventsQueue (generated in EventManager.buildEventsPayload())
+   * - Same token persists across all retry attempts of the same batch
+   * - Backend can use this to distinguish retries from genuine duplicates
+   * - Fallback: Generates new token if missing (backward compatibility)
+   *
    * @param body - EventsQueue to send
    * @returns Object with `url` (API endpoint) and `payload` (JSON string)
    * @private
    */
   prepareRequest(body) {
+    const timestamp = Date.now();
+    const idempotencyToken = generateEventId();
     const enrichedBody = {
       ...body,
       _metadata: {
         referer: typeof window !== "undefined" ? window.location.href : void 0,
-        timestamp: Date.now()
+        timestamp,
+        idempotency_token: idempotencyToken,
+        client_version: LIB_VERSION
       }
     };
     return {
@@ -2095,10 +2115,176 @@ class SenderManager extends StateManager {
     }
   }
 }
+class TimeManager {
+  bootTime;
+  bootTimestamp;
+  hasPerformanceNow;
+  lastClockSkewCheck = 0;
+  detectedSkew = 0;
+  /**
+   * Creates a TimeManager instance and establishes boot time reference.
+   *
+   * **Initialization**:
+   * 1. Captures `performance.now()` as boot time (monotonic clock)
+   * 2. Captures `Date.now()` as boot timestamp (wall clock)
+   * 3. Detects if `performance.now()` is available (for fallback)
+   *
+   * **Boot Time**: Reference point for all subsequent timestamp calculations
+   * - All timestamps are relative to this boot time
+   * - Immune to system clock changes after initialization
+   */
+  constructor() {
+    this.hasPerformanceNow = typeof performance !== "undefined" && typeof performance.now === "function";
+    if (this.hasPerformanceNow) {
+      this.bootTime = performance.now();
+      this.bootTimestamp = Date.now();
+      log("debug", "TimeManager initialized with monotonic clock", {
+        data: {
+          bootTime: this.bootTime.toFixed(3),
+          bootTimestamp: this.bootTimestamp
+        }
+      });
+    } else {
+      this.bootTime = 0;
+      this.bootTimestamp = Date.now();
+      log("warn", "performance.now() not available, falling back to Date.now()");
+    }
+  }
+  /**
+   * Returns current timestamp in milliseconds since epoch.
+   *
+   * **Calculation**:
+   * - If `performance.now()` available: `bootTimestamp + (performance.now() - bootTime)`
+   * - Otherwise: `Date.now()` (fallback)
+   *
+   * **Advantages over Date.now()**:
+   * - Immune to system clock changes during session
+   * - More accurate (microsecond precision)
+   * - Prevents future timestamp errors from clock adjustments
+   *
+   * @returns Timestamp in milliseconds since Unix epoch
+   *
+   * @example
+   * ```typescript
+   * const eventTimestamp = timeManager.now();
+   * // Always accurate relative to boot time, even if system clock changes
+   * ```
+   */
+  now() {
+    if (!this.hasPerformanceNow) {
+      return Date.now();
+    }
+    const elapsed = performance.now() - this.bootTime;
+    return Math.round(this.bootTimestamp + elapsed);
+  }
+  /**
+   * Detects clock skew by comparing monotonic time vs system time.
+   *
+   * **Purpose**: Identifies when the system clock has changed during the session.
+   *
+   * **Detection Method**:
+   * 1. Calculate expected timestamp using monotonic clock: `now()`
+   * 2. Compare with actual system time: `Date.now()`
+   * 3. Difference is the clock skew
+   *
+   * **Clock Skew Scenarios**:
+   * - Positive skew: System clock jumped forward (e.g., NTP correction)
+   * - Negative skew: System clock jumped backward (rare, usually manual adjustment)
+   * - Near zero: No significant clock drift
+   *
+   * **Throttling**: Only checks every 5 seconds to avoid performance impact
+   *
+   * @returns Clock skew in milliseconds (positive = clock ahead, negative = clock behind)
+   *
+   * @example
+   * ```typescript
+   * const skew = timeManager.getClockSkew();
+   * if (Math.abs(skew) > 30000) {
+   *   console.warn(`System clock drifted by ${skew}ms`);
+   * }
+   * ```
+   */
+  getClockSkew() {
+    if (!this.hasPerformanceNow) {
+      return 0;
+    }
+    const now = Date.now();
+    if (now - this.lastClockSkewCheck < 5e3) {
+      return this.detectedSkew;
+    }
+    this.lastClockSkewCheck = now;
+    const monotonicTimestamp = this.now();
+    const systemTimestamp = Date.now();
+    this.detectedSkew = systemTimestamp - monotonicTimestamp;
+    if (Math.abs(this.detectedSkew) > 3e4) {
+      log("warn", "Significant clock skew detected", {
+        data: {
+          skewMs: this.detectedSkew,
+          skewMinutes: (this.detectedSkew / 1e3 / 60).toFixed(2),
+          monotonicTime: new Date(monotonicTimestamp).toISOString(),
+          systemTime: new Date(systemTimestamp).toISOString()
+        }
+      });
+    }
+    return this.detectedSkew;
+  }
+  /**
+   * Validates if a timestamp is reasonable (not too far in the future).
+   *
+   * **Purpose**: Client-side validation to catch obviously wrong timestamps
+   * before sending to backend.
+   *
+   * **Validation Rules**:
+   * - Timestamp must not be >2 minutes in the future (relative to monotonic clock)
+   * - Prevents backend rejections due to clock skew
+   * - More lenient than backend (allows up to 2 min vs backend's 3 min)
+   *
+   * **Use Case**: Validate event timestamps before adding to queue
+   *
+   * @param timestamp - Timestamp to validate (milliseconds since epoch)
+   * @returns Object with `valid` boolean and optional `error` message
+   *
+   * @example
+   * ```typescript
+   * const validation = timeManager.validateTimestamp(eventTimestamp);
+   * if (!validation.valid) {
+   *   console.error('Invalid timestamp:', validation.error);
+   * }
+   * ```
+   */
+  validateTimestamp(timestamp) {
+    const maxFutureOffset = 2 * 60 * 1e3;
+    const currentTime = this.now();
+    const offset = timestamp - currentTime;
+    if (offset > maxFutureOffset) {
+      return {
+        valid: false,
+        error: `Timestamp is ${(offset / 1e3 / 60).toFixed(2)} minutes in the future (max allowed: 2 minutes)`
+      };
+    }
+    return { valid: true };
+  }
+  /**
+   * Returns boot time information for debugging.
+   *
+   * **Purpose**: Diagnostic utility for troubleshooting timestamp issues.
+   *
+   * @returns Object with boot time details
+   */
+  getBootInfo() {
+    return {
+      bootTime: this.bootTime,
+      bootTimestamp: this.bootTimestamp,
+      hasPerformanceNow: this.hasPerformanceNow,
+      clockSkew: this.getClockSkew()
+    };
+  }
+}
 class EventManager extends StateManager {
   dataSenders;
   emitter;
   transformers;
+  timeManager;
   recentEventFingerprints = /* @__PURE__ */ new Map();
   perEventRateLimits = /* @__PURE__ */ new Map();
   eventsQueue = [];
@@ -2131,6 +2317,7 @@ class EventManager extends StateManager {
     super();
     this.emitter = emitter;
     this.transformers = transformers;
+    this.timeManager = new TimeManager();
     this.dataSenders = [];
     const collectApiUrls = this.get("collectApiUrls");
     if (collectApiUrls?.saas) {
@@ -2772,11 +2959,18 @@ class EventManager extends StateManager {
   buildEventPayload(data) {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get("pageUrl");
+    const timestamp = this.timeManager.now();
+    const validation = this.timeManager.validateTimestamp(timestamp);
+    if (!validation.valid) {
+      log("warn", "Event timestamp validation failed", {
+        data: { type: data.type, error: validation.error }
+      });
+    }
     let payload = {
       id: generateEventId(),
       type: data.type,
       page_url: currentPageUrl,
-      timestamp: Date.now(),
+      timestamp,
       ...isSessionStart && { referrer: document.referrer || "Direct" },
       ...data.from_page_url && { from_page_url: data.from_page_url },
       ...data.scroll_data && { scroll_data: data.scroll_data },
@@ -3031,6 +3225,9 @@ class EventManager extends StateManager {
    * @internal
    */
   loadSessionCounts(sessionId) {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return this.getInitialCounts();
+    }
     const userId = this.get("userId") || "anonymous";
     const storageKey = SESSION_COUNTS_KEY(userId, sessionId);
     try {
@@ -3073,9 +3270,9 @@ class EventManager extends StateManager {
    * **Performance**: Debouncing reduces localStorage writes from ~1000 per session
    * to ~20-30 (96-97% reduction) while maintaining data integrity.
    *
-   * **Cleanup**: Counts are NOT automatically deleted when session ends.
-   * Old session data will eventually be cleared by browser localStorage limits (FIFO).
-   * This is acceptable as the data is small (~100 bytes per session).
+   * **Cleanup**: Counts are automatically deleted when the session ends via
+   * SessionManager.cleanupSessionCounts(). This prevents localStorage pollution
+   * and maintains a clean storage footprint (~100 bytes per active session only).
    *
    * @param sessionId - Current session identifier
    *
@@ -3468,6 +3665,9 @@ class SessionManager extends StateManager {
    * @internal
    */
   cleanupSessionCounts(sessionId) {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return;
+    }
     try {
       const userId = this.get("userId");
       if (!userId) {

@@ -24,6 +24,7 @@ import { getUTMParameters, log, Emitter, generateEventId, transformEvent, transf
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
+import { TimeManager } from './time.manager';
 
 /**
  * Core component responsible for event tracking, queue management, deduplication,
@@ -92,6 +93,7 @@ export class EventManager extends StateManager {
   private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
   private readonly transformers: TransformerMap;
+  private readonly timeManager: TimeManager;
   private readonly recentEventFingerprints = new Map<string, number>();
   private readonly perEventRateLimits: Map<string, number[]> = new Map();
 
@@ -129,6 +131,7 @@ export class EventManager extends StateManager {
 
     this.emitter = emitter;
     this.transformers = transformers;
+    this.timeManager = new TimeManager();
 
     this.dataSenders = [];
     const collectApiUrls = this.get('collectApiUrls');
@@ -880,11 +883,24 @@ export class EventManager extends StateManager {
     const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get('pageUrl');
 
+    // Use TimeManager for accurate timestamps (immune to clock skew during session)
+    const timestamp = this.timeManager.now();
+
+    // Validate timestamp before creating event
+    const validation = this.timeManager.validateTimestamp(timestamp);
+    if (!validation.valid) {
+      log('warn', 'Event timestamp validation failed', {
+        data: { type: data.type, error: validation.error },
+      });
+      // Continue anyway with adjusted timestamp to avoid data loss
+      // Backend has 3-minute tolerance as safety net
+    }
+
     let payload: EventData = {
       id: generateEventId(),
       type: data.type as EventType,
       page_url: currentPageUrl,
-      timestamp: Date.now(),
+      timestamp,
       ...(isSessionStart && { referrer: document.referrer || 'Direct' }),
       ...(data.from_page_url && { from_page_url: data.from_page_url }),
       ...(data.scroll_data && { scroll_data: data.scroll_data }),

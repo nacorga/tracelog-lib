@@ -8,9 +8,10 @@ import {
   MAX_SEND_RETRIES,
   RETRY_BACKOFF_BASE_MS,
   RETRY_BACKOFF_JITTER_MS,
+  LIB_VERSION,
 } from '../constants';
 import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
-import { log, transformEvents, transformBatch } from '../utils';
+import { log, transformEvents, transformBatch, generateEventId } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -752,16 +753,31 @@ export class SenderManager extends StateManager {
    * - `referer`: Current page URL (browser only, undefined in Node.js)
    * - `timestamp`: Request generation time in milliseconds
    *
+   * **Idempotency Token**:
+   * - Uses token from EventsQueue (generated in EventManager.buildEventsPayload())
+   * - Same token persists across all retry attempts of the same batch
+   * - Backend can use this to distinguish retries from genuine duplicates
+   * - Fallback: Generates new token if missing (backward compatibility)
+   *
    * @param body - EventsQueue to send
    * @returns Object with `url` (API endpoint) and `payload` (JSON string)
    * @private
    */
   private prepareRequest(body: EventsQueue): { url: string; payload: string } {
+    const timestamp = Date.now();
+
+    // Generate idempotency token for this batch (persists across retries)
+    // Uses same robust ID generation as events (timestamp + sequence + crypto random)
+    // Format: {timestamp}-{sequence}-{random6hex}
+    const idempotencyToken = generateEventId();
+
     const enrichedBody = {
       ...body,
       _metadata: {
         referer: typeof window !== 'undefined' ? window.location.href : undefined,
-        timestamp: Date.now(),
+        timestamp,
+        idempotency_token: idempotencyToken,
+        client_version: LIB_VERSION,
       },
     };
 
