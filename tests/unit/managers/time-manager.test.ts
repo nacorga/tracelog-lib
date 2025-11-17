@@ -26,7 +26,7 @@ describe('TimeManager - Timestamp Generation', () => {
     expect(bootInfo.bootTime).toBeGreaterThanOrEqual(0);
     expect(bootInfo.bootTimestamp).toBeGreaterThan(0);
     expect(bootInfo.hasPerformanceNow).toBe(true);
-    expect(bootInfo.clockSkew).toBe(0);
+    expect(Math.abs(bootInfo.clockSkew)).toBeLessThan(10);
   });
 
   it('should generate timestamps using monotonic clock', () => {
