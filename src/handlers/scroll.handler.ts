@@ -279,7 +279,7 @@ export class ScrollHandler extends StateManager {
       firstScrollEventTime: null,
       maxDepthReached: initialDepth,
       debounceTimer: null,
-      listener: null as any,
+      listener: null as unknown as EventListener,
     };
 
     const handleScroll = (): void => {

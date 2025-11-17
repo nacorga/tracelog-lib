@@ -188,7 +188,7 @@ describe('Integration: Event Deduplication Flow', () => {
 
     button.click();
 
-    await wait(600);
+    await wait(1100);
 
     button.click();
 

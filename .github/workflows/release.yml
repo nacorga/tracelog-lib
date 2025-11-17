@@ -133,31 +133,55 @@ jobs:
 
       - name: Prepare release (update version, changelog, commit)
         run: |
-          # Build release command based on inputs
-          RELEASE_CMD="node scripts/release.js"
+          # Determine release command based on inputs
+          VERSION_TYPE="${{ github.event.inputs.version_type }}"
+          FORCE_VERSION="${{ github.event.inputs.force_version }}"
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
 
-          # Add dry run flag if requested
-          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+          echo "🔍 Release parameters:"
+          echo "  Version type: $VERSION_TYPE"
+          echo "  Force version: $FORCE_VERSION"
+          echo "  Dry run: $DRY_RUN"
+
+          # Validate dry-run compatibility
+          if [[ "$DRY_RUN" == "true" ]] && [[ "$VERSION_TYPE" =~ ^(patch|minor|major)$ ]]; then
+            echo "⚠️  Warning: Dry-run mode is not supported with manual version types (patch/minor/major)"
+            echo "💡 Dry-run only works with 'auto' or 'force specific version'"
+            echo "❌ Aborting to prevent unintended release"
+            exit 1
+          fi
+
+          # Build release command
+          if [[ -n "$FORCE_VERSION" ]]; then
+            # Force specific version (highest priority)
+            RELEASE_CMD="node scripts/release.js --force-version $FORCE_VERSION --verbose"
+            echo "📌 Using forced version: $FORCE_VERSION"
+          elif [[ "$VERSION_TYPE" == "patch" ]]; then
+            # Use patch version bump
+            RELEASE_CMD="npm run release:patch"
+            echo "🔧 Using patch version bump"
+          elif [[ "$VERSION_TYPE" == "minor" ]]; then
+            # Use minor version bump
+            RELEASE_CMD="npm run release:minor"
+            echo "✨ Using minor version bump"
+          elif [[ "$VERSION_TYPE" == "major" ]]; then
+            # Use major version bump
+            RELEASE_CMD="npm run release:major"
+            echo "🚀 Using major version bump"
+          else
+            # Auto-detect from commits (default)
+            RELEASE_CMD="node scripts/release.js --verbose"
+            echo "🤖 Using automatic version detection from commits"
+          fi
+
+          # Add dry run flag if requested (only for direct script calls)
+          if [[ "$DRY_RUN" == "true" ]] && [[ "$RELEASE_CMD" == *"node scripts/release.js"* ]]; then
             RELEASE_CMD="$RELEASE_CMD --dry-run"
+            echo "🧪 Dry run mode enabled"
           fi
 
-          # Add version type or force version
-          if [[ -n "${{ github.event.inputs.force_version }}" ]]; then
-            RELEASE_CMD="$RELEASE_CMD --force-version ${{ github.event.inputs.force_version }}"
-          elif [[ "${{ github.event.inputs.version_type }}" != "auto" ]]; then
-            # For manual version types, we'll modify the release script to accept this
-            case "${{ github.event.inputs.version_type }}" in
-              "major"|"minor"|"patch")
-                # We could implement a --force-bump-type flag in the release script
-                echo "Manual version type: ${{ github.event.inputs.version_type }}"
-                ;;
-            esac
-          fi
-
-          # Add verbose flag for GitHub Actions
-          RELEASE_CMD="$RELEASE_CMD --verbose"
-
-          echo "Executing: $RELEASE_CMD"
+          echo ""
+          echo "▶️  Executing: $RELEASE_CMD"
           eval $RELEASE_CMD
 
       - name: Get release version
