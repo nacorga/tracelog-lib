@@ -10,7 +10,18 @@ interface StoredSessionData {
   lastActivity: number;
 }
 
-// Session ID validation pattern: {timestamp}-{9-char-base36}
+/**
+ * Session ID validation pattern: {timestamp}-{9-char-base36}
+ *
+ * Validates recovered session IDs to prevent data corruption from:
+ * - Manual localStorage manipulation by users or browser extensions
+ * - Race conditions in cross-tab scenarios (partial/truncated writes)
+ * - Storage corruption or quota-based truncation
+ * - Malformed IDs from older library versions or external interference
+ *
+ * Format: 13-digit timestamp + hyphen + 9 lowercase alphanumeric characters
+ * Example: 1704067200000-a3f9c2b5d
+ */
 const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
 
 /**
@@ -27,7 +38,7 @@ const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
  * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
  * - **Persistence**: Stores session data in localStorage for recovery
  * - **Inactivity Detection**: Automatic timeout after inactivity (default 15 minutes)
- * - **Lifecycle Events**: Emits SESSION_START event only (SESSION_END removed in v1.0.0)
+ * - **Lifecycle Events**: Emits SESSION_START event only (SESSION_END removed in v2.0.0)
  *
  * **Key Features**:
  * - **Session ID Format**: `{timestamp}-{9-char-base36}` (e.g., `1704896400000-a3b4c5d6e`)
@@ -38,7 +49,7 @@ const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
  *
  * **BroadcastChannel Integration**:
  * - **Initialized BEFORE SESSION_START**: Prevents race condition with secondary tabs
- * - **Messages**: `session_start` (share session)
+ * - **Messages**: Only `session_start` action (share session across tabs)
  * - **Fallback**: Logs warning if BroadcastChannel not supported (no cross-tab sync)
  *
  * **Activity Detection**:
@@ -48,7 +59,6 @@ const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
  *
  * **State Management**:
  * - **`sessionId`**: Current session ID stored in global state
- * - **`hasStartSession`**: Flag in global state to prevent duplicate SESSION_START
  *
  * @see src/managers/README.md (lines 140-169) for detailed documentation
  *
@@ -113,17 +123,15 @@ export class SessionManager extends StateManager {
         return;
       }
 
-      if (action === 'session_end') {
-        this.resetSessionState();
-        return;
-      }
-
       if (action === 'session_start' && sessionId && typeof timestamp === 'number' && timestamp > Date.now() - 5000) {
         this.set('sessionId', sessionId);
         this.persistSession(sessionId, timestamp);
         if (this.isTracking) {
           this.setupSessionTimeout();
         }
+      } else if (action && action !== 'session_start') {
+        // Log unknown action types to help with debugging cross-tab synchronization issues
+        log('debug', 'Ignored BroadcastChannel message with unknown action', { data: { action } });
       }
     };
   }
@@ -422,7 +430,7 @@ export class SessionManager extends StateManager {
    * 3. Removes lifecycle listeners (visibilitychange)
    * 4. Closes BroadcastChannel
    * 5. Clears session from localStorage
-   * 6. Resets `sessionId` and `hasStartSession` in global state
+   * 6. Resets `sessionId` in global state
    * 7. Sets `isTracking` to false
    *
    * **Called by**: `App.destroy()` during application teardown
@@ -461,7 +469,7 @@ export class SessionManager extends StateManager {
    * 2. Removes activity listeners (click, keydown, scroll)
    * 3. Closes BroadcastChannel
    * 4. Removes lifecycle listeners (visibilitychange)
-   * 5. Resets tracking flags (`isTracking`, `hasStartSession`)
+   * 5. Resets tracking flag (`isTracking`)
    *
    * **Called by**: `App.destroy()` during application teardown
    *

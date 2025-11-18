@@ -18,7 +18,13 @@ import {
   FINGERPRINT_CLEANUP_MULTIPLIER,
   MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
-import { SESSION_COUNTS_KEY, SESSION_COUNTS_EXPIRY_MS, STORAGE_BASE_KEY } from '../constants/storage.constants';
+import {
+  SESSION_COUNTS_KEY,
+  SESSION_COUNTS_EXPIRY_MS,
+  SESSION_COUNTS_LAST_CLEANUP_KEY,
+  SESSION_COUNTS_CLEANUP_THROTTLE_MS,
+  STORAGE_BASE_KEY,
+} from '../constants/storage.constants';
 import { EventsQueue, EmitterEvent, EventData, EventType, Mode, TransformerMap, SessionEventCounts } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId, transformEvent, transformBatch } from '../utils';
 import { SenderManager } from './sender.manager';
@@ -164,27 +170,6 @@ export class EventManager extends StateManager {
 
     // Cleanup expired session counts on init (7-day TTL)
     this.cleanupExpiredSessionCounts();
-  }
-
-  /**
-   * Aborts all pending HTTP requests across all SenderManager instances.
-   *
-   * **Purpose**: Prevents fetch() + sendBeacon() duplication when user closes tab during pending request.
-   *
-   * **Use Case**: Prevents race condition where fetch() completes after sendBeacon() fires on page unload.
-   *
-   * **Behavior**:
-   * - Calls `abortPendingRequests()` on all SenderManager instances (SaaS + Custom)
-   * - Safe to call when no requests are pending (no-op)
-   * - Safe to call multiple times (idempotent)
-   *
-   * **Note**: In v2.0.0+, no longer called by SessionManager (pagehide handler removed).
-   * Method retained for compatibility and potential future use cases.
-   */
-  abortPendingRequests(): void {
-    this.dataSenders.forEach((sender) => {
-      sender.abortPendingRequests();
-    });
   }
 
   /**
@@ -1303,6 +1288,9 @@ export class EventManager extends StateManager {
         data: { sessionId, parsed },
       });
       localStorage.removeItem(storageKey);
+      log('debug', 'Session counts removed due to invalid/corrupted data', {
+        data: { sessionId, parsed },
+      });
 
       return this.getInitialCounts();
     } catch (error) {
@@ -1322,14 +1310,17 @@ export class EventManager extends StateManager {
    * counts older than 7 days.
    *
    * **Behavior**:
+   * - Checks if cleanup was run recently (within last hour) and skips if so
    * - Iterates all localStorage keys matching the session counts prefix pattern
    * - Parses each entry and checks `_timestamp` field
    * - Removes entries where age exceeds SESSION_COUNTS_EXPIRY_MS (7 days)
    * - Silently ignores parse errors (corrupted entries cleaned on next load)
+   * - Updates last cleanup timestamp after successful run
    *
    * **When Called**: Automatically on EventManager constructor initialization
    *
-   * **Performance**: Fast O(n) scan where n = localStorage keys (typically <100)
+   * **Performance**: O(n) scan where n = localStorage keys (typically <100), but throttled
+   * to run at most once per hour to prevent impact on rapid page reloads
    *
    * @internal
    */
@@ -1338,10 +1329,25 @@ export class EventManager extends StateManager {
       return;
     }
 
-    const userId = this.get('userId') || 'anonymous';
-    const prefix = `${STORAGE_BASE_KEY}:${userId}:session_counts:`;
-
     try {
+      // Throttling: Skip if cleanup ran recently (within last hour)
+      const lastCleanup = localStorage.getItem(SESSION_COUNTS_LAST_CLEANUP_KEY);
+
+      if (lastCleanup) {
+        const timeSinceLastCleanup = Date.now() - parseInt(lastCleanup, 10);
+
+        if (timeSinceLastCleanup < SESSION_COUNTS_CLEANUP_THROTTLE_MS) {
+          log('debug', 'Skipping session counts cleanup (throttled)', {
+            data: { timeSinceLastCleanup, throttleMs: SESSION_COUNTS_CLEANUP_THROTTLE_MS },
+          });
+
+          return;
+        }
+      }
+
+      const userId = this.get('userId') || 'anonymous';
+      const prefix = `${STORAGE_BASE_KEY}:${userId}:session_counts:`;
+
       // Collect keys to remove (can't modify during iteration)
       const keysToRemove: string[] = [];
 
@@ -1375,6 +1381,9 @@ export class EventManager extends StateManager {
       if (keysToRemove.length > 0) {
         log('info', `Cleaned up ${keysToRemove.length} expired session counts entries`);
       }
+
+      // Update last cleanup timestamp
+      localStorage.setItem(SESSION_COUNTS_LAST_CLEANUP_KEY, Date.now().toString());
     } catch (error) {
       log('warn', 'Failed to cleanup expired session counts', { error });
     }

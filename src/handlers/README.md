@@ -651,7 +651,7 @@ await tracelog.init({
 
 Manages user session lifecycle through delegation to SessionManager with robust error handling and state management.
 
-**Events Generated**: `session_start`, `session_end`
+**Events Generated**: `session_start` only (SESSION_END removed in v2.0.0)
 
 **Architecture**:
 - Wrapper around `SessionManager` for consistent handler interface

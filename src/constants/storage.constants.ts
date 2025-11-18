@@ -126,3 +126,27 @@ export const SESSION_COUNTS_KEY = (userId: string, sessionId: string): string =>
  * - While preventing indefinite accumulation (~100 bytes per session)
  */
 export const SESSION_COUNTS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/**
+ * Storage key for tracking last session counts cleanup timestamp.
+ *
+ * Used to throttle cleanup operations and prevent performance impact
+ * from scanning localStorage on every EventManager initialization.
+ *
+ * Format: 'tlog:session_counts_last_cleanup'
+ */
+export const SESSION_COUNTS_LAST_CLEANUP_KEY = `${STORAGE_BASE_KEY}:session_counts_last_cleanup`;
+
+/**
+ * Minimum interval between session counts cleanup runs (1 hour in milliseconds).
+ *
+ * Cleanup will only run if at least this much time has elapsed since the
+ * last cleanup. This prevents performance degradation from frequent localStorage
+ * scans while still ensuring regular cleanup of stale data.
+ *
+ * **Rationale**: 1 hour provides a good balance between:
+ * - Preventing frequent scans on rapid page reloads
+ * - Ensuring cleanup runs at least once per typical browsing session
+ * - Minimal localStorage overhead (~100 entries typical, <1ms scan time)
+ */
+export const SESSION_COUNTS_CLEANUP_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
