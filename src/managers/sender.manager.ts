@@ -131,8 +131,11 @@ export class SenderManager extends StateManager {
    *
    * **Purpose**: Prevents fetch() + sendBeacon() duplication when user closes tab during pending request.
    *
-   * **Use Case**: Called before endSession('page_unload') in pageHideHandler to cancel pending
-   * async requests before sending final SESSION_END via sendBeacon().
+   * **Use Case**: Called before page unload in pageHideHandler to cancel pending
+   * async requests before sending final events via sendBeacon().
+   *
+   * **Note**: Previously used for SESSION_END events (removed in v2.0.0). This method is retained
+   * for compatibility and to prevent duplicate event transmission during page unload scenarios.
    *
    * **Behavior**:
    * - Aborts all pending AbortControllers

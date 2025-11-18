@@ -10,6 +10,9 @@ interface StoredSessionData {
   lastActivity: number;
 }
 
+// Session ID validation pattern: {timestamp}-{9-char-base36}
+const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
+
 /**
  * Manages user sessions with cross-tab synchronization, inactivity detection,
  * and automatic lifecycle tracking.
@@ -153,8 +156,7 @@ export class SessionManager extends StateManager {
     }
 
     // Validate session ID format: {timestamp}-{9-char-base36}
-    const sessionIdPattern = /^\d{13}-[a-z0-9]{9}$/;
-    if (!sessionIdPattern.test(storedSession.id)) {
+    if (!SESSION_ID_PATTERN.test(storedSession.id)) {
       log('warn', 'Invalid session ID format recovered from storage, clearing', {
         data: { sessionId: storedSession.id },
       });
