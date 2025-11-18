@@ -9,7 +9,6 @@ import { EventType, ScrollDirection, ErrorType } from '../../src/types/event.typ
 import type { EventData } from '../../src/types/event.types';
 import type { EventsQueue } from '../../src/types/queue.types';
 import { DeviceType } from '../../src/types/device.types';
-import type { SessionEndReason } from '../../src/types/session.types';
 
 /**
  * Create mock configuration with default values
@@ -80,10 +79,6 @@ export function createMockEvent(type: EventType, overrides?: Partial<EventData>)
     };
   } else if (type === EventType.SESSION_START) {
     // Session start events don't have additional data
-  } else if (type === EventType.SESSION_END) {
-    typeSpecificData = {
-      session_end_reason: 'inactivity' as SessionEndReason,
-    };
   } else if (type === EventType.CUSTOM) {
     typeSpecificData = {
       custom_event: {

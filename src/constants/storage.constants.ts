@@ -112,3 +112,17 @@ export const BROADCAST_CHANNEL_NAME = (id: string): string =>
  */
 export const SESSION_COUNTS_KEY = (userId: string, sessionId: string): string =>
   `${STORAGE_BASE_KEY}:${userId}:session_counts:${sessionId}`;
+
+/**
+ * Session counts expiry duration (7 days in milliseconds).
+ *
+ * Session counts are automatically cleaned up after this duration to prevent
+ * localStorage pollution. Counts older than 7 days are considered stale and
+ * are removed on next page load.
+ *
+ * **Rationale**: 7 days provides sufficient buffer for:
+ * - Long-running sessions (rare but possible)
+ * - Users returning after extended inactivity
+ * - While preventing indefinite accumulation (~100 bytes per session)
+ */
+export const SESSION_COUNTS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days

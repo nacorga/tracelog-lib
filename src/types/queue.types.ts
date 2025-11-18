@@ -6,15 +6,6 @@ import { EventData } from './event.types';
  * Event queue structure sent to backend.
  *
  * **Purpose**: Batches multiple events for efficient transmission to analytics backend.
- *
- * **Idempotency Token**:
- * - Format: `{timestamp}-{sequence}-{random6hex}` (e.g., "1731783421234-001-a3f8e2")
- * - Generated once per batch in SenderManager.prepareRequest()
- * - Persists across all retry attempts of the same batch (same payload string)
- * - Placed in `_metadata.idempotency_token` field (not in EventsQueue root)
- * - Allows backend to distinguish retries (same token) from duplicates (different token)
- *
- * @see SenderManager.prepareRequest() - Token generation and _metadata wrapping (sender.manager.ts:771)
  */
 export interface EventsQueue {
   /** Unique user identifier (UUID) */

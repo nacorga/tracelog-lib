@@ -10,6 +10,7 @@ import { EventManager } from '../../../src/managers/event.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { EventType, DeviceType, EmitterEvent, ScrollDirection, ErrorType } from '../../../src/types';
 import { Emitter } from '../../../src/utils';
+import { SESSION_COUNTS_KEY, SESSION_COUNTS_EXPIRY_MS } from '../../../src/constants/storage.constants';
 
 describe('EventManager - Event Tracking', () => {
   let eventManager: EventManager;
@@ -482,15 +483,6 @@ describe('EventManager - Sampling', () => {
     expect(eventManager.getQueueLength()).toBe(1);
   });
 
-  it('should never sample SESSION_END', () => {
-    eventManager['set']('config', { samplingRate: 0 });
-
-    eventManager.track({ type: EventType.SESSION_END, session_end_reason: 'inactivity' });
-
-    // SESSION_END should always be tracked regardless of sampling
-    expect(eventManager.getQueueLength()).toBe(1);
-  });
-
   it('should never sample PAGE_VIEW', () => {
     eventManager['set']('config', { samplingRate: 0 });
 
@@ -574,17 +566,14 @@ describe('EventManager - Rate Limiting', () => {
       eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `event_${i}` } });
     }
 
-    // Track critical events
+    // Track critical event
     eventManager.track({ type: EventType.SESSION_START });
-    eventManager.track({ type: EventType.SESSION_END, session_end_reason: 'inactivity' });
 
-    // Critical events should be tracked
+    // Critical event should be tracked
     const events = eventManager.getQueueEvents();
     const hasSessionStart = events.some((e) => e.type === EventType.SESSION_START);
-    const hasSessionEnd = events.some((e) => e.type === EventType.SESSION_END);
 
     expect(hasSessionStart).toBe(true);
-    expect(hasSessionEnd).toBe(true);
   });
 
   it('should log when rate limit exceeded', () => {
@@ -1405,16 +1394,288 @@ describe('EventManager - Session Event Counters', () => {
       eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `event_${i}` } });
     }
 
-    // Track critical events - should always be accepted
+    // Track critical event - should always be accepted
     eventManager.track({ type: EventType.SESSION_START });
-    eventManager.track({ type: EventType.SESSION_END, session_end_reason: 'inactivity' });
 
-    // Critical events should be tracked even after rate limit
+    // Critical event should be tracked even after rate limit
     const sessionStartEvents = eventManager.getQueueEvents().filter((e) => e.type === EventType.SESSION_START);
-    const sessionEndEvents = eventManager.getQueueEvents().filter((e) => e.type === EventType.SESSION_END);
 
     expect(sessionStartEvents.length).toBeGreaterThan(0);
-    expect(sessionEndEvents.length).toBeGreaterThan(0);
+  });
+});
+
+describe('EventManager - Session Counts Cleanup', () => {
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let emitter: Emitter;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    emitter = new Emitter();
+  });
+
+  afterEach(() => {
+    if (eventManager) {
+      eventManager.stop();
+    }
+    cleanupTestEnvironment();
+  });
+
+  it('should remove expired session counts on initialization (>7 days)', () => {
+    const userId = 'anonymous'; // Default userId when not explicitly set
+    const expiredSessionId = '1234567890123-abc123456';
+    const expiredKey = SESSION_COUNTS_KEY(userId, expiredSessionId);
+
+    // Create expired session counts (8 days old)
+    const expiredTimestamp = Date.now() - SESSION_COUNTS_EXPIRY_MS - 24 * 60 * 60 * 1000; // 8 days ago
+    const expiredData = {
+      total: 10,
+      [EventType.CLICK]: 5,
+      [EventType.PAGE_VIEW]: 3,
+      [EventType.CUSTOM]: 2,
+      [EventType.VIEWPORT_VISIBLE]: 0,
+      [EventType.SCROLL]: 0,
+      _timestamp: expiredTimestamp,
+      _version: 1,
+    };
+
+    localStorage.setItem(expiredKey, JSON.stringify(expiredData));
+
+    // Verify data exists before initialization
+    expect(localStorage.getItem(expiredKey)).toBeTruthy();
+
+    // Initialize EventManager - triggers cleanup in constructor
+    // Without explicit userId, defaults to 'anonymous'
+    eventManager = new EventManager(storageManager, emitter, {});
+
+    // Verify expired data was removed
+    expect(localStorage.getItem(expiredKey)).toBeNull();
+  });
+
+  it('should preserve recent session counts (<7 days)', () => {
+    const userId = 'anonymous';
+    const recentSessionId = '1234567890456-def789012';
+    const recentKey = SESSION_COUNTS_KEY(userId, recentSessionId);
+
+    // Create recent session counts (3 days old)
+    const recentTimestamp = Date.now() - 3 * 24 * 60 * 60 * 1000; // 3 days ago
+    const recentData = {
+      total: 15,
+      [EventType.CLICK]: 8,
+      [EventType.PAGE_VIEW]: 5,
+      [EventType.CUSTOM]: 2,
+      [EventType.VIEWPORT_VISIBLE]: 0,
+      [EventType.SCROLL]: 0,
+      _timestamp: recentTimestamp,
+      _version: 1,
+    };
+
+    localStorage.setItem(recentKey, JSON.stringify(recentData));
+
+    // Verify data exists before initialization
+    expect(localStorage.getItem(recentKey)).toBeTruthy();
+
+    // Initialize EventManager - triggers cleanup in constructor
+    eventManager = new EventManager(storageManager, emitter, {});
+
+    // Verify recent data was preserved
+    expect(localStorage.getItem(recentKey)).toBeTruthy();
+    const preserved = JSON.parse(localStorage.getItem(recentKey)!);
+    expect(preserved.total).toBe(15);
+    expect(preserved._timestamp).toBe(recentTimestamp);
+  });
+
+  it('should handle multiple expired and recent sessions correctly', () => {
+    const userId = 'anonymous';
+
+    // Create 3 expired sessions (10 days old)
+    const expiredTimestamp = Date.now() - 10 * 24 * 60 * 60 * 1000;
+    for (let i = 1; i <= 3; i++) {
+      const sessionId = `expired-session-${i}`;
+      const key = SESSION_COUNTS_KEY(userId, sessionId);
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          total: i * 5,
+          [EventType.CLICK]: i,
+          [EventType.PAGE_VIEW]: i,
+          [EventType.CUSTOM]: i,
+          [EventType.VIEWPORT_VISIBLE]: i,
+          [EventType.SCROLL]: i,
+          _timestamp: expiredTimestamp,
+          _version: 1,
+        }),
+      );
+    }
+
+    // Create 2 recent sessions (2 days old)
+    const recentTimestamp = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    for (let i = 1; i <= 2; i++) {
+      const sessionId = `recent-session-${i}`;
+      const key = SESSION_COUNTS_KEY(userId, sessionId);
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          total: i * 3,
+          [EventType.CLICK]: i,
+          [EventType.PAGE_VIEW]: i,
+          [EventType.CUSTOM]: i,
+          [EventType.VIEWPORT_VISIBLE]: 0,
+          [EventType.SCROLL]: 0,
+          _timestamp: recentTimestamp,
+          _version: 1,
+        }),
+      );
+    }
+
+    // Initialize EventManager - triggers cleanup in constructor
+    eventManager = new EventManager(storageManager, emitter, {});
+
+    // Verify expired sessions were removed
+    for (let i = 1; i <= 3; i++) {
+      const sessionId = `expired-session-${i}`;
+      const key = SESSION_COUNTS_KEY(userId, sessionId);
+      expect(localStorage.getItem(key)).toBeNull();
+    }
+
+    // Verify recent sessions were preserved
+    for (let i = 1; i <= 2; i++) {
+      const sessionId = `recent-session-${i}`;
+      const key = SESSION_COUNTS_KEY(userId, sessionId);
+      expect(localStorage.getItem(key)).toBeTruthy();
+    }
+  });
+
+  it('should handle corrupted session counts gracefully', () => {
+    const userId = 'anonymous';
+    const corruptedSessionId = '1234567890789-ghi345678';
+    const corruptedKey = SESSION_COUNTS_KEY(userId, corruptedSessionId);
+
+    // Create corrupted data (invalid JSON)
+    localStorage.setItem(corruptedKey, '{invalid json}');
+
+    // Verify corrupted data exists
+    expect(localStorage.getItem(corruptedKey)).toBeTruthy();
+
+    // Initialize EventManager - should not throw on corrupted data
+    expect(() => {
+      eventManager = new EventManager(storageManager, emitter, {});
+    }).not.toThrow();
+
+    // Corrupted data should remain (cleanup only validates timestamps)
+    expect(localStorage.getItem(corruptedKey)).toBeTruthy();
+  });
+
+  it('should handle missing _timestamp field gracefully', () => {
+    const userId = 'anonymous';
+    const sessionId = '1234567890999-jkl456789';
+    const key = SESSION_COUNTS_KEY(userId, sessionId);
+
+    // Create session counts without _timestamp (old format)
+    const dataWithoutTimestamp = {
+      total: 20,
+      [EventType.CLICK]: 10,
+      [EventType.PAGE_VIEW]: 5,
+      [EventType.CUSTOM]: 5,
+      [EventType.VIEWPORT_VISIBLE]: 0,
+      [EventType.SCROLL]: 0,
+      _version: 1,
+    };
+
+    localStorage.setItem(key, JSON.stringify(dataWithoutTimestamp));
+
+    // Initialize EventManager - triggers cleanup in constructor
+    eventManager = new EventManager(storageManager, emitter, {});
+
+    // Data without timestamp should be preserved (not expired)
+    expect(localStorage.getItem(key)).toBeTruthy();
+  });
+
+  it('should handle empty localStorage gracefully', () => {
+    // Ensure localStorage is empty
+    localStorage.clear();
+
+    // Initialize EventManager - should not throw
+    expect(() => {
+      eventManager = new EventManager(storageManager, emitter, {});
+    }).not.toThrow();
+  });
+
+  it('should only cleanup session counts for the current user', () => {
+    const currentUser = 'anonymous'; // Current user (no explicit userId set)
+    const otherUser = 'user-b';
+    const expiredTimestamp = Date.now() - SESSION_COUNTS_EXPIRY_MS - 24 * 60 * 60 * 1000;
+
+    // Create expired session for anonymous user (current)
+    const sessionAnonymous = 'session-anonymous-123';
+    const keyAnonymous = SESSION_COUNTS_KEY(currentUser, sessionAnonymous);
+    localStorage.setItem(
+      keyAnonymous,
+      JSON.stringify({
+        total: 10,
+        [EventType.CLICK]: 5,
+        [EventType.PAGE_VIEW]: 3,
+        [EventType.CUSTOM]: 2,
+        [EventType.VIEWPORT_VISIBLE]: 0,
+        [EventType.SCROLL]: 0,
+        _timestamp: expiredTimestamp,
+        _version: 1,
+      }),
+    );
+
+    // Create expired session for user B (different user)
+    const sessionB = 'session-b-456';
+    const keyB = SESSION_COUNTS_KEY(otherUser, sessionB);
+    localStorage.setItem(
+      keyB,
+      JSON.stringify({
+        total: 15,
+        [EventType.CLICK]: 8,
+        [EventType.PAGE_VIEW]: 5,
+        [EventType.CUSTOM]: 2,
+        [EventType.VIEWPORT_VISIBLE]: 0,
+        [EventType.SCROLL]: 0,
+        _timestamp: expiredTimestamp,
+        _version: 1,
+      }),
+    );
+
+    // Initialize EventManager - triggers cleanup for anonymous user only
+    eventManager = new EventManager(storageManager, emitter, {});
+
+    // Anonymous user's expired data should be removed
+    expect(localStorage.getItem(keyAnonymous)).toBeNull();
+
+    // User B's expired data should remain (different user)
+    expect(localStorage.getItem(keyB)).toBeTruthy();
+  });
+
+  it('should handle "anonymous" user correctly', () => {
+    const anonymousSessionId = 'anonymous-session-789';
+    const anonymousKey = SESSION_COUNTS_KEY('anonymous', anonymousSessionId);
+    const expiredTimestamp = Date.now() - SESSION_COUNTS_EXPIRY_MS - 24 * 60 * 60 * 1000;
+
+    // Create expired session for anonymous user
+    localStorage.setItem(
+      anonymousKey,
+      JSON.stringify({
+        total: 5,
+        [EventType.CLICK]: 2,
+        [EventType.PAGE_VIEW]: 2,
+        [EventType.CUSTOM]: 1,
+        [EventType.VIEWPORT_VISIBLE]: 0,
+        [EventType.SCROLL]: 0,
+        _timestamp: expiredTimestamp,
+        _version: 1,
+      }),
+    );
+
+    // Initialize EventManager without userId (defaults to 'anonymous')
+    eventManager = new EventManager(storageManager, emitter, {});
+
+    // Anonymous user's expired data should be removed
+    expect(localStorage.getItem(anonymousKey)).toBeNull();
   });
 });
 

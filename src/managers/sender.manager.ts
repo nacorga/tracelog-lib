@@ -11,7 +11,7 @@ import {
   LIB_VERSION,
 } from '../constants';
 import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
-import { log, transformEvents, transformBatch, generateEventId } from '../utils';
+import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
@@ -86,6 +86,7 @@ export class SenderManager extends StateManager {
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
   private lastMetadataTimestamp = 0;
+  private readonly pendingControllers = new Set<AbortController>();
 
   /**
    * Creates a SenderManager instance.
@@ -123,6 +124,26 @@ export class SenderManager extends StateManager {
    */
   public getIntegrationId(): 'saas' | 'custom' | undefined {
     return this.integrationId;
+  }
+
+  /**
+   * Aborts all pending HTTP requests.
+   *
+   * **Purpose**: Prevents fetch() + sendBeacon() duplication when user closes tab during pending request.
+   *
+   * **Use Case**: Called before endSession('page_unload') in pageHideHandler to cancel pending
+   * async requests before sending final SESSION_END via sendBeacon().
+   *
+   * **Behavior**:
+   * - Aborts all pending AbortControllers
+   * - Clears the pending controllers set
+   * - Safe to call multiple times (idempotent)
+   */
+  public abortPendingRequests(): void {
+    this.pendingControllers.forEach((controller) => {
+      controller.abort();
+    });
+    this.pendingControllers.clear();
   }
 
   private getQueueStorageKey(): string {
@@ -630,6 +651,8 @@ export class SenderManager extends StateManager {
    */
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
+    this.pendingControllers.add(controller);
+
     const timeoutId = setTimeout(() => {
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
@@ -663,6 +686,7 @@ export class SenderManager extends StateManager {
       return response;
     } finally {
       clearTimeout(timeoutId);
+      this.pendingControllers.delete(controller);
     }
   }
 
@@ -773,17 +797,11 @@ export class SenderManager extends StateManager {
     }
     this.lastMetadataTimestamp = timestamp;
 
-    // Generate idempotency token for this batch (persists across retries)
-    // Uses same robust ID generation as events (timestamp + sequence + crypto random)
-    // Format: {timestamp}-{sequence}-{random6hex}
-    const idempotencyToken = generateEventId();
-
     const enrichedBody = {
       ...body,
       _metadata: {
         referer: typeof window !== 'undefined' ? window.location.href : undefined,
         timestamp,
-        idempotency_token: idempotencyToken,
         client_version: LIB_VERSION,
       },
     };

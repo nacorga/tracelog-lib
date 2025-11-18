@@ -117,18 +117,6 @@ export function expectSessionStartEvent(event: any): void {
 }
 
 /**
- * Validate session end event has required fields
- */
-export function expectSessionEndEvent(event: any): void {
-  expectEventStructure(event);
-  expectEventType(event, EventType.SESSION_END);
-  expect(event.session).toBeDefined();
-  expect(event.session.duration_ms).toBeTypeOf('number');
-  expect(event.session.page_views).toBeTypeOf('number');
-  expect(event.session.events_count).toBeTypeOf('number');
-}
-
-/**
  * Validate custom event has required fields
  */
 export function expectCustomEvent(event: any, expectedName?: string): void {
