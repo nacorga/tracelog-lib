@@ -57,7 +57,7 @@ Core business logic components that handle analytics data processing, state mana
   - NOT set by SessionManager's BroadcastChannel message handler (secondary tabs don't track SESSION_START)
 
 **Application Lifecycle Integration**:
-- **App.destroy() Flow**: When `App.destroy()` is called, handlers are stopped first (including `SessionHandler.stopTracking()`), which triggers `SessionManager.endSession()` that tracks SESSION_END and calls `flushImmediatelySync()`. EventManager.stop() is called AFTER handlers are stopped, so there's no redundant flush call - the queue is already processed by the time `stop()` runs.
+- **App.destroy() Flow**: When `App.destroy()` is called, handlers are stopped first (including `SessionHandler.stopTracking()`), which cleans up SessionManager resources. EventManager.stop() is called AFTER handlers are stopped. In v2.0.0+, no events are emitted during cleanup.
 
 **Transformer Support**:
 - **`beforeSend` Hook**: Applied conditionally in `buildEventPayload()` based on integration mode
@@ -145,42 +145,35 @@ Core business logic components that handle analytics data processing, state mana
 
 **Purpose**: Manages user session lifecycle across browser tabs with cross-tab synchronization and session recovery capabilities.
 
-**Core Functionality**:
-- **Session Lifecycle**: Creates, tracks, and terminates user sessions based on configurable timeouts
-- **Cross-Tab Sync**: Uses BroadcastChannel API to maintain consistent session state across tabs with message validation
-- **Session Recovery**: Automatically recovers existing sessions from localStorage on page refresh (no duplicate SESSION_START events)
+**Core Functionality** (v2.0.0+):
+- **Session Lifecycle**: Creates and tracks user sessions based on configurable timeouts
+- **Cross-Tab Sync**: Uses BroadcastChannel API to maintain consistent session state across tabs with explicit action validation
+- **Session Recovery**: Automatically recovers existing sessions from localStorage on page refresh (validates session ID format)
 - **Activity Tracking**: Monitors user engagement (click, keydown, scroll) to extend session duration
-- **Event Integration**: Tracks SESSION_START and SESSION_END events via EventManager with synchronous flush on session end
+- **Event Integration**: Tracks SESSION_START events only via EventManager (SESSION_END removed in v2.0.0)
 
 **Key Features**:
 - Configurable session timeouts (default: 15 minutes, range: 30s - 24 hours)
-- BroadcastChannel-based cross-tab communication with project-scoped namespacing and 5-second message freshness validation
+- BroadcastChannel-based cross-tab communication with project-scoped namespacing, 5-second message freshness validation, and explicit `action` type validation
 - **BroadcastChannel initialization timing**: ALWAYS initialized BEFORE SESSION_START tracking to ensure cross-tab sync is ready when events are emitted
-- Automatic session recovery from localStorage with conditional persistence (preserved on page_unload, cleared on inactivity/manual_stop)
+- Automatic session recovery from localStorage with session ID format validation (`/^\d{13}-[a-z0-9]{9}$/`)
 - Page visibility change handling (pauses timeout when hidden, resumes when visible)
 - Graceful cleanup and resource management with passive event listeners for optimal performance
 - Unique session ID generation: `{timestamp}-{9-char-base36}` format (e.g., `1728488234567-kx9f2m1bq`)
-- Synchronous event flush on session end with automatic localStorage persistence fallback for recovery
-- **Dual endSession() protection**: Two guard flags prevent duplicate SESSION_END events:
-  - `isEnding`: Prevents concurrent calls (e.g., timeout + pagehide firing simultaneously)
-  - `hasEndedSession`: Prevents multiple SESSION_END per session lifecycle
-- Five session end reasons: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
-- **Smart page unload detection**: Uses `pagehide` event with `event.persisted` check to only fire SESSION_END when the page is permanently unloaded (`persisted=false`), not when entering BFCache (`persisted=true`)
+- **Session START always emitted**: Every new app instance emits SESSION_START, even if recovering a session ID (prevents anomalous durations)
 - Graceful BroadcastChannel fallback (sessions work without cross-tab sync if API unavailable)
 - **Project-scoped session storage**: Session data stored with key `tlog:session:{projectId}` to prevent cross-project conflicts
 - **Error rollback**: On initialization error in `startTracking()`, all setup is rolled back (cleanup listeners, timers, state) and error re-thrown to caller
 
-**Critical Implementation Details**:
+**Critical Implementation Details** (v2.0.0+):
 - **Initialization Order**: `initCrossTabSync()` MUST be called before `eventManager.track(SESSION_START)` to prevent message loss during session initialization
 - **Cross-Tab Message Handling**: Secondary tabs receiving session broadcasts do NOT set `hasStartSession` flag - this flag is managed exclusively by EventManager when SESSION_START event is tracked
-- **Dual Guard System**:
-  - `isEnding`: Short-lived flag prevents concurrent execution (reset in finally block)
-  - `hasEndedSession`: Session-scoped flag prevents multiple SESSION_END per session (reset on new session start)
-- **Guard Reset Timing**: `isEnding` reset in finally block ensures immediate cleanup, while `hasEndedSession` persists until `startTracking()` creates new session
-- **pagehide vs beforeunload**: Uses `pagehide` event instead of `beforeunload` because:
-  - `beforeunload` fires on EVERY navigation (including back/forward with BFCache), causing false SESSION_END events
-  - `pagehide` allows checking `event.persisted` to distinguish between permanent unload and BFCache entry
-  - This prevents SESSION_END when user navigates back/forward using browser history (preserving user session)
+- **hasStartSession Flag**: Consolidated reset in EventManager.stop() only (single source of truth, prevents inconsistencies)
+- **BroadcastChannel Validation**: Messages require explicit `action === 'session_start'` check (prevents malformed messages)
+- **Session ID Format Validation**: Recovered IDs validated via regex, corrupted IDs cleared and regenerated
+- **Queue Sorting**: SESSION_START events always sorted first in batch payloads (guarantees order)
+- **No Session End Events**: pagehide event handler removed due to 43% failure rate (browser crashes, force quit, mobile background)
+- **Server-Side Inference**: Session end time inferred from last event timestamp (100% reliability vs 43% with pagehide)
 
 ## StateManager
 

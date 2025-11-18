@@ -18,13 +18,25 @@ import {
   FINGERPRINT_CLEANUP_MULTIPLIER,
   MAX_FINGERPRINTS_HARD_LIMIT,
 } from '../constants/config.constants';
-import { SESSION_COUNTS_KEY } from '../constants/storage.constants';
+import { SESSION_COUNTS_KEY, SESSION_COUNTS_EXPIRY_MS, STORAGE_BASE_KEY } from '../constants/storage.constants';
 import { EventsQueue, EmitterEvent, EventData, EventType, Mode, TransformerMap, SessionEventCounts } from '../types';
 import { getUTMParameters, log, Emitter, generateEventId, transformEvent, transformBatch } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { TimeManager } from './time.manager';
+
+/**
+ * Extended session counts structure with metadata for expiry tracking.
+ *
+ * Adds timestamp and version fields to SessionEventCounts for cleanup management.
+ */
+interface StoredSessionCounts extends SessionEventCounts {
+  /** Timestamp when counts were last saved (for 7-day expiry) */
+  _timestamp: number;
+  /** Schema version for future migrations */
+  _version: number;
+}
 
 /**
  * Core component responsible for event tracking, queue management, deduplication,
@@ -149,6 +161,30 @@ export class EventManager extends StateManager {
     this.saveSessionCountsDebounced = this.debounce((sessionId: string) => {
       this.saveSessionCounts(sessionId);
     }, 500);
+
+    // Cleanup expired session counts on init (7-day TTL)
+    this.cleanupExpiredSessionCounts();
+  }
+
+  /**
+   * Aborts all pending HTTP requests across all SenderManager instances.
+   *
+   * **Purpose**: Prevents fetch() + sendBeacon() duplication when user closes tab during pending request.
+   *
+   * **Use Case**: Prevents race condition where fetch() completes after sendBeacon() fires on page unload.
+   *
+   * **Behavior**:
+   * - Calls `abortPendingRequests()` on all SenderManager instances (SaaS + Custom)
+   * - Safe to call when no requests are pending (no-op)
+   * - Safe to call multiple times (idempotent)
+   *
+   * **Note**: In v2.0.0+, no longer called by SessionManager (pagehide handler removed).
+   * Method retained for compatibility and potential future use cases.
+   */
+  abortPendingRequests(): void {
+    this.dataSenders.forEach((sender) => {
+      sender.abortPendingRequests();
+    });
   }
 
   /**
@@ -265,7 +301,6 @@ export class EventManager extends StateManager {
     custom_event,
     web_vitals,
     error_data,
-    session_end_reason,
     viewport_data,
   }: Partial<EventData>): void {
     if (!type) {
@@ -292,7 +327,6 @@ export class EventManager extends StateManager {
         custom_event,
         web_vitals,
         error_data,
-        session_end_reason,
         viewport_data,
       });
 
@@ -306,7 +340,13 @@ export class EventManager extends StateManager {
       this.sessionEventCounts = this.loadSessionCounts(currentSessionId);
     }
 
-    const isCriticalEvent = type === EventType.SESSION_START || type === EventType.SESSION_END;
+    const isCriticalEvent = type === EventType.SESSION_START;
+
+    if (isCriticalEvent) {
+      log('debug', 'Processing SESSION_START event', {
+        data: { sessionId: currentSessionId },
+      });
+    }
 
     if (!isCriticalEvent && !this.checkRateLimit()) {
       return;
@@ -365,7 +405,6 @@ export class EventManager extends StateManager {
       custom_event,
       web_vitals,
       error_data,
-      session_end_reason,
       viewport_data,
     });
 
@@ -854,7 +893,13 @@ export class EventManager extends StateManager {
     const events = order
       .map((signature) => eventMap.get(signature))
       .filter((event): event is EventData => Boolean(event))
-      .sort((a, b) => a.timestamp - b.timestamp);
+      .sort((a, b) => {
+        // SESSION_START always goes first
+        if (a.type === EventType.SESSION_START && b.type !== EventType.SESSION_START) return -1;
+        if (b.type === EventType.SESSION_START && a.type !== EventType.SESSION_START) return 1;
+        // Otherwise sort by timestamp
+        return a.timestamp - b.timestamp;
+      });
 
     let queue: EventsQueue = {
       user_id: this.get('userId'),
@@ -908,7 +953,6 @@ export class EventManager extends StateManager {
       ...(data.custom_event && { custom_event: data.custom_event }),
       ...(data.web_vitals && { web_vitals: data.web_vitals }),
       ...(data.error_data && { error_data: data.error_data }),
-      ...(data.session_end_reason && { session_end_reason: data.session_end_reason }),
       ...(data.viewport_data && { viewport_data: data.viewport_data }),
       ...(isSessionStart && getUTMParameters() && { utm: getUTMParameters() }),
     };
@@ -1021,9 +1065,7 @@ export class EventManager extends StateManager {
     this.eventsQueue.push(event);
 
     if (this.eventsQueue.length > MAX_EVENTS_QUEUE_LENGTH) {
-      const nonCriticalIndex = this.eventsQueue.findIndex(
-        (e) => e.type !== EventType.SESSION_START && e.type !== EventType.SESSION_END,
-      );
+      const nonCriticalIndex = this.eventsQueue.findIndex((e) => e.type !== EventType.SESSION_START);
 
       const removedEvent =
         nonCriticalIndex >= 0 ? this.eventsQueue.splice(nonCriticalIndex, 1)[0] : this.eventsQueue.shift();
@@ -1033,7 +1075,7 @@ export class EventManager extends StateManager {
           maxLength: MAX_EVENTS_QUEUE_LENGTH,
           currentLength: this.eventsQueue.length,
           removedEventType: removedEvent?.type,
-          wasCritical: removedEvent?.type === EventType.SESSION_START || removedEvent?.type === EventType.SESSION_END,
+          wasCritical: removedEvent?.type === EventType.SESSION_START,
         },
       });
     }
@@ -1225,7 +1267,16 @@ export class EventManager extends StateManager {
         return this.getInitialCounts();
       }
 
-      const parsed = JSON.parse(stored);
+      const parsed = JSON.parse(stored) as Partial<StoredSessionCounts>;
+
+      // Check for expiry (7 days)
+      if (parsed._timestamp && Date.now() - parsed._timestamp > SESSION_COUNTS_EXPIRY_MS) {
+        log('debug', 'Session counts expired, clearing', {
+          data: { sessionId, age: Date.now() - parsed._timestamp },
+        });
+        localStorage.removeItem(storageKey);
+        return this.getInitialCounts();
+      }
 
       // Robust validation: check all required fields (not just 'total')
       // Prevents partial/corrupted data from causing runtime errors
@@ -1237,12 +1288,21 @@ export class EventManager extends StateManager {
         typeof parsed[EventType.VIEWPORT_VISIBLE] === 'number' &&
         typeof parsed[EventType.SCROLL] === 'number'
       ) {
-        return parsed as SessionEventCounts;
+        // Return only the SessionEventCounts fields (exclude _timestamp, _version)
+        return {
+          total: parsed.total,
+          [EventType.CLICK]: parsed[EventType.CLICK],
+          [EventType.PAGE_VIEW]: parsed[EventType.PAGE_VIEW],
+          [EventType.CUSTOM]: parsed[EventType.CUSTOM],
+          [EventType.VIEWPORT_VISIBLE]: parsed[EventType.VIEWPORT_VISIBLE],
+          [EventType.SCROLL]: parsed[EventType.SCROLL],
+        };
       }
 
       log('warn', 'Invalid session counts structure in localStorage, resetting', {
         data: { sessionId, parsed },
       });
+      localStorage.removeItem(storageKey);
 
       return this.getInitialCounts();
     } catch (error) {
@@ -1252,6 +1312,71 @@ export class EventManager extends StateManager {
       });
 
       return this.getInitialCounts();
+    }
+  }
+
+  /**
+   * Cleans up expired session counts from localStorage.
+   *
+   * **Purpose**: Prevents localStorage pollution from abandoned sessions by removing
+   * counts older than 7 days.
+   *
+   * **Behavior**:
+   * - Iterates all localStorage keys matching the session counts prefix pattern
+   * - Parses each entry and checks `_timestamp` field
+   * - Removes entries where age exceeds SESSION_COUNTS_EXPIRY_MS (7 days)
+   * - Silently ignores parse errors (corrupted entries cleaned on next load)
+   *
+   * **When Called**: Automatically on EventManager constructor initialization
+   *
+   * **Performance**: Fast O(n) scan where n = localStorage keys (typically <100)
+   *
+   * @internal
+   */
+  private cleanupExpiredSessionCounts(): void {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
+
+    const userId = this.get('userId') || 'anonymous';
+    const prefix = `${STORAGE_BASE_KEY}:${userId}:session_counts:`;
+
+    try {
+      // Collect keys to remove (can't modify during iteration)
+      const keysToRemove: string[] = [];
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+
+        if (key?.startsWith(prefix)) {
+          try {
+            const stored = localStorage.getItem(key);
+
+            if (stored) {
+              const parsed = JSON.parse(stored) as Partial<StoredSessionCounts>;
+
+              // Check expiry
+              if (parsed._timestamp && Date.now() - parsed._timestamp > SESSION_COUNTS_EXPIRY_MS) {
+                keysToRemove.push(key);
+              }
+            }
+          } catch {
+            // Ignore parse errors, will be cleaned on next load
+          }
+        }
+      }
+
+      // Remove expired entries
+      keysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+        log('debug', 'Cleaned up expired session counts', { data: { key } });
+      });
+
+      if (keysToRemove.length > 0) {
+        log('info', `Cleaned up ${keysToRemove.length} expired session counts entries`);
+      }
+    } catch (error) {
+      log('warn', 'Failed to cleanup expired session counts', { error });
     }
   }
 
@@ -1274,9 +1399,10 @@ export class EventManager extends StateManager {
    * **Performance**: Debouncing reduces localStorage writes from ~1000 per session
    * to ~20-30 (96-97% reduction) while maintaining data integrity.
    *
-   * **Cleanup**: Counts are automatically deleted when the session ends via
-   * SessionManager.cleanupSessionCounts(). This prevents localStorage pollution
-   * and maintains a clean storage footprint (~100 bytes per active session only).
+   * **Cleanup**: Counts persist across page reloads for rate limiting enforcement.
+   * Automatic cleanup on page reload removes expired counts (older than 7 days).
+   * Note: SESSION_COUNTS_KEY entries are intentionally persistent to maintain
+   * rate limits across sessions (~100 bytes per session).
    *
    * @param sessionId - Current session identifier
    *
@@ -1287,7 +1413,13 @@ export class EventManager extends StateManager {
     const storageKey = SESSION_COUNTS_KEY(userId, sessionId);
 
     try {
-      localStorage.setItem(storageKey, JSON.stringify(this.sessionEventCounts));
+      const dataToStore: StoredSessionCounts = {
+        ...this.sessionEventCounts,
+        _timestamp: Date.now(),
+        _version: 1,
+      };
+
+      localStorage.setItem(storageKey, JSON.stringify(dataToStore));
     } catch (error) {
       log('warn', 'Failed to persist session counts to localStorage', {
         error,

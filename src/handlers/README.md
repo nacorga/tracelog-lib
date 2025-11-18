@@ -746,20 +746,19 @@ try {
 }
 ```
 
-**Cleanup Behavior**:
+**Cleanup Behavior** (v2.0.0+):
 ```javascript
-// stopTracking(): Complete session cleanup
-// - Calls SessionManager.stopTracking() (ends session, sends SESSION_END event)
-// - Calls SessionManager.destroy() (removes listeners, cleans state)
+// stopTracking(): Complete session cleanup (no events emitted)
+// - Calls SessionManager.stopTracking() (cleans up listeners and timers)
+// - Calls SessionManager.destroy() (final cleanup)
 // - Sets sessionManager to null
 handler.stopTracking();
 
-// destroy(): Handler cleanup without session end
+// destroy(): Same as stopTracking() in v2.0.0+
 // - Checks destroyed flag (early return if true)
-// - Calls SessionManager.destroy() only (no stopTracking)
+// - Calls SessionManager.destroy() (removes listeners, cleans state)
 // - Sets sessionManager to null
 // - Sets destroyed flag to true
-// - Updates hasStartSession global state to false
 handler.destroy();
 
 // Private: cleanupSessionManager()
@@ -768,7 +767,7 @@ handler.destroy();
 // - Safe null checks before operations
 ```
 
-**Key Difference**: `stopTracking()` ends the session gracefully (with SESSION_END event), while `destroy()` forcefully cleans up resources without sending events.
+**Note**: In v2.0.0+, both `stopTracking()` and `destroy()` perform the same cleanup without emitting events. SESSION_END events are no longer emitted due to unreliable browser pagehide behavior (43% failure rate).
 
 **Integration Notes**:
 - Used by main App class for session management

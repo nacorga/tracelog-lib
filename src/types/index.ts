@@ -8,7 +8,6 @@ export * from './log.types';
 export * from './mode.types';
 export * from './queue.types';
 export * from './scroll.types';
-export * from './session.types';
 export * from './state.types';
 export * from './test-bridge.types';
 export * from './transformer.types';

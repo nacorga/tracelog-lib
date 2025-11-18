@@ -1,6 +1,5 @@
-import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY, SESSION_COUNTS_KEY } from '../constants';
+import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
 import { EventType } from '../types';
-import { SessionEndReason } from '../types/session.types';
 import { log } from '../utils';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -11,34 +10,35 @@ interface StoredSessionData {
   lastActivity: number;
 }
 
+// Session ID validation pattern: {timestamp}-{9-char-base36}
+const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
+
 /**
  * Manages user sessions with cross-tab synchronization, inactivity detection,
  * and automatic lifecycle tracking.
  *
- * **Purpose**: Creates and manages user sessions, tracking session boundaries
- * (start/end) with automatic persistence, recovery, and multi-tab synchronization.
+ * **Purpose**: Creates and manages user sessions, tracking session start
+ * with automatic persistence, recovery, and multi-tab synchronization.
+ * Does not track session end events (removed in v2.0.0).
  *
  * **Core Functionality**:
  * - **Session Generation**: Creates unique session IDs (`{timestamp}-{9-char-base36}`)
  * - **Activity Tracking**: Monitors user interactions to extend session timeout
  * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
  * - **Persistence**: Stores session data in localStorage for recovery
- * - **Inactivity Detection**: Automatic session end after timeout (default 15 minutes)
- * - **Page Unload Handling**: Session end when page is permanently unloaded (pagehide with persisted=false), not when entering BFCache
- * - **Lifecycle Events**: Emits SESSION_START and SESSION_END events
+ * - **Inactivity Detection**: Automatic timeout after inactivity (default 15 minutes)
+ * - **Lifecycle Events**: Emits SESSION_START event only (SESSION_END removed in v1.0.0)
  *
  * **Key Features**:
  * - **Session ID Format**: `{timestamp}-{9-char-base36}` (e.g., `1704896400000-a3b4c5d6e`)
  * - **Default Timeout**: 15 minutes (900,000 ms), configurable via `sessionTimeout`
  * - **Cross-Tab Sharing**: Primary tab creates session, shares via BroadcastChannel
  * - **Secondary Tab Behavior**: Receives session from primary tab, no SESSION_START event
- * - **Session End Reasons**: `inactivity`, `page_unload`, `manual_stop`, `orphaned_cleanup`, `tab_closed`
- * - **Dual Guards**: `isEnding` (prevents concurrent calls) + `hasEndedSession` (prevents multiple SESSION_END per session)
- * - **pagehide Event**: Only fires SESSION_END if `event.persisted === false` (page permanently unloaded, not cached in BFCache)
+ * - **No Session End Events**: Library only tracks SESSION_START (v2.0.0+)
  *
  * **BroadcastChannel Integration**:
  * - **Initialized BEFORE SESSION_START**: Prevents race condition with secondary tabs
- * - **Messages**: `session_start` (share session), `session_end` (notify termination)
+ * - **Messages**: `session_start` (share session)
  * - **Fallback**: Logs warning if BroadcastChannel not supported (no cross-tab sync)
  *
  * **Activity Detection**:
@@ -66,10 +66,10 @@ interface StoredSessionData {
  * // User activity extends session
  * // (automatic via activity listeners)
  *
- * // Manual session end
+ * // Stop tracking (cleanup only)
  * sessionManager.stopTracking();
- * // → Emits SESSION_END event (reason: 'manual_stop')
  * // → Cleans up listeners and timers
+ * // → No SESSION_END event emitted
  * ```
  */
 export class SessionManager extends StateManager {
@@ -79,18 +79,15 @@ export class SessionManager extends StateManager {
 
   private activityHandler: (() => void) | null = null;
   private visibilityChangeHandler: (() => void) | null = null;
-  private pageHideHandler: ((event: PageTransitionEvent) => void) | null = null;
   private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private isTracking = false;
-  private isEnding = false;
-  private hasEndedSession = false;
 
   /**
    * Creates a SessionManager instance.
    *
    * @param storageManager - Storage manager for session persistence
-   * @param eventManager - Event manager for SESSION_START/SESSION_END events
+   * @param eventManager - Event manager for SESSION_START events
    * @param projectId - Project identifier for namespacing session storage
    */
   constructor(storageManager: StorageManager, eventManager: EventManager, projectId: string) {
@@ -121,7 +118,7 @@ export class SessionManager extends StateManager {
         return;
       }
 
-      if (sessionId && typeof timestamp === 'number' && timestamp > Date.now() - 5000) {
+      if (action === 'session_start' && sessionId && typeof timestamp === 'number' && timestamp > Date.now() - 5000) {
         this.set('sessionId', sessionId);
         this.persistSession(sessionId, timestamp);
         if (this.isTracking) {
@@ -142,26 +139,6 @@ export class SessionManager extends StateManager {
     }
   }
 
-  private broadcastSessionEnd(sessionId: string | null, reason: SessionEndReason): void {
-    if (!sessionId) {
-      return;
-    }
-
-    if (this.broadcastChannel && typeof this.broadcastChannel.postMessage === 'function') {
-      try {
-        this.broadcastChannel.postMessage({
-          action: 'session_end',
-          projectId: this.getProjectId(),
-          sessionId,
-          reason,
-          timestamp: Date.now(),
-        });
-      } catch (error) {
-        log('warn', 'Failed to broadcast session end', { error, data: { sessionId, reason } });
-      }
-    }
-  }
-
   private cleanupCrossTabSync(): void {
     if (this.broadcastChannel) {
       if (typeof this.broadcastChannel.close === 'function') {
@@ -175,6 +152,15 @@ export class SessionManager extends StateManager {
     const storedSession = this.loadStoredSession();
 
     if (!storedSession) {
+      return null;
+    }
+
+    // Validate session ID format: {timestamp}-{9-char-base36}
+    if (!SESSION_ID_PATTERN.test(storedSession.id)) {
+      log('warn', 'Invalid session ID format recovered from storage, clearing', {
+        data: { sessionId: storedSession.id },
+      });
+      this.clearStoredSession();
       return null;
     }
 
@@ -293,15 +279,21 @@ export class SessionManager extends StateManager {
     const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
 
+    log('debug', 'Session tracking initialized', {
+      data: {
+        sessionId,
+        wasRecovered: !!recoveredSessionId,
+        willEmitSessionStart: true,
+      },
+    });
+
     // IMPORTANT: Always send SESSION_START on new app instance
     // Even if we recover a session ID, this is a NEW instance of the application
     // (page reload, new tab, browser restart, etc.)
     // This prevents anomalous session durations (e.g., 12+ days between START and END)
     // Recovered session ID is kept for analytics continuity, but START event marks new instance
-    const isRecovered = false; // Always false to force SESSION_START
 
     this.isTracking = true;
-    this.hasEndedSession = false;
 
     try {
       this.set('sessionId', sessionId);
@@ -310,18 +302,19 @@ export class SessionManager extends StateManager {
       this.shareSession(sessionId);
 
       // ALWAYS send SESSION_START on new app instance
-      if (!isRecovered) {
-        this.eventManager.track({
-          type: EventType.SESSION_START,
-        });
-      }
+      log('debug', 'Emitting SESSION_START event', {
+        data: { sessionId },
+      });
+
+      this.eventManager.track({
+        type: EventType.SESSION_START,
+      });
 
       this.setupSessionTimeout();
       this.setupActivityListeners();
       this.setupLifecycleListeners();
     } catch (error) {
       this.isTracking = false;
-      this.hasEndedSession = false;
       this.clearSessionTimeout();
       this.cleanupActivityListeners();
       this.cleanupLifecycleListeners();
@@ -342,7 +335,7 @@ export class SessionManager extends StateManager {
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
 
     this.sessionTimeoutId = setTimeout(() => {
-      this.endSession('inactivity');
+      this.resetSessionState();
     }, sessionTimeout);
   }
 
@@ -381,7 +374,7 @@ export class SessionManager extends StateManager {
   }
 
   private setupLifecycleListeners(): void {
-    if (this.visibilityChangeHandler || this.pageHideHandler) {
+    if (this.visibilityChangeHandler) {
       return;
     }
 
@@ -396,14 +389,7 @@ export class SessionManager extends StateManager {
       }
     };
 
-    this.pageHideHandler = (event: PageTransitionEvent): void => {
-      if (!event.persisted) {
-        this.endSession('page_unload');
-      }
-    };
-
     document.addEventListener('visibilitychange', this.visibilityChangeHandler);
-    window.addEventListener('pagehide', this.pageHideHandler);
   }
 
   private cleanupLifecycleListeners(): void {
@@ -411,175 +397,70 @@ export class SessionManager extends StateManager {
       document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
       this.visibilityChangeHandler = null;
     }
-
-    if (this.pageHideHandler) {
-      window.removeEventListener('pagehide', this.pageHideHandler);
-      this.pageHideHandler = null;
-    }
   }
 
-  private endSession(reason: SessionEndReason): void {
-    if (this.isEnding || this.hasEndedSession) {
-      return;
-    }
-
-    const sessionId = this.get('sessionId');
-
-    if (!sessionId) {
-      log('warn', 'endSession called without active session', { data: { reason } });
-      this.resetSessionState(reason);
-      return;
-    }
-
-    this.isEnding = true;
-    this.hasEndedSession = true;
-
-    try {
-      this.eventManager.track({
-        type: EventType.SESSION_END,
-        session_end_reason: reason,
-      });
-
-      const flushResult = this.eventManager.flushImmediatelySync();
-
-      if (!flushResult) {
-        log('warn', 'Sync flush failed during session end, events persisted for recovery', {
-          data: { reason, sessionId },
-        });
-      }
-
-      this.broadcastSessionEnd(sessionId, reason);
-      this.cleanupSessionCounts(sessionId); // Cleanup counts for ended session
-      this.resetSessionState(reason);
-    } finally {
-      this.isEnding = false;
-    }
-  }
-
-  /**
-   * Cleans up persisted session event counts from localStorage.
-   *
-   * **Purpose**: Removes session counts for the current session after it ends
-   * to prevent localStorage pollution over time.
-   *
-   * **Behavior**:
-   * - Removes counts for the provided session ID
-   * - Fails silently if localStorage unavailable or key doesn't exist
-   * - Called automatically from `endSession()` after SESSION_END event
-   *
-   * **Storage Key**: `tlog:{userId}:session_counts:{sessionId}`
-   *
-   * **Why Not More Aggressive Cleanup**:
-   * - Only cleans current session (not old sessions from previous days/weeks)
-   * - Browser localStorage quota management handles very old data (FIFO)
-   * - Keeps implementation simple and avoids complex timestamp-based cleanup
-   *
-   * **Future Enhancement**: Could scan and delete counts older than N days,
-   * but current approach is sufficient for most use cases (~100 bytes per session).
-   *
-   * @param sessionId - Session identifier to cleanup counts for
-   *
-   * @internal
-   */
-  private cleanupSessionCounts(sessionId: string): void {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-      return;
-    }
-
-    try {
-      const userId = this.get('userId');
-      if (!userId) {
-        log('debug', 'Cannot cleanup session counts without userId');
-        return;
-      }
-
-      const storageKey = SESSION_COUNTS_KEY(userId, sessionId);
-      localStorage.removeItem(storageKey);
-
-      log('debug', 'Session counts cleaned up', { data: { sessionId } });
-    } catch (error) {
-      log('warn', 'Failed to cleanup session counts', {
-        error,
-        data: { sessionId },
-      });
-    }
-  }
-
-  private resetSessionState(reason?: SessionEndReason): void {
+  private resetSessionState(): void {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
     this.cleanupLifecycleListeners();
     this.cleanupCrossTabSync();
-
-    if (reason !== 'page_unload') {
-      this.clearStoredSession();
-    }
+    this.clearStoredSession();
 
     this.set('sessionId', null);
-    this.set('hasStartSession', false);
     this.isTracking = false;
   }
 
   /**
-   * Stops session tracking and ends the current session.
+   * Stops session tracking and cleans up all resources.
    *
-   * **Purpose**: Manually ends the current session, tracking SESSION_END event
-   * and cleaning up all listeners and timers.
+   * **Purpose**: Manually stops the current session tracking and cleans up
+   * all listeners and timers. Does not emit SESSION_END event (removed in v2.0.0).
    *
    * **Flow**:
-   * 1. Calls `endSession('manual_stop')` internally
-   * 2. Tracks SESSION_END event (reason: 'manual_stop')
-   * 3. Broadcasts session_end via BroadcastChannel (notifies other tabs)
-   * 4. Clears inactivity timeout
-   * 5. Cleans up activity listeners
-   * 6. Cleans up lifecycle listeners
-   * 7. Cleans up BroadcastChannel
-   * 8. Clears session from localStorage
-   * 9. Resets `sessionId` and `hasStartSession` in global state
-   * 10. Sets `isTracking` to false
-   *
-   * **State Guard**:
-   * - `isEnding` flag prevents duplicate SESSION_END events
-   * - Try-finally ensures cleanup even if error occurs
+   * 1. Clears inactivity timeout
+   * 2. Removes activity listeners (click, keydown, scroll)
+   * 3. Removes lifecycle listeners (visibilitychange)
+   * 4. Closes BroadcastChannel
+   * 5. Clears session from localStorage
+   * 6. Resets `sessionId` and `hasStartSession` in global state
+   * 7. Sets `isTracking` to false
    *
    * **Called by**: `App.destroy()` during application teardown
    *
-   * **Important**: After calling, session is terminated and cannot be resumed.
-   * New session will be created on next `startTracking()` call.
+   * **Important**: After calling, session tracking is terminated and cannot be resumed.
+   * A new session will be created on next `startTracking()` call.
    *
    * @example
    * ```typescript
-   * // Manual session end
+   * // Stop session tracking
    * sessionManager.stopTracking();
-   * // → SESSION_END event tracked (reason: 'manual_stop')
    * // → All listeners cleaned up
    * // → Session cleared from localStorage
-   * // → Other tabs notified via BroadcastChannel
+   * // → BroadcastChannel closed
+   * // → No SESSION_END event emitted
    * ```
    *
    * @see src/managers/README.md (lines 140-169) for session management details
    */
   stopTracking(): void {
-    this.endSession('manual_stop');
+    this.resetSessionState();
   }
 
   /**
    * Destroys the session manager and cleans up all resources.
    *
-   * **Purpose**: Performs deep cleanup of session manager resources without
-   * tracking SESSION_END event. Used during application teardown.
+   * **Purpose**: Performs deep cleanup of session manager resources during
+   * application teardown. Preserves session in localStorage for recovery.
    *
    * **Differences from stopTracking()**:
-   * - Does NOT track SESSION_END event
-   * - Does NOT broadcast session end to other tabs
    * - Does NOT clear localStorage (preserves session for recovery)
-   * - Used for internal cleanup, not user-initiated session end
+   * - Used for internal cleanup during teardown
    *
    * **Cleanup Flow**:
    * 1. Clears inactivity timeout
    * 2. Removes activity listeners (click, keydown, scroll)
    * 3. Closes BroadcastChannel
-   * 4. Removes lifecycle listeners (visibilitychange, beforeunload)
+   * 4. Removes lifecycle listeners (visibilitychange)
    * 5. Resets tracking flags (`isTracking`, `hasStartSession`)
    *
    * **Called by**: `App.destroy()` during application teardown
@@ -590,7 +471,6 @@ export class SessionManager extends StateManager {
    * ```typescript
    * sessionManager.destroy();
    * // → All resources cleaned up
-   * // → NO SESSION_END event tracked
    * // → Session preserved in localStorage for recovery
    * ```
    */

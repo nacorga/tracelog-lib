@@ -120,8 +120,6 @@ export interface CommonEventFilters {
   INITIALIZATION: EventLogDispatchFilter;
   /** Filter for session start events */
   SESSION_START: EventLogDispatchFilter;
-  /** Filter for session end events */
-  SESSION_END: EventLogDispatchFilter;
   /** Filter for session manager events */
   SESSION_MANAGER: EventLogDispatchFilter;
   /** Filter for session handler events */

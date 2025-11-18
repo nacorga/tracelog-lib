@@ -192,7 +192,6 @@ export class App extends StateManager {
     this.transformers.beforeSend = undefined;
     this.transformers.beforeBatch = undefined;
 
-    this.set('hasStartSession', false);
     this.set('suppressNextScroll', false);
     this.set('sessionId', null);
 

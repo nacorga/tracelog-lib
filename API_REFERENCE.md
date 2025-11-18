@@ -1003,24 +1003,13 @@ Session initialization event.
 
 ---
 
-### `SESSION_END`
+### `SESSION_END` (Removed in v2.0.0)
 
-Session termination event.
+**⚠️ DEPRECATED**: SESSION_END events are no longer emitted by the library.
 
-**Additional Properties:**
-```typescript
-{
-  session_end_reason: 'page_unload' | 'timeout' | 'manual'
-}
-```
+**Reason**: Browser `pagehide` event had 43% failure rate in production (browser crashes, force quit, mobile background, etc.), resulting in unreliable session tracking.
 
-**Captured When:**
-- User navigates away (page unload)
-- Session timeout expires
-- Manual `destroy()` call
-
-**Notes:**
-- Sent synchronously via `sendBeacon()` to ensure delivery
+**Migration**: Remove any `SESSION_END` event listeners from your code. The library now only emits `SESSION_START` events.
 
 ---
 
