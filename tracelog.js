@@ -237,7 +237,7 @@ const dt = () => {
     default:
       return Ne;
   }
-}, pt = 1e3, Tt = 50, _t = "1.8.1", vt = _t, It = () => {
+}, pt = 1e3, Tt = 50, _t = "2.0.0", vt = _t, It = () => {
   if (typeof window > "u" || typeof document > "u")
     return !1;
   try {
@@ -2811,7 +2811,7 @@ class Bt extends p {
     this.visibilityChangeHandler && (document.removeEventListener("visibilitychange", this.visibilityChangeHandler), this.visibilityChangeHandler = null);
   }
   resetSessionState() {
-    this.clearSessionTimeout(), this.cleanupActivityListeners(), this.cleanupLifecycleListeners(), this.cleanupCrossTabSync(), this.clearStoredSession(), this.set("sessionId", null), this.isTracking = !1;
+    this.clearSessionTimeout(), this.cleanupActivityListeners(), this.cleanupLifecycleListeners(), this.cleanupCrossTabSync(), this.clearStoredSession(), this.set("sessionId", null), this.set("hasStartSession", !1), this.isTracking = !1;
   }
   /**
    * Stops session tracking and cleans up all resources.
@@ -2825,10 +2825,10 @@ class Bt extends p {
    * 3. Removes lifecycle listeners (visibilitychange)
    * 4. Closes BroadcastChannel
    * 5. Clears session from localStorage
-   * 6. Resets `sessionId` in global state
+   * 6. Resets `sessionId` and `hasStartSession` in global state
    * 7. Sets `isTracking` to false
    *
-   * **Called by**: `App.destroy()` during application teardown
+   * **Called by**: `App.destroy()` during application teardown or when session times out
    *
    * **Important**: After calling, session tracking is terminated and cannot be resumed.
    * A new session will be created on next `startTracking()` call.
