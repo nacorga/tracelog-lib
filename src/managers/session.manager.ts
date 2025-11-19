@@ -415,6 +415,7 @@ export class SessionManager extends StateManager {
     this.clearStoredSession();
 
     this.set('sessionId', null);
+    this.set('hasStartSession', false);
     this.isTracking = false;
   }
 
@@ -430,10 +431,10 @@ export class SessionManager extends StateManager {
    * 3. Removes lifecycle listeners (visibilitychange)
    * 4. Closes BroadcastChannel
    * 5. Clears session from localStorage
-   * 6. Resets `sessionId` in global state
+   * 6. Resets `sessionId` and `hasStartSession` in global state
    * 7. Sets `isTracking` to false
    *
-   * **Called by**: `App.destroy()` during application teardown
+   * **Called by**: `App.destroy()` during application teardown or when session times out
    *
    * **Important**: After calling, session tracking is terminated and cannot be resumed.
    * A new session will be created on next `startTracking()` call.
