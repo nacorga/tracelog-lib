@@ -24,8 +24,8 @@ import { log } from '../utils';
  *
  * **Lifecycle**:
  * - startTracking(): Creates session, sends SESSION_START event
- * - stopTracking(): Ends session gracefully with SESSION_END event + cleanup
- * - destroy(): Cleanup only without session end (no SESSION_END event)
+ * - stopTracking(): Cleans up session tracking (no events emitted)
+ * - destroy(): Same as stopTracking() (no events emitted in v2.0.0+)
  *
  * @example
  * ```typescript
@@ -111,29 +111,36 @@ export class SessionHandler extends StateManager {
   }
 
   /**
-   * Stops session tracking by ending current session and cleaning up resources.
+   * Stops session tracking by cleaning up resources.
    *
-   * Calls SessionManager.stopTracking() to end session (sends SESSION_END event),
-   * then calls SessionManager.destroy() to clean up listeners and state.
+   * **Purpose**: Terminates session tracking and removes all listeners and timers.
+   * No events are emitted (SESSION_END removed in v2.0.0).
    *
-   * **Difference from destroy()**: This method ends the session gracefully with
-   * a SESSION_END event before cleanup. Use destroy() for cleanup without session end.
+   * **Behavior**:
+   * - Calls SessionManager.stopTracking() to clean up listeners
+   * - Calls SessionManager.destroy() to finalize cleanup
+   * - Safe to call multiple times (idempotent via cleanupSessionManager)
+   *
+   * **Note**: In v2.0.0+, this method only performs cleanup without emitting events.
+   * Session end time is inferred server-side from last event timestamp.
    */
   stopTracking(): void {
     this.cleanupSessionManager();
   }
 
   /**
-   * Destroys handler and cleans up SessionManager without ending session.
+   * Destroys handler and cleans up SessionManager.
+   *
+   * **Purpose**: Same as stopTracking() in v2.0.0+. Both methods perform cleanup
+   * without emitting events.
    *
    * **Behavior**:
    * - Idempotent: Early return if already destroyed
-   * - Calls SessionManager.destroy() only (NOT stopTracking)
+   * - Calls SessionManager.destroy() to clean up listeners and timers
    * - Sets sessionManager to null and destroyed flag to true
-   * - Updates hasStartSession global state to false
    *
-   * **Difference from stopTracking()**: This method does cleanup only without
-   * sending a SESSION_END event. Use stopTracking() for graceful session end.
+   * **Note**: In v2.0.0+, there is no functional difference between stopTracking()
+   * and destroy(). Both perform cleanup without emitting SESSION_END events.
    */
   destroy(): void {
     if (this.destroyed) {
@@ -146,6 +153,5 @@ export class SessionHandler extends StateManager {
     }
 
     this.destroyed = true;
-    this.set('hasStartSession', false);
   }
 }

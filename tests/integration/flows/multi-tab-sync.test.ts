@@ -216,52 +216,6 @@ describe('Integration: Multi-Tab Session Sync', () => {
     const customEvent = updatedEvents.find((e: any) => e.type === 'custom' && e.custom_event?.name === 'test_event');
     expect(customEvent).toBeTruthy();
   });
-
-  it('should handle session_end broadcast', async () => {
-    let onMessageHandler: ((event: any) => void) | null = null;
-
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => {
-      const channel = {
-        postMessage: vi.fn(),
-        close: vi.fn(),
-        onmessage: null as any,
-      };
-
-      Object.defineProperty(channel, 'onmessage', {
-        get: () => onMessageHandler,
-        set: (handler) => {
-          onMessageHandler = handler;
-        },
-      });
-
-      return channel;
-    });
-
-    const bridge = await initTestBridge();
-    const sessionId = bridge.getSessionData()?.id;
-    expect(sessionId).toBeTruthy();
-
-    // Wait for handler
-    await waitForCondition(() => onMessageHandler !== null, 1000);
-
-    // Simulate receiving session_end from another tab
-    onMessageHandler!({
-      data: {
-        action: 'session_end',
-        sessionId: sessionId,
-        reason: 'manual_stop',
-        timestamp: Date.now(),
-        projectId: 'custom', // Matches library default for standalone mode
-      },
-    });
-
-    // Wait for session to be reset
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Session should be cleared
-    const currentSessionId = bridge.getSessionData()?.id;
-    expect(currentSessionId).toBeNull();
-  });
 });
 
 describe('Integration: Multi-Tab Event Tracking', () => {

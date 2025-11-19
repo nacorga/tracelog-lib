@@ -35,7 +35,7 @@ export const PERSISTENCE_THROTTLE_MS = 1000; // 1 second throttle for cross-tab 
 // ============================================================================
 
 export const MAX_EVENTS_QUEUE_LENGTH = 100;
-export const REQUEST_TIMEOUT_MS = 10000;
+export const REQUEST_TIMEOUT_MS = 15000; // 15 seconds (to ensure requests complete before tab close/navigation)
 export const MAX_METADATA_SIZE = 5000;
 
 // Motion and interaction thresholds

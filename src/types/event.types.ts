@@ -1,5 +1,4 @@
 import { MetadataType } from './common.types';
-import { SessionEndReason } from './session.types';
 
 /**
  * Coordinate information from a click event
@@ -35,8 +34,6 @@ export enum EventType {
   SCROLL = 'scroll',
   /** Session initialization */
   SESSION_START = 'session_start',
-  /** Session termination */
-  SESSION_END = 'session_end',
   /** Custom business events */
   CUSTOM = 'custom',
   /** Performance metrics */
@@ -283,8 +280,6 @@ export interface EventData {
   web_vitals?: WebVitalsData;
   /** Page view details (when type is PAGE_VIEW) */
   page_view?: PageViewData;
-  /** Session termination reason (when type is SESSION_END) */
-  session_end_reason?: SessionEndReason;
   /** Error details (when type is ERROR) */
   error_data?: ErrorData;
   /** Viewport visibility details (when type is VIEWPORT_VISIBLE) */

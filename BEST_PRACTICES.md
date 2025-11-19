@@ -478,10 +478,10 @@ await tracelog.init({
   }
 });
 
-// GOOD - use a load balancer in front of your backend
+// GOOD - use a load balancer endpoint
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://lb.example.com' } // Load balancer handles distribution
+    custom: { collectApiUrl: 'https://lb.example.com' } // Handles distribution to endpoints
   }
 });
 ```
@@ -991,15 +991,11 @@ Expected impact on your application:
 | **Event capture** | ~1ms per event (includes deduplication & ID generation) |
 | **Memory usage** | ~500KB (queue + session state) |
 | **Network requests** | 1 per 10 seconds OR 50 events (batched) |
-| **Duplicate prevention** | 97% reduction in duplicate errors (v1.7.0+) |
-| **Backend efficiency** | 30% fewer MongoDB writes with idempotency system |
 | **Event ID generation** | <1ms with zero-collision guarantees (sequence counter) |
 
 **Efficiency Improvements (v1.7.0+):**
-- **Idempotency token system**: Prevents retry-based duplicates at backend level
 - **Sequence counter in event IDs**: Guarantees unique IDs even in high-frequency bursts (1000 events/ms capacity)
 - **Client version tracking**: Automatic version reporting for adoption monitoring and debugging
-- **Enhanced duplicate logging**: Detailed breakdowns by event type, client version, and duplicate rate
 
 **Optimization tips:**
 - Use `samplingRate` to reduce load

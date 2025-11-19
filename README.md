@@ -212,7 +212,6 @@ TraceLog captures these events automatically (no code required):
 | `page_view`       | Navigation, SPA route changes               | ❌ Core event  |
 | `click`           | User interactions with elements             | ❌ Core event  |
 | `session_start`   | New session creation                        | ❌ Core event  |
-| `session_end`     | Session termination (timeout, page unload)  | ❌ Core event  |
 | `scroll`          | Scroll depth, velocity, engagement          | ✅ Optional    |
 | `web_vitals`      | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) | ✅ Optional    |
 | `error`           | JavaScript errors, promise rejections       | ✅ Optional    |
