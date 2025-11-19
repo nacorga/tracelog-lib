@@ -147,6 +147,8 @@ const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
 const SESSION_COUNTS_KEY = (userId, sessionId) => `${STORAGE_BASE_KEY}:${userId}:session_counts:${sessionId}`;
 const SESSION_COUNTS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1e3;
+const SESSION_COUNTS_LAST_CLEANUP_KEY = `${STORAGE_BASE_KEY}:session_counts_last_cleanup`;
+const SESSION_COUNTS_CLEANUP_THROTTLE_MS = 60 * 60 * 1e3;
 var SpecialApiUrl = /* @__PURE__ */ ((SpecialApiUrl2) => {
   SpecialApiUrl2["Localhost"] = "localhost:8080";
   SpecialApiUrl2["Fail"] = "localhost:9999";
@@ -1418,28 +1420,6 @@ class SenderManager extends StateManager {
   getIntegrationId() {
     return this.integrationId;
   }
-  /**
-   * Aborts all pending HTTP requests.
-   *
-   * **Purpose**: Prevents fetch() + sendBeacon() duplication when user closes tab during pending request.
-   *
-   * **Use Case**: Called before page unload in pageHideHandler to cancel pending
-   * async requests before sending final events via sendBeacon().
-   *
-   * **Note**: Previously used for SESSION_END events (removed in v2.0.0). This method is retained
-   * for compatibility and to prevent duplicate event transmission during page unload scenarios.
-   *
-   * **Behavior**:
-   * - Aborts all pending AbortControllers
-   * - Clears the pending controllers set
-   * - Safe to call multiple times (idempotent)
-   */
-  abortPendingRequests() {
-    this.pendingControllers.forEach((controller) => {
-      controller.abort();
-    });
-    this.pendingControllers.clear();
-  }
   getQueueStorageKey() {
     const userId = this.get("userId") || "anonymous";
     const baseKey = QUEUE_KEY(userId);
@@ -2372,26 +2352,6 @@ class EventManager extends StateManager {
     this.cleanupExpiredSessionCounts();
   }
   /**
-   * Aborts all pending HTTP requests across all SenderManager instances.
-   *
-   * **Purpose**: Prevents fetch() + sendBeacon() duplication when user closes tab during pending request.
-   *
-   * **Use Case**: Prevents race condition where fetch() completes after sendBeacon() fires on page unload.
-   *
-   * **Behavior**:
-   * - Calls `abortPendingRequests()` on all SenderManager instances (SaaS + Custom)
-   * - Safe to call when no requests are pending (no-op)
-   * - Safe to call multiple times (idempotent)
-   *
-   * **Note**: In v2.0.0+, no longer called by SessionManager (pagehide handler removed).
-   * Method retained for compatibility and potential future use cases.
-   */
-  abortPendingRequests() {
-    this.dataSenders.forEach((sender) => {
-      sender.abortPendingRequests();
-    });
-  }
-  /**
    * Recovers persisted events from localStorage after a crash or page reload.
    *
    * **Purpose**: Ensures zero data loss by recovering events that failed to send
@@ -3321,6 +3281,9 @@ class EventManager extends StateManager {
         data: { sessionId, parsed }
       });
       localStorage.removeItem(storageKey);
+      log("debug", "Session counts removed due to invalid/corrupted data", {
+        data: { sessionId, parsed }
+      });
       return this.getInitialCounts();
     } catch (error) {
       log("warn", "Failed to load session counts from localStorage", {
@@ -3337,14 +3300,17 @@ class EventManager extends StateManager {
    * counts older than 7 days.
    *
    * **Behavior**:
+   * - Checks if cleanup was run recently (within last hour) and skips if so
    * - Iterates all localStorage keys matching the session counts prefix pattern
    * - Parses each entry and checks `_timestamp` field
    * - Removes entries where age exceeds SESSION_COUNTS_EXPIRY_MS (7 days)
    * - Silently ignores parse errors (corrupted entries cleaned on next load)
+   * - Updates last cleanup timestamp after successful run
    *
    * **When Called**: Automatically on EventManager constructor initialization
    *
-   * **Performance**: Fast O(n) scan where n = localStorage keys (typically <100)
+   * **Performance**: O(n) scan where n = localStorage keys (typically <100), but throttled
+   * to run at most once per hour to prevent impact on rapid page reloads
    *
    * @internal
    */
@@ -3352,9 +3318,19 @@ class EventManager extends StateManager {
     if (typeof window === "undefined" || typeof localStorage === "undefined") {
       return;
     }
-    const userId = this.get("userId") || "anonymous";
-    const prefix = `${STORAGE_BASE_KEY}:${userId}:session_counts:`;
     try {
+      const lastCleanup = localStorage.getItem(SESSION_COUNTS_LAST_CLEANUP_KEY);
+      if (lastCleanup) {
+        const timeSinceLastCleanup = Date.now() - parseInt(lastCleanup, 10);
+        if (timeSinceLastCleanup < SESSION_COUNTS_CLEANUP_THROTTLE_MS) {
+          log("debug", "Skipping session counts cleanup (throttled)", {
+            data: { timeSinceLastCleanup, throttleMs: SESSION_COUNTS_CLEANUP_THROTTLE_MS }
+          });
+          return;
+        }
+      }
+      const userId = this.get("userId") || "anonymous";
+      const prefix = `${STORAGE_BASE_KEY}:${userId}:session_counts:`;
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -3378,6 +3354,7 @@ class EventManager extends StateManager {
       if (keysToRemove.length > 0) {
         log("info", `Cleaned up ${keysToRemove.length} expired session counts entries`);
       }
+      localStorage.setItem(SESSION_COUNTS_LAST_CLEANUP_KEY, Date.now().toString());
     } catch (error) {
       log("warn", "Failed to cleanup expired session counts", { error });
     }
@@ -3490,16 +3467,14 @@ class SessionManager extends StateManager {
       if (messageProjectId !== projectId) {
         return;
       }
-      if (action === "session_end") {
-        this.resetSessionState();
-        return;
-      }
       if (action === "session_start" && sessionId && typeof timestamp === "number" && timestamp > Date.now() - 5e3) {
         this.set("sessionId", sessionId);
         this.persistSession(sessionId, timestamp);
         if (this.isTracking) {
           this.setupSessionTimeout();
         }
+      } else if (action && action !== "session_start") {
+        log("debug", "Ignored BroadcastChannel message with unknown action", { data: { action } });
       }
     };
   }
@@ -3735,6 +3710,7 @@ class SessionManager extends StateManager {
     this.cleanupCrossTabSync();
     this.clearStoredSession();
     this.set("sessionId", null);
+    this.set("hasStartSession", false);
     this.isTracking = false;
   }
   /**
@@ -3752,7 +3728,7 @@ class SessionManager extends StateManager {
    * 6. Resets `sessionId` and `hasStartSession` in global state
    * 7. Sets `isTracking` to false
    *
-   * **Called by**: `App.destroy()` during application teardown
+   * **Called by**: `App.destroy()` during application teardown or when session times out
    *
    * **Important**: After calling, session tracking is terminated and cannot be resumed.
    * A new session will be created on next `startTracking()` call.
@@ -3787,7 +3763,7 @@ class SessionManager extends StateManager {
    * 2. Removes activity listeners (click, keydown, scroll)
    * 3. Closes BroadcastChannel
    * 4. Removes lifecycle listeners (visibilitychange)
-   * 5. Resets tracking flags (`isTracking`, `hasStartSession`)
+   * 5. Resets tracking flag (`isTracking`)
    *
    * **Called by**: `App.destroy()` during application teardown
    *
