@@ -754,25 +754,24 @@ export class EventManager extends StateManager {
 
     if (isSync) {
       const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
-      const allSucceeded = results.every((success) => success);
+      const anySucceeded = results.some((success) => success);
 
-      // Pessimistic removal: Only remove events if ALL integrations succeeded
-      // Prevents duplicates when one integration fails but others succeed
-      if (allSucceeded) {
+      // Optimistic removal: Remove events if ANY integration succeeded
+      // Each SenderManager independently persists failures in its own localStorage
+      // This prevents duplicate sends to successful integrations on retry
+      if (anySucceeded) {
         this.removeProcessedEvents(eventIds);
         this.clearSendInterval();
         this.emitEventsQueue(body);
       } else {
-        // Keep events in queue - recovery will happen on next page load
-        // Failed integrations will persist independently
+        // All integrations failed - keep events in queue for retry on next page load
         this.clearSendInterval();
-        const failedCount = results.filter((success) => !success).length;
-        log('warn', 'Sync flush partial failure, events kept in queue for retry', {
-          data: { eventCount: eventIds.length, succeededCount: results.length - failedCount, failedCount },
+        log('warn', 'Sync flush complete failure, events kept in queue for retry', {
+          data: { eventCount: eventIds.length },
         });
       }
 
-      return allSucceeded;
+      return anySucceeded;
     } else {
       const sendPromises = this.dataSenders.map(async (sender) =>
         sender.sendEventsQueue(body, {
@@ -782,25 +781,23 @@ export class EventManager extends StateManager {
       );
 
       return Promise.allSettled(sendPromises).then((results) => {
-        const allSucceeded = results.every((result) => this.isSuccessfulResult(result));
+        const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
 
-        // Pessimistic removal: Only remove events if ALL integrations succeeded
-        // Prevents duplicates when one integration fails but others succeed
-        if (allSucceeded) {
+        // Optimistic removal: Remove events if ANY integration succeeded
+        // Each SenderManager independently persists failures in its own localStorage
+        // This prevents duplicate sends to successful integrations on retry
+        if (anySucceeded) {
           this.removeProcessedEvents(eventIds);
           this.clearSendInterval();
           this.emitEventsQueue(body);
         } else {
-          // Keep events in queue - recovery will happen on next page load
-          // Failed integrations will persist independently
-          const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-
-          log('warn', 'Async flush partial failure, events kept in queue for retry', {
-            data: { eventCount: eventsToSend.length, succeededCount: results.length - failedCount, failedCount },
+          // All integrations failed - keep events in queue for retry on next page load
+          log('warn', 'Async flush complete failure, events kept in queue for retry', {
+            data: { eventCount: eventsToSend.length },
           });
         }
 
-        return allSucceeded;
+        return anySucceeded;
       });
     }
   }
@@ -829,24 +826,29 @@ export class EventManager extends StateManager {
 
     const results = await Promise.allSettled(sendPromises);
 
-    this.removeProcessedEvents(eventIds);
-
     const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
 
+    // Optimistic removal: Remove events if ANY integration succeeded
+    // Each SenderManager independently persists failures in its own localStorage
     if (anySucceeded) {
+      this.removeProcessedEvents(eventIds);
       this.emitEventsQueue(body);
+
+      const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+      if (failedCount > 0) {
+        log('warn', 'Periodic send completed with some failures, removed from queue and persisted per-integration', {
+          data: { eventCount: eventsToSend.length, failedCount },
+        });
+      }
+    } else {
+      // All integrations failed - keep events in queue for retry
+      log('warn', 'Periodic send complete failure, events kept in queue for retry', {
+        data: { eventCount: eventsToSend.length },
+      });
     }
 
     if (this.eventsQueue.length === 0) {
       this.clearSendInterval();
-    }
-
-    const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-
-    if (failedCount > 0) {
-      log('warn', 'Events send completed with some failures, removed from queue and persisted per-integration', {
-        data: { eventCount: eventsToSend.length, failedCount },
-      });
     }
   }
 
