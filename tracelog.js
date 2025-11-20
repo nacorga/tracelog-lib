@@ -237,7 +237,7 @@ const dt = () => {
     default:
       return Ne;
   }
-}, pt = 1e3, Tt = 50, _t = "2.0.0", vt = _t, It = () => {
+}, pt = 1e3, Tt = 50, _t = "2.0.1", vt = _t, It = () => {
   if (typeof window > "u" || typeof document > "u")
     return !1;
   try {
@@ -2205,7 +2205,7 @@ class Ht extends p {
       return this.removeProcessedEvents(s), this.clearSendInterval(), this.emitEventsQueue(t), e ? !0 : Promise.resolve(!0);
     if (e) {
       const o = this.dataSenders.map((l) => l.sendEventsQueueSync(t)).some((l) => l);
-      return o ? (this.removeProcessedEvents(s), this.clearSendInterval(), this.emitEventsQueue(t)) : (this.clearSendInterval(), a("warn", "Sync flush failed for all integrations, events remain in queue for next flush", {
+      return o ? (this.removeProcessedEvents(s), this.clearSendInterval(), this.emitEventsQueue(t)) : (this.clearSendInterval(), a("warn", "Sync flush complete failure, events kept in queue for retry", {
         data: { eventCount: s.length }
       })), o;
     } else {
@@ -2219,21 +2219,9 @@ class Ht extends p {
       );
       return Promise.allSettled(i).then((o) => {
         const l = o.some((c) => this.isSuccessfulResult(c));
-        if (l) {
-          this.removeProcessedEvents(s), this.clearSendInterval(), this.emitEventsQueue(t);
-          const c = o.filter((d) => !this.isSuccessfulResult(d)).length;
-          c > 0 && a(
-            "warn",
-            "Async flush completed with partial success, events removed from queue and persisted per failed integration",
-            {
-              data: { eventCount: r.length, succeededCount: o.length - c, failedCount: c }
-            }
-          );
-        } else
-          this.removeProcessedEvents(s), this.clearSendInterval(), a("error", "Async flush failed for all integrations, events persisted per-integration for recovery", {
-            data: { eventCount: r.length, integrations: this.dataSenders.length }
-          });
-        return l;
+        return l ? (this.removeProcessedEvents(s), this.clearSendInterval(), this.emitEventsQueue(t)) : a("warn", "Async flush complete failure, events kept in queue for retry", {
+          data: { eventCount: r.length }
+        }), l;
       });
     }
   }
@@ -2245,19 +2233,25 @@ class Ht extends p {
       this.emitEventsQueue(e);
       return;
     }
-    const t = [...this.eventsQueue], r = t.map((c) => c.id), s = this.dataSenders.map(
-      async (c) => c.sendEventsQueue(e, {
+    const t = [...this.eventsQueue], r = t.map((l) => l.id), s = this.dataSenders.map(
+      async (l) => l.sendEventsQueue(e, {
         onSuccess: () => {
         },
         onFailure: () => {
         }
       })
     ), i = await Promise.allSettled(s);
-    this.removeProcessedEvents(r), i.some((c) => this.isSuccessfulResult(c)) && this.emitEventsQueue(e), this.eventsQueue.length === 0 && this.clearSendInterval();
-    const l = i.filter((c) => !this.isSuccessfulResult(c)).length;
-    l > 0 && a("warn", "Events send completed with some failures, removed from queue and persisted per-integration", {
-      data: { eventCount: t.length, failedCount: l }
-    });
+    if (i.some((l) => this.isSuccessfulResult(l))) {
+      this.removeProcessedEvents(r), this.emitEventsQueue(e);
+      const l = i.filter((c) => !this.isSuccessfulResult(c)).length;
+      l > 0 && a("warn", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
+        data: { eventCount: t.length, failedCount: l }
+      });
+    } else
+      a("warn", "Periodic send complete failure, events kept in queue for retry", {
+        data: { eventCount: t.length }
+      });
+    this.eventsQueue.length === 0 && this.clearSendInterval();
   }
   buildEventsPayload() {
     const e = /* @__PURE__ */ new Map(), t = [];
