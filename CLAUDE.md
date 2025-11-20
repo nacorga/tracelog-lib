@@ -182,13 +182,32 @@ tracelog.setTransformer('beforeBatch', (batch) => {
 
 ### 4. Event Queue & Sending
 
-- Batching: Every 10s OR 50-event threshold
-- Transport: `fetch()` (async) or `navigator.sendBeacon()` (page unload)
-- Retries: Up to 2 attempts for transient errors (5xx, timeout)
-- Backoff: 200-300ms (retry 1), 400-500ms (retry 2)
-- Persistence: Failed events saved per-integration to localStorage
-- Recovery: Auto-recovered on next `init()`
-- Optimistic Removal: Queue cleared if AT LEAST ONE integration succeeds
+**Core Principle**: Optimistic Removal with Per-Integration Persistence
+
+- **Batching**: Every 10s OR 50-event threshold
+- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload)
+- **Retries**: Up to 2 attempts for transient errors (5xx, timeout)
+- **Backoff**: 200-300ms (retry 1), 400-500ms (retry 2)
+- **Persistence**: Failed events saved per-integration to localStorage
+- **Recovery**: Auto-recovered on next `init()`
+- **Optimistic Removal**: Queue cleared if AT LEAST ONE integration succeeds
+
+**Why Optimistic Removal is Critical**:
+- EventManager queue = "events not yet attempted to send"
+- Each SenderManager has independent localStorage: `tracelog_queue:{userId}:{integrationId}`
+- When integration fails, only that SenderManager persists events
+- Keeping events in queue after ANY success would cause duplicates to successful integrations
+- Pessimistic removal (waiting for ALL) causes infinite queue buildup if one integration permanently fails
+
+**Multi-Integration Example**:
+```typescript
+// Two integrations: TraceLog (working) + Custom (broken)
+// 1. Send attempt: TraceLog ✅ succeeds, Custom ❌ fails
+// 2. EventManager removes events (optimistic - at least one succeeded)
+// 3. SenderManager[Custom] persists to its own localStorage
+// 4. Next page load: Only Custom retries from its localStorage
+// 5. TraceLog never receives duplicates ✅
+```
 
 | Error Type | Retries | Persistence |
 |------------|---------|-------------|
@@ -348,6 +367,7 @@ npm test             # 100% pass rate (REQUIRED)
 - ❌ DON'T mutate `globalState` directly (use `StateManager.set()`)
 - ❌ DON'T instantiate multiple App instances
 - ❌ DON'T call `init()` in SSR (typeof window check required)
+- ❌ DON'T change optimistic removal to pessimistic (causes duplicates and infinite queue buildup)
 - ❌ DON'T commit without passing `npm run check`
 
 ### Testing

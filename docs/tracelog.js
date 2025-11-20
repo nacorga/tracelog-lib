@@ -405,7 +405,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.0.0";
+const version = "2.0.1";
 const LIB_VERSION = version;
 const detectQaMode = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -2874,7 +2874,7 @@ class EventManager extends StateManager {
         this.emitEventsQueue(body);
       } else {
         this.clearSendInterval();
-        log("warn", "Sync flush failed for all integrations, events remain in queue for next flush", {
+        log("warn", "Sync flush complete failure, events kept in queue for retry", {
           data: { eventCount: eventIds.length }
         });
       }
@@ -2894,21 +2894,9 @@ class EventManager extends StateManager {
           this.removeProcessedEvents(eventIds);
           this.clearSendInterval();
           this.emitEventsQueue(body);
-          const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-          if (failedCount > 0) {
-            log(
-              "warn",
-              "Async flush completed with partial success, events removed from queue and persisted per failed integration",
-              {
-                data: { eventCount: eventsToSend.length, succeededCount: results.length - failedCount, failedCount }
-              }
-            );
-          }
         } else {
-          this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
-          log("error", "Async flush failed for all integrations, events persisted per-integration for recovery", {
-            data: { eventCount: eventsToSend.length, integrations: this.dataSenders.length }
+          log("warn", "Async flush complete failure, events kept in queue for retry", {
+            data: { eventCount: eventsToSend.length }
           });
         }
         return anySucceeded;
@@ -2935,19 +2923,23 @@ class EventManager extends StateManager {
       })
     );
     const results = await Promise.allSettled(sendPromises);
-    this.removeProcessedEvents(eventIds);
     const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
     if (anySucceeded) {
+      this.removeProcessedEvents(eventIds);
       this.emitEventsQueue(body);
+      const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+      if (failedCount > 0) {
+        log("warn", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
+          data: { eventCount: eventsToSend.length, failedCount }
+        });
+      }
+    } else {
+      log("warn", "Periodic send complete failure, events kept in queue for retry", {
+        data: { eventCount: eventsToSend.length }
+      });
     }
     if (this.eventsQueue.length === 0) {
       this.clearSendInterval();
-    }
-    const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-    if (failedCount > 0) {
-      log("warn", "Events send completed with some failures, removed from queue and persisted per-integration", {
-        data: { eventCount: eventsToSend.length, failedCount }
-      });
     }
   }
   buildEventsPayload() {
