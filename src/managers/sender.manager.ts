@@ -10,7 +10,7 @@ import {
   RETRY_BACKOFF_JITTER_MS,
   LIB_VERSION,
 } from '../constants';
-import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
+import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap, EventType } from '../types';
 import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -453,6 +453,86 @@ export class SenderManager extends StateManager {
   }
 
   /**
+   * Filters events based on disabledEvents configuration for custom backend integration.
+   *
+   * **Purpose**: Excludes specific event types from being sent to custom backend only.
+   * TraceLog SaaS integration always receives all events regardless of this setting.
+   *
+   * **Integration-Level Filtering**:
+   * - Only applies when `integrationId === 'custom'`
+   * - SaaS integration bypasses this filter entirely
+   * - Events are still captured and emitted to local listeners
+   *
+   * **Filtering Flow**:
+   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
+   * 2. Read disabledEvents from config.integrations.custom.disabledEvents
+   * 3. Filter events based on type mapping:
+   *    - 'scroll' → EventType.SCROLL
+   *    - 'web_vitals' → EventType.WEB_VITALS
+   *    - 'error' → EventType.ERROR
+   * 4. Return filtered queue or null if all events removed
+   *
+   * **Use Cases**:
+   * - Privacy: Don't send scroll data to custom warehouse
+   * - Cost: Exclude performance metrics from third-party analytics
+   * - Compliance: Filter error events from certain backends
+   *
+   * @param body - Event queue to filter
+   * @returns Filtered queue with disabled events removed, or null if batch becomes empty
+   */
+  private filterDisabledEvents(body: EventsQueue): EventsQueue | null {
+    // TraceLog SaaS requires all events for complete analytics
+    if (this.integrationId !== 'custom') {
+      return body;
+    }
+
+    const config = this.get('config');
+    const disabledEvents = config?.integrations?.custom?.disabledEvents ?? [];
+
+    if (disabledEvents.length === 0) {
+      return body;
+    }
+
+    const filteredEvents = body.events.filter((event) => {
+      // Map disabledEvents strings to EventType enum values
+      if (event.type === EventType.SCROLL && disabledEvents.includes('scroll')) {
+        return false;
+      }
+      if (event.type === EventType.WEB_VITALS && disabledEvents.includes('web_vitals')) {
+        return false;
+      }
+      if (event.type === EventType.ERROR && disabledEvents.includes('error')) {
+        return false;
+      }
+      return true;
+    });
+
+    // If all events filtered out, skip send entirely
+    if (filteredEvents.length === 0) {
+      log('debug', 'All events filtered by disabledEvents, skipping send [custom]', {
+        data: { originalCount: body.events.length, disabledEvents },
+      });
+      return null;
+    }
+
+    // Log if any events were filtered
+    if (filteredEvents.length < body.events.length) {
+      log('debug', 'Some events filtered by disabledEvents [custom]', {
+        data: {
+          originalCount: body.events.length,
+          filteredCount: filteredEvents.length,
+          disabledEvents,
+        },
+      });
+    }
+
+    return {
+      ...body,
+      events: filteredEvents,
+    };
+  }
+
+  /**
    * Calculates exponential backoff delay with jitter for retry attempts.
    *
    * **Purpose**: Prevents thundering herd problem when multiple clients retry simultaneously.
@@ -524,7 +604,13 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
+    const afterFiltering = this.filterDisabledEvents(afterBeforeSend);
+
+    if (!afterFiltering) {
+      return true;
+    }
+
+    const transformedBody = this.applyBeforeBatchTransformer(afterFiltering);
 
     if (!transformedBody) {
       return true;
@@ -697,7 +783,13 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
+    const afterFiltering = this.filterDisabledEvents(afterBeforeSend);
+
+    if (!afterFiltering) {
+      return true;
+    }
+
+    const transformedBody = this.applyBeforeBatchTransformer(afterFiltering);
 
     if (!transformedBody) {
       return true;

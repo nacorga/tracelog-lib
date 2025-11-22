@@ -20,7 +20,6 @@ export function createMockConfig(overrides?: Partial<Config>): Config {
     sensitiveQueryParams: [],
     samplingRate: 1.0,
     errorSampling: 1.0,
-    disabledEvents: [],
     webVitalsMode: 'needs-improvement',
     pageViewThrottleMs: 1000,
     clickThrottleMs: 300,

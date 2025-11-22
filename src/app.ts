@@ -339,7 +339,6 @@ export class App extends StateManager {
 
   private initializeHandlers(): void {
     const config = this.get('config');
-    const disabledEvents = config.disabledEvents ?? [];
 
     this.handlers.session = new SessionHandler(
       this.managers.storage as StorageManager,
@@ -366,22 +365,16 @@ export class App extends StateManager {
     this.handlers.click = new ClickHandler(this.managers.event as EventManager);
     this.handlers.click.startTracking();
 
-    if (!disabledEvents.includes('scroll')) {
-      this.handlers.scroll = new ScrollHandler(this.managers.event as EventManager);
-      this.handlers.scroll.startTracking();
-    }
+    this.handlers.scroll = new ScrollHandler(this.managers.event as EventManager);
+    this.handlers.scroll.startTracking();
 
-    if (!disabledEvents.includes('web_vitals')) {
-      this.handlers.performance = new PerformanceHandler(this.managers.event as EventManager);
-      this.handlers.performance.startTracking().catch((error) => {
-        log('warn', 'Failed to start performance tracking', { error });
-      });
-    }
+    this.handlers.performance = new PerformanceHandler(this.managers.event as EventManager);
+    this.handlers.performance.startTracking().catch((error) => {
+      log('warn', 'Failed to start performance tracking', { error });
+    });
 
-    if (!disabledEvents.includes('error')) {
-      this.handlers.error = new ErrorHandler(this.managers.event as EventManager);
-      this.handlers.error.startTracking();
-    }
+    this.handlers.error = new ErrorHandler(this.managers.event as EventManager);
+    this.handlers.error.startTracking();
 
     if (config.viewport) {
       this.handlers.viewport = new ViewportHandler(this.managers.event as EventManager);

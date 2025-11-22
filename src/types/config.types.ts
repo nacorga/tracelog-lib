@@ -44,18 +44,6 @@ export interface Config {
    * Only applies when webVitalsMode is set. Overrides default thresholds for the selected mode.
    */
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
-  /**
-   * Event types to disable from auto-tracking.
-   * Core events (PAGE_VIEW, CLICK, SESSION_*) cannot be disabled as they are essential for analytics.
-   * @default []
-   * @example
-   * // Disable scroll tracking only
-   * disabledEvents: ['scroll']
-   * @example
-   * // Disable performance and error tracking
-   * disabledEvents: ['web_vitals', 'error']
-   */
-  disabledEvents?: DisabledEventType[];
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */
@@ -69,6 +57,19 @@ export interface Config {
       collectApiUrl: string;
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
+      /**
+       * Event types to exclude from being sent to the custom backend.
+       * Note: Events are still captured and available to local event listeners.
+       * Only affects what is sent to the custom collectApiUrl.
+       * @default []
+       * @example
+       * // Don't send scroll events to custom backend
+       * disabledEvents: ['scroll']
+       * @example
+       * // Exclude performance and error tracking from custom backend
+       * disabledEvents: ['web_vitals', 'error']
+       */
+      disabledEvents?: DisabledEventType[];
     };
   };
 }

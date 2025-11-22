@@ -267,22 +267,31 @@ describe('Integration: Config Propagation', () => {
     expect(event).toBeDefined();
   });
 
-  it('should apply disabledEvents to handlers', async () => {
-    const disabledEvents = ['scroll', 'web_vitals', 'error'];
+  it('should always initialize all handlers (filtering happens at send time)', async () => {
+    // disabledEvents now lives under integrations.custom and only affects
+    // what gets sent to custom backend, not handler initialization
+    const config = {
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com',
+          disabledEvents: ['scroll', 'web_vitals', 'error'] as const,
+        },
+      },
+    };
 
-    bridge = await initTestBridge({ disabledEvents });
+    bridge = await initTestBridge(config);
 
     const handlers = getHandlers(bridge);
 
-    // Core handlers always initialized
+    // ALL handlers always initialized (including previously "disableable" ones)
     expect(handlers.session).toBeDefined();
     expect(handlers.pageView).toBeDefined();
     expect(handlers.click).toBeDefined();
+    expect(handlers.scroll).toBeDefined(); // ✅ Now always initialized
+    expect(handlers.performance).toBeDefined(); // ✅ Now always initialized
+    expect(handlers.error).toBeDefined(); // ✅ Now always initialized
 
-    // Disabled handlers return null (not initialized)
-    expect(handlers.scroll).toBeNull();
-    expect(handlers.performance).toBeNull();
-    expect(handlers.error).toBeNull();
+    // Events are still captured, filtering happens in SenderManager before network send
   });
 });
 

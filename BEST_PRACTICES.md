@@ -299,29 +299,58 @@ tracelog.event('purchase', {
 
 ## Performance
 
-### ✅ DO: Disable unnecessary event types
+### ✅ DO: Exclude unnecessary event types from custom backend
+
+**Note:** Events are still captured locally. This only filters what's sent to your custom backend.
 
 ```typescript
-// Already using Sentry for errors? Disable error tracking
+// Already using Sentry for errors? Exclude from custom backend
 await tracelog.init({
-  disabledEvents: ['error']
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com',
+      disabledEvents: ['error']
+    }
+  }
 });
 
-// High-frequency scrolls causing performance issues?
+// High-frequency scrolls not needed in data warehouse?
 await tracelog.init({
-  disabledEvents: ['scroll']
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://warehouse.com',
+      disabledEvents: ['scroll']
+    }
+  }
 });
 
-// Only need core analytics (page views, clicks, sessions)?
+// Only need core analytics in custom backend?
 await tracelog.init({
-  disabledEvents: ['scroll', 'web_vitals', 'error']
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com',
+      disabledEvents: ['scroll', 'web_vitals', 'error']
+    }
+  }
+});
+
+// Multi-integration: SaaS gets everything, warehouse gets filtered
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'proj-123' },           // Full analytics
+    custom: {
+      collectApiUrl: 'https://warehouse.com',
+      disabledEvents: ['scroll', 'web_vitals']     // Lean data warehouse
+    }
+  }
 });
 ```
 
 **Benefits:**
-- Reduces client-side processing overhead
-- Lower bandwidth usage
-- Fewer backend costs
+- Lower bandwidth usage to custom backend
+- Reduced custom backend storage costs
+- Events still available locally via `tracelog.on('event')`
+- TraceLog SaaS receives all events for complete analytics
 - Faster page performance on complex applications
 
 ### ✅ DO: Use sampling for high-traffic sites

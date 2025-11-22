@@ -228,7 +228,7 @@ for (let i = 0; i < localStorage.length; i++) {
 #### Step 4: Verify Event Configuration
 ```typescript
 const config = bridge.getFullState().config;
-console.log('[DEBUG] disabledEvents:', config?.disabledEvents);
+console.log('[DEBUG] disabledEvents:', config?.integrations?.custom?.disabledEvents);
 console.log('[DEBUG] waitForConsent:', config?.waitForConsent);
 ```
 
@@ -500,7 +500,7 @@ onMessageHandler!({
 1. **Event count is 0**
    - Check: Event type case sensitivity
    - Check: Consent buffer vs main queue
-   - Check: Event configuration (disabledEvents)
+   - Check: Event configuration (integrations.custom.disabledEvents excludes events from custom backend)
 
 2. **BroadcastChannel not working**
    - Check: ProjectId value

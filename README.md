@@ -172,18 +172,20 @@ await tracelog.init({
   samplingRate: 1.0,               // 100% (default)
   sensitiveQueryParams: ['token'], // Add to defaults
 
-  // Event Control
-  disabledEvents: ['scroll'],  // Disable specific auto-tracked events
-                                // Options: 'scroll', 'web_vitals', 'error'
-
   // Integrations (pick one, multiple, or none)
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
-    custom: { collectApiUrl: 'https://api.com' },    // Custom backend
+    custom: {
+      collectApiUrl: 'https://api.com',              // Custom backend
+      disabledEvents: ['scroll', 'web_vitals']       // Exclude events from custom backend only
+    },
 
     // Multi-integration: Send to multiple backends simultaneously
-    // tracelog: { projectId: 'proj-123' },                    // Analytics dashboard
-    // custom: { collectApiUrl: 'https://warehouse.com' }      // Data warehouse
+    // tracelog: { projectId: 'proj-123' },                    // Analytics dashboard (gets ALL events)
+    // custom: {
+    //   collectApiUrl: 'https://warehouse.com',               // Data warehouse
+    //   disabledEvents: ['scroll']                            // Exclude scroll from warehouse only
+    // }
     // Events sent to BOTH independently with separate error handling
   },
 
@@ -219,25 +221,50 @@ TraceLog captures these events automatically (no code required):
 
 **Disabling Optional Events:**
 
-You can disable specific auto-tracked events to reduce data volume or improve performance:
+You can exclude specific auto-tracked events from being sent to your **custom backend only**. Events are still captured locally and available to event listeners.
+
+**Note:** This setting only affects custom backend integrations. TraceLog SaaS always receives all events for complete analytics.
 
 ```typescript
-// Disable scroll tracking only
+// Exclude scroll events from custom backend only
 await tracelog.init({
-  disabledEvents: ['scroll']
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com',
+      disabledEvents: ['scroll']
+    }
+  }
 });
 
-// Disable multiple event types
+// Exclude multiple event types from custom backend
 await tracelog.init({
-  disabledEvents: ['scroll', 'web_vitals', 'error']
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com',
+      disabledEvents: ['scroll', 'web_vitals', 'error']
+    }
+  }
+});
+
+// Multi-integration: Only custom backend excludes events
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'proj-123' },           // Receives ALL events
+    custom: {
+      collectApiUrl: 'https://warehouse.com',
+      disabledEvents: ['scroll', 'web_vitals']     // Warehouse excludes scroll & vitals
+    }
+  }
 });
 ```
 
 **Use Cases:**
-- Reduce bandwidth and backend costs
-- Already using Sentry/Datadog for errors
-- Performance optimization on complex pages
-- Minimize data collection for privacy compliance
+- Reduce bandwidth and backend costs for custom backends
+- Already using Sentry/Datadog for errors (exclude `error` events)
+- Data warehouse doesn't need scroll/vitals granularity
+- Minimize custom backend data volume for privacy compliance
+
+**Important:** Events are still captured and emitted locally. Use `tracelog.on('event')` to access excluded events client-side.
 
 **Custom Events:**
 ```typescript

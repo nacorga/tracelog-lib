@@ -121,36 +121,6 @@ export const validateAppConfig = (config?: Config): void => {
     validateViewportConfig(config.viewport);
   }
 
-  if (config.disabledEvents !== undefined) {
-    if (!Array.isArray(config.disabledEvents)) {
-      throw new AppConfigValidationError('disabledEvents must be an array', 'config');
-    }
-
-    const uniqueEvents = new Set<string>();
-
-    for (const eventType of config.disabledEvents) {
-      if (typeof eventType !== 'string') {
-        throw new AppConfigValidationError('All disabled event types must be strings', 'config');
-      }
-
-      if (!DISABLEABLE_EVENT_TYPES.includes(eventType as any)) {
-        throw new AppConfigValidationError(
-          `Invalid disabled event type: "${eventType}". Must be one of: ${DISABLEABLE_EVENT_TYPES.join(', ')}`,
-          'config',
-        );
-      }
-
-      if (uniqueEvents.has(eventType)) {
-        throw new AppConfigValidationError(
-          `Duplicate disabled event type found: "${eventType}". Each event type should appear only once.`,
-          'config',
-        );
-      }
-
-      uniqueEvents.add(eventType);
-    }
-  }
-
   if (config.webVitalsMode !== undefined) {
     // Type check first
     if (typeof config.webVitalsMode !== 'string') {
@@ -320,6 +290,37 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
         'config',
       );
     }
+
+    // Validate disabledEvents for custom integration
+    if (integrations.custom.disabledEvents !== undefined) {
+      if (!Array.isArray(integrations.custom.disabledEvents)) {
+        throw new IntegrationValidationError('disabledEvents must be an array', 'config');
+      }
+
+      const uniqueEvents = new Set<string>();
+
+      for (const eventType of integrations.custom.disabledEvents) {
+        if (typeof eventType !== 'string') {
+          throw new IntegrationValidationError('All disabled event types must be strings', 'config');
+        }
+
+        if (!DISABLEABLE_EVENT_TYPES.includes(eventType as any)) {
+          throw new IntegrationValidationError(
+            `Invalid disabled event type: "${eventType}". Must be one of: ${DISABLEABLE_EVENT_TYPES.join(', ')}`,
+            'config',
+          );
+        }
+
+        if (uniqueEvents.has(eventType)) {
+          throw new IntegrationValidationError(
+            `Duplicate disabled event type found: "${eventType}". Each event type should appear only once.`,
+            'config',
+          );
+        }
+
+        uniqueEvents.add(eventType);
+      }
+    }
   }
 };
 
@@ -344,13 +345,13 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
-    disabledEvents: config?.disabledEvents ?? [],
   };
 
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
       ...normalizedConfig.integrations.custom,
       allowHttp: normalizedConfig.integrations.custom.allowHttp ?? false,
+      disabledEvents: normalizedConfig.integrations.custom.disabledEvents ?? [],
     };
   }
 

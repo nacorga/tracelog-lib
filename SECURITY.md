@@ -196,7 +196,12 @@ if (consent.level === 'full') {
   await tracelog.init({
     samplingRate: 0.1, // 10%
     errorSampling: 0.5, // 50% errors only
-    disabledEvents: ['scroll', 'web_vitals'], // Only track core events
+    integrations: {
+      custom: {
+        collectApiUrl: 'https://api.example.com',
+        disabledEvents: ['scroll', 'web_vitals'], // Only track core events in backend
+      }
+    }
   });
 } else {
   // No consent - don't initialize
@@ -250,7 +255,7 @@ Before deploying TraceLog to production (especially e-commerce):
 
 - [ ] **`sessionTimeout` appropriate** - Consider GDPR session limits (default 15min OK)
 - [ ] **`errorSampling` set** - Reduce noise in production (0.1 = 10% recommended)
-- [ ] **`disabledEvents` configured** - Disable unnecessary tracking for privacy/performance
+- [ ] **`integrations.custom.disabledEvents` configured** - Exclude unnecessary events from custom backend for privacy/performance (TraceLog SaaS always receives all events)
 - [ ] **`globalMetadata` reviewed** - No PII in metadata added to ALL events
 - [ ] **Integration configured** - TraceLog SaaS or custom backend URL validated
 
