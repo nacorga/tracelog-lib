@@ -193,10 +193,22 @@ if (consent.level === 'full') {
   });
 } else if (consent.level === 'essential') {
   // Essential only (minimal tracking)
+  // Filter high-volume events from custom backend
+  tracelog.setTransformer('beforeSend', (event) => {
+    if (['scroll', 'web_vitals'].includes(event.type)) {
+      return null; // Only track core events in backend
+    }
+    return event;
+  });
+
   await tracelog.init({
     samplingRate: 0.1, // 10%
     errorSampling: 0.5, // 50% errors only
-    disabledEvents: ['scroll', 'web_vitals'], // Only track core events
+    integrations: {
+      custom: {
+        collectApiUrl: 'https://api.example.com',
+      }
+    }
   });
 } else {
   // No consent - don't initialize
@@ -250,7 +262,7 @@ Before deploying TraceLog to production (especially e-commerce):
 
 - [ ] **`sessionTimeout` appropriate** - Consider GDPR session limits (default 15min OK)
 - [ ] **`errorSampling` set** - Reduce noise in production (0.1 = 10% recommended)
-- [ ] **`disabledEvents` configured** - Disable unnecessary tracking for privacy/performance
+- [ ] **`beforeSend` transformer configured** - Exclude unnecessary events from custom backend for privacy/performance using `setTransformer('beforeSend', ...)` (TraceLog SaaS always receives all events)
 - [ ] **`globalMetadata` reviewed** - No PII in metadata added to ALL events
 - [ ] **Integration configured** - TraceLog SaaS or custom backend URL validated
 

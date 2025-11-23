@@ -77,14 +77,13 @@ Core business logic components that handle analytics data processing, state mana
 
 ## SenderManager
 
-**Purpose**: Integration-aware event transmission with network resilience, independent persistence per integration (SaaS/Custom), and automatic request enrichment with idempotency tokens and client version tracking.
+**Purpose**: Integration-aware event transmission with network resilience, independent persistence per integration (SaaS/Custom), and automatic request enrichment with client version tracking.
 
 **Core Functionality**:
 - **Integration-Specific Sending**: Each instance handles one integration (identified by `integrationId`: 'saas' or 'custom')
 - **Network Transmission**: Sends analytics events via HTTP POST (async) or sendBeacon (sync)
 - **Request Enrichment**: Automatically adds `_metadata` wrapper with:
-  - `idempotency_token`: Unique batch identifier using `generateEventId()` format (e.g., `1704067200000-001-a3f9c2`)
-  - `client_version`: Library version from `LIB_VERSION` constant (e.g., `1.7.0`)
+  - `client_version`: Library version from `LIB_VERSION` constant (e.g., `2.0.2`)
   - `timestamp`: Request timestamp
   - `referer`: Current page URL
 - **Independent Persistence**: localStorage-based persistence with integration-specific keys (`tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom`)

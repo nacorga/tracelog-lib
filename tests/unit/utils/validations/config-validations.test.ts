@@ -260,32 +260,6 @@ describe('config-validations.utils', () => {
         }).toThrow(SamplingRateValidationError);
       });
     });
-
-    describe('disabledEvents validation', () => {
-      it('should accept valid disableable event types', () => {
-        expect(() => {
-          validateAppConfig({ disabledEvents: ['scroll', 'web_vitals', 'error'] });
-        }).not.toThrow();
-      });
-
-      it('should throw error for core event types', () => {
-        expect(() => {
-          validateAppConfig({ disabledEvents: ['page_view'] as any });
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should throw error for non-array value', () => {
-        expect(() => {
-          validateAppConfig({ disabledEvents: 'scroll' as any });
-        }).toThrow(AppConfigValidationError);
-      });
-
-      it('should throw error for invalid event type', () => {
-        expect(() => {
-          validateAppConfig({ disabledEvents: ['invalid_event'] as any });
-        }).toThrow(AppConfigValidationError);
-      });
-    });
   });
 
   describe('validateAndNormalizeConfig', () => {

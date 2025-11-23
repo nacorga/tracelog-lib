@@ -321,9 +321,14 @@ Sets a transformer function to modify events at runtime before sending to integr
 | `beforeBatch` | Batch-level (before sending) | `EventsQueue` | Custom backend only |
 
 **Integration Behavior:**
-- **TraceLog SaaS (only)**: Transformers silently ignored (schema protection)
+
+Transformers **only apply to custom backend integrations**. TraceLog SaaS always receives all events unmodified to maintain schema integrity and ensure complete analytics.
+
+- **TraceLog SaaS (only)**: Transformers silently bypassed - all events sent unmodified
 - **Custom Backend (only)**: Transformers applied as configured
-- **Multi-Integration (SaaS + Custom)**: SaaS gets original events, custom gets transformed events
+- **Multi-Integration (SaaS + Custom)**: SaaS receives original events (unfiltered), custom receives transformed/filtered events
+
+This is the same behavior as the removed `disabledEvents` configuration in v2.x, which also only affected custom backends.
 
 **Examples:**
 
@@ -379,6 +384,22 @@ tracelog.setTransformer('beforeBatch', (data) => {
   }
   return data;
 });
+
+// Multi-integration: Filter events from custom backend only
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data && ['scroll', 'web_vitals'].includes(data.type)) {
+    return null; // Filtered from custom backend ONLY
+  }
+  return data;
+});
+
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'proj-123' },           // Receives ALL events (unfiltered)
+    custom: { collectApiUrl: 'https://warehouse.com' }  // Receives filtered events
+  }
+});
+// Result: TraceLog SaaS gets all events, custom backend gets filtered events
 ```
 
 **Error Handling:**
@@ -543,7 +564,6 @@ interface Config {
   sensitiveQueryParams?: string[];
   errorSampling?: number;
   samplingRate?: number;
-  disabledEvents?: Array<'scroll' | 'web_vitals' | 'error'>;
   primaryScrollSelector?: string;
   viewport?: ViewportConfig;
   pageViewThrottleMs?: number;
@@ -553,7 +573,10 @@ interface Config {
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
   integrations?: {
     tracelog?: { projectId: string };
-    custom?: { collectApiUrl: string; allowHttp?: boolean };
+    custom?: {
+      collectApiUrl: string;
+      allowHttp?: boolean;
+    };
   };
 }
 ```
@@ -623,40 +646,6 @@ await tracelog.init({
   errorSampling: 0.1  // Track 10% of errors
 });
 ```
-
-#### `disabledEvents`
-- **Type:** `Array<'scroll' | 'web_vitals' | 'error'>`
-- **Default:** `[]` (all events enabled)
-- **Description:** Disable specific auto-tracked event types. Core events (`PAGE_VIEW`, `CLICK`, `SESSION_*`) cannot be disabled as they are essential for analytics.
-
-```typescript
-// Disable scroll tracking only
-await tracelog.init({
-  disabledEvents: ['scroll']
-});
-
-// Disable multiple event types
-await tracelog.init({
-  disabledEvents: ['scroll', 'web_vitals', 'error']
-});
-
-// Default behavior (all events enabled)
-await tracelog.init({
-  disabledEvents: []
-});
-```
-
-**Use Cases:**
-- Reduce bandwidth and backend costs by eliminating high-frequency events
-- Already using dedicated error tracking (Sentry, Datadog)
-- Performance optimization on complex pages with heavy scroll interaction
-- Minimize data collection for privacy compliance
-- Only need core analytics (page views, clicks, sessions)
-
-**Impact:**
-- `'scroll'`: No scroll depth, velocity, or engagement data
-- `'web_vitals'`: No Core Web Vitals (LCP, INP, CLS, FCP, TTFB, LONG_TASK)
-- `'error'`: No JavaScript errors or promise rejection tracking
 
 ---
 
@@ -833,9 +822,14 @@ await tracelog.init({
 });
 ```
 
-**Notes:**
-- `allowHttp: true` **only for local testing** (e.g., `http://localhost:8080`)
-- Production must use HTTPS
+**`collectApiUrl`**:
+- Full URL to your backend endpoint
+- Must use HTTPS in production
+
+**`allowHttp`**:
+- **Default:** `false`
+- Set to `true` **only for local testing** (e.g., `http://localhost:8080`)
+- Never use in production
 
 #### Multi-Integration (TraceLog SaaS + Custom Backend)
 

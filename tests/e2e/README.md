@@ -464,7 +464,7 @@ npm run serve
 1. Increase wait time: `E2E_WAIT_TIMES.EVENT_PROCESSING` → `E2E_WAIT_TIMES.DEBOUNCE`
 2. Check event type is lowercase: `'click'` not `'CLICK'`
 3. Verify event is actually triggered (check with `console.log(events)`)
-4. Check if event is filtered by config (e.g., `disabledEvents`)
+4. Check if event is filtered by transformer (e.g., `setTransformer('beforeSend', ...)` may filter events from custom backend)
 
 ### Problem: Type Errors
 

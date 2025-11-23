@@ -299,30 +299,66 @@ tracelog.event('purchase', {
 
 ## Performance
 
-### ✅ DO: Disable unnecessary event types
+### ✅ DO: Filter unnecessary events before sending to backend
+
+Use the `beforeSend` transformer to exclude specific event types from being sent to your backend. Events are still captured locally.
 
 ```typescript
-// Already using Sentry for errors? Disable error tracking
-await tracelog.init({
-  disabledEvents: ['error']
+// Already using Sentry for errors? Filter them out
+tracelog.setTransformer('beforeSend', (event) => {
+  if (event.type === 'error') {
+    return null; // Don't send to backend
+  }
+  return event;
 });
 
-// High-frequency scrolls causing performance issues?
 await tracelog.init({
-  disabledEvents: ['scroll']
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
 });
 
-// Only need core analytics (page views, clicks, sessions)?
-await tracelog.init({
-  disabledEvents: ['scroll', 'web_vitals', 'error']
+// High-frequency scrolls not needed in data warehouse?
+tracelog.setTransformer('beforeSend', (event) => {
+  if (event.type === 'scroll') {
+    return null;
+  }
+  return event;
+});
+
+// Only need core analytics? Filter scroll, web_vitals, and errors
+tracelog.setTransformer('beforeSend', (event) => {
+  const excludeTypes = ['scroll', 'web_vitals', 'error'];
+  if (excludeTypes.includes(event.type)) {
+    return null;
+  }
+  return event;
+});
+
+// Advanced: Conditional filtering based on environment
+tracelog.setTransformer('beforeSend', (event) => {
+  // Only send errors in production
+  if (event.type === 'error' && process.env.NODE_ENV !== 'production') {
+    return null;
+  }
+
+  // Sample scroll events (send only 10%)
+  if (event.type === 'scroll' && Math.random() > 0.1) {
+    return null;
+  }
+
+  return event;
 });
 ```
 
 **Benefits:**
-- Reduces client-side processing overhead
-- Lower bandwidth usage
-- Fewer backend costs
-- Faster page performance on complex applications
+- Lower bandwidth usage for custom backends
+- Reduced backend storage costs
+- Complete control over filtering logic
+- Events still available locally via `tracelog.on('event')`
+- Can add custom conditions (environment, sampling, etc.)
+
+**Important:** Transformers only apply to **custom backend integrations**. TraceLog SaaS always receives all events unmodified to maintain schema integrity. If you use both integrations, SaaS will get all events while your custom backend will get the filtered events.
 
 ### ✅ DO: Use sampling for high-traffic sites
 
