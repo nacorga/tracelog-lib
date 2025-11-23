@@ -299,59 +299,66 @@ tracelog.event('purchase', {
 
 ## Performance
 
-### ✅ DO: Exclude unnecessary event types from custom backend
+### ✅ DO: Filter unnecessary events before sending to backend
 
-**Note:** Events are still captured locally. This only filters what's sent to your custom backend.
+Use the `beforeSend` transformer to exclude specific event types from being sent to your backend. Events are still captured locally.
 
 ```typescript
-// Already using Sentry for errors? Exclude from custom backend
+// Already using Sentry for errors? Filter them out
+tracelog.setTransformer('beforeSend', (event) => {
+  if (event.type === 'error') {
+    return null; // Don't send to backend
+  }
+  return event;
+});
+
 await tracelog.init({
   integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com',
-      disabledEvents: ['error']
-    }
+    custom: { collectApiUrl: 'https://api.example.com' }
   }
 });
 
 // High-frequency scrolls not needed in data warehouse?
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://warehouse.com',
-      disabledEvents: ['scroll']
-    }
+tracelog.setTransformer('beforeSend', (event) => {
+  if (event.type === 'scroll') {
+    return null;
   }
+  return event;
 });
 
-// Only need core analytics in custom backend?
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com',
-      disabledEvents: ['scroll', 'web_vitals', 'error']
-    }
+// Only need core analytics? Filter scroll, web_vitals, and errors
+tracelog.setTransformer('beforeSend', (event) => {
+  const excludeTypes = ['scroll', 'web_vitals', 'error'];
+  if (excludeTypes.includes(event.type)) {
+    return null;
   }
+  return event;
 });
 
-// Multi-integration: SaaS gets everything, warehouse gets filtered
-await tracelog.init({
-  integrations: {
-    tracelog: { projectId: 'proj-123' },           // Full analytics
-    custom: {
-      collectApiUrl: 'https://warehouse.com',
-      disabledEvents: ['scroll', 'web_vitals']     // Lean data warehouse
-    }
+// Advanced: Conditional filtering based on environment
+tracelog.setTransformer('beforeSend', (event) => {
+  // Only send errors in production
+  if (event.type === 'error' && process.env.NODE_ENV !== 'production') {
+    return null;
   }
+
+  // Sample scroll events (send only 10%)
+  if (event.type === 'scroll' && Math.random() > 0.1) {
+    return null;
+  }
+
+  return event;
 });
 ```
 
 **Benefits:**
-- Lower bandwidth usage to custom backend
-- Reduced custom backend storage costs
+- Lower bandwidth usage for custom backends
+- Reduced backend storage costs
+- Complete control over filtering logic
 - Events still available locally via `tracelog.on('event')`
-- TraceLog SaaS receives all events for complete analytics
-- Faster page performance on complex applications
+- Can add custom conditions (environment, sampling, etc.)
+
+**Important:** Transformers only apply to **custom backend integrations**. TraceLog SaaS always receives all events unmodified to maintain schema integrity. If you use both integrations, SaaS will get all events while your custom backend will get the filtered events.
 
 ### ✅ DO: Use sampling for high-traffic sites
 

@@ -321,9 +321,14 @@ Sets a transformer function to modify events at runtime before sending to integr
 | `beforeBatch` | Batch-level (before sending) | `EventsQueue` | Custom backend only |
 
 **Integration Behavior:**
-- **TraceLog SaaS (only)**: Transformers silently ignored (schema protection)
+
+Transformers **only apply to custom backend integrations**. TraceLog SaaS always receives all events unmodified to maintain schema integrity and ensure complete analytics.
+
+- **TraceLog SaaS (only)**: Transformers silently bypassed - all events sent unmodified
 - **Custom Backend (only)**: Transformers applied as configured
-- **Multi-Integration (SaaS + Custom)**: SaaS gets original events, custom gets transformed events
+- **Multi-Integration (SaaS + Custom)**: SaaS receives original events (unfiltered), custom receives transformed/filtered events
+
+This is the same behavior as the removed `disabledEvents` configuration in v2.x, which also only affected custom backends.
 
 **Examples:**
 
@@ -379,6 +384,22 @@ tracelog.setTransformer('beforeBatch', (data) => {
   }
   return data;
 });
+
+// Multi-integration: Filter events from custom backend only
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data && ['scroll', 'web_vitals'].includes(data.type)) {
+    return null; // Filtered from custom backend ONLY
+  }
+  return data;
+});
+
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'proj-123' },           // Receives ALL events (unfiltered)
+    custom: { collectApiUrl: 'https://warehouse.com' }  // Receives filtered events
+  }
+});
+// Result: TraceLog SaaS gets all events, custom backend gets filtered events
 ```
 
 **Error Handling:**
@@ -555,7 +576,6 @@ interface Config {
     custom?: {
       collectApiUrl: string;
       allowHttp?: boolean;
-      disabledEvents?: Array<'scroll' | 'web_vitals' | 'error'>;
     };
   };
 }
@@ -788,7 +808,7 @@ await tracelog.init({
 ```
 
 #### `integrations.custom`
-- **Type:** `{ collectApiUrl: string; allowHttp?: boolean; disabledEvents?: Array<'scroll' | 'web_vitals' | 'error'> }`
+- **Type:** `{ collectApiUrl: string; allowHttp?: boolean }`
 - **Description:** Custom backend integration
 
 ```typescript
@@ -796,8 +816,7 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect',
-      allowHttp: false,  // Only true for local testing
-      disabledEvents: ['scroll', 'web_vitals']  // Exclude from custom backend only
+      allowHttp: false  // Only true for local testing
     }
   }
 });
@@ -811,58 +830,6 @@ await tracelog.init({
 - **Default:** `false`
 - Set to `true` **only for local testing** (e.g., `http://localhost:8080`)
 - Never use in production
-
-**`disabledEvents`**:
-- **Type:** `Array<'scroll' | 'web_vitals' | 'error'>`
-- **Default:** `[]` (all events sent)
-- **Description:** Exclude specific auto-tracked event types from being sent to **custom backend only**. Events are still captured locally and available to event listeners. TraceLog SaaS (if configured) always receives all events.
-
-```typescript
-// Exclude scroll events from custom backend
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://warehouse.com',
-      disabledEvents: ['scroll']  // Scroll events NOT sent to warehouse
-    }
-  }
-});
-
-// Exclude multiple event types
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com',
-      disabledEvents: ['scroll', 'web_vitals', 'error']
-    }
-  }
-});
-
-// Multi-integration: Only custom backend excludes events
-await tracelog.init({
-  integrations: {
-    tracelog: { projectId: 'proj-123' },           // Gets ALL events
-    custom: {
-      collectApiUrl: 'https://warehouse.com',
-      disabledEvents: ['scroll', 'web_vitals']     // Excludes scroll & vitals
-    }
-  }
-});
-```
-
-**Use Cases:**
-- Reduce bandwidth and backend storage costs for custom backends
-- Already using dedicated error tracking (Sentry, Datadog) - exclude `'error'`
-- Data warehouse doesn't need scroll/vitals granularity
-- Performance optimization on complex pages
-- Minimize custom backend data volume for privacy compliance
-
-**Impact:**
-- `'scroll'`: No scroll depth, velocity, or engagement data sent to custom backend
-- `'web_vitals'`: No Core Web Vitals (LCP, INP, CLS, FCP, TTFB) sent to custom backend
-- `'error'`: No JavaScript errors or promise rejection tracking sent to custom backend
-
-**Important:** Events are still captured and emitted locally. Use `tracelog.on('event')` to access excluded events client-side.
 
 #### Multi-Integration (TraceLog SaaS + Custom Backend)
 

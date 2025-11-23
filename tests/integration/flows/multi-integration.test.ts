@@ -32,7 +32,6 @@ describe('Integration: Multi-Integration Setup', () => {
 
     // Initialize with both SaaS and custom backend
     bridge = await initTestBridge({
-      disabledEvents: ['page_view'], // Disable automatic page_view to simplify tests
       integrations: {
         tracelog: {
           projectId: 'test-project-123',
@@ -153,7 +152,6 @@ describe('Integration: Multi-Integration Event Flow', () => {
     const specialUrls = getSpecialApiUrls();
 
     bridge = await initTestBridge({
-      disabledEvents: ['page_view'], // Disable automatic page_view to simplify tests
       integrations: {
         tracelog: {
           projectId: 'test-project-123',
@@ -268,7 +266,6 @@ describe('Integration: Multi-Integration Event Flow', () => {
     destroyTestBridge();
 
     bridge = await initTestBridge({
-      disabledEvents: ['page_view'], // Disable automatic page_view to simplify tests
       integrations: {
         tracelog: {
           projectId: 'test-project-123',

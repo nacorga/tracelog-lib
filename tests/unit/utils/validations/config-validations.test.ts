@@ -260,60 +260,6 @@ describe('config-validations.utils', () => {
         }).toThrow(SamplingRateValidationError);
       });
     });
-
-    describe('disabledEvents validation (custom integration)', () => {
-      it('should accept valid disableable event types', () => {
-        expect(() => {
-          validateAppConfig({
-            integrations: {
-              custom: {
-                collectApiUrl: 'https://api.test.com',
-                disabledEvents: ['scroll', 'web_vitals', 'error'],
-              },
-            },
-          });
-        }).not.toThrow();
-      });
-
-      it('should throw error for core event types', () => {
-        expect(() => {
-          validateAppConfig({
-            integrations: {
-              custom: {
-                collectApiUrl: 'https://api.test.com',
-                disabledEvents: ['page_view'] as any,
-              },
-            },
-          });
-        }).toThrow(IntegrationValidationError);
-      });
-
-      it('should throw error for non-array value', () => {
-        expect(() => {
-          validateAppConfig({
-            integrations: {
-              custom: {
-                collectApiUrl: 'https://api.test.com',
-                disabledEvents: 'scroll' as any,
-              },
-            },
-          });
-        }).toThrow(IntegrationValidationError);
-      });
-
-      it('should throw error for invalid event type', () => {
-        expect(() => {
-          validateAppConfig({
-            integrations: {
-              custom: {
-                collectApiUrl: 'https://api.test.com',
-                disabledEvents: ['invalid_event'] as any,
-              },
-            },
-          });
-        }).toThrow(IntegrationValidationError);
-      });
-    });
   });
 
   describe('validateAndNormalizeConfig', () => {

@@ -1,7 +1,6 @@
 import { MetadataType } from './common.types';
 import { ViewportConfig } from './viewport.types';
 import { WebVitalType } from './event.types';
-import { DisabledEventType } from '../constants';
 
 /**
  * Web Vitals filtering mode
@@ -57,19 +56,6 @@ export interface Config {
       collectApiUrl: string;
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
-      /**
-       * Event types to exclude from being sent to the custom backend.
-       * Note: Events are still captured and available to local event listeners.
-       * Only affects what is sent to the custom collectApiUrl.
-       * @default []
-       * @example
-       * // Don't send scroll events to custom backend
-       * disabledEvents: ['scroll']
-       * @example
-       * // Exclude performance and error tracking from custom backend
-       * disabledEvents: ['web_vitals', 'error']
-       */
-      disabledEvents?: DisabledEventType[];
     };
   };
 }
