@@ -267,22 +267,30 @@ describe('Integration: Config Propagation', () => {
     expect(event).toBeDefined();
   });
 
-  it('should apply disabledEvents to handlers', async () => {
-    const disabledEvents = ['scroll', 'web_vitals', 'error'];
+  it('should always initialize all handlers (filtering happens at send time)', async () => {
+    // All handlers are always initialized regardless of transformer configuration
+    // Filtering only affects what gets sent to backends (via beforeSend transformer)
+    const config = {
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com',
+        },
+      },
+    };
 
-    bridge = await initTestBridge({ disabledEvents });
+    bridge = await initTestBridge(config);
 
     const handlers = getHandlers(bridge);
 
-    // Core handlers always initialized
+    // ALL handlers always initialized
     expect(handlers.session).toBeDefined();
     expect(handlers.pageView).toBeDefined();
     expect(handlers.click).toBeDefined();
+    expect(handlers.scroll).toBeDefined();
+    expect(handlers.performance).toBeDefined();
+    expect(handlers.error).toBeDefined();
 
-    // Disabled handlers return null (not initialized)
-    expect(handlers.scroll).toBeNull();
-    expect(handlers.performance).toBeNull();
-    expect(handlers.error).toBeNull();
+    // Events are still captured even if filtered via transformers before network send
   });
 });
 

@@ -172,18 +172,14 @@ await tracelog.init({
   samplingRate: 1.0,               // 100% (default)
   sensitiveQueryParams: ['token'], // Add to defaults
 
-  // Event Control
-  disabledEvents: ['scroll'],  // Disable specific auto-tracked events
-                                // Options: 'scroll', 'web_vitals', 'error'
-
   // Integrations (pick one, multiple, or none)
   integrations: {
     tracelog: { projectId: 'your-id' },              // TraceLog SaaS
     custom: { collectApiUrl: 'https://api.com' },    // Custom backend
 
     // Multi-integration: Send to multiple backends simultaneously
-    // tracelog: { projectId: 'proj-123' },                    // Analytics dashboard
-    // custom: { collectApiUrl: 'https://warehouse.com' }      // Data warehouse
+    // tracelog: { projectId: 'proj-123' },            // Analytics dashboard
+    // custom: { collectApiUrl: 'https://warehouse.com' }  // Data warehouse
     // Events sent to BOTH independently with separate error handling
   },
 
@@ -207,37 +203,86 @@ await tracelog.init({
 
 TraceLog captures these events automatically (no code required):
 
-| Event Type        | What It Tracks                              | Can Disable?   |
-|-------------------|---------------------------------------------|----------------|
-| `page_view`       | Navigation, SPA route changes               | ❌ Core event  |
-| `click`           | User interactions with elements             | ❌ Core event  |
-| `session_start`   | New session creation                        | ❌ Core event  |
-| `scroll`          | Scroll depth, velocity, engagement          | ✅ Optional    |
-| `web_vitals`      | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) | ✅ Optional    |
-| `error`           | JavaScript errors, promise rejections       | ✅ Optional    |
-| `viewport_visible`| Element visibility (requires `viewport` config) | Via config |
+| Event Type        | What It Tracks                              |
+|-------------------|---------------------------------------------|
+| `page_view`       | Navigation, SPA route changes               |
+| `click`           | User interactions with elements             |
+| `session_start`   | New session creation                        |
+| `scroll`          | Scroll depth, velocity, engagement          |
+| `web_vitals`      | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) |
+| `error`           | JavaScript errors, promise rejections       |
+| `viewport_visible`| Element visibility (requires `viewport` config) |
 
-**Disabling Optional Events:**
+**Filtering Events:**
 
-You can disable specific auto-tracked events to reduce data volume or improve performance:
+You can filter specific events before they're sent to your backend using the `beforeSend` transformer. This gives you complete control over what data is transmitted.
 
 ```typescript
-// Disable scroll tracking only
-await tracelog.init({
-  disabledEvents: ['scroll']
+// Filter out high-volume events (scroll, web_vitals)
+tracelog.setTransformer('beforeSend', (event) => {
+  // Skip scroll and web vitals events
+  if (['scroll', 'web_vitals'].includes(event.type)) {
+    return null; // Returning null excludes the event from being sent
+  }
+  return event; // Send all other events normally
 });
 
-// Disable multiple event types
 await tracelog.init({
-  disabledEvents: ['scroll', 'web_vitals', 'error']
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com' }
+  }
 });
 ```
 
+**Advanced Filtering:**
+
+```typescript
+// Conditional filtering based on custom logic
+tracelog.setTransformer('beforeSend', (event) => {
+  // Only send errors in production
+  if (event.type === 'error' && process.env.NODE_ENV !== 'production') {
+    return null;
+  }
+
+  // Only send 10% of scroll events (sampling)
+  if (event.type === 'scroll' && Math.random() > 0.1) {
+    return null;
+  }
+
+  return event;
+});
+```
+
+**Multi-Integration Behavior:**
+
+```typescript
+// Transformers ONLY apply to custom backends
+// TraceLog SaaS always receives all events unmodified
+tracelog.setTransformer('beforeSend', (event) => {
+  if (['scroll', 'web_vitals'].includes(event.type)) {
+    return null; // Filtered from custom backend only
+  }
+  return event;
+});
+
+await tracelog.init({
+  integrations: {
+    tracelog: { projectId: 'proj-123' },            // Gets ALL events (unfiltered)
+    custom: { collectApiUrl: 'https://warehouse.com' }  // Gets filtered events
+  }
+});
+```
+
+**Important:** Transformers (`beforeSend`, `beforeBatch`) only apply to **custom backend integrations**. TraceLog SaaS always receives all events unmodified to maintain schema integrity and ensure complete analytics. This behavior is the same as the removed `disabledEvents` configuration.
+
 **Use Cases:**
-- Reduce bandwidth and backend costs
-- Already using Sentry/Datadog for errors
-- Performance optimization on complex pages
-- Minimize data collection for privacy compliance
+- Reduce bandwidth and backend costs for custom backends
+- Already using Sentry/Datadog for errors (filter out `error` events from custom backend)
+- Data warehouse doesn't need scroll/vitals granularity
+- Minimize custom backend data volume for privacy compliance
+- Custom sampling logic per event type
+
+**Note:** Filtered events are still captured locally. Use `tracelog.on('event')` to access all events client-side, even those excluded from backend transmission.
 
 **Custom Events:**
 ```typescript

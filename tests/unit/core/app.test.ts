@@ -311,19 +311,6 @@ describe('App - Initialization', () => {
       const appliedConfig = bridge.get('config');
       expect(appliedConfig.samplingRate).toBe(0.5);
     });
-
-    it('should apply disabledEvents from config', async () => {
-      const config = createMockConfig({
-        disabledEvents: ['scroll', 'web_vitals'],
-      });
-
-      const bridge = await initTestBridge(config);
-
-      const { scroll, performance } = getHandlers(bridge);
-
-      expect(scroll).toBeNull();
-      expect(performance).toBeNull();
-    });
   });
 });
 

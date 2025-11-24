@@ -11,7 +11,6 @@ import {
   DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS,
   DEFAULT_VISIBILITY_TIMEOUT_MS,
   DEFAULT_ERROR_SAMPLING_RATE,
-  DISABLEABLE_EVENT_TYPES,
 } from '../../constants';
 import {
   Config,
@@ -119,36 +118,6 @@ export const validateAppConfig = (config?: Config): void => {
 
   if (config.viewport !== undefined) {
     validateViewportConfig(config.viewport);
-  }
-
-  if (config.disabledEvents !== undefined) {
-    if (!Array.isArray(config.disabledEvents)) {
-      throw new AppConfigValidationError('disabledEvents must be an array', 'config');
-    }
-
-    const uniqueEvents = new Set<string>();
-
-    for (const eventType of config.disabledEvents) {
-      if (typeof eventType !== 'string') {
-        throw new AppConfigValidationError('All disabled event types must be strings', 'config');
-      }
-
-      if (!DISABLEABLE_EVENT_TYPES.includes(eventType as any)) {
-        throw new AppConfigValidationError(
-          `Invalid disabled event type: "${eventType}". Must be one of: ${DISABLEABLE_EVENT_TYPES.join(', ')}`,
-          'config',
-        );
-      }
-
-      if (uniqueEvents.has(eventType)) {
-        throw new AppConfigValidationError(
-          `Duplicate disabled event type found: "${eventType}". Each event type should appear only once.`,
-          'config',
-        );
-      }
-
-      uniqueEvents.add(eventType);
-    }
   }
 
   if (config.webVitalsMode !== undefined) {
@@ -344,7 +313,6 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
-    disabledEvents: config?.disabledEvents ?? [],
   };
 
   if (normalizedConfig.integrations?.custom) {

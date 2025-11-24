@@ -324,7 +324,6 @@ const getDeviceType = () => {
 };
 const LOG_STYLE_ACTIVE = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
 const LOG_STYLE_DISABLED = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
-const DISABLEABLE_EVENT_TYPES = ["scroll", "web_vitals", "error"];
 const PII_PATTERNS = [
   // Email addresses
   /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
@@ -405,7 +404,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.0.1";
+const version = "2.0.2";
 const LIB_VERSION = version;
 const detectQaMode = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -773,30 +772,6 @@ const validateAppConfig = (config) => {
   if (config.viewport !== void 0) {
     validateViewportConfig(config.viewport);
   }
-  if (config.disabledEvents !== void 0) {
-    if (!Array.isArray(config.disabledEvents)) {
-      throw new AppConfigValidationError("disabledEvents must be an array", "config");
-    }
-    const uniqueEvents = /* @__PURE__ */ new Set();
-    for (const eventType of config.disabledEvents) {
-      if (typeof eventType !== "string") {
-        throw new AppConfigValidationError("All disabled event types must be strings", "config");
-      }
-      if (!DISABLEABLE_EVENT_TYPES.includes(eventType)) {
-        throw new AppConfigValidationError(
-          `Invalid disabled event type: "${eventType}". Must be one of: ${DISABLEABLE_EVENT_TYPES.join(", ")}`,
-          "config"
-        );
-      }
-      if (uniqueEvents.has(eventType)) {
-        throw new AppConfigValidationError(
-          `Duplicate disabled event type found: "${eventType}". Each event type should appear only once.`,
-          "config"
-        );
-      }
-      uniqueEvents.add(eventType);
-    }
-  }
   if (config.webVitalsMode !== void 0) {
     if (typeof config.webVitalsMode !== "string") {
       throw new AppConfigValidationError(
@@ -924,8 +899,7 @@ const validateAndNormalizeConfig = (config) => {
     samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
-    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
-    disabledEvents: config?.disabledEvents ?? []
+    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -5928,7 +5902,6 @@ class App extends StateManager {
   }
   initializeHandlers() {
     const config = this.get("config");
-    const disabledEvents = config.disabledEvents ?? [];
     this.handlers.session = new SessionHandler(
       this.managers.storage,
       this.managers.event
@@ -5947,20 +5920,14 @@ class App extends StateManager {
     this.handlers.pageView.startTracking();
     this.handlers.click = new ClickHandler(this.managers.event);
     this.handlers.click.startTracking();
-    if (!disabledEvents.includes("scroll")) {
-      this.handlers.scroll = new ScrollHandler(this.managers.event);
-      this.handlers.scroll.startTracking();
-    }
-    if (!disabledEvents.includes("web_vitals")) {
-      this.handlers.performance = new PerformanceHandler(this.managers.event);
-      this.handlers.performance.startTracking().catch((error) => {
-        log("warn", "Failed to start performance tracking", { error });
-      });
-    }
-    if (!disabledEvents.includes("error")) {
-      this.handlers.error = new ErrorHandler(this.managers.event);
-      this.handlers.error.startTracking();
-    }
+    this.handlers.scroll = new ScrollHandler(this.managers.event);
+    this.handlers.scroll.startTracking();
+    this.handlers.performance = new PerformanceHandler(this.managers.event);
+    this.handlers.performance.startTracking().catch((error) => {
+      log("warn", "Failed to start performance tracking", { error });
+    });
+    this.handlers.error = new ErrorHandler(this.managers.event);
+    this.handlers.error.startTracking();
     if (config.viewport) {
       this.handlers.viewport = new ViewportHandler(this.managers.event);
       this.handlers.viewport.startTracking();
