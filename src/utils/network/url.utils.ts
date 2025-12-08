@@ -113,7 +113,7 @@ export const getCollectApiUrls = (config: Config): { saas?: string; custom?: str
  */
 export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): string => {
   if (!url || typeof url !== 'string') {
-    log('warn', 'Invalid URL provided to normalizeUrl', { data: { url: String(url) } });
+    log('warn', 'Invalid URL provided to normalizeUrl', { data: { type: typeof url } });
     return url || '';
   }
 
@@ -143,9 +143,7 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
 
     return result;
   } catch (error) {
-    const urlPreview = url && typeof url === 'string' ? url.slice(0, 100) : String(url);
-
-    log('warn', 'URL normalization failed, returning original', { error, data: { url: urlPreview } });
+    log('warn', 'URL normalization failed, returning original', { error, data: { urlLength: url?.length } });
 
     return url;
   }

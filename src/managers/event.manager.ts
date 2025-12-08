@@ -428,7 +428,7 @@ export class EventManager extends StateManager {
     if (this.get('mode') === Mode.QA) {
       if (eventType === EventType.CUSTOM && custom_event) {
         log('info', `Custom Event: ${custom_event.name}`, {
-          showToClient: true,
+          visibility: 'qa',
           data: {
             name: custom_event.name,
             ...(custom_event.metadata && { metadata: custom_event.metadata }),
@@ -444,7 +444,7 @@ export class EventManager extends StateManager {
         const displayName = viewport_data.name || viewport_data.id || viewport_data.selector;
 
         log('info', `Viewport Visible: ${displayName}`, {
-          showToClient: true,
+          visibility: 'qa',
           data: {
             selector: viewport_data.selector,
             ...(viewport_data.name && { name: viewport_data.name }),

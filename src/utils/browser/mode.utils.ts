@@ -68,7 +68,7 @@ export const detectQaMode = (): boolean => {
       sessionStorage.setItem(QA_MODE_KEY, 'true');
 
       log('info', 'QA Mode ACTIVE', {
-        showToClient: true,
+        visibility: 'qa',
         style: LOG_STYLE_ACTIVE,
       });
     } else if (urlParam === QA_MODE_DISABLE_VALUE) {
@@ -76,7 +76,7 @@ export const detectQaMode = (): boolean => {
       sessionStorage.setItem(QA_MODE_KEY, 'false');
 
       log('info', 'QA Mode DISABLED', {
-        showToClient: true,
+        visibility: 'qa',
         style: LOG_STYLE_DISABLED,
       });
     }
@@ -105,7 +105,7 @@ export const setQaMode = (enabled: boolean): void => {
     sessionStorage.setItem(QA_MODE_KEY, enabled ? 'true' : 'false');
 
     log('info', enabled ? 'QA Mode ACTIVE' : 'QA Mode DISABLED', {
-      showToClient: true,
+      visibility: 'qa',
       style: enabled ? LOG_STYLE_ACTIVE : LOG_STYLE_DISABLED,
     });
   } catch {
