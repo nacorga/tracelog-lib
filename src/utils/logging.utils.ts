@@ -82,7 +82,12 @@ export const formatLogMsg = (msg: string, error?: unknown): string => {
 
 /**
  * Check if QA mode is active by reading sessionStorage directly
- * This avoids circular dependency with mode.utils.ts
+ *
+ * NOTE: Intentional duplication of mode.utils.ts:isQaModeActive() to avoid
+ * circular dependency (mode.utils.ts imports log() from this file).
+ * Changes to QA mode detection logic must be synchronized in both files.
+ *
+ * @see src/utils/browser/mode.utils.ts - Canonical public implementation
  */
 const isQaModeActive = (): boolean => {
   if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
