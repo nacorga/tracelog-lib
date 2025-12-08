@@ -65,10 +65,10 @@ export class StorageManager {
     this.sessionStorageRef = this.initializeStorage('sessionStorage');
 
     if (!this.storage) {
-      log('warn', 'localStorage not available, using memory fallback');
+      log('debug', 'localStorage not available, using memory fallback');
     }
     if (!this.sessionStorageRef) {
-      log('warn', 'sessionStorage not available, using memory fallback');
+      log('debug', 'sessionStorage not available, using memory fallback');
     }
   }
 

@@ -20,7 +20,7 @@ import {
 } from './types';
 import {
   isEventValid,
-  getDeviceType,
+  getDeviceInfo,
   normalizeUrl,
   Emitter,
   getCollectApiUrls,
@@ -209,16 +209,16 @@ export class App extends StateManager {
     const collectApiUrls = getCollectApiUrls(config);
     this.set('collectApiUrls', collectApiUrls);
 
-    const device = getDeviceType();
+    const device = getDeviceInfo();
     this.set('device', device);
 
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set('pageUrl', pageUrl);
 
-    const mode = detectQaMode() ? Mode.QA : undefined;
+    const isQaMode = detectQaMode();
 
-    if (mode) {
-      this.set('mode', mode);
+    if (isQaMode) {
+      this.set('mode', Mode.QA);
     }
   }
 

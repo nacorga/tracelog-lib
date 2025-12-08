@@ -387,7 +387,7 @@ export class ScrollHandler extends StateManager {
 
     this.limitWarningLogged = true;
 
-    log('warn', 'Max scroll events per session reached', {
+    log('debug', 'Max scroll events per session reached', {
       data: { limit: this.maxEventsPerSession },
     });
   }
@@ -503,7 +503,7 @@ export class ScrollHandler extends StateManager {
     } else {
       const element = document.querySelector(selector);
       if (!(element instanceof HTMLElement)) {
-        log('warn', `Selector "${selector}" did not match an HTMLElement`);
+        log('debug', `Selector "${selector}" did not match an HTMLElement`);
         return;
       }
       targetElement = element;

@@ -1,3 +1,15 @@
+import { QA_MODE_KEY } from '../constants/storage.constants';
+import { LOG_STYLE_CRITICAL } from '../constants/app.constants';
+
+/**
+ * Log visibility level determining when logs are shown
+ *
+ * - 'critical': Always visible (production included) - for Sentry/monitoring
+ * - 'qa': Only visible when QA mode is active (equivalent to showToClient: true)
+ * - undefined: Only visible in NODE_ENV=development
+ */
+export type LogVisibility = 'critical' | 'qa';
+
 /**
  * Formats log messages with optional error information and environment-specific sanitization
  *
@@ -69,54 +81,130 @@ export const formatLogMsg = (msg: string, error?: unknown): string => {
 };
 
 /**
- * Safe logging utility that respects production environment
+ * Check if QA mode is active by reading sessionStorage directly
+ * This avoids circular dependency with mode.utils.ts
+ */
+const isQaModeActive = (): boolean => {
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+    return false;
+  }
+  try {
+    return sessionStorage.getItem(QA_MODE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Safe logging utility that enforces zero logs in production
  *
  * @param type - Log level (info, warn, error, debug)
  * @param msg - Message to log
  * @param extra - Optional extra data
  * @param extra.error - Error object to include in the log message
  * @param extra.data - Additional data object to log (will be sanitized in production)
- * @param extra.showToClient - If true, info logs will be shown in production
+ * @param extra.showToClient - If true, log will be shown in production (QA mode only) - DEPRECATED: use visibility: 'qa'
  * @param extra.style - CSS styles to apply to the console message (browser only, uses %c formatting)
+ * @param extra.visibility - Controls when log is visible:
+ *   - 'critical': Always visible (production included) - for monitoring/Sentry
+ *   - 'qa': Only visible when QA mode is active
+ *   - undefined: Only visible in NODE_ENV=development
  *
- * Production behavior:
- * - debug: Never logged in production
- * - info: Only logged if showToClient=true
- * - warn: Always logged (important for debugging production issues)
- * - error: Always logged
- * - Stack traces are sanitized
- * - Data objects are sanitized
+ * Visibility hierarchy (production):
+ * - CRITICAL: Always shown - errors that must reach monitoring platforms
+ * - QA: Shown with ?tlog_mode=qa - custom event verification
+ * - Default: Never shown in production
+ *
+ * Development behavior (NODE_ENV=development):
+ * - All logs visible regardless of visibility level
+ * - Full error messages and stack traces preserved
  */
 export const log = (
   type: 'info' | 'warn' | 'error' | 'debug',
   msg: string,
-  extra?: { error?: unknown; data?: Record<string, unknown>; showToClient?: boolean; style?: string },
+  extra?: {
+    error?: unknown;
+    data?: Record<string, unknown>;
+    showToClient?: boolean;
+    style?: string;
+    visibility?: LogVisibility;
+  },
 ): void => {
-  const { error, data, showToClient = false, style } = extra ?? {};
+  const { error, data, showToClient = false, style, visibility } = extra ?? {};
   const formattedMsg = error ? formatLogMsg(msg, error) : `[TraceLog] ${msg}`;
   const method = type === 'error' ? 'error' : type === 'warn' ? 'warn' : 'log';
   const isProduction = process.env.NODE_ENV !== 'development';
 
-  if (isProduction) {
-    if (type === 'debug') {
-      return;
-    }
-
-    if (type === 'info' && !showToClient) {
-      return;
-    }
+  // Development: All logs visible
+  if (!isProduction) {
+    outputLog(method, formattedMsg, style, data);
+    return;
   }
 
+  // Production: Check visibility level
+  const shouldShow = shouldShowLog(visibility, showToClient);
+
+  if (!shouldShow) {
+    return;
+  }
+
+  // Apply appropriate style for visibility level
+  const effectiveStyle = getEffectiveStyle(visibility, style);
+  const sanitizedData = data !== undefined ? sanitizeLogData(data) : undefined;
+
+  outputLog(method, formattedMsg, effectiveStyle, sanitizedData);
+};
+
+/**
+ * Determines if a log should be shown based on visibility level
+ */
+const shouldShowLog = (visibility: LogVisibility | undefined, showToClient: boolean): boolean => {
+  // Critical logs are always shown
+  if (visibility === 'critical') {
+    return true;
+  }
+
+  // QA mode logs (including legacy showToClient)
+  if (visibility === 'qa' || showToClient) {
+    return isQaModeActive();
+  }
+
+  // Default: not shown in production
+  return false;
+};
+
+/**
+ * Gets the appropriate style for the visibility level
+ */
+const getEffectiveStyle = (visibility: LogVisibility | undefined, providedStyle: string | undefined): string => {
+  if (providedStyle !== undefined && providedStyle !== '') {
+    return providedStyle;
+  }
+
+  if (visibility === 'critical') {
+    return LOG_STYLE_CRITICAL;
+  }
+
+  return '';
+};
+
+/**
+ * Outputs the log message to console
+ */
+const outputLog = (
+  method: 'log' | 'warn' | 'error',
+  formattedMsg: string,
+  style: string | undefined,
+  data: Record<string, unknown> | undefined,
+): void => {
   const hasStyle = style !== undefined && style !== '';
   const styledMsg = hasStyle ? `%c${formattedMsg}` : formattedMsg;
 
   if (data !== undefined) {
-    const sanitizedData = isProduction ? sanitizeLogData(data) : data;
-
     if (hasStyle) {
-      console[method](styledMsg, style, sanitizedData);
+      console[method](styledMsg, style, data);
     } else {
-      console[method](styledMsg, sanitizedData);
+      console[method](styledMsg, data);
     }
   } else {
     if (hasStyle) {

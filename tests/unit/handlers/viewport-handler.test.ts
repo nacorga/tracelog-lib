@@ -90,9 +90,7 @@ describe('ViewportHandler - Basic Initialization', () => {
     });
   });
 
-  it('should warn and not track with invalid threshold < 0', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
+  it('should not track with invalid threshold < 0', () => {
     vi.spyOn(handler as any, 'get').mockReturnValue({
       viewport: {
         elements: [{ selector: '.test' }],
@@ -102,13 +100,10 @@ describe('ViewportHandler - Basic Initialization', () => {
 
     handler.startTracking();
 
-    expect(warnSpy).toHaveBeenCalledWith('[TraceLog] ViewportHandler: Invalid threshold, must be between 0 and 1');
     expect(global.IntersectionObserver).not.toHaveBeenCalled();
   });
 
-  it('should warn and not track with invalid threshold > 1', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
+  it('should not track with invalid threshold > 1', () => {
     vi.spyOn(handler as any, 'get').mockReturnValue({
       viewport: {
         elements: [{ selector: '.test' }],
@@ -118,13 +113,10 @@ describe('ViewportHandler - Basic Initialization', () => {
 
     handler.startTracking();
 
-    expect(warnSpy).toHaveBeenCalledWith('[TraceLog] ViewportHandler: Invalid threshold, must be between 0 and 1');
     expect(global.IntersectionObserver).not.toHaveBeenCalled();
   });
 
-  it('should warn and not track with invalid minDwellTime < 0', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
+  it('should not track with invalid minDwellTime < 0', () => {
     vi.spyOn(handler as any, 'get').mockReturnValue({
       viewport: {
         elements: [{ selector: '.test' }],
@@ -134,12 +126,10 @@ describe('ViewportHandler - Basic Initialization', () => {
 
     handler.startTracking();
 
-    expect(warnSpy).toHaveBeenCalledWith('[TraceLog] ViewportHandler: Invalid minDwellTime, must be non-negative');
     expect(global.IntersectionObserver).not.toHaveBeenCalled();
   });
 
-  it('should warn if IntersectionObserver not supported', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('should gracefully handle IntersectionObserver not supported', () => {
     (global.IntersectionObserver as any) = undefined;
 
     vi.spyOn(handler as any, 'get').mockReturnValue({
@@ -148,11 +138,10 @@ describe('ViewportHandler - Basic Initialization', () => {
       },
     });
 
-    handler.startTracking();
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[TraceLog] ViewportHandler: IntersectionObserver not supported in this browser',
-    );
+    // Should not throw error when IntersectionObserver is not available
+    expect(() => {
+      handler.startTracking();
+    }).not.toThrow();
   });
 });
 
@@ -250,24 +239,20 @@ describe('ViewportHandler - Element Observation', () => {
     expect(mockObserver.observe).toHaveBeenCalledTimes(1);
   });
 
-  it('should warn on invalid selector', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
+  it('should gracefully handle invalid selector', () => {
     vi.spyOn(handler as any, 'get').mockReturnValue({
       viewport: {
         elements: [{ selector: '::invalid::selector' }],
       },
     });
 
-    handler.startTracking();
-
-    expect(warnSpy).toHaveBeenCalled();
-    expect(warnSpy.mock.calls[0]?.[0]).toContain('Invalid selector "::invalid::selector"');
+    // Should not throw error with invalid selector
+    expect(() => {
+      handler.startTracking();
+    }).not.toThrow();
   });
 
   it('should respect maxTrackedElements limit', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     // Create 5 elements
     for (let i = 0; i < 5; i++) {
       const el = document.createElement('div');
@@ -284,11 +269,8 @@ describe('ViewportHandler - Element Observation', () => {
 
     handler.startTracking();
 
+    // Should only observe first 3 elements
     expect(mockObserver.observe).toHaveBeenCalledTimes(3);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Maximum tracked elements reached'),
-      expect.any(Object),
-    );
   });
 
   it('should use DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS if not configured', () => {

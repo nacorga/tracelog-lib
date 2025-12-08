@@ -1,4 +1,5 @@
-import { LogLevel } from '../../src/types/log.types';
+// Log levels for test event capture
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 /**
  * Event log dispatch structure for TraceLog testing

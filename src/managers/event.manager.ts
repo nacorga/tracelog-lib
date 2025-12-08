@@ -210,7 +210,7 @@ export class EventManager extends StateManager {
           }
         },
         onFailure: () => {
-          log('warn', 'Failed to recover persisted events');
+          log('debug', 'Failed to recover persisted events');
         },
       }),
     );
@@ -298,7 +298,7 @@ export class EventManager extends StateManager {
     if (!currentSessionId) {
       if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
         this.pendingEventsBuffer.shift();
-        log('warn', 'Pending events buffer full - dropping oldest event', {
+        log('debug', 'Pending events buffer full - dropping oldest event', {
           data: { maxBufferSize: MAX_PENDING_EVENTS_BUFFER },
         });
       }
@@ -411,7 +411,7 @@ export class EventManager extends StateManager {
       }
 
       if (this.get('hasStartSession')) {
-        log('warn', 'Duplicate session_start detected', {
+        log('debug', 'Duplicate session_start detected', {
           data: { sessionId: currentSessionId },
         });
 
@@ -425,18 +425,39 @@ export class EventManager extends StateManager {
       return;
     }
 
-    if (this.get('mode') === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
-      log('info', `Custom Event: ${custom_event.name}`, {
-        showToClient: true,
-        data: {
-          name: custom_event.name,
-          ...(custom_event.metadata && { metadata: custom_event.metadata }),
-        },
-      });
+    if (this.get('mode') === Mode.QA) {
+      if (eventType === EventType.CUSTOM && custom_event) {
+        log('info', `Custom Event: ${custom_event.name}`, {
+          visibility: 'qa',
+          data: {
+            name: custom_event.name,
+            ...(custom_event.metadata && { metadata: custom_event.metadata }),
+          },
+        });
 
-      this.emitEvent(payload);
+        this.emitEvent(payload);
 
-      return;
+        return;
+      }
+
+      if (eventType === EventType.VIEWPORT_VISIBLE && viewport_data) {
+        const displayName = viewport_data.name || viewport_data.id || viewport_data.selector;
+
+        log('info', `Viewport Visible: ${displayName}`, {
+          visibility: 'qa',
+          data: {
+            selector: viewport_data.selector,
+            ...(viewport_data.name && { name: viewport_data.name }),
+            ...(viewport_data.id && { id: viewport_data.id }),
+            visibilityRatio: viewport_data.visibilityRatio,
+            dwellTime: viewport_data.dwellTime,
+          },
+        });
+
+        this.emitEvent(payload);
+
+        return;
+      }
     }
 
     this.addToQueue(payload);
@@ -709,7 +730,7 @@ export class EventManager extends StateManager {
 
     const currentSessionId = this.get('sessionId');
     if (!currentSessionId) {
-      log('warn', 'Cannot flush pending events: session not initialized - keeping in buffer', {
+      log('debug', 'Cannot flush pending events: session not initialized - keeping in buffer', {
         data: { bufferedEventCount: this.pendingEventsBuffer.length },
       });
 
@@ -766,7 +787,7 @@ export class EventManager extends StateManager {
       } else {
         // All integrations failed - keep events in queue for retry on next page load
         this.clearSendInterval();
-        log('warn', 'Sync flush complete failure, events kept in queue for retry', {
+        log('debug', 'Sync flush complete failure, events kept in queue for retry', {
           data: { eventCount: eventIds.length },
         });
       }
@@ -792,7 +813,7 @@ export class EventManager extends StateManager {
           this.emitEventsQueue(body);
         } else {
           // All integrations failed - keep events in queue for retry on next page load
-          log('warn', 'Async flush complete failure, events kept in queue for retry', {
+          log('debug', 'Async flush complete failure, events kept in queue for retry', {
             data: { eventCount: eventsToSend.length },
           });
         }
@@ -836,13 +857,13 @@ export class EventManager extends StateManager {
 
       const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
       if (failedCount > 0) {
-        log('warn', 'Periodic send completed with some failures, removed from queue and persisted per-integration', {
+        log('debug', 'Periodic send completed with some failures, removed from queue and persisted per-integration', {
           data: { eventCount: eventsToSend.length, failedCount },
         });
       }
     } else {
       // All integrations failed - keep events in queue for retry
-      log('warn', 'Periodic send complete failure, events kept in queue for retry', {
+      log('debug', 'Periodic send complete failure, events kept in queue for retry', {
         data: { eventCount: eventsToSend.length },
       });
     }
@@ -977,7 +998,7 @@ export class EventManager extends StateManager {
       this.recentEventFingerprints.clear();
       this.recentEventFingerprints.set(fingerprint, now);
 
-      log('warn', 'Event fingerprint cache exceeded hard limit, cleared', {
+      log('debug', 'Event fingerprint cache exceeded hard limit, cleared', {
         data: { hardLimit: MAX_FINGERPRINTS_HARD_LIMIT },
       });
     }

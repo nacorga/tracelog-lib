@@ -244,6 +244,8 @@ class InitializationTimeoutError extends TraceLogValidationError {
     this.timeoutMs = timeoutMs;
   }
 }
+const LOG_STYLE_ACTIVE = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
+const LOG_STYLE_DISABLED = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
 const formatLogMsg = (msg, error) => {
   if (error) {
     if (error instanceof Error) {
@@ -264,17 +266,22 @@ const formatLogMsg = (msg, error) => {
   return `[TraceLog] ${msg}`;
 };
 const log = (type, msg, extra) => {
-  const { error, data, showToClient = false, style } = extra ?? {};
+  const { error, data, showToClient = false, style, visibility } = extra ?? {};
   const formattedMsg = error ? formatLogMsg(msg, error) : `[TraceLog] ${msg}`;
   const method = type === "error" ? "error" : type === "warn" ? "warn" : "log";
+  {
+    outputLog(method, formattedMsg, style, data);
+    return;
+  }
+};
+const outputLog = (method, formattedMsg, style, data) => {
   const hasStyle = style !== void 0 && style !== "";
   const styledMsg = hasStyle ? `%c${formattedMsg}` : formattedMsg;
   if (data !== void 0) {
-    const sanitizedData = data;
     if (hasStyle) {
-      console[method](styledMsg, style, sanitizedData);
+      console[method](styledMsg, style, data);
     } else {
-      console[method](styledMsg, sanitizedData);
+      console[method](styledMsg, data);
     }
   } else {
     if (hasStyle) {
@@ -292,11 +299,53 @@ const initMediaQueries = () => {
     noHoverQuery = window.matchMedia("(hover: none)");
   }
 };
+const UNKNOWN = "Unknown";
+const detectOS = (nav) => {
+  const platform = nav.userAgentData?.platform;
+  if (platform != null && platform !== "") {
+    if (/windows/i.test(platform)) return "Windows";
+    if (/macos/i.test(platform)) return "macOS";
+    if (/android/i.test(platform)) return "Android";
+    if (/linux/i.test(platform)) return "Linux";
+    if (/chromeos/i.test(platform)) return "ChromeOS";
+    if (/ios/i.test(platform)) return "iOS";
+  }
+  const ua = navigator.userAgent;
+  if (/Windows/i.test(ua)) return "Windows";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
+  if (/Mac OS X|Macintosh/i.test(ua)) return "macOS";
+  if (/Android/i.test(ua)) return "Android";
+  if (/CrOS/i.test(ua)) return "ChromeOS";
+  if (/Linux/i.test(ua)) return "Linux";
+  return UNKNOWN;
+};
+const detectBrowser = (nav) => {
+  const brands = nav.userAgentData?.brands;
+  if (brands != null && brands.length > 0) {
+    const validBrands = brands.filter((b2) => !/not.?a.?brand|chromium/i.test(b2.brand));
+    const firstBrand = validBrands[0];
+    if (firstBrand != null) {
+      const brand = firstBrand.brand;
+      if (/google chrome/i.test(brand)) return "Chrome";
+      if (/microsoft edge/i.test(brand)) return "Edge";
+      if (/opera/i.test(brand)) return "Opera";
+      return brand;
+    }
+  }
+  const ua = navigator.userAgent;
+  if (/Edg\//i.test(ua)) return "Edge";
+  if (/OPR\//i.test(ua)) return "Opera";
+  if (/Chrome/i.test(ua)) return "Chrome";
+  if (/Firefox/i.test(ua)) return "Firefox";
+  if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return "Safari";
+  return UNKNOWN;
+};
 const getDeviceType = () => {
   try {
     const nav = navigator;
-    if (nav.userAgentData && typeof nav.userAgentData.mobile === "boolean") {
-      if (nav.userAgentData.platform && /ipad|tablet/i.test(nav.userAgentData.platform)) {
+    if (nav.userAgentData != null && typeof nav.userAgentData.mobile === "boolean") {
+      const uaPlatform = nav.userAgentData.platform;
+      if (uaPlatform != null && uaPlatform !== "" && /ipad|tablet/i.test(uaPlatform)) {
         return DeviceType.Tablet;
       }
       const result = nav.userAgentData.mobile ? DeviceType.Mobile : DeviceType.Desktop;
@@ -318,12 +367,27 @@ const getDeviceType = () => {
     }
     return DeviceType.Desktop;
   } catch (error) {
-    log("warn", "Device detection failed, defaulting to desktop", { error });
+    log("debug", "Device detection failed, defaulting to desktop", { error });
     return DeviceType.Desktop;
   }
 };
-const LOG_STYLE_ACTIVE = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
-const LOG_STYLE_DISABLED = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
+const getDeviceInfo = () => {
+  try {
+    const nav = navigator;
+    return {
+      type: getDeviceType(),
+      os: detectOS(nav),
+      browser: detectBrowser(nav)
+    };
+  } catch (error) {
+    log("debug", "Device info detection failed, using defaults", { error });
+    return {
+      type: DeviceType.Desktop,
+      os: UNKNOWN,
+      browser: UNKNOWN
+    };
+  }
+};
 const PII_PATTERNS = [
   // Email addresses
   /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
@@ -404,10 +468,23 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.0.2";
+const version = "2.0.3";
 const LIB_VERSION = version;
+const isBrowserEnvironment = () => {
+  return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
+};
+const cleanUrlParameter = () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    params.delete(QA_MODE_URL_PARAM);
+    const search = params.toString();
+    const url = window.location.pathname + (search ? "?" + search : "") + window.location.hash;
+    window.history.replaceState({}, "", url);
+  } catch {
+  }
+};
 const detectQaMode = () => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
+  if (!isBrowserEnvironment()) {
     return false;
   }
   try {
@@ -419,25 +496,19 @@ const detectQaMode = () => {
       newState = true;
       sessionStorage.setItem(QA_MODE_KEY, "true");
       log("info", "QA Mode ACTIVE", {
-        showToClient: true,
+        visibility: "qa",
         style: LOG_STYLE_ACTIVE
       });
     } else if (urlParam === QA_MODE_DISABLE_VALUE) {
       newState = false;
       sessionStorage.setItem(QA_MODE_KEY, "false");
       log("info", "QA Mode DISABLED", {
-        showToClient: true,
+        visibility: "qa",
         style: LOG_STYLE_DISABLED
       });
     }
     if (urlParam === QA_MODE_ENABLE_VALUE || urlParam === QA_MODE_DISABLE_VALUE) {
-      try {
-        params.delete(QA_MODE_URL_PARAM);
-        const search = params.toString();
-        const url = window.location.pathname + (search ? "?" + search : "") + window.location.hash;
-        window.history.replaceState({}, "", url);
-      } catch {
-      }
+      cleanUrlParameter();
     }
     return newState ?? storedState === "true";
   } catch {
@@ -445,30 +516,33 @@ const detectQaMode = () => {
   }
 };
 const setQaMode$1 = (enabled) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
+  if (!isBrowserEnvironment()) {
     return;
   }
   try {
-    if (enabled) {
-      sessionStorage.setItem(QA_MODE_KEY, "true");
-      log("info", "QA Mode ENABLED", {
-        showToClient: true,
-        style: LOG_STYLE_ACTIVE
-      });
-    } else {
-      sessionStorage.setItem(QA_MODE_KEY, "false");
-      log("info", "QA Mode DISABLED", {
-        showToClient: true,
-        style: LOG_STYLE_DISABLED
-      });
-    }
+    sessionStorage.setItem(QA_MODE_KEY, enabled ? "true" : "false");
+    log("info", enabled ? "QA Mode ACTIVE" : "QA Mode DISABLED", {
+      visibility: "qa",
+      style: enabled ? LOG_STYLE_ACTIVE : LOG_STYLE_DISABLED
+    });
   } catch {
-    log("warn", "Cannot set QA mode: sessionStorage unavailable");
+    log("debug", "Cannot set QA mode: sessionStorage unavailable");
   }
 };
-const qaMode_utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const isQaModeActive = () => {
+  if (!isBrowserEnvironment()) {
+    return false;
+  }
+  try {
+    return sessionStorage.getItem(QA_MODE_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+const mode_utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   detectQaMode,
+  isQaModeActive,
   setQaMode: setQaMode$1
 }, Symbol.toStringTag, { value: "Module" }));
 const getUTMParameters = () => {
@@ -589,7 +663,7 @@ const getCollectApiUrls = (config) => {
 };
 const normalizeUrl = (url, sensitiveQueryParams = []) => {
   if (!url || typeof url !== "string") {
-    log("warn", "Invalid URL provided to normalizeUrl", { data: { url: String(url) } });
+    log("warn", "Invalid URL provided to normalizeUrl", { data: { type: typeof url } });
     return url || "";
   }
   try {
@@ -612,8 +686,7 @@ const normalizeUrl = (url, sensitiveQueryParams = []) => {
     const result = urlObject.toString();
     return result;
   } catch (error) {
-    const urlPreview = url && typeof url === "string" ? url.slice(0, 100) : String(url);
-    log("warn", "URL normalization failed, returning original", { error, data: { url: urlPreview } });
+    log("warn", "URL normalization failed, returning original", { error, data: { urlLength: url?.length } });
     return url;
   }
 };
@@ -637,7 +710,7 @@ const sanitizeString = (value) => {
     log("warn", "XSS patterns detected and removed", {
       data: {
         patternMatches: xssPatternMatches,
-        originalValue: value.slice(0, 100)
+        valueLength: value.length
       }
     });
   }
@@ -1110,7 +1183,6 @@ const isEventValid = (eventName, metadata) => {
   const nameValidation = isValidEventName(eventName);
   if (!nameValidation.valid) {
     log("error", "Event name validation failed", {
-      showToClient: true,
       data: { eventName, error: nameValidation.error }
     });
     return nameValidation;
@@ -1121,7 +1193,6 @@ const isEventValid = (eventName, metadata) => {
   const metadataValidation = isValidMetadata(eventName, metadata, "customEvent");
   if (!metadataValidation.valid) {
     log("error", "Event metadata validation failed", {
-      showToClient: true,
       data: {
         eventName,
         error: metadataValidation.error
@@ -1266,7 +1337,10 @@ function transformEvent(event2, transformer, context) {
     log("warn", `beforeSend transformer returned invalid data, using original [${context}]`);
     return event2;
   } catch (error) {
-    log("error", `beforeSend transformer threw error, using original event [${context}]`, { error });
+    log("error", `beforeSend transformer threw error, using original event [${context}]`, {
+      error,
+      visibility: "critical"
+    });
     return event2;
   }
 }
@@ -1292,7 +1366,8 @@ function transformBatch(batch, transformer, context) {
   } catch (error) {
     log("error", `beforeBatch transformer threw error, using original batch [${context}]`, {
       error,
-      data: { eventCount: batch.events.length }
+      data: { eventCount: batch.events.length },
+      visibility: "critical"
     });
     return batch;
   }
@@ -1760,7 +1835,7 @@ class SenderManager extends StateManager {
       return true;
     }
     if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
-      log("warn", `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+      log("debug", `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
         data: { events: transformedBody.events.length }
       });
       return false;
@@ -1987,7 +2062,7 @@ class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      log("warn", `Failed to parse persisted data${this.integrationId ? ` [${this.integrationId}]` : ""}`, { error });
+      log("debug", `Failed to parse persisted data${this.integrationId ? ` [${this.integrationId}]` : ""}`, { error });
       this.clearPersistedEvents();
     }
     return null;
@@ -2066,7 +2141,7 @@ class SenderManager extends StateManager {
       this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      log("warn", `Failed to persist events${this.integrationId ? ` [${this.integrationId}]` : ""}`, { error });
+      log("debug", `Failed to persist events${this.integrationId ? ` [${this.integrationId}]` : ""}`, { error });
       return false;
     }
   }
@@ -2075,7 +2150,9 @@ class SenderManager extends StateManager {
       const key = this.getQueueStorageKey();
       this.storeManager.removeItem(key);
     } catch (error) {
-      log("warn", `Failed to clear persisted events${this.integrationId ? ` [${this.integrationId}]` : ""}`, { error });
+      log("debug", `Failed to clear persisted events${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+        error
+      });
     }
   }
   shouldSkipSend() {
@@ -2141,7 +2218,7 @@ class TimeManager extends StateManager {
     } else {
       this.bootTime = 0;
       this.bootTimestamp = Date.now();
-      log("warn", "performance.now() not available, falling back to Date.now()");
+      log("debug", "performance.now() not available, falling back to Date.now()");
     }
   }
   /**
@@ -2362,7 +2439,7 @@ class EventManager extends StateManager {
           }
         },
         onFailure: () => {
-          log("warn", "Failed to recover persisted events");
+          log("debug", "Failed to recover persisted events");
         }
       })
     );
@@ -2446,7 +2523,7 @@ class EventManager extends StateManager {
     if (!currentSessionId) {
       if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
         this.pendingEventsBuffer.shift();
-        log("warn", "Pending events buffer full - dropping oldest event", {
+        log("debug", "Pending events buffer full - dropping oldest event", {
           data: { maxBufferSize: MAX_PENDING_EVENTS_BUFFER }
         });
       }
@@ -2535,7 +2612,7 @@ class EventManager extends StateManager {
         return;
       }
       if (this.get("hasStartSession")) {
-        log("warn", "Duplicate session_start detected", {
+        log("debug", "Duplicate session_start detected", {
           data: { sessionId: currentSessionId2 }
         });
         return;
@@ -2545,16 +2622,33 @@ class EventManager extends StateManager {
     if (this.isDuplicateEvent(payload)) {
       return;
     }
-    if (this.get("mode") === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
-      log("info", `Custom Event: ${custom_event.name}`, {
-        showToClient: true,
-        data: {
-          name: custom_event.name,
-          ...custom_event.metadata && { metadata: custom_event.metadata }
-        }
-      });
-      this.emitEvent(payload);
-      return;
+    if (this.get("mode") === Mode.QA) {
+      if (eventType === EventType.CUSTOM && custom_event) {
+        log("info", `Custom Event: ${custom_event.name}`, {
+          visibility: "qa",
+          data: {
+            name: custom_event.name,
+            ...custom_event.metadata && { metadata: custom_event.metadata }
+          }
+        });
+        this.emitEvent(payload);
+        return;
+      }
+      if (eventType === EventType.VIEWPORT_VISIBLE && viewport_data) {
+        const displayName = viewport_data.name || viewport_data.id || viewport_data.selector;
+        log("info", `Viewport Visible: ${displayName}`, {
+          visibility: "qa",
+          data: {
+            selector: viewport_data.selector,
+            ...viewport_data.name && { name: viewport_data.name },
+            ...viewport_data.id && { id: viewport_data.id },
+            visibilityRatio: viewport_data.visibilityRatio,
+            dwellTime: viewport_data.dwellTime
+          }
+        });
+        this.emitEvent(payload);
+        return;
+      }
     }
     this.addToQueue(payload);
     if (!isCriticalEvent) {
@@ -2806,7 +2900,7 @@ class EventManager extends StateManager {
     }
     const currentSessionId = this.get("sessionId");
     if (!currentSessionId) {
-      log("warn", "Cannot flush pending events: session not initialized - keeping in buffer", {
+      log("debug", "Cannot flush pending events: session not initialized - keeping in buffer", {
         data: { bufferedEventCount: this.pendingEventsBuffer.length }
       });
       return;
@@ -2848,7 +2942,7 @@ class EventManager extends StateManager {
         this.emitEventsQueue(body);
       } else {
         this.clearSendInterval();
-        log("warn", "Sync flush complete failure, events kept in queue for retry", {
+        log("debug", "Sync flush complete failure, events kept in queue for retry", {
           data: { eventCount: eventIds.length }
         });
       }
@@ -2869,7 +2963,7 @@ class EventManager extends StateManager {
           this.clearSendInterval();
           this.emitEventsQueue(body);
         } else {
-          log("warn", "Async flush complete failure, events kept in queue for retry", {
+          log("debug", "Async flush complete failure, events kept in queue for retry", {
             data: { eventCount: eventsToSend.length }
           });
         }
@@ -2903,12 +2997,12 @@ class EventManager extends StateManager {
       this.emitEventsQueue(body);
       const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
       if (failedCount > 0) {
-        log("warn", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
+        log("debug", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
           data: { eventCount: eventsToSend.length, failedCount }
         });
       }
     } else {
-      log("warn", "Periodic send complete failure, events kept in queue for retry", {
+      log("debug", "Periodic send complete failure, events kept in queue for retry", {
         data: { eventCount: eventsToSend.length }
       });
     }
@@ -3005,7 +3099,7 @@ class EventManager extends StateManager {
     if (this.recentEventFingerprints.size > MAX_FINGERPRINTS_HARD_LIMIT) {
       this.recentEventFingerprints.clear();
       this.recentEventFingerprints.set(fingerprint, now);
-      log("warn", "Event fingerprint cache exceeded hard limit, cleared", {
+      log("debug", "Event fingerprint cache exceeded hard limit, cleared", {
         data: { hardLimit: MAX_FINGERPRINTS_HARD_LIMIT }
       });
     }
@@ -3423,7 +3517,7 @@ class SessionManager extends StateManager {
   }
   initCrossTabSync() {
     if (typeof BroadcastChannel === "undefined") {
-      log("warn", "BroadcastChannel not supported");
+      log("debug", "BroadcastChannel not supported");
       return;
     }
     const projectId = this.getProjectId();
@@ -3571,7 +3665,7 @@ class SessionManager extends StateManager {
    */
   startTracking() {
     if (this.isTracking) {
-      log("warn", "Session tracking already active");
+      log("debug", "Session tracking already active");
       return;
     }
     const recoveredSessionId = this.recoverSession();
@@ -3784,7 +3878,7 @@ class SessionHandler extends StateManager {
       return;
     }
     if (this.destroyed) {
-      log("warn", "Cannot start tracking on destroyed handler");
+      log("debug", "Cannot start tracking on destroyed handler");
       return;
     }
     const config = this.get("config");
@@ -3998,7 +4092,7 @@ class ClickHandler extends StateManager {
       const target = mouseEvent.target;
       const clickedElement = typeof HTMLElement !== "undefined" && target instanceof HTMLElement ? target : typeof HTMLElement !== "undefined" && target instanceof Node && target.parentElement instanceof HTMLElement ? target.parentElement : null;
       if (!clickedElement) {
-        log("warn", "Click target not found or not an element");
+        log("debug", "Click target not found or not an element");
         return;
       }
       if (this.shouldIgnoreElement(clickedElement)) {
@@ -4160,7 +4254,7 @@ class ClickHandler extends StateManager {
           return parent;
         }
       } catch (error) {
-        log("warn", "Invalid selector in element search", { error, data: { selector } });
+        log("debug", "Invalid selector in element search", { error, data: { selector } });
         continue;
       }
     }
@@ -4531,7 +4625,7 @@ class ScrollHandler extends StateManager {
       return;
     }
     this.limitWarningLogged = true;
-    log("warn", "Max scroll events per session reached", {
+    log("debug", "Max scroll events per session reached", {
       data: { limit: this.maxEventsPerSession }
     });
   }
@@ -4616,7 +4710,7 @@ class ScrollHandler extends StateManager {
     } else {
       const element = document.querySelector(selector);
       if (!(element instanceof HTMLElement)) {
-        log("warn", `Selector "${selector}" did not match an HTMLElement`);
+        log("debug", `Selector "${selector}" did not match an HTMLElement`);
         return;
       }
       targetElement = element;
@@ -4658,15 +4752,15 @@ class ViewportHandler extends StateManager {
     const threshold = this.config.threshold ?? 0.5;
     const minDwellTime = this.config.minDwellTime ?? 1e3;
     if (threshold < 0 || threshold > 1) {
-      log("warn", "ViewportHandler: Invalid threshold, must be between 0 and 1");
+      log("debug", "ViewportHandler: Invalid threshold, must be between 0 and 1");
       return;
     }
     if (minDwellTime < 0) {
-      log("warn", "ViewportHandler: Invalid minDwellTime, must be non-negative");
+      log("debug", "ViewportHandler: Invalid minDwellTime, must be non-negative");
       return;
     }
     if (typeof IntersectionObserver === "undefined") {
-      log("warn", "ViewportHandler: IntersectionObserver not supported in this browser");
+      log("debug", "ViewportHandler: IntersectionObserver not supported in this browser");
       return;
     }
     this.observer = new IntersectionObserver(this.handleIntersection, {
@@ -4710,7 +4804,7 @@ class ViewportHandler extends StateManager {
         const elements = document.querySelectorAll(elementConfig.selector);
         for (const element of Array.from(elements)) {
           if (totalTracked >= maxTrackedElements) {
-            log("warn", "ViewportHandler: Maximum tracked elements reached", {
+            log("debug", "ViewportHandler: Maximum tracked elements reached", {
               data: {
                 limit: maxTrackedElements,
                 selector: elementConfig.selector,
@@ -4738,7 +4832,7 @@ class ViewportHandler extends StateManager {
           totalTracked++;
         }
       } catch (error) {
-        log("warn", `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
+        log("debug", `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
       }
     }
     log("debug", "ViewportHandler: Elements tracked", {
@@ -4818,7 +4912,7 @@ class ViewportHandler extends StateManager {
       return;
     }
     if (!document.body) {
-      log("warn", "ViewportHandler: document.body not available, skipping MutationObserver setup");
+      log("debug", "ViewportHandler: document.body not available, skipping MutationObserver setup");
       return;
     }
     this.mutationObserver = new MutationObserver((mutations) => {
@@ -4885,10 +4979,10 @@ class StorageManager {
     this.storage = this.initializeStorage("localStorage");
     this.sessionStorageRef = this.initializeStorage("sessionStorage");
     if (!this.storage) {
-      log("warn", "localStorage not available, using memory fallback");
+      log("debug", "localStorage not available, using memory fallback");
     }
     if (!this.sessionStorageRef) {
-      log("warn", "sessionStorage not available, using memory fallback");
+      log("debug", "sessionStorage not available, using memory fallback");
     }
   }
   /**
@@ -5263,7 +5357,7 @@ class PerformanceHandler extends StateManager {
       try {
         obs.disconnect();
       } catch (error) {
-        log("warn", "Failed to disconnect performance observer", { error, data: { observerIndex: index } });
+        log("debug", "Failed to disconnect performance observer", { error, data: { observerIndex: index } });
       }
     });
     this.observers.length = 0;
@@ -5348,7 +5442,7 @@ class PerformanceHandler extends StateManager {
       onTTFB(report("TTFB"), { reportAllChanges: false });
       onINP(report("INP"), { reportAllChanges: false });
     } catch (error) {
-      log("warn", "Failed to load web-vitals library, using fallback", { error });
+      log("debug", "Failed to load web-vitals library, using fallback", { error });
       this.observeWebVitalsFallback();
     }
   }
@@ -5363,7 +5457,7 @@ class PerformanceHandler extends StateManager {
         this.sendVital({ type: "TTFB", value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
       }
     } catch (error) {
-      log("warn", "Failed to report TTFB", { error });
+      log("debug", "Failed to report TTFB", { error });
     }
   }
   observeLongTasks() {
@@ -5413,7 +5507,7 @@ class PerformanceHandler extends StateManager {
   }
   trackWebVital(type, value) {
     if (!Number.isFinite(value)) {
-      log("warn", "Invalid web vital value", { data: { type, value } });
+      log("debug", "Invalid web vital value", { data: { type, value } });
       return;
     }
     this.eventManager.track({
@@ -5456,7 +5550,7 @@ class PerformanceHandler extends StateManager {
       const baseId = `${timestamp.toFixed(2)}_${window.location.pathname}`;
       return counter > 1 ? `${baseId}_${counter}` : baseId;
     } catch (error) {
-      log("warn", "Failed to get navigation ID", { error });
+      log("debug", "Failed to get navigation ID", { error });
       return null;
     }
   }
@@ -5474,7 +5568,7 @@ class PerformanceHandler extends StateManager {
         try {
           cb(list, observer);
         } catch (callbackError) {
-          log("warn", "Observer callback failed", {
+          log("debug", "Observer callback failed", {
             error: callbackError,
             data: { type }
           });
@@ -5492,7 +5586,7 @@ class PerformanceHandler extends StateManager {
       }
       return true;
     } catch (error) {
-      log("warn", "Failed to create performance observer", {
+      log("debug", "Failed to create performance observer", {
         error,
         data: { type }
       });
@@ -5501,7 +5595,7 @@ class PerformanceHandler extends StateManager {
   }
   shouldSendVital(type, value) {
     if (typeof value !== "number" || !Number.isFinite(value)) {
-      log("warn", "Invalid web vital value", { data: { type, value } });
+      log("debug", "Invalid web vital value", { data: { type, value } });
       return false;
     }
     const threshold = this.vitalThresholds[type];
@@ -5562,7 +5656,7 @@ class ErrorHandler extends StateManager {
     this.errorBurstCounter++;
     if (this.errorBurstCounter > ERROR_BURST_THRESHOLD) {
       this.burstBackoffUntil = now + ERROR_BURST_BACKOFF_MS;
-      log("warn", "Error burst detected - entering cooldown", {
+      log("debug", "Error burst detected - entering cooldown", {
         data: {
           errorsInWindow: this.errorBurstCounter,
           cooldownMs: ERROR_BURST_BACKOFF_MS
@@ -5796,13 +5890,13 @@ class App extends StateManager {
     this.set("userId", userId);
     const collectApiUrls = getCollectApiUrls(config);
     this.set("collectApiUrls", collectApiUrls);
-    const device = getDeviceType();
+    const device = getDeviceInfo();
     this.set("device", device);
     const pageUrl = normalizeUrl(window.location.href, config.sensitiveQueryParams);
     this.set("pageUrl", pageUrl);
-    const mode = detectQaMode() ? Mode.QA : void 0;
-    if (mode) {
-      this.set("mode", mode);
+    const isQaMode = detectQaMode();
+    if (isQaMode) {
+      this.set("mode", Mode.QA);
     }
   }
   /**
@@ -6154,7 +6248,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
   }).catch(() => {
   });
-  void Promise.resolve().then(() => qaMode_utils).then((module) => {
+  void Promise.resolve().then(() => mode_utils).then((module) => {
     if (typeof module.detectQaMode === "function") {
       module.detectQaMode();
     }

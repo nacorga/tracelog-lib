@@ -531,7 +531,7 @@ export class SenderManager extends StateManager {
     }
 
     if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
-      log('warn', `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
+      log('debug', `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
         data: { events: transformedBody.events.length },
       });
 
@@ -813,7 +813,7 @@ export class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      log('warn', `Failed to parse persisted data${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
+      log('debug', `Failed to parse persisted data${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
       this.clearPersistedEvents();
     }
 
@@ -905,7 +905,7 @@ export class SenderManager extends StateManager {
 
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      log('warn', `Failed to persist events${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
+      log('debug', `Failed to persist events${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
       return false;
     }
   }
@@ -915,7 +915,9 @@ export class SenderManager extends StateManager {
       const key = this.getQueueStorageKey();
       this.storeManager.removeItem(key);
     } catch (error) {
-      log('warn', `Failed to clear persisted events${this.integrationId ? ` [${this.integrationId}]` : ''}`, { error });
+      log('debug', `Failed to clear persisted events${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
+        error,
+      });
     }
   }
 

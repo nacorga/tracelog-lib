@@ -104,7 +104,7 @@ export class VisibilityListenerManager implements EventListenerManager {
         window.removeEventListener('offline', this.onVisibilityChange);
       }
     } catch (error) {
-      log('warn', 'Error during visibility listeners cleanup', { error });
+      log('debug', 'Error during visibility listeners cleanup', { error });
     }
   }
 }
