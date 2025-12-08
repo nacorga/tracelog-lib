@@ -71,7 +71,7 @@ export class SessionHandler extends StateManager {
     }
 
     if (this.destroyed) {
-      log('warn', 'Cannot start tracking on destroyed handler');
+      log('debug', 'Cannot start tracking on destroyed handler');
       return;
     }
 

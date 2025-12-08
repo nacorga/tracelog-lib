@@ -384,6 +384,53 @@ npm test             # 100% pass rate (REQUIRED)
 - ❌ DON'T block main thread (use passive listeners)
 - ❌ DON'T send high-frequency events without throttling
 
+### Logging
+- ❌ DON'T use `warn` or `error` for internal operations (use `debug`)
+- ❌ DON'T add logs visible in production (users of websites should NEVER see logs)
+- ✅ USE `debug` for graceful degradations and internal operations
+- ✅ USE `warn` only for issues the integrating developer can fix (visible in dev only)
+- ✅ USE `visibility: 'qa'` only for QA mode messages (custom event verification)
+- ✅ USE `visibility: 'critical'` only for errors that MUST reach monitoring (Sentry)
+
+---
+
+## Logging Policy
+
+### Visibility Levels
+```typescript
+type LogVisibility = 'critical' | 'qa';
+
+// Examples:
+log('error', 'Critical failure', { visibility: 'critical' }); // Always visible
+log('info', 'Custom event tracked', { visibility: 'qa' });    // QA mode only
+log('warn', 'Config issue');                                   // Development only
+```
+
+| Visibility | Production | Development | Use Case |
+|------------|------------|-------------|----------|
+| `'critical'` | ✅ Always | ✅ Always | Sentry/monitoring errors |
+| `'qa'` | QA mode only | ✅ Always | Custom event verification |
+| `undefined` | ❌ Never | ✅ Always | Internal operations |
+
+### Production Behavior
+**ZERO logs by default** - Only `visibility: 'critical'` logs are shown.
+
+Users of websites where TraceLog is installed should **NEVER** see console logs unless they activate QA mode.
+
+### Development Behavior
+All logs visible for debugging:
+- `debug`: Internal operations, graceful degradations, cache operations
+- `warn`: Issues the integrating developer can fix (config errors, limits)
+- `error`: Critical failures requiring attention
+
+### QA Mode (Production Debugging)
+Activate with `?tlog_mode=qa` or `tracelog.setQaMode(true)` to see logs marked with `visibility: 'qa'`.
+
+### Golden Rule
+**Production = Silent. Development = Verbose.**
+
+If the user cannot take action to fix the issue, use `debug` not `warn`.
+
 ---
 
 ## Build System

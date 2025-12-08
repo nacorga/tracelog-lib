@@ -66,7 +66,7 @@ export class TouchListenerManager implements EventListenerManager {
       window.removeEventListener('touchend', this.onActivity);
       window.removeEventListener('orientationchange', this.onActivity);
     } catch (error) {
-      log('warn', 'Error during touch listeners cleanup', { error });
+      log('debug', 'Error during touch listeners cleanup', { error });
     }
   }
 }

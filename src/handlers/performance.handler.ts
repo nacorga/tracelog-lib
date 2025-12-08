@@ -104,7 +104,7 @@ export class PerformanceHandler extends StateManager {
       try {
         obs.disconnect();
       } catch (error) {
-        log('warn', 'Failed to disconnect performance observer', { error, data: { observerIndex: index } });
+        log('debug', 'Failed to disconnect performance observer', { error, data: { observerIndex: index } });
       }
     });
 
@@ -210,7 +210,7 @@ export class PerformanceHandler extends StateManager {
       onTTFB(report('TTFB'), { reportAllChanges: false });
       onINP(report('INP'), { reportAllChanges: false });
     } catch (error) {
-      log('warn', 'Failed to load web-vitals library, using fallback', { error });
+      log('debug', 'Failed to load web-vitals library, using fallback', { error });
       this.observeWebVitalsFallback();
     }
   }
@@ -230,7 +230,7 @@ export class PerformanceHandler extends StateManager {
         this.sendVital({ type: 'TTFB', value: Number(ttfb.toFixed(PRECISION_TWO_DECIMALS)) });
       }
     } catch (error) {
-      log('warn', 'Failed to report TTFB', { error });
+      log('debug', 'Failed to report TTFB', { error });
     }
   }
 
@@ -291,7 +291,7 @@ export class PerformanceHandler extends StateManager {
 
   private trackWebVital(type: WebVitalType, value: number): void {
     if (!Number.isFinite(value)) {
-      log('warn', 'Invalid web vital value', { data: { type, value } });
+      log('debug', 'Invalid web vital value', { data: { type, value } });
       return;
     }
 
@@ -343,7 +343,7 @@ export class PerformanceHandler extends StateManager {
       // This prevents collisions if two navigations occur in the same millisecond to the same path
       return counter > 1 ? `${baseId}_${counter}` : baseId;
     } catch (error) {
-      log('warn', 'Failed to get navigation ID', { error });
+      log('debug', 'Failed to get navigation ID', { error });
       return null;
     }
   }
@@ -369,7 +369,7 @@ export class PerformanceHandler extends StateManager {
         try {
           cb(list, observer);
         } catch (callbackError) {
-          log('warn', 'Observer callback failed', {
+          log('debug', 'Observer callback failed', {
             error: callbackError,
             data: { type },
           });
@@ -392,7 +392,7 @@ export class PerformanceHandler extends StateManager {
 
       return true;
     } catch (error) {
-      log('warn', 'Failed to create performance observer', {
+      log('debug', 'Failed to create performance observer', {
         error,
         data: { type },
       });
@@ -402,7 +402,7 @@ export class PerformanceHandler extends StateManager {
 
   private shouldSendVital(type: WebVitalType, value?: number): boolean {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
-      log('warn', 'Invalid web vital value', { data: { type, value } });
+      log('debug', 'Invalid web vital value', { data: { type, value } });
       return false;
     }
 

@@ -52,17 +52,17 @@ export class ViewportHandler extends StateManager {
     const minDwellTime = this.config.minDwellTime ?? 1000;
 
     if (threshold < 0 || threshold > 1) {
-      log('warn', 'ViewportHandler: Invalid threshold, must be between 0 and 1');
+      log('debug', 'ViewportHandler: Invalid threshold, must be between 0 and 1');
       return;
     }
 
     if (minDwellTime < 0) {
-      log('warn', 'ViewportHandler: Invalid minDwellTime, must be non-negative');
+      log('debug', 'ViewportHandler: Invalid minDwellTime, must be non-negative');
       return;
     }
 
     if (typeof IntersectionObserver === 'undefined') {
-      log('warn', 'ViewportHandler: IntersectionObserver not supported in this browser');
+      log('debug', 'ViewportHandler: IntersectionObserver not supported in this browser');
       return;
     }
 
@@ -118,7 +118,7 @@ export class ViewportHandler extends StateManager {
 
         for (const element of Array.from(elements)) {
           if (totalTracked >= maxTrackedElements) {
-            log('warn', 'ViewportHandler: Maximum tracked elements reached', {
+            log('debug', 'ViewportHandler: Maximum tracked elements reached', {
               data: {
                 limit: maxTrackedElements,
                 selector: elementConfig.selector,
@@ -150,7 +150,7 @@ export class ViewportHandler extends StateManager {
           totalTracked++;
         }
       } catch (error) {
-        log('warn', `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
+        log('debug', `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
       }
     }
 
@@ -245,7 +245,7 @@ export class ViewportHandler extends StateManager {
     }
 
     if (!document.body) {
-      log('warn', 'ViewportHandler: document.body not available, skipping MutationObserver setup');
+      log('debug', 'ViewportHandler: document.body not available, skipping MutationObserver setup');
       return;
     }
 

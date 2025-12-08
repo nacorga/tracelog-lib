@@ -10,7 +10,7 @@ import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { State, TraceLogTestBridge, EventData } from './types';
-import { setQaMode as setQaModeUtil } from './utils/browser/qa-mode.utils';
+import { setQaMode as setQaModeUtil } from './utils/browser/mode.utils';
 
 /**
  * Test bridge for E2E and integration testing (development only)

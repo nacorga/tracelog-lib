@@ -109,7 +109,7 @@ export class SessionManager extends StateManager {
 
   private initCrossTabSync(): void {
     if (typeof BroadcastChannel === 'undefined') {
-      log('warn', 'BroadcastChannel not supported');
+      log('debug', 'BroadcastChannel not supported');
       return;
     }
 
@@ -280,7 +280,7 @@ export class SessionManager extends StateManager {
    */
   startTracking(): void {
     if (this.isTracking) {
-      log('warn', 'Session tracking already active');
+      log('debug', 'Session tracking already active');
       return;
     }
 

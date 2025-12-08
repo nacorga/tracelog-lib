@@ -63,7 +63,7 @@ export class ActivityListenerManager implements EventListenerManager {
       window.removeEventListener('resize', this.onActivity);
       window.removeEventListener('focus', this.onActivity);
     } catch (error) {
-      log('warn', 'Error during activity listeners cleanup', { error });
+      log('debug', 'Error during activity listeners cleanup', { error });
     }
   }
 }

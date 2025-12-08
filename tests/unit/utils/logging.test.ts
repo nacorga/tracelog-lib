@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { formatLogMsg, log } from '../../../src/utils/logging.utils';
+import { QA_MODE_KEY } from '../../../src/constants';
 
 describe('formatLogMsg', () => {
   const originalEnv = process.env.NODE_ENV;
@@ -178,6 +179,7 @@ describe('log', () => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -185,6 +187,7 @@ describe('log', () => {
     consoleWarnSpy.mockRestore();
     consoleErrorSpy.mockRestore();
     process.env.NODE_ENV = originalEnv;
+    sessionStorage.clear();
   });
 
   describe('Development mode', () => {
@@ -251,19 +254,14 @@ describe('log', () => {
       expect(consoleLogSpy).not.toHaveBeenCalled();
     });
 
-    it('should log info messages in production with showToClient=true', () => {
-      log('info', 'Test message', { showToClient: true });
-      expect(consoleLogSpy).toHaveBeenCalledWith('[TraceLog] Test message');
-    });
-
-    it('should log warn messages in production', () => {
+    it('should NOT log warn messages in production by default', () => {
       log('warn', 'Warning message');
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Warning message');
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
     });
 
-    it('should log error messages in production', () => {
+    it('should NOT log error messages in production by default', () => {
       log('error', 'Error message');
-      expect(consoleErrorSpy).toHaveBeenCalledWith('[TraceLog] Error message');
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
     });
 
     it('should NOT log debug messages in production', () => {
@@ -271,44 +269,115 @@ describe('log', () => {
       expect(consoleLogSpy).not.toHaveBeenCalled();
     });
 
-    it('should sanitize data in production', () => {
-      const data = { userId: '123', token: 'secret', password: 'pass123' };
-      log('warn', 'Event', { data });
-      // Note: "key" substring matches, so "userId" would not be redacted but "key" would
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Event', {
-        userId: '123',
-        token: '[REDACTED]',
-        password: '[REDACTED]',
+    it('should NOT log with showToClient=true when QA mode is NOT active', () => {
+      log('info', 'Test message', { showToClient: true });
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    describe('with QA mode active', () => {
+      beforeEach(() => {
+        sessionStorage.setItem(QA_MODE_KEY, 'true');
+      });
+
+      it('should log info with showToClient=true when QA mode is active', () => {
+        log('info', 'Test message', { showToClient: true });
+        expect(consoleLogSpy).toHaveBeenCalledWith('[TraceLog] Test message');
+      });
+
+      it('should log warn with showToClient=true when QA mode is active', () => {
+        log('warn', 'Warning message', { showToClient: true });
+        expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Warning message');
+      });
+
+      it('should log error with showToClient=true when QA mode is active', () => {
+        log('error', 'Error message', { showToClient: true });
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[TraceLog] Error message');
+      });
+
+      it('should sanitize data in production with showToClient=true', () => {
+        const data = { userId: '123', token: 'secret', password: 'pass123' };
+        log('warn', 'Event', { data, showToClient: true });
+        expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Event', {
+          userId: '123',
+          token: '[REDACTED]',
+          password: '[REDACTED]',
+        });
+      });
+
+      it('should sanitize nested data in production with showToClient=true', () => {
+        const data = {
+          outer: {
+            inner: 'value',
+            apiKey: 'secret',
+          },
+        };
+        log('error', 'Event', { data, showToClient: true });
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[TraceLog] Event', {
+          outer: {
+            inner: 'value',
+            apiKey: '[REDACTED]',
+          },
+        });
+      });
+
+      it('should log with style in production with showToClient=true', () => {
+        log('warn', 'Styled', { style: 'font-weight: bold;', showToClient: true });
+        expect(consoleWarnSpy).toHaveBeenCalledWith('%c[TraceLog] Styled', 'font-weight: bold;');
+      });
+
+      it('should log with style and sanitized data in production with showToClient=true', () => {
+        const data = { userId: '123', secret: 'hidden' };
+        log('error', 'Event', { style: 'color: red;', data, showToClient: true });
+        expect(consoleErrorSpy).toHaveBeenCalledWith('%c[TraceLog] Event', 'color: red;', {
+          userId: '123',
+          secret: '[REDACTED]',
+        });
+      });
+    });
+  });
+
+  describe('Visibility levels in production', () => {
+    beforeEach(() => {
+      process.env.NODE_ENV = 'production';
+    });
+
+    describe('visibility: critical', () => {
+      it('should ALWAYS log critical messages in production', () => {
+        log('error', 'Critical error', { visibility: 'critical' });
+        expect(consoleErrorSpy).toHaveBeenCalled();
+        expect(consoleErrorSpy.mock.calls[0]?.[0]).toContain('[TraceLog] Critical error');
+      });
+
+      it('should log critical messages even when no mode is active', () => {
+        log('warn', 'Critical warning', { visibility: 'critical' });
+        expect(consoleWarnSpy).toHaveBeenCalled();
+      });
+
+      it('should apply critical style automatically', () => {
+        log('error', 'Critical', { visibility: 'critical' });
+        // Should have %c prefix for styling
+        expect(consoleErrorSpy.mock.calls[0]?.[0]).toContain('%c');
       });
     });
 
-    it('should sanitize nested data in production', () => {
-      const data = {
-        outer: {
-          inner: 'value',
-          apiKey: 'secret',
-        },
-      };
-      log('error', 'Event', { data });
-      expect(consoleErrorSpy).toHaveBeenCalledWith('[TraceLog] Event', {
-        outer: {
-          inner: 'value',
-          apiKey: '[REDACTED]',
-        },
+    describe('visibility: qa', () => {
+      it('should NOT log qa messages when QA mode is NOT active', () => {
+        log('info', 'QA info', { visibility: 'qa' });
+        expect(consoleLogSpy).not.toHaveBeenCalled();
+      });
+
+      it('should log qa messages when QA mode IS active', () => {
+        sessionStorage.setItem(QA_MODE_KEY, 'true');
+        log('info', 'QA info', { visibility: 'qa' });
+        expect(consoleLogSpy).toHaveBeenCalled();
       });
     });
 
-    it('should log with style in production', () => {
-      log('warn', 'Styled', { style: 'font-weight: bold;' });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('%c[TraceLog] Styled', 'font-weight: bold;');
-    });
-
-    it('should log with style and sanitized data in production', () => {
-      const data = { userId: '123', secret: 'hidden' };
-      log('error', 'Event', { style: 'color: red;', data });
-      expect(consoleErrorSpy).toHaveBeenCalledWith('%c[TraceLog] Event', 'color: red;', {
-        userId: '123',
-        secret: '[REDACTED]',
+    describe('custom style takes precedence', () => {
+      it('should use custom style over default critical style', () => {
+        const customStyle = 'background: purple;';
+        log('error', 'Test', { visibility: 'critical', style: customStyle });
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.any(String), customStyle);
       });
     });
   });
@@ -357,6 +426,7 @@ describe('log', () => {
   describe('Data sanitization (sanitizeLogData)', () => {
     beforeEach(() => {
       process.env.NODE_ENV = 'production';
+      // Use visibility: 'critical' to test sanitization without needing QA mode
     });
 
     it('should redact all sensitive key substrings', () => {
@@ -367,8 +437,9 @@ describe('log', () => {
         apiKey: 'secret4',
         sessionId: 'secret5',
       };
-      log('warn', 'Test', { data });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('warn', 'Test', { data, visibility: 'critical' });
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy.mock.calls[0]?.[2]).toEqual({
         myToken: '[REDACTED]',
         userPassword: '[REDACTED]',
         apiSecret: '[REDACTED]',
@@ -384,8 +455,9 @@ describe('log', () => {
           { id: '2', password: 'secret' },
         ],
       };
-      log('warn', 'Test', { data });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('warn', 'Test', { data, visibility: 'critical' });
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy.mock.calls[0]?.[2]).toEqual({
         items: [
           { id: '1', token: '[REDACTED]' },
           { id: '2', password: '[REDACTED]' },
@@ -397,8 +469,9 @@ describe('log', () => {
       const data = {
         items: [1, 2, 'test', true, null],
       };
-      log('warn', 'Test', { data });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('warn', 'Test', { data, visibility: 'critical' });
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy.mock.calls[0]?.[2]).toEqual({
         items: [1, 2, 'test', true, null],
       });
     });
@@ -414,8 +487,9 @@ describe('log', () => {
           },
         },
       };
-      log('error', 'Test', { data });
-      expect(consoleErrorSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('error', 'Test', { data, visibility: 'critical' });
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(consoleErrorSpy.mock.calls[0]?.[2]).toEqual({
         level1: {
           level2: {
             level3: {
@@ -439,8 +513,9 @@ describe('log', () => {
           },
         ],
       };
-      log('warn', 'Test', { data });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('warn', 'Test', { data, visibility: 'critical' });
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy.mock.calls[0]?.[2]).toEqual({
         users: [
           {
             name: 'John',
@@ -460,8 +535,9 @@ describe('log', () => {
         userId: '123',
         status: 'active',
       };
-      log('warn', 'Test', { data });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('warn', 'Test', { data, visibility: 'critical' });
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy.mock.calls[0]?.[2]).toEqual({
         tokenCount: '[REDACTED]',
         passwordStrength: '[REDACTED]',
         userId: '123',
@@ -474,8 +550,9 @@ describe('log', () => {
         config: {},
         token: 'secret',
       };
-      log('warn', 'Test', { data });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('warn', 'Test', { data, visibility: 'critical' });
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy.mock.calls[0]?.[2]).toEqual({
         config: {},
         token: '[REDACTED]',
       });
@@ -488,8 +565,9 @@ describe('log', () => {
           [3, 4],
         ],
       };
-      log('warn', 'Test', { data });
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[TraceLog] Test', {
+      log('warn', 'Test', { data, visibility: 'critical' });
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy.mock.calls[0]?.[2]).toEqual({
         matrix: [
           [1, 2],
           [3, 4],

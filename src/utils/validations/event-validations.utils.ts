@@ -20,7 +20,6 @@ export const isEventValid = (
 
   if (!nameValidation.valid) {
     log('error', 'Event name validation failed', {
-      showToClient: true,
       data: { eventName, error: nameValidation.error },
     });
 
@@ -35,7 +34,6 @@ export const isEventValid = (
 
   if (!metadataValidation.valid) {
     log('error', 'Event metadata validation failed', {
-      showToClient: true,
       data: {
         eventName,
         error: metadataValidation.error,

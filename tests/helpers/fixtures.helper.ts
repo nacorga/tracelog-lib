@@ -8,7 +8,14 @@ import type { Config } from '../../src/types/config.types';
 import { EventType, ScrollDirection, ErrorType } from '../../src/types/event.types';
 import type { EventData } from '../../src/types/event.types';
 import type { EventsQueue } from '../../src/types/queue.types';
-import { DeviceType } from '../../src/types/device.types';
+import { DeviceType, type DeviceInfo } from '../../src/types/device.types';
+
+/** Default mock device info for tests */
+export const MOCK_DEVICE_INFO: DeviceInfo = {
+  type: DeviceType.Desktop,
+  os: 'macOS',
+  browser: 'Chrome',
+};
 
 /**
  * Create mock configuration with default values
@@ -129,7 +136,7 @@ export function createMockQueue(events: EventData[] = [], overrides?: Partial<Ev
   return {
     session_id: 'test-session-id',
     user_id: 'test-user-id',
-    device: DeviceType.Desktop,
+    device: MOCK_DEVICE_INFO,
     events: events.length > 0 ? events : [createMockEvent(EventType.CLICK)],
     ...overrides,
   };

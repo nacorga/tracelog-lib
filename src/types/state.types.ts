@@ -1,8 +1,9 @@
 import { Config } from './config.types';
-import { DeviceType } from './device.types';
+import { DeviceInfo } from './device.types';
 import { Mode } from './mode.types';
 
 export interface State {
+  /** QA mode flag - when true, custom events are logged to console */
   mode?: Mode;
   /**
    * Collection of API URLs for different integrations.
@@ -16,7 +17,7 @@ export interface State {
   config: Config;
   sessionId: string | null;
   userId: string;
-  device: DeviceType;
+  device: DeviceInfo;
   pageUrl: string;
   hasStartSession: boolean;
   suppressNextScroll: boolean;
