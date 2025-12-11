@@ -515,13 +515,13 @@ if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && t
       // Silent fail - TestBridge is optional in test environments
     });
 
-  void import('./utils/browser/qa-mode.utils')
+  void import('./utils/browser/mode.utils')
     .then((module) => {
       if (typeof module.detectQaMode === 'function') {
         module.detectQaMode();
       }
     })
     .catch(() => {
-      // Silent fail - QA mode detection is optional
+      // Silent fail - mode detection is optional
     });
 }

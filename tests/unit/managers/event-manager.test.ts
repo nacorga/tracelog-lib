@@ -5,10 +5,10 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment, advanceTimers } from '../../helpers/setup.helper';
-import { createMockConfig } from '../../helpers/fixtures.helper';
+import { createMockConfig, MOCK_DEVICE_INFO } from '../../helpers/fixtures.helper';
 import { EventManager } from '../../../src/managers/event.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
-import { EventType, DeviceType, EmitterEvent, ScrollDirection, ErrorType } from '../../../src/types';
+import { EventType, EmitterEvent, ScrollDirection, ErrorType } from '../../../src/types';
 import { Emitter } from '../../../src/utils';
 import { SESSION_COUNTS_KEY, SESSION_COUNTS_EXPIRY_MS } from '../../../src/constants/storage.constants';
 
@@ -27,7 +27,7 @@ describe('EventManager - Event Tracking', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
   });
 
   afterEach(() => {
@@ -125,6 +125,171 @@ describe('EventManager - Event Tracking', () => {
       expect(consoleErrorSpy).toHaveBeenCalled();
 
       consoleErrorSpy.mockRestore();
+    });
+
+    it('should preserve page_view data through the tracking pipeline', () => {
+      const pageViewData = {
+        referrer: 'https://google.com',
+        title: 'Test Page',
+        pathname: '/test',
+        search: '?foo=bar',
+        hash: '#section',
+      };
+
+      eventManager.track({
+        type: EventType.PAGE_VIEW,
+        page_url: 'https://example.com/test?foo=bar#section',
+        page_view: pageViewData,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.page_view).toBeDefined();
+      expect(events[0]?.page_view).toEqual(pageViewData);
+    });
+
+    it('should preserve page_view with only partial data', () => {
+      const pageViewData = {
+        pathname: '/',
+        title: 'Home',
+      };
+
+      eventManager.track({
+        type: EventType.PAGE_VIEW,
+        page_url: 'https://example.com/',
+        page_view: pageViewData,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.page_view).toEqual(pageViewData);
+    });
+
+    it('should preserve from_page_url for navigation events', () => {
+      eventManager.track({
+        type: EventType.PAGE_VIEW,
+        page_url: 'https://example.com/new-page',
+        from_page_url: 'https://example.com/old-page',
+        page_view: { pathname: '/new-page' },
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.from_page_url).toBe('https://example.com/old-page');
+      expect(events[0]?.page_view?.pathname).toBe('/new-page');
+    });
+
+    it('should preserve scroll_data through the tracking pipeline', () => {
+      const scrollData = {
+        depth: 75,
+        direction: ScrollDirection.DOWN,
+        container_selector: 'body',
+        is_primary: true,
+        velocity: 150,
+        max_depth_reached: 75,
+      };
+
+      eventManager.track({
+        type: EventType.SCROLL,
+        scroll_data: scrollData,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.scroll_data).toBeDefined();
+      expect(events[0]?.scroll_data).toEqual(scrollData);
+    });
+
+    it('should preserve error_data through the tracking pipeline', () => {
+      const errorData = {
+        message: 'Test error',
+        type: ErrorType.JS_ERROR,
+        filename: 'test.js',
+        line: 1,
+        column: 1,
+      };
+
+      eventManager.track({
+        type: EventType.ERROR,
+        error_data: errorData,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.error_data).toBeDefined();
+      expect(events[0]?.error_data).toEqual(errorData);
+    });
+
+    it('should preserve viewport_data through the tracking pipeline', () => {
+      const viewportData = {
+        selector: '#hero-section',
+        name: 'Hero Section',
+        visibilityRatio: 0.85,
+        dwellTime: 5000,
+      };
+
+      eventManager.track({
+        type: EventType.VIEWPORT_VISIBLE,
+        viewport_data: viewportData,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.viewport_data).toBeDefined();
+      expect(events[0]?.viewport_data).toEqual(viewportData);
+    });
+
+    it('should preserve web_vitals through the tracking pipeline', () => {
+      const webVitals = {
+        type: 'LCP' as const,
+        value: 2500,
+      };
+
+      eventManager.track({
+        type: EventType.WEB_VITALS,
+        web_vitals: webVitals,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.web_vitals).toBeDefined();
+      expect(events[0]?.web_vitals).toEqual(webVitals);
+    });
+
+    it('should preserve custom_event through the tracking pipeline', () => {
+      const customEvent = {
+        name: 'purchase_completed',
+        metadata: {
+          orderId: '12345',
+          total: 99.99,
+          items: ['item1', 'item2'],
+        },
+      };
+
+      eventManager.track({
+        type: EventType.CUSTOM,
+        custom_event: customEvent,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.custom_event).toBeDefined();
+      expect(events[0]?.custom_event).toEqual(customEvent);
+    });
+
+    it('should preserve click_data through the tracking pipeline', () => {
+      const clickData = {
+        x: 150,
+        y: 250,
+        relativeX: 0.5,
+        relativeY: 0.3,
+        tag: 'button',
+        text: 'Submit Form',
+        id: 'submit-btn',
+        classes: ['btn', 'btn-primary'],
+      };
+
+      eventManager.track({
+        type: EventType.CLICK,
+        click_data: clickData,
+      });
+
+      const events = eventManager.getQueueEvents();
+      expect(events[0]?.click_data).toBeDefined();
+      expect(events[0]?.click_data).toEqual(clickData);
     });
   });
 
@@ -272,7 +437,7 @@ describe('EventManager - Deduplication', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
   });
 
   afterEach(() => {
@@ -406,7 +571,7 @@ describe('EventManager - Sampling', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
   });
 
   afterEach(() => {
@@ -509,7 +674,7 @@ describe('EventManager - Rate Limiting', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
   });
 
   afterEach(() => {
@@ -615,7 +780,7 @@ describe('EventManager - Queue Flushing', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
     eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
 
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
@@ -750,7 +915,7 @@ describe('EventManager - Integration Coordination', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({
       type: EventType.CLICK,
@@ -779,7 +944,7 @@ describe('EventManager - Integration Coordination', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({
       type: EventType.CLICK,
@@ -804,7 +969,7 @@ describe('EventManager - Integration Coordination', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({
       type: EventType.CLICK,
@@ -832,7 +997,7 @@ describe('EventManager - Integration Coordination', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -860,7 +1025,7 @@ describe('EventManager - Integration Coordination', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -892,7 +1057,7 @@ describe('EventManager - Transformers', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -916,7 +1081,7 @@ describe('EventManager - Transformers', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -938,7 +1103,7 @@ describe('EventManager - Transformers', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -967,7 +1132,7 @@ describe('EventManager - Transformers', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -992,7 +1157,7 @@ describe('EventManager - Transformers', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     // Should not throw
     expect(() => {
@@ -1018,7 +1183,7 @@ describe('EventManager - Transformers', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -1041,7 +1206,7 @@ describe('EventManager - Transformers', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -1066,7 +1231,7 @@ describe('EventManager - Error Handling', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
   });
 
   afterEach(() => {
@@ -1085,7 +1250,7 @@ describe('EventManager - Error Handling', () => {
     errorEventManager['set']('sessionId', 'test-session');
     errorEventManager['set']('userId', 'test-user');
     errorEventManager['set']('pageUrl', 'https://example.com');
-    errorEventManager['set']('device', DeviceType.Desktop);
+    errorEventManager['set']('device', MOCK_DEVICE_INFO);
 
     // Emitter errors currently propagate (not caught by EventManager)
     // Test that error is thrown to document current behavior
@@ -1121,7 +1286,7 @@ describe('EventManager - Error Handling', () => {
     transformEventManager['set']('sessionId', 'test-session');
     transformEventManager['set']('userId', 'test-user');
     transformEventManager['set']('pageUrl', 'https://example.com');
-    transformEventManager['set']('device', DeviceType.Desktop);
+    transformEventManager['set']('device', MOCK_DEVICE_INFO);
 
     // Should not throw
     expect(() => {
@@ -1179,7 +1344,7 @@ describe('EventManager - Pending Events Buffer', () => {
 
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
     // Note: sessionId NOT set initially to test pending buffer
   });
 
@@ -1257,21 +1422,14 @@ describe('EventManager - Pending Events Buffer', () => {
   });
 
   it('should not flush when session still not initialized', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
     expect(eventManager['pendingEventsBuffer'].length).toBe(1);
 
     // Try to flush without session
     eventManager.flushPendingEvents();
 
-    // Should log warning
-    expect(consoleWarnSpy).toHaveBeenCalled();
-
-    // Buffer should still have event
+    // Buffer should still have event (not flushed due to missing session)
     expect(eventManager['pendingEventsBuffer'].length).toBe(1);
-
-    consoleWarnSpy.mockRestore();
   });
 
   it('should handle empty pending buffer gracefully', () => {
@@ -1283,6 +1441,78 @@ describe('EventManager - Pending Events Buffer', () => {
     }).not.toThrow();
 
     expect(eventManager['pendingEventsBuffer'].length).toBe(0);
+  });
+
+  it('should preserve page_view data in pending buffer and after flush', () => {
+    const pageViewData = {
+      referrer: 'https://google.com',
+      title: 'Test Page',
+      pathname: '/test',
+      search: '?q=test',
+      hash: '#results',
+    };
+
+    // Track without session (goes to pending buffer)
+    eventManager.track({
+      type: EventType.PAGE_VIEW,
+      page_url: 'https://example.com/test?q=test#results',
+      from_page_url: 'https://example.com/',
+      page_view: pageViewData,
+    });
+
+    // Verify data in pending buffer
+    expect(eventManager['pendingEventsBuffer'].length).toBe(1);
+    expect(eventManager['pendingEventsBuffer'][0]?.page_view).toEqual(pageViewData);
+    expect(eventManager['pendingEventsBuffer'][0]?.from_page_url).toBe('https://example.com/');
+
+    // Initialize session and flush
+    eventManager['set']('sessionId', 'test-session-id');
+    eventManager.flushPendingEvents();
+
+    // Verify data preserved after flush to queue
+    const events = eventManager.getQueueEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.page_view).toEqual(pageViewData);
+    expect(events[0]?.from_page_url).toBe('https://example.com/');
+  });
+
+  it('should preserve all event data fields in pending buffer', () => {
+    const viewportData = {
+      selector: '#cta-section',
+      name: 'CTA Section',
+      visibilityRatio: 0.9,
+      dwellTime: 3000,
+    };
+
+    const errorData = {
+      message: 'Network error',
+      type: ErrorType.JS_ERROR,
+    };
+
+    // Track multiple event types without session
+    eventManager.track({
+      type: EventType.VIEWPORT_VISIBLE,
+      viewport_data: viewportData,
+    });
+
+    eventManager.track({
+      type: EventType.ERROR,
+      error_data: errorData,
+    });
+
+    // Verify all data preserved in buffer
+    expect(eventManager['pendingEventsBuffer'].length).toBe(2);
+    expect(eventManager['pendingEventsBuffer'][0]?.viewport_data).toEqual(viewportData);
+    expect(eventManager['pendingEventsBuffer'][1]?.error_data).toEqual(errorData);
+
+    // Initialize session and flush
+    eventManager['set']('sessionId', 'test-session-id');
+    eventManager.flushPendingEvents();
+
+    // Verify data preserved in queue
+    const events = eventManager.getQueueEvents();
+    expect(events[0]?.viewport_data).toEqual(viewportData);
+    expect(events[1]?.error_data).toEqual(errorData);
   });
 });
 
@@ -1300,7 +1530,7 @@ describe('EventManager - Session Event Counters', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
   });
 
   afterEach(() => {
@@ -1693,7 +1923,7 @@ describe('EventManager - Advanced Deduplication', () => {
     eventManager['set']('sessionId', 'test-session-id');
     eventManager['set']('userId', 'test-user-id');
     eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
   });
 
   afterEach(() => {
@@ -1785,7 +2015,7 @@ describe('EventManager - beforeBatch Transformer', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -1810,7 +2040,7 @@ describe('EventManager - beforeBatch Transformer', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -1839,7 +2069,7 @@ describe('EventManager - beforeBatch Transformer', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
@@ -1876,7 +2106,7 @@ describe('EventManager - Recovery Edge Cases', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     // No persisted events in storage
     await expect(eventManager.recoverPersistedEvents()).resolves.toBeUndefined();
@@ -1900,7 +2130,7 @@ describe('EventManager - Recovery Edge Cases', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     // Should not throw
     await expect(eventManager.recoverPersistedEvents()).resolves.toBeUndefined();
@@ -1923,7 +2153,7 @@ describe('EventManager - Recovery Edge Cases', () => {
     eventManager['set']('sessionId', 'test-session');
     eventManager['set']('userId', 'test-user');
     eventManager['set']('pageUrl', 'https://example.com');
-    eventManager['set']('device', DeviceType.Desktop);
+    eventManager['set']('device', MOCK_DEVICE_INFO);
 
     // Mock persisted events in storage
     const persistedEvents = [
@@ -1939,7 +2169,7 @@ describe('EventManager - Recovery Edge Cases', () => {
     const body = {
       user_id: 'test-user',
       session_id: 'test-session',
-      device: DeviceType.Desktop,
+      device: MOCK_DEVICE_INFO,
       events: persistedEvents,
     };
 

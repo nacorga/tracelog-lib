@@ -24,3 +24,22 @@ export enum DeviceType {
   /** Unable to determine device type */
   Unknown = 'unknown',
 }
+
+/**
+ * Comprehensive device and environment information
+ *
+ * **Purpose**: Provides rich device context for analytics segmentation,
+ * debugging, and user experience optimization.
+ *
+ * **Detection**: Uses navigator.userAgentData (modern) with UA string fallback.
+ *
+ * @see src/utils/browser/device-detector.utils.ts for detection implementation
+ */
+export interface DeviceInfo {
+  /** Device form factor classification */
+  type: DeviceType;
+  /** OS name: "Windows", "macOS", "iOS", "Android", "Linux", "ChromeOS", "Unknown" */
+  os: string;
+  /** Browser name: "Chrome", "Firefox", "Safari", "Edge", "Opera", "Unknown" */
+  browser: string;
+}

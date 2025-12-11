@@ -36,7 +36,6 @@ describe('event-validations.utils', () => {
         expect(result.valid).toBe(false);
         expect(result.error).toBe('Event name must be a string');
         expect(logSpy).toHaveBeenCalledWith('error', 'Event name validation failed', {
-          showToClient: true,
           data: { eventName: '', error: 'Event name must be a string' },
         });
       });
@@ -52,7 +51,6 @@ describe('event-validations.utils', () => {
 
         expect(logSpy).toHaveBeenCalledTimes(1);
         expect(logSpy).toHaveBeenCalledWith('error', 'Event name validation failed', {
-          showToClient: true,
           data: { eventName: 'invalid-name', error: 'Invalid name format' },
         });
       });
@@ -85,7 +83,6 @@ describe('event-validations.utils', () => {
         expect(result.valid).toBe(false);
         expect(result.error).toBe('Metadata is too large');
         expect(logSpy).toHaveBeenCalledWith('error', 'Event metadata validation failed', {
-          showToClient: true,
           data: {
             eventName: 'purchase',
             error: 'Metadata is too large',
@@ -104,7 +101,6 @@ describe('event-validations.utils', () => {
         isEventValid('purchase', { invalid: 'data' });
 
         expect(logSpy).toHaveBeenCalledWith('error', 'Event metadata validation failed', {
-          showToClient: true,
           data: {
             eventName: 'purchase',
             error: 'Invalid metadata structure',

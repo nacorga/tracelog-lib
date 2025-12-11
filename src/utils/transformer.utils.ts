@@ -29,7 +29,10 @@ export function transformEvent(
 
     return event;
   } catch (error) {
-    log('error', `beforeSend transformer threw error, using original event [${context}]`, { error });
+    log('error', `beforeSend transformer threw error, using original event [${context}]`, {
+      error,
+      visibility: 'critical',
+    });
 
     return event;
   }
@@ -86,6 +89,7 @@ export function transformBatch(
     log('error', `beforeBatch transformer threw error, using original batch [${context}]`, {
       error,
       data: { eventCount: batch.events.length },
+      visibility: 'critical',
     });
 
     return batch;

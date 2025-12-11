@@ -83,7 +83,7 @@ export class ClickHandler extends StateManager {
             : null;
 
       if (!clickedElement) {
-        log('warn', 'Click target not found or not an element');
+        log('debug', 'Click target not found or not an element');
         return;
       }
 
@@ -286,7 +286,7 @@ export class ClickHandler extends StateManager {
           return parent;
         }
       } catch (error) {
-        log('warn', 'Invalid selector in element search', { error, data: { selector } });
+        log('debug', 'Invalid selector in element search', { error, data: { selector } });
         continue;
       }
     }

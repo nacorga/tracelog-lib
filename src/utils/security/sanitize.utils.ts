@@ -37,7 +37,7 @@ export const sanitizeString = (value: string): string => {
     log('warn', 'XSS patterns detected and removed', {
       data: {
         patternMatches: xssPatternMatches,
-        originalValue: value.slice(0, 100),
+        valueLength: value.length,
       },
     });
   }

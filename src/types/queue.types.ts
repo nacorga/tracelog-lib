@@ -1,5 +1,5 @@
 import { MetadataType } from './common.types';
-import { DeviceType } from './device.types';
+import { DeviceInfo } from './device.types';
 import { EventData } from './event.types';
 
 /**
@@ -13,7 +13,7 @@ export interface EventsQueue {
   /** Current session identifier (UUID) */
   session_id: string;
   /** Device information (type, OS, browser) */
-  device: DeviceType;
+  device: DeviceInfo;
   /** Array of events to send */
   events: EventData[];
   /** Optional metadata attached to all events in this batch */

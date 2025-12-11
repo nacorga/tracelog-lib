@@ -92,7 +92,7 @@ export class ErrorHandler extends StateManager {
 
     if (this.errorBurstCounter > ERROR_BURST_THRESHOLD) {
       this.burstBackoffUntil = now + ERROR_BURST_BACKOFF_MS;
-      log('warn', 'Error burst detected - entering cooldown', {
+      log('debug', 'Error burst detected - entering cooldown', {
         data: {
           errorsInWindow: this.errorBurstCounter,
           cooldownMs: ERROR_BURST_BACKOFF_MS,

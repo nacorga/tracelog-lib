@@ -93,7 +93,7 @@ export class TimeManager extends StateManager {
       this.bootTime = 0;
       this.bootTimestamp = Date.now();
 
-      log('warn', 'performance.now() not available, falling back to Date.now()');
+      log('debug', 'performance.now() not available, falling back to Date.now()');
     }
   }
 
