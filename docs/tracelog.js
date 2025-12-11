@@ -2513,7 +2513,8 @@ class EventManager extends StateManager {
     custom_event,
     web_vitals,
     error_data,
-    viewport_data
+    viewport_data,
+    page_view
   }) {
     if (!type) {
       log("error", "Event type is required - event will be ignored");
@@ -2536,7 +2537,8 @@ class EventManager extends StateManager {
         custom_event,
         web_vitals,
         error_data,
-        viewport_data
+        viewport_data,
+        page_view
       });
       return;
     }
@@ -2597,7 +2599,8 @@ class EventManager extends StateManager {
       custom_event,
       web_vitals,
       error_data,
-      viewport_data
+      viewport_data,
+      page_view
     });
     if (!payload) {
       return;
@@ -3066,6 +3069,7 @@ class EventManager extends StateManager {
       ...data.web_vitals && { web_vitals: data.web_vitals },
       ...data.error_data && { error_data: data.error_data },
       ...data.viewport_data && { viewport_data: data.viewport_data },
+      ...data.page_view && { page_view: data.page_view },
       ...isSessionStart && getUTMParameters() && { utm: getUTMParameters() }
     };
     const collectApiUrls = this.get("collectApiUrls");

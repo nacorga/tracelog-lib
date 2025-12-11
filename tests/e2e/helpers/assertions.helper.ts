@@ -79,15 +79,17 @@ export interface ErrorData {
 /**
  * Page view event data structure
  */
-export interface PageViewData {
-  /** Current page URL */
-  page_url: string;
-  /** Previous page URL (for navigation tracking) */
-  from_page_url?: string;
-  /** Page title */
-  title?: string;
-  /** Referrer URL */
+export interface PageViewDataDetails {
+  /** Document referrer URL */
   referrer?: string;
+  /** Document title */
+  title?: string;
+  /** URL pathname */
+  pathname?: string;
+  /** URL query string (including leading ?) */
+  search?: string;
+  /** URL hash fragment (including leading #) */
+  hash?: string;
 }
 
 /**
@@ -106,6 +108,8 @@ export interface CapturedEvent {
   custom_event?: CustomEventData;
   /** Error event data */
   error_data?: ErrorData;
+  /** Page view event data (nested details) */
+  page_view?: PageViewDataDetails;
   /** Page URL (for page_view events) */
   page_url?: string;
   /** Previous page URL (for navigation) */
@@ -293,4 +297,79 @@ export function assertValidScrollDepth(scrollData: ScrollData): void {
       scrollData.depth,
     );
   }
+}
+
+/**
+ * Assert that a page_view event has valid page_view data with at least pathname.
+ * This ensures the page_view field is properly propagated through the event pipeline.
+ *
+ * @param event - Page view event to validate
+ *
+ * @example
+ * ```typescript
+ * const pageViewEvent = findEventByType(result, 'page_view');
+ * assertEventStructure(pageViewEvent, 'page_view');
+ * assertPageViewData(pageViewEvent);
+ * ```
+ */
+export function assertPageViewData(event: CapturedEvent): void {
+  expect(event.type, 'Event should be page_view type').toBe('page_view');
+  expect(event.page_url, 'Page view event should have page_url').toBeDefined();
+  expect(event.page_view, 'Page view event should have page_view data object').toBeDefined();
+  expect(event.page_view!.pathname, 'Page view should have pathname').toBeDefined();
+  expect(typeof event.page_view!.pathname, 'Pathname should be a string').toBe('string');
+}
+
+/**
+ * Assert that page_view data contains expected values.
+ * Useful for verifying specific navigation scenarios.
+ *
+ * @param event - Page view event to validate
+ * @param expected - Expected values for page_view fields
+ *
+ * @example
+ * ```typescript
+ * assertPageViewDataContains(pageViewEvent, {
+ *   pathname: '/products',
+ *   title: 'Products Page',
+ * });
+ * ```
+ */
+export function assertPageViewDataContains(event: CapturedEvent, expected: Partial<PageViewDataDetails>): void {
+  expect(event.page_view, 'Page view event should have page_view data').toBeDefined();
+
+  if (expected.pathname !== undefined) {
+    expect(event.page_view!.pathname, 'Pathname should match expected').toBe(expected.pathname);
+  }
+  if (expected.title !== undefined) {
+    expect(event.page_view!.title, 'Title should match expected').toBe(expected.title);
+  }
+  if (expected.referrer !== undefined) {
+    expect(event.page_view!.referrer, 'Referrer should match expected').toBe(expected.referrer);
+  }
+  if (expected.search !== undefined) {
+    expect(event.page_view!.search, 'Search should match expected').toBe(expected.search);
+  }
+  if (expected.hash !== undefined) {
+    expect(event.page_view!.hash, 'Hash should match expected').toBe(expected.hash);
+  }
+}
+
+/**
+ * Assert that a page_view event has navigation tracking (from_page_url).
+ * Useful for verifying SPA navigation events.
+ *
+ * @param event - Page view event to validate
+ *
+ * @example
+ * ```typescript
+ * // For SPA navigation events
+ * assertPageViewNavigation(pageViewEvent);
+ * expect(pageViewEvent.from_page_url).toContain('/previous-page');
+ * ```
+ */
+export function assertPageViewNavigation(event: CapturedEvent): void {
+  assertPageViewData(event);
+  expect(event.from_page_url, 'Navigation event should have from_page_url').toBeDefined();
+  expect(typeof event.from_page_url, 'from_page_url should be a string').toBe('string');
 }

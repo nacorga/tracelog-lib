@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
-import { initTestBridge, destroyTestBridge, collectEvents } from '../../helpers/bridge.helper';
+import { initTestBridge, destroyTestBridge, collectEvents, getManagers } from '../../helpers/bridge.helper';
 import { createMockFetch } from '../../helpers/mocks.helper';
 import { wait } from '../../helpers/wait.helper';
 import type { TraceLogTestBridge } from '../../../src/types';
@@ -382,5 +382,208 @@ describe('Integration: Multi-Integration Sending', () => {
 
     const persistedQueue = localStorage.getItem('tlog:queue:test-user-id:custom');
     expect(persistedQueue).toBeDefined();
+  });
+});
+
+describe('Integration: Event Data Field Preservation', () => {
+  let bridge: TraceLogTestBridge;
+  let mockFetch: ReturnType<typeof createMockFetch>;
+
+  beforeEach(async () => {
+    setupTestEnvironment();
+    mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+  });
+
+  it('should preserve page_view data through full pipeline to network', async () => {
+    const [getEvents, cleanupEvents] = collectEvents(bridge, 'event');
+
+    // Simulate a PAGE_VIEW event with full page_view data
+    const managers = getManagers(bridge);
+    const eventManager = managers.event;
+    if (!eventManager) throw new Error('EventManager not available');
+
+    eventManager.track({
+      type: 'page_view' as any,
+      page_url: 'https://example.com/products?category=shoes#section',
+      from_page_url: 'https://example.com/',
+      page_view: {
+        referrer: 'https://google.com/search?q=shoes',
+        title: 'Products - Shoes',
+        pathname: '/products',
+        search: '?category=shoes',
+        hash: '#section',
+      },
+    });
+
+    // Verify event emitted with page_view data
+    const emittedEvents = getEvents();
+    const pageViewEvent = emittedEvents.find((e) => e.type === 'page_view' && e.page_view !== undefined);
+    expect(pageViewEvent).toBeDefined();
+    expect(pageViewEvent?.page_view?.pathname).toBe('/products');
+    expect(pageViewEvent?.page_view?.title).toBe('Products - Shoes');
+    expect(pageViewEvent?.page_view?.referrer).toBe('https://google.com/search?q=shoes');
+    expect(pageViewEvent?.from_page_url).toBe('https://example.com/');
+
+    // Verify event in queue has page_view data
+    const queuedEvents = bridge.getQueueEvents();
+    const queuedPageView = queuedEvents.find((e) => e.type === 'page_view' && e.page_view?.pathname === '/products');
+    expect(queuedPageView).toBeDefined();
+    expect(queuedPageView?.page_view).toEqual({
+      referrer: 'https://google.com/search?q=shoes',
+      title: 'Products - Shoes',
+      pathname: '/products',
+      search: '?category=shoes',
+      hash: '#section',
+    });
+
+    // Flush and verify data sent to network
+    await bridge.flushQueue();
+    await wait(100);
+
+    expect(mockFetch).toHaveBeenCalled();
+    const fetchCall = mockFetch.mock.calls[0];
+    if (!fetchCall) throw new Error('No fetch call found');
+
+    const payload = JSON.parse(fetchCall[1].body as string);
+    const sentPageView = payload.events.find(
+      (e: any) => e.type === 'page_view' && e.page_view?.pathname === '/products',
+    );
+    expect(sentPageView).toBeDefined();
+    expect(sentPageView.page_view.title).toBe('Products - Shoes');
+    expect(sentPageView.page_view.search).toBe('?category=shoes');
+    expect(sentPageView.from_page_url).toBe('https://example.com/');
+
+    cleanupEvents();
+  });
+
+  it('should preserve all event-specific data fields through pipeline', async () => {
+    const managers = getManagers(bridge);
+    const eventManager = managers.event;
+    if (!eventManager) throw new Error('EventManager not available');
+
+    // Track events with various data fields
+    eventManager.track({
+      type: 'scroll' as any,
+      scroll_data: {
+        depth: 85,
+        direction: 'down' as any,
+        container_selector: 'body',
+        is_primary: true,
+        velocity: 200,
+        max_depth_reached: 85,
+      },
+    });
+
+    eventManager.track({
+      type: 'error' as any,
+      error_data: {
+        message: 'Test error message',
+        type: 'js_error' as any,
+        filename: 'test.js',
+        line: 1,
+        column: 5,
+      },
+    });
+
+    eventManager.track({
+      type: 'viewport_visible' as any,
+      viewport_data: {
+        selector: '#pricing-section',
+        name: 'Pricing',
+        id: 'pricing',
+        visibilityRatio: 0.95,
+        dwellTime: 8000,
+      },
+    });
+
+    // Flush to network
+    await bridge.flushQueue();
+    await wait(100);
+
+    const fetchCall = mockFetch.mock.calls[0];
+    if (!fetchCall) throw new Error('No fetch call found');
+
+    const payload = JSON.parse(fetchCall[1].body as string);
+
+    // Verify scroll_data preserved
+    const scrollEvent = payload.events.find((e: any) => e.type === 'scroll');
+    expect(scrollEvent?.scroll_data?.depth).toBe(85);
+    expect(scrollEvent?.scroll_data?.velocity).toBe(200);
+
+    // Verify error_data preserved
+    const errorEvent = payload.events.find((e: any) => e.type === 'error');
+    expect(errorEvent?.error_data?.message).toBe('Test error message');
+    expect(errorEvent?.error_data?.line).toBe(1);
+
+    // Verify viewport_data preserved
+    const viewportEvent = payload.events.find((e: any) => e.type === 'viewport_visible');
+    expect(viewportEvent?.viewport_data?.selector).toBe('#pricing-section');
+    expect(viewportEvent?.viewport_data?.dwellTime).toBe(8000);
+  });
+
+  it('should preserve page_view data with partial fields', () => {
+    const managers = getManagers(bridge);
+    const eventManager = managers.event;
+    if (!eventManager) throw new Error('EventManager not available');
+
+    // Track page view with only some fields (common case: no referrer on direct navigation)
+    eventManager.track({
+      type: 'page_view' as any,
+      page_url: 'https://example.com/test-partial',
+      page_view: {
+        title: 'Home',
+        pathname: '/test-partial',
+      },
+    });
+
+    const events = bridge.getQueueEvents();
+    // Use specific pathname to find our event, not the initial page view from init
+    const pageView = events.find((e) => e.type === 'page_view' && e.page_view?.pathname === '/test-partial');
+
+    expect(pageView?.page_view).toBeDefined();
+    expect(pageView?.page_view?.title).toBe('Home');
+    expect(pageView?.page_view?.pathname).toBe('/test-partial');
+    expect(pageView?.page_view?.referrer).toBeUndefined();
+    expect(pageView?.page_view?.search).toBeUndefined();
+  });
+
+  it('should preserve web_vitals data through pipeline', async () => {
+    const managers = getManagers(bridge);
+    const eventManager = managers.event;
+    if (!eventManager) throw new Error('EventManager not available');
+
+    eventManager.track({
+      type: 'web_vitals' as any,
+      web_vitals: {
+        type: 'LCP',
+        value: 2500,
+      },
+    });
+
+    await bridge.flushQueue();
+    await wait(100);
+
+    const fetchCall = mockFetch.mock.calls[0];
+    if (!fetchCall) throw new Error('No fetch call found');
+
+    const payload = JSON.parse(fetchCall[1].body as string);
+    const vitalsEvent = payload.events.find((e: any) => e.type === 'web_vitals');
+
+    expect(vitalsEvent?.web_vitals?.type).toBe('LCP');
+    expect(vitalsEvent?.web_vitals?.value).toBe(2500);
   });
 });

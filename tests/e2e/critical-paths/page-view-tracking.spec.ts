@@ -9,6 +9,7 @@ import {
   findEventByType,
   findEventsByType,
   assertEventStructure,
+  assertPageViewData,
 } from '../helpers/assertions.helper';
 
 test.describe('E2E: Page View Tracking', () => {
@@ -44,6 +45,7 @@ test.describe('E2E: Page View Tracking', () => {
 
       const pageViewEvent = findEventByType(result, 'page_view');
       assertEventStructure(pageViewEvent, 'page_view');
+      assertPageViewData(pageViewEvent);
       expect(pageViewEvent.page_url).toBeDefined();
       expect(pageViewEvent.page_url).toContain('localhost');
     });
@@ -75,7 +77,9 @@ test.describe('E2E: Page View Tracking', () => {
 
       const pageViewEvent = findEventByType(result, 'page_view');
       assertEventStructure(pageViewEvent, 'page_view');
+      assertPageViewData(pageViewEvent);
       expect(pageViewEvent.page_url).toContain('/');
+      expect(pageViewEvent.page_view?.pathname).toBe('/');
     });
 
     test('should track referrer', async ({ page }) => {
