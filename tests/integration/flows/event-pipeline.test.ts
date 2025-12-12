@@ -587,3 +587,168 @@ describe('Integration: Event Data Field Preservation', () => {
     expect(vitalsEvent?.web_vitals?.value).toBe(2500);
   });
 });
+
+describe('Integration: SESSION_START Referrer Detection', () => {
+  let bridge: TraceLogTestBridge;
+  let mockFetch: ReturnType<typeof createMockFetch>;
+  let originalReferrer: string;
+  let originalLocation: Location;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    // Save original values
+    originalReferrer = document.referrer;
+    originalLocation = window.location;
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+
+    // Restore original values
+    Object.defineProperty(document, 'referrer', {
+      value: originalReferrer,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: originalLocation,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it('should include external referrer in SESSION_START event', async () => {
+    // Setup external referrer
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://google.com/search?q=test',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, hostname: 'example.com', href: 'https://example.com/page' },
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    const events = bridge.getQueueEvents();
+    const sessionStart = events.find((e) => e.type === 'session_start');
+
+    expect(sessionStart).toBeDefined();
+    expect(sessionStart?.referrer).toBe('https://google.com/search?q=test');
+  });
+
+  it('should set referrer to "Direct" for internal navigation', async () => {
+    // Setup internal referrer (same domain)
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://example.com/other-page',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, hostname: 'example.com', href: 'https://example.com/page' },
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    const events = bridge.getQueueEvents();
+    const sessionStart = events.find((e) => e.type === 'session_start');
+
+    expect(sessionStart).toBeDefined();
+    expect(sessionStart?.referrer).toBe('Direct');
+  });
+
+  it('should set referrer to "Direct" for subdomain navigation', async () => {
+    // Setup subdomain referrer
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://www.example.com/page',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, hostname: 'blog.example.com', href: 'https://blog.example.com/article' },
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    const events = bridge.getQueueEvents();
+    const sessionStart = events.find((e) => e.type === 'session_start');
+
+    expect(sessionStart).toBeDefined();
+    expect(sessionStart?.referrer).toBe('Direct');
+  });
+
+  it('should set referrer to "Direct" when no referrer', async () => {
+    // Setup empty referrer (direct navigation)
+    Object.defineProperty(document, 'referrer', {
+      value: '',
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    const events = bridge.getQueueEvents();
+    const sessionStart = events.find((e) => e.type === 'session_start');
+
+    expect(sessionStart).toBeDefined();
+    expect(sessionStart?.referrer).toBe('Direct');
+  });
+
+  it('should preserve referrer through network send', async () => {
+    // Setup external referrer
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://facebook.com/share',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, hostname: 'mysite.com', href: 'https://mysite.com/landing' },
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    await bridge.flushQueue();
+    await wait(100);
+
+    expect(mockFetch).toHaveBeenCalled();
+    const fetchCall = mockFetch.mock.calls[0];
+    if (!fetchCall) throw new Error('No fetch call found');
+
+    const payload = JSON.parse(fetchCall[1].body as string);
+    const sessionStart = payload.events.find((e: any) => e.type === 'session_start');
+
+    expect(sessionStart?.referrer).toBe('https://facebook.com/share');
+  });
+});

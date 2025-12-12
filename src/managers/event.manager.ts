@@ -946,7 +946,7 @@ export class EventManager extends StateManager {
       type: data.type as EventType,
       page_url: currentPageUrl,
       timestamp,
-      ...(isSessionStart && { referrer: document.referrer || 'Direct' }),
+      ...(isSessionStart && { referrer: this.getExternalReferrer() }),
       ...(data.from_page_url && { from_page_url: data.from_page_url }),
       ...(data.scroll_data && { scroll_data: data.scroll_data }),
       ...(data.click_data && { click_data: data.click_data }),
@@ -1403,6 +1403,106 @@ export class EventManager extends StateManager {
     } catch (error) {
       log('warn', 'Failed to cleanup expired session counts', { error });
     }
+  }
+
+  /**
+   * Returns the referrer if it's external, or 'Direct' if internal/empty.
+   *
+   * **Purpose**: Filter out internal referrers (same domain) to ensure
+   * accurate traffic source attribution. Internal referrers occur when:
+   * - Session expires and user navigates within the same site
+   * - User opens new tab from an internal link
+   * - Page refresh after session timeout
+   *
+   * **Logic**:
+   * - Empty referrer → 'Direct'
+   * - Referrer from same domain or subdomain → 'Direct' (internal navigation)
+   * - External referrer → Returns original referrer
+   *
+   * **Subdomain Detection**:
+   * - `www.example.com` → `example.com` ✓ (internal)
+   * - `blog.example.com` → `example.com` ✓ (internal)
+   * - `example.com` → `www.example.com` ✓ (internal)
+   *
+   * @returns External referrer URL or 'Direct'
+   *
+   * @internal
+   */
+  private getExternalReferrer(): string {
+    const referrer = document.referrer;
+    if (!referrer) {
+      return 'Direct';
+    }
+    try {
+      const referrerHostname = new URL(referrer).hostname.toLowerCase();
+      const currentHostname = window.location.hostname.toLowerCase();
+      if (this.isSameDomain(referrerHostname, currentHostname)) {
+        return 'Direct';
+      }
+      return referrer;
+    } catch (error) {
+      log('debug', 'Failed to parse referrer URL, using raw value', { error, data: { referrer } });
+      return referrer;
+    }
+  }
+
+  /**
+   * Checks if two hostnames belong to the same domain (including subdomains).
+   * Extracts root domain and compares to handle cross-subdomain navigation.
+   *
+   * @example
+   * isSameDomain('www.example.com', 'example.com') // true
+   * isSameDomain('app.example.com', 'www.example.com') // true
+   * isSameDomain('example.co.uk', 'app.example.co.uk') // true
+   *
+   * @param hostname1 - First hostname (e.g., 'www.example.com')
+   * @param hostname2 - Second hostname (e.g., 'app.example.com')
+   * @returns true if same root domain
+   *
+   * @internal
+   */
+  private isSameDomain(hostname1: string, hostname2: string): boolean {
+    if (hostname1 === hostname2) {
+      return true;
+    }
+    return this.getRootDomain(hostname1) === this.getRootDomain(hostname2);
+  }
+
+  /**
+   * Extracts the root (registrable) domain from a hostname.
+   * Handles both standard TLDs (.com, .org) and compound TLDs (.co.uk, .com.br).
+   *
+   * @example
+   * getRootDomain('www.example.com') // 'example.com'
+   * getRootDomain('app.blog.example.com') // 'example.com'
+   * getRootDomain('shop.example.co.uk') // 'example.co.uk'
+   *
+   * @internal
+   */
+  private getRootDomain(hostname: string): string {
+    // Note: Keep COMPOUND_TLDS in sync with tracelog-api/src/utils/common/utils.ts
+    const parts = hostname.toLowerCase().split('.');
+    if (parts.length <= 2) {
+      return hostname.toLowerCase();
+    }
+    const compoundTlds = [
+      'co.uk',
+      'org.uk',
+      'com.au',
+      'net.au',
+      'com.br',
+      'co.nz',
+      'co.jp',
+      'com.mx',
+      'co.in',
+      'com.cn',
+      'co.za',
+    ];
+    const lastTwo = parts.slice(-2).join('.');
+    if (compoundTlds.includes(lastTwo)) {
+      return parts.slice(-3).join('.');
+    }
+    return parts.slice(-2).join('.');
   }
 
   /**
