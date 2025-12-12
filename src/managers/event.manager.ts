@@ -946,7 +946,7 @@ export class EventManager extends StateManager {
       type: data.type as EventType,
       page_url: currentPageUrl,
       timestamp,
-      ...(isSessionStart && { referrer: document.referrer || 'Direct' }),
+      ...(isSessionStart && { referrer: this.getExternalReferrer() }),
       ...(data.from_page_url && { from_page_url: data.from_page_url }),
       ...(data.scroll_data && { scroll_data: data.scroll_data }),
       ...(data.click_data && { click_data: data.click_data }),
@@ -1403,6 +1403,65 @@ export class EventManager extends StateManager {
     } catch (error) {
       log('warn', 'Failed to cleanup expired session counts', { error });
     }
+  }
+
+  /**
+   * Returns the referrer if it's external, or 'Direct' if internal/empty.
+   *
+   * **Purpose**: Filter out internal referrers (same domain) to ensure
+   * accurate traffic source attribution. Internal referrers occur when:
+   * - Session expires and user navigates within the same site
+   * - User opens new tab from an internal link
+   * - Page refresh after session timeout
+   *
+   * **Logic**:
+   * - Empty referrer → 'Direct'
+   * - Referrer from same domain or subdomain → 'Direct' (internal navigation)
+   * - External referrer → Returns original referrer
+   *
+   * **Subdomain Detection**:
+   * - `www.example.com` → `example.com` ✓ (internal)
+   * - `blog.example.com` → `example.com` ✓ (internal)
+   * - `example.com` → `www.example.com` ✓ (internal)
+   *
+   * @returns External referrer URL or 'Direct'
+   *
+   * @internal
+   */
+  private getExternalReferrer(): string {
+    const referrer = document.referrer;
+    if (!referrer) {
+      return 'Direct';
+    }
+    try {
+      const referrerHostname = new URL(referrer).hostname.toLowerCase();
+      const currentHostname = window.location.hostname.toLowerCase();
+      if (this.isSameDomain(referrerHostname, currentHostname)) {
+        return 'Direct';
+      }
+      return referrer;
+    } catch {
+      return referrer || 'Direct';
+    }
+  }
+
+  /**
+   * Checks if two hostnames belong to the same domain (including subdomains).
+   *
+   * @param hostname1 - First hostname (e.g., 'www.example.com')
+   * @param hostname2 - Second hostname (e.g., 'example.com')
+   * @returns true if same domain or subdomain relationship exists
+   *
+   * @internal
+   */
+  private isSameDomain(hostname1: string, hostname2: string): boolean {
+    if (hostname1 === hostname2) {
+      return true;
+    }
+    // Check if one is a subdomain of the other
+    // www.example.com ends with .example.com
+    // blog.example.com ends with .example.com
+    return hostname1.endsWith(`.${hostname2}`) || hostname2.endsWith(`.${hostname1}`);
   }
 
   /**
