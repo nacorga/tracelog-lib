@@ -1440,7 +1440,8 @@ export class EventManager extends StateManager {
         return 'Direct';
       }
       return referrer;
-    } catch {
+    } catch (error) {
+      log('debug', 'Failed to parse referrer URL, using raw value', { error, data: { referrer } });
       return referrer;
     }
   }
