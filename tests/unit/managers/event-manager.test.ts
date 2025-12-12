@@ -2103,6 +2103,26 @@ describe('EventManager - External Referrer Detection', () => {
   });
 
   describe('getExternalReferrer()', () => {
+    let originalReferrer: string;
+    let originalLocation: Location;
+
+    beforeEach(() => {
+      originalReferrer = document.referrer;
+      originalLocation = window.location;
+    });
+
+    afterEach(() => {
+      Object.defineProperty(document, 'referrer', {
+        value: originalReferrer,
+        configurable: true,
+      });
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        configurable: true,
+        writable: true,
+      });
+    });
+
     it('should return "Direct" when referrer is empty', () => {
       Object.defineProperty(document, 'referrer', {
         value: '',
