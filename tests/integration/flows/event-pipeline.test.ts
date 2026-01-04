@@ -751,4 +751,120 @@ describe('Integration: SESSION_START Referrer Detection', () => {
 
     expect(sessionStart?.referrer).toBe('https://facebook.com/share');
   });
+
+  it('should propagate referrer to ALL events, not just SESSION_START', async () => {
+    // Setup external referrer
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://google.com/search?q=test',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, hostname: 'example.com', href: 'https://example.com/page' },
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    // Track custom events after SESSION_START
+    bridge.event('purchase', { amount: 99.99 });
+    bridge.event('signup', { method: 'email' });
+
+    const events = bridge.getQueueEvents();
+
+    // Verify SESSION_START has referrer
+    const sessionStart = events.find((e) => e.type === 'session_start');
+    expect(sessionStart?.referrer).toBe('https://google.com/search?q=test');
+
+    // Verify custom events ALSO have the same referrer (propagation)
+    const purchaseEvent = events.find((e) => e.custom_event?.name === 'purchase');
+    const signupEvent = events.find((e) => e.custom_event?.name === 'signup');
+
+    expect(purchaseEvent?.referrer).toBe('https://google.com/search?q=test');
+    expect(signupEvent?.referrer).toBe('https://google.com/search?q=test');
+  });
+
+  it('should propagate UTM parameters to ALL events', async () => {
+    // Setup URL with UTM parameters
+    const searchParams = new URLSearchParams({
+      utm_source: 'google',
+      utm_medium: 'cpc',
+      utm_campaign: 'summer_sale',
+      utm_term: 'shoes',
+      utm_content: 'banner_ad',
+    });
+
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...originalLocation,
+        hostname: 'example.com',
+        href: `https://example.com/landing?${searchParams.toString()}`,
+        search: `?${searchParams.toString()}`,
+      },
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    // Track custom event after SESSION_START
+    bridge.event('add_to_cart', { productId: 'SKU123' });
+
+    const events = bridge.getQueueEvents();
+
+    // Verify SESSION_START has UTM
+    const sessionStart = events.find((e) => e.type === 'session_start');
+    expect(sessionStart?.utm).toEqual({
+      source: 'google',
+      medium: 'cpc',
+      campaign: 'summer_sale',
+      term: 'shoes',
+      content: 'banner_ad',
+    });
+
+    // Verify custom event ALSO has the same UTM (propagation)
+    const cartEvent = events.find((e) => e.custom_event?.name === 'add_to_cart');
+    expect(cartEvent?.utm).toEqual({
+      source: 'google',
+      medium: 'cpc',
+      campaign: 'summer_sale',
+      term: 'shoes',
+      content: 'banner_ad',
+    });
+  });
+
+  it('should preserve original referrer/UTM when "Direct" is set', async () => {
+    // Direct navigation (no referrer)
+    Object.defineProperty(document, 'referrer', {
+      value: '',
+      configurable: true,
+    });
+
+    bridge = await initTestBridge({
+      integrations: {
+        custom: {
+          collectApiUrl: 'https://api.test.com/collect',
+        },
+      },
+    });
+
+    bridge.event('page_scroll', { depth: 50 });
+
+    const events = bridge.getQueueEvents();
+
+    // All events should have "Direct" referrer (including custom events)
+    events.forEach((event) => {
+      expect(event.referrer).toBe('Direct');
+    });
+  });
 });

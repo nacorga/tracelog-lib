@@ -468,7 +468,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.1.0";
+const version = "2.1.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -545,6 +545,53 @@ const mode_utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePr
   isQaModeActive,
   setQaMode: setQaMode$1
 }, Symbol.toStringTag, { value: "Module" }));
+const COMPOUND_TLDS = [
+  "co.uk",
+  "org.uk",
+  "com.au",
+  "net.au",
+  "com.br",
+  "co.nz",
+  "co.jp",
+  "com.mx",
+  "co.in",
+  "com.cn",
+  "co.za"
+];
+const getRootDomain = (hostname) => {
+  const parts = hostname.toLowerCase().split(".");
+  if (parts.length <= 2) {
+    return hostname.toLowerCase();
+  }
+  const lastTwo = parts.slice(-2).join(".");
+  if (COMPOUND_TLDS.includes(lastTwo)) {
+    return parts.slice(-3).join(".");
+  }
+  return parts.slice(-2).join(".");
+};
+const isSameDomain = (hostname1, hostname2) => {
+  if (hostname1 === hostname2) {
+    return true;
+  }
+  return getRootDomain(hostname1) === getRootDomain(hostname2);
+};
+const getExternalReferrer = () => {
+  const referrer = document.referrer;
+  if (!referrer) {
+    return "Direct";
+  }
+  try {
+    const referrerHostname = new URL(referrer).hostname.toLowerCase();
+    const currentHostname = window.location.hostname.toLowerCase();
+    if (isSameDomain(referrerHostname, currentHostname)) {
+      return "Direct";
+    }
+    return referrer;
+  } catch (error) {
+    log("debug", "Failed to parse referrer URL, using raw value", { error, data: { referrer } });
+    return referrer;
+  }
+};
 const getUTMParameters = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const utmParams = {};
@@ -3047,7 +3094,6 @@ class EventManager extends StateManager {
     return queue;
   }
   buildEventPayload(data) {
-    const isSessionStart = data.type === EventType.SESSION_START;
     const currentPageUrl = data.page_url ?? this.get("pageUrl");
     const timestamp = this.timeManager.now();
     const validation = this.timeManager.validateTimestamp(timestamp);
@@ -3056,12 +3102,14 @@ class EventManager extends StateManager {
         data: { type: data.type, error: validation.error }
       });
     }
+    const sessionReferrer = this.get("sessionReferrer");
+    const sessionUtm = this.get("sessionUtm");
     let payload = {
       id: generateEventId(),
       type: data.type,
       page_url: currentPageUrl,
       timestamp,
-      ...isSessionStart && { referrer: this.getExternalReferrer() },
+      ...sessionReferrer && { referrer: sessionReferrer },
       ...data.from_page_url && { from_page_url: data.from_page_url },
       ...data.scroll_data && { scroll_data: data.scroll_data },
       ...data.click_data && { click_data: data.click_data },
@@ -3070,7 +3118,7 @@ class EventManager extends StateManager {
       ...data.error_data && { error_data: data.error_data },
       ...data.viewport_data && { viewport_data: data.viewport_data },
       ...data.page_view && { page_view: data.page_view },
-      ...isSessionStart && getUTMParameters() && { utm: getUTMParameters() }
+      ...sessionUtm && { utm: sessionUtm }
     };
     const collectApiUrls = this.get("collectApiUrls");
     const hasCustomBackend = Boolean(collectApiUrls?.custom);
@@ -3424,102 +3472,6 @@ class EventManager extends StateManager {
     }
   }
   /**
-   * Returns the referrer if it's external, or 'Direct' if internal/empty.
-   *
-   * **Purpose**: Filter out internal referrers (same domain) to ensure
-   * accurate traffic source attribution. Internal referrers occur when:
-   * - Session expires and user navigates within the same site
-   * - User opens new tab from an internal link
-   * - Page refresh after session timeout
-   *
-   * **Logic**:
-   * - Empty referrer → 'Direct'
-   * - Referrer from same domain or subdomain → 'Direct' (internal navigation)
-   * - External referrer → Returns original referrer
-   *
-   * **Subdomain Detection**:
-   * - `www.example.com` → `example.com` ✓ (internal)
-   * - `blog.example.com` → `example.com` ✓ (internal)
-   * - `example.com` → `www.example.com` ✓ (internal)
-   *
-   * @returns External referrer URL or 'Direct'
-   *
-   * @internal
-   */
-  getExternalReferrer() {
-    const referrer = document.referrer;
-    if (!referrer) {
-      return "Direct";
-    }
-    try {
-      const referrerHostname = new URL(referrer).hostname.toLowerCase();
-      const currentHostname = window.location.hostname.toLowerCase();
-      if (this.isSameDomain(referrerHostname, currentHostname)) {
-        return "Direct";
-      }
-      return referrer;
-    } catch (error) {
-      log("debug", "Failed to parse referrer URL, using raw value", { error, data: { referrer } });
-      return referrer;
-    }
-  }
-  /**
-   * Checks if two hostnames belong to the same domain (including subdomains).
-   * Extracts root domain and compares to handle cross-subdomain navigation.
-   *
-   * @example
-   * isSameDomain('www.example.com', 'example.com') // true
-   * isSameDomain('app.example.com', 'www.example.com') // true
-   * isSameDomain('example.co.uk', 'app.example.co.uk') // true
-   *
-   * @param hostname1 - First hostname (e.g., 'www.example.com')
-   * @param hostname2 - Second hostname (e.g., 'app.example.com')
-   * @returns true if same root domain
-   *
-   * @internal
-   */
-  isSameDomain(hostname1, hostname2) {
-    if (hostname1 === hostname2) {
-      return true;
-    }
-    return this.getRootDomain(hostname1) === this.getRootDomain(hostname2);
-  }
-  /**
-   * Extracts the root (registrable) domain from a hostname.
-   * Handles both standard TLDs (.com, .org) and compound TLDs (.co.uk, .com.br).
-   *
-   * @example
-   * getRootDomain('www.example.com') // 'example.com'
-   * getRootDomain('app.blog.example.com') // 'example.com'
-   * getRootDomain('shop.example.co.uk') // 'example.co.uk'
-   *
-   * @internal
-   */
-  getRootDomain(hostname) {
-    const parts = hostname.toLowerCase().split(".");
-    if (parts.length <= 2) {
-      return hostname.toLowerCase();
-    }
-    const compoundTlds = [
-      "co.uk",
-      "org.uk",
-      "com.au",
-      "net.au",
-      "com.br",
-      "co.nz",
-      "co.jp",
-      "com.mx",
-      "co.in",
-      "com.cn",
-      "co.za"
-    ];
-    const lastTwo = parts.slice(-2).join(".");
-    if (compoundTlds.includes(lastTwo)) {
-      return parts.slice(-3).join(".");
-    }
-    return parts.slice(-2).join(".");
-  }
-  /**
    * Persists current session event counts to localStorage (debounced).
    *
    * **Purpose**: Save event counts to ensure they survive page reloads and
@@ -3602,6 +3554,7 @@ class SessionManager extends StateManager {
   sessionTimeoutId = null;
   broadcastChannel = null;
   isTracking = false;
+  needsRenewal = false;
   /**
    * Creates a SessionManager instance.
    *
@@ -3675,10 +3628,12 @@ class SessionManager extends StateManager {
     }
     return storedSession.id;
   }
-  persistSession(sessionId, lastActivity = Date.now()) {
+  persistSession(sessionId, lastActivity = Date.now(), referrer, utm) {
     this.saveStoredSession({
       id: sessionId,
-      lastActivity
+      lastActivity,
+      ...referrer && { referrer },
+      ...utm && { utm }
     });
   }
   clearStoredSession() {
@@ -3770,25 +3725,45 @@ class SessionManager extends StateManager {
     }
     const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
+    let sessionReferrer;
+    let sessionUtm;
+    if (recoveredSessionId) {
+      const storedSession = this.loadStoredSession();
+      sessionReferrer = storedSession?.referrer ?? getExternalReferrer();
+      sessionUtm = storedSession?.utm ?? getUTMParameters();
+    } else {
+      sessionReferrer = getExternalReferrer();
+      sessionUtm = getUTMParameters();
+    }
     log("debug", "Session tracking initialized", {
       data: {
         sessionId,
         wasRecovered: !!recoveredSessionId,
-        willEmitSessionStart: true
+        willEmitSessionStart: !recoveredSessionId,
+        sessionReferrer,
+        hasUtm: !!sessionUtm
       }
     });
     this.isTracking = true;
     try {
       this.set("sessionId", sessionId);
-      this.persistSession(sessionId);
+      this.set("sessionReferrer", sessionReferrer);
+      this.set("sessionUtm", sessionUtm);
+      this.persistSession(sessionId, Date.now(), sessionReferrer, sessionUtm);
       this.initCrossTabSync();
       this.shareSession(sessionId);
-      log("debug", "Emitting SESSION_START event", {
-        data: { sessionId }
-      });
-      this.eventManager.track({
-        type: EventType.SESSION_START
-      });
+      if (!recoveredSessionId) {
+        log("debug", "Emitting SESSION_START event", {
+          data: { sessionId }
+        });
+        this.eventManager.track({
+          type: EventType.SESSION_START
+        });
+      } else {
+        log("debug", "Session recovered, skipping SESSION_START", {
+          data: { sessionId }
+        });
+      }
       this.setupSessionTimeout();
       this.setupActivityListeners();
       this.setupLifecycleListeners();
@@ -3809,14 +3784,14 @@ class SessionManager extends StateManager {
     this.clearSessionTimeout();
     const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
     this.sessionTimeoutId = setTimeout(() => {
-      this.resetSessionState();
+      this.enterRenewalMode();
     }, sessionTimeout);
   }
   resetSessionTimeout() {
     this.setupSessionTimeout();
     const sessionId = this.get("sessionId");
     if (sessionId) {
-      this.persistSession(sessionId);
+      this.persistSession(sessionId, Date.now(), this.get("sessionReferrer"), this.get("sessionUtm"));
     }
   }
   clearSessionTimeout() {
@@ -3827,11 +3802,40 @@ class SessionManager extends StateManager {
   }
   setupActivityListeners() {
     this.activityHandler = () => {
-      this.resetSessionTimeout();
+      if (this.needsRenewal) {
+        this.renewSession();
+      } else {
+        this.resetSessionTimeout();
+      }
     };
     document.addEventListener("click", this.activityHandler, { passive: true });
     document.addEventListener("keydown", this.activityHandler, { passive: true });
     document.addEventListener("scroll", this.activityHandler, { passive: true });
+  }
+  /**
+   * Renews the session after timeout when user returns.
+   * Creates a new session ID and emits SESSION_START.
+   */
+  renewSession() {
+    this.needsRenewal = false;
+    const newSessionId = this.generateSessionId();
+    const sessionReferrer = getExternalReferrer();
+    const sessionUtm = getUTMParameters();
+    log("debug", "Renewing session after timeout", {
+      data: { newSessionId }
+    });
+    this.set("sessionId", newSessionId);
+    this.set("sessionReferrer", sessionReferrer);
+    this.set("sessionUtm", sessionUtm);
+    this.persistSession(newSessionId, Date.now(), sessionReferrer, sessionUtm);
+    this.cleanupCrossTabSync();
+    this.initCrossTabSync();
+    this.shareSession(newSessionId);
+    this.eventManager.track({
+      type: EventType.SESSION_START
+    });
+    this.eventManager.flushPendingEvents();
+    this.setupSessionTimeout();
   }
   cleanupActivityListeners() {
     if (this.activityHandler) {
@@ -3849,6 +3853,11 @@ class SessionManager extends StateManager {
       if (document.hidden) {
         this.clearSessionTimeout();
       } else {
+        if (this.isSessionStale()) {
+          log("debug", "Session expired during suspend, entering renewal mode");
+          this.enterRenewalMode();
+          return;
+        }
         const sessionId = this.get("sessionId");
         if (sessionId) {
           this.setupSessionTimeout();
@@ -3857,12 +3866,51 @@ class SessionManager extends StateManager {
     };
     document.addEventListener("visibilitychange", this.visibilityChangeHandler);
   }
+  /**
+   * Checks if the current session has become stale (expired during browser suspend).
+   * This handles the case where JavaScript timers are paused during suspend/hibernate.
+   */
+  isSessionStale() {
+    if (this.needsRenewal) {
+      return false;
+    }
+    const sessionId = this.get("sessionId");
+    if (!sessionId) {
+      return false;
+    }
+    const storedSession = this.loadStoredSession();
+    if (!storedSession) {
+      return false;
+    }
+    const sessionTimeout = this.get("config")?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
+    return Date.now() - storedSession.lastActivity > sessionTimeout;
+  }
   cleanupLifecycleListeners() {
     if (this.visibilityChangeHandler) {
       document.removeEventListener("visibilitychange", this.visibilityChangeHandler);
       this.visibilityChangeHandler = null;
     }
   }
+  /**
+   * Enters renewal mode after session timeout.
+   * Keeps activity listeners active to detect when user returns.
+   * Called by session timeout timer.
+   */
+  enterRenewalMode() {
+    this.clearSessionTimeout();
+    this.cleanupCrossTabSync();
+    this.clearStoredSession();
+    this.set("sessionId", null);
+    this.set("hasStartSession", false);
+    this.set("sessionReferrer", void 0);
+    this.set("sessionUtm", void 0);
+    this.needsRenewal = true;
+    log("debug", "Session timed out, entering renewal mode");
+  }
+  /**
+   * Fully resets session state and cleans up all resources.
+   * Called by stopTracking() for explicit session termination.
+   */
   resetSessionState() {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
@@ -3871,6 +3919,9 @@ class SessionManager extends StateManager {
     this.clearStoredSession();
     this.set("sessionId", null);
     this.set("hasStartSession", false);
+    this.set("sessionReferrer", void 0);
+    this.set("sessionUtm", void 0);
+    this.needsRenewal = false;
     this.isTracking = false;
   }
   /**
@@ -3942,6 +3993,7 @@ class SessionManager extends StateManager {
     this.cleanupCrossTabSync();
     this.cleanupLifecycleListeners();
     this.isTracking = false;
+    this.needsRenewal = false;
     this.set("hasStartSession", false);
   }
 }

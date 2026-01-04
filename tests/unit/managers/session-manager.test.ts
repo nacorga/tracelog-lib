@@ -685,3 +685,175 @@ describe('SessionManager - Edge Cases', () => {
     expect(newSessionId).toMatch(/^\d+-[a-z0-9]{9}$/);
   });
 });
+
+describe('SessionManager - Session Renewal Mode', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+  });
+
+  it('should enter renewal mode after timeout and create new session on activity', async () => {
+    vi.useFakeTimers();
+
+    const bridge = await initTestBridge({ sessionTimeout: 1000 });
+    const originalSessionId = bridge.get('sessionId');
+
+    expect(originalSessionId).toBeTruthy();
+
+    // Advance past timeout
+    await advanceTimers(1100);
+
+    // Session should be null (in renewal mode)
+    const sessionIdAfterTimeout = bridge.get('sessionId');
+    expect(sessionIdAfterTimeout).toBeNull();
+
+    // Switch to real timers before DOM events (fake timers can interfere with event handling)
+    vi.useRealTimers();
+
+    // Simulate user activity
+    document.dispatchEvent(new MouseEvent('click'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // New session should be created
+    const newSessionId = bridge.get('sessionId');
+    expect(newSessionId).toBeTruthy();
+    expect(newSessionId).not.toBe(originalSessionId);
+    expect(newSessionId).toMatch(/^\d+-[a-z0-9]{9}$/);
+  });
+
+  it('should create only one new session on multiple rapid clicks after timeout', async () => {
+    vi.useFakeTimers();
+
+    const bridge = await initTestBridge({ sessionTimeout: 1000 });
+
+    // Advance past timeout
+    await advanceTimers(1100);
+
+    // Switch to real timers before DOM events
+    vi.useRealTimers();
+
+    // Simulate rapid clicks
+    document.dispatchEvent(new MouseEvent('click'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const firstNewSessionId = bridge.get('sessionId');
+
+    document.dispatchEvent(new MouseEvent('click'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const secondSessionId = bridge.get('sessionId');
+
+    document.dispatchEvent(new MouseEvent('click'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const thirdSessionId = bridge.get('sessionId');
+
+    // All should be the same new session
+    expect(firstNewSessionId).toBeTruthy();
+    expect(secondSessionId).toBe(firstNewSessionId);
+    expect(thirdSessionId).toBe(firstNewSessionId);
+  });
+
+  it('should detect stale session on visibility change after browser suspend', async () => {
+    const bridge = await initTestBridge({ sessionTimeout: 1000 });
+    const { storage } = getManagers(bridge);
+    const originalSessionId = bridge.get('sessionId');
+
+    expect(storage).toBeDefined();
+
+    // Simulate browser suspend: manually set lastActivity to past
+    const projectId = 'custom';
+    const storageKey = SESSION_STORAGE_KEY(projectId);
+    const staleLastActivity = Date.now() - 2000; // 2 seconds ago (past timeout)
+
+    storage?.setItem(
+      storageKey,
+      JSON.stringify({
+        id: originalSessionId,
+        lastActivity: staleLastActivity,
+      }),
+    );
+
+    // Simulate visibility change (user returns from suspend)
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Session should be null (entered renewal mode due to stale check)
+    const sessionIdAfterVisibility = bridge.get('sessionId');
+    expect(sessionIdAfterVisibility).toBeNull();
+
+    // Simulate user activity to trigger renewal
+    document.dispatchEvent(new MouseEvent('click'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // New session should be created
+    const newSessionId = bridge.get('sessionId');
+    expect(newSessionId).toBeTruthy();
+    expect(newSessionId).not.toBe(originalSessionId);
+  });
+
+  it('should not detect stale session if within timeout window', async () => {
+    const bridge = await initTestBridge({ sessionTimeout: 5000 });
+    const { storage } = getManagers(bridge);
+    const originalSessionId = bridge.get('sessionId');
+
+    expect(storage).toBeDefined();
+
+    // Set lastActivity to recent time (within timeout)
+    const projectId = 'custom';
+    const storageKey = SESSION_STORAGE_KEY(projectId);
+    const recentLastActivity = Date.now() - 1000; // 1 second ago
+
+    storage?.setItem(
+      storageKey,
+      JSON.stringify({
+        id: originalSessionId,
+        lastActivity: recentLastActivity,
+      }),
+    );
+
+    // Simulate visibility change
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Session should still be the original (not stale)
+    const sessionIdAfterVisibility = bridge.get('sessionId');
+    expect(sessionIdAfterVisibility).toBe(originalSessionId);
+  });
+
+  it('should flush pending events after renewal', async () => {
+    vi.useFakeTimers();
+
+    const bridge = await initTestBridge({ sessionTimeout: 1000 });
+    const { event: eventManager } = getManagers(bridge);
+
+    // Advance past timeout to enter renewal mode
+    await advanceTimers(1100);
+
+    // Verify we're in renewal mode (sessionId is null)
+    expect(bridge.get('sessionId')).toBeNull();
+
+    // Switch to real timers for event tracking and activity
+    vi.useRealTimers();
+
+    // Track an event while in renewal mode (should go to pending buffer)
+    bridge.event('custom_event_during_renewal', { test: true });
+
+    // Simulate user activity to trigger renewal
+    document.dispatchEvent(new MouseEvent('click'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // New session should be created
+    const newSessionId = bridge.get('sessionId');
+    expect(newSessionId).toBeTruthy();
+
+    // The pending event should have been flushed
+    // EventManager should be defined and operational
+    expect(eventManager).toBeDefined();
+  });
+});

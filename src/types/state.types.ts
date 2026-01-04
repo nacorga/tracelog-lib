@@ -1,5 +1,6 @@
 import { Config } from './config.types';
 import { DeviceInfo } from './device.types';
+import { UTM } from './event.types';
 import { Mode } from './mode.types';
 
 export interface State {
@@ -22,4 +23,6 @@ export interface State {
   hasStartSession: boolean;
   suppressNextScroll: boolean;
   scrollEventCount?: number;
+  sessionReferrer?: string;
+  sessionUtm?: UTM;
 }

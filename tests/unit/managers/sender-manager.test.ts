@@ -533,7 +533,9 @@ describe('SenderManager - Retry Logic', () => {
   });
 
   it('should use exponential backoff', async () => {
-    // Arrange
+    // Arrange - Mock Math.random to eliminate jitter for deterministic timing
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
     const mockFetch = createMockFetch({ ok: false, status: 500 });
     global.fetch = mockFetch;
 
@@ -550,21 +552,32 @@ describe('SenderManager - Retry Logic', () => {
     });
     const eventsQueue = createMockQueue([customEvent]);
 
-    // Act
+    // Act - Start send and advance through retry delays
     const sendPromise = sender.sendEventsQueue(eventsQueue);
 
-    // First retry should happen between 200-300ms (100ms * 2^1 + jitter)
-    await advanceTimers(200);
-    expect(mockFetch).toHaveBeenCalledTimes(2); // Initial + first retry
+    // With Math.random() = 0 (no jitter):
+    // - First backoff: 100ms * 2^1 = 200ms
+    // - Second backoff: 100ms * 2^2 = 400ms
+    // Total time needed: 200ms + 400ms = 600ms
 
-    // Second retry should happen between 400-500ms (100ms * 2^2 + jitter)
-    await advanceTimers(400);
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
+    // Verify initial call happens immediately
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Advance past first backoff delay (200ms) - should trigger first retry
+    await vi.advanceTimersByTimeAsync(201);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    // Advance past second backoff delay (400ms) - should trigger second retry
+    await vi.advanceTimersByTimeAsync(401);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
 
     await sendPromise;
 
-    // Assert
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    // Assert final state
+    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
+
+    // Cleanup
+    randomSpy.mockRestore();
   });
 
   it('should max out at 2 retries (3 total attempts)', async () => {
