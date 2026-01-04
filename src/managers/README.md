@@ -159,7 +159,8 @@ Core business logic components that handle analytics data processing, state mana
 - Page visibility change handling (pauses timeout when hidden, resumes when visible)
 - Graceful cleanup and resource management with passive event listeners for optimal performance
 - Unique session ID generation: `{timestamp}-{9-char-base36}` format (e.g., `1728488234567-kx9f2m1bq`)
-- **Session START always emitted**: Every new app instance emits SESSION_START, even if recovering a session ID (prevents anomalous durations)
+- **Session START on new sessions only**: SESSION_START emitted only for NEW sessions, not when recovering an existing session ID (prevents duplicate SESSION_START events per session)
+- **Session renewal after timeout (SPA support)**: When session times out, activity listeners remain active in "renewal mode" - next user interaction automatically creates a new session with SESSION_START (prevents null sessionId in SPAs)
 - Graceful BroadcastChannel fallback (sessions work without cross-tab sync if API unavailable)
 - **Project-scoped session storage**: Session data stored with key `tlog:session:{projectId}` to prevent cross-project conflicts
 - **Error rollback**: On initialization error in `startTracking()`, all setup is rolled back (cleanup listeners, timers, state) and error re-thrown to caller

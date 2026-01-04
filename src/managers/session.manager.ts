@@ -94,6 +94,7 @@ export class SessionManager extends StateManager {
   private sessionTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private isTracking = false;
+  private needsRenewal = false;
 
   /**
    * Creates a SessionManager instance.
@@ -310,17 +311,11 @@ export class SessionManager extends StateManager {
       data: {
         sessionId,
         wasRecovered: !!recoveredSessionId,
-        willEmitSessionStart: true,
+        willEmitSessionStart: !recoveredSessionId,
         sessionReferrer,
         hasUtm: !!sessionUtm,
       },
     });
-
-    // IMPORTANT: Always send SESSION_START on new app instance
-    // Even if we recover a session ID, this is a NEW instance of the application
-    // (page reload, new tab, browser restart, etc.)
-    // This prevents anomalous session durations (e.g., 12+ days between START and END)
-    // Recovered session ID is kept for analytics continuity, but START event marks new instance
 
     this.isTracking = true;
 
@@ -332,14 +327,22 @@ export class SessionManager extends StateManager {
       this.initCrossTabSync();
       this.shareSession(sessionId);
 
-      // ALWAYS send SESSION_START on new app instance
-      log('debug', 'Emitting SESSION_START event', {
-        data: { sessionId },
-      });
+      // Only emit SESSION_START for NEW sessions (not recovered)
+      // Recovered sessions already had their SESSION_START tracked on initial creation
+      // Server infers session end from last event timestamp (v2.0+)
+      if (!recoveredSessionId) {
+        log('debug', 'Emitting SESSION_START event', {
+          data: { sessionId },
+        });
 
-      this.eventManager.track({
-        type: EventType.SESSION_START,
-      });
+        this.eventManager.track({
+          type: EventType.SESSION_START,
+        });
+      } else {
+        log('debug', 'Session recovered, skipping SESSION_START', {
+          data: { sessionId },
+        });
+      }
 
       this.setupSessionTimeout();
       this.setupActivityListeners();
@@ -366,7 +369,7 @@ export class SessionManager extends StateManager {
     const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
 
     this.sessionTimeoutId = setTimeout(() => {
-      this.resetSessionState();
+      this.enterRenewalMode();
     }, sessionTimeout);
   }
 
@@ -387,12 +390,51 @@ export class SessionManager extends StateManager {
 
   private setupActivityListeners(): void {
     this.activityHandler = (): void => {
-      this.resetSessionTimeout();
+      if (this.needsRenewal) {
+        this.renewSession();
+      } else {
+        this.resetSessionTimeout();
+      }
     };
 
     document.addEventListener('click', this.activityHandler, { passive: true });
     document.addEventListener('keydown', this.activityHandler, { passive: true });
     document.addEventListener('scroll', this.activityHandler, { passive: true });
+  }
+
+  /**
+   * Renews the session after timeout when user returns.
+   * Creates a new session ID and emits SESSION_START.
+   */
+  private renewSession(): void {
+    this.needsRenewal = false;
+
+    const newSessionId = this.generateSessionId();
+    const sessionReferrer = getExternalReferrer();
+    const sessionUtm = getUTMParameters();
+
+    log('debug', 'Renewing session after timeout', {
+      data: { newSessionId },
+    });
+
+    this.set('sessionId', newSessionId);
+    this.set('sessionReferrer', sessionReferrer);
+    this.set('sessionUtm', sessionUtm);
+    this.persistSession(newSessionId, Date.now(), sessionReferrer, sessionUtm);
+
+    // Re-initialize cross-tab sync with new session
+    this.cleanupCrossTabSync();
+    this.initCrossTabSync();
+    this.shareSession(newSessionId);
+
+    this.eventManager.track({
+      type: EventType.SESSION_START,
+    });
+
+    // Flush any events that were buffered during renewal mode
+    this.eventManager.flushPendingEvents();
+
+    this.setupSessionTimeout();
   }
 
   private cleanupActivityListeners(): void {
@@ -413,6 +455,13 @@ export class SessionManager extends StateManager {
       if (document.hidden) {
         this.clearSessionTimeout();
       } else {
+        // Check if session expired during browser suspend/hibernate
+        if (this.isSessionStale()) {
+          log('debug', 'Session expired during suspend, entering renewal mode');
+          this.enterRenewalMode();
+          return;
+        }
+
         const sessionId = this.get('sessionId');
         if (sessionId) {
           this.setupSessionTimeout();
@@ -423,6 +472,30 @@ export class SessionManager extends StateManager {
     document.addEventListener('visibilitychange', this.visibilityChangeHandler);
   }
 
+  /**
+   * Checks if the current session has become stale (expired during browser suspend).
+   * This handles the case where JavaScript timers are paused during suspend/hibernate.
+   */
+  private isSessionStale(): boolean {
+    // If already in renewal mode, no need to check
+    if (this.needsRenewal) {
+      return false;
+    }
+
+    const sessionId = this.get('sessionId');
+    if (!sessionId) {
+      return false;
+    }
+
+    const storedSession = this.loadStoredSession();
+    if (!storedSession) {
+      return false;
+    }
+
+    const sessionTimeout = this.get('config')?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
+    return Date.now() - storedSession.lastActivity > sessionTimeout;
+  }
+
   private cleanupLifecycleListeners(): void {
     if (this.visibilityChangeHandler) {
       document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
@@ -430,6 +503,31 @@ export class SessionManager extends StateManager {
     }
   }
 
+  /**
+   * Enters renewal mode after session timeout.
+   * Keeps activity listeners active to detect when user returns.
+   * Called by session timeout timer.
+   */
+  private enterRenewalMode(): void {
+    this.clearSessionTimeout();
+    this.cleanupCrossTabSync();
+    this.clearStoredSession();
+
+    this.set('sessionId', null);
+    this.set('hasStartSession', false);
+    this.set('sessionReferrer', undefined);
+    this.set('sessionUtm', undefined);
+
+    // Keep activity listeners active but switch to renewal mode
+    this.needsRenewal = true;
+
+    log('debug', 'Session timed out, entering renewal mode');
+  }
+
+  /**
+   * Fully resets session state and cleans up all resources.
+   * Called by stopTracking() for explicit session termination.
+   */
   private resetSessionState(): void {
     this.clearSessionTimeout();
     this.cleanupActivityListeners();
@@ -442,6 +540,7 @@ export class SessionManager extends StateManager {
     this.set('sessionReferrer', undefined);
     this.set('sessionUtm', undefined);
 
+    this.needsRenewal = false;
     this.isTracking = false;
   }
 
@@ -515,6 +614,7 @@ export class SessionManager extends StateManager {
     this.cleanupCrossTabSync();
     this.cleanupLifecycleListeners();
     this.isTracking = false;
+    this.needsRenewal = false;
     this.set('hasStartSession', false);
   }
 }

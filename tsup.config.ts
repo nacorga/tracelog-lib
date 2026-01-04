@@ -11,6 +11,9 @@ export default defineConfig({
   treeshake: true,
   minify: false,
   external: ['web-vitals'],
+  env: {
+    NODE_ENV: 'production',
+  },
   outExtension({ format }) {
     return {
       js: format === 'esm' ? '.js' : '.cjs',
