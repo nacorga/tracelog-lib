@@ -17,6 +17,7 @@ import {
   BeforeSendTransformer,
   BeforeBatchTransformer,
   MetadataType,
+  CustomHeadersProvider,
 } from './types';
 import {
   isEventValid,
@@ -39,6 +40,7 @@ export class App extends StateManager {
 
   private readonly emitter = new Emitter();
   private readonly transformers: TransformerMap = {};
+  private customHeadersProvider?: CustomHeadersProvider;
 
   protected managers: {
     storage?: StorageManager;
@@ -76,7 +78,16 @@ export class App extends StateManager {
     try {
       this.setupState(config);
 
-      this.managers.event = new EventManager(this.managers.storage, this.emitter, this.transformers);
+      // Extract static headers from custom integration config
+      const staticHeaders = config.integrations?.custom?.headers ?? {};
+
+      this.managers.event = new EventManager(
+        this.managers.storage,
+        this.emitter,
+        this.transformers,
+        staticHeaders,
+        this.customHeadersProvider,
+      );
 
       this.initializeHandlers();
 
@@ -161,6 +172,41 @@ export class App extends StateManager {
   }
 
   /**
+   * Sets a callback to provide custom HTTP headers for requests to custom backends.
+   * Only applies to custom backend integration (not TraceLog SaaS).
+   *
+   * @param provider - Callback function that returns custom headers
+   * @throws {Error} If provider is not a function
+   * @internal Called from api.setCustomHeaders()
+   */
+  setCustomHeaders(provider: CustomHeadersProvider): void {
+    if (typeof provider !== 'function') {
+      throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
+    }
+
+    this.customHeadersProvider = provider;
+
+    // Update EventManager if already initialized
+    if (this.managers.event) {
+      this.managers.event.setCustomHeadersProvider(provider);
+    }
+  }
+
+  /**
+   * Removes the custom headers provider callback.
+   *
+   * @internal Called from api.removeCustomHeaders()
+   */
+  removeCustomHeaders(): void {
+    this.customHeadersProvider = undefined;
+
+    // Update EventManager if already initialized
+    if (this.managers.event) {
+      this.managers.event.removeCustomHeadersProvider();
+    }
+  }
+
+  /**
    * Destroys the TraceLog instance and cleans up all resources.
    *
    * @param force - If true, forces cleanup even if not initialized (used during init failure)
@@ -191,6 +237,7 @@ export class App extends StateManager {
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = undefined;
     this.transformers.beforeBatch = undefined;
+    this.customHeadersProvider = undefined;
 
     this.set('suppressNextScroll', false);
     this.set('sessionId', null);

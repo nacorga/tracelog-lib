@@ -81,24 +81,29 @@ tracelog.setTransformer('beforeSend', (event) => {
   return { ...event, custom_metadata: { app: 'v1' } };
 });
 
-// 4. Initialize FOURTH (starts tracking immediately)
+// 4. Configure custom headers FOURTH (if using custom backend with auth)
+tracelog.setCustomHeaders(() => ({
+  'Authorization': `Bearer ${getAuthToken()}`
+}));
+
+// 5. Initialize FIFTH (starts tracking immediately)
 await tracelog.init({
   integrations: {
     custom: { collectApiUrl: 'https://api.example.com' }
   }
 });
 
-// 5. Track custom events (after init)
+// 6. Track custom events (after init)
 tracelog.event('button_clicked', {
   buttonId: 'signup-cta',
   source: 'homepage'
 });
 
-// 6. Cleanup (on consent revoke or app unmount)
+// 7. Cleanup (on consent revoke or app unmount)
 tracelog.destroy();
 ```
 
-**Why this order?** You must obtain user consent before initializing. Events like `SESSION_START` and `PAGE_VIEW` fire during initialization. Registering listeners and transformers before init ensures you don't miss them.
+**Why this order?** You must obtain user consent before initializing. Events like `SESSION_START` and `PAGE_VIEW` fire during initialization. Registering listeners, transformers, and custom headers before init ensures you capture, transform, and send these initial events with proper authentication.
 
 **That's it!** TraceLog now automatically tracks:
 - Page views & navigation (including SPA routes)
@@ -122,6 +127,8 @@ tracelog.destroy();
 | `off(event, callback)` | Unsubscribe from events |
 | `setTransformer(hook, fn)` | Transform events before sending (see [Transformers](#transformers)) |
 | `removeTransformer(hook)` | Remove a previously set transformer |
+| `setCustomHeaders(provider)` | Add custom HTTP headers to requests (see [Custom Headers](#custom-headers)) |
+| `removeCustomHeaders()` | Remove custom headers provider |
 | `isInitialized()` | Check initialization status |
 | `setQaMode(enabled)` | Enable/disable QA mode (console logging) |
 | `destroy()` | Stop tracking and cleanup |
@@ -589,6 +596,92 @@ tracelog.setTransformer('beforeSend', (data) => {
   return data;
 });
 ```
+
+---
+
+## Custom Headers
+
+Add custom HTTP headers to requests sent to custom backends. Useful for authentication, tenant identification, or API versioning.
+
+**Important**: Custom headers **only apply to custom backend integrations**. TraceLog SaaS always receives requests without custom headers.
+
+### Static Headers (Config)
+
+Set fixed headers in configuration:
+
+```typescript
+await tracelog.init({
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      headers: {
+        'X-Tenant-Id': 'tenant-123',
+        'X-Brand': 'my-brand',
+        'X-API-Version': '2.0'
+      }
+    }
+  }
+});
+```
+
+### Dynamic Headers (Provider)
+
+Set headers dynamically at runtime (e.g., auth tokens that expire):
+
+```typescript
+// Set before or after init
+tracelog.setCustomHeaders(() => ({
+  'Authorization': `Bearer ${getAuthToken()}`,
+  'X-Request-ID': crypto.randomUUID()
+}));
+
+await tracelog.init({
+  integrations: {
+    custom: { collectApiUrl: 'https://api.example.com/collect' }
+  }
+});
+```
+
+### Static + Dynamic Headers
+
+Combine both approaches. Dynamic headers override static on key collision:
+
+```typescript
+await tracelog.init({
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      headers: {
+        'X-Brand': 'static-brand',       // Static
+        'X-Tenant-Id': 'tenant-123'      // Static
+      }
+    }
+  }
+});
+
+// Dynamic provider overrides 'X-Brand'
+tracelog.setCustomHeaders(() => ({
+  'X-Brand': 'dynamic-brand',           // Overrides static
+  'Authorization': 'Bearer token'        // New header
+}));
+
+// Result: { 'X-Tenant-Id': 'tenant-123', 'X-Brand': 'dynamic-brand', 'Authorization': 'Bearer token' }
+```
+
+### Removing Headers
+
+```typescript
+// Remove dynamic provider (static headers from config remain)
+tracelog.removeCustomHeaders();
+```
+
+### sendBeacon Limitation
+
+⚠️ Custom headers are **NOT applied** to `sendBeacon()` requests (page unload). The browser API doesn't support custom headers. For scenarios requiring headers on all requests:
+- Ensure async sends complete before page unload
+- Use short-lived tokens that don't require refresh per request
+
+**→ [Custom Headers API Reference](./API_REFERENCE.md#setcustomheadersprovider-customheadersprovider-void)**
 
 ---
 

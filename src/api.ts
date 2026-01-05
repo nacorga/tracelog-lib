@@ -7,6 +7,7 @@ import {
   TransformerHook,
   BeforeSendTransformer,
   BeforeBatchTransformer,
+  CustomHeadersProvider,
 } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
@@ -24,6 +25,7 @@ interface PendingTransformer {
 
 const pendingListeners: PendingListener[] = [];
 const pendingTransformers: PendingTransformer[] = [];
+let pendingCustomHeadersProvider: CustomHeadersProvider | null = null;
 
 let app: App | null = null;
 let isInitializing = false;
@@ -90,6 +92,12 @@ export const init = async (config?: Config): Promise<void> => {
       });
 
       pendingTransformers.length = 0;
+
+      // Apply pending custom headers provider
+      if (pendingCustomHeadersProvider) {
+        instance.setCustomHeaders(pendingCustomHeadersProvider);
+        pendingCustomHeadersProvider = null;
+      }
 
       const initPromise = instance.init(validatedConfig);
 
@@ -300,6 +308,77 @@ export const removeTransformer = (hook: TransformerHook): void => {
 };
 
 /**
+ * Sets a callback to provide custom HTTP headers for requests to custom backends.
+ *
+ * Can be called before or after init(). Only applies to custom backend integration
+ * (not TraceLog SaaS). Headers are NOT applied to sendBeacon requests (page unload).
+ *
+ * @param provider - Callback function that returns custom headers object
+ * @throws {Error} If provider is not a function
+ * @throws {Error} If called during destroy()
+ *
+ * @example
+ * ```typescript
+ * // Set before or after init
+ * tracelog.setCustomHeaders(() => ({
+ *   'Authorization': `Bearer ${getAuthToken()}`,
+ *   'X-Request-ID': crypto.randomUUID()
+ * }));
+ *
+ * await tracelog.init({ integrations: { custom: { collectApiUrl: '...' } } });
+ * ```
+ *
+ * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#setcustomheaders} for full documentation
+ */
+export const setCustomHeaders = (provider: CustomHeadersProvider): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (typeof provider !== 'function') {
+    throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
+  }
+
+  if (!app || isInitializing) {
+    pendingCustomHeadersProvider = provider;
+    return;
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot set custom headers while TraceLog is being destroyed');
+  }
+
+  app.setCustomHeaders(provider);
+};
+
+/**
+ * Removes the custom headers provider callback.
+ *
+ * @throws {Error} If called during destroy()
+ *
+ * @example
+ * ```typescript
+ * tracelog.removeCustomHeaders();
+ * ```
+ */
+export const removeCustomHeaders = (): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    pendingCustomHeadersProvider = null;
+    return;
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot remove custom headers while TraceLog is being destroyed');
+  }
+
+  app.removeCustomHeaders();
+};
+
+/**
  * Checks if TraceLog is currently initialized.
  *
  * @returns true if initialized, false otherwise
@@ -356,6 +435,7 @@ export const destroy = (): void => {
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
+    pendingCustomHeadersProvider = null;
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__traceLogBridge) {
       window.__traceLogBridge = undefined;
@@ -368,6 +448,7 @@ export const destroy = (): void => {
 
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
+    pendingCustomHeadersProvider = null;
 
     isDestroying = false;
 

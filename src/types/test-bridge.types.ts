@@ -10,7 +10,12 @@ import { StorageManager } from '../managers/storage.manager';
 import { Config } from './config.types';
 import { State } from './state.types';
 import { EventData } from './event.types';
-import { BeforeSendTransformer, BeforeBatchTransformer, TransformerHook } from './transformer.types';
+import {
+  BeforeSendTransformer,
+  BeforeBatchTransformer,
+  TransformerHook,
+  CustomHeadersProvider,
+} from './transformer.types';
 
 /**
  * Testing bridge interface for E2E and integration tests
@@ -59,6 +64,10 @@ export interface TraceLogTestBridge {
   setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
   setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void;
   removeTransformer(hook: TransformerHook): void;
+
+  // Custom headers methods (for testing custom backend headers)
+  setCustomHeaders(provider: CustomHeadersProvider): void;
+  removeCustomHeaders(): void;
 
   // Manager accessors (for unit/integration tests)
   getEventManager(): EventManager | undefined;
