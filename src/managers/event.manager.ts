@@ -25,7 +25,16 @@ import {
   SESSION_COUNTS_CLEANUP_THROTTLE_MS,
   STORAGE_BASE_KEY,
 } from '../constants/storage.constants';
-import { EventsQueue, EmitterEvent, EventData, EventType, Mode, TransformerMap, SessionEventCounts } from '../types';
+import {
+  EventsQueue,
+  EmitterEvent,
+  EventData,
+  EventType,
+  Mode,
+  TransformerMap,
+  SessionEventCounts,
+  CustomHeadersProvider,
+} from '../types';
 import { log, Emitter, generateEventId, transformEvent, transformBatch } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
@@ -143,8 +152,16 @@ export class EventManager extends StateManager {
    * @param storeManager - Storage manager for persistence
    * @param emitter - Optional event emitter for local event consumption
    * @param transformers - Optional event transformation hooks
+   * @param staticHeaders - Optional static HTTP headers for custom backend (from config)
+   * @param customHeadersProvider - Optional callback for dynamic headers
    */
-  constructor(storeManager: StorageManager, emitter: Emitter | null = null, transformers: TransformerMap = {}) {
+  constructor(
+    storeManager: StorageManager,
+    emitter: Emitter | null = null,
+    transformers: TransformerMap = {},
+    staticHeaders: Record<string, string> = {},
+    customHeadersProvider?: CustomHeadersProvider,
+  ) {
     super();
 
     this.emitter = emitter;
@@ -154,12 +171,23 @@ export class EventManager extends StateManager {
     this.dataSenders = [];
     const collectApiUrls = this.get('collectApiUrls');
 
+    // SaaS integration: no custom headers (schema protection)
     if (collectApiUrls?.saas) {
       this.dataSenders.push(new SenderManager(storeManager, 'saas', collectApiUrls.saas, transformers));
     }
 
+    // Custom integration: receives static headers and dynamic provider
     if (collectApiUrls?.custom) {
-      this.dataSenders.push(new SenderManager(storeManager, 'custom', collectApiUrls.custom, transformers));
+      this.dataSenders.push(
+        new SenderManager(
+          storeManager,
+          'custom',
+          collectApiUrls.custom,
+          transformers,
+          staticHeaders,
+          customHeadersProvider,
+        ),
+      );
     }
 
     // Initialize debounced session counts saver (500ms delay, trailing edge)
@@ -517,6 +545,8 @@ export class EventManager extends StateManager {
    * @see src/managers/README.md (lines 5-75) for cleanup details
    */
   stop(): void {
+    // Note: customHeadersProvider is NOT cleared here since it's stored in SenderManagers
+    // and those are destroyed during this stop() call anyway
     if (this.sendIntervalId) {
       clearInterval(this.sendIntervalId);
       this.sendIntervalId = null;
@@ -625,6 +655,31 @@ export class EventManager extends StateManager {
    */
   flushImmediatelySync(): boolean {
     return this.flushEvents(true) as boolean;
+  }
+
+  /**
+   * Sets the custom headers provider callback for the custom integration.
+   * Only affects requests to custom backend (not TraceLog SaaS).
+   *
+   * @param provider - Callback function that returns custom headers
+   */
+  setCustomHeadersProvider(provider: CustomHeadersProvider): void {
+    for (const sender of this.dataSenders) {
+      if (sender.getIntegrationId() === 'custom') {
+        sender.setCustomHeadersProvider(provider);
+      }
+    }
+  }
+
+  /**
+   * Removes the custom headers provider callback from the custom integration.
+   */
+  removeCustomHeadersProvider(): void {
+    for (const sender of this.dataSenders) {
+      if (sender.getIntegrationId() === 'custom') {
+        sender.removeCustomHeadersProvider();
+      }
+    }
   }
 
   /**

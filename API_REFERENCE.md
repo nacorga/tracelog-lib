@@ -68,11 +68,14 @@ tracelog.on('event', handler);
 // 2. Set transformers SECOND (if using custom backend)
 tracelog.setTransformer('beforeSend', transformFn);
 
-// 3. Initialize LAST
+// 3. Set custom headers THIRD (if using custom backend)
+tracelog.setCustomHeaders(() => ({ 'Authorization': `Bearer ${token}` }));
+
+// 4. Initialize LAST
 await tracelog.init();
 ```
 
-**Why?** Events like `SESSION_START` and `PAGE_VIEW` fire immediately during `init()`. Registering listeners and transformers beforehand ensures you capture and transform these initial events.
+**Why?** Events like `SESSION_START` and `PAGE_VIEW` fire immediately during `init()`. Registering listeners, transformers, and custom headers beforehand ensures you capture, transform, and send these initial events with proper authentication.
 
 **Notes:**
 - Automatically starts tracking page views, clicks, scrolls, sessions, and performance
@@ -446,6 +449,104 @@ tracelog.removeTransformer('beforeBatch');
 
 ---
 
+### `setCustomHeaders(provider: CustomHeadersProvider): void`
+
+Sets a callback to provide custom HTTP headers for requests to custom backends.
+
+**Parameters:**
+- `provider`: Callback function that returns a `Record<string, string>` of headers
+
+**Throws:**
+- `Error` if `provider` is not a function
+- `Error` if called during `destroy()`
+
+**Integration Behavior:**
+
+Custom headers **only apply to custom backend integrations**. TraceLog SaaS always receives requests without custom headers to maintain schema integrity.
+
+- **TraceLog SaaS (only)**: Custom headers ignored
+- **Custom Backend (only)**: Custom headers applied to all fetch requests
+- **Multi-Integration (SaaS + Custom)**: SaaS receives standard headers, custom receives custom headers
+
+**Examples:**
+
+```typescript
+import { tracelog } from '@tracelog/lib';
+import type { CustomHeadersProvider } from '@tracelog/lib';
+
+// Dynamic authorization header
+tracelog.setCustomHeaders(() => ({
+  'Authorization': `Bearer ${getAuthToken()}`,
+  'X-Request-ID': crypto.randomUUID()
+}));
+
+// Tenant identification
+tracelog.setCustomHeaders(() => ({
+  'X-Tenant-Id': getCurrentTenantId(),
+  'X-Brand': 'my-brand'
+}));
+
+// Static headers via config + dynamic via provider
+await tracelog.init({
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      headers: { 'X-Brand': 'static-brand' }  // Static headers in config
+    }
+  }
+});
+
+// Dynamic provider overrides static on key collision
+tracelog.setCustomHeaders(() => ({
+  'X-Brand': 'dynamic-brand',     // Overrides static 'X-Brand'
+  'Authorization': 'Bearer token'  // New header
+}));
+// Result: { 'X-Brand': 'dynamic-brand', 'Authorization': 'Bearer token' }
+```
+
+**Merge Behavior:**
+- Static headers (from `config.integrations.custom.headers`) are merged with dynamic headers (from provider)
+- Dynamic headers **override** static headers when keys collide
+- Provider called synchronously before each fetch request
+
+**sendBeacon Limitation:**
+
+⚠️ Custom headers are **NOT applied** to `sendBeacon()` requests (page unload). The `sendBeacon` browser API only supports Content-Type via Blob and does not allow custom headers. For scenarios requiring custom headers on all requests:
+- Ensure async sends complete before page unload
+- Use short-lived tokens that don't require refresh on every request
+
+**Notes:**
+- Can be called before or after `init()` (pending queue pattern)
+- Only one provider at a time (calling again replaces previous)
+- Provider should return empty object `{}` if no custom headers needed
+- Provider errors are caught and logged (falls back to static headers only)
+- Automatically cleared on `destroy()`
+
+---
+
+### `removeCustomHeaders(): void`
+
+Removes the custom headers provider callback.
+
+**Throws:**
+- `Error` if called during `destroy()`
+
+**Example:**
+
+```typescript
+// Remove custom headers provider
+tracelog.removeCustomHeaders();
+
+// Subsequent requests use only static headers (from config) or none
+```
+
+**Notes:**
+- Safe to call even if no provider is set
+- Static headers from config remain (only dynamic provider removed)
+- Automatically called on `destroy()`
+
+---
+
 ### `updateGlobalMetadata(metadata: Record<string, MetadataType>): void`
 
 Replaces all global metadata with new values. Global metadata is automatically appended to every event sent to the backend.
@@ -576,6 +677,7 @@ interface Config {
     custom?: {
       collectApiUrl: string;
       allowHttp?: boolean;
+      headers?: Record<string, string>;  // Static HTTP headers
     };
   };
 }
@@ -808,7 +910,7 @@ await tracelog.init({
 ```
 
 #### `integrations.custom`
-- **Type:** `{ collectApiUrl: string; allowHttp?: boolean }`
+- **Type:** `{ collectApiUrl: string; allowHttp?: boolean; headers?: Record<string, string> }`
 - **Description:** Custom backend integration
 
 ```typescript
@@ -816,7 +918,11 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect',
-      allowHttp: false  // Only true for local testing
+      allowHttp: false,  // Only true for local testing
+      headers: {         // Static HTTP headers (optional)
+        'X-Tenant-Id': 'tenant-123',
+        'X-Brand': 'my-brand'
+      }
     }
   }
 });
@@ -830,6 +936,13 @@ await tracelog.init({
 - **Default:** `false`
 - Set to `true` **only for local testing** (e.g., `http://localhost:8080`)
 - Never use in production
+
+**`headers`**:
+- **Default:** `undefined`
+- Static HTTP headers added to all requests
+- Use for tenant identification, API keys, or fixed values
+- For dynamic headers (auth tokens), use `setCustomHeaders()` instead
+- Dynamic headers override static headers on key collision
 
 #### Multi-Integration (TraceLog SaaS + Custom Backend)
 
@@ -1247,6 +1360,12 @@ import {
   // Queue
   EventsQueue,
 
+  // Transformers & Headers
+  TransformerHook,
+  BeforeSendTransformer,
+  BeforeBatchTransformer,
+  CustomHeadersProvider,
+
   // Common
   MetadataType
 } from '@tracelog/lib';
@@ -1413,6 +1532,6 @@ window.__traceLogDisabled = true;
 
 ---
 
-**Version:** 0.12.0
+**Version:** 2.1.2
 **License:** MIT
-**Last Updated:** October 2025
+**Last Updated:** January 2026

@@ -1065,3 +1065,314 @@ describe('SenderManager - Error Handling', () => {
     expect(mockFetch).toHaveBeenCalledTimes(4); // 3 failed + 1 success
   });
 });
+
+describe('SenderManager - Custom Headers', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should include static headers from config in fetch request', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const staticHeaders = { 'X-Brand': 'test-brand', 'X-Tenant-Id': 'tenant-123' };
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {}, staticHeaders);
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Brand': 'test-brand',
+      'X-Tenant-Id': 'tenant-123',
+    });
+  });
+
+  it('should include dynamic headers from provider in fetch request', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const dynamicProvider = vi.fn(() => ({
+      Authorization: 'Bearer test-token',
+      'X-Request-Id': 'req-123',
+    }));
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {}, {}, dynamicProvider);
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect(dynamicProvider).toHaveBeenCalledTimes(1);
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-token',
+      'X-Request-Id': 'req-123',
+    });
+  });
+
+  it('should merge static and dynamic headers (dynamic overrides static)', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const staticHeaders = { 'X-Brand': 'static-brand', 'X-Shared': 'from-static' };
+    const dynamicProvider = vi.fn(() => ({
+      'X-Shared': 'from-dynamic', // Should override static
+      Authorization: 'Bearer token',
+    }));
+    const sender = new SenderManager(
+      storage,
+      'custom',
+      'https://api.test.com/collect',
+      {},
+      staticHeaders,
+      dynamicProvider,
+    );
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Brand': 'static-brand',
+      'X-Shared': 'from-dynamic', // Dynamic wins
+      Authorization: 'Bearer token',
+    });
+  });
+
+  it('should NOT apply custom headers for saas integration', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const staticHeaders = { 'X-Brand': 'test-brand' };
+    const dynamicProvider = vi.fn(() => ({ Authorization: 'Bearer token' }));
+    // Use 'saas' integration - headers should be ignored
+    const sender = new SenderManager(
+      storage,
+      'saas',
+      'https://api.tracelog.com/collect',
+      {},
+      staticHeaders,
+      dynamicProvider,
+    );
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect(dynamicProvider).not.toHaveBeenCalled(); // Provider not called for saas
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      // No custom headers
+    });
+  });
+
+  it('should use empty custom headers when provider throws error', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const staticHeaders = { 'X-Brand': 'static-brand' };
+    const dynamicProvider = vi.fn(() => {
+      throw new Error('Provider error');
+    });
+    const sender = new SenderManager(
+      storage,
+      'custom',
+      'https://api.test.com/collect',
+      {},
+      staticHeaders,
+      dynamicProvider,
+    );
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    const success = await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect(success).toBe(true); // Request still succeeds
+    expect(dynamicProvider).toHaveBeenCalledTimes(1);
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    // Falls back to static headers only (dynamic failed)
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Brand': 'static-brand',
+    });
+  });
+
+  it('should use empty custom headers when provider returns invalid value', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const staticHeaders = { 'X-Brand': 'static-brand' };
+    // Provider returns array instead of object (invalid)
+    const dynamicProvider = vi.fn(() => ['invalid'] as unknown as Record<string, string>);
+    const sender = new SenderManager(
+      storage,
+      'custom',
+      'https://api.test.com/collect',
+      {},
+      staticHeaders,
+      dynamicProvider,
+    );
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    const success = await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect(success).toBe(true);
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    // Falls back to static headers only (dynamic invalid)
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Brand': 'static-brand',
+    });
+  });
+
+  it('should allow setting provider after construction', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Set provider after construction
+    const dynamicProvider = vi.fn(() => ({ Authorization: 'Bearer late-token' }));
+    sender.setCustomHeadersProvider(dynamicProvider);
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect(dynamicProvider).toHaveBeenCalledTimes(1);
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer late-token',
+    });
+  });
+
+  it('should allow removing provider', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const staticHeaders = { 'X-Brand': 'test-brand' };
+    const dynamicProvider = vi.fn(() => ({ Authorization: 'Bearer token' }));
+    const sender = new SenderManager(
+      storage,
+      'custom',
+      'https://api.test.com/collect',
+      {},
+      staticHeaders,
+      dynamicProvider,
+    );
+
+    // Remove provider
+    sender.removeCustomHeadersProvider();
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect(dynamicProvider).not.toHaveBeenCalled(); // Provider was removed
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Brand': 'test-brand', // Only static headers
+    });
+  });
+});

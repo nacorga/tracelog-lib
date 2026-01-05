@@ -140,6 +140,20 @@ Core business logic components that handle analytics data processing, state mana
   - Errors caught by utility, original batch used as fallback
   - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
 
+**Custom Headers Support** (v2.1.2+):
+- **Purpose**: Adds custom HTTP headers to requests sent to custom backends
+- **Static Headers**: Configured via `config.integrations.custom.headers` at initialization
+- **Dynamic Headers**: Configured via `setCustomHeadersProvider()` at runtime
+- **Merge Behavior**: Dynamic headers override static headers when keys collide
+- **Integration-Specific**: Only applied for custom backend (`integrationId === 'custom'`)
+  - Silently bypassed for TraceLog SaaS (`integrationId === 'saas'`)
+- **sendBeacon Limitation**: Custom headers NOT applied to `sendBeacon()` requests (browser API limitation)
+- **Error Handling**: Provider errors caught and logged, falls back to static headers only
+- **API Methods**:
+  - `setCustomHeadersProvider(provider: () => Record<string, string>)`: Sets dynamic header provider
+  - `removeCustomHeadersProvider()`: Removes dynamic header provider
+  - `getCustomHeaders()`: Private method that merges static + dynamic headers
+
 ## SessionManager
 
 **Purpose**: Manages user session lifecycle across browser tabs with cross-tab synchronization and session recovery capabilities.

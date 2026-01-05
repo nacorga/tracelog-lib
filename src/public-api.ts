@@ -8,6 +8,8 @@ import {
   setQaMode,
   setTransformer,
   removeTransformer,
+  setCustomHeaders,
+  removeCustomHeaders,
   updateGlobalMetadata,
   mergeGlobalMetadata,
 } from './api';
@@ -26,6 +28,8 @@ export const tracelog = {
   off,
   setTransformer,
   removeTransformer,
+  setCustomHeaders,
+  removeCustomHeaders,
   isInitialized,
   destroy,
   setQaMode,

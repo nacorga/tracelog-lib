@@ -10,7 +10,14 @@ import {
   RETRY_BACKOFF_JITTER_MS,
   LIB_VERSION,
 } from '../constants';
-import { PersistedEventsQueue, EventsQueue, SpecialApiUrl, PermanentError, TransformerMap } from '../types';
+import {
+  PersistedEventsQueue,
+  EventsQueue,
+  SpecialApiUrl,
+  PermanentError,
+  TransformerMap,
+  CustomHeadersProvider,
+} from '../types';
 import { log, transformEvents, transformBatch } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -83,6 +90,8 @@ export class SenderManager extends StateManager {
   private readonly integrationId?: 'saas' | 'custom';
   private readonly apiUrl?: string;
   private readonly transformers: TransformerMap;
+  private readonly staticHeaders: Record<string, string>;
+  private customHeadersProvider?: CustomHeadersProvider;
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
   private lastMetadataTimestamp = 0;
@@ -98,6 +107,8 @@ export class SenderManager extends StateManager {
    * @param integrationId - Optional integration identifier ('saas' or 'custom')
    * @param apiUrl - Optional API endpoint URL
    * @param transformers - Optional event transformation hooks
+   * @param staticHeaders - Optional static HTTP headers (from config)
+   * @param customHeadersProvider - Optional callback for dynamic headers
    * @throws Error if integrationId and apiUrl are not both provided or both undefined
    */
   constructor(
@@ -105,6 +116,8 @@ export class SenderManager extends StateManager {
     integrationId?: 'saas' | 'custom',
     apiUrl?: string,
     transformers: TransformerMap = {},
+    staticHeaders: Record<string, string> = {},
+    customHeadersProvider?: CustomHeadersProvider,
   ) {
     super();
 
@@ -116,6 +129,8 @@ export class SenderManager extends StateManager {
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
     this.transformers = transformers;
+    this.staticHeaders = staticHeaders;
+    this.customHeadersProvider = customHeadersProvider;
   }
 
   /**
@@ -124,6 +139,59 @@ export class SenderManager extends StateManager {
    */
   public getIntegrationId(): 'saas' | 'custom' | undefined {
     return this.integrationId;
+  }
+
+  /**
+   * Sets the custom headers provider callback.
+   * Only applies to 'custom' integration (ignored for 'saas').
+   *
+   * @param provider - Callback function that returns custom headers
+   */
+  public setCustomHeadersProvider(provider: CustomHeadersProvider): void {
+    this.customHeadersProvider = provider;
+  }
+
+  /**
+   * Removes the custom headers provider callback.
+   */
+  public removeCustomHeadersProvider(): void {
+    this.customHeadersProvider = undefined;
+  }
+
+  /**
+   * Builds custom headers by merging static headers with dynamic headers from provider.
+   * Only applies to 'custom' integration (returns empty object for 'saas').
+   *
+   * @returns Merged custom headers object (dynamic headers override static)
+   * @private
+   */
+  private getCustomHeaders(): Record<string, string> {
+    // Only apply custom headers to 'custom' integration
+    if (this.integrationId !== 'custom') {
+      return {};
+    }
+
+    let dynamicHeaders: Record<string, string> = {};
+
+    if (this.customHeadersProvider) {
+      try {
+        const result = this.customHeadersProvider();
+
+        // Validate return value
+        if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
+          dynamicHeaders = result;
+        } else {
+          log('warn', 'Custom headers provider returned invalid value, expected object', {
+            data: { received: typeof result },
+          });
+        }
+      } catch (error) {
+        log('warn', 'Custom headers provider threw an error, using static headers only', { error });
+      }
+    }
+
+    // Merge: dynamic headers override static headers
+    return { ...this.staticHeaders, ...dynamicHeaders };
   }
 
   private getQueueStorageKey(): string {
@@ -154,6 +222,11 @@ export class SenderManager extends StateManager {
    * - `false`: Send failed (network error, browser rejected beacon)
    *
    * **Important**: No retry mechanism for failures. Events are NOT persisted.
+   *
+   * **Custom Headers Limitation**: Custom headers set via `setCustomHeaders()` are NOT applied
+   * to sendBeacon requests due to browser API limitations. The sendBeacon API only supports
+   * Content-Type header via Blob. For scenarios requiring custom headers, ensure async
+   * sends complete before page unload.
    *
    * @param body - Event queue to send
    * @returns `true` if send succeeded or was skipped, `false` if failed
@@ -638,6 +711,9 @@ export class SenderManager extends StateManager {
     }, REQUEST_TIMEOUT_MS);
 
     try {
+      // Get custom headers (only applies to 'custom' integration)
+      const customHeaders = this.getCustomHeaders();
+
       const response = await fetch(url, {
         method: 'POST',
         body: payload,
@@ -646,6 +722,7 @@ export class SenderManager extends StateManager {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
+          ...customHeaders,
         },
       });
 
