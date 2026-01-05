@@ -468,7 +468,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.1.1";
+const version = "2.1.2";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1483,6 +1483,8 @@ class SenderManager extends StateManager {
   integrationId;
   apiUrl;
   transformers;
+  staticHeaders;
+  customHeadersProvider;
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
   lastMetadataTimestamp = 0;
@@ -1497,9 +1499,11 @@ class SenderManager extends StateManager {
    * @param integrationId - Optional integration identifier ('saas' or 'custom')
    * @param apiUrl - Optional API endpoint URL
    * @param transformers - Optional event transformation hooks
+   * @param staticHeaders - Optional static HTTP headers (from config)
+   * @param customHeadersProvider - Optional callback for dynamic headers
    * @throws Error if integrationId and apiUrl are not both provided or both undefined
    */
-  constructor(storeManager, integrationId, apiUrl, transformers = {}) {
+  constructor(storeManager, integrationId, apiUrl, transformers = {}, staticHeaders = {}, customHeadersProvider) {
     super();
     if (integrationId && !apiUrl || !integrationId && apiUrl) {
       throw new Error("SenderManager: integrationId and apiUrl must either both be provided or both be undefined");
@@ -1508,6 +1512,8 @@ class SenderManager extends StateManager {
     this.integrationId = integrationId;
     this.apiUrl = apiUrl;
     this.transformers = transformers;
+    this.staticHeaders = staticHeaders;
+    this.customHeadersProvider = customHeadersProvider;
   }
   /**
    * Get the integration ID for this sender
@@ -1515,6 +1521,49 @@ class SenderManager extends StateManager {
    */
   getIntegrationId() {
     return this.integrationId;
+  }
+  /**
+   * Sets the custom headers provider callback.
+   * Only applies to 'custom' integration (ignored for 'saas').
+   *
+   * @param provider - Callback function that returns custom headers
+   */
+  setCustomHeadersProvider(provider) {
+    this.customHeadersProvider = provider;
+  }
+  /**
+   * Removes the custom headers provider callback.
+   */
+  removeCustomHeadersProvider() {
+    this.customHeadersProvider = void 0;
+  }
+  /**
+   * Builds custom headers by merging static headers with dynamic headers from provider.
+   * Only applies to 'custom' integration (returns empty object for 'saas').
+   *
+   * @returns Merged custom headers object (dynamic headers override static)
+   * @private
+   */
+  getCustomHeaders() {
+    if (this.integrationId !== "custom") {
+      return {};
+    }
+    let dynamicHeaders = {};
+    if (this.customHeadersProvider) {
+      try {
+        const result = this.customHeadersProvider();
+        if (typeof result === "object" && result !== null && !Array.isArray(result)) {
+          dynamicHeaders = result;
+        } else {
+          log("warn", "Custom headers provider returned invalid value, expected object", {
+            data: { received: typeof result }
+          });
+        }
+      } catch (error) {
+        log("warn", "Custom headers provider threw an error, using static headers only", { error });
+      }
+    }
+    return { ...this.staticHeaders, ...dynamicHeaders };
   }
   getQueueStorageKey() {
     const userId = this.get("userId") || "anonymous";
@@ -1542,6 +1591,11 @@ class SenderManager extends StateManager {
    * - `false`: Send failed (network error, browser rejected beacon)
    *
    * **Important**: No retry mechanism for failures. Events are NOT persisted.
+   *
+   * **Custom Headers Limitation**: Custom headers set via `setCustomHeaders()` are NOT applied
+   * to sendBeacon requests due to browser API limitations. The sendBeacon API only supports
+   * Content-Type header via Blob. For scenarios requiring custom headers, ensure async
+   * sends complete before page unload.
    *
    * @param body - Event queue to send
    * @returns `true` if send succeeded or was skipped, `false` if failed
@@ -1965,6 +2019,7 @@ class SenderManager extends StateManager {
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
     try {
+      const customHeaders = this.getCustomHeaders();
       const response = await fetch(url, {
         method: "POST",
         body: payload,
@@ -1972,7 +2027,8 @@ class SenderManager extends StateManager {
         credentials: "include",
         signal: controller.signal,
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...customHeaders
         }
       });
       if (!response.ok) {
@@ -2430,8 +2486,10 @@ class EventManager extends StateManager {
    * @param storeManager - Storage manager for persistence
    * @param emitter - Optional event emitter for local event consumption
    * @param transformers - Optional event transformation hooks
+   * @param staticHeaders - Optional static HTTP headers for custom backend (from config)
+   * @param customHeadersProvider - Optional callback for dynamic headers
    */
-  constructor(storeManager, emitter = null, transformers = {}) {
+  constructor(storeManager, emitter = null, transformers = {}, staticHeaders = {}, customHeadersProvider) {
     super();
     this.emitter = emitter;
     this.transformers = transformers;
@@ -2442,7 +2500,16 @@ class EventManager extends StateManager {
       this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas, transformers));
     }
     if (collectApiUrls?.custom) {
-      this.dataSenders.push(new SenderManager(storeManager, "custom", collectApiUrls.custom, transformers));
+      this.dataSenders.push(
+        new SenderManager(
+          storeManager,
+          "custom",
+          collectApiUrls.custom,
+          transformers,
+          staticHeaders,
+          customHeadersProvider
+        )
+      );
     }
     this.saveSessionCountsDebounced = this.debounce((sessionId) => {
       this.saveSessionCounts(sessionId);
@@ -2848,6 +2915,29 @@ class EventManager extends StateManager {
    */
   flushImmediatelySync() {
     return this.flushEvents(true);
+  }
+  /**
+   * Sets the custom headers provider callback for the custom integration.
+   * Only affects requests to custom backend (not TraceLog SaaS).
+   *
+   * @param provider - Callback function that returns custom headers
+   */
+  setCustomHeadersProvider(provider) {
+    for (const sender of this.dataSenders) {
+      if (sender.getIntegrationId() === "custom") {
+        sender.setCustomHeadersProvider(provider);
+      }
+    }
+  }
+  /**
+   * Removes the custom headers provider callback from the custom integration.
+   */
+  removeCustomHeadersProvider() {
+    for (const sender of this.dataSenders) {
+      if (sender.getIntegrationId() === "custom") {
+        sender.removeCustomHeadersProvider();
+      }
+    }
   }
   /**
    * Returns the current number of events in the main queue.
@@ -5923,6 +6013,7 @@ class App extends StateManager {
   suppressNextScrollTimer = null;
   emitter = new Emitter();
   transformers = {};
+  customHeadersProvider;
   managers = {};
   handlers = {};
   get initialized() {
@@ -5942,7 +6033,14 @@ class App extends StateManager {
     this.managers.storage = new StorageManager();
     try {
       this.setupState(config);
-      this.managers.event = new EventManager(this.managers.storage, this.emitter, this.transformers);
+      const staticHeaders = config.integrations?.custom?.headers ?? {};
+      this.managers.event = new EventManager(
+        this.managers.storage,
+        this.emitter,
+        this.transformers,
+        staticHeaders,
+        this.customHeadersProvider
+      );
       this.initializeHandlers();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log("warn", "Failed to recover persisted events", { error });
@@ -6006,6 +6104,34 @@ class App extends StateManager {
     return this.transformers[hook];
   }
   /**
+   * Sets a callback to provide custom HTTP headers for requests to custom backends.
+   * Only applies to custom backend integration (not TraceLog SaaS).
+   *
+   * @param provider - Callback function that returns custom headers
+   * @throws {Error} If provider is not a function
+   * @internal Called from api.setCustomHeaders()
+   */
+  setCustomHeaders(provider) {
+    if (typeof provider !== "function") {
+      throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
+    }
+    this.customHeadersProvider = provider;
+    if (this.managers.event) {
+      this.managers.event.setCustomHeadersProvider(provider);
+    }
+  }
+  /**
+   * Removes the custom headers provider callback.
+   *
+   * @internal Called from api.removeCustomHeaders()
+   */
+  removeCustomHeaders() {
+    this.customHeadersProvider = void 0;
+    if (this.managers.event) {
+      this.managers.event.removeCustomHeadersProvider();
+    }
+  }
+  /**
    * Destroys the TraceLog instance and cleans up all resources.
    *
    * @param force - If true, forces cleanup even if not initialized (used during init failure)
@@ -6030,6 +6156,7 @@ class App extends StateManager {
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = void 0;
     this.transformers.beforeBatch = void 0;
+    this.customHeadersProvider = void 0;
     this.set("suppressNextScroll", false);
     this.set("sessionId", null);
     this.isInitialized = false;
@@ -6182,6 +6309,7 @@ class App extends StateManager {
 }
 const pendingListeners = [];
 const pendingTransformers = [];
+let pendingCustomHeadersProvider = null;
 let app = null;
 let isInitializing = false;
 let isDestroying = false;
@@ -6216,6 +6344,10 @@ const init = async (config) => {
         }
       });
       pendingTransformers.length = 0;
+      if (pendingCustomHeadersProvider) {
+        instance.setCustomHeaders(pendingCustomHeadersProvider);
+        pendingCustomHeadersProvider = null;
+      }
       const initPromise = instance.init(validatedConfig);
       const timeoutPromise = new Promise((_2, reject) => {
         setTimeout(() => {
@@ -6314,6 +6446,35 @@ const removeTransformer = (hook) => {
   }
   app.removeTransformer(hook);
 };
+const setCustomHeaders = (provider) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (typeof provider !== "function") {
+    throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
+  }
+  if (!app || isInitializing) {
+    pendingCustomHeadersProvider = provider;
+    return;
+  }
+  if (isDestroying) {
+    throw new Error("[TraceLog] Cannot set custom headers while TraceLog is being destroyed");
+  }
+  app.setCustomHeaders(provider);
+};
+const removeCustomHeaders = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!app) {
+    pendingCustomHeadersProvider = null;
+    return;
+  }
+  if (isDestroying) {
+    throw new Error("[TraceLog] Cannot remove custom headers while TraceLog is being destroyed");
+  }
+  app.removeCustomHeaders();
+};
 const isInitialized = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return false;
@@ -6338,6 +6499,7 @@ const destroy = () => {
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
+    pendingCustomHeadersProvider = null;
     if (typeof window !== "undefined" && window.__traceLogBridge) {
       window.__traceLogBridge = void 0;
     }
@@ -6347,6 +6509,7 @@ const destroy = () => {
     isInitializing = false;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
+    pendingCustomHeadersProvider = null;
     isDestroying = false;
     log("warn", "Error during destroy, forced cleanup completed", { error });
   }
@@ -6417,7 +6580,9 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   mergeGlobalMetadata,
   off,
   on,
+  removeCustomHeaders,
   removeTransformer,
+  setCustomHeaders,
   setQaMode,
   setTransformer,
   updateGlobalMetadata
@@ -6429,6 +6594,8 @@ const tracelog = {
   off,
   setTransformer,
   removeTransformer,
+  setCustomHeaders,
+  removeCustomHeaders,
   isInitialized,
   destroy,
   setQaMode,
