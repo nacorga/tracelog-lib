@@ -721,8 +721,8 @@ export class SenderManager extends StateManager {
         credentials: 'include',
         signal: controller.signal,
         headers: {
-          'Content-Type': 'application/json',
           ...customHeaders,
+          'Content-Type': 'application/json',
         },
       });
 
