@@ -140,40 +140,27 @@ class ReleaseManager {
   async determineVersionBump() {
     this.log.step('Analyzing commits to determine version bump...');
 
+    const currentVersion = this.getCurrentVersion();
+
+    // Get lastTag for changelog generation (needed for both manual and automatic bumps)
+    let lastTag = null;
+    try {
+      lastTag = execSync('git describe --tags --abbrev=0', { encoding: 'utf8', cwd: this.projectRoot }).trim();
+    } catch {
+      this.log.debug('No previous tags found');
+    }
+
     if (this.forceVersion) {
-      const currentVersion = this.getCurrentVersion();
       return {
         currentVersion,
         newVersion: this.forceVersion,
         bumpType: 'manual',
         changeType: 'manual',
+        lastTag,
       };
     }
 
-    const currentVersion = this.getCurrentVersion();
-
-    try {
-      // Get commits since last tag
-      const lastTag = execSync('git describe --tags --abbrev=0', { encoding: 'utf8' }).trim();
-      const commitRange = `${lastTag}..HEAD`;
-      const commits = execSync(`git log ${commitRange} --pretty=format:"%s"`, { encoding: 'utf8' });
-
-      this.log.debug(`Analyzing commits since ${lastTag}:`);
-      this.log.debug(commits);
-
-      const changeType = this.analyzeCommits(commits);
-      const bumpType = this.getBumpType(changeType);
-      const newVersion = this.bumpVersion(currentVersion, bumpType);
-
-      return {
-        currentVersion,
-        newVersion,
-        bumpType,
-        changeType,
-        lastTag,
-        commits,
-      };
-    } catch (error) {
+    if (!lastTag) {
       // No previous tags, this is the first release
       this.log.warning('No previous tags found, treating as initial release');
       return {
@@ -183,6 +170,29 @@ class ReleaseManager {
         changeType: 'initial',
       };
     }
+
+    // Get commits since last tag
+    const commitRange = `${lastTag}..HEAD`;
+    const commits = execSync(`git log ${commitRange} --pretty=format:"%s"`, {
+      encoding: 'utf8',
+      cwd: this.projectRoot,
+    });
+
+    this.log.debug(`Analyzing commits since ${lastTag}:`);
+    this.log.debug(commits);
+
+    const changeType = this.analyzeCommits(commits);
+    const bumpType = this.getBumpType(changeType);
+    const newVersion = this.bumpVersion(currentVersion, bumpType);
+
+    return {
+      currentVersion,
+      newVersion,
+      bumpType,
+      changeType,
+      lastTag,
+      commits,
+    };
   }
 
   getCurrentVersion() {

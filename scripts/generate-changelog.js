@@ -65,13 +65,28 @@ class ChangelogGenerator {
   }
 
   async generateReleaseNotes(versionInfo) {
-    const { newVersion, lastTag, currentVersion } = versionInfo;
-    const date = new Date().toISOString().split('T')[0];
+    const { newVersion, lastTag, targetTag } = versionInfo;
+
+    // Get the date from the tag if available, otherwise use today
+    let date = new Date().toISOString().split('T')[0];
+    if (targetTag) {
+      try {
+        const tagDate = execSync(`git log -1 --format=%ad --date=short ${targetTag}`, {
+          encoding: 'utf8',
+          cwd: this.projectRoot,
+        }).trim();
+        if (tagDate) date = tagDate;
+      } catch {
+        // Use default date
+      }
+    }
 
     // Get commits since last release
     let commits = [];
     if (lastTag) {
-      const commitRange = `${lastTag}..HEAD`;
+      // Use targetTag if provided (for full changelog regeneration), otherwise HEAD
+      const endRef = targetTag || 'HEAD';
+      const commitRange = `${lastTag}..${endRef}`;
       const commitOutput = execSync(`git log ${commitRange} --pretty=format:"%H|%s|%an|%ae|%ad" --date=short`, {
         encoding: 'utf8',
         cwd: this.projectRoot,
@@ -81,11 +96,25 @@ class ChangelogGenerator {
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => {
-          const [hash, subject, author, email, date] = line.split('|');
-          return { hash, subject, author, email, date };
+          const [hash, subject, author, email, commitDate] = line.split('|');
+          return { hash, subject, author, email, date: commitDate };
+        });
+    } else if (targetTag) {
+      // First release with a specific tag
+      const commitOutput = execSync(`git log ${targetTag} --pretty=format:"%H|%s|%an|%ae|%ad" --date=short`, {
+        encoding: 'utf8',
+        cwd: this.projectRoot,
+      });
+
+      commits = commitOutput
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => {
+          const [hash, subject, author, email, commitDate] = line.split('|');
+          return { hash, subject, author, email, date: commitDate };
         });
     } else {
-      // First release - get all commits
+      // First release - get all commits up to HEAD
       const commitOutput = execSync('git log --pretty=format:"%H|%s|%an|%ae|%ad" --date=short', {
         encoding: 'utf8',
         cwd: this.projectRoot,
@@ -95,8 +124,8 @@ class ChangelogGenerator {
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => {
-          const [hash, subject, author, email, date] = line.split('|');
-          return { hash, subject, author, email, date };
+          const [hash, subject, author, email, commitDate] = line.split('|');
+          return { hash, subject, author, email, date: commitDate };
         });
     }
 
@@ -403,6 +432,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
           newVersion: currentTag.replace(/^v/, ''),
           lastTag: previousTag,
           currentVersion: currentTag.replace(/^v/, ''),
+          targetTag: currentTag, // Use the current tag as the end reference
         };
 
         const releaseNotes = await this.generateReleaseNotes(versionInfo);

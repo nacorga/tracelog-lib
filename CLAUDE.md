@@ -112,14 +112,17 @@ tracelog.on('event', eventHandler);
 // 2. SECOND: Configure transformers (before init, custom backend only)
 tracelog.setTransformer('beforeSend', (event) => ({ ...event, custom: true }));
 
-// 3. THIRD: Initialize (starts tracking immediately)
+// 3. THIRD: Configure custom headers (before init, custom backend only)
+tracelog.setCustomHeaders(() => ({ 'Authorization': `Bearer ${token}` }));
+
+// 4. FOURTH: Initialize (starts tracking immediately)
 await tracelog.init({ integrations: { custom: { collectApiUrl: '...' } } });
 
-// 4. FOURTH: Custom events (after init)
+// 5. FIFTH: Custom events (after init)
 tracelog.event('button_click', { id: 'signup-cta' });
 ```
 
-**Why**: `SESSION_START` and `PAGE_VIEW` fire during `App.init()`. Listeners/transformers registered after miss these events.
+**Why**: `SESSION_START` and `PAGE_VIEW` fire during `App.init()`. Listeners, transformers, and custom headers registered after miss these initial events or send them without proper authentication.
 
 ### 2. Integration Modes
 
@@ -136,7 +139,10 @@ await tracelog.init({
 // Custom Backend
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://api.example.com/collect' }
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      headers: { 'X-Tenant-Id': 'tenant-123' }  // Optional static headers
+    }
   }
 });
 
@@ -180,7 +186,43 @@ tracelog.setTransformer('beforeBatch', (batch) => {
 
 **Validation Philosophy**: Minimal validation (only discriminator fields). Allows custom schemas for maximum flexibility.
 
-### 4. Event Queue & Sending
+### 4. Custom Headers System
+
+**Integration-Specific Behavior** (same as transformers):
+
+| Mode | Static Headers | Dynamic Headers | Notes |
+|------|----------------|-----------------|-------|
+| Standalone | ❌ Not applicable | ❌ Not applicable | No network requests |
+| TraceLog SaaS | ❌ Ignored | ❌ Ignored | Schema protection |
+| Custom Backend | ✅ Applied | ✅ Applied | Full control |
+| Multi-Integration | ⚠️ Custom only | ⚠️ Custom only | SaaS gets standard headers |
+
+```typescript
+// Static headers in config
+await tracelog.init({
+  integrations: {
+    custom: {
+      collectApiUrl: 'https://api.example.com/collect',
+      headers: { 'X-Tenant-Id': 'tenant-123' }
+    }
+  }
+});
+
+// Dynamic headers via provider (can be set before or after init)
+tracelog.setCustomHeaders(() => ({
+  'Authorization': `Bearer ${getAuthToken()}`,
+  'X-Request-ID': crypto.randomUUID()
+}));
+
+// Remove dynamic provider
+tracelog.removeCustomHeaders();
+```
+
+**Merge Behavior**: Dynamic headers override static headers when keys collide.
+
+**sendBeacon Limitation**: Custom headers are NOT applied to `sendBeacon()` requests (browser API limitation). Only affects page unload scenarios.
+
+### 5. Event Queue & Sending
 
 **Core Principle**: Optimistic Removal with Per-Integration Persistence
 
@@ -216,7 +258,7 @@ tracelog.setTransformer('beforeBatch', (batch) => {
 | 408 Timeout, 429 Rate Limit | ✅ Up to 2 | ✅ After exhaustion |
 | 5xx, Network Errors | ✅ Up to 2 | ✅ After exhaustion |
 
-### 5. Session Management
+### 6. Session Management
 
 - Cross-tab sync via BroadcastChannel
 - Primary tab creates session

@@ -33,3 +33,24 @@ export interface TransformerMap {
   beforeSend?: BeforeSendTransformer;
   beforeBatch?: BeforeBatchTransformer;
 }
+
+/**
+ * Callback function for providing dynamic HTTP headers.
+ *
+ * Called synchronously before each fetch request to custom backends.
+ * Return empty object {} to send no custom headers.
+ *
+ * **Note**: Only applies to `custom` integration (not TraceLog SaaS).
+ * Headers are NOT applied to sendBeacon requests (page unload).
+ *
+ * @returns Record of header names to values
+ *
+ * @example
+ * ```typescript
+ * tracelog.setCustomHeaders(() => ({
+ *   'Authorization': `Bearer ${getAuthToken()}`,
+ *   'X-Request-ID': crypto.randomUUID()
+ * }));
+ * ```
+ */
+export type CustomHeadersProvider = () => Record<string, string>;

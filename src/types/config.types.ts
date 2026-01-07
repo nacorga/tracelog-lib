@@ -56,6 +56,12 @@ export interface Config {
       collectApiUrl: string;
       /** Allow HTTP URLs (not recommended for production). @default false */
       allowHttp?: boolean;
+      /**
+       * Static HTTP headers to include in every request.
+       * For dynamic headers, use `setCustomHeaders()` instead.
+       * @example { 'X-Brand': 'my-brand', 'X-Tenant-Id': 'tenant-123' }
+       */
+      headers?: Record<string, string>;
     };
   };
 }
