@@ -1,5 +1,33 @@
 # Changelog
 
+
+## [2.2.0] - 2026-01-07
+
+### ✨ Features
+
+- Add support for custom HTTP headers in requests to custom backends ([3f83114](../../commit/3f83114e436531110dd6b6dfc7db70696be69eb2))
+
+### 🐛 Bug Fixes
+
+- Correct placement of Content-Type header in SenderManager ([d97ad20](../../commit/d97ad204290af1f518e9508ee455b3ab271116f0))
+
+### 🔧 Other Changes
+
+- Merge pull request #78 from nacorga/release/20260105.1 ([3377ee4](../../commit/3377ee4c8386d25411f72f21f1003a3f24b60a24))
+- Add .gitattributes to exclude auto-generated files from GitHub Copilot reviews ([4b8aa68](../../commit/4b8aa681bb433564502891d29260c12a6e7f6566))
+- Release v2.1.2 with support for custom HTTP headers in requests to custom backends ([5be7206](../../commit/5be720611fba1614d4395d1fb016759e81e92f2e))
+- Merge pull request #77 from nacorga/feature/custom-headers ([925a3c5](../../commit/925a3c590ba34858d715dd2332308eda41855185))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.1.2...v2.2.0
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
