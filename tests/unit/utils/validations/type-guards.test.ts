@@ -185,6 +185,28 @@ describe('type-guards.utils', () => {
         const obj = { items: [Symbol('test')] };
         expect(isOnlyPrimitiveFields(obj)).toBe(false);
       });
+
+      it('should return false for circular reference', () => {
+        const obj: Record<string, unknown> = { name: 'test' };
+        obj.self = obj;
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for nested circular reference', () => {
+        const obj: Record<string, unknown> = {
+          data: {
+            nested: {},
+          },
+        };
+        (obj.data as Record<string, unknown>).nested = obj;
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for circular reference in array', () => {
+        const obj: Record<string, unknown> = { items: [] };
+        (obj.items as unknown[]).push(obj);
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
     });
 
     describe('edge cases', () => {

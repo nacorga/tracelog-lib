@@ -104,6 +104,20 @@ describe('sanitize.utils', () => {
         // The exact behavior depends on implementation, but the deep value should not exist
         expect(Object.keys(result).length).toBeGreaterThan(0);
       });
+
+      it('should handle circular references gracefully via depth limit', () => {
+        const obj: Record<string, unknown> = { name: 'test', value: 123 };
+        obj.self = obj;
+
+        // Should not throw - depth limit stops infinite recursion
+        const result = sanitizeMetadata(obj);
+
+        // Result should be a valid object (circular ref truncated at depth limit)
+        expect(result).toBeDefined();
+        expect(typeof result).toBe('object');
+        expect(result.name).toBeDefined();
+        expect(result.value).toBe(123);
+      });
     });
 
     describe('primitive sanitization', () => {

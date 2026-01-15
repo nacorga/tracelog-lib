@@ -467,7 +467,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.1.2";
+const version = "2.2.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1037,7 +1037,7 @@ const validateAndNormalizeConfig = (config) => {
   }
   return normalizedConfig;
 };
-const isSerializable = (value) => {
+const isSerializable = (value, seen = /* @__PURE__ */ new Set()) => {
   if (value === null || value === void 0) {
     return true;
   }
@@ -1048,11 +1048,15 @@ const isSerializable = (value) => {
   if (type === "function" || type === "symbol" || type === "bigint") {
     return false;
   }
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
   if (Array.isArray(value)) {
-    return value.every((item) => isSerializable(item));
+    return value.every((item) => isSerializable(item, seen));
   }
   if (type === "object") {
-    return Object.values(value).every((v2) => isSerializable(v2));
+    return Object.values(value).every((v2) => isSerializable(v2, seen));
   }
   return false;
 };

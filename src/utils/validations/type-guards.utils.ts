@@ -1,10 +1,11 @@
 /**
  * Checks if a value is JSON-serializable (primitives, arrays, or plain objects).
- * Rejects functions, symbols, and other non-serializable types.
+ * Rejects functions, symbols, circular references, and other non-serializable types.
  * @param value - The value to check
+ * @param seen - Set of visited objects to detect circular references
  * @returns True if the value is JSON-serializable
  */
-const isSerializable = (value: unknown): boolean => {
+const isSerializable = (value: unknown, seen: Set<unknown> = new Set()): boolean => {
   if (value === null || value === undefined) {
     return true;
   }
@@ -19,12 +20,18 @@ const isSerializable = (value: unknown): boolean => {
     return false;
   }
 
+  // Circular reference check for complex types
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+
   if (Array.isArray(value)) {
-    return value.every((item) => isSerializable(item));
+    return value.every((item) => isSerializable(item, seen));
   }
 
   if (type === 'object') {
-    return Object.values(value as Record<string, unknown>).every((v) => isSerializable(v));
+    return Object.values(value as Record<string, unknown>).every((v) => isSerializable(v, seen));
   }
 
   return false;
