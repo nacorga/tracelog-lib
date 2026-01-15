@@ -1,6 +1,29 @@
 # Changelog
 
 
+
+## [2.2.1] - 2026-01-15
+
+### ✨ Features
+
+- Enhance JSON-serializability checks with circular reference detection and add related tests ([94a4a78](../../commit/94a4a787f95bde442ed97a375d969133a3f4ad07))
+- Enhance metadata handling with increased nesting depth and improved sanitization ([42e4930](../../commit/42e49304d702022cf477d551041de25ed880a367))
+
+### 🔧 Other Changes
+
+- Merge pull request #80 from nacorga/release/20260115.1 ([b5c8527](../../commit/b5c85274cb10ca2b7592545247c3d6d331f90a9b))
+- Merge pull request #79 from nacorga/refactor/increased-nested-object-depth ([592e779](../../commit/592e77931937db07b88d39c426344ff7d1737bd7))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.2.0...v2.2.1
+
+
 ## [2.2.0] - 2026-01-07
 
 ### ✨ Features
