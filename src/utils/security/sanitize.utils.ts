@@ -62,14 +62,11 @@ export const sanitizeString = (value: string): string => {
  * @returns The sanitized value
  */
 const sanitizeValue = (value: unknown, depth = 0): unknown => {
-  if (depth > MAX_OBJECT_DEPTH) {
-    return null;
-  }
-
   if (value === null || value === undefined) {
     return null;
   }
 
+  // Primitives are always allowed regardless of depth
   if (typeof value === 'string') {
     return sanitizeString(value);
   }
@@ -84,6 +81,11 @@ const sanitizeValue = (value: unknown, depth = 0): unknown => {
 
   if (typeof value === 'boolean') {
     return value;
+  }
+
+  // Depth check only applies to complex types (arrays and objects)
+  if (depth > MAX_OBJECT_DEPTH) {
+    return null;
   }
 
   if (Array.isArray(value)) {

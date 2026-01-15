@@ -38,12 +38,11 @@ const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024;
 const MAX_CUSTOM_EVENT_KEYS = 10;
 const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
 const MAX_NESTED_OBJECT_KEYS = 20;
-const MAX_METADATA_NESTING_DEPTH = 1;
 const MAX_TEXT_LENGTH = 255;
 const MAX_STRING_LENGTH = 1e3;
 const MAX_STRING_LENGTH_IN_ARRAY = 500;
 const MAX_ARRAY_LENGTH = 100;
-const MAX_OBJECT_DEPTH = 3;
+const MAX_OBJECT_DEPTH = 10;
 const PRECISION_TWO_DECIMALS = 2;
 const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024;
 const MAX_FINGERPRINTS = 1500;
@@ -766,9 +765,6 @@ const sanitizeString = (value) => {
   return result;
 };
 const sanitizeValue = (value, depth = 0) => {
-  if (depth > MAX_OBJECT_DEPTH) {
-    return null;
-  }
   if (value === null || value === void 0) {
     return null;
   }
@@ -783,6 +779,9 @@ const sanitizeValue = (value, depth = 0) => {
   }
   if (typeof value === "boolean") {
     return value;
+  }
+  if (depth > MAX_OBJECT_DEPTH) {
+    return null;
   }
   if (Array.isArray(value)) {
     const limitedArray = value.slice(0, MAX_ARRAY_LENGTH);
@@ -1038,69 +1037,30 @@ const validateAndNormalizeConfig = (config) => {
   }
   return normalizedConfig;
 };
-const isValidArrayItem = (item) => {
-  if (typeof item === "string") {
+const isSerializable = (value) => {
+  if (value === null || value === void 0) {
     return true;
   }
-  if (typeof item === "object" && item !== null && !Array.isArray(item)) {
-    const entries = Object.entries(item);
-    if (entries.length > MAX_NESTED_OBJECT_KEYS) {
-      return false;
-    }
-    for (const [, value] of entries) {
-      if (value === null || value === void 0) {
-        continue;
-      }
-      const type = typeof value;
-      if (type !== "string" && type !== "number" && type !== "boolean") {
-        return false;
-      }
-    }
+  const type = typeof value;
+  if (type === "string" || type === "number" || type === "boolean") {
     return true;
+  }
+  if (type === "function" || type === "symbol" || type === "bigint") {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.every((item) => isSerializable(item));
+  }
+  if (type === "object") {
+    return Object.values(value).every((v2) => isSerializable(v2));
   }
   return false;
 };
-const isOnlyPrimitiveFields = (object, depth = 0) => {
+const isOnlyPrimitiveFields = (object) => {
   if (typeof object !== "object" || object === null) {
     return false;
   }
-  if (depth > MAX_METADATA_NESTING_DEPTH) {
-    return false;
-  }
-  for (const value of Object.values(object)) {
-    if (value === null || value === void 0) {
-      continue;
-    }
-    const type = typeof value;
-    if (type === "string" || type === "number" || type === "boolean") {
-      continue;
-    }
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        continue;
-      }
-      const firstItem = value[0];
-      const isStringArray = typeof firstItem === "string";
-      if (isStringArray) {
-        if (!value.every((item) => typeof item === "string")) {
-          return false;
-        }
-      } else {
-        if (!value.every((item) => isValidArrayItem(item))) {
-          return false;
-        }
-      }
-      continue;
-    }
-    if (type === "object" && depth === 0) {
-      if (!isOnlyPrimitiveFields(value, depth + 1)) {
-        return false;
-      }
-      continue;
-    }
-    return false;
-  }
-  return true;
+  return isSerializable(object);
 };
 const isValidEventName = (eventName) => {
   if (typeof eventName !== "string") {
@@ -2027,8 +1987,8 @@ class SenderManager extends StateManager {
         credentials: "include",
         signal: controller.signal,
         headers: {
-          "Content-Type": "application/json",
-          ...customHeaders
+          ...customHeaders,
+          "Content-Type": "application/json"
         }
       });
       if (!response.ok) {
@@ -7040,7 +7000,6 @@ export {
   MAX_CUSTOM_EVENT_KEYS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
-  MAX_METADATA_NESTING_DEPTH,
   MAX_NESTED_OBJECT_KEYS,
   MAX_STRING_LENGTH,
   MAX_STRING_LENGTH_IN_ARRAY,
