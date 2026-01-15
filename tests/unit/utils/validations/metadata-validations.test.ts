@@ -387,6 +387,37 @@ describe('metadata-validations.utils', () => {
 
         expect(result.valid).toBe(true);
       });
+
+      it('should preserve nested object arrays structure', () => {
+        const metadata = {
+          source: 'test_page',
+          data: {
+            records: [
+              {
+                id: 'record-1',
+                position: 1,
+                value: 99.99,
+                active: true,
+                category: 'type_a',
+              },
+            ],
+          },
+          context: 'unit_test',
+        };
+        const result = isValidMetadata('custom_event', metadata, 'customEvent');
+
+        expect(result.valid).toBe(true);
+        expect(result.sanitizedMetadata).toBeDefined();
+
+        const sanitized = result.sanitizedMetadata as Record<string, unknown>;
+        const data = sanitized.data as Record<string, unknown>;
+        const records = data.records as Record<string, unknown>[];
+
+        expect(records).toHaveLength(1);
+        expect(records[0]?.id).toBeDefined();
+        expect(records[0]?.value).toBe(99.99);
+        expect(records[0]?.category).toBeDefined();
+      });
     });
   });
 });

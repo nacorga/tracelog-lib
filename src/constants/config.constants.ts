@@ -75,7 +75,6 @@ export const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024; // 8KB
 export const MAX_CUSTOM_EVENT_KEYS = 10;
 export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
 export const MAX_NESTED_OBJECT_KEYS = 20; // Maximum keys in nested objects within arrays
-export const MAX_METADATA_NESTING_DEPTH = 1; // Maximum nesting depth for metadata objects
 
 // Text content limits
 export const MAX_TEXT_LENGTH = 255; // For click tracking text content
@@ -84,7 +83,7 @@ export const MAX_TEXT_LENGTH = 255; // For click tracking text content
 export const MAX_STRING_LENGTH = 1000;
 export const MAX_STRING_LENGTH_IN_ARRAY = 500; // Strings within arrays are more limited
 export const MAX_ARRAY_LENGTH = 100;
-export const MAX_OBJECT_DEPTH = 3;
+export const MAX_OBJECT_DEPTH = 10; // Sufficient for any real use case, protects against circular/malicious structures
 
 // Precision for numeric metrics
 export const PRECISION_TWO_DECIMALS = 2 as const;
