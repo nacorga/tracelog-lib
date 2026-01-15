@@ -1,102 +1,52 @@
-import { MAX_NESTED_OBJECT_KEYS, MAX_METADATA_NESTING_DEPTH } from '../../constants';
-
 /**
- * Validates if an item in an array is a valid nested object
- * @param item - The item to validate
- * @returns True if the item is a valid nested object
+ * Checks if a value is JSON-serializable (primitives, arrays, or plain objects).
+ * Rejects functions, symbols, circular references, and other non-serializable types.
+ * @param value - The value to check
+ * @param seen - Set of visited objects to detect circular references
+ * @returns True if the value is JSON-serializable
  */
-const isValidArrayItem = (item: unknown): boolean => {
-  if (typeof item === 'string') {
+const isSerializable = (value: unknown, seen: Set<unknown> = new Set()): boolean => {
+  if (value === null || value === undefined) {
     return true;
   }
 
-  // Allow objects with primitive fields only (one level deep)
-  if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
-    const entries = Object.entries(item);
+  const type = typeof value;
 
-    // Check key count limit
-    if (entries.length > MAX_NESTED_OBJECT_KEYS) {
-      return false;
-    }
-
-    // All values must be primitives (no nested objects or arrays)
-    for (const [, value] of entries) {
-      if (value === null || value === undefined) {
-        continue;
-      }
-
-      const type = typeof value;
-      if (type !== 'string' && type !== 'number' && type !== 'boolean') {
-        return false;
-      }
-    }
-
+  if (type === 'string' || type === 'number' || type === 'boolean') {
     return true;
+  }
+
+  if (type === 'function' || type === 'symbol' || type === 'bigint') {
+    return false;
+  }
+
+  // Circular reference check for complex types
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.every((item) => isSerializable(item, seen));
+  }
+
+  if (type === 'object') {
+    return Object.values(value as Record<string, unknown>).every((v) => isSerializable(v, seen));
   }
 
   return false;
 };
 
 /**
- * Checks if an object contains only primitive fields, string arrays, arrays of flat objects,
- * or nested objects with primitive fields
+ * Checks if an object contains only JSON-serializable fields.
+ * Accepts any depth of nesting as long as all values are serializable.
  * @param object - The object to check
- * @param depth - Current nesting depth (default: 0, max: MAX_METADATA_NESTING_DEPTH)
- * @returns True if the object contains only valid fields
+ * @returns True if the object contains only serializable fields
  */
-export const isOnlyPrimitiveFields = (object: Record<string, unknown>, depth = 0): boolean => {
+export const isOnlyPrimitiveFields = (object: Record<string, unknown>): boolean => {
   if (typeof object !== 'object' || object === null) {
     return false;
   }
 
-  if (depth > MAX_METADATA_NESTING_DEPTH) {
-    return false;
-  }
-
-  for (const value of Object.values(object)) {
-    if (value === null || value === undefined) {
-      continue;
-    }
-
-    const type = typeof value;
-    if (type === 'string' || type === 'number' || type === 'boolean') {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        continue;
-      }
-
-      // Determine array type from first item
-      const firstItem = value[0];
-      const isStringArray = typeof firstItem === 'string';
-
-      // All items must be of the same type (all strings OR all objects)
-      if (isStringArray) {
-        if (!value.every((item) => typeof item === 'string')) {
-          return false;
-        }
-      } else {
-        // Must be all objects
-        if (!value.every((item) => isValidArrayItem(item))) {
-          return false;
-        }
-      }
-
-      continue;
-    }
-
-    // Allow nested objects at depth 0 only (one level deep)
-    if (type === 'object' && depth === 0) {
-      if (!isOnlyPrimitiveFields(value as Record<string, unknown>, depth + 1)) {
-        return false;
-      }
-      continue;
-    }
-
-    return false;
-  }
-
-  return true;
+  return isSerializable(object);
 };

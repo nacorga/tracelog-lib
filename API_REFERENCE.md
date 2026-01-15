@@ -591,7 +591,7 @@ tracelog.updateGlobalMetadata({});
 - Max 10KB serialized size
 - Max 500 items per array field
 - Max 1000 characters per string field
-- Max 2 levels of nesting for objects
+- Max 10 levels of nesting (supports complex structures like GA4 ecommerce)
 
 **Notes:**
 - Completely replaces existing global metadata
@@ -644,7 +644,7 @@ tracelog.mergeGlobalMetadata({
 - Max 10KB serialized size
 - Max 500 items per array field
 - Max 1000 characters per string field
-- Max 2 levels of nesting for objects
+- Max 10 levels of nesting (supports complex structures like GA4 ecommerce)
 
 **Notes:**
 - Shallow merge: new keys added, existing keys overwritten

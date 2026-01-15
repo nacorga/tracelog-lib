@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { isOnlyPrimitiveFields } from '../../../../src/utils/validations/type-guards.utils';
-import { MAX_NESTED_OBJECT_KEYS, MAX_METADATA_NESTING_DEPTH } from '../../../../src/constants/config.constants';
 
 describe('type-guards.utils', () => {
   describe('isOnlyPrimitiveFields', () => {
@@ -47,12 +46,12 @@ describe('type-guards.utils', () => {
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should return false for mixed string and number array', () => {
-        const obj = { mixed: ['string', 123] };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      it('should return true for mixed primitive array', () => {
+        const obj = { mixed: ['string', 123, true, null] };
+        expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should return true for array of flat objects with primitives', () => {
+      it('should return true for array of objects with primitives', () => {
         const obj = {
           items: [
             { id: '1', name: 'Item 1', active: true },
@@ -62,18 +61,18 @@ describe('type-guards.utils', () => {
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should return false for array of objects with nested objects', () => {
+      it('should return true for array of objects with nested objects', () => {
         const obj = {
           items: [{ id: '1', meta: { nested: 'value' } }],
         };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+        expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should return false for array of objects with nested arrays', () => {
+      it('should return true for array of objects with nested arrays', () => {
         const obj = {
           items: [{ id: '1', tags: ['tag1', 'tag2'] }],
         };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+        expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
       it('should return true for array items with null values', () => {
@@ -86,20 +85,9 @@ describe('type-guards.utils', () => {
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should return false if array has too many keys in object', () => {
+      it('should return true for array with many keys in object', () => {
         const obj = {
-          items: [
-            Object.fromEntries(Array.from({ length: MAX_NESTED_OBJECT_KEYS + 1 }, (_, i) => [`key${i}`, `value${i}`])),
-          ],
-        };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
-      });
-
-      it('should return true if array has exactly max keys in object', () => {
-        const obj = {
-          items: [
-            Object.fromEntries(Array.from({ length: MAX_NESTED_OBJECT_KEYS }, (_, i) => [`key${i}`, `value${i}`])),
-          ],
+          items: [Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`key${i}`, `value${i}`]))],
         };
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
@@ -128,7 +116,7 @@ describe('type-guards.utils', () => {
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should return false for double-nested object', () => {
+      it('should return true for double-nested object', () => {
         const obj = {
           user: {
             profile: {
@@ -136,32 +124,22 @@ describe('type-guards.utils', () => {
             },
           },
         };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+        expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should return false for nested object at depth > max', () => {
+      it('should return true for deeply nested objects', () => {
         const obj = {
           level1: {
             level2: {
-              value: 'too deep',
+              level3: {
+                level4: {
+                  value: 'deep',
+                },
+              },
             },
           },
         };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
-      });
-
-      it('should respect MAX_METADATA_NESTING_DEPTH constant', () => {
-        if (MAX_METADATA_NESTING_DEPTH === 1) {
-          const obj = {
-            level1: { value: 'ok' },
-          };
-          expect(isOnlyPrimitiveFields(obj)).toBe(true);
-
-          const tooDeep = {
-            level1: { level2: { value: 'too deep' } },
-          };
-          expect(isOnlyPrimitiveFields(tooDeep)).toBe(false);
-        }
+        expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
     });
 
@@ -187,6 +165,48 @@ describe('type-guards.utils', () => {
         const obj = { name: 'test', sym: Symbol('test') };
         expect(isOnlyPrimitiveFields(obj)).toBe(false);
       });
+
+      it('should return false for bigint value', () => {
+        const obj = { name: 'test', big: BigInt(123) };
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for function in nested object', () => {
+        const obj = { nested: { fn: () => {} } };
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for function in array', () => {
+        const obj = { items: [() => {}] };
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for symbol in array', () => {
+        const obj = { items: [Symbol('test')] };
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for circular reference', () => {
+        const obj: Record<string, unknown> = { name: 'test' };
+        obj.self = obj;
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for nested circular reference', () => {
+        const obj: Record<string, unknown> = {
+          data: {
+            nested: {},
+          },
+        };
+        (obj.data as Record<string, unknown>).nested = obj;
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
+
+      it('should return false for circular reference in array', () => {
+        const obj: Record<string, unknown> = { items: [] };
+        (obj.items as unknown[]).push(obj);
+        expect(isOnlyPrimitiveFields(obj)).toBe(false);
+      });
     });
 
     describe('edge cases', () => {
@@ -195,12 +215,12 @@ describe('type-guards.utils', () => {
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should handle Date objects as nested objects (allowed at depth 0)', () => {
+      it('should return true for Date objects', () => {
         const obj = { createdAt: new Date() };
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
 
-      it('should handle RegExp objects as nested objects (allowed at depth 0)', () => {
+      it('should return true for RegExp objects', () => {
         const obj = { pattern: /test/ };
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
@@ -234,66 +254,59 @@ describe('type-guards.utils', () => {
       });
     });
 
-    describe('depth parameter', () => {
-      it('should handle explicit depth parameter', () => {
-        const obj = { value: 'test' };
-        expect(isOnlyPrimitiveFields(obj, 0)).toBe(true);
-      });
-
-      it('should reject at depth > MAX_METADATA_NESTING_DEPTH', () => {
-        const obj = { value: 'test' };
-        expect(isOnlyPrimitiveFields(obj, MAX_METADATA_NESTING_DEPTH + 1)).toBe(false);
-      });
-
-      it('should allow nested object at depth 0', () => {
-        const obj = { nested: { value: 'test' } };
-        expect(isOnlyPrimitiveFields(obj, 0)).toBe(true);
-      });
-
-      it('should reject nested object at depth 1', () => {
-        const obj = { nested: { value: 'test' } };
-        expect(isOnlyPrimitiveFields(obj, 1)).toBe(false);
-      });
-    });
-
-    describe('array item validation', () => {
-      it('should validate string items in arrays', () => {
-        const obj = { items: ['a', 'b', 'c'] };
-        expect(isOnlyPrimitiveFields(obj)).toBe(true);
-      });
-
-      it('should reject number items in string arrays', () => {
-        const obj = { items: ['a', 123, 'c'] };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
-      });
-
-      it('should reject boolean items in string arrays', () => {
-        const obj = { items: ['a', true, 'c'] };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
-      });
-
-      it('should reject null items in object arrays', () => {
-        const obj = { items: [{ id: '1' }, null, { id: '2' }] };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
-      });
-
-      it('should reject array items in object arrays', () => {
-        const obj = { items: [{ id: '1' }, ['nested']] };
-        expect(isOnlyPrimitiveFields(obj)).toBe(false);
-      });
-
-      it('should accept all string items consistently', () => {
-        const obj = { items: ['one', 'two', 'three', 'four'] };
-        expect(isOnlyPrimitiveFields(obj)).toBe(true);
-      });
-
-      it('should accept all object items with same structure', () => {
+    describe('complex nested structures', () => {
+      it('should handle nested object with array of objects', () => {
         const obj = {
-          items: [
-            { id: '1', name: 'First' },
-            { id: '2', name: 'Second' },
-            { id: '3', name: 'Third' },
-          ],
+          source: 'test_page',
+          data: {
+            records: [
+              {
+                position: 1,
+                brand: 'Test Brand',
+                currency: 'EUR',
+                value: 66.88,
+                variant: 'a',
+                count: 1,
+                id: 'record-123',
+                category: 'type_a',
+                subcategory: 'subtype_1',
+                label: 'Test Label',
+              },
+            ],
+          },
+          context: 'unit_test',
+        };
+        expect(isOnlyPrimitiveFields(obj)).toBe(true);
+      });
+
+      it('should handle multiple objects in nested array', () => {
+        const obj = {
+          data: {
+            records: [
+              { id: '1', name: 'Record 1', value: 10.0 },
+              { id: '2', name: 'Record 2', value: 20.0 },
+              { id: '3', name: 'Record 3', value: 30.0 },
+            ],
+          },
+        };
+        expect(isOnlyPrimitiveFields(obj)).toBe(true);
+      });
+
+      it('should handle nested product attributes', () => {
+        const obj = {
+          product: {
+            id: '123',
+            attributes: {
+              color: 'red',
+              size: 'large',
+              dimensions: {
+                width: 10,
+                height: 20,
+                depth: 5,
+              },
+            },
+            tags: ['sale', 'featured'],
+          },
         };
         expect(isOnlyPrimitiveFields(obj)).toBe(true);
       });
