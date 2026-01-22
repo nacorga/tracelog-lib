@@ -360,6 +360,10 @@ Transformers **only apply to custom backend integrations**. TraceLog SaaS always
 
 This is the same behavior as the removed `disabledEvents` configuration in v2.x, which also only affected custom backends.
 
+**Event Listeners:**
+
+Event listeners (`tracelog.on('event', ...)`) receive **original events**, not transformed events. Transformers only affect data sent to backends. If you need enriched events in listeners (e.g., for GTM relay), apply the transformation manually in your callback.
+
 **Examples:**
 
 ```typescript

@@ -167,6 +167,8 @@ await tracelog.init({
 | Custom Backend | ✅ Applied | ✅ Applied | Full control |
 | Multi-Integration | ⚠️ Custom only | ⚠️ Custom only | SaaS gets original, custom gets transformed |
 
+**Event Listeners**: `tracelog.on('event', ...)` receives **original events** (not transformed). Transformers only affect backend sends. For GTM relay, apply transformation manually in listener callback.
+
 ```typescript
 // beforeSend: Per-event, before dedup/sampling/queueing
 tracelog.setTransformer('beforeSend', (event) => {

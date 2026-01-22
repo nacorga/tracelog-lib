@@ -416,6 +416,50 @@ Transform events dynamically at runtime before they're sent to integrations. Use
 - Custom backend receives **transformed events**
 - Independent error handling and retry per integration
 
+**Event Listeners and Transformers:**
+
+Event listeners (`tracelog.on('event', ...)`) receive **original events**, not transformed events. Transformers only affect data sent to backends.
+
+```typescript
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return { ...data, enrichedField: 'value' };
+  }
+  return data;
+});
+
+tracelog.on('event', (ev) => {
+  console.log(ev.enrichedField); // undefined - listeners receive original events
+});
+```
+
+**Workaround for GTM/Third-Party Relay:**
+
+If you need to forward enriched events to GTM or other systems, apply the transformation in your listener:
+
+```typescript
+// Define enrichment function once
+const enrichEvent = (event) => ({
+  ...event,
+  appVersion: '1.0.0',
+  environment: 'production'
+});
+
+// Use in transformer (for backend)
+tracelog.setTransformer('beforeSend', (data) => {
+  if ('type' in data) {
+    return enrichEvent(data);
+  }
+  return data;
+});
+
+// Use in listener (for GTM relay)
+tracelog.on('event', (event) => {
+  const enrichedEvent = enrichEvent(event);
+  window.dataLayer?.push({ event: 'tracelog_event', ...enrichedEvent });
+});
+```
+
 ### Available Hooks
 
 #### `beforeSend` - Per-Event Transformation
