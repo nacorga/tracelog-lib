@@ -28,19 +28,25 @@ describe('Public API - init()', () => {
   });
 
   it('should initialize with no arguments', async () => {
-    await expect(api.init()).resolves.toBeUndefined();
+    const result = await api.init();
+    expect(result).toHaveProperty('sessionId');
+    expect(typeof result.sessionId).toBe('string');
+    expect(result.sessionId.length).toBeGreaterThan(0);
     expect(api.isInitialized()).toBe(true);
   });
 
   it('should initialize with config object', async () => {
-    await expect(api.init({ sessionTimeout: 60000 })).resolves.toBeUndefined();
+    const result = await api.init({ sessionTimeout: 60000 });
+    expect(result).toHaveProperty('sessionId');
+    expect(typeof result.sessionId).toBe('string');
     expect(api.isInitialized()).toBe(true);
   });
 
-  it('should return promise that resolves', async () => {
+  it('should return promise that resolves with InitResult', async () => {
     const result = api.init();
     expect(result).toBeInstanceOf(Promise);
-    await expect(result).resolves.toBeUndefined();
+    const initResult = await result;
+    expect(initResult).toHaveProperty('sessionId');
   });
 
   it('should reject double initialization', async () => {
@@ -362,7 +368,8 @@ describe('Public API - destroy()', () => {
     api.destroy();
 
     // Should be able to init again
-    await expect(api.init()).resolves.toBeUndefined();
+    const result = await api.init();
+    expect(result).toHaveProperty('sessionId');
     expect(api.isInitialized()).toBe(true);
 
     // Cleanup

@@ -8,6 +8,7 @@ import {
   BeforeSendTransformer,
   BeforeBatchTransformer,
   CustomHeadersProvider,
+  InitResult,
 } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
@@ -37,37 +38,38 @@ let isDestroying = false;
  * Important: Register listeners with on() before calling init() to capture initial events.
  *
  * @param config - Optional configuration object
- * @returns Promise that resolves when initialization completes (5s timeout)
+ * @returns Promise with sessionId (empty string in SSR/disabled/race conditions)
  * @throws {Error} If initialization fails or times out
  *
  * @example
  * ```typescript
- * await tracelog.init({
+ * const { sessionId } = await tracelog.init({
  *   integrations: {
  *     tracelog: { projectId: 'your-project-id' }
  *   }
  * });
+ * console.log('Session:', sessionId);
  * ```
  *
  * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#init} for configuration options
  */
-export const init = async (config?: Config): Promise<void> => {
+export const init = async (config?: Config): Promise<InitResult> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
+    return { sessionId: '' };
   }
 
   isDestroying = false;
 
   if (window.__traceLogDisabled === true) {
-    return;
+    return { sessionId: '' };
   }
 
   if (app) {
-    return;
+    return { sessionId: app.getSessionId() ?? '' };
   }
 
   if (isInitializing) {
-    return;
+    return { sessionId: '' };
   }
 
   isInitializing = true;
@@ -107,9 +109,11 @@ export const init = async (config?: Config): Promise<void> => {
         }, INITIALIZATION_TIMEOUT_MS);
       });
 
-      await Promise.race([initPromise, timeoutPromise]);
+      const result = await Promise.race([initPromise, timeoutPromise]);
 
       app = instance;
+
+      return result;
     } catch (error) {
       try {
         instance.destroy(true);
@@ -396,6 +400,33 @@ export const isInitialized = (): boolean => {
   }
 
   return app !== null;
+};
+
+/**
+ * Returns the current session ID.
+ *
+ * Session ID is generated during init() and persists across page refreshes
+ * within the session timeout window (default 15 minutes).
+ *
+ * @returns Session ID string, or null if not initialized
+ *
+ * @example
+ * ```typescript
+ * await tracelog.init();
+ * const sessionId = tracelog.getSessionId();
+ * console.log('Session:', sessionId); // e.g., "1704896400000-a3b4c5d6e"
+ * ```
+ */
+export const getSessionId = (): string | null => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+
+  if (!app) {
+    return null;
+  }
+
+  return app.getSessionId();
 };
 
 /**

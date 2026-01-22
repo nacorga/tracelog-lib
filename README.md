@@ -28,10 +28,11 @@ npm install @tracelog/lib
 import { tracelog } from '@tracelog/lib';
 
 // Standalone mode (no backend)
-await tracelog.init();
+const { sessionId } = await tracelog.init();
+console.log('Session:', sessionId);
 
 // With TraceLog SaaS
-await tracelog.init({
+const { sessionId } = await tracelog.init({
   integrations: {
     tracelog: { projectId: 'your-project-id' }
   }

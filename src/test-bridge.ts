@@ -9,7 +9,7 @@ import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
-import { State, TraceLogTestBridge, EventData } from './types';
+import { State, TraceLogTestBridge, EventData, InitResult } from './types';
 import { setQaMode as setQaModeUtil } from './utils/browser/mode.utils';
 
 /**
@@ -26,7 +26,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     super();
   }
 
-  override async init(config?: any): Promise<void> {
+  override async init(config?: any): Promise<InitResult> {
     if (process.env.NODE_ENV !== 'development') {
       throw new Error('[TraceLog] TestBridge is only available in development mode');
     }
@@ -39,7 +39,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
     }
 
     try {
-      await super.init(config);
+      return await super.init(config);
     } catch (error) {
       const { __setAppInstance } = await import('./api');
       __setAppInstance(null);

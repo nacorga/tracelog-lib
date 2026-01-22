@@ -65,3 +65,19 @@ type MetadataNestedObject = Record<string, MetadataNestedValue>;
  * ```
  */
 export type MetadataType = MetadataPrimitive | string[] | MetadataNestedObject | MetadataNestedObject[];
+
+/**
+ * Result returned by tracelog.init()
+ *
+ * Contains the session identifier generated during initialization.
+ * The sessionId is empty string in edge cases (SSR, disabled, race condition).
+ *
+ * @example
+ * ```typescript
+ * const { sessionId } = await tracelog.init();
+ * console.log('Session started:', sessionId);
+ * ```
+ */
+export interface InitResult {
+  sessionId: string;
+}
