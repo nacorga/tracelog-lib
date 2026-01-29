@@ -71,7 +71,7 @@ export class App extends StateManager {
    */
   async init(config: Config = {}): Promise<InitResult> {
     if (this.isInitialized) {
-      return { sessionId: this.get('sessionId')! };
+      return { sessionId: this.get('sessionId') ?? '' };
     }
 
     this.managers.storage = new StorageManager();
@@ -98,7 +98,7 @@ export class App extends StateManager {
 
       this.isInitialized = true;
 
-      return { sessionId: this.get('sessionId')! };
+      return { sessionId: this.get('sessionId') ?? '' };
     } catch (error) {
       this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
