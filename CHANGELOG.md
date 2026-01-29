@@ -2,6 +2,41 @@
 
 
 
+
+## [2.3.0] - 2026-01-29
+
+### ✨ Features
+
+- Update init method to return sessionId and add getSessionId method for session tracking ([60d7663](../../commit/60d7663b0e23268dd231fa62c547f1a2cee3790a))
+
+### 🐛 Bug Fixes
+
+- Update sessionId return value to use nullish coalescing for better handling of undefined ([6db30c9](../../commit/6db30c99cb6936b53396527fdf4f1980d92c302a))
+
+### 📚 Documentation
+
+- Document event listeners behavior and provide examples for original event handling ([033746e](../../commit/033746ee2ed0dcf0c11a31c4041bd18d95b60896))
+
+### ♻️ Refactoring
+
+- Remove redundant sanitization logic from sanitizeString function ([c390d2a](../../commit/c390d2a63e4d5e64fa128fe6ffc62b95a54ce3a9))
+
+### 🔧 Other Changes
+
+- Merge pull request #82 from nacorga/release/20260129.1 ([3bf4f6e](../../commit/3bf4f6e1ec122322ecd395a46bcc3f8c4f9d0b23))
+- Merge pull request #81 from nacorga/feature/expose-session-id ([a7007ab](../../commit/a7007abe7e514822d949d0596c9de6da9cd95442))
+- E2e js ([3883e30](../../commit/3883e30bc161c36858ce9f2eea95f9e2194be003))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.2.1...v2.3.0
+
+
 ## [2.2.1] - 2026-01-15
 
 ### ✨ Features
