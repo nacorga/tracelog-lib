@@ -115,11 +115,12 @@ tracelog.setTransformer('beforeSend', (event) => ({ ...event, custom: true }));
 // 3. THIRD: Configure custom headers (before init, custom backend only)
 tracelog.setCustomHeaders(() => ({ 'Authorization': `Bearer ${token}` }));
 
-// 4. FOURTH: Initialize (starts tracking immediately)
-await tracelog.init({ integrations: { custom: { collectApiUrl: '...' } } });
+// 4. FOURTH: Initialize (starts tracking immediately, returns sessionId)
+const { sessionId } = await tracelog.init({ integrations: { custom: { collectApiUrl: '...' } } });
 
 // 5. FIFTH: Custom events (after init)
 tracelog.event('button_click', { id: 'signup-cta' });
+console.log('Tracked in session:', sessionId);
 ```
 
 **Why**: `SESSION_START` and `PAGE_VIEW` fire during `App.init()`. Listeners, transformers, and custom headers registered after miss these initial events or send them without proper authentication.
@@ -128,7 +129,7 @@ tracelog.event('button_click', { id: 'signup-cta' });
 
 ```typescript
 // Standalone (default) - NO network requests
-await tracelog.init();
+const { sessionId } = await tracelog.init();
 tracelog.on('event', (e) => console.log(e)); // Local consumption only
 
 // TraceLog SaaS
@@ -165,6 +166,8 @@ await tracelog.init({
 | TraceLog SaaS | ❌ Ignored | ❌ Ignored | Schema protection |
 | Custom Backend | ✅ Applied | ✅ Applied | Full control |
 | Multi-Integration | ⚠️ Custom only | ⚠️ Custom only | SaaS gets original, custom gets transformed |
+
+**Event Listeners**: `tracelog.on('event', ...)` receives **original events** (not transformed). Transformers only affect backend sends. For GTM relay, apply transformation manually in listener callback.
 
 ```typescript
 // beforeSend: Per-event, before dedup/sampling/queueing

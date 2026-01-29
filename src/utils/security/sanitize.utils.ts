@@ -42,14 +42,6 @@ export const sanitizeString = (value: string): string => {
     });
   }
 
-  sanitized = sanitized
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#x27;')
-    .replaceAll('/', '&#x2F;');
-
   const result = sanitized.trim();
 
   return result;

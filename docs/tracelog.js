@@ -467,7 +467,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.2.0";
+const version = "2.2.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -5992,7 +5992,7 @@ class App extends StateManager {
    */
   async init(config = {}) {
     if (this.isInitialized) {
-      return;
+      return { sessionId: this.get("sessionId") };
     }
     this.managers.storage = new StorageManager();
     try {
@@ -6010,6 +6010,7 @@ class App extends StateManager {
         log("warn", "Failed to recover persisted events", { error });
       });
       this.isInitialized = true;
+      return { sessionId: this.get("sessionId") };
     } catch (error) {
       this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -6170,6 +6171,15 @@ class App extends StateManager {
     return this.managers.event;
   }
   /**
+   * Returns the current session ID.
+   *
+   * @returns The session ID string, or null if not yet initialized
+   * @internal Used by api.getSessionId()
+   */
+  getSessionId() {
+    return this.get("sessionId");
+  }
+  /**
    * Validates metadata object structure and values.
    *
    * @param metadata - The metadata object to validate
@@ -6279,17 +6289,17 @@ let isInitializing = false;
 let isDestroying = false;
 const init = async (config) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
+    return { sessionId: "" };
   }
   isDestroying = false;
   if (window.__traceLogDisabled === true) {
-    return;
+    return { sessionId: "" };
   }
   if (app) {
-    return;
+    return { sessionId: app.getSessionId() ?? "" };
   }
   if (isInitializing) {
-    return;
+    return { sessionId: "" };
   }
   isInitializing = true;
   try {
@@ -6318,8 +6328,9 @@ const init = async (config) => {
           reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
         }, INITIALIZATION_TIMEOUT_MS);
       });
-      await Promise.race([initPromise, timeoutPromise]);
+      const result = await Promise.race([initPromise, timeoutPromise]);
       app = instance;
+      return result;
     } catch (error) {
       try {
         instance.destroy(true);
@@ -6445,6 +6456,15 @@ const isInitialized = () => {
   }
   return app !== null;
 };
+const getSessionId = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return null;
+  }
+  if (!app) {
+    return null;
+  }
+  return app.getSessionId();
+};
 const destroy = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
@@ -6539,6 +6559,7 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   __setAppInstance,
   destroy,
   event,
+  getSessionId,
   init,
   isInitialized,
   mergeGlobalMetadata,
@@ -6561,6 +6582,7 @@ const tracelog = {
   setCustomHeaders,
   removeCustomHeaders,
   isInitialized,
+  getSessionId,
   destroy,
   setQaMode,
   updateGlobalMetadata,
@@ -6778,7 +6800,7 @@ class TestBridge extends App {
       throw new Error("[TraceLog] TestBridge cannot sync with existing tracelog instance. Call destroy() first.");
     }
     try {
-      await super.init(config);
+      return await super.init(config);
     } catch (error) {
       const { __setAppInstance: __setAppInstance2 } = await Promise.resolve().then(() => api);
       __setAppInstance2(null);

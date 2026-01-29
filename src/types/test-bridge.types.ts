@@ -8,6 +8,7 @@ import { ViewportHandler } from '../handlers/viewport.handler';
 import { EventManager } from '../managers/event.manager';
 import { StorageManager } from '../managers/storage.manager';
 import { Config } from './config.types';
+import { InitResult } from './common.types';
 import { State } from './state.types';
 import { EventData } from './event.types';
 import {
@@ -29,7 +30,7 @@ import {
 export interface TraceLogTestBridge {
   // Core App methods
   readonly initialized: boolean;
-  init(config?: Config): Promise<void>;
+  init(config?: Config): Promise<InitResult>;
   destroy(force?: boolean): void;
 
   // Core event methods (inherited from App)
