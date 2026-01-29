@@ -15,34 +15,36 @@ Complete API documentation for TraceLog library. For quick start and examples, s
 
 ## Core API
 
-### `init(config?: Config): Promise<void>`
+### `init(config?: Config): Promise<InitResult>`
 
 Initializes TraceLog and begins tracking. Safe to call in SSR environments (no-ops in Node.js).
 
 **Parameters:**
 - `config` (optional): Configuration object. See [Configuration](#configuration) section.
 
-**Returns:** Promise that resolves when initialization completes (max 5s timeout).
+**Returns:** Promise that resolves with `InitResult` containing:
+- `sessionId`: The session identifier string (empty string in SSR/disabled/race conditions)
 
 **Throws:**
 - `Error` if initialization fails or times out
-- `Error` if called multiple times (subsequent calls are no-ops)
+- `Error` if called multiple times (subsequent calls return existing sessionId)
 
 **Examples:**
 
 ```typescript
-// Standalone mode (no backend)
-await tracelog.init();
+// Standalone mode - get sessionId directly
+const { sessionId } = await tracelog.init();
+console.log('Session started:', sessionId);
 
 // With TraceLog SaaS
-await tracelog.init({
+const { sessionId } = await tracelog.init({
   integrations: {
     tracelog: { projectId: 'your-project-id' }
   }
 });
 
 // With custom backend
-await tracelog.init({
+const { sessionId } = await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect',
@@ -53,7 +55,8 @@ await tracelog.init({
 
 // SSR-safe usage (Angular/Next.js/Nuxt)
 if (typeof window !== 'undefined') {
-  await tracelog.init();
+  const { sessionId } = await tracelog.init();
+  // sessionId is empty string in SSR
 }
 ```
 
@@ -230,6 +233,30 @@ if (tracelog.isInitialized()) {
 
 ---
 
+### `getSessionId(): string | null`
+
+Returns the current session ID. Useful for correlating TraceLog events with your own backend systems.
+
+**Returns:** Session ID string, or `null` if not initialized or in SSR environment.
+
+**Example:**
+
+```typescript
+await tracelog.init();
+const sessionId = tracelog.getSessionId();
+
+// Use sessionId to correlate with your backend
+fetch('/api/user-action', {
+  headers: {
+    'X-TraceLog-Session': sessionId ?? ''
+  }
+});
+```
+
+**Note:** Prefer using the `sessionId` returned by `init()` when possible, as it's guaranteed to be available immediately after initialization.
+
+---
+
 ### `destroy(): void`
 
 Stops all tracking, cleans up listeners, and flushes pending events. Safe to call multiple times.
@@ -332,6 +359,10 @@ Transformers **only apply to custom backend integrations**. TraceLog SaaS always
 - **Multi-Integration (SaaS + Custom)**: SaaS receives original events (unfiltered), custom receives transformed/filtered events
 
 This is the same behavior as the removed `disabledEvents` configuration in v2.x, which also only affected custom backends.
+
+**Event Listeners:**
+
+Event listeners (`tracelog.on('event', ...)`) receive **original events**, not transformed events. Transformers only affect data sent to backends. If you need enriched events in listeners (e.g., for GTM relay), apply the transformation manually in your callback.
 
 **Examples:**
 

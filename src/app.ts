@@ -18,6 +18,7 @@ import {
   BeforeBatchTransformer,
   MetadataType,
   CustomHeadersProvider,
+  InitResult,
 } from './types';
 import {
   isEventValid,
@@ -68,9 +69,9 @@ export class App extends StateManager {
    * @throws {Error} If initialization fails
    * @internal Called from api.init()
    */
-  async init(config: Config = {}): Promise<void> {
+  async init(config: Config = {}): Promise<InitResult> {
     if (this.isInitialized) {
-      return;
+      return { sessionId: this.get('sessionId') ?? '' };
     }
 
     this.managers.storage = new StorageManager();
@@ -96,6 +97,8 @@ export class App extends StateManager {
       });
 
       this.isInitialized = true;
+
+      return { sessionId: this.get('sessionId') ?? '' };
     } catch (error) {
       this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -297,6 +300,16 @@ export class App extends StateManager {
    */
   public getEventManager(): EventManager | undefined {
     return this.managers.event;
+  }
+
+  /**
+   * Returns the current session ID.
+   *
+   * @returns The session ID string, or null if not yet initialized
+   * @internal Used by api.getSessionId()
+   */
+  public getSessionId(): string | null {
+    return this.get('sessionId');
   }
 
   /**
