@@ -3,6 +3,27 @@
 
 
 
+
+## [2.3.1] - 2026-02-04
+
+### 🐛 Bug Fixes
+
+- Prevent concurrent event sending by adding sendInProgress flag ([717c1e6](../../commit/717c1e670edc5254c04a708a33799243fd416a85))
+
+### 🔧 Other Changes
+
+- Merge pull request #83 from nacorga/release/20260204.1 ([c3ef301](../../commit/c3ef301149508cb687802da0a70ccb38c5444fdd))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.3.0...v2.3.1
+
+
 ## [2.3.0] - 2026-01-29
 
 ### ✨ Features
