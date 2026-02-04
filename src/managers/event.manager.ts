@@ -127,6 +127,7 @@ export class EventManager extends StateManager {
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
   private sendIntervalId: number | null = null;
+  private sendInProgress = false;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
   private lastSessionId: string | null = null;
@@ -882,52 +883,58 @@ export class EventManager extends StateManager {
   }
 
   private async sendEventsQueue(): Promise<void> {
-    if (!this.get('sessionId') || this.eventsQueue.length === 0) {
+    if (!this.get('sessionId') || this.eventsQueue.length === 0 || this.sendInProgress) {
       return;
     }
 
-    const body = this.buildEventsPayload();
+    this.sendInProgress = true;
 
-    if (this.dataSenders.length === 0) {
-      this.emitEventsQueue(body);
-      return;
-    }
+    try {
+      const body = this.buildEventsPayload();
 
-    const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e) => e.id);
+      if (this.dataSenders.length === 0) {
+        this.emitEventsQueue(body);
+        return;
+      }
 
-    const sendPromises = this.dataSenders.map(async (sender) =>
-      sender.sendEventsQueue(body, {
-        onSuccess: () => {},
-        onFailure: () => {},
-      }),
-    );
+      const eventsToSend = [...this.eventsQueue];
+      const eventIds = eventsToSend.map((e) => e.id);
 
-    const results = await Promise.allSettled(sendPromises);
+      const sendPromises = this.dataSenders.map(async (sender) =>
+        sender.sendEventsQueue(body, {
+          onSuccess: () => {},
+          onFailure: () => {},
+        }),
+      );
 
-    const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
+      const results = await Promise.allSettled(sendPromises);
 
-    // Optimistic removal: Remove events if ANY integration succeeded
-    // Each SenderManager independently persists failures in its own localStorage
-    if (anySucceeded) {
-      this.removeProcessedEvents(eventIds);
-      this.emitEventsQueue(body);
+      const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
 
-      const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-      if (failedCount > 0) {
-        log('debug', 'Periodic send completed with some failures, removed from queue and persisted per-integration', {
-          data: { eventCount: eventsToSend.length, failedCount },
+      // Optimistic removal: Remove events if ANY integration succeeded
+      // Each SenderManager independently persists failures in its own localStorage
+      if (anySucceeded) {
+        this.removeProcessedEvents(eventIds);
+        this.emitEventsQueue(body);
+
+        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+        if (failedCount > 0) {
+          log('debug', 'Periodic send completed with some failures, removed from queue and persisted per-integration', {
+            data: { eventCount: eventsToSend.length, failedCount },
+          });
+        }
+      } else {
+        // All integrations failed - keep events in queue for retry
+        log('debug', 'Periodic send complete failure, events kept in queue for retry', {
+          data: { eventCount: eventsToSend.length },
         });
       }
-    } else {
-      // All integrations failed - keep events in queue for retry
-      log('debug', 'Periodic send complete failure, events kept in queue for retry', {
-        data: { eventCount: eventsToSend.length },
-      });
-    }
 
-    if (this.eventsQueue.length === 0) {
-      this.clearSendInterval();
+      if (this.eventsQueue.length === 0) {
+        this.clearSendInterval();
+      }
+    } finally {
+      this.sendInProgress = false;
     }
   }
 

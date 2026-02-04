@@ -467,7 +467,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.2.1";
+const version = "2.3.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -760,7 +760,6 @@ const sanitizeString = (value) => {
       }
     });
   }
-  sanitized = sanitized.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#x27;").replaceAll("/", "&#x2F;");
   const result = sanitized.trim();
   return result;
 };
@@ -2428,6 +2427,7 @@ class EventManager extends StateManager {
   eventsQueue = [];
   pendingEventsBuffer = [];
   sendIntervalId = null;
+  sendInProgress = false;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
   lastSessionId = null;
@@ -3076,42 +3076,47 @@ class EventManager extends StateManager {
     }
   }
   async sendEventsQueue() {
-    if (!this.get("sessionId") || this.eventsQueue.length === 0) {
+    if (!this.get("sessionId") || this.eventsQueue.length === 0 || this.sendInProgress) {
       return;
     }
-    const body = this.buildEventsPayload();
-    if (this.dataSenders.length === 0) {
-      this.emitEventsQueue(body);
-      return;
-    }
-    const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e3) => e3.id);
-    const sendPromises = this.dataSenders.map(
-      async (sender) => sender.sendEventsQueue(body, {
-        onSuccess: () => {
-        },
-        onFailure: () => {
+    this.sendInProgress = true;
+    try {
+      const body = this.buildEventsPayload();
+      if (this.dataSenders.length === 0) {
+        this.emitEventsQueue(body);
+        return;
+      }
+      const eventsToSend = [...this.eventsQueue];
+      const eventIds = eventsToSend.map((e3) => e3.id);
+      const sendPromises = this.dataSenders.map(
+        async (sender) => sender.sendEventsQueue(body, {
+          onSuccess: () => {
+          },
+          onFailure: () => {
+          }
+        })
+      );
+      const results = await Promise.allSettled(sendPromises);
+      const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
+      if (anySucceeded) {
+        this.removeProcessedEvents(eventIds);
+        this.emitEventsQueue(body);
+        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+        if (failedCount > 0) {
+          log("debug", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
+            data: { eventCount: eventsToSend.length, failedCount }
+          });
         }
-      })
-    );
-    const results = await Promise.allSettled(sendPromises);
-    const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
-    if (anySucceeded) {
-      this.removeProcessedEvents(eventIds);
-      this.emitEventsQueue(body);
-      const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-      if (failedCount > 0) {
-        log("debug", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
-          data: { eventCount: eventsToSend.length, failedCount }
+      } else {
+        log("debug", "Periodic send complete failure, events kept in queue for retry", {
+          data: { eventCount: eventsToSend.length }
         });
       }
-    } else {
-      log("debug", "Periodic send complete failure, events kept in queue for retry", {
-        data: { eventCount: eventsToSend.length }
-      });
-    }
-    if (this.eventsQueue.length === 0) {
-      this.clearSendInterval();
+      if (this.eventsQueue.length === 0) {
+        this.clearSendInterval();
+      }
+    } finally {
+      this.sendInProgress = false;
     }
   }
   buildEventsPayload() {
@@ -5992,7 +5997,7 @@ class App extends StateManager {
    */
   async init(config = {}) {
     if (this.isInitialized) {
-      return { sessionId: this.get("sessionId") };
+      return { sessionId: this.get("sessionId") ?? "" };
     }
     this.managers.storage = new StorageManager();
     try {
@@ -6010,7 +6015,7 @@ class App extends StateManager {
         log("warn", "Failed to recover persisted events", { error });
       });
       this.isInitialized = true;
-      return { sessionId: this.get("sessionId") };
+      return { sessionId: this.get("sessionId") ?? "" };
     } catch (error) {
       this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
