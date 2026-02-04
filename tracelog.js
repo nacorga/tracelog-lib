@@ -284,7 +284,7 @@ const It = () => {
     default:
       return ke;
   }
-}, Nt = 1e3, Ot = 50, Pt = "2.2.1", Dt = Pt, Ke = () => typeof window < "u" && typeof sessionStorage < "u", kt = () => {
+}, Nt = 1e3, Ot = 50, Pt = "2.3.0", Dt = Pt, Ke = () => typeof window < "u" && typeof sessionStorage < "u", kt = () => {
   try {
     const s = new URLSearchParams(window.location.search);
     s.delete(We);
@@ -1781,6 +1781,7 @@ class tr extends I {
   eventsQueue = [];
   pendingEventsBuffer = [];
   sendIntervalId = null;
+  sendInProgress = !1;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
   lastSessionId = null;
@@ -2338,32 +2339,37 @@ class tr extends I {
     }
   }
   async sendEventsQueue() {
-    if (!this.get("sessionId") || this.eventsQueue.length === 0)
-      return;
-    const e = this.buildEventsPayload();
-    if (this.dataSenders.length === 0) {
-      this.emitEventsQueue(e);
-      return;
-    }
-    const t = [...this.eventsQueue], r = t.map((l) => l.id), n = this.dataSenders.map(
-      async (l) => l.sendEventsQueue(e, {
-        onSuccess: () => {
-        },
-        onFailure: () => {
+    if (!(!this.get("sessionId") || this.eventsQueue.length === 0 || this.sendInProgress)) {
+      this.sendInProgress = !0;
+      try {
+        const e = this.buildEventsPayload();
+        if (this.dataSenders.length === 0) {
+          this.emitEventsQueue(e);
+          return;
         }
-      })
-    ), i = await Promise.allSettled(n);
-    if (i.some((l) => this.isSuccessfulResult(l))) {
-      this.removeProcessedEvents(r), this.emitEventsQueue(e);
-      const l = i.filter((c) => !this.isSuccessfulResult(c)).length;
-      l > 0 && a("debug", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
-        data: { eventCount: t.length, failedCount: l }
-      });
-    } else
-      a("debug", "Periodic send complete failure, events kept in queue for retry", {
-        data: { eventCount: t.length }
-      });
-    this.eventsQueue.length === 0 && this.clearSendInterval();
+        const t = [...this.eventsQueue], r = t.map((l) => l.id), n = this.dataSenders.map(
+          async (l) => l.sendEventsQueue(e, {
+            onSuccess: () => {
+            },
+            onFailure: () => {
+            }
+          })
+        ), i = await Promise.allSettled(n);
+        if (i.some((l) => this.isSuccessfulResult(l))) {
+          this.removeProcessedEvents(r), this.emitEventsQueue(e);
+          const l = i.filter((c) => !this.isSuccessfulResult(c)).length;
+          l > 0 && a("debug", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
+            data: { eventCount: t.length, failedCount: l }
+          });
+        } else
+          a("debug", "Periodic send complete failure, events kept in queue for retry", {
+            data: { eventCount: t.length }
+          });
+        this.eventsQueue.length === 0 && this.clearSendInterval();
+      } finally {
+        this.sendInProgress = !1;
+      }
+    }
   }
   buildEventsPayload() {
     const e = /* @__PURE__ */ new Map(), t = [];
