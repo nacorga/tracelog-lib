@@ -23,7 +23,7 @@ Initializes TraceLog and begins tracking. Safe to call in SSR environments (no-o
 - `config` (optional): Configuration object. See [Configuration](#configuration) section.
 
 **Returns:** Promise that resolves with `InitResult` containing:
-- `sessionId`: The session identifier string (empty string in SSR/disabled/race conditions)
+- `sessionId`: The session identifier string (empty string in SSR/disabled environments)
 
 **Throws:**
 - `Error` if initialization fails or times out

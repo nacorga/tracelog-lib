@@ -31,6 +31,7 @@ let pendingCustomHeadersProvider: CustomHeadersProvider | null = null;
 let app: App | null = null;
 let isInitializing = false;
 let isDestroying = false;
+let initPromise: Promise<InitResult> | null = null;
 
 /**
  * Initializes TraceLog and begins tracking user interactions.
@@ -38,7 +39,7 @@ let isDestroying = false;
  * Important: Register listeners with on() before calling init() to capture initial events.
  *
  * @param config - Optional configuration object
- * @returns Promise with sessionId (empty string in SSR/disabled/race conditions)
+ * @returns Promise with sessionId (empty string in SSR/disabled environments)
  * @throws {Error} If initialization fails or times out
  *
  * @example
@@ -68,67 +69,72 @@ export const init = async (config?: Config): Promise<InitResult> => {
     return { sessionId: app.getSessionId() ?? '' };
   }
 
-  if (isInitializing) {
-    return { sessionId: '' };
+  if (isInitializing && initPromise) {
+    return initPromise;
   }
 
   isInitializing = true;
 
-  try {
-    const validatedConfig = validateAndNormalizeConfig(config ?? {});
-    const instance = new App();
-
+  initPromise = (async (): Promise<InitResult> => {
     try {
-      pendingListeners.forEach(({ event, callback }) => {
-        instance.on(event, callback);
-      });
+      const validatedConfig = validateAndNormalizeConfig(config ?? {});
+      const instance = new App();
 
-      pendingListeners.length = 0;
-
-      pendingTransformers.forEach(({ hook, fn }) => {
-        if (hook === 'beforeSend') {
-          instance.setTransformer('beforeSend', fn as BeforeSendTransformer);
-        } else {
-          instance.setTransformer('beforeBatch', fn as BeforeBatchTransformer);
-        }
-      });
-
-      pendingTransformers.length = 0;
-
-      // Apply pending custom headers provider
-      if (pendingCustomHeadersProvider) {
-        instance.setCustomHeaders(pendingCustomHeadersProvider);
-        pendingCustomHeadersProvider = null;
-      }
-
-      const initPromise = instance.init(validatedConfig);
-
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
-        }, INITIALIZATION_TIMEOUT_MS);
-      });
-
-      const result = await Promise.race([initPromise, timeoutPromise]);
-
-      app = instance;
-
-      return result;
-    } catch (error) {
       try {
-        instance.destroy(true);
-      } catch (cleanupError) {
-        log('error', 'Failed to cleanup partially initialized app', { error: cleanupError });
-      }
+        pendingListeners.forEach(({ event, callback }) => {
+          instance.on(event, callback);
+        });
 
+        pendingListeners.length = 0;
+
+        pendingTransformers.forEach(({ hook, fn }) => {
+          if (hook === 'beforeSend') {
+            instance.setTransformer('beforeSend', fn as BeforeSendTransformer);
+          } else {
+            instance.setTransformer('beforeBatch', fn as BeforeBatchTransformer);
+          }
+        });
+
+        pendingTransformers.length = 0;
+
+        // Apply pending custom headers provider
+        if (pendingCustomHeadersProvider) {
+          instance.setCustomHeaders(pendingCustomHeadersProvider);
+          pendingCustomHeadersProvider = null;
+        }
+
+        const appInitPromise = instance.init(validatedConfig);
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
+          }, INITIALIZATION_TIMEOUT_MS);
+        });
+
+        const result = await Promise.race([appInitPromise, timeoutPromise]);
+
+        app = instance;
+
+        return result;
+      } catch (error) {
+        try {
+          instance.destroy(true);
+        } catch (cleanupError) {
+          log('error', 'Failed to cleanup partially initialized app', { error: cleanupError });
+        }
+
+        throw error;
+      }
+    } catch (error) {
+      app = null;
       throw error;
+    } finally {
+      isInitializing = false;
+      initPromise = null;
     }
-  } catch (error) {
-    app = null;
-    throw error;
-  } finally {
-    isInitializing = false;
-  }
+  })();
+
+  return initPromise;
 };
 
 /**
@@ -464,6 +470,7 @@ export const destroy = (): void => {
     app.destroy();
     app = null;
     isInitializing = false;
+    initPromise = null;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
     pendingCustomHeadersProvider = null;
@@ -476,6 +483,7 @@ export const destroy = (): void => {
   } catch (error) {
     app = null;
     isInitializing = false;
+    initPromise = null;
 
     pendingListeners.length = 0;
     pendingTransformers.length = 0;

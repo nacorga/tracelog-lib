@@ -41,6 +41,8 @@ import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { TimeManager } from './time.manager';
 
+const VALID_EVENT_TYPES: ReadonlySet<string> = new Set(Object.values(EventType));
+
 /**
  * Extended session counts structure with metadata for expiry tracking.
  *
@@ -323,6 +325,13 @@ export class EventManager extends StateManager {
       return;
     }
 
+    if (!VALID_EVENT_TYPES.has(type)) {
+      log('error', 'Invalid event type - event will be ignored', {
+        data: { type },
+      });
+      return;
+    }
+
     const currentSessionId = this.get('sessionId');
 
     if (!currentSessionId) {
@@ -528,8 +537,8 @@ export class EventManager extends StateManager {
    * 6. **Stop SenderManagers**: Calls `stop()` on all SenderManager instances
    *
    * **Important Behavior**:
-   * - **No final flush**: Events in queue are NOT sent before stopping
-   * - For flush before destroy, call `flushImmediatelySync()` first
+   * - **No final flush**: `stop()` itself does NOT send queued events
+   * - `App.destroy()` calls `flushImmediatelySync()` before `stop()` automatically
    *
    * **Multi-Integration**:
    * - Stops all SenderManager instances (SaaS + Custom)

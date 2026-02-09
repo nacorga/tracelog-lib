@@ -1262,13 +1262,11 @@ describe('EventManager - Error Handling', () => {
   });
 
   it('should handle validation errors', () => {
-    // Invalid event type - EventManager doesn't validate EventType enum
-    // It only checks if type field exists
-    // So invalid type strings still get queued
+    // Invalid event type - EventManager validates against EventType enum
     eventManager.track({ type: 'invalid_type' as any });
 
-    // Event is queued even with invalid type (no enum validation)
-    expect(eventManager.getQueueLength()).toBe(1);
+    // Event is rejected due to invalid type
+    expect(eventManager.getQueueLength()).toBe(0);
   });
 
   it('should handle transformation errors', () => {

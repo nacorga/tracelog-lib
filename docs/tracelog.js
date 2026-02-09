@@ -467,7 +467,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.3.0";
+const version = "2.3.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -2417,6 +2417,7 @@ class TimeManager extends StateManager {
     };
   }
 }
+const VALID_EVENT_TYPES = new Set(Object.values(EventType));
 class EventManager extends StateManager {
   dataSenders;
   emitter;
@@ -2596,6 +2597,12 @@ class EventManager extends StateManager {
   }) {
     if (!type) {
       log("error", "Event type is required - event will be ignored");
+      return;
+    }
+    if (!VALID_EVENT_TYPES.has(type)) {
+      log("error", "Invalid event type - event will be ignored", {
+        data: { type }
+      });
       return;
     }
     const currentSessionId = this.get("sessionId");
@@ -5980,6 +5987,7 @@ class ErrorHandler extends StateManager {
 class App extends StateManager {
   isInitialized = false;
   suppressNextScrollTimer = null;
+  pageUnloadHandler = null;
   emitter = new Emitter();
   transformers = {};
   customHeadersProvider;
@@ -6011,6 +6019,7 @@ class App extends StateManager {
         this.customHeadersProvider
       );
       this.initializeHandlers();
+      this.setupPageLifecycleListeners();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log("warn", "Failed to recover persisted events", { error });
       });
@@ -6045,6 +6054,7 @@ class App extends StateManager {
       if (this.get("mode") === Mode.QA) {
         throw new Error(`[TraceLog] Custom event "${name}" validation failed: ${error}`);
       }
+      log("warn", `Custom event "${name}" dropped: ${error}`);
       return;
     }
     this.managers.event.track({
@@ -6122,6 +6132,12 @@ class App extends StateManager {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
     }
+    if (this.pageUnloadHandler) {
+      window.removeEventListener("pagehide", this.pageUnloadHandler);
+      window.removeEventListener("beforeunload", this.pageUnloadHandler);
+      this.pageUnloadHandler = null;
+    }
+    this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = void 0;
@@ -6252,6 +6268,13 @@ class App extends StateManager {
     this.set("config", updatedConfig);
     log("debug", "Global metadata updated (merged)", { data: { keys: Object.keys(metadata) } });
   }
+  setupPageLifecycleListeners() {
+    this.pageUnloadHandler = () => {
+      this.managers.event?.flushImmediatelySync();
+    };
+    window.addEventListener("pagehide", this.pageUnloadHandler);
+    window.addEventListener("beforeunload", this.pageUnloadHandler);
+  }
   initializeHandlers() {
     const config = this.get("config");
     this.handlers.session = new SessionHandler(
@@ -6292,6 +6315,7 @@ let pendingCustomHeadersProvider = null;
 let app = null;
 let isInitializing = false;
 let isDestroying = false;
+let initPromise = null;
 const init = async (config) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return { sessionId: "" };
@@ -6303,53 +6327,57 @@ const init = async (config) => {
   if (app) {
     return { sessionId: app.getSessionId() ?? "" };
   }
-  if (isInitializing) {
-    return { sessionId: "" };
+  if (isInitializing && initPromise) {
+    return initPromise;
   }
   isInitializing = true;
-  try {
-    const validatedConfig = validateAndNormalizeConfig(config ?? {});
-    const instance = new App();
+  initPromise = (async () => {
     try {
-      pendingListeners.forEach(({ event: event2, callback }) => {
-        instance.on(event2, callback);
-      });
-      pendingListeners.length = 0;
-      pendingTransformers.forEach(({ hook, fn }) => {
-        if (hook === "beforeSend") {
-          instance.setTransformer("beforeSend", fn);
-        } else {
-          instance.setTransformer("beforeBatch", fn);
-        }
-      });
-      pendingTransformers.length = 0;
-      if (pendingCustomHeadersProvider) {
-        instance.setCustomHeaders(pendingCustomHeadersProvider);
-        pendingCustomHeadersProvider = null;
-      }
-      const initPromise = instance.init(validatedConfig);
-      const timeoutPromise = new Promise((_2, reject) => {
-        setTimeout(() => {
-          reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
-        }, INITIALIZATION_TIMEOUT_MS);
-      });
-      const result = await Promise.race([initPromise, timeoutPromise]);
-      app = instance;
-      return result;
-    } catch (error) {
+      const validatedConfig = validateAndNormalizeConfig(config ?? {});
+      const instance = new App();
       try {
-        instance.destroy(true);
-      } catch (cleanupError) {
-        log("error", "Failed to cleanup partially initialized app", { error: cleanupError });
+        pendingListeners.forEach(({ event: event2, callback }) => {
+          instance.on(event2, callback);
+        });
+        pendingListeners.length = 0;
+        pendingTransformers.forEach(({ hook, fn }) => {
+          if (hook === "beforeSend") {
+            instance.setTransformer("beforeSend", fn);
+          } else {
+            instance.setTransformer("beforeBatch", fn);
+          }
+        });
+        pendingTransformers.length = 0;
+        if (pendingCustomHeadersProvider) {
+          instance.setCustomHeaders(pendingCustomHeadersProvider);
+          pendingCustomHeadersProvider = null;
+        }
+        const appInitPromise = instance.init(validatedConfig);
+        const timeoutPromise = new Promise((_2, reject) => {
+          setTimeout(() => {
+            reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
+          }, INITIALIZATION_TIMEOUT_MS);
+        });
+        const result = await Promise.race([appInitPromise, timeoutPromise]);
+        app = instance;
+        return result;
+      } catch (error) {
+        try {
+          instance.destroy(true);
+        } catch (cleanupError) {
+          log("error", "Failed to cleanup partially initialized app", { error: cleanupError });
+        }
+        throw error;
       }
+    } catch (error) {
+      app = null;
       throw error;
+    } finally {
+      isInitializing = false;
+      initPromise = null;
     }
-  } catch (error) {
-    app = null;
-    throw error;
-  } finally {
-    isInitializing = false;
-  }
+  })();
+  return initPromise;
 };
 const event = (name, metadata) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -6486,6 +6514,7 @@ const destroy = () => {
     app.destroy();
     app = null;
     isInitializing = false;
+    initPromise = null;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
     pendingCustomHeadersProvider = null;
@@ -6496,6 +6525,7 @@ const destroy = () => {
   } catch (error) {
     app = null;
     isInitializing = false;
+    initPromise = null;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
     pendingCustomHeadersProvider = null;
