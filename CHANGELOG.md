@@ -4,6 +4,33 @@
 
 
 
+
+## [2.4.0] - 2026-02-10
+
+### ✨ Features
+
+- Add sendIntervalMs configuration with validation and backoff logic ([eeee74b](../../commit/eeee74b2d8e19b8f35bf80e7efbbd91c7f312ca3))
+- Implement exponential backoff for event sending with failure tracking ([0b70363](../../commit/0b7036395cc2284e8211789efdf7358184513a5b))
+- Implement new agent team creation process and enhance event handling with validation ([dbc4c46](../../commit/dbc4c46e1fc9483f526b1af2e4b71b1b82e765c1))
+
+### 🐛 Bug Fixes
+
+- Update sendIntervalMs validation to reject NaN and Infinity; rename sendIntervalId to sendTimeoutId ([be61133](../../commit/be611334c91c704132ad299f615145dea4ad35ac))
+
+### 🔧 Other Changes
+
+- Merge pull request #84 from nacorga/release/20260209.1 ([e9c60b5](../../commit/e9c60b55440af93ed656cef2930643023bb5c546))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.3.1...v2.4.0
+
+
 ## [2.3.1] - 2026-02-04
 
 ### 🐛 Bug Fixes
