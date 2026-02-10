@@ -43,6 +43,8 @@ export interface Config {
    * Only applies when webVitalsMode is set. Overrides default thresholds for the selected mode.
    */
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
+  /** Interval in milliseconds between event batch sends. @default 10000 (10 seconds) */
+  sendIntervalMs?: number;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

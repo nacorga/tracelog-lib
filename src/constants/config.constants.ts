@@ -10,6 +10,8 @@
 export const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 export const DUPLICATE_EVENT_THRESHOLD_MS = 1000; // 1 second (increased from 500ms to reduce duplicate events)
 export const EVENT_SENT_INTERVAL_MS = 10000; // 10 seconds
+export const MIN_SEND_INTERVAL_MS = 1000; // 1 second
+export const MAX_SEND_INTERVAL_MS_CONFIG = 60000; // 60 seconds
 
 // Throttling and debouncing
 export const SCROLL_DEBOUNCE_TIME_MS = 250;
@@ -254,6 +256,20 @@ export const RETRY_BACKOFF_BASE_MS = 100;
  */
 export const RETRY_BACKOFF_JITTER_MS = 100;
 
+/**
+ * Maximum delay between send attempts when using exponential backoff (in milliseconds)
+ * Caps the backoff at 2 minutes to prevent excessively long delays
+ * Formula: min(EVENT_SENT_INTERVAL_MS * 2^failures, MAX_SEND_INTERVAL_MS)
+ */
+export const MAX_SEND_INTERVAL_MS = 120000;
+
+/**
+ * Maximum consecutive send failures before stopping the send scheduler
+ * After this many failures, the scheduler stops until new events arrive
+ * Each failure includes up to 2 per-request retries in SenderManager
+ */
+export const MAX_CONSECUTIVE_SEND_FAILURES = 5;
+
 // ============================================================================
 // VALIDATION
 // ============================================================================
@@ -294,6 +310,7 @@ export const VALIDATION_MESSAGES = {
   INVALID_VIEWPORT_MIN_DWELL_TIME: 'Viewport minDwellTime must be a non-negative number',
   INVALID_VIEWPORT_COOLDOWN_PERIOD: 'Viewport cooldownPeriod must be a non-negative number',
   INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: 'Viewport maxTrackedElements must be a positive number',
+  INVALID_SEND_INTERVAL: `Send interval must be between ${MIN_SEND_INTERVAL_MS}ms (1 second) and ${MAX_SEND_INTERVAL_MS_CONFIG}ms (60 seconds)`,
 } as const;
 
 // ============================================================================

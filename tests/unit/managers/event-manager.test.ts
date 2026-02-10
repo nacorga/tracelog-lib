@@ -11,6 +11,11 @@ import { StorageManager } from '../../../src/managers/storage.manager';
 import { EventType, EmitterEvent, ScrollDirection, ErrorType } from '../../../src/types';
 import { Emitter } from '../../../src/utils';
 import { SESSION_COUNTS_KEY, SESSION_COUNTS_EXPIRY_MS } from '../../../src/constants/storage.constants';
+import {
+  EVENT_SENT_INTERVAL_MS,
+  MAX_SEND_INTERVAL_MS,
+  MAX_CONSECUTIVE_SEND_FAILURES,
+} from '../../../src/constants/config.constants';
 
 describe('EventManager - Event Tracking', () => {
   let eventManager: EventManager;
@@ -1262,13 +1267,11 @@ describe('EventManager - Error Handling', () => {
   });
 
   it('should handle validation errors', () => {
-    // Invalid event type - EventManager doesn't validate EventType enum
-    // It only checks if type field exists
-    // So invalid type strings still get queued
+    // Invalid event type - EventManager validates against EventType enum
     eventManager.track({ type: 'invalid_type' as any });
 
-    // Event is queued even with invalid type (no enum validation)
-    expect(eventManager.getQueueLength()).toBe(1);
+    // Event is rejected due to invalid type
+    expect(eventManager.getQueueLength()).toBe(0);
   });
 
   it('should handle transformation errors', () => {
@@ -2184,5 +2187,272 @@ describe('EventManager - Recovery Edge Cases', () => {
     // Note: This depends on SenderManager recovery flow
 
     eventManager.stop();
+  });
+});
+
+describe('EventManager - Send Backoff', () => {
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let emitter: Emitter;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    emitter = new Emitter();
+  });
+
+  afterEach(() => {
+    if (eventManager) {
+      eventManager.stop();
+    }
+    cleanupTestEnvironment();
+  });
+
+  function createEventManagerWithBackend(): EventManager {
+    const em = new EventManager(storageManager, emitter, {});
+    em['set']('collectApiUrls', { custom: 'https://api.example.com' });
+    em['set']('sessionId', 'test-session');
+    em['set']('userId', 'test-user');
+    em['set']('pageUrl', 'https://example.com');
+    em['set']('device', MOCK_DEVICE_INFO);
+    return em;
+  }
+
+  it('should use setTimeout instead of setInterval for send scheduling', () => {
+    vi.useFakeTimers();
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    eventManager = createEventManagerWithBackend();
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
+
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('should calculate base delay when no failures', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['consecutiveSendFailures'] = 0;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS);
+  });
+
+  it('should calculate exponential backoff delay on failures', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['consecutiveSendFailures'] = 1;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS * 2);
+
+    eventManager['consecutiveSendFailures'] = 2;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS * 4);
+
+    eventManager['consecutiveSendFailures'] = 3;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS * 8);
+  });
+
+  it('should cap backoff delay at MAX_SEND_INTERVAL_MS', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['consecutiveSendFailures'] = 10;
+    expect(eventManager['calculateSendDelay']()).toBe(MAX_SEND_INTERVAL_MS);
+  });
+
+  it('should increment consecutiveSendFailures on complete send failure', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+    // Set collectApiUrls in global state BEFORE construction so SenderManagers are created
+    const setup = new EventManager(storageManager, emitter, {});
+    setup['set']('collectApiUrls', { custom: 'https://api.example.com' });
+    setup.stop();
+
+    eventManager = new EventManager(storageManager, emitter, {});
+    eventManager['set']('sessionId', 'test-session');
+    eventManager['set']('userId', 'test-user');
+    eventManager['set']('pageUrl', 'https://example.com');
+    eventManager['set']('device', MOCK_DEVICE_INFO);
+
+    expect(eventManager['consecutiveSendFailures']).toBe(0);
+    expect(eventManager['dataSenders'].length).toBe(1);
+
+    eventManager['eventsQueue'] = [
+      {
+        id: 'e1',
+        type: EventType.CUSTOM,
+        custom_event: { name: 'test' },
+        timestamp: Date.now(),
+        page_url: 'https://example.com',
+      } as any,
+    ];
+
+    await eventManager['sendEventsQueue']();
+
+    expect(eventManager['consecutiveSendFailures']).toBe(1);
+  });
+
+  it('should reset consecutiveSendFailures on successful send', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    // Set collectApiUrls in global state BEFORE construction so SenderManagers are created
+    const setup = new EventManager(storageManager, emitter, {});
+    setup['set']('collectApiUrls', { custom: 'https://api.example.com' });
+    setup.stop();
+
+    eventManager = new EventManager(storageManager, emitter, {});
+    eventManager['set']('sessionId', 'test-session');
+    eventManager['set']('userId', 'test-user');
+    eventManager['set']('pageUrl', 'https://example.com');
+    eventManager['set']('device', MOCK_DEVICE_INFO);
+
+    eventManager['consecutiveSendFailures'] = 3;
+
+    eventManager['eventsQueue'] = [
+      {
+        id: 'e1',
+        type: EventType.CUSTOM,
+        custom_event: { name: 'test' },
+        timestamp: Date.now(),
+        page_url: 'https://example.com',
+      } as any,
+    ];
+
+    await eventManager['sendEventsQueue']();
+
+    expect(eventManager['consecutiveSendFailures']).toBe(0);
+  });
+
+  it('should not schedule when max consecutive failures reached', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['consecutiveSendFailures'] = MAX_CONSECUTIVE_SEND_FAILURES;
+    eventManager['sendTimeoutId'] = null;
+
+    eventManager['scheduleSendTimeout']();
+
+    expect(eventManager['sendTimeoutId']).toBeNull();
+  });
+
+  it('should not schedule when a timeout is already pending', () => {
+    vi.useFakeTimers();
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['consecutiveSendFailures'] = 0;
+    eventManager['scheduleSendTimeout']();
+    const firstId = eventManager['sendTimeoutId'];
+
+    eventManager['scheduleSendTimeout']();
+
+    expect(eventManager['sendTimeoutId']).toBe(firstId);
+
+    vi.useRealTimers();
+  });
+
+  it('should reset failures and reschedule when new events arrive after max failures', () => {
+    vi.useFakeTimers();
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['consecutiveSendFailures'] = MAX_CONSECUTIVE_SEND_FAILURES;
+    eventManager['sendTimeoutId'] = null;
+
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'fresh' } });
+
+    expect(eventManager['consecutiveSendFailures']).toBe(0);
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('should reset consecutiveSendFailures on stop()', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['consecutiveSendFailures'] = 3;
+    eventManager.stop();
+
+    expect(eventManager['consecutiveSendFailures']).toBe(0);
+  });
+
+  it('should reset sendInProgress on stop()', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+
+    eventManager['sendInProgress'] = true;
+    eventManager.stop();
+
+    expect(eventManager['sendInProgress']).toBe(false);
+  });
+
+  it('should use clearTimeout instead of clearInterval', () => {
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    eventManager = createEventManagerWithBackend();
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
+
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+
+    eventManager['clearSendTimeout']();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    expect(eventManager['sendTimeoutId']).toBeNull();
+
+    clearTimeoutSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('should use sendIntervalMs from config when present', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+    eventManager['set']('config', { sendIntervalMs: 5000 });
+
+    eventManager['consecutiveSendFailures'] = 0;
+    expect(eventManager['calculateSendDelay']()).toBe(5000);
+  });
+
+  it('should use config sendIntervalMs as backoff base', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+    eventManager['set']('config', { sendIntervalMs: 5000 });
+
+    eventManager['consecutiveSendFailures'] = 1;
+    expect(eventManager['calculateSendDelay']()).toBe(10000); // 5000 * 2^1
+
+    eventManager['consecutiveSendFailures'] = 2;
+    expect(eventManager['calculateSendDelay']()).toBe(20000); // 5000 * 2^2
+
+    eventManager['consecutiveSendFailures'] = 3;
+    expect(eventManager['calculateSendDelay']()).toBe(40000); // 5000 * 2^3
+  });
+
+  it('should fallback to EVENT_SENT_INTERVAL_MS when config has no sendIntervalMs', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+    eventManager['set']('config', {});
+
+    eventManager['consecutiveSendFailures'] = 0;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS);
+
+    eventManager['consecutiveSendFailures'] = 1;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS * 2);
+  });
+
+  it('should flush queue after base interval on success', async () => {
+    vi.useFakeTimers();
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    eventManager = createEventManagerWithBackend();
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'timer-test' } });
+
+    expect(eventManager.getQueueLength()).toBe(1);
+
+    await advanceTimers(EVENT_SENT_INTERVAL_MS);
+
+    vi.useRealTimers();
   });
 });

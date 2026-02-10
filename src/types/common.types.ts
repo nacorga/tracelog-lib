@@ -70,7 +70,7 @@ export type MetadataType = MetadataPrimitive | string[] | MetadataNestedObject |
  * Result returned by tracelog.init()
  *
  * Contains the session identifier generated during initialization.
- * The sessionId is empty string in edge cases (SSR, disabled, race condition).
+ * The sessionId is empty string in edge cases (SSR, disabled).
  *
  * @example
  * ```typescript

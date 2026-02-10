@@ -38,6 +38,7 @@ import { ErrorHandler } from './handlers/error.handler';
 export class App extends StateManager {
   private isInitialized = false;
   private suppressNextScrollTimer: number | null = null;
+  private pageUnloadHandler: (() => void) | null = null;
 
   private readonly emitter = new Emitter();
   private readonly transformers: TransformerMap = {};
@@ -91,6 +92,7 @@ export class App extends StateManager {
       );
 
       this.initializeHandlers();
+      this.setupPageLifecycleListeners();
 
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log('warn', 'Failed to recover persisted events', { error });
@@ -134,6 +136,7 @@ export class App extends StateManager {
         throw new Error(`[TraceLog] Custom event "${name}" validation failed: ${error}`);
       }
 
+      log('warn', `Custom event "${name}" dropped: ${error}`);
       return;
     }
 
@@ -235,6 +238,13 @@ export class App extends StateManager {
       this.suppressNextScrollTimer = null;
     }
 
+    if (this.pageUnloadHandler) {
+      window.removeEventListener('pagehide', this.pageUnloadHandler);
+      window.removeEventListener('beforeunload', this.pageUnloadHandler);
+      this.pageUnloadHandler = null;
+    }
+
+    this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
 
     this.emitter.removeAllListeners();
@@ -395,6 +405,14 @@ export class App extends StateManager {
     this.set('config', updatedConfig);
 
     log('debug', 'Global metadata updated (merged)', { data: { keys: Object.keys(metadata) } });
+  }
+
+  private setupPageLifecycleListeners(): void {
+    this.pageUnloadHandler = (): void => {
+      this.managers.event?.flushImmediatelySync();
+    };
+    window.addEventListener('pagehide', this.pageUnloadHandler);
+    window.addEventListener('beforeunload', this.pageUnloadHandler);
   }
 
   private initializeHandlers(): void {

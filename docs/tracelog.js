@@ -1,6 +1,8 @@
 const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
 const DUPLICATE_EVENT_THRESHOLD_MS = 1e3;
 const EVENT_SENT_INTERVAL_MS = 1e4;
+const MIN_SEND_INTERVAL_MS = 1e3;
+const MAX_SEND_INTERVAL_MS_CONFIG = 6e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
 const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
 const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1e3;
@@ -104,6 +106,8 @@ const SCROLL_SUPPRESS_MULTIPLIER = 2;
 const MAX_SEND_RETRIES = 2;
 const RETRY_BACKOFF_BASE_MS = 100;
 const RETRY_BACKOFF_JITTER_MS = 100;
+const MAX_SEND_INTERVAL_MS = 12e4;
+const MAX_CONSECUTIVE_SEND_FAILURES = 5;
 const VALIDATION_MESSAGES = {
   INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
   INVALID_SAMPLING_RATE: "Sampling rate must be between 0 and 1",
@@ -125,7 +129,8 @@ const VALIDATION_MESSAGES = {
   INVALID_VIEWPORT_THRESHOLD: "Viewport threshold must be a number between 0 and 1",
   INVALID_VIEWPORT_MIN_DWELL_TIME: "Viewport minDwellTime must be a non-negative number",
   INVALID_VIEWPORT_COOLDOWN_PERIOD: "Viewport cooldownPeriod must be a non-negative number",
-  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number"
+  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number",
+  INVALID_SEND_INTERVAL: `Send interval must be between ${MIN_SEND_INTERVAL_MS}ms (1 second) and ${MAX_SEND_INTERVAL_MS_CONFIG}ms (60 seconds)`
 };
 const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
@@ -467,7 +472,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.3.0";
+const version = "2.3.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -887,6 +892,11 @@ const validateAppConfig = (config) => {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_MAX_SAME_EVENT_PER_MINUTE, "config");
     }
   }
+  if (config.sendIntervalMs !== void 0) {
+    if (!Number.isFinite(config.sendIntervalMs) || config.sendIntervalMs < MIN_SEND_INTERVAL_MS || config.sendIntervalMs > MAX_SEND_INTERVAL_MS_CONFIG) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SEND_INTERVAL, "config");
+    }
+  }
   if (config.viewport !== void 0) {
     validateViewportConfig(config.viewport);
   }
@@ -1017,7 +1027,8 @@ const validateAndNormalizeConfig = (config) => {
     samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
-    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE
+    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
+    sendIntervalMs: config?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -2417,6 +2428,7 @@ class TimeManager extends StateManager {
     };
   }
 }
+const VALID_EVENT_TYPES = new Set(Object.values(EventType));
 class EventManager extends StateManager {
   dataSenders;
   emitter;
@@ -2426,8 +2438,9 @@ class EventManager extends StateManager {
   perEventRateLimits = /* @__PURE__ */ new Map();
   eventsQueue = [];
   pendingEventsBuffer = [];
-  sendIntervalId = null;
+  sendTimeoutId = null;
   sendInProgress = false;
+  consecutiveSendFailures = 0;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
   lastSessionId = null;
@@ -2598,6 +2611,12 @@ class EventManager extends StateManager {
       log("error", "Event type is required - event will be ignored");
       return;
     }
+    if (!VALID_EVENT_TYPES.has(type)) {
+      log("error", "Invalid event type - event will be ignored", {
+        data: { type }
+      });
+      return;
+    }
     const currentSessionId = this.get("sessionId");
     if (!currentSessionId) {
       if (this.pendingEventsBuffer.length >= MAX_PENDING_EVENTS_BUFFER) {
@@ -2750,7 +2769,7 @@ class EventManager extends StateManager {
    * and allow subsequent init() → destroy() → init() cycles.
    *
    * **Cleanup Actions**:
-   * 1. **Clear send interval**: Stops periodic 10-second queue flush timer
+   * 1. **Clear send timeout**: Cancels pending queue flush timeout and resets backoff state
    * 2. **Clear all queues and buffers**:
    *    - `eventsQueue`: Discarded (not sent)
    *    - `pendingEventsBuffer`: Discarded (events before session init)
@@ -2760,8 +2779,8 @@ class EventManager extends StateManager {
    * 6. **Stop SenderManagers**: Calls `stop()` on all SenderManager instances
    *
    * **Important Behavior**:
-   * - **No final flush**: Events in queue are NOT sent before stopping
-   * - For flush before destroy, call `flushImmediatelySync()` first
+   * - **No final flush**: `stop()` itself does NOT send queued events
+   * - `App.destroy()` calls `flushImmediatelySync()` before `stop()` automatically
    *
    * **Multi-Integration**:
    * - Stops all SenderManager instances (SaaS + Custom)
@@ -2778,10 +2797,9 @@ class EventManager extends StateManager {
    * @see src/managers/README.md (lines 5-75) for cleanup details
    */
   stop() {
-    if (this.sendIntervalId) {
-      clearInterval(this.sendIntervalId);
-      this.sendIntervalId = null;
-    }
+    this.clearSendTimeout();
+    this.sendInProgress = false;
+    this.consecutiveSendFailures = 0;
     const currentSessionId = this.get("sessionId");
     if (currentSessionId) {
       this.saveSessionCounts(currentSessionId);
@@ -2810,7 +2828,7 @@ class EventManager extends StateManager {
    * Flushes all events in the queue asynchronously.
    *
    * **Purpose**: Force immediate sending of queued events without waiting for
-   * the 10-second periodic flush timer.
+   * the scheduled queue flush timeout.
    *
    * **Use Cases**:
    * - Manual flush triggered by user action
@@ -3015,10 +3033,10 @@ class EventManager extends StateManager {
       this.track(event2);
     });
   }
-  clearSendInterval() {
-    if (this.sendIntervalId) {
-      clearInterval(this.sendIntervalId);
-      this.sendIntervalId = null;
+  clearSendTimeout() {
+    if (this.sendTimeoutId !== null) {
+      clearTimeout(this.sendTimeoutId);
+      this.sendTimeoutId = null;
     }
   }
   isSuccessfulResult(result) {
@@ -3033,7 +3051,7 @@ class EventManager extends StateManager {
     const eventIds = eventsToSend.map((e3) => e3.id);
     if (this.dataSenders.length === 0) {
       this.removeProcessedEvents(eventIds);
-      this.clearSendInterval();
+      this.clearSendTimeout();
       this.emitEventsQueue(body);
       return isSync ? true : Promise.resolve(true);
     }
@@ -3042,10 +3060,10 @@ class EventManager extends StateManager {
       const anySucceeded = results.some((success) => success);
       if (anySucceeded) {
         this.removeProcessedEvents(eventIds);
-        this.clearSendInterval();
+        this.clearSendTimeout();
         this.emitEventsQueue(body);
       } else {
-        this.clearSendInterval();
+        this.clearSendTimeout();
         log("debug", "Sync flush complete failure, events kept in queue for retry", {
           data: { eventCount: eventIds.length }
         });
@@ -3064,7 +3082,7 @@ class EventManager extends StateManager {
         const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
         if (anySucceeded) {
           this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
+          this.clearSendTimeout();
           this.emitEventsQueue(body);
         } else {
           log("debug", "Async flush complete failure, events kept in queue for retry", {
@@ -3099,6 +3117,7 @@ class EventManager extends StateManager {
       const results = await Promise.allSettled(sendPromises);
       const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
       if (anySucceeded) {
+        this.consecutiveSendFailures = 0;
         this.removeProcessedEvents(eventIds);
         this.emitEventsQueue(body);
         const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
@@ -3108,12 +3127,15 @@ class EventManager extends StateManager {
           });
         }
       } else {
+        this.consecutiveSendFailures++;
         log("debug", "Periodic send complete failure, events kept in queue for retry", {
           data: { eventCount: eventsToSend.length }
         });
       }
       if (this.eventsQueue.length === 0) {
-        this.clearSendInterval();
+        this.clearSendTimeout();
+      } else {
+        this.scheduleSendTimeout();
       }
     } finally {
       this.sendInProgress = false;
@@ -3270,19 +3292,30 @@ class EventManager extends StateManager {
         }
       });
     }
-    if (!this.sendIntervalId) {
-      this.startSendInterval();
+    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) {
+      this.consecutiveSendFailures = 0;
     }
+    this.scheduleSendTimeout();
     if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
       void this.sendEventsQueue();
     }
   }
-  startSendInterval() {
-    this.sendIntervalId = window.setInterval(() => {
+  scheduleSendTimeout() {
+    if (this.sendTimeoutId !== null) return;
+    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) return;
+    const delay = this.calculateSendDelay();
+    this.sendTimeoutId = window.setTimeout(() => {
+      this.sendTimeoutId = null;
       if (this.eventsQueue.length > 0) {
         void this.sendEventsQueue();
       }
-    }, EVENT_SENT_INTERVAL_MS);
+    }, delay);
+  }
+  calculateSendDelay() {
+    const baseInterval = this.get("config")?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS;
+    if (this.consecutiveSendFailures === 0) return baseInterval;
+    const backoff = baseInterval * Math.pow(2, this.consecutiveSendFailures);
+    return Math.min(backoff, MAX_SEND_INTERVAL_MS);
   }
   shouldSample() {
     const samplingRate = this.get("config")?.samplingRate ?? 1;
@@ -5980,6 +6013,7 @@ class ErrorHandler extends StateManager {
 class App extends StateManager {
   isInitialized = false;
   suppressNextScrollTimer = null;
+  pageUnloadHandler = null;
   emitter = new Emitter();
   transformers = {};
   customHeadersProvider;
@@ -6011,6 +6045,7 @@ class App extends StateManager {
         this.customHeadersProvider
       );
       this.initializeHandlers();
+      this.setupPageLifecycleListeners();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
         log("warn", "Failed to recover persisted events", { error });
       });
@@ -6045,6 +6080,7 @@ class App extends StateManager {
       if (this.get("mode") === Mode.QA) {
         throw new Error(`[TraceLog] Custom event "${name}" validation failed: ${error}`);
       }
+      log("warn", `Custom event "${name}" dropped: ${error}`);
       return;
     }
     this.managers.event.track({
@@ -6122,6 +6158,12 @@ class App extends StateManager {
       clearTimeout(this.suppressNextScrollTimer);
       this.suppressNextScrollTimer = null;
     }
+    if (this.pageUnloadHandler) {
+      window.removeEventListener("pagehide", this.pageUnloadHandler);
+      window.removeEventListener("beforeunload", this.pageUnloadHandler);
+      this.pageUnloadHandler = null;
+    }
+    this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
     this.emitter.removeAllListeners();
     this.transformers.beforeSend = void 0;
@@ -6252,6 +6294,13 @@ class App extends StateManager {
     this.set("config", updatedConfig);
     log("debug", "Global metadata updated (merged)", { data: { keys: Object.keys(metadata) } });
   }
+  setupPageLifecycleListeners() {
+    this.pageUnloadHandler = () => {
+      this.managers.event?.flushImmediatelySync();
+    };
+    window.addEventListener("pagehide", this.pageUnloadHandler);
+    window.addEventListener("beforeunload", this.pageUnloadHandler);
+  }
   initializeHandlers() {
     const config = this.get("config");
     this.handlers.session = new SessionHandler(
@@ -6292,6 +6341,7 @@ let pendingCustomHeadersProvider = null;
 let app = null;
 let isInitializing = false;
 let isDestroying = false;
+let initPromise = null;
 const init = async (config) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return { sessionId: "" };
@@ -6303,53 +6353,57 @@ const init = async (config) => {
   if (app) {
     return { sessionId: app.getSessionId() ?? "" };
   }
-  if (isInitializing) {
-    return { sessionId: "" };
+  if (isInitializing && initPromise) {
+    return initPromise;
   }
   isInitializing = true;
-  try {
-    const validatedConfig = validateAndNormalizeConfig(config ?? {});
-    const instance = new App();
+  initPromise = (async () => {
     try {
-      pendingListeners.forEach(({ event: event2, callback }) => {
-        instance.on(event2, callback);
-      });
-      pendingListeners.length = 0;
-      pendingTransformers.forEach(({ hook, fn }) => {
-        if (hook === "beforeSend") {
-          instance.setTransformer("beforeSend", fn);
-        } else {
-          instance.setTransformer("beforeBatch", fn);
-        }
-      });
-      pendingTransformers.length = 0;
-      if (pendingCustomHeadersProvider) {
-        instance.setCustomHeaders(pendingCustomHeadersProvider);
-        pendingCustomHeadersProvider = null;
-      }
-      const initPromise = instance.init(validatedConfig);
-      const timeoutPromise = new Promise((_2, reject) => {
-        setTimeout(() => {
-          reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
-        }, INITIALIZATION_TIMEOUT_MS);
-      });
-      const result = await Promise.race([initPromise, timeoutPromise]);
-      app = instance;
-      return result;
-    } catch (error) {
+      const validatedConfig = validateAndNormalizeConfig(config ?? {});
+      const instance = new App();
       try {
-        instance.destroy(true);
-      } catch (cleanupError) {
-        log("error", "Failed to cleanup partially initialized app", { error: cleanupError });
+        pendingListeners.forEach(({ event: event2, callback }) => {
+          instance.on(event2, callback);
+        });
+        pendingListeners.length = 0;
+        pendingTransformers.forEach(({ hook, fn }) => {
+          if (hook === "beforeSend") {
+            instance.setTransformer("beforeSend", fn);
+          } else {
+            instance.setTransformer("beforeBatch", fn);
+          }
+        });
+        pendingTransformers.length = 0;
+        if (pendingCustomHeadersProvider) {
+          instance.setCustomHeaders(pendingCustomHeadersProvider);
+          pendingCustomHeadersProvider = null;
+        }
+        const appInitPromise = instance.init(validatedConfig);
+        const timeoutPromise = new Promise((_2, reject) => {
+          setTimeout(() => {
+            reject(new Error(`[TraceLog] Initialization timeout after ${INITIALIZATION_TIMEOUT_MS}ms`));
+          }, INITIALIZATION_TIMEOUT_MS);
+        });
+        const result = await Promise.race([appInitPromise, timeoutPromise]);
+        app = instance;
+        return result;
+      } catch (error) {
+        try {
+          instance.destroy(true);
+        } catch (cleanupError) {
+          log("error", "Failed to cleanup partially initialized app", { error: cleanupError });
+        }
+        throw error;
       }
+    } catch (error) {
+      app = null;
       throw error;
+    } finally {
+      isInitializing = false;
+      initPromise = null;
     }
-  } catch (error) {
-    app = null;
-    throw error;
-  } finally {
-    isInitializing = false;
-  }
+  })();
+  return initPromise;
 };
 const event = (name, metadata) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -6486,6 +6540,7 @@ const destroy = () => {
     app.destroy();
     app = null;
     isInitializing = false;
+    initPromise = null;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
     pendingCustomHeadersProvider = null;
@@ -6496,6 +6551,7 @@ const destroy = () => {
   } catch (error) {
     app = null;
     isInitializing = false;
+    initPromise = null;
     pendingListeners.length = 0;
     pendingTransformers.length = 0;
     pendingCustomHeadersProvider = null;

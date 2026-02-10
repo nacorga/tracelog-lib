@@ -17,6 +17,8 @@ import {
   MAX_FINGERPRINTS,
   FINGERPRINT_CLEANUP_MULTIPLIER,
   MAX_FINGERPRINTS_HARD_LIMIT,
+  MAX_SEND_INTERVAL_MS,
+  MAX_CONSECUTIVE_SEND_FAILURES,
 } from '../constants/config.constants';
 import {
   SESSION_COUNTS_KEY,
@@ -41,6 +43,8 @@ import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { TimeManager } from './time.manager';
 
+const VALID_EVENT_TYPES: ReadonlySet<string> = new Set(Object.values(EventType));
+
 /**
  * Extended session counts structure with metadata for expiry tracking.
  *
@@ -62,7 +66,7 @@ interface StoredSessionCounts extends SessionEventCounts {
  *
  * **Core Functionality**:
  * - **Event Tracking**: Captures all user interactions (clicks, scrolls, page views, custom events, web vitals, errors)
- * - **Queue Management**: Batches events with 10-second intervals to optimize network requests
+ * - **Queue Management**: Batches events with 10-second base intervals (exponential backoff on failure) to optimize network requests
  * - **Deduplication**: LRU cache with 1000-entry fingerprint storage prevents duplicate events
  * - **Rate Limiting**: Client-side limits (50 events/second global, 60/minute per event name)
  * - **Per-Session Caps**: Configurable limits prevent runaway generation (1000 total, type-specific limits)
@@ -126,8 +130,9 @@ export class EventManager extends StateManager {
 
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
-  private sendIntervalId: number | null = null;
+  private sendTimeoutId: number | null = null;
   private sendInProgress = false;
+  private consecutiveSendFailures = 0;
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
   private lastSessionId: string | null = null;
@@ -320,6 +325,13 @@ export class EventManager extends StateManager {
   }: Partial<EventData>): void {
     if (!type) {
       log('error', 'Event type is required - event will be ignored');
+      return;
+    }
+
+    if (!VALID_EVENT_TYPES.has(type)) {
+      log('error', 'Invalid event type - event will be ignored', {
+        data: { type },
+      });
       return;
     }
 
@@ -518,7 +530,7 @@ export class EventManager extends StateManager {
    * and allow subsequent init() → destroy() → init() cycles.
    *
    * **Cleanup Actions**:
-   * 1. **Clear send interval**: Stops periodic 10-second queue flush timer
+   * 1. **Clear send timeout**: Cancels pending queue flush timeout and resets backoff state
    * 2. **Clear all queues and buffers**:
    *    - `eventsQueue`: Discarded (not sent)
    *    - `pendingEventsBuffer`: Discarded (events before session init)
@@ -528,8 +540,8 @@ export class EventManager extends StateManager {
    * 6. **Stop SenderManagers**: Calls `stop()` on all SenderManager instances
    *
    * **Important Behavior**:
-   * - **No final flush**: Events in queue are NOT sent before stopping
-   * - For flush before destroy, call `flushImmediatelySync()` first
+   * - **No final flush**: `stop()` itself does NOT send queued events
+   * - `App.destroy()` calls `flushImmediatelySync()` before `stop()` automatically
    *
    * **Multi-Integration**:
    * - Stops all SenderManager instances (SaaS + Custom)
@@ -548,10 +560,9 @@ export class EventManager extends StateManager {
   stop(): void {
     // Note: customHeadersProvider is NOT cleared here since it's stored in SenderManagers
     // and those are destroyed during this stop() call anyway
-    if (this.sendIntervalId) {
-      clearInterval(this.sendIntervalId);
-      this.sendIntervalId = null;
-    }
+    this.clearSendTimeout();
+    this.sendInProgress = false;
+    this.consecutiveSendFailures = 0;
 
     // Save session counts immediately before cleanup (bypass debounce)
     // This ensures final counts are persisted before destroying the EventManager
@@ -586,7 +597,7 @@ export class EventManager extends StateManager {
    * Flushes all events in the queue asynchronously.
    *
    * **Purpose**: Force immediate sending of queued events without waiting for
-   * the 10-second periodic flush timer.
+   * the scheduled queue flush timeout.
    *
    * **Use Cases**:
    * - Manual flush triggered by user action
@@ -804,10 +815,10 @@ export class EventManager extends StateManager {
     });
   }
 
-  private clearSendInterval(): void {
-    if (this.sendIntervalId) {
-      clearInterval(this.sendIntervalId);
-      this.sendIntervalId = null;
+  private clearSendTimeout(): void {
+    if (this.sendTimeoutId !== null) {
+      clearTimeout(this.sendTimeoutId);
+      this.sendTimeoutId = null;
     }
   }
 
@@ -826,7 +837,7 @@ export class EventManager extends StateManager {
 
     if (this.dataSenders.length === 0) {
       this.removeProcessedEvents(eventIds);
-      this.clearSendInterval();
+      this.clearSendTimeout();
       this.emitEventsQueue(body);
 
       return isSync ? true : Promise.resolve(true);
@@ -841,11 +852,11 @@ export class EventManager extends StateManager {
       // This prevents duplicate sends to successful integrations on retry
       if (anySucceeded) {
         this.removeProcessedEvents(eventIds);
-        this.clearSendInterval();
+        this.clearSendTimeout();
         this.emitEventsQueue(body);
       } else {
         // All integrations failed - keep events in queue for retry on next page load
-        this.clearSendInterval();
+        this.clearSendTimeout();
         log('debug', 'Sync flush complete failure, events kept in queue for retry', {
           data: { eventCount: eventIds.length },
         });
@@ -868,7 +879,7 @@ export class EventManager extends StateManager {
         // This prevents duplicate sends to successful integrations on retry
         if (anySucceeded) {
           this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
+          this.clearSendTimeout();
           this.emitEventsQueue(body);
         } else {
           // All integrations failed - keep events in queue for retry on next page load
@@ -914,6 +925,7 @@ export class EventManager extends StateManager {
       // Optimistic removal: Remove events if ANY integration succeeded
       // Each SenderManager independently persists failures in its own localStorage
       if (anySucceeded) {
+        this.consecutiveSendFailures = 0;
         this.removeProcessedEvents(eventIds);
         this.emitEventsQueue(body);
 
@@ -924,6 +936,7 @@ export class EventManager extends StateManager {
           });
         }
       } else {
+        this.consecutiveSendFailures++;
         // All integrations failed - keep events in queue for retry
         log('debug', 'Periodic send complete failure, events kept in queue for retry', {
           data: { eventCount: eventsToSend.length },
@@ -931,7 +944,9 @@ export class EventManager extends StateManager {
       }
 
       if (this.eventsQueue.length === 0) {
-        this.clearSendInterval();
+        this.clearSendTimeout();
+      } else {
+        this.scheduleSendTimeout();
       }
     } finally {
       this.sendInProgress = false;
@@ -1146,21 +1161,34 @@ export class EventManager extends StateManager {
       });
     }
 
-    if (!this.sendIntervalId) {
-      this.startSendInterval();
+    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) {
+      this.consecutiveSendFailures = 0;
     }
+    this.scheduleSendTimeout();
 
     if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
       void this.sendEventsQueue();
     }
   }
 
-  private startSendInterval(): void {
-    this.sendIntervalId = window.setInterval(() => {
+  private scheduleSendTimeout(): void {
+    if (this.sendTimeoutId !== null) return;
+    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) return;
+
+    const delay = this.calculateSendDelay();
+    this.sendTimeoutId = window.setTimeout(() => {
+      this.sendTimeoutId = null;
       if (this.eventsQueue.length > 0) {
         void this.sendEventsQueue();
       }
-    }, EVENT_SENT_INTERVAL_MS);
+    }, delay);
+  }
+
+  private calculateSendDelay(): number {
+    const baseInterval = this.get('config')?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS;
+    if (this.consecutiveSendFailures === 0) return baseInterval;
+    const backoff = baseInterval * Math.pow(2, this.consecutiveSendFailures);
+    return Math.min(backoff, MAX_SEND_INTERVAL_MS);
   }
 
   private shouldSample(): boolean {

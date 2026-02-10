@@ -56,6 +56,17 @@ describe('Public API - init()', () => {
     expect(api.isInitialized()).toBe(true);
   });
 
+  it('should return same sessionId for concurrent init calls', async () => {
+    // Call init twice without awaiting the first
+    const promise1 = api.init();
+    const promise2 = api.init();
+
+    const [result1, result2] = await Promise.all([promise1, promise2]);
+
+    expect(result1.sessionId).toBe(result2.sessionId);
+    expect(result1.sessionId.length).toBeGreaterThan(0);
+  });
+
   it('should validate config before initializing', async () => {
     // Invalid config should throw during validation
     await expect(api.init({ sessionTimeout: -1000 } as any)).rejects.toThrow();

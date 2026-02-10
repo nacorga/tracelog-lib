@@ -9,7 +9,7 @@ export default defineConfig({
   outDir: 'dist',
   splitting: false,
   treeshake: true,
-  minify: false,
+  minify: true,
   external: ['web-vitals'],
   env: {
     NODE_ENV: 'production',

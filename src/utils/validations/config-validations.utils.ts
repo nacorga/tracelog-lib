@@ -11,6 +11,9 @@ import {
   DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS,
   DEFAULT_VISIBILITY_TIMEOUT_MS,
   DEFAULT_ERROR_SAMPLING_RATE,
+  MIN_SEND_INTERVAL_MS,
+  MAX_SEND_INTERVAL_MS_CONFIG,
+  EVENT_SENT_INTERVAL_MS,
 } from '../../constants';
 import {
   Config,
@@ -113,6 +116,16 @@ export const validateAppConfig = (config?: Config): void => {
   if (config.maxSameEventPerMinute !== undefined) {
     if (typeof config.maxSameEventPerMinute !== 'number' || config.maxSameEventPerMinute <= 0) {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_MAX_SAME_EVENT_PER_MINUTE, 'config');
+    }
+  }
+
+  if (config.sendIntervalMs !== undefined) {
+    if (
+      !Number.isFinite(config.sendIntervalMs) ||
+      config.sendIntervalMs < MIN_SEND_INTERVAL_MS ||
+      config.sendIntervalMs > MAX_SEND_INTERVAL_MS_CONFIG
+    ) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SEND_INTERVAL, 'config');
     }
   }
 
@@ -313,6 +326,7 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
+    sendIntervalMs: config?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS,
   };
 
   if (normalizedConfig.integrations?.custom) {

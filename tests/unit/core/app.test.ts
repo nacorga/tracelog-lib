@@ -242,6 +242,46 @@ describe('App - Initialization', () => {
       await expect(bridge.init()).resolves.not.toThrow();
       expect(bridge.initialized).toBe(true);
     });
+
+    it('should flush pending events before stopping EventManager', async () => {
+      const bridge = await initTestBridge();
+      const { event } = getManagers(bridge);
+
+      const flushSyncSpy = vi.spyOn(event!, 'flushImmediatelySync');
+      const stopSpy = vi.spyOn(event!, 'stop');
+
+      bridge.destroy();
+
+      expect(flushSyncSpy).toHaveBeenCalled();
+      expect(stopSpy).toHaveBeenCalled();
+
+      // flushImmediatelySync must be called before stop
+      const flushOrder = flushSyncSpy.mock.invocationCallOrder[0] ?? 0;
+      const stopOrder = stopSpy.mock.invocationCallOrder[0] ?? 0;
+      expect(flushOrder).toBeLessThan(stopOrder);
+    });
+
+    it('should register and remove page lifecycle listeners', async () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+      const bridge = await initTestBridge();
+
+      const pagehideAdd = addSpy.mock.calls.find(([event]) => event === 'pagehide');
+      const beforeunloadAdd = addSpy.mock.calls.find(([event]) => event === 'beforeunload');
+      expect(pagehideAdd).toBeDefined();
+      expect(beforeunloadAdd).toBeDefined();
+
+      bridge.destroy();
+
+      const pagehideRemove = removeSpy.mock.calls.find(([event]) => event === 'pagehide');
+      const beforeunloadRemove = removeSpy.mock.calls.find(([event]) => event === 'beforeunload');
+      expect(pagehideRemove).toBeDefined();
+      expect(beforeunloadRemove).toBeDefined();
+
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
   });
 
   describe('Configuration', () => {
