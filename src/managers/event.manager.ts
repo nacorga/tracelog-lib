@@ -130,7 +130,7 @@ export class EventManager extends StateManager {
 
   private eventsQueue: EventData[] = [];
   private pendingEventsBuffer: Partial<EventData>[] = [];
-  private sendIntervalId: number | null = null;
+  private sendTimeoutId: number | null = null;
   private sendInProgress = false;
   private consecutiveSendFailures = 0;
   private rateLimitCounter = 0;
@@ -560,7 +560,7 @@ export class EventManager extends StateManager {
   stop(): void {
     // Note: customHeadersProvider is NOT cleared here since it's stored in SenderManagers
     // and those are destroyed during this stop() call anyway
-    this.clearSendInterval();
+    this.clearSendTimeout();
     this.sendInProgress = false;
     this.consecutiveSendFailures = 0;
 
@@ -815,10 +815,10 @@ export class EventManager extends StateManager {
     });
   }
 
-  private clearSendInterval(): void {
-    if (this.sendIntervalId !== null) {
-      clearTimeout(this.sendIntervalId);
-      this.sendIntervalId = null;
+  private clearSendTimeout(): void {
+    if (this.sendTimeoutId !== null) {
+      clearTimeout(this.sendTimeoutId);
+      this.sendTimeoutId = null;
     }
   }
 
@@ -837,7 +837,7 @@ export class EventManager extends StateManager {
 
     if (this.dataSenders.length === 0) {
       this.removeProcessedEvents(eventIds);
-      this.clearSendInterval();
+      this.clearSendTimeout();
       this.emitEventsQueue(body);
 
       return isSync ? true : Promise.resolve(true);
@@ -852,11 +852,11 @@ export class EventManager extends StateManager {
       // This prevents duplicate sends to successful integrations on retry
       if (anySucceeded) {
         this.removeProcessedEvents(eventIds);
-        this.clearSendInterval();
+        this.clearSendTimeout();
         this.emitEventsQueue(body);
       } else {
         // All integrations failed - keep events in queue for retry on next page load
-        this.clearSendInterval();
+        this.clearSendTimeout();
         log('debug', 'Sync flush complete failure, events kept in queue for retry', {
           data: { eventCount: eventIds.length },
         });
@@ -879,7 +879,7 @@ export class EventManager extends StateManager {
         // This prevents duplicate sends to successful integrations on retry
         if (anySucceeded) {
           this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
+          this.clearSendTimeout();
           this.emitEventsQueue(body);
         } else {
           // All integrations failed - keep events in queue for retry on next page load
@@ -944,7 +944,7 @@ export class EventManager extends StateManager {
       }
 
       if (this.eventsQueue.length === 0) {
-        this.clearSendInterval();
+        this.clearSendTimeout();
       } else {
         this.scheduleSendTimeout();
       }
@@ -1172,12 +1172,12 @@ export class EventManager extends StateManager {
   }
 
   private scheduleSendTimeout(): void {
-    if (this.sendIntervalId !== null) return;
+    if (this.sendTimeoutId !== null) return;
     if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) return;
 
     const delay = this.calculateSendDelay();
-    this.sendIntervalId = window.setTimeout(() => {
-      this.sendIntervalId = null;
+    this.sendTimeoutId = window.setTimeout(() => {
+      this.sendTimeoutId = null;
       if (this.eventsQueue.length > 0) {
         void this.sendEventsQueue();
       }

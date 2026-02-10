@@ -893,7 +893,7 @@ const validateAppConfig = (config) => {
     }
   }
   if (config.sendIntervalMs !== void 0) {
-    if (typeof config.sendIntervalMs !== "number" || config.sendIntervalMs < MIN_SEND_INTERVAL_MS || config.sendIntervalMs > MAX_SEND_INTERVAL_MS_CONFIG) {
+    if (!Number.isFinite(config.sendIntervalMs) || config.sendIntervalMs < MIN_SEND_INTERVAL_MS || config.sendIntervalMs > MAX_SEND_INTERVAL_MS_CONFIG) {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SEND_INTERVAL, "config");
     }
   }
@@ -2438,7 +2438,7 @@ class EventManager extends StateManager {
   perEventRateLimits = /* @__PURE__ */ new Map();
   eventsQueue = [];
   pendingEventsBuffer = [];
-  sendIntervalId = null;
+  sendTimeoutId = null;
   sendInProgress = false;
   consecutiveSendFailures = 0;
   rateLimitCounter = 0;
@@ -2797,7 +2797,7 @@ class EventManager extends StateManager {
    * @see src/managers/README.md (lines 5-75) for cleanup details
    */
   stop() {
-    this.clearSendInterval();
+    this.clearSendTimeout();
     this.sendInProgress = false;
     this.consecutiveSendFailures = 0;
     const currentSessionId = this.get("sessionId");
@@ -3033,10 +3033,10 @@ class EventManager extends StateManager {
       this.track(event2);
     });
   }
-  clearSendInterval() {
-    if (this.sendIntervalId !== null) {
-      clearTimeout(this.sendIntervalId);
-      this.sendIntervalId = null;
+  clearSendTimeout() {
+    if (this.sendTimeoutId !== null) {
+      clearTimeout(this.sendTimeoutId);
+      this.sendTimeoutId = null;
     }
   }
   isSuccessfulResult(result) {
@@ -3051,7 +3051,7 @@ class EventManager extends StateManager {
     const eventIds = eventsToSend.map((e3) => e3.id);
     if (this.dataSenders.length === 0) {
       this.removeProcessedEvents(eventIds);
-      this.clearSendInterval();
+      this.clearSendTimeout();
       this.emitEventsQueue(body);
       return isSync ? true : Promise.resolve(true);
     }
@@ -3060,10 +3060,10 @@ class EventManager extends StateManager {
       const anySucceeded = results.some((success) => success);
       if (anySucceeded) {
         this.removeProcessedEvents(eventIds);
-        this.clearSendInterval();
+        this.clearSendTimeout();
         this.emitEventsQueue(body);
       } else {
-        this.clearSendInterval();
+        this.clearSendTimeout();
         log("debug", "Sync flush complete failure, events kept in queue for retry", {
           data: { eventCount: eventIds.length }
         });
@@ -3082,7 +3082,7 @@ class EventManager extends StateManager {
         const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
         if (anySucceeded) {
           this.removeProcessedEvents(eventIds);
-          this.clearSendInterval();
+          this.clearSendTimeout();
           this.emitEventsQueue(body);
         } else {
           log("debug", "Async flush complete failure, events kept in queue for retry", {
@@ -3133,7 +3133,7 @@ class EventManager extends StateManager {
         });
       }
       if (this.eventsQueue.length === 0) {
-        this.clearSendInterval();
+        this.clearSendTimeout();
       } else {
         this.scheduleSendTimeout();
       }
@@ -3301,11 +3301,11 @@ class EventManager extends StateManager {
     }
   }
   scheduleSendTimeout() {
-    if (this.sendIntervalId !== null) return;
+    if (this.sendTimeoutId !== null) return;
     if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) return;
     const delay = this.calculateSendDelay();
-    this.sendIntervalId = window.setTimeout(() => {
-      this.sendIntervalId = null;
+    this.sendTimeoutId = window.setTimeout(() => {
+      this.sendTimeoutId = null;
       if (this.eventsQueue.length > 0) {
         void this.sendEventsQueue();
       }

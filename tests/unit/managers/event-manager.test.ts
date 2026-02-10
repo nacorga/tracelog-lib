@@ -2225,7 +2225,7 @@ describe('EventManager - Send Backoff', () => {
     eventManager = createEventManagerWithBackend();
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
-    expect(eventManager['sendIntervalId']).not.toBeNull();
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
 
     vi.useRealTimers();
   });
@@ -2328,11 +2328,11 @@ describe('EventManager - Send Backoff', () => {
     eventManager = createEventManagerWithBackend();
 
     eventManager['consecutiveSendFailures'] = MAX_CONSECUTIVE_SEND_FAILURES;
-    eventManager['sendIntervalId'] = null;
+    eventManager['sendTimeoutId'] = null;
 
     eventManager['scheduleSendTimeout']();
 
-    expect(eventManager['sendIntervalId']).toBeNull();
+    expect(eventManager['sendTimeoutId']).toBeNull();
   });
 
   it('should not schedule when a timeout is already pending', () => {
@@ -2342,11 +2342,11 @@ describe('EventManager - Send Backoff', () => {
 
     eventManager['consecutiveSendFailures'] = 0;
     eventManager['scheduleSendTimeout']();
-    const firstId = eventManager['sendIntervalId'];
+    const firstId = eventManager['sendTimeoutId'];
 
     eventManager['scheduleSendTimeout']();
 
-    expect(eventManager['sendIntervalId']).toBe(firstId);
+    expect(eventManager['sendTimeoutId']).toBe(firstId);
 
     vi.useRealTimers();
   });
@@ -2357,12 +2357,12 @@ describe('EventManager - Send Backoff', () => {
     eventManager = createEventManagerWithBackend();
 
     eventManager['consecutiveSendFailures'] = MAX_CONSECUTIVE_SEND_FAILURES;
-    eventManager['sendIntervalId'] = null;
+    eventManager['sendTimeoutId'] = null;
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'fresh' } });
 
     expect(eventManager['consecutiveSendFailures']).toBe(0);
-    expect(eventManager['sendIntervalId']).not.toBeNull();
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
 
     vi.useRealTimers();
   });
@@ -2395,12 +2395,12 @@ describe('EventManager - Send Backoff', () => {
     eventManager = createEventManagerWithBackend();
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
-    expect(eventManager['sendIntervalId']).not.toBeNull();
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
 
-    eventManager['clearSendInterval']();
+    eventManager['clearSendTimeout']();
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
-    expect(eventManager['sendIntervalId']).toBeNull();
+    expect(eventManager['sendTimeoutId']).toBeNull();
 
     clearTimeoutSpy.mockRestore();
     vi.useRealTimers();

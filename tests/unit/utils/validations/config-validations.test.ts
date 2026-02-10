@@ -303,6 +303,18 @@ describe('config-validations.utils', () => {
           validateAppConfig({ sendIntervalMs: '5000' as unknown as number });
         }).toThrow(AppConfigValidationError);
       });
+
+      it('should reject NaN', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: NaN });
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should reject Infinity', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: Infinity });
+        }).toThrow(AppConfigValidationError);
+      });
     });
   });
 

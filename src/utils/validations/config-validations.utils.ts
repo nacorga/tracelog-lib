@@ -121,7 +121,7 @@ export const validateAppConfig = (config?: Config): void => {
 
   if (config.sendIntervalMs !== undefined) {
     if (
-      typeof config.sendIntervalMs !== 'number' ||
+      !Number.isFinite(config.sendIntervalMs) ||
       config.sendIntervalMs < MIN_SEND_INTERVAL_MS ||
       config.sendIntervalMs > MAX_SEND_INTERVAL_MS_CONFIG
     ) {
