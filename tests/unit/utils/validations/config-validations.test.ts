@@ -260,6 +260,50 @@ describe('config-validations.utils', () => {
         }).toThrow(SamplingRateValidationError);
       });
     });
+
+    describe('sendIntervalMs validation', () => {
+      it('should accept undefined (default)', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: undefined });
+        }).not.toThrow();
+      });
+
+      it('should accept valid value (5000)', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: 5000 });
+        }).not.toThrow();
+      });
+
+      it('should accept lower bound (1000)', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: 1000 });
+        }).not.toThrow();
+      });
+
+      it('should accept upper bound (60000)', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: 60000 });
+        }).not.toThrow();
+      });
+
+      it('should reject value below 1000', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: 999 });
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should reject value above 60000', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: 60001 });
+        }).toThrow(AppConfigValidationError);
+      });
+
+      it('should reject non-number type', () => {
+        expect(() => {
+          validateAppConfig({ sendIntervalMs: '5000' as unknown as number });
+        }).toThrow(AppConfigValidationError);
+      });
+    });
   });
 
   describe('validateAndNormalizeConfig', () => {
@@ -291,6 +335,16 @@ describe('config-validations.utils', () => {
 
     it('should validate before normalizing', () => {
       expect(() => validateAndNormalizeConfig({ sessionTimeout: 1000 })).toThrow(SessionTimeoutValidationError);
+    });
+
+    it('should normalize sendIntervalMs to default when not provided', () => {
+      const normalized = validateAndNormalizeConfig({});
+      expect(normalized.sendIntervalMs).toBe(10000);
+    });
+
+    it('should preserve custom sendIntervalMs value', () => {
+      const normalized = validateAndNormalizeConfig({ sendIntervalMs: 5000 });
+      expect(normalized.sendIntervalMs).toBe(5000);
     });
   });
 });

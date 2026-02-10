@@ -1,6 +1,8 @@
 const DEFAULT_SESSION_TIMEOUT = 15 * 60 * 1e3;
 const DUPLICATE_EVENT_THRESHOLD_MS = 1e3;
 const EVENT_SENT_INTERVAL_MS = 1e4;
+const MIN_SEND_INTERVAL_MS = 1e3;
+const MAX_SEND_INTERVAL_MS_CONFIG = 6e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
 const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
 const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1e3;
@@ -127,7 +129,8 @@ const VALIDATION_MESSAGES = {
   INVALID_VIEWPORT_THRESHOLD: "Viewport threshold must be a number between 0 and 1",
   INVALID_VIEWPORT_MIN_DWELL_TIME: "Viewport minDwellTime must be a non-negative number",
   INVALID_VIEWPORT_COOLDOWN_PERIOD: "Viewport cooldownPeriod must be a non-negative number",
-  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number"
+  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number",
+  INVALID_SEND_INTERVAL: `Send interval must be between ${MIN_SEND_INTERVAL_MS}ms (1 second) and ${MAX_SEND_INTERVAL_MS_CONFIG}ms (60 seconds)`
 };
 const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
@@ -889,6 +892,11 @@ const validateAppConfig = (config) => {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_MAX_SAME_EVENT_PER_MINUTE, "config");
     }
   }
+  if (config.sendIntervalMs !== void 0) {
+    if (typeof config.sendIntervalMs !== "number" || config.sendIntervalMs < MIN_SEND_INTERVAL_MS || config.sendIntervalMs > MAX_SEND_INTERVAL_MS_CONFIG) {
+      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SEND_INTERVAL, "config");
+    }
+  }
   if (config.viewport !== void 0) {
     validateViewportConfig(config.viewport);
   }
@@ -1019,7 +1027,8 @@ const validateAndNormalizeConfig = (config) => {
     samplingRate: config?.samplingRate ?? DEFAULT_SAMPLING_RATE,
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
-    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE
+    maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
+    sendIntervalMs: config?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -3303,8 +3312,9 @@ class EventManager extends StateManager {
     }, delay);
   }
   calculateSendDelay() {
-    if (this.consecutiveSendFailures === 0) return EVENT_SENT_INTERVAL_MS;
-    const backoff = EVENT_SENT_INTERVAL_MS * Math.pow(2, this.consecutiveSendFailures);
+    const baseInterval = this.get("config")?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS;
+    if (this.consecutiveSendFailures === 0) return baseInterval;
+    const backoff = baseInterval * Math.pow(2, this.consecutiveSendFailures);
     return Math.min(backoff, MAX_SEND_INTERVAL_MS);
   }
   shouldSample() {

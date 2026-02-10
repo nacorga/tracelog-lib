@@ -1185,8 +1185,9 @@ export class EventManager extends StateManager {
   }
 
   private calculateSendDelay(): number {
-    if (this.consecutiveSendFailures === 0) return EVENT_SENT_INTERVAL_MS;
-    const backoff = EVENT_SENT_INTERVAL_MS * Math.pow(2, this.consecutiveSendFailures);
+    const baseInterval = this.get('config')?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS;
+    if (this.consecutiveSendFailures === 0) return baseInterval;
+    const backoff = baseInterval * Math.pow(2, this.consecutiveSendFailures);
     return Math.min(backoff, MAX_SEND_INTERVAL_MS);
   }
 

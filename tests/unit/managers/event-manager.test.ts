@@ -2406,6 +2406,42 @@ describe('EventManager - Send Backoff', () => {
     vi.useRealTimers();
   });
 
+  it('should use sendIntervalMs from config when present', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+    eventManager['set']('config', { sendIntervalMs: 5000 });
+
+    eventManager['consecutiveSendFailures'] = 0;
+    expect(eventManager['calculateSendDelay']()).toBe(5000);
+  });
+
+  it('should use config sendIntervalMs as backoff base', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+    eventManager['set']('config', { sendIntervalMs: 5000 });
+
+    eventManager['consecutiveSendFailures'] = 1;
+    expect(eventManager['calculateSendDelay']()).toBe(10000); // 5000 * 2^1
+
+    eventManager['consecutiveSendFailures'] = 2;
+    expect(eventManager['calculateSendDelay']()).toBe(20000); // 5000 * 2^2
+
+    eventManager['consecutiveSendFailures'] = 3;
+    expect(eventManager['calculateSendDelay']()).toBe(40000); // 5000 * 2^3
+  });
+
+  it('should fallback to EVENT_SENT_INTERVAL_MS when config has no sendIntervalMs', () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    eventManager = createEventManagerWithBackend();
+    eventManager['set']('config', {});
+
+    eventManager['consecutiveSendFailures'] = 0;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS);
+
+    eventManager['consecutiveSendFailures'] = 1;
+    expect(eventManager['calculateSendDelay']()).toBe(EVENT_SENT_INTERVAL_MS * 2);
+  });
+
   it('should flush queue after base interval on success', async () => {
     vi.useFakeTimers();
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
