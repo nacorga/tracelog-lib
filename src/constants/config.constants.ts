@@ -254,6 +254,20 @@ export const RETRY_BACKOFF_BASE_MS = 100;
  */
 export const RETRY_BACKOFF_JITTER_MS = 100;
 
+/**
+ * Maximum delay between send attempts when using exponential backoff (in milliseconds)
+ * Caps the backoff at 2 minutes to prevent excessively long delays
+ * Formula: min(EVENT_SENT_INTERVAL_MS * 2^failures, MAX_SEND_INTERVAL_MS)
+ */
+export const MAX_SEND_INTERVAL_MS = 120000;
+
+/**
+ * Maximum consecutive send failures before stopping the send scheduler
+ * After this many failures, the scheduler stops until new events arrive
+ * Each failure includes up to 2 per-request retries in SenderManager
+ */
+export const MAX_CONSECUTIVE_SEND_FAILURES = 5;
+
 // ============================================================================
 // VALIDATION
 // ============================================================================

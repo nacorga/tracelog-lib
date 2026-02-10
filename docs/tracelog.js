@@ -104,6 +104,8 @@ const SCROLL_SUPPRESS_MULTIPLIER = 2;
 const MAX_SEND_RETRIES = 2;
 const RETRY_BACKOFF_BASE_MS = 100;
 const RETRY_BACKOFF_JITTER_MS = 100;
+const MAX_SEND_INTERVAL_MS = 12e4;
+const MAX_CONSECUTIVE_SEND_FAILURES = 5;
 const VALIDATION_MESSAGES = {
   INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
   INVALID_SAMPLING_RATE: "Sampling rate must be between 0 and 1",
@@ -2429,6 +2431,7 @@ class EventManager extends StateManager {
   pendingEventsBuffer = [];
   sendIntervalId = null;
   sendInProgress = false;
+  consecutiveSendFailures = 0;
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
   lastSessionId = null;
@@ -2757,7 +2760,7 @@ class EventManager extends StateManager {
    * and allow subsequent init() → destroy() → init() cycles.
    *
    * **Cleanup Actions**:
-   * 1. **Clear send interval**: Stops periodic 10-second queue flush timer
+   * 1. **Clear send timeout**: Cancels pending queue flush timeout and resets backoff state
    * 2. **Clear all queues and buffers**:
    *    - `eventsQueue`: Discarded (not sent)
    *    - `pendingEventsBuffer`: Discarded (events before session init)
@@ -2767,8 +2770,8 @@ class EventManager extends StateManager {
    * 6. **Stop SenderManagers**: Calls `stop()` on all SenderManager instances
    *
    * **Important Behavior**:
-   * - **No final flush**: Events in queue are NOT sent before stopping
-   * - For flush before destroy, call `flushImmediatelySync()` first
+   * - **No final flush**: `stop()` itself does NOT send queued events
+   * - `App.destroy()` calls `flushImmediatelySync()` before `stop()` automatically
    *
    * **Multi-Integration**:
    * - Stops all SenderManager instances (SaaS + Custom)
@@ -2785,10 +2788,9 @@ class EventManager extends StateManager {
    * @see src/managers/README.md (lines 5-75) for cleanup details
    */
   stop() {
-    if (this.sendIntervalId) {
-      clearInterval(this.sendIntervalId);
-      this.sendIntervalId = null;
-    }
+    this.clearSendInterval();
+    this.sendInProgress = false;
+    this.consecutiveSendFailures = 0;
     const currentSessionId = this.get("sessionId");
     if (currentSessionId) {
       this.saveSessionCounts(currentSessionId);
@@ -2817,7 +2819,7 @@ class EventManager extends StateManager {
    * Flushes all events in the queue asynchronously.
    *
    * **Purpose**: Force immediate sending of queued events without waiting for
-   * the 10-second periodic flush timer.
+   * the scheduled queue flush timeout.
    *
    * **Use Cases**:
    * - Manual flush triggered by user action
@@ -3023,8 +3025,8 @@ class EventManager extends StateManager {
     });
   }
   clearSendInterval() {
-    if (this.sendIntervalId) {
-      clearInterval(this.sendIntervalId);
+    if (this.sendIntervalId !== null) {
+      clearTimeout(this.sendIntervalId);
       this.sendIntervalId = null;
     }
   }
@@ -3106,6 +3108,7 @@ class EventManager extends StateManager {
       const results = await Promise.allSettled(sendPromises);
       const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
       if (anySucceeded) {
+        this.consecutiveSendFailures = 0;
         this.removeProcessedEvents(eventIds);
         this.emitEventsQueue(body);
         const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
@@ -3115,12 +3118,15 @@ class EventManager extends StateManager {
           });
         }
       } else {
+        this.consecutiveSendFailures++;
         log("debug", "Periodic send complete failure, events kept in queue for retry", {
           data: { eventCount: eventsToSend.length }
         });
       }
       if (this.eventsQueue.length === 0) {
         this.clearSendInterval();
+      } else {
+        this.scheduleSendTimeout();
       }
     } finally {
       this.sendInProgress = false;
@@ -3277,19 +3283,29 @@ class EventManager extends StateManager {
         }
       });
     }
-    if (!this.sendIntervalId) {
-      this.startSendInterval();
+    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) {
+      this.consecutiveSendFailures = 0;
     }
+    this.scheduleSendTimeout();
     if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
       void this.sendEventsQueue();
     }
   }
-  startSendInterval() {
-    this.sendIntervalId = window.setInterval(() => {
+  scheduleSendTimeout() {
+    if (this.sendIntervalId !== null) return;
+    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) return;
+    const delay = this.calculateSendDelay();
+    this.sendIntervalId = window.setTimeout(() => {
+      this.sendIntervalId = null;
       if (this.eventsQueue.length > 0) {
         void this.sendEventsQueue();
       }
-    }, EVENT_SENT_INTERVAL_MS);
+    }, delay);
+  }
+  calculateSendDelay() {
+    if (this.consecutiveSendFailures === 0) return EVENT_SENT_INTERVAL_MS;
+    const backoff = EVENT_SENT_INTERVAL_MS * Math.pow(2, this.consecutiveSendFailures);
+    return Math.min(backoff, MAX_SEND_INTERVAL_MS);
   }
   shouldSample() {
     const samplingRate = this.get("config")?.samplingRate ?? 1;
