@@ -160,6 +160,7 @@ export class EventManager extends StateManager {
    * @param transformers - Optional event transformation hooks
    * @param staticHeaders - Optional static HTTP headers for custom backend (from config)
    * @param customHeadersProvider - Optional callback for dynamic headers
+   * @param fetchCredentials - Fetch credentials mode for custom backend. @default 'include'
    */
   constructor(
     storeManager: StorageManager,
@@ -167,6 +168,7 @@ export class EventManager extends StateManager {
     transformers: TransformerMap = {},
     staticHeaders: Record<string, string> = {},
     customHeadersProvider?: CustomHeadersProvider,
+    fetchCredentials: RequestCredentials = 'include',
   ) {
     super();
 
@@ -182,7 +184,7 @@ export class EventManager extends StateManager {
       this.dataSenders.push(new SenderManager(storeManager, 'saas', collectApiUrls.saas, transformers));
     }
 
-    // Custom integration: receives static headers and dynamic provider
+    // Custom integration: receives static headers, dynamic provider, and fetchCredentials
     if (collectApiUrls?.custom) {
       this.dataSenders.push(
         new SenderManager(
@@ -192,6 +194,7 @@ export class EventManager extends StateManager {
           transformers,
           staticHeaders,
           customHeadersProvider,
+          fetchCredentials,
         ),
       );
     }

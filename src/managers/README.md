@@ -149,6 +149,13 @@ Core business logic components that handle analytics data processing, state mana
   - Silently bypassed for TraceLog SaaS (`integrationId === 'saas'`)
 - **sendBeacon Limitation**: Custom headers NOT applied to `sendBeacon()` requests (browser API limitation)
 - **Error Handling**: Provider errors caught and logged, falls back to static headers only
+
+**Fetch Credentials Support** (v2.2.0+):
+- **Purpose**: Controls whether cookies/credentials are sent with `fetch()` requests
+- **Config**: `config.integrations.custom.fetchCredentials` — `'include'` (default), `'same-origin'`, or `'omit'`
+- **Integration-Specific**: Only configurable for custom backend (`integrationId === 'custom'`)
+  - TraceLog SaaS always uses `'include'`
+- **sendBeacon Limitation**: `sendBeacon()` always sends cookies regardless of this setting (browser API limitation)
 - **API Methods**:
   - `setCustomHeadersProvider(provider: () => Record<string, string>)`: Sets dynamic header provider
   - `removeCustomHeadersProvider()`: Removes dynamic header provider

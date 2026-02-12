@@ -186,6 +186,31 @@ describe('config-validations.utils', () => {
             });
           }).toThrow(IntegrationValidationError);
         });
+
+        it('should accept valid fetchCredentials values', () => {
+          for (const value of ['include', 'same-origin', 'omit'] as const) {
+            expect(() => {
+              validateAppConfig({
+                integrations: {
+                  custom: { collectApiUrl: 'https://api.example.com', fetchCredentials: value },
+                },
+              });
+            }).not.toThrow();
+          }
+        });
+
+        it('should throw error for invalid fetchCredentials value', () => {
+          expect(() => {
+            validateAppConfig({
+              integrations: {
+                custom: {
+                  collectApiUrl: 'https://api.example.com',
+                  fetchCredentials: 'invalid' as unknown as RequestCredentials,
+                },
+              },
+            });
+          }).toThrow(IntegrationValidationError);
+        });
       });
     });
 

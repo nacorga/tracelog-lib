@@ -709,6 +709,7 @@ interface Config {
       collectApiUrl: string;
       allowHttp?: boolean;
       headers?: Record<string, string>;  // Static HTTP headers
+      fetchCredentials?: RequestCredentials;  // 'include' | 'same-origin' | 'omit'
     };
   };
 }
@@ -941,7 +942,7 @@ await tracelog.init({
 ```
 
 #### `integrations.custom`
-- **Type:** `{ collectApiUrl: string; allowHttp?: boolean; headers?: Record<string, string> }`
+- **Type:** `{ collectApiUrl: string; allowHttp?: boolean; headers?: Record<string, string>; fetchCredentials?: RequestCredentials }`
 - **Description:** Custom backend integration
 
 ```typescript
@@ -953,7 +954,8 @@ await tracelog.init({
       headers: {         // Static HTTP headers (optional)
         'X-Tenant-Id': 'tenant-123',
         'X-Brand': 'my-brand'
-      }
+      },
+      fetchCredentials: 'include'  // Cookie/credential policy (optional)
     }
   }
 });
@@ -974,6 +976,14 @@ await tracelog.init({
 - Use for tenant identification, API keys, or fixed values
 - For dynamic headers (auth tokens), use `setCustomHeaders()` instead
 - Dynamic headers override static headers on key collision
+
+**`fetchCredentials`**:
+- **Default:** `'include'`
+- Controls whether cookies and HTTP credentials are sent with `fetch()` requests
+- `'include'`: Always send cookies, even cross-origin (required for cookie-based auth)
+- `'same-origin'`: Only send cookies for same-origin requests
+- `'omit'`: Never send cookies
+- **sendBeacon limitation**: This option only applies to async `fetch()` calls. `sendBeacon()` (used during page unload) always sends cookies regardless of this setting
 
 #### Multi-Integration (TraceLog SaaS + Custom Backend)
 
