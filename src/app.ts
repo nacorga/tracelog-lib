@@ -80,8 +80,9 @@ export class App extends StateManager {
     try {
       this.setupState(config);
 
-      // Extract static headers from custom integration config
+      // Extract static headers and fetchCredentials from custom integration config
       const staticHeaders = config.integrations?.custom?.headers ?? {};
+      const fetchCredentials = config.integrations?.custom?.fetchCredentials ?? 'include';
 
       this.managers.event = new EventManager(
         this.managers.storage,
@@ -89,6 +90,7 @@ export class App extends StateManager {
         this.transformers,
         staticHeaders,
         this.customHeadersProvider,
+        fetchCredentials,
       );
 
       this.initializeHandlers();

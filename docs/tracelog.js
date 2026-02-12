@@ -472,7 +472,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.3.1";
+const version = "2.4.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1014,6 +1014,12 @@ const validateIntegrations = (integrations) => {
         "config"
       );
     }
+    if (integrations.custom.fetchCredentials !== void 0 && !["include", "same-origin", "omit"].includes(integrations.custom.fetchCredentials)) {
+      throw new IntegrationValidationError(
+        'fetchCredentials must be "include", "same-origin", or "omit"',
+        "config"
+      );
+    }
   }
 };
 const validateAndNormalizeConfig = (config) => {
@@ -1462,6 +1468,7 @@ class SenderManager extends StateManager {
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
   lastMetadataTimestamp = 0;
+  fetchCredentials;
   pendingControllers = /* @__PURE__ */ new Set();
   /**
    * Creates a SenderManager instance.
@@ -1477,7 +1484,7 @@ class SenderManager extends StateManager {
    * @param customHeadersProvider - Optional callback for dynamic headers
    * @throws Error if integrationId and apiUrl are not both provided or both undefined
    */
-  constructor(storeManager, integrationId, apiUrl, transformers = {}, staticHeaders = {}, customHeadersProvider) {
+  constructor(storeManager, integrationId, apiUrl, transformers = {}, staticHeaders = {}, customHeadersProvider, fetchCredentials = "include") {
     super();
     if (integrationId && !apiUrl || !integrationId && apiUrl) {
       throw new Error("SenderManager: integrationId and apiUrl must either both be provided or both be undefined");
@@ -1488,6 +1495,7 @@ class SenderManager extends StateManager {
     this.transformers = transformers;
     this.staticHeaders = staticHeaders;
     this.customHeadersProvider = customHeadersProvider;
+    this.fetchCredentials = fetchCredentials;
   }
   /**
    * Get the integration ID for this sender
@@ -1570,6 +1578,11 @@ class SenderManager extends StateManager {
    * to sendBeacon requests due to browser API limitations. The sendBeacon API only supports
    * Content-Type header via Blob. For scenarios requiring custom headers, ensure async
    * sends complete before page unload.
+   *
+   * **Credentials Limitation**: The `fetchCredentials` config option is NOT applied to
+   * sendBeacon requests. `sendBeacon()` always sends cookies (equivalent to `credentials: 'include'`)
+   * regardless of the configured value. If `fetchCredentials` is set to `'omit'` or `'same-origin'`,
+   * only async `fetch()` calls honor that setting.
    *
    * @param body - Event queue to send
    * @returns `true` if send succeeded or was skipped, `false` if failed
@@ -1998,7 +2011,7 @@ class SenderManager extends StateManager {
         method: "POST",
         body: payload,
         keepalive: true,
-        credentials: "include",
+        credentials: this.fetchCredentials,
         signal: controller.signal,
         headers: {
           ...customHeaders,
@@ -2465,8 +2478,9 @@ class EventManager extends StateManager {
    * @param transformers - Optional event transformation hooks
    * @param staticHeaders - Optional static HTTP headers for custom backend (from config)
    * @param customHeadersProvider - Optional callback for dynamic headers
+   * @param fetchCredentials - Fetch credentials mode for custom backend. @default 'include'
    */
-  constructor(storeManager, emitter = null, transformers = {}, staticHeaders = {}, customHeadersProvider) {
+  constructor(storeManager, emitter = null, transformers = {}, staticHeaders = {}, customHeadersProvider, fetchCredentials = "include") {
     super();
     this.emitter = emitter;
     this.transformers = transformers;
@@ -2484,7 +2498,8 @@ class EventManager extends StateManager {
           collectApiUrls.custom,
           transformers,
           staticHeaders,
-          customHeadersProvider
+          customHeadersProvider,
+          fetchCredentials
         )
       );
     }
@@ -6037,12 +6052,14 @@ class App extends StateManager {
     try {
       this.setupState(config);
       const staticHeaders = config.integrations?.custom?.headers ?? {};
+      const fetchCredentials = config.integrations?.custom?.fetchCredentials ?? "include";
       this.managers.event = new EventManager(
         this.managers.storage,
         this.emitter,
         this.transformers,
         staticHeaders,
-        this.customHeadersProvider
+        this.customHeadersProvider,
+        fetchCredentials
       );
       this.initializeHandlers();
       this.setupPageLifecycleListeners();

@@ -302,6 +302,13 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
         'config',
       );
     }
+
+    if (
+      integrations.custom.fetchCredentials !== undefined &&
+      !['include', 'same-origin', 'omit'].includes(integrations.custom.fetchCredentials)
+    ) {
+      throw new IntegrationValidationError('fetchCredentials must be "include", "same-origin", or "omit"', 'config');
+    }
   }
 };
 

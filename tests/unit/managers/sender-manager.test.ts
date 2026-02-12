@@ -1376,3 +1376,96 @@ describe('SenderManager - Custom Headers', () => {
     });
   });
 });
+
+describe('SenderManager - fetchCredentials', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should default to credentials: include', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.credentials).toBe('include');
+  });
+
+  it('should use configured fetchCredentials: same-origin', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(
+      storage,
+      'custom',
+      'https://api.test.com/collect',
+      {},
+      {},
+      undefined,
+      'same-origin',
+    );
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.credentials).toBe('same-origin');
+  });
+
+  it('should use configured fetchCredentials: omit', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {}, {}, undefined, 'omit');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    const fetchCall = mockFetch.mock.calls[0];
+    const [, options] = fetchCall ?? [];
+    expect(options?.credentials).toBe('omit');
+  });
+});

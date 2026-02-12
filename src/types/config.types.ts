@@ -64,6 +64,14 @@ export interface Config {
        * @example { 'X-Brand': 'my-brand', 'X-Tenant-Id': 'tenant-123' }
        */
       headers?: Record<string, string>;
+      /**
+       * Controls whether cookies and credentials are sent with fetch requests.
+       * - `'include'`: Always send cookies (even cross-origin) — required for cookie-based auth
+       * - `'same-origin'`: Only send cookies for same-origin requests
+       * - `'omit'`: Never send cookies
+       * @default 'include'
+       */
+      fetchCredentials?: RequestCredentials;
     };
   };
 }

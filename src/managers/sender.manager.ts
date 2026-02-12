@@ -95,6 +95,7 @@ export class SenderManager extends StateManager {
   private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
   private recoveryInProgress = false;
   private lastMetadataTimestamp = 0;
+  private readonly fetchCredentials: RequestCredentials;
   private readonly pendingControllers = new Set<AbortController>();
 
   /**
@@ -118,6 +119,7 @@ export class SenderManager extends StateManager {
     transformers: TransformerMap = {},
     staticHeaders: Record<string, string> = {},
     customHeadersProvider?: CustomHeadersProvider,
+    fetchCredentials: RequestCredentials = 'include',
   ) {
     super();
 
@@ -131,6 +133,7 @@ export class SenderManager extends StateManager {
     this.transformers = transformers;
     this.staticHeaders = staticHeaders;
     this.customHeadersProvider = customHeadersProvider;
+    this.fetchCredentials = fetchCredentials;
   }
 
   /**
@@ -227,6 +230,11 @@ export class SenderManager extends StateManager {
    * to sendBeacon requests due to browser API limitations. The sendBeacon API only supports
    * Content-Type header via Blob. For scenarios requiring custom headers, ensure async
    * sends complete before page unload.
+   *
+   * **Credentials Limitation**: The `fetchCredentials` config option is NOT applied to
+   * sendBeacon requests. `sendBeacon()` always sends cookies (equivalent to `credentials: 'include'`)
+   * regardless of the configured value. If `fetchCredentials` is set to `'omit'` or `'same-origin'`,
+   * only async `fetch()` calls honor that setting.
    *
    * @param body - Event queue to send
    * @returns `true` if send succeeded or was skipped, `false` if failed
@@ -718,7 +726,7 @@ export class SenderManager extends StateManager {
         method: 'POST',
         body: payload,
         keepalive: true,
-        credentials: 'include',
+        credentials: this.fetchCredentials,
         signal: controller.signal,
         headers: {
           ...customHeaders,
