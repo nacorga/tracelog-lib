@@ -5,6 +5,31 @@
 
 
 
+
+## [2.5.0] - 2026-02-12
+
+### ✨ Features
+
+- Add fetchCredentials configuration with validation and update related components ([4fc35a4](../../commit/4fc35a43d6aa2436e1d215e117c58328ff68ef31))
+
+### 📚 Documentation
+
+- Add fetchCredentials support to custom integrations and update related documentation ([a1eaacf](../../commit/a1eaacfff4942c86ff7ee5b260660a56558ff615))
+
+### 🔧 Other Changes
+
+- Merge pull request #85 from nacorga/release/20260212.1 ([ecc2162](../../commit/ecc216205603fd69ff38dd71e837e96a5b5befce))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.4.0...v2.5.0
+
+
 ## [2.4.0] - 2026-02-10
 
 ### ✨ Features
