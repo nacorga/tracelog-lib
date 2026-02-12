@@ -166,7 +166,7 @@ interface Config {
   primaryScrollSelector?: string;    // Override auto-detection
   integrations?: {
     tracelog?: { projectId: string };
-    custom?: { collectApiUrl: string; allowHttp?: boolean };
+    custom?: { collectApiUrl: string; allowHttp?: boolean; headers?: Record<string, string>; fetchCredentials?: RequestCredentials };
   };
 }
 ```

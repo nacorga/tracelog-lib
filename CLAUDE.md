@@ -142,7 +142,8 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect',
-      headers: { 'X-Tenant-Id': 'tenant-123' }  // Optional static headers
+      headers: { 'X-Tenant-Id': 'tenant-123' },  // Optional static headers
+      fetchCredentials: 'include'                  // Optional: 'include' | 'same-origin' | 'omit'
     }
   }
 });
@@ -206,7 +207,8 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect',
-      headers: { 'X-Tenant-Id': 'tenant-123' }
+      headers: { 'X-Tenant-Id': 'tenant-123' },
+      fetchCredentials: 'include' // Controls cookie/credential policy for fetch()
     }
   }
 });

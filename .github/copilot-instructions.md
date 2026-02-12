@@ -183,7 +183,7 @@ All configuration options are optional. Review for:
   - **maxTrackedElements**: Max elements to track (default: 50)
 - **integrations**: Optional backend integrations (tracelog, custom)
   - **tracelog**: `{ projectId: string }` - TraceLog SaaS integration
-  - **custom**: `{ collectApiUrl: string; allowHttp?: boolean }` - Custom backend
+  - **custom**: `{ collectApiUrl: string; allowHttp?: boolean; headers?: Record<string, string>; fetchCredentials?: RequestCredentials }` - Custom backend
 
 ## Security & Privacy
 

@@ -774,7 +774,8 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect',
-      allowHttp: false  // Only true for local testing
+      allowHttp: false,          // Only true for local testing
+      fetchCredentials: 'include' // Cookie policy: 'include' | 'same-origin' | 'omit'
     }
   }
 });

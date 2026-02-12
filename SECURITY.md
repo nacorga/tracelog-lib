@@ -313,7 +313,8 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://your-api.com/collect',
-      allowHttp: false, // NEVER enable in production
+      allowHttp: false,            // NEVER enable in production
+      fetchCredentials: 'include', // Use 'omit' if cookies are not needed (privacy-conscious)
     }
   }
 });
