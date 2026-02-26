@@ -264,9 +264,19 @@ export const RETRY_BACKOFF_JITTER_MS = 100;
 export const MAX_SEND_INTERVAL_MS = 120000;
 
 /**
- * Maximum consecutive send failures before stopping the send scheduler
- * After this many failures, the scheduler stops until new events arrive
- * Each failure includes up to 2 per-request retries in SenderManager
+ * Maximum consecutive send failures before entering cooldown mode.
+ *
+ * After this many failures:
+ * - **Batch-threshold sends** (50+ events) are suppressed to prevent rapid retries
+ * - **Periodic scheduler** continues at MAX_SEND_INTERVAL_MS (2 min) for auto-recovery
+ * - Counter resets on successful send, stop(), or page reload
+ *
+ * This implements a circuit breaker pattern:
+ * - Closed (0 failures): normal 10s send interval
+ * - Half-open (1-4 failures): exponential backoff (20s, 40s, 80s, 120s)
+ * - Open (5 failures): cooldown retries every 2 min, batch threshold blocked
+ *
+ * Each failure includes up to 2 per-request retries in SenderManager.
  */
 export const MAX_CONSECUTIVE_SEND_FAILURES = 5;
 

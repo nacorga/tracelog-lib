@@ -834,6 +834,13 @@ export class EventManager extends StateManager {
       return isSync ? true : Promise.resolve(true);
     }
 
+    // Prevent concurrent async sends — if a send is already in-flight
+    // (e.g., sendEventsQueue with retries), skip to avoid duplicate requests
+    if (!isSync && this.sendInProgress) {
+      log('debug', 'Async flush skipped: send already in progress');
+      return Promise.resolve(false);
+    }
+
     const body = this.buildEventsPayload();
     const eventsToSend = [...this.eventsQueue];
     const eventIds = eventsToSend.map((e) => e.id);
@@ -939,8 +946,8 @@ export class EventManager extends StateManager {
           });
         }
       } else {
-        this.consecutiveSendFailures++;
-        // All integrations failed - keep events in queue for retry
+        this.consecutiveSendFailures = Math.min(this.consecutiveSendFailures + 1, MAX_CONSECUTIVE_SEND_FAILURES);
+        // All integrations failed - keep events in queue for retry via periodic backoff
         log('debug', 'Periodic send complete failure, events kept in queue for retry', {
           data: { eventCount: eventsToSend.length },
         });
@@ -1164,19 +1171,18 @@ export class EventManager extends StateManager {
       });
     }
 
-    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) {
-      this.consecutiveSendFailures = 0;
-    }
     this.scheduleSendTimeout();
 
-    if (this.eventsQueue.length >= BATCH_SIZE_THRESHOLD) {
+    if (
+      this.eventsQueue.length >= BATCH_SIZE_THRESHOLD &&
+      this.consecutiveSendFailures < MAX_CONSECUTIVE_SEND_FAILURES
+    ) {
       void this.sendEventsQueue();
     }
   }
 
   private scheduleSendTimeout(): void {
     if (this.sendTimeoutId !== null) return;
-    if (this.consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) return;
 
     const delay = this.calculateSendDelay();
     this.sendTimeoutId = window.setTimeout(() => {
