@@ -20,3 +20,19 @@ export class PermanentError extends Error {
     }
   }
 }
+
+/**
+ * Represents a timeout error where the server likely received the request
+ * but the response took too long. Events should NOT be persisted for retry
+ * since the server most likely already processed them.
+ */
+export class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TimeoutError';
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, TimeoutError);
+    }
+  }
+}

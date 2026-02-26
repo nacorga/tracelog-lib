@@ -1469,3 +1469,279 @@ describe('SenderManager - fetchCredentials', () => {
     expect(options?.credentials).toBe('omit');
   });
 });
+
+describe('SenderManager - TimeoutError Handling', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+    vi.useRealTimers();
+  });
+
+  it('should convert AbortController timeout into TimeoutError (not persist events)', async () => {
+    // Arrange — fetch that never resolves, triggers abort on signal
+    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        }
+      });
+    });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    const failureCallback = vi.fn();
+
+    // Act — advance past REQUEST_TIMEOUT_MS (15s) for all 3 attempts + backoff
+    const sendPromise = sender.sendEventsQueue(eventsQueue, { onFailure: failureCallback });
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    const success = await sendPromise;
+
+    // Assert — TimeoutError path: returns false, does NOT persist, clears storage
+    expect(success).toBe(false);
+    expect(failureCallback).toHaveBeenCalledTimes(1);
+
+    const storageKey = 'tlog:test-user-id:queue:custom';
+    expect(localStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it('should call clearPersistedEvents (not persistEvents) when all attempts timeout', async () => {
+    // Arrange — mock send() to throw TimeoutError directly
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const { TimeoutError } = await import('../../../src/types');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
+    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
+
+    // Mock private send() to throw TimeoutError (simulates all attempts timed out)
+    vi.spyOn(sender as any, 'send').mockRejectedValue(
+      new TimeoutError('All retry attempts timed out (server likely received the request)'),
+    );
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    const success = await sender.sendEventsQueue(eventsQueue);
+
+    // Assert — TimeoutError: clearPersistedEvents called, persistEvents NOT called
+    expect(success).toBe(false);
+    expect(clearSpy).toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
+  });
+
+  it('should call persistEvents (not clearPersistedEvents) when failures are mixed', async () => {
+    // Arrange — mock send() to return false (simulates mixed failures where allTimeouts=false)
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
+    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
+
+    // Mock private send() to return false (mixed failures — not all timeouts)
+    vi.spyOn(sender as any, 'send').mockResolvedValue(false);
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    const success = await sender.sendEventsQueue(eventsQueue);
+
+    // Assert — mixed failures (send returned false): persistEvents called, not clear
+    expect(success).toBe(false);
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  it('should clear persisted events when recovery times out (recoverPersistedEvents)', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const { TimeoutError } = await import('../../../src/types');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Persist events using the sender's own internal key (via persistEvents)
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'persisted_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+    (sender as any).persistEvents(eventsQueue);
+
+    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
+
+    // Mock private send() to throw TimeoutError
+    vi.spyOn(sender as any, 'send').mockRejectedValue(
+      new TimeoutError('All retry attempts timed out (server likely received the request)'),
+    );
+
+    const failureCallback = vi.fn();
+
+    // Act
+    await sender.recoverPersistedEvents({ onFailure: failureCallback });
+
+    // Assert — recovery timeout: clearPersistedEvents called, onFailure invoked
+    expect(clearSpy).toHaveBeenCalled();
+    expect(failureCallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call onFailure callback on timeout (not onSuccess)', async () => {
+    // Arrange
+    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        }
+      });
+    });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    const successCallback = vi.fn();
+    const failureCallback = vi.fn();
+
+    // Act
+    const sendPromise = sender.sendEventsQueue(eventsQueue, {
+      onSuccess: successCallback,
+      onFailure: failureCallback,
+    });
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await sendPromise;
+
+    // Assert
+    expect(successCallback).not.toHaveBeenCalled();
+    expect(failureCallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry all 3 attempts before concluding timeout (not bail early)', async () => {
+    // Arrange
+    const fetchSpy = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        }
+      });
+    });
+    global.fetch = fetchSpy;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    const sendPromise = sender.sendEventsQueue(eventsQueue);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await sendPromise;
+
+    // Assert — all 3 attempts made (initial + 2 retries)
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('should track allTimeouts correctly in send() — all timeouts throws TimeoutError', async () => {
+    // Arrange — fetch that always times out via AbortController
+    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        }
+      });
+    });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
+    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    const sendPromise = sender.sendEventsQueue(eventsQueue);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    const success = await sendPromise;
+
+    // Assert — TimeoutError: clearPersistedEvents called, persistEvents NOT called
+    expect(success).toBe(false);
+    expect(clearSpy).toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
+  });
+});

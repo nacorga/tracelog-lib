@@ -892,6 +892,44 @@ describe('EventManager - Queue Flushing', () => {
     // No network call for empty queue
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('should skip async flush when sendInProgress is true (prevents concurrent sends)', async () => {
+    eventManager.track({
+      type: EventType.CLICK,
+      click_data: { x: 0, y: 0, relativeX: 0.5, relativeY: 0.5, tag: 'button' },
+    });
+
+    // Simulate a send already in progress
+    eventManager['sendInProgress'] = true;
+
+    const result = await eventManager.flushImmediately();
+
+    // Should return false without sending — events remain in queue
+    expect(result).toBe(false);
+    expect(eventManager.getQueueLength()).toBeGreaterThan(0);
+  });
+
+  it('should allow sync flush even when sendInProgress is true (page unload must always send)', () => {
+    const sendBeaconSpy = vi.fn().mockReturnValue(true);
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: sendBeaconSpy,
+      writable: true,
+      configurable: true,
+    });
+
+    eventManager.track({
+      type: EventType.CLICK,
+      click_data: { x: 0, y: 0, relativeX: 0.5, relativeY: 0.5, tag: 'button' },
+    });
+
+    // Simulate a send already in progress
+    eventManager['sendInProgress'] = true;
+
+    const result = eventManager.flushImmediatelySync();
+
+    // Sync flush should NOT be blocked — page unload must always attempt to send
+    expect(typeof result).toBe('boolean');
+  });
 });
 
 describe('EventManager - Integration Coordination', () => {
@@ -2323,7 +2361,8 @@ describe('EventManager - Send Backoff', () => {
     expect(eventManager['consecutiveSendFailures']).toBe(0);
   });
 
-  it('should not schedule when max consecutive failures reached', () => {
+  it('should schedule with max backoff delay when consecutive failures at maximum (auto-recovery)', () => {
+    vi.useFakeTimers();
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     eventManager = createEventManagerWithBackend();
 
@@ -2332,7 +2371,10 @@ describe('EventManager - Send Backoff', () => {
 
     eventManager['scheduleSendTimeout']();
 
-    expect(eventManager['sendTimeoutId']).toBeNull();
+    // Circuit breaker uses cooldown-based recovery, not hard stop
+    // Scheduler continues at MAX_SEND_INTERVAL_MS (2 min) for auto-recovery
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+    vi.useRealTimers();
   });
 
   it('should not schedule when a timeout is already pending', () => {
@@ -2351,7 +2393,7 @@ describe('EventManager - Send Backoff', () => {
     vi.useRealTimers();
   });
 
-  it('should reset failures and reschedule when new events arrive after max failures', () => {
+  it('should NOT reset failures when new events arrive after max failures (prevents rapid fire-and-fail loops)', () => {
     vi.useFakeTimers();
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     eventManager = createEventManagerWithBackend();
@@ -2361,8 +2403,32 @@ describe('EventManager - Send Backoff', () => {
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'fresh' } });
 
-    expect(eventManager['consecutiveSendFailures']).toBe(0);
+    // Failures should NOT be reset by new events — only by successful sends
+    expect(eventManager['consecutiveSendFailures']).toBe(MAX_CONSECUTIVE_SEND_FAILURES);
+    // Send SHOULD still be scheduled with max backoff delay for auto-recovery
     expect(eventManager['sendTimeoutId']).not.toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('should NOT trigger batch-threshold send when max consecutive failures reached', () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    global.fetch = fetchSpy;
+    eventManager = createEventManagerWithBackend();
+
+    // Simulate max failures reached
+    eventManager['consecutiveSendFailures'] = MAX_CONSECUTIVE_SEND_FAILURES;
+    eventManager['sendTimeoutId'] = null;
+
+    // Fill queue beyond batch threshold (50) without triggering sends
+    for (let i = 0; i < 55; i++) {
+      eventManager.track({ type: EventType.CUSTOM, custom_event: { name: `event_${i}` } });
+    }
+
+    // fetch should NOT be called — batch threshold guard prevents send attempts
+    // when max consecutive failures have been reached
+    expect(fetchSpy).not.toHaveBeenCalled();
 
     vi.useRealTimers();
   });

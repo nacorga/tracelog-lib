@@ -15,6 +15,7 @@ import {
   EventsQueue,
   SpecialApiUrl,
   PermanentError,
+  TimeoutError,
   TransformerMap,
   CustomHeadersProvider,
 } from '../types';
@@ -54,7 +55,7 @@ interface SendCallbacks {
  * - **4xx Errors** (permanent): Logged once per minute (throttled), events discarded, no retries
  * - **5xx Errors** (transient): Retried up to 2 times with exponential backoff, then persisted
  * - **Network Errors** (transient): Retried up to 2 times with exponential backoff, then persisted
- * - **Timeout** (transient): Retried up to 2 times with exponential backoff, then persisted
+ * - **Timeout** (transient): Retried up to 2 times with exponential backoff; if ALL attempts timeout, events are NOT persisted (server likely received them)
  *
  * **Storage Keys**:
  * - **Standalone**: `tlog:{userId}:queue` (single queue)
@@ -291,7 +292,8 @@ export class SenderManager extends StateManager {
    *
    * **Error Handling**:
    * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
-   * - **Transient errors** (5xx, network, timeout): Events persisted for recovery
+   * - **Timeout errors** (all attempts timed out): Events NOT persisted (server likely received them)
+   * - **Transient errors** (5xx, network, mixed): Events persisted for recovery
    *
    * **Important**: Events are NOT retried in-session. Persistence is for
    * recovery on next page load via `recoverPersistedEvents()`.
@@ -319,6 +321,16 @@ export class SenderManager extends StateManager {
     } catch (error) {
       if (error instanceof PermanentError) {
         this.logPermanentError('Permanent error, not retrying', error);
+        this.clearPersistedEvents();
+        callbacks?.onFailure?.();
+        return false;
+      }
+
+      if (error instanceof TimeoutError) {
+        log(
+          'debug',
+          `All attempts timed out, skipping persistence (server likely received events)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        );
         this.clearPersistedEvents();
         callbacks?.onFailure?.();
         return false;
@@ -407,6 +419,16 @@ export class SenderManager extends StateManager {
     } catch (error) {
       if (error instanceof PermanentError) {
         this.logPermanentError('Permanent error during recovery, clearing persisted events', error);
+        this.clearPersistedEvents();
+        callbacks?.onFailure?.();
+        return;
+      }
+
+      if (error instanceof TimeoutError) {
+        log(
+          'debug',
+          `Recovery timed out, clearing persisted events (server likely received them)${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        );
         this.clearPersistedEvents();
         callbacks?.onFailure?.();
         return;
@@ -593,6 +615,7 @@ export class SenderManager extends StateManager {
    * @param body - Event queue to send
    * @returns Promise resolving to true if send succeeded, false if all retries exhausted
    * @throws PermanentError for 4xx errors (caller should not retry)
+   * @throws TimeoutError when all retry attempts timed out (caller should not persist)
    */
   private async send(body: EventsQueue): Promise<boolean> {
     if (this.shouldSkipSend()) {
@@ -628,6 +651,7 @@ export class SenderManager extends StateManager {
     }
 
     const { url, payload } = this.prepareRequest(transformedBody);
+    let allTimeouts = true;
 
     // Retry loop: initial attempt + MAX_SEND_RETRIES additional attempts
     for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
@@ -659,6 +683,10 @@ export class SenderManager extends StateManager {
           throw error;
         }
 
+        if (!(error instanceof TimeoutError)) {
+          allTimeouts = false;
+        }
+
         // Log error with retry context
         log(
           isLastAttempt ? 'error' : 'warn',
@@ -680,7 +708,12 @@ export class SenderManager extends StateManager {
           continue;
         }
 
-        // All retries exhausted
+        // All retries exhausted — if every attempt timed out, server likely
+        // received the request so we throw TimeoutError to skip persistence
+        if (allTimeouts) {
+          throw new TimeoutError('All retry attempts timed out (server likely received the request)');
+        }
+
         return false;
       }
     }
@@ -697,24 +730,28 @@ export class SenderManager extends StateManager {
    *
    * **Timeout Behavior**:
    * - 10-second timeout via AbortController (REQUEST_TIMEOUT_MS constant)
-   * - Aborted requests throw network error (triggers retry in caller)
+   * - Aborted requests throw TimeoutError (caller decides persistence)
    *
    * **Error Classification**:
    * - 4xx (except 408, 429): PermanentError thrown → no retries
+   * - Timeout: TimeoutError thrown → caller tracks for persistence decision
    * - 408, 429, 5xx, network: Standard Error thrown → triggers retry
    *
    * @param url - API endpoint URL
    * @param payload - JSON-stringified EventsQueue body
    * @returns Response object if successful
    * @throws PermanentError for unrecoverable 4xx errors
-   * @throws Error for transient errors (5xx, timeout, network)
+   * @throws TimeoutError when request times out (server likely received it)
+   * @throws Error for transient errors (5xx, network)
    * @private
    */
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
     const controller = new AbortController();
     this.pendingControllers.add(controller);
+    let didTimeout = false;
 
     const timeoutId = setTimeout(() => {
+      didTimeout = true;
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
 
@@ -749,6 +786,11 @@ export class SenderManager extends StateManager {
       }
 
       return response;
+    } catch (error) {
+      if (didTimeout) {
+        throw new TimeoutError('Request timed out (server likely received the request)');
+      }
+      throw error;
     } finally {
       clearTimeout(timeoutId);
       this.pendingControllers.delete(controller);
