@@ -6,6 +6,33 @@
 
 
 
+
+## [2.5.1] - 2026-02-26
+
+### ✨ Features
+
+- Implement TimeoutError handling in SenderManager and EventManager; update related tests ([3f013cd](../../commit/3f013cda5023a3b92975976e86003a281fb89ec7))
+
+### 🐛 Bug Fixes
+
+- Handle PermanentError in SenderManager to ensure proper error propagation ([5d48899](../../commit/5d48899231abd9a66b43c7fcd1f9ffd08cf1fb04))
+
+### 🔧 Other Changes
+
+- Merge pull request #87 from nacorga/release/20260226.1 ([e41cca8](../../commit/e41cca8186eb04484ed4bf61da2a5f7ec33eabcf))
+- Update dependencies in package-lock.json ([a0f8618](../../commit/a0f8618bc6b369a5aac86e8bd48559f051d6707d))
+- Merge pull request #86 from nacorga/fix/sender-timing ([3148922](../../commit/31489223323767c50634c6cc54b701a1b49ad738))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.5.0...v2.5.1
+
+
 ## [2.5.0] - 2026-02-12
 
 ### ✨ Features
