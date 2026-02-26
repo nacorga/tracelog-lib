@@ -787,6 +787,9 @@ export class SenderManager extends StateManager {
 
       return response;
     } catch (error) {
+      if (error instanceof PermanentError) {
+        throw error;
+      }
       if (didTimeout) {
         throw new TimeoutError('Request timed out (server likely received the request)');
       }
