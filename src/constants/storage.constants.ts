@@ -92,6 +92,18 @@ export const SESSION_RECOVERY_KEY = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:recovery` : `${STORAGE_BASE_KEY}:recovery`;
 
 /**
+ * Generates sessionStorage key for session handoff during external redirects.
+ *
+ * Used to preserve the session ID across payment processor redirects (PayPal, Stripe, Klarna, etc.)
+ * so the returning user resumes the same session instead of creating a phantom session.
+ *
+ * @param id - Project identifier
+ * @returns sessionStorage key for session handoff (e.g., 'tlog:project123:handoff')
+ */
+export const SESSION_HANDOFF_KEY = (id: string): string =>
+  id ? `${STORAGE_BASE_KEY}:${id}:handoff` : `${STORAGE_BASE_KEY}:handoff`;
+
+/**
  * Generates BroadcastChannel name for cross-tab communication
  *
  * @param id - Project identifier

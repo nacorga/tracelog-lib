@@ -111,6 +111,20 @@ export class SessionHandler extends StateManager {
   }
 
   /**
+   * Preserves the current session for recovery after external redirects.
+   *
+   * @returns true if session was preserved, false if no active session
+   */
+  preserveSession(): boolean {
+    if (!this.sessionManager || this.destroyed) {
+      log('debug', 'Cannot preserve session: no active session manager');
+      return false;
+    }
+
+    return this.sessionManager.preserveSession();
+  }
+
+  /**
    * Stops session tracking by cleaning up resources.
    *
    * **Purpose**: Terminates session tracking and removes all listeners and timers.

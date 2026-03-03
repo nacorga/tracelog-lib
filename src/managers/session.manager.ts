@@ -1,4 +1,10 @@
-import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
+import {
+  BROADCAST_CHANNEL_NAME,
+  DEFAULT_SESSION_TIMEOUT,
+  SESSION_HANDOFF_KEY,
+  SESSION_HANDOFF_TTL_MS,
+  SESSION_STORAGE_KEY,
+} from '../constants';
 import { EventType, UTM } from '../types';
 import { getExternalReferrer, getUTMParameters, log } from '../utils';
 import { StateManager } from './state.manager';
@@ -185,6 +191,51 @@ export class SessionManager extends StateManager {
     return storedSession.id;
   }
 
+  /**
+   * Attempts to recover a session from a handoff stored in sessionStorage.
+   *
+   * Handoffs are written by preserveSession() before external redirects (e.g., payment processors).
+   * The handoff is single-use: consumed (deleted) immediately after reading.
+   *
+   * @returns The handoff session ID if valid and within TTL, null otherwise
+   */
+  private recoverHandoff(): string | null {
+    const handoffKey = SESSION_HANDOFF_KEY(this.getProjectId());
+    const raw = this.storageManager.getSessionItem(handoffKey);
+
+    this.storageManager.removeSessionItem(handoffKey);
+
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const handoff = JSON.parse(raw) as { sessionId: string; timestamp: number };
+
+      if (!handoff.sessionId || typeof handoff.timestamp !== 'number') {
+        return null;
+      }
+
+      if (!SESSION_ID_PATTERN.test(handoff.sessionId)) {
+        log('warn', 'Invalid session ID format in handoff, discarding');
+        return null;
+      }
+
+      if (Date.now() - handoff.timestamp > SESSION_HANDOFF_TTL_MS) {
+        log('debug', 'Session handoff expired, discarding');
+        return null;
+      }
+
+      log('debug', 'Session recovered from handoff', {
+        data: { sessionId: handoff.sessionId },
+      });
+
+      return handoff.sessionId;
+    } catch {
+      return null;
+    }
+  }
+
   private persistSession(sessionId: string, lastActivity: number = Date.now(), referrer?: string, utm?: UTM): void {
     this.saveStoredSession({
       id: sessionId,
@@ -289,8 +340,15 @@ export class SessionManager extends StateManager {
       return;
     }
 
-    const recoveredSessionId = this.recoverSession();
+    const recoveredFromStorage = this.recoverSession();
+    const recoveredSessionId = recoveredFromStorage ?? this.recoverHandoff();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
+
+    // Always clean up handoff key to prevent orphaned entries in sessionStorage
+    // (when normal recovery succeeds, recoverHandoff is never called due to short-circuit)
+    if (recoveredFromStorage) {
+      this.storageManager.removeSessionItem(SESSION_HANDOFF_KEY(this.getProjectId()));
+    }
 
     // Capture or recover attribution data (referrer/UTM)
     let sessionReferrer: string;
@@ -542,6 +600,38 @@ export class SessionManager extends StateManager {
 
     this.needsRenewal = false;
     this.isTracking = false;
+  }
+
+  /**
+   * Preserves the current session ID in sessionStorage for recovery after external redirects.
+   *
+   * Call this before redirecting to an external payment processor (PayPal, Stripe, Klarna, etc.)
+   * to ensure the user resumes the same session on return instead of creating a phantom session.
+   *
+   * The handoff is:
+   * - Stored in sessionStorage (survives same-tab navigation, cleared on tab close)
+   * - Single-use (consumed on next session initialization)
+   * - TTL-bounded (expires after 10 minutes)
+   *
+   * @returns true if the session was preserved, false if no active session exists
+   */
+  preserveSession(): boolean {
+    const sessionId = this.get('sessionId');
+
+    if (!sessionId) {
+      log('debug', 'No active session to preserve');
+      return false;
+    }
+
+    const handoffKey = SESSION_HANDOFF_KEY(this.getProjectId());
+
+    this.storageManager.setSessionItem(handoffKey, JSON.stringify({ sessionId, timestamp: Date.now() }));
+
+    log('debug', 'Session preserved for handoff', {
+      data: { sessionId },
+    });
+
+    return true;
   }
 
   /**

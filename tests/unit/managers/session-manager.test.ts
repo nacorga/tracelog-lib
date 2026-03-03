@@ -5,10 +5,16 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment, advanceTimers } from '../../helpers/setup.helper';
-import { initTestBridge, destroyTestBridge, getManagers } from '../../helpers/bridge.helper';
+import {
+  initTestBridge,
+  destroyTestBridge,
+  getManagers,
+  getHandlers,
+  getQueueState,
+} from '../../helpers/bridge.helper';
 import { setupMockBroadcastChannel } from '../../helpers/mocks.helper';
-import { SESSION_STORAGE_KEY } from '../../../src/constants/storage.constants';
-import { DEFAULT_SESSION_TIMEOUT } from '../../../src/constants/config.constants';
+import { SESSION_STORAGE_KEY, SESSION_HANDOFF_KEY } from '../../../src/constants/storage.constants';
+import { DEFAULT_SESSION_TIMEOUT, SESSION_HANDOFF_TTL_MS } from '../../../src/constants/config.constants';
 
 describe('SessionManager - Session Lifecycle', () => {
   beforeEach(() => {
@@ -855,5 +861,230 @@ describe('SessionManager - Session Renewal Mode', () => {
     // The pending event should have been flushed
     // EventManager should be defined and operational
     expect(eventManager).toBeDefined();
+  });
+});
+
+describe('SessionManager - Session Handoff', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+  });
+
+  describe('preserveSession()', () => {
+    it('should store session data in sessionStorage', async () => {
+      const bridge = await initTestBridge();
+      const sessionId = bridge.get('sessionId');
+      const { session } = getHandlers(bridge);
+
+      session!.preserveSession();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      const raw = sessionStorage.getItem(handoffKey);
+      expect(raw).toBeTruthy();
+
+      const handoff = JSON.parse(raw!);
+      expect(handoff.sessionId).toBe(sessionId);
+      expect(typeof handoff.timestamp).toBe('number');
+    });
+
+    it('should return true when session is active', async () => {
+      const bridge = await initTestBridge();
+      const { session } = getHandlers(bridge);
+
+      const result = session!.preserveSession();
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false when no active session (after timeout)', async () => {
+      vi.useFakeTimers();
+
+      const bridge = await initTestBridge({ sessionTimeout: 1000 });
+      const { session } = getHandlers(bridge);
+
+      await advanceTimers(1100);
+
+      expect(bridge.get('sessionId')).toBeNull();
+
+      const result = session!.preserveSession();
+
+      expect(result).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it('should be idempotent (multiple calls overwrite safely)', async () => {
+      const bridge = await initTestBridge();
+      const sessionId = bridge.get('sessionId');
+      const { session } = getHandlers(bridge);
+
+      session!.preserveSession();
+      session!.preserveSession();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      const raw = sessionStorage.getItem(handoffKey);
+      const handoff = JSON.parse(raw!);
+
+      expect(handoff.sessionId).toBe(sessionId);
+    });
+  });
+
+  describe('recoverHandoff()', () => {
+    it('should recover session from handoff when localStorage is empty', async () => {
+      const bridge1 = await initTestBridge();
+      const sessionId1 = bridge1.get('sessionId');
+
+      bridge1.destroy(true);
+      localStorage.clear();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      sessionStorage.setItem(handoffKey, JSON.stringify({ sessionId: sessionId1, timestamp: Date.now() }));
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const bridge2 = await initTestBridge();
+
+      expect(bridge2.get('sessionId')).toBe(sessionId1);
+    });
+
+    it('should consume handoff after recovery (single-use)', async () => {
+      const bridge1 = await initTestBridge();
+      const sessionId1 = bridge1.get('sessionId');
+
+      bridge1.destroy(true);
+      localStorage.clear();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      sessionStorage.setItem(handoffKey, JSON.stringify({ sessionId: sessionId1, timestamp: Date.now() }));
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await initTestBridge();
+
+      expect(sessionStorage.getItem(handoffKey)).toBeNull();
+    });
+
+    it('should not recover expired handoff', async () => {
+      const bridge1 = await initTestBridge();
+      const sessionId1 = bridge1.get('sessionId');
+
+      bridge1.destroy(true);
+      localStorage.clear();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      sessionStorage.setItem(
+        handoffKey,
+        JSON.stringify({ sessionId: sessionId1, timestamp: Date.now() - SESSION_HANDOFF_TTL_MS - 1000 }),
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const bridge2 = await initTestBridge();
+
+      expect(bridge2.get('sessionId')).not.toBe(sessionId1);
+      expect(bridge2.get('sessionId')).toMatch(/^\d+-[a-z0-9]{9}$/);
+    });
+
+    it('should handle corrupted handoff data gracefully', async () => {
+      localStorage.clear();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      sessionStorage.setItem(handoffKey, 'not-valid-json');
+
+      const bridge = await initTestBridge();
+
+      expect(bridge.get('sessionId')).toBeTruthy();
+      expect(bridge.get('sessionId')).toMatch(/^\d+-[a-z0-9]{9}$/);
+    });
+
+    it('should reject handoff with invalid session ID format', async () => {
+      localStorage.clear();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      sessionStorage.setItem(handoffKey, JSON.stringify({ sessionId: 'invalid-format', timestamp: Date.now() }));
+
+      const bridge = await initTestBridge();
+
+      expect(bridge.get('sessionId')).toBeTruthy();
+      expect(bridge.get('sessionId')).toMatch(/^\d+-[a-z0-9]{9}$/);
+      expect(bridge.get('sessionId')).not.toBe('invalid-format');
+    });
+
+    it('should prioritize normal recovery over handoff', async () => {
+      const bridge1 = await initTestBridge();
+      const sessionId1 = bridge1.get('sessionId');
+      const { storage } = getManagers(bridge1);
+
+      const storageKey = SESSION_STORAGE_KEY('custom');
+      const storedData = storage?.getItem(storageKey);
+
+      bridge1.destroy(false);
+
+      if (storedData !== null && storedData !== undefined) {
+        localStorage.setItem(storageKey, storedData);
+      }
+
+      // Write a different session ID to handoff
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      const differentSessionId = `${Date.now()}-zzzzzzzzz`;
+      sessionStorage.setItem(handoffKey, JSON.stringify({ sessionId: differentSessionId, timestamp: Date.now() }));
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const bridge2 = await initTestBridge();
+
+      // Normal recovery should win
+      expect(bridge2.get('sessionId')).toBe(sessionId1);
+    });
+
+    it('should clean up orphaned handoff when normal recovery succeeds', async () => {
+      const bridge1 = await initTestBridge();
+      const { storage } = getManagers(bridge1);
+
+      const storageKey = SESSION_STORAGE_KEY('custom');
+      const storedData = storage?.getItem(storageKey);
+
+      bridge1.destroy(false);
+
+      if (storedData !== null && storedData !== undefined) {
+        localStorage.setItem(storageKey, storedData);
+      }
+
+      // Write handoff that should be cleaned up
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      sessionStorage.setItem(handoffKey, JSON.stringify({ sessionId: 'unused', timestamp: Date.now() }));
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await initTestBridge();
+
+      // Orphaned handoff should be cleaned up
+      expect(sessionStorage.getItem(handoffKey)).toBeNull();
+    });
+
+    it('should not emit SESSION_START when recovering from handoff', async () => {
+      const bridge1 = await initTestBridge();
+      const sessionId1 = bridge1.get('sessionId');
+
+      bridge1.destroy(true);
+      localStorage.clear();
+
+      const handoffKey = SESSION_HANDOFF_KEY('custom');
+      sessionStorage.setItem(handoffKey, JSON.stringify({ sessionId: sessionId1, timestamp: Date.now() }));
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const bridge2 = await initTestBridge();
+
+      const events = getQueueState(bridge2).events;
+      const sessionStartEvents = events.filter((e) => e.type === 'session_start');
+
+      expect(sessionStartEvents).toHaveLength(0);
+      expect(bridge2.get('sessionId')).toBe(sessionId1);
+    });
   });
 });

@@ -325,6 +325,21 @@ export class App extends StateManager {
   }
 
   /**
+   * Preserves the current session for recovery after external redirects.
+   *
+   * @returns true if session was preserved, false if no active session
+   * @internal Called from api.preserveSession()
+   */
+  public preserveSession(): boolean {
+    if (!this.handlers.session) {
+      log('warn', 'Cannot preserve session: TraceLog not initialized');
+      return false;
+    }
+
+    return this.handlers.session.preserveSession();
+  }
+
+  /**
    * Validates metadata object structure and values.
    *
    * @param metadata - The metadata object to validate
