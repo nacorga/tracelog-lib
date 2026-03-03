@@ -131,6 +131,8 @@ tracelog.destroy();
 | `setCustomHeaders(provider)` | Add custom HTTP headers to requests (see [Custom Headers](#custom-headers)) |
 | `removeCustomHeaders()` | Remove custom headers provider |
 | `isInitialized()` | Check initialization status |
+| `getSessionId()` | Get current session ID (or null) |
+| `preserveSession()` | Preserve session for recovery after external redirects |
 | `setQaMode(enabled)` | Enable/disable QA mode (console logging) |
 | `destroy()` | Stop tracking and cleanup |
 
@@ -878,6 +880,26 @@ await tracelog.init({ /* same config */ });
 ```
 
 **→ [Full Error Handling Reference](./API_REFERENCE.md#error-handling)**
+
+### Session Preservation (External Redirects)
+
+When redirecting users to external payment processors (PayPal, Stripe, Klarna), the session is normally lost on return. Call `preserveSession()` before the redirect to ensure continuity:
+
+```typescript
+// Before redirecting to payment
+tracelog.preserveSession();
+window.location.href = paymentUrl;
+
+// On the confirmation page, init() automatically recovers the session
+const { sessionId } = await tracelog.init({ /* same config */ });
+tracelog.event('purchase', { orderId: '12345', amount: 99.99 });
+// ✅ Same session as before the redirect
+```
+
+- Stored in `sessionStorage` (survives same-tab navigation)
+- Single-use (consumed on next `init()` call)
+- TTL-bounded (10 minutes, shorter than session timeout)
+- Returns `true` if preserved, `false` if not initialized
 
 ---
 

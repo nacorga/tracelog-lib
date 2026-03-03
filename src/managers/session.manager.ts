@@ -45,6 +45,7 @@ const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
  * - **Activity Tracking**: Monitors user interactions to extend session timeout
  * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
  * - **Persistence**: Stores session data in localStorage for recovery
+ * - **Session Handoff**: Preserves session in sessionStorage for recovery after external redirects
  * - **Inactivity Detection**: Automatic timeout after inactivity (default 15 minutes)
  * - **Lifecycle Events**: Emits SESSION_START event only (SESSION_END removed in v2.0.0)
  *

@@ -271,6 +271,7 @@ tracelog.removeCustomHeaders();
 - Recovery from localStorage on refresh
 - No duplicate `SESSION_START` on recovery
 - Default timeout: 15 minutes (configurable)
+- **Session Handoff** via `preserveSession()`: Preserves session ID in `sessionStorage` before external redirects (payment processors, OAuth). On return, `init()` recovers the session automatically. Single-use, TTL-bounded (10 min), no `SESSION_START` on recovery.
 
 ---
 

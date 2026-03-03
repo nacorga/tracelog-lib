@@ -769,6 +769,10 @@ handler.destroy();
 
 **Note**: In v2.0.0+, both `stopTracking()` and `destroy()` perform the same cleanup without emitting events. SESSION_END events are no longer emitted due to unreliable browser pagehide behavior (43% failure rate).
 
+**Session Handoff**:
+- `preserveSession()`: Delegates to `SessionManager.preserveSession()` with guard checks (returns `false` if no active session manager or handler destroyed)
+- Used by `api.preserveSession()` → `App.preserveSession()` → `SessionHandler.preserveSession()` → `SessionManager.preserveSession()`
+
 **Integration Notes**:
 - Used by main App class for session management
 - Provides consistent interface with other handlers
