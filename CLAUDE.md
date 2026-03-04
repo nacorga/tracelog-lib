@@ -271,6 +271,7 @@ tracelog.removeCustomHeaders();
 - Recovery from localStorage on refresh
 - No duplicate `SESSION_START` on recovery
 - Default timeout: 15 minutes (configurable)
+- **Session Mirror**: Session data automatically mirrored to `sessionStorage` on every write. When `localStorage` is empty (e.g., after external redirect), recovery falls back to `sessionStorage` transparently. Zero API surface, zero developer action needed.
 
 ---
 

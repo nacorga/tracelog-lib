@@ -409,7 +409,8 @@ describe('App - State Management', () => {
   it('should generate new sessionId on init', async () => {
     const bridge1 = await initTestBridge();
     const sessionId1 = bridge1.get('sessionId');
-    bridge1.destroy();
+    bridge1.destroy(true);
+    sessionStorage.clear();
 
     const bridge2 = await initTestBridge();
     const sessionId2 = bridge2.get('sessionId');

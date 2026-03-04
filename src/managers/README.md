@@ -195,6 +195,7 @@ Core business logic components that handle analytics data processing, state mana
 - **Queue Sorting**: SESSION_START events always sorted first in batch payloads (guarantees order)
 - **No Session End Events**: pagehide event handler removed due to 43% failure rate (browser crashes, force quit, mobile background)
 - **Server-Side Inference**: Session end time inferred from last event timestamp (100% reliability vs 43% with pagehide)
+- **Session Mirror**: Session data is automatically mirrored to `sessionStorage` (same key as `localStorage`) on every write. When `localStorage` is empty (e.g., after an external redirect), `loadStoredSession()` falls back to `sessionStorage` transparently. No developer action needed — sessions survive external redirects (payment processors, OAuth) automatically. Recovered sessions do NOT emit `SESSION_START`. Session timeout still applies to mirrored data.
 
 ## StateManager
 

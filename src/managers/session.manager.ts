@@ -39,6 +39,7 @@ const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
  * - **Activity Tracking**: Monitors user interactions to extend session timeout
  * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
  * - **Persistence**: Stores session data in localStorage for recovery
+ * - **Session Mirror**: Automatically mirrors session to sessionStorage for recovery after external redirects
  * - **Inactivity Detection**: Automatic timeout after inactivity (default 15 minutes)
  * - **Lifecycle Events**: Emits SESSION_START event only (SESSION_END removed in v2.0.0)
  *
@@ -197,31 +198,49 @@ export class SessionManager extends StateManager {
   private clearStoredSession(): void {
     const storageKey = this.getSessionStorageKey();
     this.storageManager.removeItem(storageKey);
+    // sessionStorage mirror is intentionally NOT cleared here.
+    // It persists to enable recovery after external redirects (payment processors, OAuth).
+    // Stale data is rejected by the timeout check in recoverSession().
+    // sessionStorage auto-clears when the tab closes.
   }
 
   private loadStoredSession(): StoredSessionData | null {
     const storageKey = this.getSessionStorageKey();
-    const storedData = this.storageManager.getItem(storageKey);
 
-    if (!storedData) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(storedData) as StoredSessionData;
-      if (!parsed.id || typeof parsed.lastActivity !== 'number') {
-        return null;
+    // Primary: localStorage (cross-tab, persistent)
+    const localData = this.storageManager.getItem(storageKey);
+    if (localData !== null) {
+      try {
+        const parsed = JSON.parse(localData) as StoredSessionData;
+        if (parsed.id && typeof parsed.lastActivity === 'number') {
+          return parsed;
+        }
+      } catch {
+        this.storageManager.removeItem(storageKey);
       }
-      return parsed;
-    } catch {
-      this.storageManager.removeItem(storageKey);
-      return null;
     }
+
+    // Fallback: sessionStorage (survives same-tab external redirects)
+    const sessionData = this.storageManager.getSessionItem(storageKey);
+    if (sessionData !== null) {
+      try {
+        const parsed = JSON.parse(sessionData) as StoredSessionData;
+        if (parsed.id && typeof parsed.lastActivity === 'number') {
+          return parsed;
+        }
+      } catch {
+        this.storageManager.removeSessionItem(storageKey);
+      }
+    }
+
+    return null;
   }
 
   private saveStoredSession(session: StoredSessionData): void {
     const storageKey = this.getSessionStorageKey();
-    this.storageManager.setItem(storageKey, JSON.stringify(session));
+    const data = JSON.stringify(session);
+    this.storageManager.setItem(storageKey, data);
+    this.storageManager.setSessionItem(storageKey, data);
   }
 
   private getSessionStorageKey(): string {
@@ -252,7 +271,8 @@ export class SessionManager extends StateManager {
    * 11. Sets up lifecycle listeners (visibilitychange, beforeunload)
    *
    * **Session Recovery**:
-   * - Checks localStorage for existing session
+   * - Checks localStorage for existing session (primary)
+   * - Falls back to sessionStorage mirror (survives external redirects)
    * - Recovers if session exists and is recent (within timeout window)
    * - NO SESSION_START event if session recovered
    *

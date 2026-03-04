@@ -481,7 +481,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.5.0";
+const version = "2.5.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -623,8 +623,8 @@ const generateUUID = () => {
     return crypto.randomUUID();
   }
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c2) => {
-    const r = Math.random() * 16 | 0;
-    const v2 = c2 === "x" ? r : r & 3 | 8;
+    const r2 = Math.random() * 16 | 0;
+    const v2 = c2 === "x" ? r2 : r2 & 3 | 8;
     return v2.toString(16);
   });
 };
@@ -1186,19 +1186,19 @@ const isValidMetadata = (eventName, metadata, type) => {
   if (Array.isArray(metadata)) {
     const sanitizedArray = [];
     const intro = type && type === "customEvent" ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
-    for (let i = 0; i < metadata.length; i++) {
-      const item = metadata[i];
+    for (let i2 = 0; i2 < metadata.length; i2++) {
+      const item = metadata[i2];
       if (typeof item !== "object" || item === null || Array.isArray(item)) {
         return {
           valid: false,
-          error: `${intro}: array item at index ${i} must be an object.`
+          error: `${intro}: array item at index ${i2} must be an object.`
         };
       }
       const itemValidation = validateSingleMetadata(eventName, item, type);
       if (!itemValidation.valid) {
         return {
           valid: false,
-          error: `${intro}: array item at index ${i} is invalid: ${itemValidation.error}`
+          error: `${intro}: array item at index ${i2} is invalid: ${itemValidation.error}`
         };
       }
       if (itemValidation.sanitizedMetadata) {
@@ -2064,6 +2064,9 @@ class SenderManager extends StateManager {
       }
       return response;
     } catch (error) {
+      if (error instanceof PermanentError) {
+        throw error;
+      }
       if (didTimeout) {
         throw new TimeoutError("Request timed out (server likely received the request)");
       }
@@ -3593,8 +3596,8 @@ class EventManager extends StateManager {
       const userId = this.get("userId") || "anonymous";
       const prefix = `${STORAGE_BASE_KEY}:${userId}:session_counts:`;
       const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
+      for (let i2 = 0; i2 < localStorage.length; i2++) {
+        const key = localStorage.key(i2);
         if (key?.startsWith(prefix)) {
           try {
             const stored = localStorage.getItem(key);
@@ -3791,24 +3794,35 @@ class SessionManager extends StateManager {
   }
   loadStoredSession() {
     const storageKey = this.getSessionStorageKey();
-    const storedData = this.storageManager.getItem(storageKey);
-    if (!storedData) {
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(storedData);
-      if (!parsed.id || typeof parsed.lastActivity !== "number") {
-        return null;
+    const localData = this.storageManager.getItem(storageKey);
+    if (localData !== null) {
+      try {
+        const parsed = JSON.parse(localData);
+        if (parsed.id && typeof parsed.lastActivity === "number") {
+          return parsed;
+        }
+      } catch {
+        this.storageManager.removeItem(storageKey);
       }
-      return parsed;
-    } catch {
-      this.storageManager.removeItem(storageKey);
-      return null;
     }
+    const sessionData = this.storageManager.getSessionItem(storageKey);
+    if (sessionData !== null) {
+      try {
+        const parsed = JSON.parse(sessionData);
+        if (parsed.id && typeof parsed.lastActivity === "number") {
+          return parsed;
+        }
+      } catch {
+        this.storageManager.removeSessionItem(storageKey);
+      }
+    }
+    return null;
   }
   saveStoredSession(session) {
     const storageKey = this.getSessionStorageKey();
-    this.storageManager.setItem(storageKey, JSON.stringify(session));
+    const data = JSON.stringify(session);
+    this.storageManager.setItem(storageKey, data);
+    this.storageManager.setSessionItem(storageKey, data);
   }
   getSessionStorageKey() {
     return SESSION_STORAGE_KEY(this.getProjectId());
@@ -3836,7 +3850,8 @@ class SessionManager extends StateManager {
    * 11. Sets up lifecycle listeners (visibilitychange, beforeunload)
    *
    * **Session Recovery**:
-   * - Checks localStorage for existing session
+   * - Checks localStorage for existing session (primary)
+   * - Falls back to sessionStorage mirror (survives external redirects)
    * - Recovers if session exists and is recent (within timeout window)
    * - NO SESSION_START event if session recovered
    *
@@ -5391,8 +5406,8 @@ class StorageManager {
     }
     try {
       const keysToRemove = [];
-      for (let i = 0; i < this.storage.length; i++) {
-        const key = this.storage.key(i);
+      for (let i2 = 0; i2 < this.storage.length; i2++) {
+        const key = this.storage.key(i2);
         if (key?.startsWith("tracelog_")) {
           keysToRemove.push(key);
         }
@@ -5463,8 +5478,8 @@ class StorageManager {
     try {
       const tracelogKeys = [];
       const persistedEventsKeys = [];
-      for (let i = 0; i < this.storage.length; i++) {
-        const key = this.storage.key(i);
+      for (let i2 = 0; i2 < this.storage.length; i2++) {
+        const key = this.storage.key(i2);
         if (key?.startsWith("tracelog_")) {
           tracelogKeys.push(key);
           if (key.startsWith("tracelog_persisted_events_")) {
@@ -6507,7 +6522,7 @@ function setTransformer(hook, fn) {
     throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
   }
   if (!app || isInitializing) {
-    const existingIndex = pendingTransformers.findIndex((t) => t.hook === hook);
+    const existingIndex = pendingTransformers.findIndex((t2) => t2.hook === hook);
     if (existingIndex !== -1) {
       pendingTransformers.splice(existingIndex, 1);
     }
@@ -6528,7 +6543,7 @@ const removeTransformer = (hook) => {
     return;
   }
   if (!app) {
-    const index = pendingTransformers.findIndex((t) => t.hook === hook);
+    const index = pendingTransformers.findIndex((t2) => t2.hook === hook);
     if (index !== -1) {
       pendingTransformers.splice(index, 1);
     }
@@ -6660,6 +6675,9 @@ const __setAppInstance = (instance) => {
   }
   app = instance;
 };
+const __getInitState = () => {
+  return { isInitializing, isDestroying };
+};
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   void Promise.resolve().then(() => testBridge).then((module) => {
     if (typeof module.injectTestBridge === "function") {
@@ -6676,6 +6694,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 }
 const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
+  __getInitState,
   __setAppInstance,
   destroy,
   event,
@@ -6708,9 +6727,9 @@ const tracelog = {
   updateGlobalMetadata,
   mergeGlobalMetadata
 };
-var e, o = -1, a = function(e3) {
-  addEventListener("pageshow", (function(n) {
-    n.persisted && (o = n.timeStamp, e3(n));
+var e, n, t, r, i, o = -1, a = function(e3) {
+  addEventListener("pageshow", (function(n2) {
+    n2.persisted && (o = n2.timeStamp, e3(n2));
   }), true);
 }, c = function() {
   var e3 = self.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
@@ -6718,28 +6737,28 @@ var e, o = -1, a = function(e3) {
 }, u = function() {
   var e3 = c();
   return e3 && e3.activationStart || 0;
-}, f = function(e3, n) {
-  var t = c(), r = "navigate";
-  o >= 0 ? r = "back-forward-cache" : t && (document.prerendering || u() > 0 ? r = "prerender" : document.wasDiscarded ? r = "restore" : t.type && (r = t.type.replace(/_/g, "-")));
-  return { name: e3, value: void 0 === n ? -1 : n, rating: "good", delta: 0, entries: [], id: "v4-".concat(Date.now(), "-").concat(Math.floor(8999999999999 * Math.random()) + 1e12), navigationType: r };
-}, s = function(e3, n, t) {
+}, f = function(e3, n2) {
+  var t2 = c(), r2 = "navigate";
+  o >= 0 ? r2 = "back-forward-cache" : t2 && (document.prerendering || u() > 0 ? r2 = "prerender" : document.wasDiscarded ? r2 = "restore" : t2.type && (r2 = t2.type.replace(/_/g, "-")));
+  return { name: e3, value: void 0 === n2 ? -1 : n2, rating: "good", delta: 0, entries: [], id: "v4-".concat(Date.now(), "-").concat(Math.floor(8999999999999 * Math.random()) + 1e12), navigationType: r2 };
+}, s = function(e3, n2, t2) {
   try {
     if (PerformanceObserver.supportedEntryTypes.includes(e3)) {
-      var r = new PerformanceObserver((function(e4) {
+      var r2 = new PerformanceObserver((function(e4) {
         Promise.resolve().then((function() {
-          n(e4.getEntries());
+          n2(e4.getEntries());
         }));
       }));
-      return r.observe(Object.assign({ type: e3, buffered: true }, t || {})), r;
+      return r2.observe(Object.assign({ type: e3, buffered: true }, t2 || {})), r2;
     }
   } catch (e4) {
   }
-}, d = function(e3, n, t, r) {
-  var i, o2;
+}, d = function(e3, n2, t2, r2) {
+  var i2, o2;
   return function(a2) {
-    n.value >= 0 && (a2 || r) && ((o2 = n.value - (i || 0)) || void 0 === i) && (i = n.value, n.delta = o2, n.rating = (function(e4, n2) {
-      return e4 > n2[1] ? "poor" : e4 > n2[0] ? "needs-improvement" : "good";
-    })(n.value, t), e3(n));
+    n2.value >= 0 && (a2 || r2) && ((o2 = n2.value - (i2 || 0)) || void 0 === i2) && (i2 = n2.value, n2.delta = o2, n2.rating = (function(e4, n3) {
+      return e4 > n3[1] ? "poor" : e4 > n3[0] ? "needs-improvement" : "good";
+    })(n2.value, t2), e3(n2));
   };
 }, l = function(e3) {
   requestAnimationFrame((function() {
@@ -6752,9 +6771,9 @@ var e, o = -1, a = function(e3) {
     "hidden" === document.visibilityState && e3();
   }));
 }, v = function(e3) {
-  var n = false;
+  var n2 = false;
   return function() {
-    n || (e3(), n = true);
+    n2 || (e3(), n2 = true);
   };
 }, m = -1, h = function() {
   return "hidden" !== document.visibilityState || document.prerendering ? 1 / 0 : 0;
@@ -6776,36 +6795,36 @@ var e, o = -1, a = function(e3) {
   document.prerendering ? addEventListener("prerenderingchange", (function() {
     return e3();
   }), true) : e3();
-}, b = [1800, 3e3], S = function(e3, n) {
-  n = n || {}, C((function() {
-    var t, r = E(), i = f("FCP"), o2 = s("paint", (function(e4) {
+}, b = [1800, 3e3], S = function(e3, n2) {
+  n2 = n2 || {}, C((function() {
+    var t2, r2 = E(), i2 = f("FCP"), o2 = s("paint", (function(e4) {
       e4.forEach((function(e5) {
-        "first-contentful-paint" === e5.name && (o2.disconnect(), e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries.push(e5), t(true)));
+        "first-contentful-paint" === e5.name && (o2.disconnect(), e5.startTime < r2.firstHiddenTime && (i2.value = Math.max(e5.startTime - u(), 0), i2.entries.push(e5), t2(true)));
       }));
     }));
-    o2 && (t = d(e3, i, b, n.reportAllChanges), a((function(r2) {
-      i = f("FCP"), t = d(e3, i, b, n.reportAllChanges), l((function() {
-        i.value = performance.now() - r2.timeStamp, t(true);
+    o2 && (t2 = d(e3, i2, b, n2.reportAllChanges), a((function(r3) {
+      i2 = f("FCP"), t2 = d(e3, i2, b, n2.reportAllChanges), l((function() {
+        i2.value = performance.now() - r3.timeStamp, t2(true);
       }));
     })));
   }));
-}, L = [0.1, 0.25], w = function(e3, n) {
-  n = n || {}, S(v((function() {
-    var t, r = f("CLS", 0), i = 0, o2 = [], c2 = function(e4) {
+}, L = [0.1, 0.25], w = function(e3, n2) {
+  n2 = n2 || {}, S(v((function() {
+    var t2, r2 = f("CLS", 0), i2 = 0, o2 = [], c2 = function(e4) {
       e4.forEach((function(e5) {
         if (!e5.hadRecentInput) {
-          var n2 = o2[0], t2 = o2[o2.length - 1];
-          i && e5.startTime - t2.startTime < 1e3 && e5.startTime - n2.startTime < 5e3 ? (i += e5.value, o2.push(e5)) : (i = e5.value, o2 = [e5]);
+          var n3 = o2[0], t3 = o2[o2.length - 1];
+          i2 && e5.startTime - t3.startTime < 1e3 && e5.startTime - n3.startTime < 5e3 ? (i2 += e5.value, o2.push(e5)) : (i2 = e5.value, o2 = [e5]);
         }
-      })), i > r.value && (r.value = i, r.entries = o2, t());
+      })), i2 > r2.value && (r2.value = i2, r2.entries = o2, t2());
     }, u2 = s("layout-shift", c2);
-    u2 && (t = d(e3, r, L, n.reportAllChanges), p((function() {
-      c2(u2.takeRecords()), t(true);
+    u2 && (t2 = d(e3, r2, L, n2.reportAllChanges), p((function() {
+      c2(u2.takeRecords()), t2(true);
     })), a((function() {
-      i = 0, r = f("CLS", 0), t = d(e3, r, L, n.reportAllChanges), l((function() {
-        return t();
+      i2 = 0, r2 = f("CLS", 0), t2 = d(e3, r2, L, n2.reportAllChanges), l((function() {
+        return t2();
       }));
-    })), setTimeout(t, 0));
+    })), setTimeout(t2, 0));
   })));
 }, A = 0, I = 1 / 0, P = 0, M = function(e3) {
   e3.forEach((function(e4) {
@@ -6819,79 +6838,120 @@ var e, o = -1, a = function(e3) {
   var e3 = Math.min(D.length - 1, Math.floor((k() - R) / 50));
   return D[e3];
 }, H = [], q = function(e3) {
-  if (H.forEach((function(n2) {
-    return n2(e3);
+  if (H.forEach((function(n3) {
+    return n3(e3);
   })), e3.interactionId || "first-input" === e3.entryType) {
-    var n = D[D.length - 1], t = x.get(e3.interactionId);
-    if (t || D.length < 10 || e3.duration > n.latency) {
-      if (t) e3.duration > t.latency ? (t.entries = [e3], t.latency = e3.duration) : e3.duration === t.latency && e3.startTime === t.entries[0].startTime && t.entries.push(e3);
+    var n2 = D[D.length - 1], t2 = x.get(e3.interactionId);
+    if (t2 || D.length < 10 || e3.duration > n2.latency) {
+      if (t2) e3.duration > t2.latency ? (t2.entries = [e3], t2.latency = e3.duration) : e3.duration === t2.latency && e3.startTime === t2.entries[0].startTime && t2.entries.push(e3);
       else {
-        var r = { id: e3.interactionId, latency: e3.duration, entries: [e3] };
-        x.set(r.id, r), D.push(r);
+        var r2 = { id: e3.interactionId, latency: e3.duration, entries: [e3] };
+        x.set(r2.id, r2), D.push(r2);
       }
-      D.sort((function(e4, n2) {
-        return n2.latency - e4.latency;
+      D.sort((function(e4, n3) {
+        return n3.latency - e4.latency;
       })), D.length > 10 && D.splice(10).forEach((function(e4) {
         return x.delete(e4.id);
       }));
     }
   }
 }, O = function(e3) {
-  var n = self.requestIdleCallback || self.setTimeout, t = -1;
-  return e3 = v(e3), "hidden" === document.visibilityState ? e3() : (t = n(e3), p(e3)), t;
-}, N = [200, 500], j = function(e3, n) {
-  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (n = n || {}, C((function() {
-    var t;
+  var n2 = self.requestIdleCallback || self.setTimeout, t2 = -1;
+  return e3 = v(e3), "hidden" === document.visibilityState ? e3() : (t2 = n2(e3), p(e3)), t2;
+}, N = [200, 500], j = function(e3, n2) {
+  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (n2 = n2 || {}, C((function() {
+    var t2;
     F();
-    var r, i = f("INP"), o2 = function(e4) {
+    var r2, i2 = f("INP"), o2 = function(e4) {
       O((function() {
         e4.forEach(q);
-        var n2 = B();
-        n2 && n2.latency !== i.value && (i.value = n2.latency, i.entries = n2.entries, r());
+        var n3 = B();
+        n3 && n3.latency !== i2.value && (i2.value = n3.latency, i2.entries = n3.entries, r2());
       }));
-    }, c2 = s("event", o2, { durationThreshold: null !== (t = n.durationThreshold) && void 0 !== t ? t : 40 });
-    r = d(e3, i, N, n.reportAllChanges), c2 && (c2.observe({ type: "first-input", buffered: true }), p((function() {
-      o2(c2.takeRecords()), r(true);
+    }, c2 = s("event", o2, { durationThreshold: null !== (t2 = n2.durationThreshold) && void 0 !== t2 ? t2 : 40 });
+    r2 = d(e3, i2, N, n2.reportAllChanges), c2 && (c2.observe({ type: "first-input", buffered: true }), p((function() {
+      o2(c2.takeRecords()), r2(true);
     })), a((function() {
-      R = k(), D.length = 0, x.clear(), i = f("INP"), r = d(e3, i, N, n.reportAllChanges);
+      R = k(), D.length = 0, x.clear(), i2 = f("INP"), r2 = d(e3, i2, N, n2.reportAllChanges);
     })));
   })));
-}, _ = [2500, 4e3], z = {}, G = function(e3, n) {
-  n = n || {}, C((function() {
-    var t, r = E(), i = f("LCP"), o2 = function(e4) {
-      n.reportAllChanges || (e4 = e4.slice(-1)), e4.forEach((function(e5) {
-        e5.startTime < r.firstHiddenTime && (i.value = Math.max(e5.startTime - u(), 0), i.entries = [e5], t());
+}, _ = [2500, 4e3], z = {}, G = function(e3, n2) {
+  n2 = n2 || {}, C((function() {
+    var t2, r2 = E(), i2 = f("LCP"), o2 = function(e4) {
+      n2.reportAllChanges || (e4 = e4.slice(-1)), e4.forEach((function(e5) {
+        e5.startTime < r2.firstHiddenTime && (i2.value = Math.max(e5.startTime - u(), 0), i2.entries = [e5], t2());
       }));
     }, c2 = s("largest-contentful-paint", o2);
     if (c2) {
-      t = d(e3, i, _, n.reportAllChanges);
+      t2 = d(e3, i2, _, n2.reportAllChanges);
       var m2 = v((function() {
-        z[i.id] || (o2(c2.takeRecords()), c2.disconnect(), z[i.id] = true, t(true));
+        z[i2.id] || (o2(c2.takeRecords()), c2.disconnect(), z[i2.id] = true, t2(true));
       }));
       ["keydown", "click"].forEach((function(e4) {
         addEventListener(e4, (function() {
           return O(m2);
         }), { once: true, capture: true });
-      })), p(m2), a((function(r2) {
-        i = f("LCP"), t = d(e3, i, _, n.reportAllChanges), l((function() {
-          i.value = performance.now() - r2.timeStamp, z[i.id] = true, t(true);
+      })), p(m2), a((function(r3) {
+        i2 = f("LCP"), t2 = d(e3, i2, _, n2.reportAllChanges), l((function() {
+          i2.value = performance.now() - r3.timeStamp, z[i2.id] = true, t2(true);
         }));
       }));
     }
   }));
-}, J = [800, 1800], K = function e2(n) {
+}, J = [800, 1800], K = function e2(n2) {
   document.prerendering ? C((function() {
-    return e2(n);
+    return e2(n2);
   })) : "complete" !== document.readyState ? addEventListener("load", (function() {
-    return e2(n);
-  }), true) : setTimeout(n, 0);
-}, Q = function(e3, n) {
-  n = n || {};
-  var t = f("TTFB"), r = d(e3, t, J, n.reportAllChanges);
+    return e2(n2);
+  }), true) : setTimeout(n2, 0);
+}, Q = function(e3, n2) {
+  n2 = n2 || {};
+  var t2 = f("TTFB"), r2 = d(e3, t2, J, n2.reportAllChanges);
   K((function() {
-    var i = c();
-    i && (t.value = Math.max(i.responseStart - u(), 0), t.entries = [i], r(true), a((function() {
-      t = f("TTFB", 0), (r = d(e3, t, J, n.reportAllChanges))(true);
+    var i2 = c();
+    i2 && (t2.value = Math.max(i2.responseStart - u(), 0), t2.entries = [i2], r2(true), a((function() {
+      t2 = f("TTFB", 0), (r2 = d(e3, t2, J, n2.reportAllChanges))(true);
+    })));
+  }));
+}, U = { passive: true, capture: true }, V = /* @__PURE__ */ new Date(), W = function(e3, i2) {
+  n || (n = i2, t = e3, r = /* @__PURE__ */ new Date(), Z(removeEventListener), X());
+}, X = function() {
+  if (t >= 0 && t < r - V) {
+    var e3 = { entryType: "first-input", name: n.type, target: n.target, cancelable: n.cancelable, startTime: n.timeStamp, processingStart: n.timeStamp + t };
+    i.forEach((function(n2) {
+      n2(e3);
+    })), i = [];
+  }
+}, Y = function(e3) {
+  if (e3.cancelable) {
+    var n2 = (e3.timeStamp > 1e12 ? /* @__PURE__ */ new Date() : performance.now()) - e3.timeStamp;
+    "pointerdown" == e3.type ? (function(e4, n3) {
+      var t2 = function() {
+        W(e4, n3), i2();
+      }, r2 = function() {
+        i2();
+      }, i2 = function() {
+        removeEventListener("pointerup", t2, U), removeEventListener("pointercancel", r2, U);
+      };
+      addEventListener("pointerup", t2, U), addEventListener("pointercancel", r2, U);
+    })(n2, e3) : W(n2, e3);
+  }
+}, Z = function(e3) {
+  ["mousedown", "keydown", "touchstart", "pointerdown"].forEach((function(n2) {
+    return e3(n2, Y, U);
+  }));
+}, $ = [100, 300], ee = function(e3, r2) {
+  r2 = r2 || {}, C((function() {
+    var o2, c2 = E(), u2 = f("FID"), l2 = function(e4) {
+      e4.startTime < c2.firstHiddenTime && (u2.value = e4.processingStart - e4.startTime, u2.entries.push(e4), o2(true));
+    }, m2 = function(e4) {
+      e4.forEach(l2);
+    }, h2 = s("first-input", m2);
+    o2 = d(e3, u2, $, r2.reportAllChanges), h2 && (p(v((function() {
+      m2(h2.takeRecords()), h2.disconnect();
+    }))), a((function() {
+      var a2;
+      u2 = f("FID"), o2 = d(e3, u2, $, r2.reportAllChanges), i = [], t = -1, n = null, Z(addEventListener), a2 = l2, i.push(a2), X();
     })));
   }));
 };
@@ -6899,11 +6959,13 @@ const webVitals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePro
   __proto__: null,
   CLSThresholds: L,
   FCPThresholds: b,
+  FIDThresholds: $,
   INPThresholds: N,
   LCPThresholds: _,
   TTFBThresholds: J,
   onCLS: w,
   onFCP: S,
+  onFID: ee,
   onINP: j,
   onLCP: G,
   onTTFB: Q
