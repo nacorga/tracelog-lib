@@ -8,6 +8,33 @@
 
 
 
+
+## [2.6.1] - 2026-03-04
+
+### ✨ Features
+
+- Implement network circuit breaker and cross-session recovery limits ([228c1e4](../../commit/228c1e4115affd40c1e9b8c7c4cfe9393cfad2ea))
+
+### 🐛 Bug Fixes
+
+- Enhance network circuit breaker logic to differentiate between network-level failures and HTTP errors, and update related tests ([7a74449](../../commit/7a744498162cd6f9bdeeed6f3bc4e0a8778dc7c1))
+- Update persistEventsWithFailureCount to support throttling during recovery and adjust recovery test setup ([dca843e](../../commit/dca843eb615125d2b938ed55865d54e91a82833b))
+
+### 🔧 Other Changes
+
+- Merge pull request #91 from nacorga/release/20260304.2 ([a68ba7e](../../commit/a68ba7ed15ac57b1301841db17f85d57b63f08ce))
+- Merge pull request #90 from nacorga/fix/network-circuit-breaker ([4589d20](../../commit/4589d202a8e5c016ccafb9da6114821546da7584))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.6.0...v2.6.1
+
+
 ## [2.6.0] - 2026-03-04
 
 ### ✨ Features
