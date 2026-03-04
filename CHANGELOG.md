@@ -7,6 +7,33 @@
 
 
 
+
+## [2.6.0] - 2026-03-04
+
+### ✨ Features
+
+- Add session handoff functionality to preserve session ID during external redirects ([5004756](../../commit/50047568b9558f363d318b713d9422e380c9829b))
+- Implement session preservation for external redirects and add related tests ([9ef2554](../../commit/9ef25549db89386df438b0202c956a7e521bff8f))
+
+### ♻️ Refactoring
+
+- Remove session preservation logic and implement session mirroring ([69b97d8](../../commit/69b97d8f48dad9ce6bf448c39abcefc732cc400a))
+
+### 🔧 Other Changes
+
+- Merge pull request #89 from nacorga/release/20260304.1 ([c070549](../../commit/c070549070a019b4813a75a104770b9b0219b9ae))
+- Merge pull request #88 from nacorga/feature/preserve-session ([2dde3da](../../commit/2dde3daadd405ee0fb1c8ce05640a2cbc2471cba))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.5.1...v2.6.0
+
+
 ## [2.5.1] - 2026-02-26
 
 ### ✨ Features
