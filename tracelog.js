@@ -290,7 +290,7 @@ const Ot = () => {
     default:
       return We;
   }
-}, Bt = 1e3, Wt = 50, Gt = "2.5.0", Xt = Gt, nt = () => typeof window < "u" && typeof sessionStorage < "u", Qt = () => {
+}, Bt = 1e3, Wt = 50, Gt = "2.5.1", Xt = Gt, nt = () => typeof window < "u" && typeof sessionStorage < "u", Qt = () => {
   try {
     const s = new URLSearchParams(window.location.search);
     s.delete(Je);
@@ -2857,18 +2857,28 @@ class Er extends w {
   }
   loadStoredSession() {
     const e = this.getSessionStorageKey(), t = this.storageManager.getItem(e);
-    if (!t)
-      return null;
-    try {
-      const r = JSON.parse(t);
-      return !r.id || typeof r.lastActivity != "number" ? null : r;
-    } catch {
-      return this.storageManager.removeItem(e), null;
-    }
+    if (t !== null)
+      try {
+        const n = JSON.parse(t);
+        if (n.id && typeof n.lastActivity == "number")
+          return n;
+      } catch {
+        this.storageManager.removeItem(e);
+      }
+    const r = this.storageManager.getSessionItem(e);
+    if (r !== null)
+      try {
+        const n = JSON.parse(r);
+        if (n.id && typeof n.lastActivity == "number")
+          return n;
+      } catch {
+        this.storageManager.removeSessionItem(e);
+      }
+    return null;
   }
   saveStoredSession(e) {
-    const t = this.getSessionStorageKey();
-    this.storageManager.setItem(t, JSON.stringify(e));
+    const t = this.getSessionStorageKey(), r = JSON.stringify(e);
+    this.storageManager.setItem(t, r), this.storageManager.setSessionItem(t, r);
   }
   getSessionStorageKey() {
     return wt(this.getProjectId());
@@ -2896,7 +2906,8 @@ class Er extends w {
    * 11. Sets up lifecycle listeners (visibilitychange, beforeunload)
    *
    * **Session Recovery**:
-   * - Checks localStorage for existing session
+   * - Checks localStorage for existing session (primary)
+   * - Falls back to sessionStorage mirror (survives external redirects)
    * - Recovers if session exists and is recent (within timeout window)
    * - NO SESSION_START event if session recovered
    *
