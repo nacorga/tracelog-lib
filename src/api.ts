@@ -436,48 +436,6 @@ export const getSessionId = (): string | null => {
 };
 
 /**
- * Preserves the current session for recovery after external redirects.
- *
- * Call this before redirecting to an external payment processor (PayPal, Stripe, Klarna, etc.)
- * to ensure the user resumes the same session on return. Without this, the return page
- * creates a new "phantom session" that inflates conversion rates.
- *
- * The preserved session is:
- * - Stored in sessionStorage (survives same-tab navigation)
- * - Single-use (consumed on the next tracelog.init() call)
- * - TTL-bounded (10 minutes, shorter than session timeout)
- *
- * @returns true if the session was preserved, false if not initialized or no active session
- *
- * @example
- * ```typescript
- * // Before redirecting to payment
- * tracelog.preserveSession();
- * window.location.href = paymentUrl;
- *
- * // On the confirmation page, init() automatically recovers the session
- * const { sessionId } = await tracelog.init({ ... });
- * tracelog.event('purchase', { orderId: '12345', amount: 99.99 });
- * ```
- */
-export const preserveSession = (): boolean => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return false;
-  }
-
-  if (!app) {
-    log('warn', 'Cannot preserve session: TraceLog not initialized');
-    return false;
-  }
-
-  if (isDestroying) {
-    return false;
-  }
-
-  return app.preserveSession();
-};
-
-/**
  * Stops all tracking, cleans up listeners, and flushes pending events.
  *
  * Sends remaining events with sendBeacon before cleanup.

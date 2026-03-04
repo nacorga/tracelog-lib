@@ -26,13 +26,11 @@ describe('SessionHandler - Wrapper', () => {
       startTracking: vi.fn(),
       stopTracking: vi.fn(),
       destroy: vi.fn(),
-      preserveSession: vi.fn().mockReturnValue(true),
     };
 
     vi.spyOn(SessionManager.prototype, 'startTracking').mockImplementation(mockSessionManager.startTracking as any);
     vi.spyOn(SessionManager.prototype, 'stopTracking').mockImplementation(mockSessionManager.stopTracking as any);
     vi.spyOn(SessionManager.prototype, 'destroy').mockImplementation(mockSessionManager.destroy as any);
-    vi.spyOn(SessionManager.prototype, 'preserveSession').mockImplementation(mockSessionManager.preserveSession as any);
 
     sessionHandler = new SessionHandler(mockStorageManager, mockEventManager);
   });
@@ -60,22 +58,6 @@ describe('SessionHandler - Wrapper', () => {
 
     expect(mockSessionManager.stopTracking).toHaveBeenCalledOnce();
     expect(mockSessionManager.destroy).toHaveBeenCalledOnce();
-  });
-
-  it('should delegate preserveSession to SessionManager', () => {
-    sessionHandler.startTracking();
-
-    const result = sessionHandler.preserveSession();
-
-    expect(mockSessionManager.preserveSession).toHaveBeenCalledOnce();
-    expect(result).toBe(true);
-  });
-
-  it('should return false from preserveSession when not tracking', () => {
-    const result = sessionHandler.preserveSession();
-
-    expect(mockSessionManager.preserveSession).not.toHaveBeenCalled();
-    expect(result).toBe(false);
   });
 
   it('should expose SessionManager methods', () => {

@@ -132,7 +132,6 @@ tracelog.destroy();
 | `removeCustomHeaders()` | Remove custom headers provider |
 | `isInitialized()` | Check initialization status |
 | `getSessionId()` | Get current session ID (or null) |
-| `preserveSession()` | Preserve session for recovery after external redirects |
 | `setQaMode(enabled)` | Enable/disable QA mode (console logging) |
 | `destroy()` | Stop tracking and cleanup |
 
@@ -881,25 +880,23 @@ await tracelog.init({ /* same config */ });
 
 **→ [Full Error Handling Reference](./API_REFERENCE.md#error-handling)**
 
-### Session Preservation (External Redirects)
+### Session Continuity (External Redirects)
 
-When redirecting users to external payment processors (PayPal, Stripe, Klarna), the session is normally lost on return. Call `preserveSession()` before the redirect to ensure continuity:
+TraceLog automatically preserves sessions across external redirects (payment processors, OAuth flows, etc.) with zero developer action. Session data is mirrored to `sessionStorage` alongside `localStorage`, so when a user returns from an external site and `localStorage` is empty, the session is recovered from `sessionStorage` transparently.
 
 ```typescript
-// Before redirecting to payment
-tracelog.preserveSession();
+// No special handling needed before redirect
 window.location.href = paymentUrl;
 
 // On the confirmation page, init() automatically recovers the session
 const { sessionId } = await tracelog.init({ /* same config */ });
 tracelog.event('purchase', { orderId: '12345', amount: 99.99 });
-// ✅ Same session as before the redirect
+// Same session as before the redirect
 ```
 
-- Stored in `sessionStorage` (survives same-tab navigation)
-- Single-use (consumed on next `init()` call)
-- TTL-bounded (10 minutes, shorter than session timeout)
-- Returns `true` if preserved, `false` if not initialized
+- Automatic: no API calls or developer action required
+- `sessionStorage` mirror survives same-tab navigation (cleared on tab close)
+- Session timeout still applies (expired sessions are not recovered)
 
 ---
 

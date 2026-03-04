@@ -207,18 +207,6 @@ export const SESSION_SYNC_TIMEOUT_MS = 2000;
 export const SESSION_MAX_RETRY_ATTEMPTS = 3;
 export const SESSION_CLEANUP_DELAY_MS = 100;
 
-/**
- * TTL for session handoff data stored in sessionStorage (10 minutes).
- *
- * When a user is redirected to an external payment processor (PayPal, Stripe, Klarna),
- * the session ID is preserved in sessionStorage via preserveSession(). On return,
- * the handoff is consumed if it was written within this TTL window.
- *
- * 10 minutes is shorter than the default session timeout (15 min) to prevent
- * stale handoffs from resurrecting expired sessions.
- */
-export const SESSION_HANDOFF_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
 // Cross-tab coordination
 export const CROSS_TAB_INITIALIZATION_LOCK_TIMEOUT_MS = 5000;
 export const TAB_HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds

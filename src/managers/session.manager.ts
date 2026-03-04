@@ -1,10 +1,4 @@
-import {
-  BROADCAST_CHANNEL_NAME,
-  DEFAULT_SESSION_TIMEOUT,
-  SESSION_HANDOFF_KEY,
-  SESSION_HANDOFF_TTL_MS,
-  SESSION_STORAGE_KEY,
-} from '../constants';
+import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
 import { EventType, UTM } from '../types';
 import { getExternalReferrer, getUTMParameters, log } from '../utils';
 import { StateManager } from './state.manager';
@@ -45,7 +39,7 @@ const SESSION_ID_PATTERN = /^\d{13}-[a-z0-9]{9}$/;
  * - **Activity Tracking**: Monitors user interactions to extend session timeout
  * - **Cross-Tab Sync**: BroadcastChannel synchronization across browser tabs
  * - **Persistence**: Stores session data in localStorage for recovery
- * - **Session Handoff**: Preserves session in sessionStorage for recovery after external redirects
+ * - **Session Mirror**: Automatically mirrors session to sessionStorage for recovery after external redirects
  * - **Inactivity Detection**: Automatic timeout after inactivity (default 15 minutes)
  * - **Lifecycle Events**: Emits SESSION_START event only (SESSION_END removed in v2.0.0)
  *
@@ -192,51 +186,6 @@ export class SessionManager extends StateManager {
     return storedSession.id;
   }
 
-  /**
-   * Attempts to recover a session from a handoff stored in sessionStorage.
-   *
-   * Handoffs are written by preserveSession() before external redirects (e.g., payment processors).
-   * The handoff is single-use: consumed (deleted) immediately after reading.
-   *
-   * @returns The handoff session ID if valid and within TTL, null otherwise
-   */
-  private recoverHandoff(): string | null {
-    const handoffKey = SESSION_HANDOFF_KEY(this.getProjectId());
-    const raw = this.storageManager.getSessionItem(handoffKey);
-
-    this.storageManager.removeSessionItem(handoffKey);
-
-    if (!raw) {
-      return null;
-    }
-
-    try {
-      const handoff = JSON.parse(raw) as { sessionId: string; timestamp: number };
-
-      if (!handoff.sessionId || typeof handoff.timestamp !== 'number') {
-        return null;
-      }
-
-      if (!SESSION_ID_PATTERN.test(handoff.sessionId)) {
-        log('warn', 'Invalid session ID format in handoff, discarding');
-        return null;
-      }
-
-      if (Date.now() - handoff.timestamp > SESSION_HANDOFF_TTL_MS) {
-        log('debug', 'Session handoff expired, discarding');
-        return null;
-      }
-
-      log('debug', 'Session recovered from handoff', {
-        data: { sessionId: handoff.sessionId },
-      });
-
-      return handoff.sessionId;
-    } catch {
-      return null;
-    }
-  }
-
   private persistSession(sessionId: string, lastActivity: number = Date.now(), referrer?: string, utm?: UTM): void {
     this.saveStoredSession({
       id: sessionId,
@@ -249,31 +198,49 @@ export class SessionManager extends StateManager {
   private clearStoredSession(): void {
     const storageKey = this.getSessionStorageKey();
     this.storageManager.removeItem(storageKey);
+    // sessionStorage mirror is intentionally NOT cleared here.
+    // It persists to enable recovery after external redirects (payment processors, OAuth).
+    // Stale data is rejected by the timeout check in recoverSession().
+    // sessionStorage auto-clears when the tab closes.
   }
 
   private loadStoredSession(): StoredSessionData | null {
     const storageKey = this.getSessionStorageKey();
-    const storedData = this.storageManager.getItem(storageKey);
 
-    if (!storedData) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(storedData) as StoredSessionData;
-      if (!parsed.id || typeof parsed.lastActivity !== 'number') {
-        return null;
+    // Primary: localStorage (cross-tab, persistent)
+    const localData = this.storageManager.getItem(storageKey);
+    if (localData !== null) {
+      try {
+        const parsed = JSON.parse(localData) as StoredSessionData;
+        if (parsed.id && typeof parsed.lastActivity === 'number') {
+          return parsed;
+        }
+      } catch {
+        this.storageManager.removeItem(storageKey);
       }
-      return parsed;
-    } catch {
-      this.storageManager.removeItem(storageKey);
-      return null;
     }
+
+    // Fallback: sessionStorage (survives same-tab external redirects)
+    const sessionData = this.storageManager.getSessionItem(storageKey);
+    if (sessionData !== null) {
+      try {
+        const parsed = JSON.parse(sessionData) as StoredSessionData;
+        if (parsed.id && typeof parsed.lastActivity === 'number') {
+          return parsed;
+        }
+      } catch {
+        this.storageManager.removeSessionItem(storageKey);
+      }
+    }
+
+    return null;
   }
 
   private saveStoredSession(session: StoredSessionData): void {
     const storageKey = this.getSessionStorageKey();
-    this.storageManager.setItem(storageKey, JSON.stringify(session));
+    const data = JSON.stringify(session);
+    this.storageManager.setItem(storageKey, data);
+    this.storageManager.setSessionItem(storageKey, data);
   }
 
   private getSessionStorageKey(): string {
@@ -304,7 +271,8 @@ export class SessionManager extends StateManager {
    * 11. Sets up lifecycle listeners (visibilitychange, beforeunload)
    *
    * **Session Recovery**:
-   * - Checks localStorage for existing session
+   * - Checks localStorage for existing session (primary)
+   * - Falls back to sessionStorage mirror (survives external redirects)
    * - Recovers if session exists and is recent (within timeout window)
    * - NO SESSION_START event if session recovered
    *
@@ -341,15 +309,8 @@ export class SessionManager extends StateManager {
       return;
     }
 
-    const recoveredFromStorage = this.recoverSession();
-    const recoveredSessionId = recoveredFromStorage ?? this.recoverHandoff();
+    const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
-
-    // Always clean up handoff key to prevent orphaned entries in sessionStorage
-    // (when normal recovery succeeds, recoverHandoff is never called due to short-circuit)
-    if (recoveredFromStorage) {
-      this.storageManager.removeSessionItem(SESSION_HANDOFF_KEY(this.getProjectId()));
-    }
 
     // Capture or recover attribution data (referrer/UTM)
     let sessionReferrer: string;
@@ -601,38 +562,6 @@ export class SessionManager extends StateManager {
 
     this.needsRenewal = false;
     this.isTracking = false;
-  }
-
-  /**
-   * Preserves the current session ID in sessionStorage for recovery after external redirects.
-   *
-   * Call this before redirecting to an external payment processor (PayPal, Stripe, Klarna, etc.)
-   * to ensure the user resumes the same session on return instead of creating a phantom session.
-   *
-   * The handoff is:
-   * - Stored in sessionStorage (survives same-tab navigation, cleared on tab close)
-   * - Single-use (consumed on next session initialization)
-   * - TTL-bounded (expires after 10 minutes)
-   *
-   * @returns true if the session was preserved, false if no active session exists
-   */
-  preserveSession(): boolean {
-    const sessionId = this.get('sessionId');
-
-    if (!sessionId) {
-      log('debug', 'No active session to preserve');
-      return false;
-    }
-
-    const handoffKey = SESSION_HANDOFF_KEY(this.getProjectId());
-
-    this.storageManager.setSessionItem(handoffKey, JSON.stringify({ sessionId, timestamp: Date.now() }));
-
-    log('debug', 'Session preserved for handoff', {
-      data: { sessionId },
-    });
-
-    return true;
   }
 
   /**

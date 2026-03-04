@@ -1,18 +1,18 @@
 /**
- * Session Handoff Integration Tests
- * Focus: Full preserve → redirect simulation → recover flow
- * - preserveSession() stores handoff in sessionStorage
- * - init() recovers from handoff when localStorage is empty
+ * Session Mirror Integration Tests
+ * Focus: Automatic sessionStorage mirroring for session recovery after external redirects
+ * - Session data automatically mirrored to sessionStorage on every write
+ * - init() recovers from sessionStorage when localStorage is empty (e.g., after external redirect)
  * - Recovered session continues tracking events correctly
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
-import { initTestBridge, destroyTestBridge, getHandlers, getQueueState } from '../../helpers/bridge.helper';
-import { SESSION_HANDOFF_KEY } from '../../../src/constants/storage.constants';
+import { initTestBridge, destroyTestBridge, getQueueState } from '../../helpers/bridge.helper';
+import { SESSION_STORAGE_KEY } from '../../../src/constants/storage.constants';
 import type { TraceLogTestBridge } from '../../../src/types';
 
-describe('Integration: Session Handoff', () => {
+describe('Integration: Session Mirror', () => {
   let bridge: TraceLogTestBridge;
 
   beforeEach(() => {
@@ -24,50 +24,45 @@ describe('Integration: Session Handoff', () => {
     cleanupTestEnvironment();
   });
 
-  it('should preserve and recover session across init cycles', async () => {
+  it('should automatically recover session after external redirect', async () => {
     // Phase 1: User is on checkout page, session active
     bridge = await initTestBridge();
     const originalSessionId = bridge.get('sessionId');
     expect(originalSessionId).toBeTruthy();
 
-    // Phase 2: Developer calls preserveSession() before payment redirect
-    const { session } = getHandlers(bridge);
-    const preserved = session!.preserveSession();
-    expect(preserved).toBe(true);
+    // Session should be mirrored to sessionStorage automatically
+    const storageKey = SESSION_STORAGE_KEY('custom');
+    expect(sessionStorage.getItem(storageKey)).toBeTruthy();
 
-    // Phase 3: Simulate page unload + redirect (destroys everything)
+    // Phase 2: Simulate external redirect (destroys instance + clears localStorage)
     bridge.destroy(true);
     localStorage.clear();
 
-    // At this point: localStorage cleared (browser behavior varies),
-    // but sessionStorage survives (same-tab navigation)
-    const handoffKey = SESSION_HANDOFF_KEY('custom');
-    expect(sessionStorage.getItem(handoffKey)).toBeTruthy();
+    // sessionStorage survives same-tab navigation (browser behavior)
+    expect(sessionStorage.getItem(storageKey)).toBeTruthy();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // Phase 4: User returns from payment processor, page re-inits
+    // Phase 3: User returns from payment processor, page re-inits
     bridge = await initTestBridge();
     const recoveredSessionId = bridge.get('sessionId');
 
-    // Same session as before the redirect
+    // Same session as before the redirect — no developer action needed
     expect(recoveredSessionId).toBe(originalSessionId);
   });
 
-  it('should track events with recovered session ID after handoff', async () => {
-    // Setup: Create session and preserve it
+  it('should track events with recovered session ID', async () => {
+    // Setup: Create session
     bridge = await initTestBridge();
     const originalSessionId = bridge.get('sessionId');
 
-    const { session } = getHandlers(bridge);
-    session!.preserveSession();
-
+    // Simulate external redirect
     bridge.destroy(true);
     localStorage.clear();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // Recover from handoff
+    // Recover from sessionStorage mirror
     bridge = await initTestBridge();
     expect(bridge.get('sessionId')).toBe(originalSessionId);
 
@@ -81,12 +76,9 @@ describe('Integration: Session Handoff', () => {
     expect(customEvents.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('should not emit SESSION_START after handoff recovery', async () => {
+  it('should not emit SESSION_START after sessionStorage recovery', async () => {
     bridge = await initTestBridge();
     const originalSessionId = bridge.get('sessionId');
-
-    const { session } = getHandlers(bridge);
-    session!.preserveSession();
 
     bridge.destroy(true);
     localStorage.clear();
@@ -103,11 +95,11 @@ describe('Integration: Session Handoff', () => {
     expect(bridge.get('sessionId')).toBe(originalSessionId);
   });
 
-  it('should fall back to new session when handoff is not available', async () => {
+  it('should create new session when no recovery source available', async () => {
     bridge = await initTestBridge();
     const originalSessionId = bridge.get('sessionId');
 
-    // Destroy without preserving (user navigated away without calling preserveSession)
+    // Destroy everything — no localStorage, no sessionStorage
     bridge.destroy(true);
     localStorage.clear();
     sessionStorage.clear();
