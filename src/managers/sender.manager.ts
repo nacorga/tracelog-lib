@@ -9,6 +9,9 @@ import {
   RETRY_BACKOFF_BASE_MS,
   RETRY_BACKOFF_JITTER_MS,
   LIB_VERSION,
+  MAX_CONSECUTIVE_NETWORK_FAILURES,
+  MAX_RECOVERY_FAILURES,
+  CIRCUIT_BREAKER_COOLDOWN_MS,
 } from '../constants';
 import {
   PersistedEventsQueue,
@@ -98,6 +101,15 @@ export class SenderManager extends StateManager {
   private lastMetadataTimestamp = 0;
   private readonly fetchCredentials: RequestCredentials;
   private readonly pendingControllers = new Set<AbortController>();
+  /**
+   * Counts consecutive fetch() rejections where no HTTP response was received
+   * (DNS failure, connection refused, etc.). Resets on success.
+   * When this reaches MAX_CONSECUTIVE_NETWORK_FAILURES the circuit opens and
+   * further send attempts are skipped until CIRCUIT_BREAKER_COOLDOWN_MS elapses,
+   * at which point a single probe request is allowed (half-open state).
+   */
+  private consecutiveNetworkFailures = 0;
+  private circuitOpenedAt = 0;
 
   /**
    * Creates a SenderManager instance.
@@ -407,6 +419,20 @@ export class SenderManager extends StateManager {
         return;
       }
 
+      // Discard events that have exhausted all cross-session recovery attempts.
+      // This breaks the infinite persistence loop when the backend URL is
+      // permanently unreachable (e.g. DNS resolution failure or misconfigured URL).
+      const recoveryFailures = persistedData.recoveryFailures ?? 0;
+      if (recoveryFailures >= MAX_RECOVERY_FAILURES) {
+        log(
+          'debug',
+          `Discarding persisted events after ${recoveryFailures} failed recovery attempts${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        );
+        this.clearPersistedEvents();
+        callbacks?.onFailure?.();
+        return;
+      }
+
       const body = this.createRecoveryBody(persistedData);
       const success = await this.send(body);
 
@@ -414,6 +440,9 @@ export class SenderManager extends StateManager {
         this.clearPersistedEvents();
         callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
       } else {
+        // Increment the failure counter and re-persist so the next page load
+        // knows how many attempts have already been made.
+        this.persistEventsWithFailureCount(body, recoveryFailures + 1);
         callbacks?.onFailure?.();
       }
     } catch (error) {
@@ -650,6 +679,27 @@ export class SenderManager extends StateManager {
       return true;
     }
 
+    // Circuit breaker (Closed → Open → Half-Open):
+    // After MAX_CONSECUTIVE_NETWORK_FAILURES consecutive fetch rejections (DNS,
+    // connection refused), the circuit opens. After CIRCUIT_BREAKER_COOLDOWN_MS
+    // elapses it transitions to half-open, allowing one probe request through.
+    // A successful probe closes the circuit; a failed probe re-opens it.
+    if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
+      const elapsed = Date.now() - this.circuitOpenedAt;
+      if (elapsed < CIRCUIT_BREAKER_COOLDOWN_MS) {
+        log('debug', `Network circuit open, skipping send${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
+          data: {
+            consecutiveNetworkFailures: this.consecutiveNetworkFailures,
+            cooldownRemainingMs: CIRCUIT_BREAKER_COOLDOWN_MS - elapsed,
+          },
+        });
+        return false;
+      }
+      // Half-open: allow one probe batch through. Do NOT reset counter so a
+      // failed probe immediately re-opens the circuit (counter stays at MAX,
+      // circuitOpenedAt is refreshed in the failure path below).
+    }
+
     const { url, payload } = this.prepareRequest(transformedBody);
     let allTimeouts = true;
 
@@ -669,6 +719,7 @@ export class SenderManager extends StateManager {
             );
           }
 
+          this.consecutiveNetworkFailures = 0;
           return true;
         }
 
@@ -678,8 +729,9 @@ export class SenderManager extends StateManager {
       } catch (error) {
         const isLastAttempt = attempt === MAX_SEND_RETRIES + 1;
 
-        // Permanent errors bypass retries immediately
+        // Permanent errors bypass retries immediately; reset counter since URL is reachable
         if (error instanceof PermanentError) {
+          this.consecutiveNetworkFailures = 0;
           throw error;
         }
 
@@ -712,6 +764,19 @@ export class SenderManager extends StateManager {
         // received the request so we throw TimeoutError to skip persistence
         if (allTimeouts) {
           throw new TimeoutError('All retry attempts timed out (server likely received the request)');
+        }
+
+        // All retries exhausted without success. Increment the network circuit
+        // breaker counter. This covers DNS failures, connection refused, and
+        // persistent 5xx — all of which indicate the URL is currently unreachable.
+        // Timeouts are excluded because they imply the server is reachable but slow.
+        this.consecutiveNetworkFailures = Math.min(
+          this.consecutiveNetworkFailures + 1,
+          MAX_CONSECUTIVE_NETWORK_FAILURES,
+        );
+
+        if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
+          this.circuitOpenedAt = Date.now();
         }
 
         return false;
@@ -983,7 +1048,7 @@ export class SenderManager extends StateManager {
    */
   private createRecoveryBody(data: PersistedEventsQueue): EventsQueue {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { timestamp, ...queue } = data;
+    const { timestamp, recoveryFailures, ...queue } = data;
     return queue;
   }
 
@@ -1005,6 +1070,23 @@ export class SenderManager extends StateManager {
    * @private
    */
   private persistEvents(body: EventsQueue): boolean {
+    return this.persistEventsWithFailureCount(body, 0);
+  }
+
+  /**
+   * Persists failed events to localStorage, recording how many consecutive
+   * cross-session recovery attempts have already been made for this batch.
+   *
+   * When `recoveryFailures` reaches MAX_RECOVERY_FAILURES on the next page load,
+   * the batch is discarded rather than retried, preventing an infinite persistence
+   * loop caused by a permanently unreachable backend URL.
+   *
+   * @param body - EventsQueue to persist
+   * @param recoveryFailures - Number of failed recovery attempts already made
+   * @returns `true` on successful persistence or throttled write, `false` on error
+   * @private
+   */
+  private persistEventsWithFailureCount(body: EventsQueue, recoveryFailures: number): boolean {
     try {
       const existing = this.getPersistedData();
 
@@ -1027,6 +1109,7 @@ export class SenderManager extends StateManager {
       const persistedData: PersistedEventsQueue = {
         ...body,
         timestamp: Date.now(),
+        ...(recoveryFailures > 0 && { recoveryFailures }),
       };
 
       const storageKey = this.getQueueStorageKey();

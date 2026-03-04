@@ -378,3 +378,116 @@ describe('Integration: Per-Integration Recovery', () => {
     expect(localStorage.getItem(customKey)).toBeNull();
   });
 });
+
+describe('Integration: Cross-Session Recovery Limits', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+    vi.useRealTimers();
+  });
+
+  it('should discard cross-session persisted events after max recovery failures', async () => {
+    vi.useFakeTimers();
+
+    // Session 1: Create user to get userId and storage key
+    const failConfig = createConfigWithFailureSimulation();
+    const bridge = await initTestBridge(failConfig);
+    const userId = bridge.get('userId');
+    const storageKey = `tlog:${userId}:queue:custom`;
+
+    destroyTestBridge();
+    cleanupTestEnvironment();
+    setupTestEnvironment();
+    vi.useFakeTimers();
+
+    // Manually plant persisted data with recoveryFailures at max (3)
+    localStorage.setItem('tlog:uid', userId);
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        user_id: userId,
+        session_id: 'old-session',
+        device: { type: 'desktop', os: 'macOS', browser: 'Chrome' },
+        events: [
+          {
+            id: 'old-evt-1',
+            type: 'custom',
+            timestamp: Date.now(),
+            page_url: '/old',
+            custom_event: { name: 'old_event', metadata: {} },
+          },
+        ],
+        timestamp: Date.now(),
+        recoveryFailures: 3,
+      }),
+    );
+
+    // Session 2: Init — recovery should discard events
+    const successConfig = createConfigWithSuccessSimulation();
+    await initTestBridge(successConfig);
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runOnlyPendingTimersAsync();
+
+    // Events discarded, localStorage cleared
+    expect(localStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it('should increment recoveryFailures across sessions on failed recovery', async () => {
+    vi.useFakeTimers();
+
+    // Session 1: Fail and persist events
+    const failConfig = createConfigWithFailureSimulation();
+    let bridge = await initTestBridge(failConfig);
+
+    const userId = bridge.get('userId');
+    const storageKey = `tlog:${userId}:queue:custom`;
+
+    bridge.event('recovery_limit_test', { data: 'test' });
+
+    // Trigger send → fail → persist
+    await vi.advanceTimersByTimeAsync(10000);
+    await vi.runOnlyPendingTimersAsync();
+    await vi.advanceTimersByTimeAsync(800);
+    await vi.runOnlyPendingTimersAsync();
+
+    const persistedSession1 = localStorage.getItem(storageKey);
+    expect(persistedSession1).not.toBeNull();
+
+    // Verify no recoveryFailures on first persistence
+    const parsed1 = JSON.parse(persistedSession1!);
+    expect(parsed1.recoveryFailures).toBeUndefined();
+
+    const savedUserId = userId;
+    const savedPersistedData = persistedSession1;
+
+    destroyTestBridge();
+    cleanupTestEnvironment();
+    setupTestEnvironment();
+    vi.useFakeTimers();
+
+    // Restore userId and persisted data with adjusted timestamp.
+    // Session 1 advanced fake timers, so the persisted timestamp is in the
+    // "future" relative to Session 2's fresh fake timer. Adjust it to be
+    // 2s in the past so the persistence throttle doesn't skip the re-write.
+    localStorage.setItem('tlog:uid', savedUserId);
+    if (savedPersistedData) {
+      const adjusted = JSON.parse(savedPersistedData);
+      adjusted.timestamp = Date.now() - 2000;
+      localStorage.setItem(storageKey, JSON.stringify(adjusted));
+    }
+
+    // Session 2: Init with failure — recovery attempt fails, should increment counter
+    bridge = await initTestBridge(failConfig);
+
+    // Check immediately after init — recovery has run, new session events not sent yet
+    const persistedSession2 = localStorage.getItem(storageKey);
+    expect(persistedSession2).not.toBeNull();
+    const parsed2 = JSON.parse(persistedSession2!);
+    expect(parsed2.recoveryFailures).toBe(1);
+  });
+});
