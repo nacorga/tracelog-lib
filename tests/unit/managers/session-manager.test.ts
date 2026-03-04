@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment, advanceTimers } from '../../helpers/setup.helper';
-import { initTestBridge, destroyTestBridge, getManagers } from '../../helpers/bridge.helper';
+import { initTestBridge, destroyTestBridge, getManagers, getQueueState } from '../../helpers/bridge.helper';
 import { setupMockBroadcastChannel } from '../../helpers/mocks.helper';
 import { SESSION_STORAGE_KEY } from '../../../src/constants/storage.constants';
 import { DEFAULT_SESSION_TIMEOUT } from '../../../src/constants/config.constants';
@@ -855,5 +855,125 @@ describe('SessionManager - Session Renewal Mode', () => {
     // The pending event should have been flushed
     // EventManager should be defined and operational
     expect(eventManager).toBeDefined();
+  });
+});
+
+describe('SessionManager - Session Mirror', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    destroyTestBridge();
+    cleanupTestEnvironment();
+  });
+
+  it('should mirror session to sessionStorage on creation', async () => {
+    const bridge = await initTestBridge();
+    const sessionId = bridge.get('sessionId');
+
+    const storageKey = SESSION_STORAGE_KEY('custom');
+    const raw = sessionStorage.getItem(storageKey);
+    expect(raw).toBeTruthy();
+
+    const parsed = JSON.parse(raw!);
+    expect(parsed.id).toBe(sessionId);
+    expect(typeof parsed.lastActivity).toBe('number');
+  });
+
+  it('should recover from sessionStorage when localStorage is empty', async () => {
+    const bridge1 = await initTestBridge();
+    const sessionId1 = bridge1.get('sessionId');
+
+    // Simulate external redirect: destroy instance, clear localStorage
+    // sessionStorage survives same-tab navigation
+    bridge1.destroy(true);
+    localStorage.clear();
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const bridge2 = await initTestBridge();
+
+    expect(bridge2.get('sessionId')).toBe(sessionId1);
+  });
+
+  it('should not recover expired session from sessionStorage', async () => {
+    const bridge1 = await initTestBridge();
+    const sessionId1 = bridge1.get('sessionId');
+
+    bridge1.destroy(true);
+    localStorage.clear();
+
+    // Manually expire the session mirror in sessionStorage
+    const storageKey = SESSION_STORAGE_KEY('custom');
+    const expiredSession = JSON.stringify({
+      id: sessionId1,
+      lastActivity: Date.now() - DEFAULT_SESSION_TIMEOUT - 1000,
+    });
+    sessionStorage.setItem(storageKey, expiredSession);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const bridge2 = await initTestBridge();
+
+    expect(bridge2.get('sessionId')).not.toBe(sessionId1);
+    expect(bridge2.get('sessionId')).toMatch(/^\d+-[a-z0-9]{9}$/);
+  });
+
+  it('should handle corrupted sessionStorage data gracefully', async () => {
+    localStorage.clear();
+
+    const storageKey = SESSION_STORAGE_KEY('custom');
+    sessionStorage.setItem(storageKey, 'not-valid-json');
+
+    const bridge = await initTestBridge();
+
+    expect(bridge.get('sessionId')).toBeTruthy();
+    expect(bridge.get('sessionId')).toMatch(/^\d+-[a-z0-9]{9}$/);
+  });
+
+  it('should prioritize localStorage over sessionStorage', async () => {
+    const bridge1 = await initTestBridge();
+    const sessionId1 = bridge1.get('sessionId');
+    const { storage } = getManagers(bridge1);
+
+    const storageKey = SESSION_STORAGE_KEY('custom');
+    const storedData = storage?.getItem(storageKey);
+
+    bridge1.destroy(false);
+
+    // Ensure localStorage has the session
+    if (storedData !== null && storedData !== undefined) {
+      localStorage.setItem(storageKey, storedData);
+    }
+
+    // Write a different session to sessionStorage
+    const differentSessionId = `${Date.now()}-zzzzzzzzz`;
+    sessionStorage.setItem(storageKey, JSON.stringify({ id: differentSessionId, lastActivity: Date.now() }));
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const bridge2 = await initTestBridge();
+
+    // localStorage should win
+    expect(bridge2.get('sessionId')).toBe(sessionId1);
+  });
+
+  it('should not emit SESSION_START when recovering from sessionStorage', async () => {
+    const bridge1 = await initTestBridge();
+    const sessionId1 = bridge1.get('sessionId');
+
+    bridge1.destroy(true);
+    localStorage.clear();
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const bridge2 = await initTestBridge();
+
+    const events = getQueueState(bridge2).events;
+    const sessionStartEvents = events.filter((e) => e.type === 'session_start');
+
+    expect(sessionStartEvents).toHaveLength(0);
+    expect(bridge2.get('sessionId')).toBe(sessionId1);
   });
 });
