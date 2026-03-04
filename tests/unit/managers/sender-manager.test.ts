@@ -2060,6 +2060,66 @@ describe('SenderManager - Network Circuit Breaker', () => {
     expect((sender as any).consecutiveNetworkFailures).toBe(0);
   });
 
+  it('should NOT count 5xx errors toward circuit breaker (URL is reachable)', async () => {
+    // Arrange — 5xx responses prove the URL is reachable (server returned HTTP)
+    global.fetch = createMockFetch({ ok: false, status: 503 });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act — send 4 batches, all failing with 5xx (would exceed threshold if counted)
+    for (let i = 0; i < 4; i++) {
+      const promise = sender.sendEventsQueue(eventsQueue);
+      await advanceTimers(1000);
+      await promise;
+    }
+
+    // Assert — counter stays at 0, circuit never opens
+    expect((sender as any).consecutiveNetworkFailures).toBe(0);
+  });
+
+  it('should reset counter when HTTP response received after network failures', async () => {
+    // Arrange — start with 2 network failures
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    expect((sender as any).consecutiveNetworkFailures).toBe(2);
+
+    // Act — 5xx response proves URL is reachable, resets counter
+    global.fetch = createMockFetch({ ok: false, status: 500 });
+    const promise = sender.sendEventsQueue(eventsQueue);
+    await advanceTimers(1000);
+    await promise;
+
+    // Assert
+    expect((sender as any).consecutiveNetworkFailures).toBe(0);
+  });
+
   it('should track circuitOpenedAt timestamp when circuit opens', async () => {
     // Arrange
     const mockFetch = createMockFetchNetworkError();

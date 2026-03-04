@@ -121,6 +121,7 @@ Core business logic components that handle analytics data processing, state mana
   - Transitions to half-open after cooldown, allowing one probe batch through
   - Successful probe closes circuit; failed probe re-opens for another cooldown
   - Timeouts excluded (server is reachable but slow)
+  - HTTP responses (5xx/408/429) reset counter (URL is reachable, handled by backoff)
   - Permanent errors (4xx) reset counter immediately (URL is reachable)
 - **Cross-session recovery limit (v2.6.0+)** - Prevents infinite persistence loops
   - Each failed page-load recovery increments `recoveryFailures` counter in localStorage

@@ -422,7 +422,9 @@ export class SenderManager extends StateManager {
       // Discard events that have exhausted all cross-session recovery attempts.
       // This breaks the infinite persistence loop when the backend URL is
       // permanently unreachable (e.g. DNS resolution failure or misconfigured URL).
-      const recoveryFailures = persistedData.recoveryFailures ?? 0;
+      const rawFailures = persistedData.recoveryFailures;
+      const recoveryFailures =
+        typeof rawFailures === 'number' && Number.isFinite(rawFailures) && rawFailures >= 0 ? rawFailures : 0;
       if (recoveryFailures >= MAX_RECOVERY_FAILURES) {
         log(
           'debug',
@@ -702,6 +704,7 @@ export class SenderManager extends StateManager {
 
     const { url, payload } = this.prepareRequest(transformedBody);
     let allTimeouts = true;
+    let hadHttpResponse = false;
 
     // Retry loop: initial attempt + MAX_SEND_RETRIES additional attempts
     for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
@@ -741,6 +744,13 @@ export class SenderManager extends StateManager {
           allTimeouts = false;
         }
 
+        // Track whether any attempt received an HTTP response (5xx/408/429).
+        // Network-level failures (DNS, connection refused) throw TypeError from
+        // fetch(), while HTTP errors throw generic Error with "HTTP {status}".
+        if (!(error instanceof TypeError)) {
+          hadHttpResponse = true;
+        }
+
         // Log error with retry context
         log(
           isLastAttempt ? 'error' : 'warn',
@@ -768,17 +778,23 @@ export class SenderManager extends StateManager {
           throw new TimeoutError('All retry attempts timed out (server likely received the request)');
         }
 
-        // All retries exhausted without success. Increment the network circuit
-        // breaker counter. This covers DNS failures, connection refused, and
-        // persistent 5xx — all of which indicate the URL is currently unreachable.
-        // Timeouts are excluded because they imply the server is reachable but slow.
-        this.consecutiveNetworkFailures = Math.min(
-          this.consecutiveNetworkFailures + 1,
-          MAX_CONSECUTIVE_NETWORK_FAILURES,
-        );
+        // Only increment the circuit breaker for true network-level failures
+        // (DNS, connection refused) where no HTTP response was received.
+        // If any attempt got an HTTP response (5xx/408/429), the URL is
+        // reachable — these transient errors are handled by the existing
+        // backoff scheduler (MAX_CONSECUTIVE_SEND_FAILURES / MAX_SEND_INTERVAL_MS).
+        if (!hadHttpResponse) {
+          this.consecutiveNetworkFailures = Math.min(
+            this.consecutiveNetworkFailures + 1,
+            MAX_CONSECUTIVE_NETWORK_FAILURES,
+          );
 
-        if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
-          this.circuitOpenedAt = Date.now();
+          if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
+            this.circuitOpenedAt = Date.now();
+          }
+        } else {
+          this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
         }
 
         return false;
