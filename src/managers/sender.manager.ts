@@ -442,7 +442,7 @@ export class SenderManager extends StateManager {
       } else {
         // Increment the failure counter and re-persist so the next page load
         // knows how many attempts have already been made.
-        this.persistEventsWithFailureCount(body, recoveryFailures + 1);
+        this.persistEventsWithFailureCount(body, recoveryFailures + 1, true);
         callbacks?.onFailure?.();
       }
     } catch (error) {
@@ -720,6 +720,7 @@ export class SenderManager extends StateManager {
           }
 
           this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
           return true;
         }
 
@@ -732,6 +733,7 @@ export class SenderManager extends StateManager {
         // Permanent errors bypass retries immediately; reset counter since URL is reachable
         if (error instanceof PermanentError) {
           this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
           throw error;
         }
 
@@ -1083,14 +1085,15 @@ export class SenderManager extends StateManager {
    *
    * @param body - EventsQueue to persist
    * @param recoveryFailures - Number of failed recovery attempts already made
+   * @param skipThrottle - Bypass the multi-tab throttle (used during recovery re-persistence)
    * @returns `true` on successful persistence or throttled write, `false` on error
    * @private
    */
-  private persistEventsWithFailureCount(body: EventsQueue, recoveryFailures: number): boolean {
+  private persistEventsWithFailureCount(body: EventsQueue, recoveryFailures: number, skipThrottle = false): boolean {
     try {
       const existing = this.getPersistedData();
 
-      if (existing && existing.timestamp) {
+      if (!skipThrottle && existing && existing.timestamp) {
         const timeSinceExisting = Date.now() - existing.timestamp;
 
         if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {

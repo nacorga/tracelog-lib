@@ -470,15 +470,10 @@ describe('Integration: Cross-Session Recovery Limits', () => {
     setupTestEnvironment();
     vi.useFakeTimers();
 
-    // Restore userId and persisted data with adjusted timestamp.
-    // Session 1 advanced fake timers, so the persisted timestamp is in the
-    // "future" relative to Session 2's fresh fake timer. Adjust it to be
-    // 2s in the past so the persistence throttle doesn't skip the re-write.
+    // Restore userId and persisted data from Session 1.
     localStorage.setItem('tlog:uid', savedUserId);
     if (savedPersistedData) {
-      const adjusted = JSON.parse(savedPersistedData);
-      adjusted.timestamp = Date.now() - 2000;
-      localStorage.setItem(storageKey, JSON.stringify(adjusted));
+      localStorage.setItem(storageKey, savedPersistedData);
     }
 
     // Session 2: Init with failure — recovery attempt fails, should increment counter
