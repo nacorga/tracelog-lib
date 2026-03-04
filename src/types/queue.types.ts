@@ -22,7 +22,13 @@ export interface EventsQueue {
 
 /**
  * Extended queue structure for localStorage persistence with expiration tracking.
+ *
+ * `recoveryFailures` tracks how many consecutive page-load recovery attempts have
+ * failed for this persisted batch. When it reaches MAX_RECOVERY_FAILURES the batch
+ * is discarded, breaking the cross-session retry loop caused by permanently
+ * unreachable URLs (e.g. DNS resolution failures).
  */
 export interface PersistedEventsQueue extends EventsQueue {
   timestamp: number;
+  recoveryFailures?: number;
 }

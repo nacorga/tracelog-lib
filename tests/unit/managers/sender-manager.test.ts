@@ -1745,3 +1745,581 @@ describe('SenderManager - TimeoutError Handling', () => {
     expect(persistSpy).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// NETWORK CIRCUIT BREAKER
+// ============================================================================
+
+describe('SenderManager - Network Circuit Breaker', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  /**
+   * Helper: runs a single batch through all retries (3 attempts) with network error.
+   * Returns the sendEventsQueue promise result.
+   */
+  async function runFailedNetworkBatch(sender: any, eventsQueue: any): Promise<boolean> {
+    const promise = sender.sendEventsQueue(eventsQueue);
+    // Advance past backoff delays: attempt 1 immediate fail, backoff ~300ms,
+    // attempt 2 immediate fail, backoff ~500ms, attempt 3 immediate fail
+    await advanceTimers(1000);
+    return promise;
+  }
+
+  it('should open circuit after MAX_CONSECUTIVE_NETWORK_FAILURES batches', async () => {
+    // Arrange
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act — send 3 batches, each failing all 3 attempts (9 fetch calls total)
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    expect(mockFetch).toHaveBeenCalledTimes(9); // 3 batches × 3 attempts
+
+    // 4th send should be blocked by circuit breaker (no additional fetch calls)
+    mockFetch.mockClear();
+    const result = await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect(result).toBe(false);
+    expect(mockFetch).toHaveBeenCalledTimes(0);
+  });
+
+  it('should skip send when circuit is open (within cooldown)', async () => {
+    // Arrange
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Open circuit
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    mockFetch.mockClear();
+
+    // Act — advance 60s (still within 120s cooldown) and try sending
+    await advanceTimers(60000);
+    const result = await sender.sendEventsQueue(eventsQueue);
+
+    // Assert — still blocked
+    expect(result).toBe(false);
+    expect(mockFetch).toHaveBeenCalledTimes(0);
+  });
+
+  it('should allow probe after CIRCUIT_BREAKER_COOLDOWN_MS (half-open)', async () => {
+    // Arrange
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Open circuit
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    mockFetch.mockClear();
+
+    // Act — advance past cooldown (120s) and try sending
+    await advanceTimers(121000);
+    const promise = runFailedNetworkBatch(sender, eventsQueue);
+    await promise;
+
+    // Assert — fetch was called (probe allowed through)
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
+  it('should close circuit on successful probe', async () => {
+    // Arrange
+    const mockFetchFail = createMockFetchNetworkError();
+    global.fetch = mockFetchFail;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Open circuit
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    // Advance past cooldown
+    await advanceTimers(121000);
+
+    // Switch to success mock for probe
+    const mockFetchSuccess = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetchSuccess;
+
+    // Act — probe succeeds
+    const probeResult = await sender.sendEventsQueue(eventsQueue);
+    expect(probeResult).toBe(true);
+
+    // Assert — next send also succeeds immediately (circuit closed)
+    mockFetchSuccess.mockClear();
+    const nextResult = await sender.sendEventsQueue(eventsQueue);
+    expect(nextResult).toBe(true);
+    expect(mockFetchSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('should re-open circuit on failed probe', async () => {
+    // Arrange
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Open circuit
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    // Advance past cooldown and fail probe
+    await advanceTimers(121000);
+    mockFetch.mockClear();
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    // Assert — circuit re-opened, immediate send blocked
+    mockFetch.mockClear();
+    const result = await sender.sendEventsQueue(eventsQueue);
+    expect(result).toBe(false);
+    expect(mockFetch).toHaveBeenCalledTimes(0);
+  });
+
+  it('should reset counter on successful send', async () => {
+    // Arrange
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // 2 failed batches (counter = 2, below threshold of 3)
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    expect((sender as any).consecutiveNetworkFailures).toBe(2);
+
+    // Successful send resets counter
+    global.fetch = createMockFetch({ ok: true, status: 200 });
+    await sender.sendEventsQueue(eventsQueue);
+    expect((sender as any).consecutiveNetworkFailures).toBe(0);
+
+    // 2 more failures — circuit still not open (counter back to 2)
+    global.fetch = createMockFetchNetworkError();
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    expect((sender as any).consecutiveNetworkFailures).toBe(2);
+
+    // Verify circuit is NOT open (fetch still called)
+    const freshMock = createMockFetchNetworkError();
+    global.fetch = freshMock;
+    await runFailedNetworkBatch(sender, eventsQueue);
+    expect(freshMock).toHaveBeenCalled();
+  });
+
+  it('should reset counter on PermanentError (4xx)', async () => {
+    // Arrange — start with 2 network failures
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    expect((sender as any).consecutiveNetworkFailures).toBe(2);
+
+    // Act — 4xx response proves URL is reachable, resets counter
+    global.fetch = createMockFetch({ ok: false, status: 400 });
+    await sender.sendEventsQueue(eventsQueue);
+
+    // Assert
+    expect((sender as any).consecutiveNetworkFailures).toBe(0);
+  });
+
+  it('should NOT count TimeoutError toward circuit breaker', async () => {
+    // Arrange — fetch that hangs until AbortController timeout
+    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        }
+      });
+    });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act — send 4 batches, all timing out (would exceed threshold if counted)
+    for (let i = 0; i < 4; i++) {
+      const sendPromise = sender.sendEventsQueue(eventsQueue);
+      // Advance past REQUEST_TIMEOUT_MS (15s) × 3 attempts + backoff
+      await advanceTimers(16000);
+      await advanceTimers(16000);
+      await advanceTimers(16000);
+      await sendPromise;
+    }
+
+    // Assert — counter stays at 0, circuit never opens
+    expect((sender as any).consecutiveNetworkFailures).toBe(0);
+  });
+
+  it('should NOT count 5xx errors toward circuit breaker (URL is reachable)', async () => {
+    // Arrange — 5xx responses prove the URL is reachable (server returned HTTP)
+    global.fetch = createMockFetch({ ok: false, status: 503 });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act — send 4 batches, all failing with 5xx (would exceed threshold if counted)
+    for (let i = 0; i < 4; i++) {
+      const promise = sender.sendEventsQueue(eventsQueue);
+      await advanceTimers(1000);
+      await promise;
+    }
+
+    // Assert — counter stays at 0, circuit never opens
+    expect((sender as any).consecutiveNetworkFailures).toBe(0);
+  });
+
+  it('should reset counter when HTTP response received after network failures', async () => {
+    // Arrange — start with 2 network failures
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+    expect((sender as any).consecutiveNetworkFailures).toBe(2);
+
+    // Act — 5xx response proves URL is reachable, resets counter
+    global.fetch = createMockFetch({ ok: false, status: 500 });
+    const promise = sender.sendEventsQueue(eventsQueue);
+    await advanceTimers(1000);
+    await promise;
+
+    // Assert
+    expect((sender as any).consecutiveNetworkFailures).toBe(0);
+  });
+
+  it('should track circuitOpenedAt timestamp when circuit opens', async () => {
+    // Arrange
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Initially zero
+    expect((sender as any).circuitOpenedAt).toBe(0);
+
+    // Open circuit with 3 failed batches
+    await runFailedNetworkBatch(sender, eventsQueue);
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    const timeBeforeOpen = Date.now();
+    await runFailedNetworkBatch(sender, eventsQueue);
+
+    // Assert — timestamp set on 3rd failure
+    expect((sender as any).circuitOpenedAt).toBeGreaterThanOrEqual(timeBeforeOpen);
+    expect((sender as any).consecutiveNetworkFailures).toBe(3);
+  });
+});
+
+// ============================================================================
+// RECOVERY FAILURE TRACKING
+// ============================================================================
+
+describe('SenderManager - Recovery Failure Tracking', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should discard persisted events after MAX_RECOVERY_FAILURES', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Use sender's own persistence with MAX_RECOVERY_FAILURES
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+    (sender as any).persistEventsWithFailureCount(eventsQueue, 3);
+
+    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
+    const failureCallback = vi.fn();
+
+    // Act
+    await sender.recoverPersistedEvents({ onFailure: failureCallback });
+
+    // Assert — discarded without send attempt
+    expect(clearSpy).toHaveBeenCalled();
+    expect(failureCallback).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('should increment recoveryFailures on failed recovery', async () => {
+    // Arrange
+    vi.useFakeTimers();
+    const mockFetch = createMockFetchNetworkError();
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Use sender's own persistence with recoveryFailures: 1
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+    (sender as any).persistEventsWithFailureCount(eventsQueue, 1);
+
+    // Advance past persistence throttle window (1s)
+    await advanceTimers(1500);
+
+    // Act
+    const recoverPromise = sender.recoverPersistedEvents();
+    await advanceTimers(1000); // Past backoff delays
+    await recoverPromise;
+
+    // Assert — recoveryFailures incremented to 2
+    const storageKey = (sender as any).getQueueStorageKey();
+    const updated = JSON.parse(storage.getItem(storageKey)!);
+    expect(updated.recoveryFailures).toBe(2);
+  });
+
+  it('should clear recoveryFailures on successful recovery', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Use sender's own persistence with recoveryFailures: 2
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+    (sender as any).persistEventsWithFailureCount(eventsQueue, 2);
+
+    // Act
+    await sender.recoverPersistedEvents();
+
+    // Assert — localStorage entirely cleared
+    const storageKey = (sender as any).getQueueStorageKey();
+    expect(storage.getItem(storageKey)).toBeNull();
+  });
+
+  it('should treat missing recoveryFailures as 0', async () => {
+    // Arrange — persisted data without recoveryFailures field (backward compat)
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Use sender's own persistEvents (which sets recoveryFailures: 0, omitted from JSON)
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+    (sender as any).persistEvents(eventsQueue);
+
+    const sendSpy = vi.spyOn(sender as any, 'send');
+
+    // Act
+    await sender.recoverPersistedEvents();
+
+    // Assert — send was attempted (not discarded)
+    expect(sendSpy).toHaveBeenCalled();
+    const storageKey = (sender as any).getQueueStorageKey();
+    expect(storage.getItem(storageKey)).toBeNull(); // Cleared on success
+  });
+
+  it('should not include recoveryFailures in HTTP body', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Use sender's own persistence with recoveryFailures: 1
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+    (sender as any).persistEventsWithFailureCount(eventsQueue, 1);
+
+    // Act
+    await sender.recoverPersistedEvents();
+
+    // Assert — fetch payload should NOT contain recoveryFailures
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const fetchPayload = JSON.parse(mockFetch.mock.calls[0]![1].body as string);
+    expect(fetchPayload).not.toHaveProperty('recoveryFailures');
+    expect(fetchPayload).not.toHaveProperty('timestamp');
+  });
+});
