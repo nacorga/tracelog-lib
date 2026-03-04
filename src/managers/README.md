@@ -115,6 +115,18 @@ Core business logic components that handle analytics data processing, state mana
 - **Request timeout** - 10 seconds with AbortController
 - **Sanitized error logging** - Domain masking for privacy with `[saas]` or `[custom]` labels
 - **Test mode support** - QA scenarios and mock failures
+- **Network circuit breaker (v2.6.0+)** - Prevents cascading failures from permanently unreachable URLs
+  - Tracks consecutive network-level failures (DNS, connection refused) per integration
+  - Opens after 3 consecutive failed batches, skipping sends for 2-minute cooldown
+  - Transitions to half-open after cooldown, allowing one probe batch through
+  - Successful probe closes circuit; failed probe re-opens for another cooldown
+  - Timeouts excluded (server is reachable but slow)
+  - HTTP responses (5xx/408/429) reset counter (URL is reachable, handled by backoff)
+  - Permanent errors (4xx) reset counter immediately (URL is reachable)
+- **Cross-session recovery limit (v2.6.0+)** - Prevents infinite persistence loops
+  - Each failed page-load recovery increments `recoveryFailures` counter in localStorage
+  - After 3 failed recoveries, persisted batch is discarded
+  - Backward-compatible: existing data without counter treated as 0
 
 **Integration Storage Keys**:
 - **SaaS**: `tlog:queue:{userId}:saas`

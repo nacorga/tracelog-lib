@@ -54,7 +54,7 @@ export function createMockFetch(
  * Create mock fetch that fails with network error
  */
 export function createMockFetchNetworkError(): Mock {
-  return vi.fn().mockRejectedValue(new Error('Network request failed'));
+  return vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 }
 
 /**

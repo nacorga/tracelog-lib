@@ -264,6 +264,37 @@ export const RETRY_BACKOFF_JITTER_MS = 100;
 export const MAX_SEND_INTERVAL_MS = 120000;
 
 /**
+ * Maximum consecutive network-level failures (DNS, connection refused) before the
+ * circuit opens and further send attempts are skipped for the current session.
+ *
+ * Network failures are fetch() rejections where no HTTP response was received —
+ * distinct from timeout errors and HTTP status errors. Three consecutive failures
+ * strongly indicate a permanently misconfigured URL rather than a transient outage.
+ *
+ * After CIRCUIT_BREAKER_COOLDOWN_MS elapses, the circuit transitions to half-open
+ * and allows a single probe batch through. A successful probe closes the circuit;
+ * a failed probe re-opens it for another cooldown period.
+ */
+export const MAX_CONSECUTIVE_NETWORK_FAILURES = 3;
+
+/**
+ * Cooldown period before the network circuit breaker transitions to half-open
+ * and allows a single probe request through. Aligned with MAX_SEND_INTERVAL_MS
+ * so the EventManager's backoff scheduler naturally triggers the probe.
+ */
+export const CIRCUIT_BREAKER_COOLDOWN_MS = 120_000; // 2 minutes
+
+/**
+ * Maximum number of cross-session recovery attempts for a persisted event batch.
+ *
+ * Each page load that attempts to recover a persisted batch and fails increments
+ * this counter inside the stored data. When the counter reaches this limit the
+ * batch is discarded instead of being kept for another attempt, breaking the
+ * infinite persistence loop caused by permanently unreachable backend URLs.
+ */
+export const MAX_RECOVERY_FAILURES = 3;
+
+/**
  * Maximum consecutive send failures before entering cooldown mode.
  *
  * After this many failures:
