@@ -1133,6 +1133,9 @@ export class EventManager extends StateManager {
 
     if (event.custom_event) {
       fingerprint += `_custom_${event.custom_event.name}`;
+      if (event.custom_event.metadata) {
+        fingerprint += `_${JSON.stringify(event.custom_event.metadata)}`;
+      }
     }
 
     if (event.web_vitals) {
