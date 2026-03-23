@@ -560,6 +560,62 @@ describe('EventManager - Deduplication', () => {
     // Second event is deduplicated
     expect(eventManager.getQueueLength()).toBe(1);
   });
+
+  it('should not deduplicate custom events with same name but different metadata', () => {
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { orderId: '123' } },
+    });
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { orderId: '456' } },
+    });
+
+    // Different metadata = different fingerprints, both should queue
+    expect(eventManager.getQueueLength()).toBe(2);
+  });
+
+  it('should deduplicate custom events with same name and same metadata', () => {
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { orderId: '123' } },
+    });
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { orderId: '123' } },
+    });
+
+    // Identical name + metadata within threshold = deduplicated
+    expect(eventManager.getQueueLength()).toBe(1);
+  });
+
+  it('should deduplicate custom events with same name and no metadata', () => {
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'logout' },
+    });
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'logout' },
+    });
+
+    // Same name, no metadata = same fingerprint, deduplicated
+    expect(eventManager.getQueueLength()).toBe(1);
+  });
+
+  it('should deduplicate custom events with same metadata regardless of key order', () => {
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { orderId: '123', amount: 50 } },
+    });
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { amount: 50, orderId: '123' } },
+    });
+
+    // Same data, different key insertion order = same fingerprint, deduplicated
+    expect(eventManager.getQueueLength()).toBe(1);
+  });
 });
 
 describe('EventManager - Sampling', () => {

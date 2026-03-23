@@ -1133,6 +1133,9 @@ export class EventManager extends StateManager {
 
     if (event.custom_event) {
       fingerprint += `_custom_${event.custom_event.name}`;
+      if (event.custom_event.metadata) {
+        fingerprint += `_${this.stableStringify(event.custom_event.metadata)}`;
+      }
     }
 
     if (event.web_vitals) {
@@ -1148,6 +1151,21 @@ export class EventManager extends StateManager {
 
   private createEventSignature(event: EventData): string {
     return this.createEventFingerprint(event);
+  }
+
+  /** Deterministic JSON string with sorted keys to ensure consistent fingerprints regardless of property insertion order */
+  private stableStringify(value: unknown): string {
+    return JSON.stringify(value, (_, v: unknown) => {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        return Object.keys(v as Record<string, unknown>)
+          .sort()
+          .reduce<Record<string, unknown>>((sorted, key) => {
+            sorted[key] = (v as Record<string, unknown>)[key];
+            return sorted;
+          }, {});
+      }
+      return v;
+    });
   }
 
   private addToQueue(event: EventData): void {
