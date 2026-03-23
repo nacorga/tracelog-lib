@@ -602,6 +602,20 @@ describe('EventManager - Deduplication', () => {
     // Same name, no metadata = same fingerprint, deduplicated
     expect(eventManager.getQueueLength()).toBe(1);
   });
+
+  it('should deduplicate custom events with same metadata regardless of key order', () => {
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { orderId: '123', amount: 50 } },
+    });
+    eventManager.track({
+      type: EventType.CUSTOM,
+      custom_event: { name: 'purchase', metadata: { amount: 50, orderId: '123' } },
+    });
+
+    // Same data, different key insertion order = same fingerprint, deduplicated
+    expect(eventManager.getQueueLength()).toBe(1);
+  });
 });
 
 describe('EventManager - Sampling', () => {
