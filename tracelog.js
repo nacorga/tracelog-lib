@@ -290,7 +290,7 @@ const Ot = () => {
     default:
       return We;
   }
-}, Bt = 1e3, Wt = 50, Gt = "2.6.0", Xt = Gt, nt = () => typeof window < "u" && typeof sessionStorage < "u", Qt = () => {
+}, Bt = 1e3, Wt = 50, Gt = "2.6.1", Xt = Gt, nt = () => typeof window < "u" && typeof sessionStorage < "u", Qt = () => {
   try {
     const s = new URLSearchParams(window.location.search);
     s.delete(Je);
@@ -2543,10 +2543,14 @@ class fr extends w {
       const r = Math.round((e.click_data.x || 0) / 10) * 10, n = Math.round((e.click_data.y || 0) / 10) * 10;
       t += `_click_${r}_${n}`;
     }
-    return e.scroll_data && (t += `_scroll_${e.scroll_data.depth}_${e.scroll_data.direction}`), e.custom_event && (t += `_custom_${e.custom_event.name}`), e.web_vitals && (t += `_vitals_${e.web_vitals.type}`), e.error_data && (t += `_error_${e.error_data.type}_${e.error_data.message}`), t;
+    return e.scroll_data && (t += `_scroll_${e.scroll_data.depth}_${e.scroll_data.direction}`), e.custom_event && (t += `_custom_${e.custom_event.name}`, e.custom_event.metadata && (t += `_${this.stableStringify(e.custom_event.metadata)}`)), e.web_vitals && (t += `_vitals_${e.web_vitals.type}`), e.error_data && (t += `_error_${e.error_data.type}_${e.error_data.message}`), t;
   }
   createEventSignature(e) {
     return this.createEventFingerprint(e);
+  }
+  /** Deterministic JSON string with sorted keys to ensure consistent fingerprints regardless of property insertion order */
+  stableStringify(e) {
+    return JSON.stringify(e, (t, r) => r && typeof r == "object" && !Array.isArray(r) ? Object.keys(r).sort().reduce((n, i) => (n[i] = r[i], n), {}) : r);
   }
   addToQueue(e) {
     if (this.emitEvent(e), this.eventsQueue.push(e), this.eventsQueue.length > 100) {
