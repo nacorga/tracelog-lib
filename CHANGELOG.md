@@ -9,6 +9,29 @@
 
 
 
+
+## [2.6.2] - 2026-03-23
+
+### 🐛 Bug Fixes
+
+- Update flatted package to version 3.4.2 for improved stability ([32f0f75](../../commit/32f0f750c4454aa6b40db81f06709e03e81e1f61))
+- Ensure consistent deduplication of custom events by normalizing metadata key order ([af73df0](../../commit/af73df05e23cdb68978c61ddda1398dbc25741f9))
+- Update EventManager to differentiate custom events based on metadata for deduplication ([845d270](../../commit/845d2708fc0d1c46cc5997101d52cc99789e7e95))
+
+### 🔧 Other Changes
+
+- Merge pull request #92 from nacorga/hotfix/20260323.1 ([94a75d1](../../commit/94a75d11d7f63cd42623444dc6eacbaf5b24bcb5))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.6.1...v2.6.2
+
+
 ## [2.6.1] - 2026-03-04
 
 ### ✨ Features
