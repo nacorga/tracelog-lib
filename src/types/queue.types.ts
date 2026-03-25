@@ -32,7 +32,7 @@ export interface EventsQueue {
   /** Optional metadata attached to all events in this batch */
   global_metadata?: Record<string, MetadataType>;
   /** Visitor identity from identify() call — included in every batch */
-  identity?: IdentifyData;
+  identify?: IdentifyData;
 }
 
 /**

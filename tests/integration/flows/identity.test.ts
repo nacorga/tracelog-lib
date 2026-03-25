@@ -47,9 +47,9 @@ describe('Integration: Identity Flow', () => {
     if (!fetchCall) throw new Error('No fetch call found');
 
     const payload = JSON.parse(fetchCall[1].body as string);
-    expect(payload.identity).toBeDefined();
-    expect(payload.identity.userId).toBe('cust_123');
-    expect(payload.identity.traits).toEqual({ name: 'Maria', plan: 'pro' });
+    expect(payload.identify).toBeDefined();
+    expect(payload.identify.userId).toBe('cust_123');
+    expect(payload.identify.traits).toEqual({ name: 'Maria', plan: 'pro' });
   });
 
   it('should not include identity when not identified', async () => {
@@ -63,7 +63,7 @@ describe('Integration: Identity Flow', () => {
     if (!fetchCall) throw new Error('No fetch call found');
 
     const payload = JSON.parse(fetchCall[1].body as string);
-    expect(payload.identity).toBeUndefined();
+    expect(payload.identify).toBeUndefined();
   });
 
   it('should use latest identity (last-write-wins)', async () => {
@@ -79,7 +79,7 @@ describe('Integration: Identity Flow', () => {
     if (!fetchCall) throw new Error('No fetch call found');
 
     const payload = JSON.parse(fetchCall[1].body as string);
-    expect(payload.identity?.userId).toBe('user_2');
+    expect(payload.identify?.userId).toBe('user_2');
   });
 
   it('should not include identity after resetIdentity()', async () => {
@@ -98,7 +98,7 @@ describe('Integration: Identity Flow', () => {
     const payload = JSON.parse(lastCall[1].body as string);
     const postResetEvent = payload.events.find((e: any) => e.custom_event?.name === 'post_reset_event');
     expect(postResetEvent).toBeDefined();
-    expect(payload.identity).toBeUndefined();
+    expect(payload.identify).toBeUndefined();
   });
 });
 
