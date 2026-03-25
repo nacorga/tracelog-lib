@@ -284,6 +284,88 @@ onDestroy(() => {
 
 ---
 
+### `identify(userId: string, traits?: Record<string, string>): void`
+
+Associates the current anonymous visitor with a known user identity.
+
+**Parameters:**
+- `userId` (required): External user identifier (email, customer_id, etc.). Max 256 characters.
+- `traits` (optional): User attributes as `Record<string, string>` (name, email, plan, etc.)
+
+**Throws:**
+- Nothing (logs warning on validation failure)
+
+**Behavior:**
+- Can be called **before or after** `init()`
+- If called before `init()`, identity is persisted to localStorage and applied automatically when `init()` runs
+- Identity is included in every event batch (piggyback), so the backend always receives the latest identity
+- Calling multiple times overwrites (last-write-wins)
+
+**Integration Behavior:**
+
+| Mode | Behavior |
+|------|----------|
+| Standalone | Identity stored in state only (no backend sends) |
+| TraceLog SaaS | Identity included in batch payload |
+| Custom Backend | Identity included in batch payload |
+| Multi-Integration | Identity included in all batch payloads |
+
+**Examples:**
+
+```typescript
+// After login
+tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
+
+// Before init (identity queued, applied on init)
+tracelog.identify('cust_123');
+await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
+
+// Update traits later
+tracelog.identify('cust_123', { plan: 'enterprise' });
+```
+
+**Notes:**
+- Whitespace-only or empty `userId` values are rejected
+- Empty traits object `{}` is treated as no traits
+- `userId` is trimmed automatically
+- Identity persists across page reloads (localStorage, project-scoped)
+
+---
+
+### `resetIdentity(): Promise<void>`
+
+Clears identity, regenerates UUID, and starts a new session.
+
+Use for logout flows. The previous visitor profile remains in the backend. The next user in the same browser gets a fresh anonymous profile.
+
+**Throws:**
+- `Error` if called during `destroy()`
+
+**Behavior:**
+- Flushes pending events with the **old** identity before clearing (uses `fetch`, not `sendBeacon`)
+- Generates a new anonymous UUID
+- Starts a new session with the new UUID
+- If called before `init()`, just clears any pending identity silently
+
+**Examples:**
+
+```typescript
+// On logout
+await tracelog.resetIdentity();
+
+// Full login/logout flow
+tracelog.identify('cust_123', { name: 'Maria' });
+// ... user activity tracked with identity ...
+await tracelog.resetIdentity(); // New anonymous profile
+```
+
+**Notes:**
+- Async because it flushes pending events before resetting
+- Custom headers are preserved during the flush (unlike page unload which uses `sendBeacon`)
+- The previous visitor's events remain in the backend unchanged
+
+---
+
 ### `setQaMode(enabled: boolean): void`
 
 Enables or disables QA (Quality Assurance) mode for debugging.

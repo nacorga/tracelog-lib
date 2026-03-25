@@ -994,6 +994,7 @@ export class EventManager extends StateManager {
       device: this.get('device'),
       events,
       ...(this.get('config')?.globalMetadata && { global_metadata: this.get('config')?.globalMetadata }),
+      ...(this.get('identity') && { identity: this.get('identity') }),
     };
 
     const collectApiUrls = this.get('collectApiUrls');

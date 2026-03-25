@@ -3,6 +3,19 @@ import { DeviceInfo } from './device.types';
 import { EventData } from './event.types';
 
 /**
+ * Visitor identity data from identify() call.
+ *
+ * Sent piggyback in every batch so the backend always has the latest identity,
+ * even if earlier batches were lost.
+ */
+export interface IdentifyData {
+  /** External user identifier assigned by the site owner */
+  userId: string;
+  /** Optional user attributes (name, email, plan, etc.) */
+  traits?: Record<string, string>;
+}
+
+/**
  * Event queue structure sent to backend.
  *
  * **Purpose**: Batches multiple events for efficient transmission to analytics backend.
@@ -18,6 +31,8 @@ export interface EventsQueue {
   events: EventData[];
   /** Optional metadata attached to all events in this batch */
   global_metadata?: Record<string, MetadataType>;
+  /** Visitor identity from identify() call — included in every batch */
+  identity?: IdentifyData;
 }
 
 /**
