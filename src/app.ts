@@ -31,6 +31,7 @@ import {
   log,
   isValidMetadata,
   generateUUID,
+  sanitizeTraits,
 } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
@@ -443,17 +444,17 @@ export class App extends StateManager {
     }
 
     const trimmedUserId = userId.trim();
-    const hasTraits = traits && typeof traits === 'object' && Object.keys(traits).length > 0;
+    const validTraits = sanitizeTraits(traits);
     const identity: IdentifyData = {
       userId: trimmedUserId,
-      ...(hasTraits ? { traits } : {}),
+      ...(validTraits ? { traits: validTraits } : {}),
     };
 
     this.set('identity', identity);
     this.persistIdentity(identity);
 
     log('debug', 'Visitor identified', {
-      data: { userIdLength: trimmedUserId.length, traitKeys: hasTraits ? Object.keys(traits) : [] },
+      data: { userIdLength: trimmedUserId.length, traitKeys: validTraits ? Object.keys(validTraits) : [] },
     });
   }
 
@@ -532,8 +533,9 @@ export class App extends StateManager {
           return;
         }
 
-        storage.setItem(projectKey, JSON.stringify(pending));
-        this.set('identity', pending);
+        const normalizedPending: IdentifyData = { ...pending, userId: pending.userId.trim() };
+        storage.setItem(projectKey, JSON.stringify(normalizedPending));
+        this.set('identity', normalizedPending);
         log('debug', 'Migrated pending identity to project-scoped key');
         return;
       }
@@ -553,7 +555,8 @@ export class App extends StateManager {
           return;
         }
 
-        this.set('identity', identity);
+        const normalizedIdentity: IdentifyData = { ...identity, userId: identity.userId.trim() };
+        this.set('identity', normalizedIdentity);
         log('debug', 'Loaded persisted identity');
       }
     } catch {

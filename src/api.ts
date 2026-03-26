@@ -11,7 +11,7 @@ import {
   CustomHeadersProvider,
   InitResult,
 } from './types';
-import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
+import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil, sanitizeTraits } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import { PENDING_IDENTITY_KEY } from './constants/storage.constants';
 import './types/window.types';
@@ -640,10 +640,10 @@ export const identify = (userId: string, traits?: Record<string, string>): void 
   // Pre-init: persist to localStorage under pending key
   // App.init() → loadPersistedIdentity() will pick this up
   try {
-    const hasTraits = traits && typeof traits === 'object' && Object.keys(traits).length > 0;
+    const validTraits = sanitizeTraits(traits);
     const identity: IdentifyData = {
       userId: userId.trim(),
-      ...(hasTraits ? { traits } : {}),
+      ...(validTraits ? { traits: validTraits } : {}),
     };
     localStorage.setItem(PENDING_IDENTITY_KEY, JSON.stringify(identity));
     log('debug', 'Identity persisted pre-init (will be applied on init)');
