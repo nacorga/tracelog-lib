@@ -2578,3 +2578,56 @@ describe('EventManager - Send Backoff', () => {
     vi.useRealTimers();
   });
 });
+
+describe('EventManager - Identity in Batch Payload', () => {
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let emitter: Emitter;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    emitter = new Emitter();
+    eventManager = new EventManager(storageManager, emitter, {});
+
+    eventManager['set']('sessionId', 'test-session-id');
+    eventManager['set']('userId', 'test-user-id');
+    eventManager['set']('pageUrl', 'https://example.com/test');
+    eventManager['set']('device', MOCK_DEVICE_INFO);
+    eventManager['set']('collectApiUrls', { custom: 'https://api.test.com/collect' });
+  });
+
+  afterEach(() => {
+    eventManager.stop();
+    cleanupTestEnvironment();
+  });
+
+  it('should include identity in batch payload when set', async () => {
+    const queueCallback = vi.fn();
+    emitter.on(EmitterEvent.QUEUE, queueCallback);
+
+    eventManager['set']('identity', { userId: 'cust_123', traits: { plan: 'pro' } });
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
+
+    await eventManager.flushImmediately();
+
+    expect(queueCallback).toHaveBeenCalled();
+    const payload = queueCallback.mock.calls[0]![0];
+    expect(payload.identify).toBeDefined();
+    expect(payload.identify.userId).toBe('cust_123');
+    expect(payload.identify.traits).toEqual({ plan: 'pro' });
+  });
+
+  it('should omit identity from batch payload when not set', async () => {
+    const queueCallback = vi.fn();
+    emitter.on(EmitterEvent.QUEUE, queueCallback);
+
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
+
+    await eventManager.flushImmediately();
+
+    expect(queueCallback).toHaveBeenCalled();
+    const payload = queueCallback.mock.calls[0]![0];
+    expect(payload.identify).toBeUndefined();
+  });
+});

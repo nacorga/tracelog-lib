@@ -94,6 +94,10 @@ export interface TraceLogTestBridge {
     viewport: ViewportHandler | null;
   };
 
+  // Identity methods (for testing identify/resetIdentity flow)
+  identify(userId: string, traits?: Record<string, string>): void;
+  resetIdentity(): Promise<void>;
+
   // Test utilities
   waitForInitialization(timeout?: number): Promise<void>;
   flushQueue(): Promise<void>;

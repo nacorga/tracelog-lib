@@ -118,7 +118,10 @@ tracelog.setCustomHeaders(() => ({ 'Authorization': `Bearer ${token}` }));
 // 4. FOURTH: Initialize (starts tracking immediately, returns sessionId)
 const { sessionId } = await tracelog.init({ integrations: { custom: { collectApiUrl: '...' } } });
 
-// 5. FIFTH: Custom events (after init)
+// 5. FIFTH: Identify user (after init, optional — can also be called before init)
+tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
+
+// 6. SIXTH: Custom events (after init)
 tracelog.event('button_click', { id: 'signup-cta' });
 console.log('Tracked in session:', sessionId);
 ```

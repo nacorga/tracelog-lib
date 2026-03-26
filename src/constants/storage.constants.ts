@@ -150,3 +150,28 @@ export const SESSION_COUNTS_LAST_CLEANUP_KEY = `${STORAGE_BASE_KEY}:session_coun
  * - Minimal localStorage overhead (~100 entries typical, <1ms scan time)
  */
 export const SESSION_COUNTS_CLEANUP_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
+
+// ============================================================
+// Identity Storage Keys
+// ============================================================
+
+/**
+ * Generates storage key for visitor identity data (project-scoped).
+ *
+ * Identity is scoped per project because the same user may have different
+ * external IDs across different projects from the same site owner.
+ *
+ * @param projectId - Project identifier
+ * @returns localStorage key for identity (e.g., 'tlog:project123:identity')
+ */
+export const IDENTITY_KEY = (projectId: string): string =>
+  projectId ? `${STORAGE_BASE_KEY}:${projectId}:identity` : `${STORAGE_BASE_KEY}:identity`;
+
+/**
+ * Temporary storage key for identity set before init().
+ *
+ * When identify() is called before init(), the projectId is unknown.
+ * Identity is stored under this key and moved to the project-scoped key
+ * once init() resolves the projectId.
+ */
+export const PENDING_IDENTITY_KEY = `${STORAGE_BASE_KEY}:pending_identity`;

@@ -1,6 +1,7 @@
 import { App } from './app';
 import {
   MetadataType,
+  IdentifyData,
   Config,
   EmitterCallback,
   EmitterMap,
@@ -12,6 +13,7 @@ import {
 } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
+import { PENDING_IDENTITY_KEY } from './constants/storage.constants';
 import './types/window.types';
 
 interface PendingListener {
@@ -584,6 +586,108 @@ export const mergeGlobalMetadata = (metadata: Record<string, MetadataType>): voi
   }
 
   app.mergeGlobalMetadata(metadata);
+};
+
+/**
+ * Associates the current anonymous visitor with a known user identity.
+ *
+ * Can be called before or after init(). If called before init(), the identity is
+ * persisted to localStorage and applied automatically when init() runs.
+ *
+ * Identity is included in every event batch (piggyback), so the backend always
+ * receives the latest identity. Calling identify() multiple times overwrites
+ * (last-write-wins).
+ *
+ * @param userId - External user identifier (email, customer_id, etc.). Max 256 chars.
+ * @param traits - Optional user attributes. Record<string, string> only in v1.
+ *
+ * @example
+ * ```typescript
+ * // After login
+ * tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
+ *
+ * // Before init (identity queued, applied on init)
+ * tracelog.identify('cust_123');
+ * await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
+ * ```
+ */
+export const identify = (userId: string, traits?: Record<string, string>): void => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+    log('warn', 'identify() called with invalid userId');
+    return;
+  }
+
+  if (userId.trim().length > 256) {
+    log('warn', 'identify() userId exceeds 256 characters');
+    return;
+  }
+
+  if (isDestroying) {
+    log('warn', 'Cannot identify while TraceLog is being destroyed');
+    return;
+  }
+
+  // If initialized, delegate to App
+  if (app) {
+    app.identify(userId, traits);
+    return;
+  }
+
+  // Pre-init: persist to localStorage under pending key
+  // App.init() → loadPersistedIdentity() will pick this up
+  try {
+    const hasTraits = traits && typeof traits === 'object' && Object.keys(traits).length > 0;
+    const identity: IdentifyData = {
+      userId: userId.trim(),
+      ...(hasTraits ? { traits } : {}),
+    };
+    localStorage.setItem(PENDING_IDENTITY_KEY, JSON.stringify(identity));
+    log('debug', 'Identity persisted pre-init (will be applied on init)');
+  } catch {
+    log('debug', 'Failed to persist pre-init identity');
+  }
+};
+
+/**
+ * Clears identity, regenerates UUID, and starts a new session.
+ *
+ * Use for logout flows. The previous visitor profile remains in the backend.
+ * The next user in the same browser gets a fresh anonymous profile.
+ *
+ * If called before init(), any pending identity is cleared silently.
+ *
+ * @throws {Error} If called during destroy()
+ *
+ * @example
+ * ```typescript
+ * // On logout
+ * await tracelog.resetIdentity();
+ * ```
+ */
+export const resetIdentity = async (): Promise<void> => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    // Pre-init: just clear any pending identity
+    try {
+      localStorage.removeItem(PENDING_IDENTITY_KEY);
+    } catch {
+      // Silent
+    }
+    return;
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot reset identity while TraceLog is being destroyed');
+  }
+
+  await app.resetIdentity();
 };
 
 /**
