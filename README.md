@@ -94,13 +94,19 @@ await tracelog.init({
   }
 });
 
-// 6. Track custom events (after init)
+// 6. Identify user (after init, optional)
+tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
+
+// 7. Track custom events (after init)
 tracelog.event('button_clicked', {
   buttonId: 'signup-cta',
   source: 'homepage'
 });
 
-// 7. Cleanup (on consent revoke or app unmount)
+// 8. On logout: reset identity
+await tracelog.resetIdentity();
+
+// 9. Cleanup (on consent revoke or app unmount)
 tracelog.destroy();
 ```
 
@@ -130,6 +136,8 @@ tracelog.destroy();
 | `removeTransformer(hook)` | Remove a previously set transformer |
 | `setCustomHeaders(provider)` | Add custom HTTP headers to requests (see [Custom Headers](#custom-headers)) |
 | `removeCustomHeaders()` | Remove custom headers provider |
+| `identify(userId, traits?)` | Associate visitor with a known user identity |
+| `resetIdentity()` | Clear identity, regenerate UUID, start new session |
 | `isInitialized()` | Check initialization status |
 | `getSessionId()` | Get current session ID (or null) |
 | `setQaMode(enabled)` | Enable/disable QA mode (console logging) |

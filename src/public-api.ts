@@ -13,6 +13,8 @@ import {
   removeCustomHeaders,
   updateGlobalMetadata,
   mergeGlobalMetadata,
+  identify,
+  resetIdentity,
 } from './api';
 
 // Constants
@@ -37,4 +39,6 @@ export const tracelog = {
   setQaMode,
   updateGlobalMetadata,
   mergeGlobalMetadata,
+  identify,
+  resetIdentity,
 };

@@ -50,3 +50,19 @@ export const isOnlyPrimitiveFields = (object: Record<string, unknown>): boolean 
 
   return isSerializable(object);
 };
+
+/**
+ * Extracts a plain Record<string, string> from an untrusted traits value.
+ * Rejects arrays and non-string values (TS types erased at runtime).
+ * @returns Sanitized traits or undefined if empty/invalid
+ */
+export const sanitizeTraits = (traits: unknown): Record<string, string> | undefined => {
+  if (typeof traits !== 'object' || traits === null || Array.isArray(traits)) return undefined;
+
+  const filtered: Record<string, string> = {};
+  for (const [key, value] of Object.entries(traits as Record<string, unknown>)) {
+    if (typeof value === 'string') filtered[key] = value;
+  }
+
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
+};

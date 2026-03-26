@@ -11,6 +11,7 @@ import {
   EventType,
   EmitterCallback,
   EmitterMap,
+  IdentifyData,
   Mode,
   TransformerHook,
   TransformerMap,
@@ -29,9 +30,12 @@ import {
   detectQaMode,
   log,
   isValidMetadata,
+  generateUUID,
+  sanitizeTraits,
 } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
+import { IDENTITY_KEY, PENDING_IDENTITY_KEY, USER_ID_KEY } from './constants/storage.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 
@@ -92,6 +96,8 @@ export class App extends StateManager {
         this.customHeadersProvider,
         fetchCredentials,
       );
+
+      this.loadPersistedIdentity();
 
       this.initializeHandlers();
       this.setupPageLifecycleListeners();
@@ -256,6 +262,8 @@ export class App extends StateManager {
 
     this.set('suppressNextScroll', false);
     this.set('sessionId', null);
+    this.set('identity', undefined);
+    this.clearPersistedIdentity();
 
     this.isInitialized = false;
     this.handlers = {};
@@ -407,6 +415,187 @@ export class App extends StateManager {
     this.set('config', updatedConfig);
 
     log('debug', 'Global metadata updated (merged)', { data: { keys: Object.keys(metadata) } });
+  }
+
+  /**
+   * Associates the current anonymous visitor with a known user identity.
+   *
+   * Identity is persisted to localStorage (project-scoped) and included in every
+   * subsequent batch payload so the backend always has the latest identity.
+   *
+   * Validation is duplicated here (also in api.ts) as defense-in-depth since
+   * TestBridge and internal callers bypass the API layer.
+   *
+   * @param userId - External user identifier (email, customer_id, etc.)
+   * @param traits - Optional user attributes (name, email, plan, etc.)
+   * @internal Called from api.identify()
+   */
+  public identify(userId: string, traits?: Record<string, string>): void {
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+      log('warn', 'identify() called with invalid userId', {
+        data: { type: typeof userId, length: typeof userId === 'string' ? userId.trim().length : 0 },
+      });
+      return;
+    }
+
+    if (userId.trim().length > 256) {
+      log('warn', 'identify() userId exceeds 256 characters', { data: { length: userId.trim().length } });
+      return;
+    }
+
+    const trimmedUserId = userId.trim();
+    const validTraits = sanitizeTraits(traits);
+    const identity: IdentifyData = {
+      userId: trimmedUserId,
+      ...(validTraits ? { traits: validTraits } : {}),
+    };
+
+    this.set('identity', identity);
+    this.persistIdentity(identity);
+
+    log('debug', 'Visitor identified', {
+      data: { userIdLength: trimmedUserId.length, traitKeys: validTraits ? Object.keys(validTraits) : [] },
+    });
+  }
+
+  /**
+   * Clears identity, regenerates UUID, and starts a new session.
+   *
+   * Used for logout flows. The previous visitor profile with its identity
+   * remains in MongoDB — this method ensures the next user in the same browser
+   * gets a fresh anonymous profile.
+   *
+   * @internal Called from api.resetIdentity()
+   */
+  public async resetIdentity(): Promise<void> {
+    // 1. Flush pending events with the OLD identity before clearing anything
+    // Uses async flush (fetch) instead of sync (sendBeacon) to preserve custom headers
+    await this.managers.event?.flushImmediately();
+
+    // 2. Clear identity from state and storage
+    this.set('identity', undefined);
+    this.clearPersistedIdentity();
+
+    // 3. Regenerate UUID — closes the old visitor profile
+    const newUserId = generateUUID();
+    (this.managers.storage as StorageManager).setItem(USER_ID_KEY, newUserId);
+    this.set('userId', newUserId);
+
+    // 4. Trigger new session with the new UUID
+    this.set('hasStartSession', false);
+    this.set('sessionId', null);
+    this.handlers.session?.stopTracking();
+    this.handlers.session?.startTracking();
+
+    log('debug', 'Identity reset, new UUID generated');
+  }
+
+  /**
+   * Returns the project ID used for identity storage scoping.
+   * Matches the same logic used by SessionHandler.
+   */
+  private getProjectId(): string {
+    const config = this.get('config');
+    return config?.integrations?.tracelog?.projectId ?? 'custom';
+  }
+
+  /**
+   * Persists identity to localStorage under the project-scoped key.
+   */
+  private persistIdentity(identity: IdentifyData): void {
+    try {
+      const projectId = this.getProjectId();
+      const key = IDENTITY_KEY(projectId);
+      (this.managers.storage as StorageManager).setItem(key, JSON.stringify(identity));
+    } catch {
+      log('debug', 'Failed to persist identity to localStorage');
+    }
+  }
+
+  /**
+   * Loads identity from localStorage on init.
+   * Also migrates pending identity (set before init) to the project-scoped key.
+   */
+  private loadPersistedIdentity(): void {
+    const storage = this.managers.storage as StorageManager;
+    const projectId = this.getProjectId();
+    const projectKey = IDENTITY_KEY(projectId);
+
+    // Check for pending identity (set before init)
+    try {
+      const pendingRaw = storage.getItem(PENDING_IDENTITY_KEY);
+      if (pendingRaw) {
+        const pending = JSON.parse(pendingRaw) as IdentifyData;
+        storage.removeItem(PENDING_IDENTITY_KEY);
+
+        if (!this.isValidIdentityData(pending)) {
+          log('debug', 'Invalid pending identity in localStorage, discarded');
+          return;
+        }
+
+        const normalizedPending: IdentifyData = { ...pending, userId: pending.userId.trim() };
+        storage.setItem(projectKey, JSON.stringify(normalizedPending));
+        this.set('identity', normalizedPending);
+        log('debug', 'Migrated pending identity to project-scoped key');
+        return;
+      }
+    } catch {
+      storage.removeItem(PENDING_IDENTITY_KEY);
+    }
+
+    // Load from project-scoped key
+    try {
+      const raw = storage.getItem(projectKey);
+      if (raw) {
+        const identity = JSON.parse(raw) as IdentifyData;
+
+        if (!this.isValidIdentityData(identity)) {
+          storage.removeItem(projectKey);
+          log('debug', 'Invalid persisted identity in localStorage, discarded');
+          return;
+        }
+
+        const normalizedIdentity: IdentifyData = { ...identity, userId: identity.userId.trim() };
+        this.set('identity', normalizedIdentity);
+        log('debug', 'Loaded persisted identity');
+      }
+    } catch {
+      log('debug', 'Failed to load persisted identity');
+    }
+  }
+
+  /**
+   * Validates identity data loaded from localStorage.
+   * Guards against tampered or corrupted localStorage values.
+   */
+  private isValidIdentityData(data: unknown): data is IdentifyData {
+    if (!data || typeof data !== 'object') return false;
+    const { userId, traits } = data as Record<string, unknown>;
+
+    if (typeof userId !== 'string' || userId.trim().length === 0 || userId.trim().length > 256) return false;
+
+    if (traits !== undefined) {
+      if (typeof traits !== 'object' || traits === null || Array.isArray(traits)) return false;
+      for (const value of Object.values(traits as Record<string, unknown>)) {
+        if (typeof value !== 'string') return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Clears persisted identity from localStorage.
+   */
+  private clearPersistedIdentity(): void {
+    try {
+      const storage = this.managers.storage as StorageManager;
+      const projectId = this.getProjectId();
+      storage.removeItem(IDENTITY_KEY(projectId));
+      storage.removeItem(PENDING_IDENTITY_KEY);
+    } catch {
+      log('debug', 'Failed to clear persisted identity');
+    }
   }
 
   private setupPageLifecycleListeners(): void {

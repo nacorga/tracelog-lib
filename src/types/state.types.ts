@@ -2,6 +2,7 @@ import { Config } from './config.types';
 import { DeviceInfo } from './device.types';
 import { UTM } from './event.types';
 import { Mode } from './mode.types';
+import { IdentifyData } from './queue.types';
 
 export interface State {
   /** QA mode flag - when true, custom events are logged to console */
@@ -25,4 +26,6 @@ export interface State {
   scrollEventCount?: number;
   sessionReferrer?: string;
   sessionUtm?: UTM;
+  /** Visitor identity from identify() call */
+  identity?: IdentifyData;
 }
