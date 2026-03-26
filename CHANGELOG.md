@@ -10,6 +10,35 @@
 
 
 
+
+## [2.7.0] - 2026-03-26
+
+### ✨ Features
+
+- Add identify and resetIdentity methods for user identity management ([0ff0ec2](../../commit/0ff0ec2e7aa5a4ef3cd0f4f2c84c69fadc494a5a))
+
+### 🐛 Bug Fixes
+
+- Implement sanitizeTraits function to validate and clean user traits; update identify method to use sanitized traits ([7b0394a](../../commit/7b0394a1626a03c678a0ac81cc52ccf7144fa55d))
+- Update picomatch and yaml packages to latest versions for improved stability ([ad95853](../../commit/ad95853aa74b19eca9cda2175f9076bfc6ab7d36))
+- Enhance identity validation and logging in identify method; update tests for batch payload identity inclusion ([d9bcfc7](../../commit/d9bcfc754a8dcce5b3c26fc47ebb680ae8d17f0c))
+- Rename identity to identify in payload and tests for consistency ([6d95aaa](../../commit/6d95aaabd59cd404737826a93ce4af1c7ed8bfd0))
+
+### 🔧 Other Changes
+
+- Merge pull request #94 from nacorga/release/20260326.1 ([b537769](../../commit/b5377695122f456f477f4f806733d010d41787ec))
+- Merge pull request #93 from nacorga/task/visitor-identity ([73b789d](../../commit/73b789d845966c12f895acbdc9b1c49c2b0fe81a))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.6.2...v2.7.0
+
+
 ## [2.6.2] - 2026-03-23
 
 ### 🐛 Bug Fixes
