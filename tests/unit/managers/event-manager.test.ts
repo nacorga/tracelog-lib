@@ -2603,35 +2603,31 @@ describe('EventManager - Identity in Batch Payload', () => {
   });
 
   it('should include identity in batch payload when set', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    global.fetch = fetchSpy;
+    const queueCallback = vi.fn();
+    emitter.on(EmitterEvent.QUEUE, queueCallback);
 
     eventManager['set']('identity', { userId: 'cust_123', traits: { plan: 'pro' } });
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
     await eventManager.flushImmediately();
 
-    if (fetchSpy.mock.calls.length > 0) {
-      const fetchCall = fetchSpy.mock.calls[0]!;
-      const payload = JSON.parse(fetchCall[1]!.body as string);
-      expect(payload.identity).toBeDefined();
-      expect(payload.identity.userId).toBe('cust_123');
-      expect(payload.identity.traits).toEqual({ plan: 'pro' });
-    }
+    expect(queueCallback).toHaveBeenCalled();
+    const payload = queueCallback.mock.calls[0]![0];
+    expect(payload.identify).toBeDefined();
+    expect(payload.identify.userId).toBe('cust_123');
+    expect(payload.identify.traits).toEqual({ plan: 'pro' });
   });
 
   it('should omit identity from batch payload when not set', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    global.fetch = fetchSpy;
+    const queueCallback = vi.fn();
+    emitter.on(EmitterEvent.QUEUE, queueCallback);
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'test' } });
 
     await eventManager.flushImmediately();
 
-    if (fetchSpy.mock.calls.length > 0) {
-      const fetchCall = fetchSpy.mock.calls[0]!;
-      const payload = JSON.parse(fetchCall[1]!.body as string);
-      expect(payload.identity).toBeUndefined();
-    }
+    expect(queueCallback).toHaveBeenCalled();
+    const payload = queueCallback.mock.calls[0]![0];
+    expect(payload.identify).toBeUndefined();
   });
 });

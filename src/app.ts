@@ -422,13 +422,18 @@ export class App extends StateManager {
    * Identity is persisted to localStorage (project-scoped) and included in every
    * subsequent batch payload so the backend always has the latest identity.
    *
+   * Validation is duplicated here (also in api.ts) as defense-in-depth since
+   * TestBridge and internal callers bypass the API layer.
+   *
    * @param userId - External user identifier (email, customer_id, etc.)
    * @param traits - Optional user attributes (name, email, plan, etc.)
    * @internal Called from api.identify()
    */
   public identify(userId: string, traits?: Record<string, string>): void {
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
-      log('warn', 'identify() called with invalid userId', { data: { userId } });
+      log('warn', 'identify() called with invalid userId', {
+        data: { type: typeof userId, length: typeof userId === 'string' ? userId.trim().length : 0 },
+      });
       return;
     }
 
@@ -448,7 +453,7 @@ export class App extends StateManager {
     this.persistIdentity(identity);
 
     log('debug', 'Visitor identified', {
-      data: { userId: trimmedUserId, traitKeys: hasTraits ? Object.keys(traits) : [] },
+      data: { userIdLength: trimmedUserId.length, traitKeys: hasTraits ? Object.keys(traits) : [] },
     });
   }
 
@@ -481,7 +486,7 @@ export class App extends StateManager {
     this.handlers.session?.stopTracking();
     this.handlers.session?.startTracking();
 
-    log('debug', 'Identity reset, new UUID generated', { data: { newUserId } });
+    log('debug', 'Identity reset, new UUID generated');
   }
 
   /**
@@ -521,9 +526,15 @@ export class App extends StateManager {
       if (pendingRaw) {
         const pending = JSON.parse(pendingRaw) as IdentifyData;
         storage.removeItem(PENDING_IDENTITY_KEY);
-        storage.setItem(projectKey, pendingRaw);
+
+        if (!this.isValidIdentityData(pending)) {
+          log('debug', 'Invalid pending identity in localStorage, discarded');
+          return;
+        }
+
+        storage.setItem(projectKey, JSON.stringify(pending));
         this.set('identity', pending);
-        log('debug', 'Migrated pending identity to project-scoped key', { data: { userId: pending.userId } });
+        log('debug', 'Migrated pending identity to project-scoped key');
         return;
       }
     } catch {
@@ -535,12 +546,39 @@ export class App extends StateManager {
       const raw = storage.getItem(projectKey);
       if (raw) {
         const identity = JSON.parse(raw) as IdentifyData;
+
+        if (!this.isValidIdentityData(identity)) {
+          storage.removeItem(projectKey);
+          log('debug', 'Invalid persisted identity in localStorage, discarded');
+          return;
+        }
+
         this.set('identity', identity);
-        log('debug', 'Loaded persisted identity', { data: { userId: identity.userId } });
+        log('debug', 'Loaded persisted identity');
       }
     } catch {
       log('debug', 'Failed to load persisted identity');
     }
+  }
+
+  /**
+   * Validates identity data loaded from localStorage.
+   * Guards against tampered or corrupted localStorage values.
+   */
+  private isValidIdentityData(data: unknown): data is IdentifyData {
+    if (!data || typeof data !== 'object') return false;
+    const { userId, traits } = data as Record<string, unknown>;
+
+    if (typeof userId !== 'string' || userId.trim().length === 0 || userId.trim().length > 256) return false;
+
+    if (traits !== undefined) {
+      if (typeof traits !== 'object' || traits === null || Array.isArray(traits)) return false;
+      for (const value of Object.values(traits as Record<string, unknown>)) {
+        if (typeof value !== 'string') return false;
+      }
+    }
+
+    return true;
   }
 
   /**
