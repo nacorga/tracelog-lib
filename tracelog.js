@@ -1,6 +1,6 @@
 const os = 9e5;
-const as = 120, ls = 8192, cs = 10, us = 10, ds = 20;
-const hs = 1e3, fs = 500, ms = 100;
+const as = 120, ls = 49152, cs = 100, us = 500, ds = 200;
+const hs = 1e3, fs = 500, ms = 1e3;
 const b = "data-tlog", _t = [
   "button",
   "a",
@@ -290,7 +290,7 @@ const kt = () => {
     default:
       return Xe;
   }
-}, jt = 1e3, Qt = 50, zt = "2.6.2", Kt = zt, ot = () => typeof window < "u" && typeof sessionStorage < "u", Yt = () => {
+}, jt = 1e3, Qt = 50, zt = "2.7.0", Kt = zt, ot = () => typeof window < "u" && typeof sessionStorage < "u", Yt = () => {
   try {
     const s = new URLSearchParams(window.location.search);
     s.delete(et);
@@ -462,9 +462,9 @@ const tr = () => {
   if (e > 10)
     return null;
   if (Array.isArray(s))
-    return s.slice(0, 100).map((n) => _e(n, e + 1)).filter((n) => n !== null);
+    return s.slice(0, 1e3).map((n) => _e(n, e + 1)).filter((n) => n !== null);
   if (typeof s == "object") {
-    const t = {}, n = Object.entries(s).slice(0, 20);
+    const t = {}, n = Object.entries(s).slice(0, 200);
     for (const [i, o] of n) {
       const l = ze(i);
       if (l) {
@@ -673,34 +673,34 @@ const tr = () => {
       error: `${n}: object contains circular references or cannot be serialized.`
     };
   }
-  if (i.length > 8192)
+  if (new TextEncoder().encode(i).byteLength > 49152)
     return {
       valid: !1,
-      error: `${n}: object is too large (max ${8192 / 1024} KB).`
+      error: `${n}: object is too large (max ${49152 / 1024} KB).`
     };
-  if (Object.keys(r).length > 10)
+  if (Object.keys(r).length > 100)
     return {
       valid: !1,
-      error: `${n}: object has too many keys (max 10 keys).`
+      error: `${n}: object has too many keys (max 100 keys).`
     };
-  for (const [l, c] of Object.entries(r)) {
-    if (Array.isArray(c)) {
-      if (c.length > 10)
+  for (const [c, u] of Object.entries(r)) {
+    if (Array.isArray(u)) {
+      if (u.length > 500)
         return {
           valid: !1,
-          error: `${n}: array property "${l}" is too large (max 10 items).`
+          error: `${n}: array property "${c}" is too large (max 500 items).`
         };
-      for (const u of c)
-        if (typeof u == "string" && u.length > 500)
+      for (const g of u)
+        if (typeof g == "string" && g.length > 500)
           return {
             valid: !1,
-            error: `${n}: array property "${l}" contains strings that are too long (max 500 characters).`
+            error: `${n}: array property "${c}" contains strings that are too long (max 500 characters).`
           };
     }
-    if (typeof c == "string" && c.length > 1e3)
+    if (typeof u == "string" && u.length > 1e3)
       return {
         valid: !1,
-        error: `${n}: property "${l}" is too long (max 1000 characters).`
+        error: `${n}: property "${c}" is too long (max 1000 characters).`
       };
   }
   return {
