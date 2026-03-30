@@ -36,14 +36,14 @@ const MAX_PENDING_EVENTS_BUFFER = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
 const MAX_SESSION_TIMEOUT_MS = 864e5;
 const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
-const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024;
-const MAX_CUSTOM_EVENT_KEYS = 10;
-const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
-const MAX_NESTED_OBJECT_KEYS = 20;
+const MAX_CUSTOM_EVENT_STRING_SIZE = 48 * 1024;
+const MAX_CUSTOM_EVENT_KEYS = 100;
+const MAX_CUSTOM_EVENT_ARRAY_SIZE = 500;
+const MAX_NESTED_OBJECT_KEYS = 200;
 const MAX_TEXT_LENGTH = 255;
 const MAX_STRING_LENGTH = 1e3;
 const MAX_STRING_LENGTH_IN_ARRAY = 500;
-const MAX_ARRAY_LENGTH = 100;
+const MAX_ARRAY_LENGTH = 1e3;
 const MAX_OBJECT_DEPTH = 10;
 const PRECISION_TWO_DECIMALS = 2;
 const MAX_BEACON_PAYLOAD_SIZE = 64 * 1024;
@@ -107,6 +107,9 @@ const MAX_SEND_RETRIES = 2;
 const RETRY_BACKOFF_BASE_MS = 100;
 const RETRY_BACKOFF_JITTER_MS = 100;
 const MAX_SEND_INTERVAL_MS = 12e4;
+const MAX_CONSECUTIVE_NETWORK_FAILURES = 3;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 12e4;
+const MAX_RECOVERY_FAILURES = 3;
 const MAX_CONSECUTIVE_SEND_FAILURES = 5;
 const VALIDATION_MESSAGES = {
   INVALID_SESSION_TIMEOUT: `Session timeout must be between ${MIN_SESSION_TIMEOUT_MS}ms (30 seconds) and ${MAX_SESSION_TIMEOUT_MS}ms (24 hours)`,
@@ -153,6 +156,8 @@ const SESSION_COUNTS_KEY = (userId, sessionId) => `${STORAGE_BASE_KEY}:${userId}
 const SESSION_COUNTS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1e3;
 const SESSION_COUNTS_LAST_CLEANUP_KEY = `${STORAGE_BASE_KEY}:session_counts_last_cleanup`;
 const SESSION_COUNTS_CLEANUP_THROTTLE_MS = 60 * 60 * 1e3;
+const IDENTITY_KEY = (projectId) => projectId ? `${STORAGE_BASE_KEY}:${projectId}:identity` : `${STORAGE_BASE_KEY}:identity`;
+const PENDING_IDENTITY_KEY = `${STORAGE_BASE_KEY}:pending_identity`;
 var SpecialApiUrl = /* @__PURE__ */ ((SpecialApiUrl2) => {
   SpecialApiUrl2["Localhost"] = "localhost:8080";
   SpecialApiUrl2["Fail"] = "localhost:9999";
@@ -481,7 +486,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.5.1";
+const version = "2.7.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1088,6 +1093,14 @@ const isOnlyPrimitiveFields = (object) => {
   }
   return isSerializable(object);
 };
+const sanitizeTraits = (traits) => {
+  if (typeof traits !== "object" || traits === null || Array.isArray(traits)) return void 0;
+  const filtered = {};
+  for (const [key, value] of Object.entries(traits)) {
+    if (typeof value === "string") filtered[key] = value;
+  }
+  return Object.keys(filtered).length > 0 ? filtered : void 0;
+};
 const isValidEventName = (eventName) => {
   if (typeof eventName !== "string") {
     return {
@@ -1140,7 +1153,8 @@ const validateSingleMetadata = (eventName, metadata, type) => {
       error: `${intro}: object contains circular references or cannot be serialized.`
     };
   }
-  if (jsonString.length > MAX_CUSTOM_EVENT_STRING_SIZE) {
+  const byteSize = new TextEncoder().encode(jsonString).byteLength;
+  if (byteSize > MAX_CUSTOM_EVENT_STRING_SIZE) {
     return {
       valid: false,
       error: `${intro}: object is too large (max ${MAX_CUSTOM_EVENT_STRING_SIZE / 1024} KB).`
@@ -1477,6 +1491,15 @@ class SenderManager extends StateManager {
   fetchCredentials;
   pendingControllers = /* @__PURE__ */ new Set();
   /**
+   * Counts consecutive fetch() rejections where no HTTP response was received
+   * (DNS failure, connection refused, etc.). Resets on success.
+   * When this reaches MAX_CONSECUTIVE_NETWORK_FAILURES the circuit opens and
+   * further send attempts are skipped until CIRCUIT_BREAKER_COOLDOWN_MS elapses,
+   * at which point a single probe request is allowed (half-open state).
+   */
+  consecutiveNetworkFailures = 0;
+  circuitOpenedAt = 0;
+  /**
    * Creates a SenderManager instance.
    *
    * **Validation**: `integrationId` and `apiUrl` must both be provided or both be undefined.
@@ -1745,12 +1768,24 @@ class SenderManager extends StateManager {
         this.clearPersistedEvents();
         return;
       }
+      const rawFailures = persistedData.recoveryFailures;
+      const recoveryFailures = typeof rawFailures === "number" && Number.isFinite(rawFailures) && rawFailures >= 0 ? rawFailures : 0;
+      if (recoveryFailures >= MAX_RECOVERY_FAILURES) {
+        log(
+          "debug",
+          `Discarding persisted events after ${recoveryFailures} failed recovery attempts${this.integrationId ? ` [${this.integrationId}]` : ""}`
+        );
+        this.clearPersistedEvents();
+        callbacks?.onFailure?.();
+        return;
+      }
       const body = this.createRecoveryBody(persistedData);
       const success = await this.send(body);
       if (success) {
         this.clearPersistedEvents();
         callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
       } else {
+        this.persistEventsWithFailureCount(body, recoveryFailures + 1, true);
         callbacks?.onFailure?.();
       }
     } catch (error) {
@@ -1960,8 +1995,21 @@ class SenderManager extends StateManager {
       });
       return true;
     }
+    if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
+      const elapsed = Date.now() - this.circuitOpenedAt;
+      if (elapsed < CIRCUIT_BREAKER_COOLDOWN_MS) {
+        log("debug", `Network circuit open, skipping send${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+          data: {
+            consecutiveNetworkFailures: this.consecutiveNetworkFailures,
+            cooldownRemainingMs: CIRCUIT_BREAKER_COOLDOWN_MS - elapsed
+          }
+        });
+        return false;
+      }
+    }
     const { url, payload } = this.prepareRequest(transformedBody);
     let allTimeouts = true;
+    let hadHttpResponse = false;
     for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
       try {
         const response = await this.sendWithTimeout(url, payload);
@@ -1975,16 +2023,23 @@ class SenderManager extends StateManager {
               }
             );
           }
+          this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
           return true;
         }
         return false;
       } catch (error) {
         const isLastAttempt = attempt === MAX_SEND_RETRIES + 1;
         if (error instanceof PermanentError) {
+          this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
           throw error;
         }
         if (!(error instanceof TimeoutError)) {
           allTimeouts = false;
+        }
+        if (!(error instanceof TypeError)) {
+          hadHttpResponse = true;
         }
         log(
           isLastAttempt ? "error" : "warn",
@@ -2005,6 +2060,18 @@ class SenderManager extends StateManager {
         }
         if (allTimeouts) {
           throw new TimeoutError("All retry attempts timed out (server likely received the request)");
+        }
+        if (!hadHttpResponse) {
+          this.consecutiveNetworkFailures = Math.min(
+            this.consecutiveNetworkFailures + 1,
+            MAX_CONSECUTIVE_NETWORK_FAILURES
+          );
+          if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
+            this.circuitOpenedAt = Date.now();
+          }
+        } else {
+          this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
         }
         return false;
       }
@@ -2232,7 +2299,7 @@ class SenderManager extends StateManager {
    * @private
    */
   createRecoveryBody(data) {
-    const { timestamp, ...queue } = data;
+    const { timestamp, recoveryFailures, ...queue } = data;
     return queue;
   }
   /**
@@ -2253,9 +2320,26 @@ class SenderManager extends StateManager {
    * @private
    */
   persistEvents(body) {
+    return this.persistEventsWithFailureCount(body, 0);
+  }
+  /**
+   * Persists failed events to localStorage, recording how many consecutive
+   * cross-session recovery attempts have already been made for this batch.
+   *
+   * When `recoveryFailures` reaches MAX_RECOVERY_FAILURES on the next page load,
+   * the batch is discarded rather than retried, preventing an infinite persistence
+   * loop caused by a permanently unreachable backend URL.
+   *
+   * @param body - EventsQueue to persist
+   * @param recoveryFailures - Number of failed recovery attempts already made
+   * @param skipThrottle - Bypass the multi-tab throttle (used during recovery re-persistence)
+   * @returns `true` on successful persistence or throttled write, `false` on error
+   * @private
+   */
+  persistEventsWithFailureCount(body, recoveryFailures, skipThrottle = false) {
     try {
       const existing = this.getPersistedData();
-      if (existing && existing.timestamp) {
+      if (!skipThrottle && existing && existing.timestamp) {
         const timeSinceExisting = Date.now() - existing.timestamp;
         if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
           log(
@@ -2270,7 +2354,8 @@ class SenderManager extends StateManager {
       }
       const persistedData = {
         ...body,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        ...recoveryFailures > 0 && { recoveryFailures }
       };
       const storageKey = this.getQueueStorageKey();
       this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
@@ -3225,7 +3310,8 @@ class EventManager extends StateManager {
       session_id: this.get("sessionId"),
       device: this.get("device"),
       events,
-      ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata }
+      ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata },
+      ...this.get("identity") && { identify: this.get("identity") }
     };
     const collectApiUrls = this.get("collectApiUrls");
     const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
@@ -3329,6 +3415,9 @@ class EventManager extends StateManager {
     }
     if (event2.custom_event) {
       fingerprint += `_custom_${event2.custom_event.name}`;
+      if (event2.custom_event.metadata) {
+        fingerprint += `_${this.stableStringify(event2.custom_event.metadata)}`;
+      }
     }
     if (event2.web_vitals) {
       fingerprint += `_vitals_${event2.web_vitals.type}`;
@@ -3340,6 +3429,18 @@ class EventManager extends StateManager {
   }
   createEventSignature(event2) {
     return this.createEventFingerprint(event2);
+  }
+  /** Deterministic JSON string with sorted keys to ensure consistent fingerprints regardless of property insertion order */
+  stableStringify(value) {
+    return JSON.stringify(value, (_2, v2) => {
+      if (v2 && typeof v2 === "object" && !Array.isArray(v2)) {
+        return Object.keys(v2).sort().reduce((sorted, key) => {
+          sorted[key] = v2[key];
+          return sorted;
+        }, {});
+      }
+      return v2;
+    });
   }
   addToQueue(event2) {
     this.emitEvent(event2);
@@ -6118,6 +6219,7 @@ class App extends StateManager {
         this.customHeadersProvider,
         fetchCredentials
       );
+      this.loadPersistedIdentity();
       this.initializeHandlers();
       this.setupPageLifecycleListeners();
       await this.managers.event.recoverPersistedEvents().catch((error) => {
@@ -6245,6 +6347,8 @@ class App extends StateManager {
     this.customHeadersProvider = void 0;
     this.set("suppressNextScroll", false);
     this.set("sessionId", null);
+    this.set("identity", void 0);
+    this.clearPersistedIdentity();
     this.isInitialized = false;
     this.handlers = {};
     this.managers = {};
@@ -6367,6 +6471,156 @@ class App extends StateManager {
     };
     this.set("config", updatedConfig);
     log("debug", "Global metadata updated (merged)", { data: { keys: Object.keys(metadata) } });
+  }
+  /**
+   * Associates the current anonymous visitor with a known user identity.
+   *
+   * Identity is persisted to localStorage (project-scoped) and included in every
+   * subsequent batch payload so the backend always has the latest identity.
+   *
+   * Validation is duplicated here (also in api.ts) as defense-in-depth since
+   * TestBridge and internal callers bypass the API layer.
+   *
+   * @param userId - External user identifier (email, customer_id, etc.)
+   * @param traits - Optional user attributes (name, email, plan, etc.)
+   * @internal Called from api.identify()
+   */
+  identify(userId, traits) {
+    if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
+      log("warn", "identify() called with invalid userId", {
+        data: { type: typeof userId, length: typeof userId === "string" ? userId.trim().length : 0 }
+      });
+      return;
+    }
+    if (userId.trim().length > 256) {
+      log("warn", "identify() userId exceeds 256 characters", { data: { length: userId.trim().length } });
+      return;
+    }
+    const trimmedUserId = userId.trim();
+    const validTraits = sanitizeTraits(traits);
+    const identity = {
+      userId: trimmedUserId,
+      ...validTraits ? { traits: validTraits } : {}
+    };
+    this.set("identity", identity);
+    this.persistIdentity(identity);
+    log("debug", "Visitor identified", {
+      data: { userIdLength: trimmedUserId.length, traitKeys: validTraits ? Object.keys(validTraits) : [] }
+    });
+  }
+  /**
+   * Clears identity, regenerates UUID, and starts a new session.
+   *
+   * Used for logout flows. The previous visitor profile with its identity
+   * remains in MongoDB — this method ensures the next user in the same browser
+   * gets a fresh anonymous profile.
+   *
+   * @internal Called from api.resetIdentity()
+   */
+  async resetIdentity() {
+    await this.managers.event?.flushImmediately();
+    this.set("identity", void 0);
+    this.clearPersistedIdentity();
+    const newUserId = generateUUID();
+    this.managers.storage.setItem(USER_ID_KEY, newUserId);
+    this.set("userId", newUserId);
+    this.set("hasStartSession", false);
+    this.set("sessionId", null);
+    this.handlers.session?.stopTracking();
+    this.handlers.session?.startTracking();
+    log("debug", "Identity reset, new UUID generated");
+  }
+  /**
+   * Returns the project ID used for identity storage scoping.
+   * Matches the same logic used by SessionHandler.
+   */
+  getProjectId() {
+    const config = this.get("config");
+    return config?.integrations?.tracelog?.projectId ?? "custom";
+  }
+  /**
+   * Persists identity to localStorage under the project-scoped key.
+   */
+  persistIdentity(identity) {
+    try {
+      const projectId = this.getProjectId();
+      const key = IDENTITY_KEY(projectId);
+      this.managers.storage.setItem(key, JSON.stringify(identity));
+    } catch {
+      log("debug", "Failed to persist identity to localStorage");
+    }
+  }
+  /**
+   * Loads identity from localStorage on init.
+   * Also migrates pending identity (set before init) to the project-scoped key.
+   */
+  loadPersistedIdentity() {
+    const storage = this.managers.storage;
+    const projectId = this.getProjectId();
+    const projectKey = IDENTITY_KEY(projectId);
+    try {
+      const pendingRaw = storage.getItem(PENDING_IDENTITY_KEY);
+      if (pendingRaw) {
+        const pending = JSON.parse(pendingRaw);
+        storage.removeItem(PENDING_IDENTITY_KEY);
+        if (!this.isValidIdentityData(pending)) {
+          log("debug", "Invalid pending identity in localStorage, discarded");
+          return;
+        }
+        const normalizedPending = { ...pending, userId: pending.userId.trim() };
+        storage.setItem(projectKey, JSON.stringify(normalizedPending));
+        this.set("identity", normalizedPending);
+        log("debug", "Migrated pending identity to project-scoped key");
+        return;
+      }
+    } catch {
+      storage.removeItem(PENDING_IDENTITY_KEY);
+    }
+    try {
+      const raw = storage.getItem(projectKey);
+      if (raw) {
+        const identity = JSON.parse(raw);
+        if (!this.isValidIdentityData(identity)) {
+          storage.removeItem(projectKey);
+          log("debug", "Invalid persisted identity in localStorage, discarded");
+          return;
+        }
+        const normalizedIdentity = { ...identity, userId: identity.userId.trim() };
+        this.set("identity", normalizedIdentity);
+        log("debug", "Loaded persisted identity");
+      }
+    } catch {
+      log("debug", "Failed to load persisted identity");
+    }
+  }
+  /**
+   * Validates identity data loaded from localStorage.
+   * Guards against tampered or corrupted localStorage values.
+   */
+  isValidIdentityData(data) {
+    if (!data || typeof data !== "object") return false;
+    const { userId, traits } = data;
+    if (typeof userId !== "string" || userId.trim().length === 0 || userId.trim().length > 256) return false;
+    if (traits !== void 0) {
+      if (typeof traits !== "object" || traits === null || Array.isArray(traits)) return false;
+      for (const value of Object.values(traits)) {
+        if (typeof value !== "string") return false;
+      }
+    }
+    return true;
+  }
+  /**
+   * Clears persisted identity from localStorage.
+   */
+  clearPersistedIdentity() {
+    try {
+      const storage = this.managers.storage;
+      const projectId = this.getProjectId();
+      storage.removeItem(IDENTITY_KEY(projectId));
+      storage.removeItem(PENDING_IDENTITY_KEY);
+    } catch {
+      log("debug", "Failed to clear persisted identity");
+    }
   }
   setupPageLifecycleListeners() {
     this.pageUnloadHandler = () => {
@@ -6663,6 +6917,54 @@ const mergeGlobalMetadata = (metadata) => {
   }
   app.mergeGlobalMetadata(metadata);
 };
+const identify = (userId, traits) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
+    log("warn", "identify() called with invalid userId");
+    return;
+  }
+  if (userId.trim().length > 256) {
+    log("warn", "identify() userId exceeds 256 characters");
+    return;
+  }
+  if (isDestroying) {
+    log("warn", "Cannot identify while TraceLog is being destroyed");
+    return;
+  }
+  if (app) {
+    app.identify(userId, traits);
+    return;
+  }
+  try {
+    const validTraits = sanitizeTraits(traits);
+    const identity = {
+      userId: userId.trim(),
+      ...validTraits ? { traits: validTraits } : {}
+    };
+    localStorage.setItem(PENDING_IDENTITY_KEY, JSON.stringify(identity));
+    log("debug", "Identity persisted pre-init (will be applied on init)");
+  } catch {
+    log("debug", "Failed to persist pre-init identity");
+  }
+};
+const resetIdentity = async () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (!app) {
+    try {
+      localStorage.removeItem(PENDING_IDENTITY_KEY);
+    } catch {
+    }
+    return;
+  }
+  if (isDestroying) {
+    throw new Error("[TraceLog] Cannot reset identity while TraceLog is being destroyed");
+  }
+  await app.resetIdentity();
+};
 const __setAppInstance = (instance) => {
   if (instance !== null) {
     const hasRequiredMethods = typeof instance === "object" && "init" in instance && "destroy" in instance && "on" in instance && "off" in instance;
@@ -6699,6 +7001,7 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   destroy,
   event,
   getSessionId,
+  identify,
   init,
   isInitialized,
   mergeGlobalMetadata,
@@ -6706,6 +7009,7 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   on,
   removeCustomHeaders,
   removeTransformer,
+  resetIdentity,
   setCustomHeaders,
   setQaMode,
   setTransformer,
@@ -6725,7 +7029,9 @@ const tracelog = {
   destroy,
   setQaMode,
   updateGlobalMetadata,
-  mergeGlobalMetadata
+  mergeGlobalMetadata,
+  identify,
+  resetIdentity
 };
 var e, n, t, r, i, o = -1, a = function(e3) {
   addEventListener("pageshow", (function(n2) {
