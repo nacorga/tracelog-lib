@@ -62,9 +62,9 @@ export const normalizeUrl = (url: string): string => {
 
 **Constants to enforce:**
 - `MAX_STRING_LENGTH` - 1000 chars
-- `MAX_ARRAY_LENGTH` - 100 items
+- `MAX_ARRAY_LENGTH` - 1000 items
 - `MAX_OBJECT_DEPTH` - 10 levels
-- `MAX_NESTED_OBJECT_KEYS` - 50 keys
+- `MAX_NESTED_OBJECT_KEYS` - 200 keys
 - `XSS_PATTERNS` - List of regex patterns for XSS detection
 - `PII_PATTERNS` - Email, phone, credit card, API key patterns
 
