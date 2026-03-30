@@ -11,6 +11,31 @@
 
 
 
+
+## [2.7.1] - 2026-03-30
+
+### 🐛 Bug Fixes
+
+- Update API documentation to reflect new nesting limits for global metadata and improve validation tests for byte size of unicode strings ([4df6670](../../commit/4df66700c8cdb5a8c28d1c9e037f8675e47fc176))
+- Update metadata validation to check byte size of JSON string for custom events ([8340fa6](../../commit/8340fa6b95e2ba49884b7ac3573947f0aa651f54))
+- Update validation limits for metadata and custom events; reduce serialized size to 48KB for improved performance ([c515e86](../../commit/c515e8648a451ffb2542ca68653e8a6fbbc7ec84))
+- Update validation limits for metadata and custom events; increase size limits for better performance ([4bbebcf](../../commit/4bbebcff3634e398df9957867469eb8eba5b6806))
+
+### 🔧 Other Changes
+
+- Merge pull request #95 from nacorga/hotfix/20260330.1 ([b9d468d](../../commit/b9d468d50e39d7a142cb475434030ba85f2df5b3))
+- Tracelog.js update ([a16e42e](../../commit/a16e42e6fdaa689a02805842b0f5daeee6b1ac1b))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.7.0...v2.7.1
+
+
 ## [2.7.0] - 2026-03-26
 
 ### ✨ Features
