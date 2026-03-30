@@ -73,10 +73,10 @@ export const MAX_SESSION_TIMEOUT_MS = 86400000; // 24 hours maximum
 
 // Custom event validation limits
 export const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
-export const MAX_CUSTOM_EVENT_STRING_SIZE = 8 * 1024; // 8KB
-export const MAX_CUSTOM_EVENT_KEYS = 10;
-export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 10;
-export const MAX_NESTED_OBJECT_KEYS = 20; // Maximum keys in nested objects within arrays
+export const MAX_CUSTOM_EVENT_STRING_SIZE = 48 * 1024; // 48KB (leaves headroom below 64KB sendBeacon limit)
+export const MAX_CUSTOM_EVENT_KEYS = 100;
+export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 500;
+export const MAX_NESTED_OBJECT_KEYS = 200; // Safety bound for sanitizer (must be > MAX_CUSTOM_EVENT_KEYS)
 
 // Text content limits
 export const MAX_TEXT_LENGTH = 255; // For click tracking text content
@@ -84,7 +84,7 @@ export const MAX_TEXT_LENGTH = 255; // For click tracking text content
 // Data sanitization limits
 export const MAX_STRING_LENGTH = 1000;
 export const MAX_STRING_LENGTH_IN_ARRAY = 500; // Strings within arrays are more limited
-export const MAX_ARRAY_LENGTH = 100;
+export const MAX_ARRAY_LENGTH = 1000; // Safety bound for sanitizer (must be > MAX_CUSTOM_EVENT_ARRAY_SIZE)
 export const MAX_OBJECT_DEPTH = 10; // Sufficient for any real use case, protects against circular/malicious structures
 
 // Precision for numeric metrics

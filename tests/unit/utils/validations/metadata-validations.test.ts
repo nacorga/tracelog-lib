@@ -4,6 +4,7 @@ import {
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_KEYS,
   MAX_CUSTOM_EVENT_ARRAY_SIZE,
+  MAX_CUSTOM_EVENT_STRING_SIZE,
   MAX_STRING_LENGTH,
   MAX_STRING_LENGTH_IN_ARRAY,
 } from '../../../../src/constants/config.constants';
@@ -385,6 +386,36 @@ describe('metadata-validations.utils', () => {
         };
         const result = isValidMetadata('purchase', metadata);
 
+        expect(result.valid).toBe(true);
+      });
+
+      it('should measure size in bytes, not characters (multibyte unicode)', () => {
+        // '€' is 1 char but 3 bytes in UTF-8. Build metadata with many keys of unicode strings
+        // where total byte size exceeds MAX_CUSTOM_EVENT_STRING_SIZE but char count doesn't.
+        // Each value: 1000 '€' chars = 1000 chars but 3000 bytes (sanitizer allows MAX_STRING_LENGTH=1000)
+        const euroValue = '€'.repeat(1000); // 1000 chars, 3000 bytes
+        const keysNeeded = Math.ceil(MAX_CUSTOM_EVENT_STRING_SIZE / 3000) + 1;
+        const metadata = Object.fromEntries(Array.from({ length: keysNeeded }, (_, i) => [`k${i}`, euroValue]));
+
+        // Verify: char count < byte limit but byte count > byte limit
+        const jsonString = JSON.stringify(metadata);
+        const byteSize = new TextEncoder().encode(jsonString).byteLength;
+        expect(jsonString.length).toBeLessThan(byteSize);
+        expect(byteSize).toBeGreaterThan(MAX_CUSTOM_EVENT_STRING_SIZE);
+
+        const result = isValidMetadata('event', metadata);
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('too large');
+      });
+
+      it('should accept unicode metadata within byte size limit', () => {
+        // Small unicode metadata well within limits
+        const metadata = {
+          producto: 'Huevos Ecológicos',
+          categoría: 'Alimentación',
+          descripción: 'Producto orgánico de la granja',
+        };
+        const result = isValidMetadata('event', metadata);
         expect(result.valid).toBe(true);
       });
 
