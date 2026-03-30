@@ -528,7 +528,7 @@ export const setQaMode = (enabled: boolean): void => {
  * @param metadata - New metadata object (replaces existing)
  * @throws {Error} If TraceLog not initialized
  * @throws {Error} If called during destroy()
- * @throws {Error} If validation fails (max 100 keys, 64KB limit)
+ * @throws {Error} If validation fails (max 100 keys, 48KB limit)
  *
  * @example
  * ```typescript
@@ -562,7 +562,7 @@ export const updateGlobalMetadata = (metadata: Record<string, MetadataType>): vo
  * @param metadata - Metadata to merge with existing values
  * @throws {Error} If TraceLog not initialized
  * @throws {Error} If called during destroy()
- * @throws {Error} If validation fails (max 100 keys, 64KB limit)
+ * @throws {Error} If validation fails (max 100 keys, 48KB limit)
  *
  * @example
  * ```typescript

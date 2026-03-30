@@ -73,7 +73,7 @@ export const MAX_SESSION_TIMEOUT_MS = 86400000; // 24 hours maximum
 
 // Custom event validation limits
 export const MAX_CUSTOM_EVENT_NAME_LENGTH = 120;
-export const MAX_CUSTOM_EVENT_STRING_SIZE = 64 * 1024; // 64KB
+export const MAX_CUSTOM_EVENT_STRING_SIZE = 48 * 1024; // 48KB (leaves headroom below 64KB sendBeacon limit)
 export const MAX_CUSTOM_EVENT_KEYS = 100;
 export const MAX_CUSTOM_EVENT_ARRAY_SIZE = 500;
 export const MAX_NESTED_OBJECT_KEYS = 200; // Safety bound for sanitizer (must be > MAX_CUSTOM_EVENT_KEYS)

@@ -398,9 +398,9 @@ tracelog.mergeGlobalMetadata({
 
 ### Validation Rules
 
-- **Allowed Types**: Primitives (string, number, boolean), string arrays, nested objects (1 level deep)
-- **NOT Allowed**: Functions, symbols, undefined, deeply nested objects
-- **Limits**: Max 100 keys, 64KB serialized size, 500 items per array, 1000 chars per string
+- **Allowed Types**: Primitives (string, number, boolean), string arrays, nested objects (up to 10 levels)
+- **NOT Allowed**: Functions, symbols, undefined, circular references
+- **Limits**: Max 100 keys, 48KB serialized size, 500 items per array, 1000 chars per string
 
 **→ [Metadata API Reference](./API_REFERENCE.md#global-metadata)**
 
