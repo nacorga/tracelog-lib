@@ -90,7 +90,9 @@ const validateSingleMetadata = (
     };
   }
 
-  if (jsonString.length > MAX_CUSTOM_EVENT_STRING_SIZE) {
+  const byteSize = new TextEncoder().encode(jsonString).byteLength;
+
+  if (byteSize > MAX_CUSTOM_EVENT_STRING_SIZE) {
     return {
       valid: false,
       error: `${intro}: object is too large (max ${MAX_CUSTOM_EVENT_STRING_SIZE / 1024} KB).`,
