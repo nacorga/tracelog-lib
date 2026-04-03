@@ -95,7 +95,7 @@ describe('ErrorHandler - Error Tracking', () => {
     );
   });
 
-  it('should capture error stack trace', () => {
+  it('should use error message (not stack) for rejection message field', () => {
     const error = new Error('Stack trace test');
     const promise = Promise.reject(error);
     promise.catch(() => {});
@@ -110,7 +110,8 @@ describe('ErrorHandler - Error Tracking', () => {
     expect(trackSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         error_data: expect.objectContaining({
-          message: expect.stringContaining('Stack trace test'),
+          message: 'Stack trace test',
+          stack: expect.stringContaining('Stack trace test'),
         }),
       }),
     );
@@ -456,7 +457,7 @@ describe('ErrorHandler - Stack Traces', () => {
     const call = trackSpy.mock.calls[0]?.[0] as Record<string, Record<string, unknown>> | undefined;
     const stack = call?.error_data?.stack as string;
     expect(stack).toBeDefined();
-    expect(stack.length).toBeLessThanOrEqual(MAX_STACK_TRACE_LENGTH + '\n...truncated'.length);
+    expect(stack.length).toBeLessThanOrEqual(MAX_STACK_TRACE_LENGTH);
     expect(stack).toContain('...truncated');
   });
 
@@ -481,6 +482,30 @@ describe('ErrorHandler - Stack Traces', () => {
     expect(stack).toBeDefined();
     expect(stack).not.toContain('user@example.com');
     expect(stack).not.toContain('Bearer eyJ');
+    expect(stack).toContain('[REDACTED]');
+  });
+
+  it('should sanitize sensitive URL query parameters from stack traces', () => {
+    const stackWithParams =
+      'Error: request failed\n' +
+      '    at fetch (https://api.example.com/auth?token=secret123&user=bob:1:1)\n' +
+      '    at init (https://api.example.com/v2?api_key=abcdef789&format=json:2:2)';
+
+    const error = new Error('request failed');
+    Object.defineProperty(error, 'stack', { value: stackWithParams });
+
+    const errorEvent = new ErrorEvent('error', {
+      message: 'request failed',
+      error,
+    });
+
+    window.dispatchEvent(errorEvent);
+
+    const call = trackSpy.mock.calls[0]?.[0] as Record<string, Record<string, unknown>> | undefined;
+    const stack = call?.error_data?.stack as string;
+    expect(stack).toBeDefined();
+    expect(stack).not.toContain('token=secret123');
+    expect(stack).not.toContain('api_key=abcdef789');
     expect(stack).toContain('[REDACTED]');
   });
 });

@@ -146,7 +146,7 @@ export class ErrorHandler extends StateManager {
     }
 
     const stack =
-      event.reason instanceof Error && event.reason.stack !== undefined
+      event.reason instanceof Error && typeof event.reason.stack === 'string'
         ? this.truncateStack(event.reason.stack)
         : undefined;
     this.eventManager.track({
@@ -165,7 +165,7 @@ export class ErrorHandler extends StateManager {
     if (typeof reason === 'string') return reason;
 
     if (reason instanceof Error) {
-      return reason.stack ?? reason.message;
+      return reason.message;
     }
 
     if (typeof reason === 'object' && 'message' in reason) {
@@ -221,9 +221,12 @@ export class ErrorHandler extends StateManager {
     return false;
   }
 
+  private static readonly TRUNCATION_SUFFIX = '\n...truncated';
+
   private truncateStack(stack: string): string {
-    const truncated =
-      stack.length <= MAX_STACK_TRACE_LENGTH ? stack : stack.slice(0, MAX_STACK_TRACE_LENGTH) + '\n...truncated';
+    if (stack.length <= MAX_STACK_TRACE_LENGTH) return this.sanitizePii(stack);
+    const limit = MAX_STACK_TRACE_LENGTH - ErrorHandler.TRUNCATION_SUFFIX.length;
+    const truncated = stack.slice(0, limit) + ErrorHandler.TRUNCATION_SUFFIX;
     return this.sanitizePii(truncated);
   }
 
