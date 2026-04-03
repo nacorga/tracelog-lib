@@ -423,6 +423,7 @@ const PII_PATTERNS = [
   /:\/\/[^:/]+:([^@]+)@/gi
 ];
 const MAX_ERROR_MESSAGE_LENGTH = 500;
+const MAX_STACK_TRACE_LENGTH = 2e3;
 const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
 const MAX_TRACKED_ERRORS = 50;
 const MAX_TRACKED_ERRORS_HARD_LIMIT = MAX_TRACKED_ERRORS * 2;
@@ -486,7 +487,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.7.0";
+const version = "2.7.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -6093,14 +6094,16 @@ class ErrorHandler extends StateManager {
     if (this.shouldSuppressError(ErrorType.JS_ERROR, sanitizedMessage)) {
       return;
     }
+    const stack = typeof event2.error?.stack === "string" ? this.truncateStack(event2.error.stack) : void 0;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
         message: sanitizedMessage,
-        ...event2.filename && { filename: event2.filename },
-        ...event2.lineno && { line: event2.lineno },
-        ...event2.colno && { column: event2.colno }
+        ...event2.filename !== "" && { filename: event2.filename },
+        ...event2.lineno !== 0 && { line: event2.lineno },
+        ...event2.colno !== 0 && { column: event2.colno },
+        ...stack !== void 0 && { stack }
       }
     });
   };
@@ -6113,19 +6116,21 @@ class ErrorHandler extends StateManager {
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
       return;
     }
+    const stack = event2.reason instanceof Error && event2.reason.stack !== void 0 ? this.truncateStack(event2.reason.stack) : void 0;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.PROMISE_REJECTION,
-        message: sanitizedMessage
+        message: sanitizedMessage,
+        ...stack !== void 0 && { stack }
       }
     });
   };
   extractRejectionMessage(reason) {
-    if (!reason) return "Unknown rejection";
+    if (reason == null) return "Unknown rejection";
     if (typeof reason === "string") return reason;
     if (reason instanceof Error) {
-      return reason.stack ?? reason.message ?? reason.toString();
+      return reason.stack ?? reason.message;
     }
     if (typeof reason === "object" && "message" in reason) {
       return String(reason.message);
@@ -6133,11 +6138,15 @@ class ErrorHandler extends StateManager {
     try {
       return JSON.stringify(reason);
     } catch {
-      return String(reason);
+      return "Unserializable rejection";
     }
   }
   sanitize(text) {
-    let sanitized = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + "..." : text;
+    const truncated = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + "..." : text;
+    return this.sanitizePii(truncated);
+  }
+  sanitizePii(text) {
+    let sanitized = text;
     for (const pattern of PII_PATTERNS) {
       const regex = new RegExp(pattern.source, pattern.flags);
       sanitized = sanitized.replace(regex, "[REDACTED]");
@@ -6148,7 +6157,7 @@ class ErrorHandler extends StateManager {
     const now = Date.now();
     const key = `${type}:${message}`;
     const lastSeenAt = this.recentErrors.get(key);
-    if (lastSeenAt && now - lastSeenAt < ERROR_SUPPRESSION_WINDOW_MS) {
+    if (lastSeenAt !== void 0 && now - lastSeenAt < ERROR_SUPPRESSION_WINDOW_MS) {
       this.recentErrors.set(key, now);
       return true;
     }
@@ -6162,6 +6171,10 @@ class ErrorHandler extends StateManager {
       this.pruneOldErrors();
     }
     return false;
+  }
+  truncateStack(stack) {
+    const truncated = stack.length <= MAX_STACK_TRACE_LENGTH ? stack : stack.slice(0, MAX_STACK_TRACE_LENGTH) + "\n...truncated";
+    return this.sanitizePii(truncated);
   }
   pruneOldErrors() {
     const now = Date.now();
