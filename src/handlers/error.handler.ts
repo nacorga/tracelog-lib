@@ -5,6 +5,7 @@ import { log } from '../utils';
 import {
   PII_PATTERNS,
   MAX_ERROR_MESSAGE_LENGTH,
+  MAX_STACK_TRACE_LENGTH,
   ERROR_SUPPRESSION_WINDOW_MS,
   MAX_TRACKED_ERRORS,
   MAX_TRACKED_ERRORS_HARD_LIMIT,
@@ -102,6 +103,7 @@ export class ErrorHandler extends StateManager {
     }
 
     const config = this.get('config');
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be undefined before init
     const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
   }
@@ -117,14 +119,16 @@ export class ErrorHandler extends StateManager {
       return;
     }
 
+    const stack = typeof event.error?.stack === 'string' ? this.truncateStack(event.error.stack) : undefined;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
         message: sanitizedMessage,
-        ...(event.filename && { filename: event.filename }),
-        ...(event.lineno && { line: event.lineno }),
-        ...(event.colno && { column: event.colno }),
+        ...(event.filename !== '' && { filename: event.filename }),
+        ...(event.lineno !== 0 && { line: event.lineno }),
+        ...(event.colno !== 0 && { column: event.colno }),
+        ...(stack !== undefined && { stack }),
       },
     });
   };
@@ -141,22 +145,27 @@ export class ErrorHandler extends StateManager {
       return;
     }
 
+    const stack =
+      event.reason instanceof Error && event.reason.stack !== undefined
+        ? this.truncateStack(event.reason.stack)
+        : undefined;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.PROMISE_REJECTION,
         message: sanitizedMessage,
+        ...(stack !== undefined && { stack }),
       },
     });
   };
 
   private extractRejectionMessage(reason: unknown): string {
-    if (!reason) return 'Unknown rejection';
+    if (reason == null) return 'Unknown rejection';
 
     if (typeof reason === 'string') return reason;
 
     if (reason instanceof Error) {
-      return reason.stack ?? reason.message ?? reason.toString();
+      return reason.stack ?? reason.message;
     }
 
     if (typeof reason === 'object' && 'message' in reason) {
@@ -166,12 +175,17 @@ export class ErrorHandler extends StateManager {
     try {
       return JSON.stringify(reason);
     } catch {
-      return String(reason);
+      return 'Unserializable rejection';
     }
   }
 
   private sanitize(text: string): string {
-    let sanitized = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + '...' : text;
+    const truncated = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + '...' : text;
+    return this.sanitizePii(truncated);
+  }
+
+  private sanitizePii(text: string): string {
+    let sanitized = text;
 
     for (const pattern of PII_PATTERNS) {
       const regex = new RegExp(pattern.source, pattern.flags);
@@ -186,7 +200,7 @@ export class ErrorHandler extends StateManager {
     const key = `${type}:${message}`;
     const lastSeenAt = this.recentErrors.get(key);
 
-    if (lastSeenAt && now - lastSeenAt < ERROR_SUPPRESSION_WINDOW_MS) {
+    if (lastSeenAt !== undefined && now - lastSeenAt < ERROR_SUPPRESSION_WINDOW_MS) {
       this.recentErrors.set(key, now);
       return true;
     }
@@ -205,6 +219,12 @@ export class ErrorHandler extends StateManager {
     }
 
     return false;
+  }
+
+  private truncateStack(stack: string): string {
+    const truncated =
+      stack.length <= MAX_STACK_TRACE_LENGTH ? stack : stack.slice(0, MAX_STACK_TRACE_LENGTH) + '\n...truncated';
+    return this.sanitizePii(truncated);
   }
 
   private pruneOldErrors(): void {

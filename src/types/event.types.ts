@@ -203,6 +203,8 @@ export interface ErrorData {
   line?: number;
   /** Column number in source file */
   column?: number;
+  /** Error stack trace (truncated to 2000 chars) */
+  stack?: string;
 }
 
 /**

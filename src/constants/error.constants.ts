@@ -45,6 +45,12 @@ export const PII_PATTERNS = [
 export const MAX_ERROR_MESSAGE_LENGTH = 500;
 
 /**
+ * Maximum length for error stack traces before truncation
+ * Prevents oversized payloads while preserving useful debugging context
+ */
+export const MAX_STACK_TRACE_LENGTH = 2000;
+
+/**
  * Time window for error suppression in milliseconds
  * Prevents duplicate errors from flooding the system within this timeframe
  */

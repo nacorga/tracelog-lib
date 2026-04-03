@@ -10,6 +10,7 @@ import { EventManager } from '../../../src/managers/event.manager';
 import { EventType, ErrorType } from '../../../src/types';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { getGlobalState } from '../../../src/managers/state.manager';
+import { MAX_STACK_TRACE_LENGTH } from '../../../src/constants/error.constants';
 
 describe('ErrorHandler - Error Tracking', () => {
   let errorHandler: ErrorHandler;
@@ -347,5 +348,204 @@ describe('ErrorHandler - Sampling', () => {
     });
     window.dispatchEvent(errorEvent2);
     expect(trackSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ErrorHandler - Stack Traces', () => {
+  let errorHandler: ErrorHandler;
+  let eventManager: EventManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+
+    const storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+
+    errorHandler = new ErrorHandler(eventManager);
+    errorHandler.startTracking();
+  });
+
+  afterEach(() => {
+    errorHandler.stopTracking();
+    cleanupTestEnvironment();
+  });
+
+  it('should include stack trace from JS errors', () => {
+    const error = new Error('Test error');
+    const errorEvent = new ErrorEvent('error', {
+      message: 'Test error',
+      error,
+    });
+
+    window.dispatchEvent(errorEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          type: ErrorType.JS_ERROR,
+          stack: expect.stringContaining('Error: Test error'),
+        }),
+      }),
+    );
+  });
+
+  it('should include stack trace from promise rejections', () => {
+    const error = new Error('Rejection with stack');
+    const promise = Promise.reject(error);
+    promise.catch(() => {});
+
+    const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+      promise,
+      reason: error,
+    });
+
+    window.dispatchEvent(rejectionEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          type: ErrorType.PROMISE_REJECTION,
+          stack: expect.stringContaining('Error: Rejection with stack'),
+        }),
+      }),
+    );
+  });
+
+  it('should not include stack when error has no stack', () => {
+    const errorEvent = new ErrorEvent('error', {
+      message: 'No stack error',
+    });
+
+    window.dispatchEvent(errorEvent);
+
+    const call = trackSpy.mock.calls[0]?.[0] as Record<string, Record<string, unknown>> | undefined;
+    expect(call?.error_data?.stack).toBeUndefined();
+  });
+
+  it('should not include stack for non-Error promise rejections', () => {
+    const promise = Promise.reject('string rejection');
+    promise.catch(() => {});
+
+    const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+      promise,
+      reason: 'string rejection',
+    });
+
+    window.dispatchEvent(rejectionEvent);
+
+    const call = trackSpy.mock.calls[0]?.[0] as Record<string, Record<string, unknown>> | undefined;
+    expect(call?.error_data?.stack).toBeUndefined();
+  });
+
+  it('should truncate stack traces exceeding max length', () => {
+    const longStack = 'Error: test\n' + '    at someFunction (file.js:1:1)\n'.repeat(200);
+    expect(longStack.length).toBeGreaterThan(MAX_STACK_TRACE_LENGTH);
+
+    const error = new Error('Long stack');
+    Object.defineProperty(error, 'stack', { value: longStack });
+
+    const errorEvent = new ErrorEvent('error', {
+      message: 'Long stack',
+      error,
+    });
+
+    window.dispatchEvent(errorEvent);
+
+    const call = trackSpy.mock.calls[0]?.[0] as Record<string, Record<string, unknown>> | undefined;
+    const stack = call?.error_data?.stack as string;
+    expect(stack).toBeDefined();
+    expect(stack.length).toBeLessThanOrEqual(MAX_STACK_TRACE_LENGTH + '\n...truncated'.length);
+    expect(stack).toContain('...truncated');
+  });
+
+  it('should sanitize PII from stack traces', () => {
+    const stackWithPii =
+      'Error: auth failed\n' +
+      '    at login (https://api.example.com?email=user@example.com:1:1)\n' +
+      '    at fetch (Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0:2:2)';
+
+    const error = new Error('auth failed');
+    Object.defineProperty(error, 'stack', { value: stackWithPii });
+
+    const errorEvent = new ErrorEvent('error', {
+      message: 'auth failed',
+      error,
+    });
+
+    window.dispatchEvent(errorEvent);
+
+    const call = trackSpy.mock.calls[0]?.[0] as Record<string, Record<string, unknown>> | undefined;
+    const stack = call?.error_data?.stack as string;
+    expect(stack).toBeDefined();
+    expect(stack).not.toContain('user@example.com');
+    expect(stack).not.toContain('Bearer eyJ');
+    expect(stack).toContain('[REDACTED]');
+  });
+});
+
+describe('ErrorHandler - Rejection Message Extraction', () => {
+  let errorHandler: ErrorHandler;
+  let eventManager: EventManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+
+    const storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+
+    errorHandler = new ErrorHandler(eventManager);
+    errorHandler.startTracking();
+  });
+
+  afterEach(() => {
+    errorHandler.stopTracking();
+    cleanupTestEnvironment();
+  });
+
+  it('should handle unserializable rejection reasons', () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    const promise = Promise.reject(circular);
+    promise.catch(() => {});
+
+    const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+      promise,
+      reason: circular,
+    });
+
+    window.dispatchEvent(rejectionEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          message: 'Unserializable rejection',
+        }),
+      }),
+    );
+  });
+
+  it('should handle null rejection reason', () => {
+    const promise = Promise.reject(null);
+    promise.catch(() => {});
+
+    const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+      promise,
+      reason: null,
+    });
+
+    window.dispatchEvent(rejectionEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          message: 'Unknown rejection',
+        }),
+      }),
+    );
   });
 });
