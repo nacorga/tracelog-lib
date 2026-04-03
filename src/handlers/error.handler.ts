@@ -103,8 +103,7 @@ export class ErrorHandler extends StateManager {
     }
 
     const config = this.get('config');
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be undefined before init
-    const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
+    const samplingRate = config.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
   }
 

@@ -4,7 +4,7 @@ import { State } from '../types';
  * Global in-memory state store shared across all TraceLog components.
  * Single source of truth for runtime application state.
  */
-const globalState: State = {} as State;
+const globalState: State = { config: {} } as State;
 
 /**
  * Returns an immutable snapshot of the global state.
@@ -54,6 +54,7 @@ export const resetGlobalState = (): void => {
   Object.keys(globalState).forEach((key) => {
     delete globalState[key as keyof State];
   });
+  globalState.config = {};
 };
 
 /**
