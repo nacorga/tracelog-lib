@@ -33,8 +33,8 @@ export const PII_PATTERNS = [
   // Passwords in connection strings (protocol://user:password@host)
   /:\/\/[^:/]+:([^@]+)@/gi,
 
-  // Sensitive URL query parameters (token=, key=, password=, auth=, secret=, api_key=)
-  /[?&](token|key|password|passwd|auth|secret|api_key|apikey|access_token)=[^&\s]+/gi,
+  // Sensitive URL query parameters (token=, password=, auth=, secret=, api_key=, etc.)
+  /[?&](token|password|passwd|auth|secret|secret_key|private_key|auth_key|api_key|apikey|access_token)=[^&\s]+/gi,
 ] as const;
 
 // ============================================================================

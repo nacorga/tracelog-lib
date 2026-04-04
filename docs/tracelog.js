@@ -420,7 +420,9 @@ const PII_PATTERNS = [
   // Bearer tokens (JWT-like patterns - matches complete and partial tokens)
   /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
   // Passwords in connection strings (protocol://user:password@host)
-  /:\/\/[^:/]+:([^@]+)@/gi
+  /:\/\/[^:/]+:([^@]+)@/gi,
+  // Sensitive URL query parameters (token=, password=, auth=, secret=, api_key=, etc.)
+  /[?&](token|password|passwd|auth|secret|secret_key|private_key|auth_key|api_key|apikey|access_token)=[^&\s]+/gi
 ];
 const MAX_ERROR_MESSAGE_LENGTH = 500;
 const MAX_STACK_TRACE_LENGTH = 2e3;
@@ -1420,7 +1422,7 @@ function transformBatch(batch, transformer, context) {
     return batch;
   }
 }
-const globalState = {};
+const globalState = { config: {} };
 class StateManager {
   /**
    * Retrieves a value from global state.
@@ -6083,7 +6085,7 @@ class ErrorHandler extends StateManager {
       return false;
     }
     const config = this.get("config");
-    const samplingRate = config?.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
+    const samplingRate = config.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
   }
   handleError = (event2) => {
@@ -6116,7 +6118,7 @@ class ErrorHandler extends StateManager {
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
       return;
     }
-    const stack = event2.reason instanceof Error && event2.reason.stack !== void 0 ? this.truncateStack(event2.reason.stack) : void 0;
+    const stack = event2.reason instanceof Error && typeof event2.reason.stack === "string" ? this.truncateStack(event2.reason.stack) : void 0;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
@@ -6130,7 +6132,7 @@ class ErrorHandler extends StateManager {
     if (reason == null) return "Unknown rejection";
     if (typeof reason === "string") return reason;
     if (reason instanceof Error) {
-      return reason.stack ?? reason.message;
+      return reason.message;
     }
     if (typeof reason === "object" && "message" in reason) {
       return String(reason.message);
@@ -6172,8 +6174,11 @@ class ErrorHandler extends StateManager {
     }
     return false;
   }
+  static TRUNCATION_SUFFIX = "\n...truncated";
   truncateStack(stack) {
-    const truncated = stack.length <= MAX_STACK_TRACE_LENGTH ? stack : stack.slice(0, MAX_STACK_TRACE_LENGTH) + "\n...truncated";
+    if (stack.length <= MAX_STACK_TRACE_LENGTH) return this.sanitizePii(stack);
+    const limit = MAX_STACK_TRACE_LENGTH - ErrorHandler.TRUNCATION_SUFFIX.length;
+    const truncated = stack.slice(0, limit) + ErrorHandler.TRUNCATION_SUFFIX;
     return this.sanitizePii(truncated);
   }
   pruneOldErrors() {
