@@ -12,6 +12,35 @@
 
 
 
+
+## [2.7.2] - 2026-04-05
+
+### ✨ Features
+
+- Enhance PII sanitization in stack traces and update error message handling ([f1b7041](../../commit/f1b70419e8b62fc79caff3c7982637650d3e9a5b))
+- Add MAX_STACK_TRACE_LENGTH constant and implement stack trace handling in ErrorHandler ([75c8b1e](../../commit/75c8b1ee37fd46b63976189dcce4aad305f8a839))
+
+### 🐛 Bug Fixes
+
+- Update README to correct gzipped size of the library ([1c1301e](../../commit/1c1301e90bae8e2156ad8798305ac76685f8f280))
+- Update comment for sensitive URL query parameters in PII_PATTERNS ([37244a0](../../commit/37244a019b04a1757f5f662596109fd349d89606))
+- Initialize globalState with default config and reset config on state reset ([1e0b45a](../../commit/1e0b45a17d41e6e2c845faff87e06614096de910))
+
+### 🔧 Other Changes
+
+- Merge pull request #96 from nacorga/release/20260403.1 ([211e8c3](../../commit/211e8c33e94bf25f7968ad2f79193d85774979bf))
+- Demo update ([d85256a](../../commit/d85256a5a12a7fd802fc8c7a98224136429d0cf8))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.7.1...v2.7.2
+
+
 ## [2.7.1] - 2026-03-30
 
 ### 🐛 Bug Fixes
