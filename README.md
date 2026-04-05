@@ -9,7 +9,7 @@ Lightweight web analytics library for tracking user behavior. Works standalone o
 - **Privacy-first** - PII sanitization, client-side sampling, `data-tlog-ignore` attribute
 - **Cross-tab sessions** - BroadcastChannel sync with localStorage recovery
 - **Event-driven** - Subscribe via `on()`/`off()` for real-time events
-- **Lightweight** - Single dependency (`web-vitals`), 15KB gzipped
+- **Lightweight** - Single dependency (`web-vitals`), ~62KB gzipped
 
 ## Live Demo
 
