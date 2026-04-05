@@ -32,6 +32,9 @@ export const PII_PATTERNS = [
 
   // Passwords in connection strings (protocol://user:password@host)
   /:\/\/[^:/]+:([^@]+)@/gi,
+
+  // Sensitive URL query parameters (token=, password=, auth=, secret=, api_key=, etc.)
+  /[?&](token|password|passwd|auth|secret|secret_key|private_key|auth_key|api_key|apikey|access_token)=[^&\s]+/gi,
 ] as const;
 
 // ============================================================================
@@ -43,6 +46,12 @@ export const PII_PATTERNS = [
  * Prevents extremely long error messages from consuming excessive storage
  */
 export const MAX_ERROR_MESSAGE_LENGTH = 500;
+
+/**
+ * Maximum length for error stack traces before truncation
+ * Prevents oversized payloads while preserving useful debugging context
+ */
+export const MAX_STACK_TRACE_LENGTH = 2000;
 
 /**
  * Time window for error suppression in milliseconds
