@@ -49,6 +49,26 @@ describe('ShopifyCartLinker - Activation', () => {
 
     expect(addSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
   });
+
+  it('should be idempotent — calling activate twice does not leak listeners', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+
+    (linker as any).set('sessionId', 'sess-1');
+    linker.activate();
+    linker.activate();
+
+    // Second activate cleans up the first listener before registering a new one
+    const addCalls = addSpy.mock.calls.filter(([e]) => e === 'visibilitychange');
+    const removeCalls = removeSpy.mock.calls.filter(([e]) => e === 'visibilitychange');
+    expect(addCalls).toHaveLength(2);
+    expect(removeCalls).toHaveLength(1);
+
+    // Deactivate cleans the remaining one
+    linker.deactivate();
+    const removeCallsAfter = removeSpy.mock.calls.filter(([e]) => e === 'visibilitychange');
+    expect(removeCallsAfter).toHaveLength(2);
+  });
 });
 
 describe('ShopifyCartLinker - Deactivation', () => {
@@ -65,12 +85,18 @@ describe('ShopifyCartLinker - Deactivation', () => {
     cleanupTestEnvironment();
   });
 
-  it('should remove visibilitychange listener on deactivate', () => {
+  it('should remove the exact visibilitychange handler on deactivate', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
     const removeSpy = vi.spyOn(document, 'removeEventListener');
     linker.activate();
+
+    const registered = addSpy.mock.calls.find(([event]) => event === 'visibilitychange');
+    expect(registered).toBeDefined();
+    const handler = registered![1];
+
     linker.deactivate();
 
-    expect(removeSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    expect(removeSpy).toHaveBeenCalledWith('visibilitychange', handler);
   });
 
   it('should reset lastSyncedSessionId on deactivate', () => {
@@ -264,5 +290,38 @@ describe('ShopifyCartLinker - Fetch Failure Handling', () => {
     expect(() => {
       linker.activate();
     }).not.toThrow();
+  });
+
+  it('should reset dedup on sync failure so next trigger retries', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    linker.activate();
+
+    // Wait for the rejection to propagate
+    await vi.waitFor(() => {
+      expect((linker as any).lastSyncedSessionId).toBeNull();
+    });
+
+    // Now fix fetch and trigger again — should retry
+    const successFetch = vi.fn().mockResolvedValue({ ok: true });
+    global.fetch = successFetch;
+    linker.onSessionChange();
+
+    expect(successFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reset dedup on synchronous throw so next trigger retries', () => {
+    global.fetch = vi.fn().mockImplementation(() => {
+      throw new Error('Network unavailable');
+    });
+    linker.activate();
+
+    // Synchronous throw resets immediately
+    expect((linker as any).lastSyncedSessionId).toBeNull();
+
+    const successFetch = vi.fn().mockResolvedValue({ ok: true });
+    global.fetch = successFetch;
+    linker.onSessionChange();
+
+    expect(successFetch).toHaveBeenCalledTimes(1);
   });
 });

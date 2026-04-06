@@ -5419,6 +5419,7 @@ class ShopifyCartLinker extends StateManager {
   visibilityHandler = null;
   lastSyncedSessionId = null;
   activate() {
+    this.cleanupVisibilityListener();
     this.syncCartAttribute();
     this.setupVisibilityListener();
   }
@@ -5444,9 +5445,11 @@ class ShopifyCartLinker extends StateManager {
         body: JSON.stringify({ attributes: { [SHOPIFY_SESSION_ATTR]: sessionId } }),
         credentials: "same-origin"
       }).catch(() => {
+        this.lastSyncedSessionId = null;
         log("debug", "Shopify cart attribute update failed");
       });
     } catch {
+      this.lastSyncedSessionId = null;
       log("debug", "Shopify cart attribute update failed");
     }
   }
