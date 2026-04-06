@@ -310,6 +310,10 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
       throw new IntegrationValidationError('fetchCredentials must be "include", "same-origin", or "omit"', 'config');
     }
   }
+
+  if (integrations.tracelog?.shopify !== undefined && typeof integrations.tracelog.shopify !== 'boolean') {
+    throw new IntegrationValidationError('tracelog.shopify must be a boolean', 'config');
+  }
 };
 
 /**
