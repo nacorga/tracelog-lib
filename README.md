@@ -824,7 +824,7 @@ TraceLog implements intelligent error handling with automatic retries for transi
 **Rate Limit** (429):
 - **No in-session retries** (deferred to EventManager periodic backoff)
 - **Events persisted immediately** to localStorage for next-cycle recovery
-- Server-side idempotency cache resolves duplicates on retry
+- TraceLog SaaS deduplicates retries server-side; custom backends should implement idempotency
 
 **Permanent Errors** (4xx except 408, 429):
 - **No retries** (immediate failure)

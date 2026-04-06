@@ -742,8 +742,8 @@ export class SenderManager extends StateManager {
         }
 
         // Rate limit (429) — server is reachable but rejecting requests. Don't waste
-        // retries, let EventManager periodic backoff handle it. Server-side idempotency
-        // cache will resolve duplicates on the next attempt.
+        // retries; let EventManager periodic backoff handle it. If the configured
+        // backend implements idempotency, it can deduplicate any later retry attempt.
         if (error instanceof RateLimitError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;

@@ -24,7 +24,9 @@ export class PermanentError extends Error {
 /**
  * Represents a rate limit error (429) that should not be retried in the
  * inner send loop. Events are persisted for periodic retry via EventManager
- * backoff, where server-side idempotency cache will resolve them.
+ * backoff. Deduplication of retried events is integration-specific (e.g.
+ * TraceLog SaaS handles it server-side; custom backends should implement
+ * their own idempotency).
  */
 export class RateLimitError extends Error {
   constructor(message: string) {
