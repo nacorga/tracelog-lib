@@ -6,10 +6,12 @@ import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
+import { ShopifyCartLinker } from './ecommerce';
 import {
   Config,
   EventType,
   EmitterCallback,
+  EmitterEvent,
   EmitterMap,
   IdentifyData,
   Mode,
@@ -61,6 +63,10 @@ export class App extends StateManager {
     performance?: PerformanceHandler;
     error?: ErrorHandler;
     viewport?: ViewportHandler;
+  } = {};
+
+  private integrationInstances: {
+    shopifyCartLinker?: ShopifyCartLinker;
   } = {};
 
   get initialized(): boolean {
@@ -264,6 +270,9 @@ export class App extends StateManager {
     this.set('sessionId', null);
     this.set('identity', undefined);
     this.clearPersistedIdentity();
+
+    this.integrationInstances.shopifyCartLinker?.deactivate();
+    this.integrationInstances = {};
 
     this.isInitialized = false;
     this.handlers = {};
@@ -648,6 +657,18 @@ export class App extends StateManager {
     if (config.viewport) {
       this.handlers.viewport = new ViewportHandler(this.managers.event as EventManager);
       this.handlers.viewport.startTracking();
+    }
+
+    if (config.integrations?.tracelog?.shopify) {
+      const linker = new ShopifyCartLinker();
+      linker.activate();
+      this.integrationInstances.shopifyCartLinker = linker;
+
+      this.emitter.on(EmitterEvent.EVENT, (event) => {
+        if (event.type === EventType.SESSION_START) {
+          linker.onSessionChange();
+        }
+      });
     }
   }
 }

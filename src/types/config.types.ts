@@ -51,6 +51,8 @@ export interface Config {
     tracelog?: {
       /** Required project ID TraceLog SaaS integration. */
       projectId: string;
+      /** Enable Shopify cart attribute linking for webhook revenue attribution. */
+      shopify?: boolean;
     };
     /** Custom integration options. */
     custom?: {

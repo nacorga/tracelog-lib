@@ -498,7 +498,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.7.2";
+const version = "2.7.3";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1043,6 +1043,9 @@ const validateIntegrations = (integrations) => {
     if (integrations.custom.fetchCredentials !== void 0 && !["include", "same-origin", "omit"].includes(integrations.custom.fetchCredentials)) {
       throw new IntegrationValidationError('fetchCredentials must be "include", "same-origin", or "omit"', "config");
     }
+  }
+  if (integrations.tracelog?.shopify !== void 0 && typeof integrations.tracelog.shopify !== "boolean") {
+    throw new IntegrationValidationError("tracelog.shopify must be a boolean", "config");
   }
 };
 const validateAndNormalizeConfig = (config) => {
@@ -5411,6 +5414,60 @@ class ViewportHandler extends StateManager {
     });
   }
 }
+const SHOPIFY_SESSION_ATTR = "tracelog_session_id";
+class ShopifyCartLinker extends StateManager {
+  visibilityHandler = null;
+  lastSyncedSessionId = null;
+  activate() {
+    this.cleanupVisibilityListener();
+    this.syncCartAttribute();
+    this.setupVisibilityListener();
+  }
+  deactivate() {
+    this.cleanupVisibilityListener();
+    this.lastSyncedSessionId = null;
+  }
+  /** Re-syncs the cart attribute when session rotates (called by App on SESSION_START). */
+  onSessionChange() {
+    this.syncCartAttribute();
+  }
+  syncCartAttribute() {
+    const sessionId = this.get("sessionId");
+    if (!sessionId || sessionId === this.lastSyncedSessionId) return;
+    this.lastSyncedSessionId = sessionId;
+    this.postCartUpdate(sessionId);
+  }
+  postCartUpdate(sessionId) {
+    try {
+      fetch("/cart/update.js", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attributes: { [SHOPIFY_SESSION_ATTR]: sessionId } }),
+        credentials: "same-origin"
+      }).catch(() => {
+        this.lastSyncedSessionId = null;
+        log("debug", "Shopify cart attribute update failed");
+      });
+    } catch {
+      this.lastSyncedSessionId = null;
+      log("debug", "Shopify cart attribute update failed");
+    }
+  }
+  setupVisibilityListener() {
+    this.visibilityHandler = () => {
+      if (!document.hidden) {
+        this.syncCartAttribute();
+      }
+    };
+    document.addEventListener("visibilitychange", this.visibilityHandler);
+  }
+  cleanupVisibilityListener() {
+    if (this.visibilityHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
+  }
+}
 class StorageManager {
   storage;
   sessionStorageRef;
@@ -6232,6 +6289,7 @@ class App extends StateManager {
   customHeadersProvider;
   managers = {};
   handlers = {};
+  integrationInstances = {};
   get initialized() {
     return this.isInitialized;
   }
@@ -6389,6 +6447,8 @@ class App extends StateManager {
     this.set("sessionId", null);
     this.set("identity", void 0);
     this.clearPersistedIdentity();
+    this.integrationInstances.shopifyCartLinker?.deactivate();
+    this.integrationInstances = {};
     this.isInitialized = false;
     this.handlers = {};
     this.managers = {};
@@ -6700,6 +6760,16 @@ class App extends StateManager {
     if (config.viewport) {
       this.handlers.viewport = new ViewportHandler(this.managers.event);
       this.handlers.viewport.startTracking();
+    }
+    if (config.integrations?.tracelog?.shopify) {
+      const linker = new ShopifyCartLinker();
+      linker.activate();
+      this.integrationInstances.shopifyCartLinker = linker;
+      this.emitter.on(EmitterEvent.EVENT, (event2) => {
+        if (event2.type === EventType.SESSION_START) {
+          linker.onSessionChange();
+        }
+      });
     }
   }
 }
