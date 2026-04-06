@@ -13,6 +13,29 @@
 
 
 
+
+## [2.7.3] - 2026-04-06
+
+### 🐛 Bug Fixes
+
+- Clarify rate limit error handling and idempotency requirements in documentation ([060b7b6](../../commit/060b7b606cecd8a5a5274794630fc5f3ccf92f57))
+- Update error handling for rate limit (429) to skip retries and persist events for periodic backoff ([5fefaec](../../commit/5fefaecf3fef85ed7748780b07294a3668a7b022))
+
+### 🔧 Other Changes
+
+- Merge pull request #97 from nacorga/hotfix/20260406.1 ([ac871da](../../commit/ac871da15208c3a4c0067a19de87ab563cdc7509))
+- Tracelog js ([3003937](../../commit/30039371c5721330da6c0e1a9760bbf74d2019a9))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.7.2...v2.7.3
+
+
 ## [2.7.2] - 2026-04-05
 
 ### ✨ Features
