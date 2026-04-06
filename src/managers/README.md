@@ -97,7 +97,8 @@ Core business logic components that handle analytics data processing, state mana
   - Multiple instances can coexist (one per integration)
   - Independent storage keys prevent cross-integration interference
 - **In-session retry with exponential backoff** - Up to 2 additional attempts for transient errors
-  - Transient errors (5xx, 408, 429, network failures) trigger retry with exponential backoff
+  - Transient errors (5xx, 408, network failures) trigger retry with exponential backoff
+  - Rate limit (429) skips inner retries, persists immediately for EventManager periodic backoff
   - Backoff formula: `100ms * 2^attempt + random(0-100ms)` (delays: 200-300ms, 400-500ms)
   - Permanent errors (4xx except 408/429) bypass retries immediately
   - Failed events persist to localStorage after exhausting retries for next-page-load recovery
@@ -121,7 +122,7 @@ Core business logic components that handle analytics data processing, state mana
   - Transitions to half-open after cooldown, allowing one probe batch through
   - Successful probe closes circuit; failed probe re-opens for another cooldown
   - Timeouts excluded (server is reachable but slow)
-  - HTTP responses (5xx/408/429) reset counter (URL is reachable, handled by backoff)
+  - HTTP responses (5xx/408/429) reset counter (URL is reachable)
   - Permanent errors (4xx) reset counter immediately (URL is reachable)
 - **Cross-session recovery limit (v2.6.0+)** - Prevents infinite persistence loops
   - Each failed page-load recovery increments `recoveryFailures` counter in localStorage

@@ -18,6 +18,7 @@ import {
   EventsQueue,
   SpecialApiUrl,
   PermanentError,
+  RateLimitError,
   TimeoutError,
   TransformerMap,
   CustomHeadersProvider,
@@ -740,13 +741,28 @@ export class SenderManager extends StateManager {
           throw error;
         }
 
+        // Rate limit (429) — server is reachable but rejecting requests. Don't waste
+        // retries; let EventManager periodic backoff handle it. If the configured
+        // backend implements idempotency, it can deduplicate any later retry attempt.
+        if (error instanceof RateLimitError) {
+          this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
+          allTimeouts = false;
+          hadHttpResponse = true;
+          log('warn', `Rate limited, skipping retries${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
+            data: { events: body.events.length, attempt },
+          });
+          break;
+        }
+
         if (!(error instanceof TimeoutError)) {
           allTimeouts = false;
         }
 
-        // Track whether any attempt received an HTTP response (5xx/408/429).
+        // Track whether any attempt received an HTTP response (5xx/408).
         // Network-level failures (DNS, connection refused) throw TypeError from
         // fetch(), while HTTP errors throw generic Error with "HTTP {status}".
+        // Note: 429 is intercepted above via RateLimitError before reaching here.
         if (!(error instanceof TypeError)) {
           hadHttpResponse = true;
         }
@@ -780,7 +796,7 @@ export class SenderManager extends StateManager {
 
         // Only increment the circuit breaker for true network-level failures
         // (DNS, connection refused) where no HTTP response was received.
-        // If any attempt got an HTTP response (5xx/408/429), the URL is
+        // If any attempt got an HTTP response (5xx/408), the URL is
         // reachable — these transient errors are handled by the existing
         // backoff scheduler (MAX_CONSECUTIVE_SEND_FAILURES / MAX_SEND_INTERVAL_MS).
         if (!hadHttpResponse) {
@@ -801,7 +817,8 @@ export class SenderManager extends StateManager {
       }
     }
 
-    // Should never reach here due to loop structure, but included for type safety
+    // Reached when RateLimitError breaks out of the retry loop.
+    // hadHttpResponse is true → circuit breaker already reset above.
     return false;
   }
 
@@ -857,12 +874,16 @@ export class SenderManager extends StateManager {
       if (!response.ok) {
         // 4xx errors are permanent (unrecoverable) except:
         // - 408 Request Timeout (transient - network/server issue)
-        // - 429 Too Many Requests (transient - rate limiting)
+        // - 429 Too Many Requests (own error type - no inner retries, deferred to EventManager backoff)
         const isPermanentError =
           response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
 
         if (isPermanentError) {
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+        }
+
+        if (response.status === 429) {
+          throw new RateLimitError(`HTTP 429: ${response.statusText}`);
         }
 
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
