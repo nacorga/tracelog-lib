@@ -263,7 +263,8 @@ tracelog.removeCustomHeaders();
 |------------|---------|-------------|
 | 2xx Success | None | Cleared |
 | 4xx (except 408, 429) | ❌ None | ❌ Discarded |
-| 408 Timeout, 429 Rate Limit | ✅ Up to 2 | ✅ After exhaustion |
+| 408 Timeout | ✅ Up to 2 | ✅ After exhaustion |
+| 429 Rate Limit | ❌ None (deferred to periodic backoff) | ✅ Immediate |
 | 5xx, Network Errors | ✅ Up to 2 | ✅ After exhaustion |
 
 ### 6. Session Management

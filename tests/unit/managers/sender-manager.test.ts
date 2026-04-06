@@ -475,7 +475,7 @@ describe('SenderManager - Retry Logic', () => {
     expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries (408 is transient)
   });
 
-  it('should retry rate limit errors (429)', async () => {
+  it('should NOT retry rate limit errors (429)', async () => {
     // Arrange
     const mockFetch = createMockFetch({ ok: false, status: 429 });
     global.fetch = mockFetch;
@@ -494,14 +494,11 @@ describe('SenderManager - Retry Logic', () => {
     const eventsQueue = createMockQueue([customEvent]);
 
     // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(300); // First retry
-    await advanceTimers(500); // Second retry
-    const success = await sendPromise;
+    const success = await sender.sendEventsQueue(eventsQueue);
 
     // Assert
     expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries (429 is transient)
+    expect(mockFetch).toHaveBeenCalledTimes(1); // No retries — deferred to EventManager periodic backoff
   });
 
   it('should NOT retry permanent errors (4xx except 408, 429)', async () => {
@@ -648,6 +645,37 @@ describe('SenderManager - Event Persistence', () => {
     const storageKey = 'tlog:test-user-id:queue:custom';
     const persisted = localStorage.getItem(storageKey);
     expect(persisted).toBeNull();
+  });
+
+  it('should persist events on rate limit (429) for periodic retry', async () => {
+    // Arrange
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
+    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    const success = await sender.sendEventsQueue(eventsQueue);
+
+    // Assert — 429: no retries, events persisted for EventManager periodic backoff
+    expect(success).toBe(false);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    expect(clearSpy).not.toHaveBeenCalled();
   });
 });
 

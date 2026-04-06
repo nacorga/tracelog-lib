@@ -821,10 +821,15 @@ TraceLog implements intelligent error handling with automatic retries for transi
 - **Independent retries** per integration (SaaS and Custom retry separately)
 - **Persistence after exhaustion**: Events saved to localStorage for next-page recovery
 
+**Rate Limit** (429):
+- **No in-session retries** (deferred to EventManager periodic backoff)
+- **Events persisted immediately** to localStorage for next-cycle recovery
+- Server-side idempotency cache resolves duplicates on retry
+
 **Permanent Errors** (4xx except 408, 429):
 - **No retries** (immediate failure)
 - **Events discarded** (not persisted)
-- **Exceptions**: 408 Request Timeout and 429 Too Many Requests are treated as transient
+- **Exception**: 408 Request Timeout is treated as transient
 
 ```typescript
 // Multi-backend example with automatic retries
@@ -851,7 +856,7 @@ await tracelog.init({
 | **2xx** | Success | None | Cleared |
 | **4xx** (except 408, 429) | Permanent | ❌ None | ❌ Discarded |
 | **408** Request Timeout | Transient | ✅ Up to 2 | ✅ After exhaustion |
-| **429** Too Many Requests | Transient | ✅ Up to 2 | ✅ After exhaustion |
+| **429** Too Many Requests | Rate Limited | ❌ None | ✅ Immediate |
 | **5xx** | Transient | ✅ Up to 2 | ✅ After exhaustion |
 | **Network Error** | Transient | ✅ Up to 2 | ✅ After exhaustion |
 | **Timeout** | Transient | ✅ Up to 2 | ✅ After exhaustion |

@@ -22,6 +22,22 @@ export class PermanentError extends Error {
 }
 
 /**
+ * Represents a rate limit error (429) that should not be retried in the
+ * inner send loop. Events are persisted for periodic retry via EventManager
+ * backoff, where server-side idempotency cache will resolve them.
+ */
+export class RateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitError';
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, RateLimitError);
+    }
+  }
+}
+
+/**
  * Represents a timeout error where the server likely received the request
  * but the response took too long. Events should NOT be persisted for retry
  * since the server most likely already processed them.
