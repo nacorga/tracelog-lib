@@ -185,6 +185,15 @@ class PermanentError extends Error {
     }
   }
 }
+class RateLimitError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "RateLimitError";
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, RateLimitError);
+    }
+  }
+}
 class TimeoutError extends Error {
   constructor(message) {
     super(message);
@@ -489,7 +498,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.7.1";
+const version = "2.7.2";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -2038,6 +2047,16 @@ class SenderManager extends StateManager {
           this.circuitOpenedAt = 0;
           throw error;
         }
+        if (error instanceof RateLimitError) {
+          this.consecutiveNetworkFailures = 0;
+          this.circuitOpenedAt = 0;
+          allTimeouts = false;
+          hadHttpResponse = true;
+          log("warn", `Rate limited, skipping retries${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+            data: { events: body.events.length, attempt }
+          });
+          break;
+        }
         if (!(error instanceof TimeoutError)) {
           allTimeouts = false;
         }
@@ -2129,6 +2148,9 @@ class SenderManager extends StateManager {
         const isPermanentError = response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
         if (isPermanentError) {
           throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+        }
+        if (response.status === 429) {
+          throw new RateLimitError(`HTTP 429: ${response.statusText}`);
         }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -7538,6 +7560,7 @@ export {
   Mode,
   PII_PATTERNS,
   PermanentError,
+  RateLimitError,
   SamplingRateValidationError,
   ScrollDirection,
   SessionTimeoutValidationError,
