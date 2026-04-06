@@ -14,6 +14,32 @@
 
 
 
+
+## [2.8.0] - 2026-04-06
+
+### ✨ Features
+
+- Add ShopifyCartLinker integration for session ID tracking in Shopify carts ([e7e0b7e](../../commit/e7e0b7ef3a52e682c350539392d6d036afb9ce30))
+
+### 🐛 Bug Fixes
+
+- Enhance error handling for Shopify cart attribute updates and reset lastSyncedSessionId on non-OK responses ([694a9bc](../../commit/694a9bc5ee859b1db31a6405cce25c4fc9a8b1aa))
+- Improve visibility listener management and reset lastSyncedSessionId on fetch failure ([1b315dc](../../commit/1b315dccb794185c91150debbc515891050c96f8))
+
+### 🔧 Other Changes
+
+- Merge pull request #98 from nacorga/release/20260406.1 ([3b71045](../../commit/3b710454debcf63d672eedfa7b50fe6e5a93d748))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.7.3...v2.8.0
+
+
 ## [2.7.3] - 2026-04-06
 
 ### 🐛 Bug Fixes
