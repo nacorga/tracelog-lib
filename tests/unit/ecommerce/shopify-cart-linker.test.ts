@@ -292,6 +292,21 @@ describe('ShopifyCartLinker - Fetch Failure Handling', () => {
     }).not.toThrow();
   });
 
+  it('should reset dedup on non-OK response so next trigger retries', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 422 });
+    linker.activate();
+
+    await vi.waitFor(() => {
+      expect((linker as any).lastSyncedSessionId).toBeNull();
+    });
+
+    const successFetch = vi.fn().mockResolvedValue({ ok: true });
+    global.fetch = successFetch;
+    linker.onSessionChange();
+
+    expect(successFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('should reset dedup on sync failure so next trigger retries', async () => {
     global.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
     linker.activate();

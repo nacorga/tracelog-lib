@@ -45,10 +45,17 @@ export class ShopifyCartLinker extends StateManager {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attributes: { [SHOPIFY_SESSION_ATTR]: sessionId } }),
         credentials: 'same-origin',
-      }).catch(() => {
-        this.lastSyncedSessionId = null;
-        log('debug', 'Shopify cart attribute update failed');
-      });
+      })
+        .then((response) => {
+          if (!response.ok) {
+            this.lastSyncedSessionId = null;
+            log('debug', 'Shopify cart attribute update failed', { data: { status: response.status } });
+          }
+        })
+        .catch(() => {
+          this.lastSyncedSessionId = null;
+          log('debug', 'Shopify cart attribute update failed');
+        });
     } catch {
       this.lastSyncedSessionId = null;
       log('debug', 'Shopify cart attribute update failed');
