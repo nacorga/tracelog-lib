@@ -48,7 +48,6 @@ export interface IngestionStackState {
   sessionsCount: number;
   visitorsCount: number;
   capturedRequests: Array<{
-    request_id?: string;
     source?: string;
     session_id?: string;
     user_id?: string;

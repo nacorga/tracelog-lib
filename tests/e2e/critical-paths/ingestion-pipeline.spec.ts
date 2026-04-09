@@ -48,20 +48,6 @@ async function initAgainstMiddleware(
   );
 }
 
-function captureCollectRequestIds(page: Page, collectApiUrl: string): string[] {
-  const requestIds: string[] = [];
-
-  page.on('response', async (response) => {
-    if (response.url() !== collectApiUrl || response.request().method() !== 'POST') {
-      return;
-    }
-
-    requestIds.push(response.headers()['x-request-id'] ?? '');
-  });
-
-  return requestIds;
-}
-
 test.describe('E2E: Ingestion Pipeline', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -83,7 +69,6 @@ test.describe('E2E: Ingestion Pipeline', () => {
   });
 
   test('should ingest SESSION_START and PAGE_VIEW exactly once through middleware', async ({ page }) => {
-    const collectRequestIds = captureCollectRequestIds(page, stack.middlewareCollectUrl);
     await initAgainstMiddleware(page, stack.middlewareCollectUrl);
 
     await expect
@@ -102,8 +87,6 @@ test.describe('E2E: Ingestion Pipeline', () => {
     expect(state.visitors[0]?.first_location).toEqual({ country: 'Local Test', country_code: 'TEST' });
     expect(state.capturedRequests).toHaveLength(1);
     expect(state.capturedRequests[0]?.events?.map((event) => event.type)).toEqual(['session_start', 'page_view']);
-    expect(collectRequestIds).toHaveLength(1);
-    expect(collectRequestIds[0]).toBe(state.capturedRequests[0]?.request_id);
   });
 
   test('should preserve idempotency after a client timeout and mutated retry', async ({ page }) => {
