@@ -411,6 +411,41 @@ describe('SenderManager - Event Sending (sendBeacon)', () => {
 
     // Note: Persistence behavior is tested in "Event Persistence" block
   });
+
+  it('should preserve the same idempotency token when sendBeacon persists and recovery retries later', async () => {
+    const mockSendBeacon = vi.fn().mockReturnValue(false);
+    global.navigator.sendBeacon = mockSendBeacon;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'send_beacon_retry_test', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    const accepted = sender.sendEventsQueueSync(eventsQueue);
+    expect(accepted).toBe(false);
+
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    const persistedToken = persisted._metadata?.idempotency_token;
+
+    expect(persistedToken).toBeTypeOf('string');
+
+    const successFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = successFetch;
+
+    await sender.recoverPersistedEvents();
+
+    const recoveredPayload = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
+    expect(recoveredPayload._metadata.idempotency_token).toBe(persistedToken);
+  });
 });
 
 describe('SenderManager - Retry Logic', () => {
@@ -1587,6 +1622,51 @@ describe('SenderManager - TimeoutError Handling', () => {
     const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
     expect(persisted.events).toHaveLength(1);
     expect(persisted._metadata.idempotency_token).toBeTypeOf('string');
+  });
+
+  it('should reuse the same idempotency token after a timeout batch is retried successfully later', async () => {
+    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        }
+      });
+    });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'timeout_retry_test', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    const firstSend = sender.sendEventsQueue(eventsQueue);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await firstSend;
+
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    const persistedToken = persisted._metadata?.idempotency_token;
+
+    expect(persistedToken).toBeTypeOf('string');
+
+    const successFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = successFetch;
+
+    await sender.recoverPersistedEvents();
+
+    const recoveredPayload = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
+    expect(recoveredPayload._metadata.idempotency_token).toBe(persistedToken);
   });
 
   it('should call persistEvents when all attempts timeout', async () => {

@@ -113,6 +113,12 @@ jobs:
           echo "🔍 Running integration tests..."
           npm run test:integration
 
+      - name: Run Critical Ingestion Gate
+        run: |
+          echo "🔍 Running critical ingestion gate..."
+          npm run test:critical:ingestion
+          echo "✅ Critical ingestion gate passed"
+
       - name: Build Integrity Check
         run: |
           echo "🔍 Testing build integrity..."
@@ -148,10 +154,10 @@ jobs:
 
           echo "✅ Build completed successfully. Browser build: ${size_kb}KB"
 
-      - name: Run E2E Tests with Health Analysis
+      - name: Run Remaining E2E Tests with Health Analysis
         run: |
-          echo "🔍 Running E2E tests with health analysis..."
-          npm run test:e2e
+          echo "🔍 Running remaining E2E tests with health analysis..."
+          npm run test:e2e:ci
 
       - name: Upload test results (if tests fail)
         if: failure()
@@ -218,6 +224,7 @@ jobs:
           echo "✅ Unit tests passed"
           echo "✅ Code coverage ≥70%"
           echo "✅ Integration tests passed"
+          echo "✅ Critical ingestion gate passed"
           echo "✅ Build integrity verified"
           echo "✅ E2E tests passed"
           echo "✅ Package configuration valid"
