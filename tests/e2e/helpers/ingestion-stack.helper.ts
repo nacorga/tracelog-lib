@@ -91,11 +91,16 @@ async function waitForReady(child: ManagedServerChild, token: string): Promise<R
     let stdout = '';
     let stderr = '';
 
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`waitForReady timed out after 30s (${token.trim()})\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`));
+    }, 30_000);
+
     const onStdout = (chunk: Buffer) => {
       const text = chunk.toString();
       stdout += text;
 
-      const line = text
+      const line = stdout
         .split('\n')
         .map((entry) => entry.trim())
         .find((entry) => entry.startsWith(token));
@@ -122,6 +127,7 @@ async function waitForReady(child: ManagedServerChild, token: string): Promise<R
     };
 
     const cleanup = () => {
+      clearTimeout(timeout);
       child.stdout.off('data', onStdout);
       child.stderr.off('data', onStderr);
       child.off('exit', onExit);

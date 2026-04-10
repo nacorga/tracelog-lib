@@ -1669,7 +1669,7 @@ describe('SenderManager - TimeoutError Handling', () => {
     expect(recoveredPayload._metadata.idempotency_token).toBe(persistedToken);
   });
 
-  it('should call persistEvents when all attempts timeout', async () => {
+  it('should persist events when send returns false', async () => {
     // Arrange — mock send() to throw TimeoutError directly
     const mockFetch = createMockFetch({ ok: true, status: 200 });
     global.fetch = mockFetch;
@@ -1729,7 +1729,7 @@ describe('SenderManager - TimeoutError Handling', () => {
     expect(clearSpy).not.toHaveBeenCalled();
   });
 
-  it('should keep persisted events when recovery times out (recoverPersistedEvents)', async () => {
+  it('should keep persisted events when recovery send fails (recoverPersistedEvents)', async () => {
     // Arrange
     const mockFetch = createMockFetch({ ok: true, status: 200 });
     global.fetch = mockFetch;

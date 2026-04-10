@@ -232,7 +232,7 @@ export class SenderManager extends StateManager {
    * - Uses `navigator.sendBeacon()` (browser-queued, synchronous API)
    * - Payload size limited to 64KB (enforced by browser)
    * - Browser guarantees delivery attempt (survives page close)
-   * - NO persistence on failure (fire-and-forget)
+   * - Persists to localStorage on beacon failure/size overflow for later recovery
    *
    * **Return Values**:
    * - `true`: Send succeeded OR skipped (standalone mode)
@@ -405,6 +405,7 @@ export class SenderManager extends StateManager {
     this.recoveryInProgress = true;
 
     let recoveryBody: EventsQueue | null = null;
+    let recoveryFailures = 0;
 
     try {
       const persistedData = this.getPersistedData();
@@ -418,7 +419,7 @@ export class SenderManager extends StateManager {
       // This breaks the infinite persistence loop when the backend URL is
       // permanently unreachable (e.g. DNS resolution failure or misconfigured URL).
       const rawFailures = persistedData.recoveryFailures;
-      const recoveryFailures =
+      recoveryFailures =
         typeof rawFailures === 'number' && Number.isFinite(rawFailures) && rawFailures >= 0 ? rawFailures : 0;
       if (recoveryFailures >= MAX_RECOVERY_FAILURES) {
         log(
@@ -452,10 +453,6 @@ export class SenderManager extends StateManager {
 
       log('error', 'Failed to recover persisted events', { error });
       if (recoveryBody) {
-        const persistedData = this.getPersistedData();
-        const rawFailures = persistedData?.recoveryFailures;
-        const recoveryFailures =
-          typeof rawFailures === 'number' && Number.isFinite(rawFailures) && rawFailures >= 0 ? rawFailures : 0;
         this.persistEventsWithFailureCount(recoveryBody, recoveryFailures + 1, true);
       }
       callbacks?.onFailure?.();
@@ -995,9 +992,10 @@ export class SenderManager extends StateManager {
    * - `timestamp`: Request generation time in milliseconds
    *
    * **Idempotency Token**:
-   * - Generated in this method using generateEventId()
-   * - Same token persists across all retry attempts of the same batch (same payload string)
-   * - Backend can use this to distinguish retries from genuine duplicates
+   * - Set upstream by ensureBatchMetadata() before this method is called
+   * - Fallback generateEventId() is defensive only (should not trigger in normal flow)
+   * - Same token persists across all retry attempts of the same batch
+   * - Backend uses this to deduplicate retries
    *
    * @param body - EventsQueue to send
    * @returns Object with `url` (API endpoint) and `payload` (JSON string)
