@@ -2,8 +2,10 @@
 # Only dist/ folders will be published as specified in package.json "files" array
 
 # Development files
+.claude/
 .github/
 .husky/
+testing/
 tests/
 scripts/
 playground/

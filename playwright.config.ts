@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const CRITICAL_INGESTION_SPEC = '**/critical-paths/ingestion-pipeline.spec.ts';
+const TEMPLATE_SPEC = '**/TEMPLATE.spec.ts';
+const NON_CHROMIUM_IGNORED_SPECS = [TEMPLATE_SPEC, CRITICAL_INGESTION_SPEC];
+
 /**
  * Playwright Configuration
  *
@@ -10,7 +14,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  testIgnore: '**/TEMPLATE.spec.ts',
+  testIgnore: TEMPLATE_SPEC,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
@@ -46,35 +50,42 @@ export default defineConfig({
     },
     {
       name: 'Mobile Chrome',
+      // The ingestion pipeline spec boots a real lib -> middleware -> api stack.
+      // We keep it on desktop chromium only to avoid redundant runs and lower-signal
+      // failures on non-canonical browsers/devices for this full-stack path.
+      testIgnore: NON_CHROMIUM_IGNORED_SPECS,
       use: {
-        ...devices['Pixel 5']
+        ...devices['Pixel 5'],
       },
     },
     ...(!process.env.CI ? [
       {
         name: 'firefox',
+        testIgnore: NON_CHROMIUM_IGNORED_SPECS,
         use: {
-          ...devices['Desktop Firefox']
+          ...devices['Desktop Firefox'],
         },
       },
       {
         name: 'webkit',
+        testIgnore: NON_CHROMIUM_IGNORED_SPECS,
         use: {
-          ...devices['Desktop Safari']
+          ...devices['Desktop Safari'],
         },
       },
       {
         name: 'Mobile Safari',
+        testIgnore: NON_CHROMIUM_IGNORED_SPECS,
         use: {
-          ...devices['iPhone 12']
+          ...devices['iPhone 12'],
         },
-      }
+      },
     ] : []),
   ],
   webServer: {
     command: 'npm run serve',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER !== 'false',
     timeout: 30 * 1000,
   },
 });

@@ -125,6 +125,42 @@ describe('SenderManager - Event Sending (fetch)', () => {
     expect(body.events[0].type).toBe('custom');
     expect(body._metadata).toBeDefined();
     expect(body._metadata.timestamp).toBeTypeOf('number');
+    expect(body._metadata.idempotency_token).toBeTypeOf('string');
+  });
+
+  it('should keep the same idempotency token across failed send and recovery', async () => {
+    const failingFetch = createMockFetchNetworkError();
+    global.fetch = failingFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    const firstResult = await sender.sendEventsQueue(eventsQueue);
+    expect(firstResult).toBe(false);
+
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    const persistedToken = persisted._metadata?.idempotency_token;
+
+    expect(persistedToken).toBeTypeOf('string');
+
+    const successFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = successFetch;
+
+    await sender.recoverPersistedEvents();
+
+    const recoveredBody = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
+    expect(recoveredBody._metadata.idempotency_token).toBe(persistedToken);
   });
 
   it('should call success callback on 2xx', async () => {
@@ -374,6 +410,41 @@ describe('SenderManager - Event Sending (sendBeacon)', () => {
     expect(mockSendBeacon).toHaveBeenCalledTimes(1);
 
     // Note: Persistence behavior is tested in "Event Persistence" block
+  });
+
+  it('should preserve the same idempotency token when sendBeacon persists and recovery retries later', async () => {
+    const mockSendBeacon = vi.fn().mockReturnValue(false);
+    global.navigator.sendBeacon = mockSendBeacon;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'send_beacon_retry_test', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    const accepted = sender.sendEventsQueueSync(eventsQueue);
+    expect(accepted).toBe(false);
+
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    const persistedToken = persisted._metadata?.idempotency_token;
+
+    expect(persistedToken).toBeTypeOf('string');
+
+    const successFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = successFetch;
+
+    await sender.recoverPersistedEvents();
+
+    const recoveredPayload = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
+    expect(recoveredPayload._metadata.idempotency_token).toBe(persistedToken);
   });
 });
 
@@ -1509,7 +1580,7 @@ describe('SenderManager - TimeoutError Handling', () => {
     vi.useRealTimers();
   });
 
-  it('should convert AbortController timeout into TimeoutError (not persist events)', async () => {
+  it('should persist the stabilized batch when all attempts time out', async () => {
     // Arrange — fetch that never resolves, triggers abort on signal
     global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
       return new Promise<Response>((_, reject) => {
@@ -1543,33 +1614,75 @@ describe('SenderManager - TimeoutError Handling', () => {
     await advanceTimers(16000);
     const success = await sendPromise;
 
-    // Assert — TimeoutError path: returns false, does NOT persist, clears storage
+    // Assert — all timeouts now keep the batch for retry with the same token
     expect(success).toBe(false);
     expect(failureCallback).toHaveBeenCalledTimes(1);
 
-    const storageKey = 'tlog:test-user-id:queue:custom';
-    expect(localStorage.getItem(storageKey)).toBeNull();
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    expect(persisted.events).toHaveLength(1);
+    expect(persisted._metadata.idempotency_token).toBeTypeOf('string');
   });
 
-  it('should call clearPersistedEvents (not persistEvents) when all attempts timeout', async () => {
+  it('should reuse the same idempotency token after a timeout batch is retried successfully later', async () => {
+    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        }
+      });
+    });
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'timeout_retry_test', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    const firstSend = sender.sendEventsQueue(eventsQueue);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await advanceTimers(16000);
+    await firstSend;
+
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    const persistedToken = persisted._metadata?.idempotency_token;
+
+    expect(persistedToken).toBeTypeOf('string');
+
+    const successFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = successFetch;
+
+    await sender.recoverPersistedEvents();
+
+    const recoveredPayload = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
+    expect(recoveredPayload._metadata.idempotency_token).toBe(persistedToken);
+  });
+
+  it('should persist events when send returns false', async () => {
     // Arrange — mock send() to throw TimeoutError directly
     const mockFetch = createMockFetch({ ok: true, status: 200 });
     global.fetch = mockFetch;
 
     const { StorageManager } = await import('../../../src/managers/storage.manager');
     const { SenderManager } = await import('../../../src/managers/sender.manager');
-    const { TimeoutError } = await import('../../../src/types');
-
     const storage = new StorageManager();
     const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
 
     const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
     const persistSpy = vi.spyOn(sender as any, 'persistEvents');
 
-    // Mock private send() to throw TimeoutError (simulates all attempts timed out)
-    vi.spyOn(sender as any, 'send').mockRejectedValue(
-      new TimeoutError('All retry attempts timed out (server likely received the request)'),
-    );
+    vi.spyOn(sender as any, 'send').mockResolvedValue(false);
 
     const customEvent = createMockEvent(EventType.CUSTOM, {
       custom_event: { name: 'test_event', metadata: {} },
@@ -1579,10 +1692,10 @@ describe('SenderManager - TimeoutError Handling', () => {
     // Act
     const success = await sender.sendEventsQueue(eventsQueue);
 
-    // Assert — TimeoutError: clearPersistedEvents called, persistEvents NOT called
+    // Assert — all timeout paths now persist for retry
     expect(success).toBe(false);
-    expect(clearSpy).toHaveBeenCalled();
-    expect(persistSpy).not.toHaveBeenCalled();
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    expect(clearSpy).not.toHaveBeenCalled();
   });
 
   it('should call persistEvents (not clearPersistedEvents) when failures are mixed', async () => {
@@ -1616,15 +1729,13 @@ describe('SenderManager - TimeoutError Handling', () => {
     expect(clearSpy).not.toHaveBeenCalled();
   });
 
-  it('should clear persisted events when recovery times out (recoverPersistedEvents)', async () => {
+  it('should keep persisted events when recovery send fails (recoverPersistedEvents)', async () => {
     // Arrange
     const mockFetch = createMockFetch({ ok: true, status: 200 });
     global.fetch = mockFetch;
 
     const { StorageManager } = await import('../../../src/managers/storage.manager');
     const { SenderManager } = await import('../../../src/managers/sender.manager');
-    const { TimeoutError } = await import('../../../src/types');
-
     const storage = new StorageManager();
     const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
 
@@ -1636,19 +1747,18 @@ describe('SenderManager - TimeoutError Handling', () => {
     (sender as any).persistEvents(eventsQueue);
 
     const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
 
-    // Mock private send() to throw TimeoutError
-    vi.spyOn(sender as any, 'send').mockRejectedValue(
-      new TimeoutError('All retry attempts timed out (server likely received the request)'),
-    );
+    vi.spyOn(sender as any, 'send').mockResolvedValue(false);
 
     const failureCallback = vi.fn();
 
     // Act
     await sender.recoverPersistedEvents({ onFailure: failureCallback });
 
-    // Assert — recovery timeout: clearPersistedEvents called, onFailure invoked
-    expect(clearSpy).toHaveBeenCalled();
+    // Assert — recovery timeout: batch remains persisted and failure count advances
+    expect(clearSpy).not.toHaveBeenCalled();
+    expect(persistSpy).toHaveBeenCalled();
     expect(failureCallback).toHaveBeenCalledTimes(1);
   });
 
@@ -1732,7 +1842,7 @@ describe('SenderManager - TimeoutError Handling', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
-  it('should track allTimeouts correctly in send() — all timeouts throws TimeoutError', async () => {
+  it('should track allTimeouts correctly in send() — all timeouts persist instead of clearing', async () => {
     // Arrange — fetch that always times out via AbortController
     global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
       return new Promise<Response>((_, reject) => {
@@ -1767,10 +1877,10 @@ describe('SenderManager - TimeoutError Handling', () => {
     await advanceTimers(16000);
     const success = await sendPromise;
 
-    // Assert — TimeoutError: clearPersistedEvents called, persistEvents NOT called
+    // Assert — allTimeouts path returns false and keeps the batch persisted
     expect(success).toBe(false);
-    expect(clearSpy).toHaveBeenCalled();
-    expect(persistSpy).not.toHaveBeenCalled();
+    expect(persistSpy).toHaveBeenCalled();
+    expect(clearSpy).not.toHaveBeenCalled();
   });
 });
 

@@ -235,11 +235,11 @@ tracelog.removeCustomHeaders();
 **Core Principle**: Optimistic Removal with Per-Integration Persistence
 
 - **Batching**: Every 10s OR 50-event threshold
-- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload)
+- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload, persists on failure)
 - **Retries**: Up to 2 attempts for transient errors (5xx, timeout)
 - **Backoff**: 200-300ms (retry 1), 400-500ms (retry 2)
-- **Persistence**: Failed events saved per-integration to localStorage
-- **Recovery**: Auto-recovered on next `init()`
+- **Persistence**: Failed events saved per-integration to localStorage with `idempotency_token` for backend deduplication
+- **Recovery**: Auto-recovered on next `init()` with same idempotency token
 - **Optimistic Removal**: Queue cleared if AT LEAST ONE integration succeeds
 
 **Why Optimistic Removal is Critical**:
@@ -264,8 +264,12 @@ tracelog.removeCustomHeaders();
 | 2xx Success | None | Cleared |
 | 4xx (except 408, 429) | ❌ None | ❌ Discarded |
 | 408 Timeout | ✅ Up to 2 | ✅ After exhaustion |
+| Request Timeout (AbortController) | ✅ Up to 2 | ✅ After exhaustion |
 | 429 Rate Limit | ❌ None (deferred to periodic backoff) | ✅ Immediate |
 | 5xx, Network Errors | ✅ Up to 2 | ✅ After exhaustion |
+| sendBeacon failure | ❌ None | ✅ Immediate |
+
+All persisted batches carry `_metadata.idempotency_token` for backend deduplication on recovery.
 
 ### 6. Session Management
 
