@@ -86,9 +86,10 @@ Core business logic components that handle analytics data processing, state mana
   - `client_version`: Library version from `LIB_VERSION` constant (e.g., `2.0.2`)
   - `timestamp`: Request timestamp
   - `referer`: Current page URL
+  - `idempotency_token`: Unique token per batch, stable across retries and cross-session recovery for backend deduplication
 - **Independent Persistence**: localStorage-based persistence with integration-specific keys (`tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom`)
 - **Permanent Error Detection**: Identifies 4xx errors as unrecoverable to prevent retry loops (clears storage, no retry)
-- **Synchronous Support**: Uses `navigator.sendBeacon()` for page unload scenarios
+- **Synchronous Support**: Uses `navigator.sendBeacon()` for page unload scenarios; persists to localStorage on failure for next-page-load recovery
 - **Independent Recovery**: Automatically recovers persisted events when page reloads (per integration)
 - **Recovery Guard**: Prevents concurrent recovery attempts during rapid navigation
 
@@ -113,7 +114,7 @@ Core business logic components that handle analytics data processing, state mana
   - Prevents data loss at page unload with large event batches
   - Configured via `MAX_BEACON_PAYLOAD_SIZE` constant
 - **Permanent error throttling** - 1 log per status code per minute with integration label
-- **Request timeout** - 10 seconds with AbortController
+- **Request timeout** - 10 seconds with AbortController; timed-out batches persisted for retry with same idempotency token
 - **Sanitized error logging** - Domain masking for privacy with `[saas]` or `[custom]` labels
 - **Test mode support** - QA scenarios and mock failures
 - **Network circuit breaker (v2.6.0+)** - Prevents cascading failures from permanently unreachable URLs
