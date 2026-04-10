@@ -1,6 +1,13 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { INGESTION_TEST_ORIGIN } from '../../../testing/ingestion/fixtures';
 import { startIngestionStack, type IngestionStack } from '../helpers/ingestion-stack.helper';
+
+const monorepoRoot = path.resolve(__dirname, '../../../..');
+const hasIngestionStack =
+  fs.existsSync(path.join(monorepoRoot, 'tracelog-api')) &&
+  fs.existsSync(path.join(monorepoRoot, 'tracelog-middleware'));
 
 const pageUrl = `${INGESTION_TEST_ORIGIN}/?auto-init=false`;
 
@@ -49,6 +56,7 @@ async function initAgainstMiddleware(
 }
 
 test.describe('E2E: Ingestion Pipeline', () => {
+  test.skip(!hasIngestionStack, 'Requires monorepo siblings (tracelog-api, tracelog-middleware)');
   test.describe.configure({ mode: 'serial' });
 
   let stack: IngestionStack;
