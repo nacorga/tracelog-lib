@@ -15,6 +15,41 @@
 
 
 
+
+## [2.8.1] - 2026-04-10
+
+### ✨ Features
+
+- Add critical ingestion gate tests and enhance event handling in SenderManager for idempotency ([8a7fb45](../../commit/8a7fb455420638cbf06a95d18941a780f9421874))
+- Add compact-context script and update settings for session hooks ([48f42e7](../../commit/48f42e7f0498a4c5ab89557dee2b4bc7ff8d5c62))
+
+### 🐛 Bug Fixes
+
+- Enhance documentation for event persistence and idempotency in analytics processes ([664b887](../../commit/664b887f4b4ed632e185a4752697652923bcf127))
+- Update SenderManager documentation for event persistence and modify ingestion test client version to use LIB_VERSION ([7597d91](../../commit/7597d91f6af9003101d28191f17b24858bae27e8))
+- Specify chromium when installing Playwright browsers in CI workflow ([993e731](../../commit/993e7313a6cec5b428cb8c7bf27018007637229e))
+- Add checks for ingestion stack existence in E2E tests ([4282539](../../commit/42825397240bc3b2b62201c3d0a00e3fccf306cf))
+- Update import path for INGESTION_TEST_ORIGIN in ingestion pipeline tests ([79343cd](../../commit/79343cdaec3d854317a2d5bdefd8d8bac65c7d21))
+- Update brace-expansion package versions for improved compatibility ([9cdffe3](../../commit/9cdffe3a53fb22b545e86df1b2110d3b22e752d0))
+- Update CI workflow to include 'develop' branch and enhance SenderManager event persistence logic ([271351e](../../commit/271351eb802b7ac4ac1ed3a7773716b1798c3592))
+- Remove unused request ID capture function and related assertions in ingestion pipeline tests ([cf49f9d](../../commit/cf49f9de7a87bc36c19684d181e56334595865b4))
+- Update error handling and metadata management in SenderManager for improved event persistence ([b4b1135](../../commit/b4b11358e9b3144f62de92ee913675b58ef737fa))
+
+### 🔧 Other Changes
+
+- Merge pull request #100 from nacorga/release/20260410.1 ([817e0a9](../../commit/817e0a9fc2f9ef7ec162cc7b1edbbd9471fb4be2))
+- Merge pull request #99 from nacorga/fix/events-flow ([f6bcd75](../../commit/f6bcd75c577b7be4201cab88dcf8afea87f05673))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.8.0...v2.8.1
+
+
 ## [2.8.0] - 2026-04-06
 
 ### ✨ Features
