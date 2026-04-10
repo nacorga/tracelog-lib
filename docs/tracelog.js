@@ -498,7 +498,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.7.3";
+const version = "2.8.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1610,7 +1610,7 @@ class SenderManager extends StateManager {
    * - Uses `navigator.sendBeacon()` (browser-queued, synchronous API)
    * - Payload size limited to 64KB (enforced by browser)
    * - Browser guarantees delivery attempt (survives page close)
-   * - NO persistence on failure (fire-and-forget)
+   * - Persists to localStorage on beacon failure/size overflow for later recovery
    *
    * **Return Values**:
    * - `true`: Send succeeded OR skipped (standalone mode)
@@ -1677,7 +1677,7 @@ class SenderManager extends StateManager {
    *
    * **Error Handling**:
    * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
-   * - **Timeout errors** (all attempts timed out): Events NOT persisted (server likely received them)
+   * - **Timeout errors**: Events persisted for retry with the same batch idempotency token
    * - **Transient errors** (5xx, network, mixed): Events persisted for recovery
    *
    * **Important**: Events are NOT retried in-session. Persistence is for
@@ -1691,13 +1691,14 @@ class SenderManager extends StateManager {
    * @see src/managers/README.md (lines 82-139) for send details
    */
   async sendEventsQueue(body, callbacks) {
+    const stableBody = this.ensureBatchMetadata(body);
     try {
-      const success = await this.send(body);
+      const success = await this.send(stableBody);
       if (success) {
         this.clearPersistedEvents();
-        callbacks?.onSuccess?.(body.events.length, body.events, body);
+        callbacks?.onSuccess?.(stableBody.events.length, stableBody.events, stableBody);
       } else {
-        this.persistEvents(body);
+        this.persistEvents(stableBody);
         callbacks?.onFailure?.();
       }
       return success;
@@ -1708,16 +1709,7 @@ class SenderManager extends StateManager {
         callbacks?.onFailure?.();
         return false;
       }
-      if (error instanceof TimeoutError) {
-        log(
-          "debug",
-          `All attempts timed out, skipping persistence (server likely received events)${this.integrationId ? ` [${this.integrationId}]` : ""}`
-        );
-        this.clearPersistedEvents();
-        callbacks?.onFailure?.();
-        return false;
-      }
-      this.persistEvents(body);
+      this.persistEvents(stableBody);
       callbacks?.onFailure?.();
       return false;
     }
@@ -1777,6 +1769,8 @@ class SenderManager extends StateManager {
       return;
     }
     this.recoveryInProgress = true;
+    let recoveryBody = null;
+    let recoveryFailures = 0;
     try {
       const persistedData = this.getPersistedData();
       if (!persistedData || !this.isDataRecent(persistedData) || persistedData.events.length === 0) {
@@ -1784,7 +1778,7 @@ class SenderManager extends StateManager {
         return;
       }
       const rawFailures = persistedData.recoveryFailures;
-      const recoveryFailures = typeof rawFailures === "number" && Number.isFinite(rawFailures) && rawFailures >= 0 ? rawFailures : 0;
+      recoveryFailures = typeof rawFailures === "number" && Number.isFinite(rawFailures) && rawFailures >= 0 ? rawFailures : 0;
       if (recoveryFailures >= MAX_RECOVERY_FAILURES) {
         log(
           "debug",
@@ -1794,13 +1788,13 @@ class SenderManager extends StateManager {
         callbacks?.onFailure?.();
         return;
       }
-      const body = this.createRecoveryBody(persistedData);
-      const success = await this.send(body);
+      recoveryBody = this.ensureBatchMetadata(this.createRecoveryBody(persistedData));
+      const success = await this.send(recoveryBody);
       if (success) {
         this.clearPersistedEvents();
-        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, body);
+        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, recoveryBody);
       } else {
-        this.persistEventsWithFailureCount(body, recoveryFailures + 1, true);
+        this.persistEventsWithFailureCount(recoveryBody, recoveryFailures + 1, true);
         callbacks?.onFailure?.();
       }
     } catch (error) {
@@ -1810,16 +1804,11 @@ class SenderManager extends StateManager {
         callbacks?.onFailure?.();
         return;
       }
-      if (error instanceof TimeoutError) {
-        log(
-          "debug",
-          `Recovery timed out, clearing persisted events (server likely received them)${this.integrationId ? ` [${this.integrationId}]` : ""}`
-        );
-        this.clearPersistedEvents();
-        callbacks?.onFailure?.();
-        return;
-      }
       log("error", "Failed to recover persisted events", { error });
+      if (recoveryBody) {
+        this.persistEventsWithFailureCount(recoveryBody, recoveryFailures + 1, true);
+      }
+      callbacks?.onFailure?.();
     } finally {
       this.recoveryInProgress = false;
     }
@@ -1984,7 +1973,6 @@ class SenderManager extends StateManager {
    * @param body - Event queue to send
    * @returns Promise resolving to true if send succeeded, false if all retries exhausted
    * @throws PermanentError for 4xx errors (caller should not retry)
-   * @throws TimeoutError when all retry attempts timed out (caller should not persist)
    */
   async send(body) {
     if (this.shouldSkipSend()) {
@@ -1998,15 +1986,16 @@ class SenderManager extends StateManager {
     if (!transformedBody) {
       return true;
     }
+    const requestBody = this.ensureBatchMetadata(transformedBody, body._metadata?.idempotency_token);
     if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
       log("debug", `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        data: { events: transformedBody.events.length }
+        data: { events: requestBody.events.length }
       });
       return false;
     }
     if (this.apiUrl?.includes(SpecialApiUrl.Localhost)) {
       log("debug", `Success mode: simulating successful send${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        data: { events: transformedBody.events.length }
+        data: { events: requestBody.events.length }
       });
       return true;
     }
@@ -2022,7 +2011,7 @@ class SenderManager extends StateManager {
         return false;
       }
     }
-    const { url, payload } = this.prepareRequest(transformedBody);
+    const { url, payload } = this.prepareRequest(requestBody);
     let allTimeouts = true;
     let hadHttpResponse = false;
     for (let attempt = 1; attempt <= MAX_SEND_RETRIES + 1; attempt++) {
@@ -2034,7 +2023,7 @@ class SenderManager extends StateManager {
               "info",
               `Send succeeded after ${attempt - 1} retry attempt(s)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
               {
-                data: { events: transformedBody.events.length, attempt }
+                data: { events: requestBody.events.length, attempt }
               }
             );
           }
@@ -2084,7 +2073,14 @@ class SenderManager extends StateManager {
           continue;
         }
         if (allTimeouts) {
-          throw new TimeoutError("All retry attempts timed out (server likely received the request)");
+          log(
+            "debug",
+            `All retry attempts timed out, preserving batch for retry${this.integrationId ? ` [${this.integrationId}]` : ""}`,
+            {
+              data: { events: requestBody.events.length }
+            }
+          );
+          return false;
         }
         if (!hadHttpResponse) {
           this.consecutiveNetworkFailures = Math.min(
@@ -2111,18 +2107,18 @@ class SenderManager extends StateManager {
    *
    * **Timeout Behavior**:
    * - 10-second timeout via AbortController (REQUEST_TIMEOUT_MS constant)
-   * - Aborted requests throw TimeoutError (caller decides persistence)
+   * - Aborted requests throw TimeoutError
    *
    * **Error Classification**:
    * - 4xx (except 408, 429): PermanentError thrown → no retries
-   * - Timeout: TimeoutError thrown → caller tracks for persistence decision
+   * - Timeout: TimeoutError thrown → caller treats it as a retryable failure
    * - 408, 429, 5xx, network: Standard Error thrown → triggers retry
    *
    * @param url - API endpoint URL
    * @param payload - JSON-stringified EventsQueue body
    * @returns Response object if successful
    * @throws PermanentError for unrecoverable 4xx errors
-   * @throws TimeoutError when request times out (server likely received it)
+   * @throws TimeoutError when request times out
    * @throws Error for transient errors (5xx, network)
    * @private
    */
@@ -2163,7 +2159,7 @@ class SenderManager extends StateManager {
         throw error;
       }
       if (didTimeout) {
-        throw new TimeoutError("Request timed out (server likely received the request)");
+        throw new TimeoutError("Request timed out");
       }
       throw error;
     } finally {
@@ -2192,7 +2188,8 @@ class SenderManager extends StateManager {
    * @private
    */
   sendQueueSyncInternal(body) {
-    const afterBeforeSend = this.applyBeforeSendTransformer(body);
+    const stableBody = this.ensureBatchMetadata(body);
+    const afterBeforeSend = this.applyBeforeSendTransformer(stableBody);
     if (!afterBeforeSend) {
       return true;
     }
@@ -2200,7 +2197,8 @@ class SenderManager extends StateManager {
     if (!transformedBody) {
       return true;
     }
-    const { url, payload } = this.prepareRequest(transformedBody);
+    const requestBody = this.ensureBatchMetadata(transformedBody, stableBody._metadata?.idempotency_token);
+    const { url, payload } = this.prepareRequest(requestBody);
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
       log(
         "warn",
@@ -2209,11 +2207,11 @@ class SenderManager extends StateManager {
           data: {
             size: payload.length,
             limit: MAX_BEACON_PAYLOAD_SIZE,
-            events: transformedBody.events.length
+            events: requestBody.events.length
           }
         }
       );
-      this.persistEvents(transformedBody);
+      this.persistEvents(stableBody);
       return false;
     }
     const blob = new Blob([payload], { type: "application/json" });
@@ -2222,7 +2220,7 @@ class SenderManager extends StateManager {
         "warn",
         `sendBeacon not available, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ""}`
       );
-      this.persistEvents(transformedBody);
+      this.persistEvents(stableBody);
       return false;
     }
     const accepted = navigator.sendBeacon(url, blob);
@@ -2231,7 +2229,7 @@ class SenderManager extends StateManager {
         "warn",
         `sendBeacon rejected request, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ""}`
       );
-      this.persistEvents(transformedBody);
+      this.persistEvents(stableBody);
     }
     return accepted;
   }
@@ -2245,9 +2243,10 @@ class SenderManager extends StateManager {
    * - `timestamp`: Request generation time in milliseconds
    *
    * **Idempotency Token**:
-   * - Generated in this method using generateEventId()
-   * - Same token persists across all retry attempts of the same batch (same payload string)
-   * - Backend can use this to distinguish retries from genuine duplicates
+   * - Set upstream by ensureBatchMetadata() before this method is called
+   * - Fallback generateEventId() is defensive only (should not trigger in normal flow)
+   * - Same token persists across all retry attempts of the same batch
+   * - Backend uses this to deduplicate retries
    *
    * @param body - EventsQueue to send
    * @returns Object with `url` (API endpoint) and `payload` (JSON string)
@@ -2262,6 +2261,8 @@ class SenderManager extends StateManager {
     const enrichedBody = {
       ...body,
       _metadata: {
+        ...body._metadata,
+        idempotency_token: body._metadata?.idempotency_token ?? generateEventId(),
         referer: typeof window !== "undefined" ? window.location.href : void 0,
         timestamp,
         client_version: LIB_VERSION
@@ -2270,6 +2271,19 @@ class SenderManager extends StateManager {
     return {
       url: this.apiUrl || "",
       payload: JSON.stringify(enrichedBody)
+    };
+  }
+  ensureBatchMetadata(body, preferredToken) {
+    const idempotencyToken = body._metadata?.idempotency_token ?? preferredToken ?? generateEventId();
+    if (body._metadata?.idempotency_token === idempotencyToken) {
+      return body;
+    }
+    return {
+      ...body,
+      _metadata: {
+        ...body._metadata,
+        idempotency_token: idempotencyToken
+      }
     };
   }
   /**
@@ -5444,6 +5458,11 @@ class ShopifyCartLinker extends StateManager {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ attributes: { [SHOPIFY_SESSION_ATTR]: sessionId } }),
         credentials: "same-origin"
+      }).then((response) => {
+        if (!response.ok) {
+          this.lastSyncedSessionId = null;
+          log("debug", "Shopify cart attribute update failed", { data: { status: response.status } });
+        }
       }).catch(() => {
         this.lastSyncedSessionId = null;
         log("debug", "Shopify cart attribute update failed");

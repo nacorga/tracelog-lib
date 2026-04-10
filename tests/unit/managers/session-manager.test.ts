@@ -9,6 +9,7 @@ import { initTestBridge, destroyTestBridge, getManagers, getQueueState } from '.
 import { setupMockBroadcastChannel } from '../../helpers/mocks.helper';
 import { SESSION_STORAGE_KEY } from '../../../src/constants/storage.constants';
 import { DEFAULT_SESSION_TIMEOUT } from '../../../src/constants/config.constants';
+import { EventManager } from '../../../src/managers/event.manager';
 
 describe('SessionManager - Session Lifecycle', () => {
   beforeEach(() => {
@@ -381,25 +382,23 @@ describe('SessionManager - Session Recovery', () => {
   });
 
   it('should not track SESSION_START on recovery', async () => {
-    const bridge1 = await initTestBridge();
-    const sessionId1 = bridge1.get('sessionId');
-    const { storage } = getManagers(bridge1);
-
     const storageKey = SESSION_STORAGE_KEY('custom');
-    const storedData = storage?.getItem(storageKey);
+    const recoveredSessionId = `${Date.now()}-abc123xyz`;
+    const trackSpy = vi.spyOn(EventManager.prototype, 'track');
 
-    bridge1.destroy(false);
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        id: recoveredSessionId,
+        lastActivity: Date.now(),
+      }),
+    );
 
-    if (storedData !== null && storedData !== undefined) {
-      localStorage.setItem(storageKey, storedData);
-    }
+    const bridge = await initTestBridge();
+    const sessionStartCalls = trackSpy.mock.calls.filter(([event]) => event?.type === 'session_start');
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const bridge2 = await initTestBridge();
-    const sessionId2 = bridge2.get('sessionId');
-
-    expect(sessionId2).toBe(sessionId1);
+    expect(bridge.get('sessionId')).toBe(recoveredSessionId);
+    expect(sessionStartCalls).toHaveLength(0);
   });
 
   it('should track SESSION_START only for new sessions', async () => {

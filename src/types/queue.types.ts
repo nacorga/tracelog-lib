@@ -2,6 +2,13 @@ import { MetadataType } from './common.types';
 import { DeviceInfo } from './device.types';
 import { EventData } from './event.types';
 
+export interface QueueMetadata {
+  referer?: string;
+  timestamp?: number;
+  client_version?: string;
+  idempotency_token?: string;
+}
+
 /**
  * Visitor identity data from identify() call.
  *
@@ -31,6 +38,8 @@ export interface EventsQueue {
   events: EventData[];
   /** Optional metadata attached to all events in this batch */
   global_metadata?: Record<string, MetadataType>;
+  /** Internal metadata used for transport guarantees */
+  _metadata?: QueueMetadata;
   /** Visitor identity from identify() call — included in every batch */
   identify?: IdentifyData;
 }
