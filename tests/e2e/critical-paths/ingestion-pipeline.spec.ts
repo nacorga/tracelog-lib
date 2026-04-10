@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { INGESTION_TEST_ORIGIN } from '../../../../testing/ingestion/fixtures';
+import { INGESTION_TEST_ORIGIN } from '../../../testing/ingestion/fixtures';
 import { startIngestionStack, type IngestionStack } from '../helpers/ingestion-stack.helper';
 
 const pageUrl = `${INGESTION_TEST_ORIGIN}/?auto-init=false`;
