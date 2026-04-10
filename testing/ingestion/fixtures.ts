@@ -1,3 +1,5 @@
+import { LIB_VERSION } from '../../src/constants/version.constants';
+
 export const INGESTION_TEST_IDS = {
   project: '507f1f77bcf86cd799439011',
   client: '507f1f77bcf86cd799439012',
@@ -15,7 +17,7 @@ export const INGESTION_TEST_PROJECT = {
 
 export const INGESTION_TEST_USER_ID = 'user-uuid-123';
 export const INGESTION_TEST_SESSION_ID = 'session-uuid-456';
-export const INGESTION_TEST_CLIENT_VERSION = '2.8.0';
+export const INGESTION_TEST_CLIENT_VERSION = LIB_VERSION;
 export const INGESTION_TEST_IP = '8.8.8.8';
 
 export interface IngestionTestEvent {

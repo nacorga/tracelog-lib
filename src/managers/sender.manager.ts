@@ -238,7 +238,8 @@ export class SenderManager extends StateManager {
    * - `true`: Send succeeded OR skipped (standalone mode)
    * - `false`: Send failed (network error, browser rejected beacon)
    *
-   * **Important**: No retry mechanism for failures. Events are NOT persisted.
+   * **Important**: No retry mechanism. Failed events are persisted to localStorage for
+   * recovery on next page load via `recoverPersistedEvents()`.
    *
    * **Custom Headers Limitation**: Custom headers set via `setCustomHeaders()` are NOT applied
    * to sendBeacon requests due to browser API limitations. The sendBeacon API only supports
@@ -918,7 +919,7 @@ export class SenderManager extends StateManager {
    * - Oversized payloads persisted instead of silently failing
    *
    * @param body - EventsQueue to send
-   * @returns `true` on success or when events persisted for recovery, `false` on failure
+   * @returns `true` on success, `false` on failure (events persisted for recovery)
    * @private
    */
   private sendQueueSyncInternal(body: EventsQueue): boolean {
