@@ -1668,8 +1668,9 @@ class SenderManager extends StateManager {
   /**
    * Persists events to localStorage for recovery without sending.
    *
-   * Used when an async send is already in-flight to avoid generating
-   * a second idempotency token for the same events via sendBeacon.
+   * Used when an async send is already in-flight to avoid sending the same
+   * events through two paths (fetch + sendBeacon) with different idempotency tokens.
+   * `ensureBatchMetadata()` assigns a stable token before persisting.
    * On next page load, `recoverPersistedEvents()` sends with the persisted token.
    *
    * @param body - Event queue to persist
