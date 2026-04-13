@@ -37,6 +37,7 @@ Core business logic components that handle analytics data processing, state mana
   - Independent error handling (4xx/5xx) and persistence per integration
 - **Standalone mode**: Queue events emitted and cleared after emission when no integrations configured
 - **Synchronous and asynchronous flushing**: Dual-mode for normal operation and page unload scenarios
+- **Sync flush deferral**: When an async send is in-flight (`sendInProgress`), sync flush persists events for recovery instead of double-sending via `sendBeacon` with a different idempotency token
 - **Event persistence recovery**: Automatic recovery from localStorage on initialization (independent per integration)
 - **QA mode**: Console logging for custom events without backend transmission
 - **Event emitter integration**: Local event consumption via `EmitterEvent.EVENT` and `EmitterEvent.QUEUE`

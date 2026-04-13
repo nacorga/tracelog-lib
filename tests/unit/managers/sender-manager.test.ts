@@ -750,6 +750,96 @@ describe('SenderManager - Event Persistence', () => {
   });
 });
 
+describe('SenderManager - persistForRecovery', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should persist events without sending', async () => {
+    const mockFetch = createMockFetch({ ok: true, status: 200 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'recovery_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    sender.persistForRecovery(eventsQueue);
+
+    // Assert — persisted but no network call
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    const body = persistSpy.mock.calls[0]?.[0] as { events?: Array<{ custom_event?: { name: string } }> };
+    expect(body.events).toHaveLength(1);
+    expect(body.events?.[0]?.custom_event?.name).toBe('recovery_event');
+  });
+
+  it('should persist with failureCount 0 and stable idempotency token', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    sender.persistForRecovery(eventsQueue);
+
+    // Assert — called with failureCount=0 and skipThrottle=true
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    expect(persistSpy).toHaveBeenCalledWith(expect.any(Object), 0, true);
+
+    // Verify idempotency token was generated
+    const body = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
+    expect(body._metadata?.idempotency_token).toBeDefined();
+  });
+
+  it('should skip persist when apiUrl is not set', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    const storage = new StorageManager();
+    // No integrationId + no apiUrl — shouldSkipSend() returns true
+    const sender = new SenderManager(storage);
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+
+    const customEvent = createMockEvent(EventType.CUSTOM, {
+      custom_event: { name: 'test_event', metadata: {} },
+    });
+    const eventsQueue = createMockQueue([customEvent]);
+
+    // Act
+    sender.persistForRecovery(eventsQueue);
+
+    // Assert — should bail out via shouldSkipSend
+    expect(persistSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('SenderManager - beforeBatch Transformer', () => {
   beforeEach(() => {
     setupTestEnvironment();

@@ -853,6 +853,18 @@ export class EventManager extends StateManager {
       return isSync ? true : Promise.resolve(true);
     }
 
+    // When async send is in-flight, persist events for recovery instead of
+    // double-sending via sendBeacon with a different idempotency token
+    if (isSync && this.sendInProgress) {
+      for (const sender of this.dataSenders) {
+        sender.persistForRecovery(body);
+      }
+      log('debug', 'Sync flush deferred: async send in progress, events persisted for recovery', {
+        data: { eventCount: eventIds.length },
+      });
+      return true;
+    }
+
     if (isSync) {
       const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
       const anySucceeded = results.some((success) => success);
