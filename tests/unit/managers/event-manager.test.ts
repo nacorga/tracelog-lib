@@ -965,26 +965,30 @@ describe('EventManager - Queue Flushing', () => {
     expect(eventManager.getQueueLength()).toBeGreaterThan(0);
   });
 
-  it('should allow sync flush even when sendInProgress is true (page unload must always send)', () => {
-    const sendBeaconSpy = vi.fn().mockReturnValue(true);
-    Object.defineProperty(navigator, 'sendBeacon', {
-      value: sendBeaconSpy,
-      writable: true,
-      configurable: true,
-    });
-
+  it('should persist events for recovery on sync flush when sendInProgress is true (prevents duplicate idempotency tokens)', () => {
     eventManager.track({
       type: EventType.CLICK,
       click_data: { x: 0, y: 0, relativeX: 0.5, relativeY: 0.5, tag: 'button' },
     });
+
+    // Spy on each SenderManager's persistForRecovery
+    const senders = eventManager['dataSenders'];
+    const persistSpies = senders.map((sender) => vi.spyOn(sender, 'persistForRecovery'));
+    const sendSyncSpies = senders.map((sender) => vi.spyOn(sender, 'sendEventsQueueSync'));
 
     // Simulate a send already in progress
     eventManager['sendInProgress'] = true;
 
     const result = eventManager.flushImmediatelySync();
 
-    // Sync flush should NOT be blocked — page unload must always attempt to send
-    expect(typeof result).toBe('boolean');
+    // Should persist for recovery, NOT send via sendBeacon
+    expect(result).toBe(true);
+    for (const spy of persistSpies) {
+      expect(spy).toHaveBeenCalledTimes(1);
+    }
+    for (const spy of sendSyncSpies) {
+      expect(spy).not.toHaveBeenCalled();
+    }
   });
 });
 

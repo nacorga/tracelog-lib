@@ -184,6 +184,7 @@ class PermanentError extends Error {
       Error.captureStackTrace(this, PermanentError);
     }
   }
+  statusCode;
 }
 class RateLimitError extends Error {
   constructor(message) {
@@ -244,6 +245,8 @@ class TraceLogValidationError extends Error {
       Error.captureStackTrace(this, this.constructor);
     }
   }
+  errorCode;
+  layer;
 }
 class AppConfigValidationError extends TraceLogValidationError {
   constructor(message, layer = "config") {
@@ -270,6 +273,7 @@ class InitializationTimeoutError extends TraceLogValidationError {
     super(message, "INITIALIZATION_TIMEOUT", layer);
     this.timeoutMs = timeoutMs;
   }
+  timeoutMs;
 }
 const LOG_STYLE_ACTIVE = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
 const LOG_STYLE_DISABLED = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
@@ -498,7 +502,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.8.0";
+const version = "2.8.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1616,7 +1620,8 @@ class SenderManager extends StateManager {
    * - `true`: Send succeeded OR skipped (standalone mode)
    * - `false`: Send failed (network error, browser rejected beacon)
    *
-   * **Important**: No retry mechanism for failures. Events are NOT persisted.
+   * **Important**: No retry mechanism. Failed events are persisted to localStorage for
+   * recovery on next page load via `recoverPersistedEvents()`.
    *
    * **Custom Headers Limitation**: Custom headers set via `setCustomHeaders()` are NOT applied
    * to sendBeacon requests due to browser API limitations. The sendBeacon API only supports
@@ -1659,6 +1664,20 @@ class SenderManager extends StateManager {
       return true;
     }
     return this.sendQueueSyncInternal(body);
+  }
+  /**
+   * Persists events to localStorage for recovery without sending.
+   *
+   * Used when an async send is already in-flight to avoid generating
+   * a second idempotency token for the same events via sendBeacon.
+   * On next page load, `recoverPersistedEvents()` sends with the persisted token.
+   *
+   * @param body - Event queue to persist
+   */
+  persistForRecovery(body) {
+    if (this.shouldSkipSend()) return;
+    const stableBody = this.ensureBatchMetadata(body);
+    this.persistEventsWithFailureCount(stableBody, 0, true);
   }
   /**
    * Sends events asynchronously using `fetch()` API with automatic persistence on failure.
@@ -2184,7 +2203,7 @@ class SenderManager extends StateManager {
    * - Oversized payloads persisted instead of silently failing
    *
    * @param body - EventsQueue to send
-   * @returns `true` on success or when events persisted for recovery, `false` on failure
+   * @returns `true` on success, `false` on failure (events persisted for recovery)
    * @private
    */
   sendQueueSyncInternal(body) {
@@ -3245,6 +3264,15 @@ class EventManager extends StateManager {
       this.clearSendTimeout();
       this.emitEventsQueue(body);
       return isSync ? true : Promise.resolve(true);
+    }
+    if (isSync && this.sendInProgress) {
+      for (const sender of this.dataSenders) {
+        sender.persistForRecovery(body);
+      }
+      log("debug", "Sync flush deferred: async send in progress, events persisted for recovery", {
+        data: { eventCount: eventIds.length }
+      });
+      return true;
     }
     if (isSync) {
       const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
