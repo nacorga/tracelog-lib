@@ -16,6 +16,28 @@
 
 
 
+
+## [2.8.2] - 2026-04-13
+
+### 🐛 Bug Fixes
+
+- Clarify documentation for event persistence in SenderManager to explain idempotency token handling ([f17788c](../../commit/f17788c239bf50b3590267759ac288ef01ccafd4))
+- Implement event persistence for recovery during sync flush when async send is in progress ([9a6d94b](../../commit/9a6d94b15cdce8c5c7aab0f28eba5a6121369f3c))
+
+### 🔧 Other Changes
+
+- Merge pull request #101 from nacorga/hotfix/20260413.1 ([dc0d38a](../../commit/dc0d38a0c6b195f89e999fd105a9499819fb0fd4))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.8.1...v2.8.2
+
+
 ## [2.8.1] - 2026-04-10
 
 ### ✨ Features
