@@ -17,6 +17,31 @@
 
 
 
+
+## [2.8.3] - 2026-04-14
+
+### 🐛 Bug Fixes
+
+- Enhance idempotency token generation in SenderManager by salting with user_id and session_id ([5405252](../../commit/5405252296a05ae8fe3234f16870579d40cf2c3c))
+- Implement deterministic idempotency token generation in SenderManager to improve retry handling ([011dcf2](../../commit/011dcf263da9195cecf01ec3f04c4126fac0d700))
+
+### 🔧 Other Changes
+
+- Merge pull request #102 from nacorga/hotfix/20260414.1 ([3698e6a](../../commit/3698e6a58d4199be5795944321c4d877923a2d94))
+- Tracelog.js ([700d9dc](../../commit/700d9dcb5cbc7df8e94531191fdd75bbf3cab2fd))
+- Cluade code improves ([86255fc](../../commit/86255fc7011bffc8fa5782dcf4882a9a8201645a))
+- Cluade code improves ([71498d3](../../commit/71498d3d089953d817ce7870dd254f56736c82c8))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.8.2...v2.8.3
+
+
 ## [2.8.2] - 2026-04-13
 
 ### 🐛 Bug Fixes
