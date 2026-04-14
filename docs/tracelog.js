@@ -502,7 +502,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.8.1";
+const version = "2.8.2";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -2264,7 +2264,7 @@ class SenderManager extends StateManager {
    *
    * **Idempotency Token**:
    * - Set upstream by ensureBatchMetadata() before this method is called
-   * - Fallback generateEventId() is defensive only (should not trigger in normal flow)
+   * - Fallback computeContentToken() is defensive only (should not trigger in normal flow)
    * - Same token persists across all retry attempts of the same batch
    * - Backend uses this to deduplicate retries
    *
@@ -2282,7 +2282,7 @@ class SenderManager extends StateManager {
       ...body,
       _metadata: {
         ...body._metadata,
-        idempotency_token: body._metadata?.idempotency_token ?? generateEventId(),
+        idempotency_token: body._metadata?.idempotency_token ?? this.computeContentToken(body),
         referer: typeof window !== "undefined" ? window.location.href : void 0,
         timestamp,
         client_version: LIB_VERSION
@@ -2294,7 +2294,7 @@ class SenderManager extends StateManager {
     };
   }
   ensureBatchMetadata(body, preferredToken) {
-    const idempotencyToken = body._metadata?.idempotency_token ?? preferredToken ?? generateEventId();
+    const idempotencyToken = body._metadata?.idempotency_token ?? preferredToken ?? this.computeContentToken(body);
     if (body._metadata?.idempotency_token === idempotencyToken) {
       return body;
     }
@@ -2305,6 +2305,34 @@ class SenderManager extends StateManager {
         idempotency_token: idempotencyToken
       }
     };
+  }
+  /**
+   * Deterministic 32-bit FNV-1a hash of sorted event IDs, salted with
+   * `user_id` and `session_id`.
+   *
+   * **Purpose**: Produces the same idempotency token for the same set of events
+   * across retries, so the backend's success cache catches in-session retries
+   * before any MongoDB work. Replaces a random token that caused the API to
+   * treat retried batches as new and emit `high_duplicate_rate` warnings.
+   *
+   * **Salting**: Scoping the hash by `user_id` + `session_id` ensures that
+   * batches from different users/sessions cannot share a token even if their
+   * event IDs hypothetically collided, eliminating cross-scope dedup risk
+   * regardless of how the backend keys its success cache.
+   *
+   * @param body - Event queue whose events determine the token
+   * @returns 8-char hex string
+   * @private
+   */
+  computeContentToken(body) {
+    const ids = body.events.map((e3) => e3.id).sort().join(",");
+    const input = `${body.user_id}|${body.session_id}|${ids}`;
+    let hash = 2166136261;
+    for (let i2 = 0; i2 < input.length; i2++) {
+      hash ^= input.charCodeAt(i2);
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return hash.toString(16).padStart(8, "0");
   }
   /**
    * Retrieves persisted events from localStorage with error recovery.

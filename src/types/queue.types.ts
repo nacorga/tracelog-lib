@@ -6,6 +6,14 @@ export interface QueueMetadata {
   referer?: string;
   timestamp?: number;
   client_version?: string;
+  /**
+   * Content-derived token used by the backend to deduplicate retries.
+   *
+   * Computed as a deterministic hash of the sorted event IDs in the batch, so
+   * the same set of events always yields the same token — retries (in-session
+   * or cross-session from localStorage recovery) hit the backend's success
+   * cache instead of being treated as new batches.
+   */
   idempotency_token?: string;
 }
 
