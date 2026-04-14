@@ -2307,12 +2307,18 @@ class SenderManager extends StateManager {
     };
   }
   /**
-   * Deterministic 32-bit FNV-1a hash of sorted event IDs.
+   * Deterministic 32-bit FNV-1a hash of sorted event IDs, salted with
+   * `user_id` and `session_id`.
    *
    * **Purpose**: Produces the same idempotency token for the same set of events
    * across retries, so the backend's success cache catches in-session retries
    * before any MongoDB work. Replaces a random token that caused the API to
    * treat retried batches as new and emit `high_duplicate_rate` warnings.
+   *
+   * **Salting**: Scoping the hash by `user_id` + `session_id` ensures that
+   * batches from different users/sessions cannot share a token even if their
+   * event IDs hypothetically collided, eliminating cross-scope dedup risk
+   * regardless of how the backend keys its success cache.
    *
    * @param body - Event queue whose events determine the token
    * @returns 8-char hex string
@@ -2320,9 +2326,10 @@ class SenderManager extends StateManager {
    */
   computeContentToken(body) {
     const ids = body.events.map((e3) => e3.id).sort().join(",");
+    const input = `${body.user_id}|${body.session_id}|${ids}`;
     let hash = 2166136261;
-    for (let i2 = 0; i2 < ids.length; i2++) {
-      hash ^= ids.charCodeAt(i2);
+    for (let i2 = 0; i2 < input.length; i2++) {
+      hash ^= input.charCodeAt(i2);
       hash = Math.imul(hash, 16777619) >>> 0;
     }
     return hash.toString(16).padStart(8, "0");
