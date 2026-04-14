@@ -1,939 +1,99 @@
-# TraceLog Library - Claude Development Pipeline
+# Claude Code Toolkit — tracelog-lib
 
-Comprehensive development automation pipeline for the TraceLog analytics library using Claude Code agents, commands, and hooks.
+Quick reference for skills, commands, agents, and hooks available in this repo.
 
-## 📁 Directory Structure
+## Skills
 
-```
-.claude/
-├── agents/                           # Custom subagents
-│   ├── feature-orchestrator.md       # Interactive feature development manager
-│   ├── test-guardian.md              # Test coverage enforcer (90%+ requirement)
-│   ├── test-implementer.md           # Test implementation expert
-│   ├── type-safety-enforcer.md       # TypeScript strict mode guardian
-│   ├── memory-leak-detector.md       # Browser memory leak analyzer
-│   └── security-privacy-advisor.md   # GDPR/privacy compliance checker
-├── commands/                         # Custom slash commands
-│   ├── new-feature.md                # Start interactive feature development
-│   ├── implement-tests.md            # Implement test logic
-│   ├── precommit.md                  # Full acceptance criteria validation
-│   ├── coverage.md                   # Test coverage analysis
-│   ├── perf.md                       # Bundle size & performance check
-│   ├── security-audit.md             # Security & privacy audit
-│   ├── compare-branch.md             # Branch comparison & pre-merge audit
-│   └── fix.md                        # Auto-fix lint/format issues
-├── hooks/                            # Development lifecycle hooks
-│   ├── pre-edit-validation.sh        # Validate types before editing
-│   ├── post-edit-tests.sh            # Run related tests after edits
-│   ├── session-start.sh              # Display project status on start
-│   └── prompt-validator.sh           # Prevent unnecessary file creation
-├── settings.json                     # Hooks configuration
-├── settings.local.json               # Enhanced permissions
-└── README.md                         # This file
-```
+No package-level skills. Uses shared monorepo skills from project root:
 
----
+| Skill                | When to use                                                                               | Invocation                 |
+| -------------------- | ----------------------------------------------------------------------------------------- | -------------------------- |
+| **review-staged**    | Pre-commit review of staged changes. Runs `clean-code-architect` + `tracelog-specialist`. | `/review-staged`           |
+| **review-fullstack** | Full-stack branch review before merge. Validates cross-package coherence.                 | `/review-fullstack [base]` |
+| **sync-types**       | Compare tracelog-api DTOs with tracelog-app interfaces and report mismatches.             | `/sync-types`              |
 
-## 🤖 Custom Subagents
+## Commands
 
-Specialized AI assistants for different development tasks.
+Defined in `.claude/commands/`. Invocable via `/slash-command`.
 
-### **feature-orchestrator**
+| Command                     | Purpose                                                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/precommit`                | Full acceptance criteria validation: lint, type-check, build, unit/integration/E2E tests. All must pass (0 errors).                                                |
+| `/coverage`                 | Generate and analyze test coverage report. Target: 90%+ for core modules.                                                                                          |
+| `/perf`                     | Analyze bundle size and performance impact. Budget: browser bundle <60KB, gzipped <20KB.                                                                           |
+| `/security-audit`           | Scan for PII leaks, sensitive query params, consent management, localStorage security. References `SECURITY.md`.                                                   |
+| `/compare-branch [branch]`  | Pre-merge audit: change analysis, quality audit, security scan, testing analysis, performance impact, breaking changes, docs review. Scores merge readiness 0-100. |
+| `/fix`                      | Auto-fix all lint and format issues (`npm run fix` + verification).                                                                                                |
+| `/research-team <scenario>` | Deep research with 3 agents investigating in parallel.                                                                                                             |
 
-**Purpose**: Interactive project manager for complete feature development from idea to production-ready code
+## Agents
 
-**When to use**: Starting ANY new feature implementation
+No package-level agents in tracelog-lib. Uses shared agents:
 
-**Invocation**:
-```bash
-/new-feature [brief description]
-```
+| Agent                    | Scope                                     | Role                                                                              |
+| ------------------------ | ----------------------------------------- | --------------------------------------------------------------------------------- |
+| **tracelog-specialist**  | Project root (`tracelog/.claude/agents/`) | Cross-package expert. Full-stack changes, session system, type sync, AI features. |
+| **clean-code-architect** | User-global (`~/.claude/agents/`)         | Universal code quality: KISS, DRY, SOLID, readability, naming, comments policy.   |
 
-**OR**:
-```
-Claude, use the feature-orchestrator agent to implement [feature]
-```
+## Hooks
 
-**What it does**:
-1. **Requirements Gathering** - Asks 15-20 clarifying questions about:
-   - Feature scope & boundaries
-   - Configuration & API design
-   - Events & data capture
-   - Integration approach
-   - Testing strategy
-   - Performance & memory considerations
+Configured in `settings.json` / `settings.local.json`.
 
-2. **Architecture Planning** - Proposes:
-   - File structure (new files + updates)
-   - Technical decisions with rationale
-   - Similar existing code to reference
-   - Privacy/security considerations
-   - Memory management strategy
+| Hook                           | Script               | What it does                                                                                     |
+| ------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------ |
+| `PostToolUse` (Edit/Write)     | `mark-changes.sh`    | Marks that code changes occurred in this session (used by `quality-check.sh`).                   |
+| `Stop`                         | `quality-check.sh`   | If changes were made, forces final quality check before stopping (runs `npm run check` + tests). |
+| `SessionStart` / `PostCompact` | `compact-context.sh` | Re-injects library context after session start or compaction.                                    |
 
-3. **Task Breakdown** - Creates detailed plan with TodoWrite:
-   - 8-12 tasks typically
-   - Progress tracking throughout
-   - Time estimates
+## Typical Workflow
 
-4. **Automated Implementation** - Coordinates:
-   - Uses all specialized agents (test, type, memory, security)
-   - Runs commands automatically (/coverage, /precommit, /perf)
-   - Updates todos in real-time
-
-5. **Quality Validation** - Enforces:
-   - ✅ Build succeeds (all bundles)
-   - ✅ 0 type errors
-   - ✅ 0 lint errors
-   - ✅ All tests pass
-   - ✅ 90%+ coverage for new code
-   - ✅ No memory leaks
-   - ✅ No security/privacy issues
-
-6. **Completion Summary** - Provides:
-   - Statistics (files created/updated, tests added)
-   - Quality gates report
-   - Suggested conventional commit message
-   - Usage example
-   - Next steps
-
-**Example Session**:
-```
-You: /new-feature viewport visibility tracking
-
-Agent: 📋 Feature Orchestrator - Gathering Requirements
-
-❓ How should elements be selected for tracking?
-   a) CSS selectors from config
-   b) Data attributes
-   c) Both
-
-❓ When should visibility be tracked?
-   a) Any part visible
-   b) X% visible (configurable)
-   [... more questions ...]
-
-You: [answer questions]
-
-Agent: ✅ Architecture Plan
-       Files to create: 5
-       Files to update: 3
-       [detailed plan]
-       Proceed? (yes/no)
-
-You: yes
-
-Agent: 🚀 Implementation [10 tasks]
-       ▶️  Task 1/10: Create types
-       ✅ Task 1 complete!
-       [... continues ...]
-
-       ✅ COMPLETE! Coverage: 96%, 0 errors
-       Commit message: "feat: add viewport tracking..."
-```
-
-**Time Savings**: 40-50% faster than manual workflow (1.5-2hrs → 45-60min)
-
-**Quality Improvement**:
-- Fewer missed edge cases
-- Better test coverage
-- Consistent architecture
-- No manual validation needed
-
----
-
-### 1. **test-guardian**
-
-**Purpose**: Enforce 90%+ test coverage for core logic
-
-**When to use**: After adding new features or modifying core code
-
-**Invocation**:
-```
-Claude, use the test-guardian agent to analyze test coverage
-```
-
-**What it does**:
-- Runs `npm run test:coverage`
-- Analyzes coverage against 90% threshold
-- Identifies uncovered code paths
-- Suggests specific test files to create
-- Validates E2E tests use `__traceLogBridge`
-
-**Quality Gates**:
-- ✅ handlers/: 95%+ coverage required
-- ✅ managers/: 95%+ coverage required
-- ✅ utils/: 90%+ coverage required
-- ✅ All tests passing (unit + integration + E2E)
-
----
-
-### 2. **test-implementer**
-
-**Purpose**: Expert test implementation following TESTING_FUNDAMENTALS.md patterns
-
-**When to use**: Implementing test logic for test files (with or without existing skeletons)
-
-**Invocation**:
-```bash
-/implement-tests tests/unit/core/app.test.ts
-```
-
-**OR**:
-```
-Claude, use the test-implementer agent to implement tests for [file/type/priority]
-```
-
-**What it does**:
-1. **Checks test file status**:
-   - If skeleton exists → Reads test declarations (`it('should...')` statements)
-   - If no skeleton → Analyzes source code and generates skeleton first
-2. **Creates implementation plan** - Uses TodoWrite to track tests to implement
-3. **Implements tests incrementally**:
-   - Reads source code to understand behavior
-   - Uses helpers extensively from `tests/helpers/`
-   - Writes clean, maintainable test implementation
-   - Runs test after implementation to verify it passes
-   - Marks todo as completed when passing
-4. **Verifies quality**:
-   - All tests pass (100% pass rate)
-   - Uses test helpers (not custom implementations)
-   - Follows TESTING_FUNDAMENTALS.md patterns
-   - Proper setup/teardown with `setupTestEnvironment()`
-5. **Provides summary** - Statistics, next steps, recommendations
-
-**Skeleton Generation** (when test file missing/empty):
-- Analyzes source code to identify public API
-- Generates test file with proper imports, describe blocks, and test declarations
-- Confirms skeleton with user before implementation
-
-**Test Helpers Available**:
-- `tests/helpers/setup.helper.ts` - Test setup/cleanup/timers
-- `tests/helpers/mocks.helper.ts` - Mock fetch, storage, APIs
-- `tests/helpers/fixtures.helper.ts` - Test data creation
-- `tests/helpers/assertions.helper.ts` - Custom assertions
-- `tests/helpers/wait.helper.ts` - Async wait utilities
-- `tests/helpers/state.helper.ts` - State management
-
-**Usage Examples**:
-```bash
-# Implement single file
-/implement-tests tests/unit/core/app.test.ts
-
-# Implement all unit tests
-/implement-tests unit
-
-# Implement all integration tests
-/implement-tests integration
-
-# Implement all E2E tests
-/implement-tests e2e
-```
-
-**Quality Standards**:
-- ✅ ALWAYS use `setupTestEnvironment()` in `beforeEach`
-- ✅ ALWAYS use test helpers (never custom implementations)
-- ✅ ALWAYS use `advanceTimers()` (NOT `vi.runAllTimersAsync()`)
-- ✅ Test behavior, not implementation details
-- ✅ One assertion per test when possible
-- ✅ Descriptive test names starting with "should"
-
-**References**:
-- `tests/TESTING_FUNDAMENTALS.md` - Complete testing guide
-- `tests/README.md` - Quick reference
-- `tests/helpers/` - All test utilities
-
----
-
-### 3. **type-safety-enforcer**
-
-**Purpose**: Maintain zero TypeScript errors with strict mode
-
-**When to use**: Before committing code changes
-
-**Invocation**:
-```
-Claude, use the type-safety-enforcer agent to check types
-```
-
-**What it does**:
-- Runs `npm run type-check`
-- Validates all 15 strict TypeScript flags
-- Provides specific fixes for type errors
-- Ensures declaration files build correctly
-
-**Strict Flags Enforced**:
-- `strict`, `noImplicitAny`, `strictNullChecks`
-- `noUncheckedIndexedAccess`, `noUnusedLocals`
-- `noImplicitReturns`, and 9 more
-
-**Acceptance**: **Zero type errors** (warnings OK)
-
----
-
-### 4. **memory-leak-detector**
-
-**Purpose**: Detect memory leaks in browser environment
-
-**When to use**: When creating/modifying event handlers or managers
-
-**Invocation**:
-```
-Claude, use the memory-leak-detector agent to check for leaks
-```
-
-**What it does**:
-- Analyzes event listener cleanup
-- Verifies `stopTracking()` implementations
-- Checks for orphaned timers/intervals
-- Validates circular reference handling
-- Ensures cleanup tests exist
-
-**Critical Checks**:
-- ✅ Every `addEventListener` has matching `removeEventListener`
-- ✅ All timers (`setTimeout`/`setInterval`) are cleared
-- ✅ Handlers implement proper `stopTracking()` method
-- ✅ No anonymous event listeners (can't be removed)
-
----
-
-### 5. **security-privacy-advisor**
-
-**Purpose**: GDPR/privacy compliance based on `SECURITY.md`
-
-**When to use**: Before releasing to production, especially e-commerce
-
-**Invocation**:
-```
-Claude, use the security-privacy-advisor agent to run audit
-```
-
-**What it does**:
-- Scans for PII leaks in click tracking
-- Validates sensitive query parameter filtering
-- Checks consent management implementation
-- Provides compliance status against GDPR requirements
-
-**References**: `SECURITY.md` for security and privacy guidelines
-
-**Phase 1 (Critical - Before E-commerce)**:
-1. ❌ Consent Management (#1)
-2. ❌ Click Data Protection (#2)
-3. ⚠️  URL Params Default (#3)
-4. ❌ GA Conditional Loading (#5)
-
----
-
-## 🔧 Custom Slash Commands
-
-Quick commands for common development tasks.
-
-### **/new-feature [description]**
-
-**Start interactive feature development workflow**
+### Before commit
 
 ```bash
-/new-feature viewport visibility tracking
-/new-feature consent management system
-/new-feature custom event metadata validation
+/precommit      # Full validation: lint + type-check + build + tests
 ```
 
-**What it does**:
-Launches the **feature-orchestrator** agent which guides you through:
-
-1. **Requirements Gathering** (Interactive Q&A)
-   - Scope & boundaries
-   - Configuration design
-   - Events & data capture
-   - Integration approach
-   - Testing strategy
-   - Performance considerations
-
-2. **Architecture Planning**
-   - Proposes file structure
-   - Explains technical decisions
-   - Identifies concerns
-
-3. **Automated Implementation**
-   - Creates 8-12 tasks with TodoWrite
-   - Implements each task sequentially
-   - Coordinates all specialized agents
-   - Runs validation commands automatically
-
-4. **Quality Validation**
-   - Enforces ALL acceptance criteria
-   - 90%+ coverage, 0 errors, all tests pass
-   - No memory leaks, no security issues
-
-5. **Completion Summary**
-   - Statistics & quality report
-   - Generated conventional commit message
-   - Usage example
-   - Next steps
-
-**Benefits**:
-- 40-50% faster than manual workflow
-- No missed requirements or edge cases
-- Automated quality enforcement
-- Consistent architecture patterns
-
-**Example Output**:
-```
-✅ FEATURE COMPLETE!
-
-Files Created: 5
-Tests Added: 24
-Coverage: 96.1%
-Quality Gates: All Passed ✅
-
-Commit message: "feat: add viewport tracking..."
-```
-
-**When to use**: Starting ANY new feature (handlers, managers, integrations, etc.)
-
----
-
-### 1. **/precommit**
-
-**Full acceptance criteria validation before commit**
+### Test coverage check
 
 ```bash
-/precommit
+/coverage       # Generate coverage report with per-module breakdown
 ```
 
-**Runs**:
-1. `npm run check` (lint + format)
-2. `npm run type-check` (TypeScript)
-3. `npm run build:all` (all bundles)
-4. `npm run test:unit` (unit tests)
-5. `npm run test:integration` (integration tests)
-6. `npm run test:e2e` (E2E tests)
-
-**Output**: Summary report with pass/fail status for each check
-
-**Acceptance**: ✅ All checks must pass (zero errors)
-
----
-
-### 2. **/coverage**
-
-**Generate and analyze test coverage report**
+### Performance check
 
 ```bash
-/coverage
+/perf           # Bundle size + runtime dependencies
 ```
 
-**Runs**: `npm run test:coverage`
-
-**Provides**:
-- Overall coverage percentage
-- Per-module breakdown (handlers, managers, utils)
-- Files below 90% threshold
-- Specific uncovered lines
-- Recommendations for missing tests
-
-**Target**: 90%+ for core modules
-
----
-
-### 3. **/perf**
-
-**Analyze bundle size and performance impact**
+### Security audit
 
 ```bash
-/perf
+/security-audit # PII scan, consent, localStorage security
 ```
 
-**Analyzes**:
-- ESM bundle size (target: <50KB)
-- CJS bundle size
-- Browser bundle size (target: <60KB)
-- Gzipped size (target: <20KB)
-- Runtime dependencies (only `web-vitals` allowed)
-
-**Performance Budget**:
-- ✅ Browser bundle: <60KB uncompressed
-- ✅ Gzipped: <20KB (target: ~15KB)
-- ✅ Single runtime dependency
-
----
-
-### 4. **/security-audit**
-
-**Comprehensive security and privacy audit**
+### Pre-merge audit
 
 ```bash
-/security-audit
+/compare-branch [target]   # Defaults to main. Scores merge readiness 0-100.
 ```
 
-**Scans**:
-- PII patterns in click tracking
-- Sensitive query parameter handling
-- Consent management implementation
-- localStorage security
-
-**References**: `SECURITY.md` priorities
-
-**Output**:
-- Critical issues (🔴)
-- High priority (🟠)
-- Compliance status (Phase 1/2/3)
-- Recommendations with time estimates
-
----
-
-### 5. **/compare-branch [branch]**
-
-**Compare current branch with another branch and audit all changes**
+### Investigating an issue
 
 ```bash
-/compare-branch
-# Prompts: "Which branch to compare against? (default: main)"
-
-/compare-branch develop
-# Compares current branch vs. develop
-
-/compare-branch feature/security
-# Compares current branch vs. feature/security
+/research-team <problem>   # 3 agents in parallel
 ```
 
-**What it does**:
-Comprehensive pre-merge audit that analyzes:
+## Permissions
 
-1. **Change Analysis**
-   - Lists all modified/added/deleted files with stats
-   - Shows full git diff for code review
-   - Categorizes changes by type (core, types, config, tests, docs)
+Enhanced permissions in `.claude/settings.local.json` allow common operations without prompts:
 
-2. **Quality Audit**
-   - Runs build, type-check, lint on changes
-   - Validates all acceptance criteria
-   - Checks test pass rate and coverage
+- `npm run build/test/lint/fix/check`, `npx tsc/eslint/jest/vitest/playwright`
+- Read: `coverage/`, `dist/`, `package.json`, `SECURITY.md`
+- Requires confirmation: `git commit/push/add/tag`, `npm publish`
 
-3. **Security Scan**
-   - Detects PII leaks in changes
-   - Scans for sensitive data patterns
-   - Reviews new dependencies
-   - Checks security-sensitive file modifications
+## Related Documentation
 
-4. **Testing Analysis**
-   - Identifies missing tests for new/modified code
-   - Checks coverage gaps
-   - Validates 90%+ threshold
-
-5. **Performance Impact**
-   - Compares bundle size changes
-   - Detects memory leak patterns (unbalanced listeners)
-   - Reviews new timers/intervals
-
-6. **Breaking Changes**
-   - Detects API signature changes
-   - Identifies type modifications
-   - Flags configuration changes
-
-7. **Documentation Review**
-   - Checks if docs updated for changes
-   - **Note**: CHANGELOG.md is auto-generated by CI/CD, should NOT be manually updated
-
-**Output**:
-- **Risk Assessment**: Critical/High/Medium/Low categorized issues
-- **Merge Readiness Score**: 0-100 with clear decision (✅/⚠️/🔴)
-- **Blocking Issues**: Must-fix before merge
-- **Actionable Recommendations**: Specific fixes with time estimates
-- **Merge Decision**: Ready/Needs Work/Do Not Merge
-
-**Merge Decision Criteria**:
-- ✅ READY (85-100): All quality gates passed, 0 blockers
-- ⚠️ NEEDS WORK (60-84): 1-2 fixable blockers
-- 🔴 DO NOT MERGE (<60): Critical issues, breaking changes undocumented
-
-**When to use**: Before merging any branch to catch errors, security issues, breaking changes
-
-**Benefits**:
-- Comprehensive pre-merge validation
-- Catches issues before code review
-- Identifies missing tests and documentation
-- Prevents breaking changes from slipping through
-
----
-
-### 6. **/fix**
-
-**Auto-fix all lint and format issues**
-
-```bash
-/fix
-```
-
-**Runs**:
-1. `npm run fix` (lint + format auto-fix)
-2. `npm run check` (verification)
-
-**Fixes**:
-- Unused imports/variables
-- Incorrect spacing/indentation
-- Quote style
-- Missing semicolons
-- Import order
-
----
-
-## 🪝 Development Hooks
-
-Automated validations and checks during development.
-
-### 1. **PreToolUse** (Edit/Write)
-
-**Trigger**: Before any file edit or write
-
-**Hook**: `.claude/hooks/pre-edit-validation.sh`
-
-**What it does**:
-- Runs `npm run type-check`
-- Blocks edits if type errors exist
-- Ensures clean baseline before changes
-
-**Why**: Prevents introducing type errors on top of existing errors
-
----
-
-### 2. **PostToolUse** (Edit)
-
-**Trigger**: After file edits
-
-**Hook**: `.claude/hooks/post-edit-tests.sh`
-
-**What it does**:
-- Determines affected module (handlers/managers/utils)
-- Runs related test suite automatically
-- Provides immediate feedback
-
-**Why**: Catch regressions early
-
----
-
-### 3. **SessionStart**
-
-**Trigger**: When Claude Code session starts
-
-**Hook**: `.claude/hooks/session-start.sh`
-
-**What it does**:
-- Displays git branch and last commit
-- Runs quick health check (types, lint, build)
-- Shows available quick commands
-- Sets development context
-
-**Output Example**:
-```
-═══════════════════════════════════════════════
-  📊 TraceLog Library - Development Session
-═══════════════════════════════════════════════
-
-📂 Branch: main
-📝 Last Commit: feat: add scroll retry mechanism
-
-🔍 Quick Health Check:
-
-  ✅ Types: OK
-  ✅ Lint: OK
-  ✅ Build: Artifacts present
-
-✅ Project is healthy - Ready to code!
-
-═══════════════════════════════════════════════
-  💡 Quick Commands:
-     /precommit      - Run full validation
-     /compare-branch - Compare & audit before merge
-     /coverage       - Check test coverage
-     /security-audit - Run security scan
-     /fix            - Auto-fix code issues
-═══════════════════════════════════════════════
-```
-
----
-
-### 4. **UserPromptSubmit**
-
-**Trigger**: When user submits a prompt
-
-**Hook**: `.claude/hooks/prompt-validator.sh`
-
-**What it does**:
-- Checks for potential unnecessary file creation
-- Warns about CLAUDE.md guidelines
-- Reminds to prefer editing over creating
-
-**Example Warning**:
-```
-⚠️  Warning: CLAUDE.md Guidelines
-
-The project guidelines discourage creating documentation files
-unless explicitly required by the user.
-
-From CLAUDE.md:
-  'NEVER proactively create documentation files (*.md)'
-  'ALWAYS prefer editing existing files to creating new ones'
-```
-
----
-
-## 📋 Permissions Configuration
-
-Enhanced permissions in `.claude/settings.local.json` allow automated operations.
-
-### Allowed Without Prompts
-
-**Build & Quality**:
-- `npm run build:*`
-- `npm run type-check:*`
-- `npm run lint:*`
-- `npm run fix:*`
-- `npm run check:*`
-
-**Testing**:
-- `npm run test:*`
-- `npm run test:coverage:*`
-- `npx vitest run:*`
-- `npx playwright:*`
-
-**Git (Read-only)**:
-- `git status`
-- `git log:*`
-- `git diff:*`
-- `git branch:*`
-- `git describe:*`
-
-**File Access**:
-- `Read(./coverage/**)`
-- `Read(./dist/**)`
-- `Read(./package.json)`
-- `Read(./SECURITY.md)`
-
-### Requires Confirmation
-
-**Destructive Git Operations**:
-- `git commit:*`
-- `git push:*`
-- `git add:*`
-- `git tag:*`
-
-**Publishing**:
-- `npm publish:*`
-
----
-
-## 🚀 Development Workflow
-
-### Starting a Session
-
-1. **Session Start Hook** automatically runs:
-   - Shows git status
-   - Runs health check
-   - Displays quick commands
-
-2. **Review Status**:
-   - Check for type/lint errors
-   - Note recent commits
-
-### Making Changes
-
-1. **Before Edit**:
-   - Pre-edit validation hook runs
-   - Type check ensures clean baseline
-
-2. **After Edit**:
-   - Post-edit hook runs related tests
-   - Immediate feedback on changes
-
-### Before Committing
-
-```bash
-/precommit
-```
-
-**Validates**:
-- ✅ Build succeeds
-- ✅ Types pass (0 errors)
-- ✅ Lint passes (0 errors)
-- ✅ All tests pass
-
-### Running Security Audit
-
-```bash
-/security-audit
-```
-
-**OR**:
-```
-Claude, use the security-privacy-advisor agent to audit security
-```
-
-**Reviews**:
-- GDPR compliance status
-- PII leak risks
-- Consent management
-- Phase 1 readiness for e-commerce
-
----
-
-## 🎯 Acceptance Criteria
-
-From `CLAUDE.md`, all code changes MUST meet:
-
-1. ✅ **No build errors** (`npm run build:all`)
-2. ✅ **No type errors** (`npm run type-check`)
-3. ✅ **No lint errors** (`npm run lint`)
-4. ✅ **100% test pass rate** (unit + integration + E2E)
-5. ✅ **90%+ coverage** for core logic (handlers, managers, utils)
-
-**Use `/precommit` to validate all criteria**
-
----
-
-## 📚 Examples
-
-### Example 1: Adding a New Feature
-
-```bash
-# 1. Start session (hook shows status automatically)
-
-# 2. Make changes to handler
-# Pre-edit hook validates types ✅
-# Post-edit hook runs handler tests ✅
-
-# 3. Check coverage
-/coverage
-
-# Output: "scroll.handler.ts: 87% ❌ (below 90%)"
-# Add missing tests...
-
-# 4. Validate before commit
-/precommit
-
-# Output: ✅ All checks pass
-
-# 5. Commit changes
-git add .
-git commit -m "feat: add scroll retry mechanism"
-```
-
-### Example 2: Branch Comparison Before Merge
-
-```bash
-# Check current branch before merging to main
-/compare-branch
-
-# Prompts: "Which branch to compare against? (default: main)"
-# Press Enter (uses 'main')
-
-# Output:
-# 📊 COMPARISON SUMMARY
-#    Current: feature/viewport-tracking
-#    Target:  main
-#    Commits: 8 ahead
-#    Files:   15 changed
-#
-# ✅ QUALITY AUDIT
-#    Build:    PASSED
-#    Types:    PASSED (0 errors)
-#    Tests:    PASSED (42/42)
-#    Coverage: 94.2%
-#
-# ⚠️  TESTING AUDIT
-#    🔴 Missing test update: src/managers/event.manager.ts
-#       Action: Update tests/unit/managers/event.test.ts
-#
-# 📊 MERGE READINESS: 78/100 - ⚠️ NEEDS WORK
-#    Blockers: 1 (missing test)
-#    Time to Ready: 30 minutes
-#
-# Next Action: Add tests for event.manager.ts changes
-
-# Fix the issue
-# Create/update tests...
-
-# Re-run comparison
-/compare-branch
-# Output: ✅ READY TO MERGE (Score: 95/100)
-```
-
-### Example 3: Security Audit
-
-```bash
-# Run security audit
-/security-audit
-
-# Output:
-# 🔴 CRITICAL - Issue #1: Consent Management
-#    Status: ❌ Not Implemented
-#    Legal Risk: Critical (€20M fines)
-#
-# 🔴 CRITICAL - Issue #2: Click Data Protection
-#    Status: ⚠️ Partial
-#    Risk: High (PII exposure)
-#
-# Compliance: ❌ Not ready for e-commerce
-# Blocker Count: 4
-```
-
----
-
-## 🛠️ Troubleshooting
-
-### Hook Not Running
-
-1. **Check permissions**:
-   ```bash
-   ls -l .claude/hooks/*.sh
-   # Should show -rwxr-xr-x (executable)
-   ```
-
-2. **Make executable**:
-   ```bash
-   chmod +x .claude/hooks/*.sh
-   ```
-
-3. **Verify hook config** in `.claude/settings.json`
-
-### Type Check Failing in Hook
-
-If pre-edit hook blocks with type errors:
-
-```bash
-npm run type-check
-```
-
-Fix errors, then retry edit.
-
-### Tests Slow After Edits
-
-Post-edit hook runs tests automatically. To disable temporarily:
-
-1. Comment out `PostToolUse` section in `.claude/settings.json`
-2. Re-enable after intensive editing session
-
----
-
-## 📖 Related Documentation
-
-- **Project Guidelines**: `CLAUDE.md` (project root)
-- **Security Priorities**: `SECURITY.md`
-- **Handler Documentation**: `src/handlers/README.md`
-- **Manager Documentation**: `src/managers/README.md`
-- **Listener Documentation**: `src/listeners/README.md`
-
----
-
-## 🎉 Benefits
-
-This Claude pipeline provides:
-
-1. **Automated Quality Enforcement**: No manual validation needed
-2. **Specialized Expertise**: Dedicated agents for testing, security, types
-3. **Fast Feedback**: Hooks catch issues immediately
-4. **Security Focus**: GDPR compliance built into workflow
-5. **Memory Safety**: Browser leak detection for long-running code
-
-**Result**: Ship faster with higher confidence 🚀
-
----
+- `CLAUDE.md` — Library guidelines (root of package)
+- `SECURITY.md` — Privacy and PII policy
+- `README.md` — Public library documentation
+- `tests/TESTING_FUNDAMENTALS.md` — Complete testing guide

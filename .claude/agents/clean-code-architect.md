@@ -1,1 +1,0 @@
-../../../.claude/agents/clean-code-architect.md
