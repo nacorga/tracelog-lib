@@ -870,6 +870,8 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
     sender.persistForRecovery(createMockQueue(events));
     sender.persistForRecovery(createMockQueue(events));
 
+    expect(persistSpy).toHaveBeenCalledTimes(2);
+
     const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
     const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
 
@@ -890,6 +892,8 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
 
     sender.persistForRecovery(createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_a' })]));
     sender.persistForRecovery(createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_b' })]));
+
+    expect(persistSpy).toHaveBeenCalledTimes(2);
 
     const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
     const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
@@ -915,6 +919,8 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
     sender.persistForRecovery(createMockQueue([a, b, c]));
     sender.persistForRecovery(createMockQueue([c, a, b]));
 
+    expect(persistSpy).toHaveBeenCalledTimes(2);
+
     const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
     const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
 
@@ -938,6 +944,8 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
     });
 
     sender.persistForRecovery(bodyWithPreassignedToken);
+
+    expect(persistSpy).toHaveBeenCalledTimes(1);
 
     const persistedBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
     expect(persistedBody._metadata?.idempotency_token).toBe('legacy-token-from-storage');
