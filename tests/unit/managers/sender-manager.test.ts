@@ -840,6 +840,110 @@ describe('SenderManager - persistForRecovery', () => {
   });
 });
 
+describe('SenderManager - Deterministic Idempotency Token', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should generate the same idempotency token for two bodies with identical events', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+
+    const events = [
+      createMockEvent(EventType.CLICK, { id: 'evt_1' }),
+      createMockEvent(EventType.CLICK, { id: 'evt_2' }),
+      createMockEvent(EventType.CLICK, { id: 'evt_3' }),
+    ];
+
+    // Two fresh bodies (no pre-existing _metadata.idempotency_token) with identical events
+    sender.persistForRecovery(createMockQueue(events));
+    sender.persistForRecovery(createMockQueue(events));
+
+    const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
+    const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
+
+    expect(firstBody._metadata?.idempotency_token).toBeDefined();
+    expect(firstBody._metadata?.idempotency_token).toBe(secondBody._metadata?.idempotency_token);
+  });
+
+  it('should generate different tokens for different event sets', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+
+    sender.persistForRecovery(createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_a' })]));
+    sender.persistForRecovery(createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_b' })]));
+
+    const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
+    const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
+
+    expect(firstBody._metadata?.idempotency_token).not.toBe(secondBody._metadata?.idempotency_token);
+  });
+
+  it('should be order-independent (same events in different order produce same token)', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+
+    const a = createMockEvent(EventType.CLICK, { id: 'evt_a' });
+    const b = createMockEvent(EventType.CLICK, { id: 'evt_b' });
+    const c = createMockEvent(EventType.CLICK, { id: 'evt_c' });
+
+    sender.persistForRecovery(createMockQueue([a, b, c]));
+    sender.persistForRecovery(createMockQueue([c, a, b]));
+
+    const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
+    const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
+
+    expect(firstBody._metadata?.idempotency_token).toBe(secondBody._metadata?.idempotency_token);
+  });
+
+  it('should preserve an existing idempotency token instead of recomputing', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+
+    const events = [createMockEvent(EventType.CLICK, { id: 'evt_1' })];
+    const bodyWithPreassignedToken = createMockQueue(events, {
+      _metadata: { idempotency_token: 'legacy-token-from-storage' },
+    });
+
+    sender.persistForRecovery(bodyWithPreassignedToken);
+
+    const persistedBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
+    expect(persistedBody._metadata?.idempotency_token).toBe('legacy-token-from-storage');
+  });
+});
+
 describe('SenderManager - beforeBatch Transformer', () => {
   beforeEach(() => {
     setupTestEnvironment();
