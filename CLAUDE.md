@@ -265,7 +265,7 @@ tracelog.removeCustomHeaders();
 | 4xx (except 408, 429) | ❌ None | ❌ Discarded |
 | 408 Timeout | ✅ Up to 2 | ✅ After exhaustion |
 | Request Timeout (AbortController) | ✅ Up to 2 | ✅ After exhaustion |
-| 429 Rate Limit | ❌ None (deferred to periodic backoff) | ✅ Immediate |
+| 429 Rate Limit | ❌ None (60s cooldown, mirrored to localStorage, shared across tabs) | ✅ Immediate |
 | 5xx, Network Errors | ✅ Up to 2 | ✅ After exhaustion |
 | sendBeacon failure | ❌ None | ✅ Immediate |
 

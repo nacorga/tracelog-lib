@@ -2902,6 +2902,128 @@ describe('SenderManager - Rate-Limit Cooldown', () => {
   });
 });
 
+describe('SenderManager - Rate-Limit Cooldown (multi-tab freshness)', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should not shorten a longer cooldown already stored by another tab', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const key = (sender as any).getRateLimitStorageKey();
+
+    // Simulate another tab having written a far-future cooldown
+    const longCooldown = Date.now() + 300_000; // 5 minutes
+    storage.setItem(key, String(longCooldown));
+
+    // This instance tries to arm a shorter cooldown (~60s) — must not overwrite
+    (sender as any).persistRateLimitCooldown(Date.now() + 60_000);
+
+    const stored = Number(storage.getItem(key));
+    expect(stored).toBe(longCooldown);
+  });
+
+  it('should adopt a longer cooldown from storage instead of clearing it on expiry', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const key = (sender as any).getRateLimitStorageKey();
+
+    // In-memory cooldown thinks it's already expired (past timestamp)
+    (sender as any).rateLimitedUntil = Date.now() - 1000;
+    // Storage holds a longer active cooldown written by another tab
+    const longerCooldown = Date.now() + 30_000;
+    storage.setItem(key, String(longerCooldown));
+
+    // isRateLimited() must adopt the longer cooldown, not clear it
+    const limited = (sender as any).isRateLimited();
+
+    expect(limited).toBe(true);
+    expect((sender as any).rateLimitedUntil).toBe(longerCooldown);
+    // Storage must still hold the longer cooldown (not removed)
+    expect(storage.getItem(key)).toBe(String(longerCooldown));
+  });
+
+  it('should still clear storage when no tab has a longer cooldown', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const key = (sender as any).getRateLimitStorageKey();
+
+    // Both in-memory and storage hold an expired cooldown
+    (sender as any).rateLimitedUntil = Date.now() - 1000;
+    storage.setItem(key, String(Date.now() - 500));
+
+    const limited = (sender as any).isRateLimited();
+
+    expect(limited).toBe(false);
+    expect((sender as any).rateLimitedUntil).toBe(0);
+    expect(storage.getItem(key)).toBeNull();
+  });
+
+  it('should bind cooldown to the userId present at arm time (resetIdentity-safe)', async () => {
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const { getGlobalState } = await import('../../../src/managers/state.manager');
+
+    // Seed userId via the global state directly (setGlobalStateValue helper
+    // uses a window-level shim that isn't wired up in this codebase).
+    (getGlobalState() as { userId: string }).userId = 'user-before-reset';
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // 429 arms cooldown bound to 'user-before-reset'
+    await sender.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
+    );
+
+    const armedKey = (sender as any).rateLimitStorageKeyAtArm as string;
+    expect(armedKey).toContain('user-before-reset');
+    expect(storage.getItem(armedKey)).not.toBeNull();
+
+    // Simulate resetIdentity: userId changes mid-cooldown
+    (getGlobalState() as { userId: string }).userId = 'user-after-reset';
+
+    // Force the cooldown fully expired (both in-memory and storage) so clear
+    // is not tempted to adopt a still-active stored value.
+    (sender as any).rateLimitedUntil = Date.now() - 1;
+    storage.setItem(armedKey, String(Date.now() - 1));
+
+    (sender as any).clearRateLimitCooldown();
+
+    // No orphan key left for the armed user
+    expect(storage.getItem(armedKey)).toBeNull();
+    // New user's key was never written → no false cooldown leaks to new identity
+    const newUserKey = (sender as any).getRateLimitStorageKey();
+    expect(newUserKey).toContain('user-after-reset');
+    expect(newUserKey).not.toBe(armedKey);
+    expect(storage.getItem(newUserKey)).toBeNull();
+    // Snapshot cleared so subsequent arms target the new user
+    expect((sender as any).rateLimitStorageKeyAtArm).toBeNull();
+  });
+});
+
 describe('SenderManager - persistEvents (recoveryFailures preservation)', () => {
   beforeEach(() => {
     setupTestEnvironment();

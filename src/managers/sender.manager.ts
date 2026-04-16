@@ -115,11 +115,18 @@ export class SenderManager extends StateManager {
   private circuitOpenedAt = 0;
   /**
    * Timestamp (epoch ms) before which `send()` must skip fetch() calls due to
-   * a prior 429 response. Persisted per-user to localStorage so traditional
-   * server-rendered sites (WordPress, Magento, etc.) don't lose the backoff
-   * on every page navigation.
+   * a prior 429 response. Mirrored to `localStorage` (keyed by userId) so the
+   * cooldown survives page navigations on traditional server-rendered sites
+   * and is discoverable by other tabs on the same origin.
    */
   private rateLimitedUntil = 0;
+  /**
+   * Storage key used when the current in-memory cooldown was armed. Captured
+   * at arm time so `resetIdentity()` (which changes `userId` mid-cooldown)
+   * can't make persist/clear operations target the wrong key or leave the
+   * old user's cooldown orphaned in storage.
+   */
+  private rateLimitStorageKeyAtArm: string | null = null;
 
   /**
    * Creates a SenderManager instance.
@@ -234,15 +241,35 @@ export class SenderManager extends StateManager {
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
 
+  /**
+   * Returns the storage key bound to the *current* in-memory cooldown. Falls
+   * back to the current-userId key when no cooldown is armed (first read) so
+   * discovery-from-storage paths can still resolve a key.
+   */
+  private getActiveRateLimitKey(): string {
+    return this.rateLimitStorageKeyAtArm ?? this.getRateLimitStorageKey();
+  }
+
+  private armRateLimitCooldown(until: number): void {
+    this.rateLimitedUntil = until;
+    this.rateLimitStorageKeyAtArm = this.getRateLimitStorageKey();
+    this.persistRateLimitCooldown(until);
+  }
+
   private loadRateLimitCooldown(): number {
+    const key = this.getRateLimitStorageKey();
     try {
-      const raw = this.storeManager.getItem(this.getRateLimitStorageKey());
+      const raw = this.storeManager.getItem(key);
       if (!raw) return 0;
       const value = Number(raw);
       if (!Number.isFinite(value) || value <= Date.now()) {
-        this.storeManager.removeItem(this.getRateLimitStorageKey());
+        this.storeManager.removeItem(key);
         return 0;
       }
+      // Snapshot the key so any subsequent persist/clear targets the user
+      // this cooldown was armed for, even if `resetIdentity()` changes the
+      // current userId while the cooldown is still active.
+      this.rateLimitStorageKeyAtArm = key;
       return value;
     } catch {
       return 0;
@@ -250,20 +277,46 @@ export class SenderManager extends StateManager {
   }
 
   private persistRateLimitCooldown(until: number): void {
+    // Don't shorten a longer cooldown written by another tab on the same origin.
+    // Example: Tab A writes T+60 at t=0; Tab B receives 429 at t=30 and computes
+    // T+90 — we want Tab B's longer window to win. But if Tab B's window is
+    // *shorter* than an existing one (clock skew, slower 429), keep the existing.
+    const key = this.getActiveRateLimitKey();
     try {
-      this.storeManager.setItem(this.getRateLimitStorageKey(), String(until));
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const existing = Number(raw);
+        if (Number.isFinite(existing) && existing >= until) {
+          return;
+        }
+      }
+      this.storeManager.setItem(key, String(until));
     } catch {
       // Storage full or disabled — cooldown still works in-memory for this instance
     }
   }
 
   private clearRateLimitCooldown(): void {
-    this.rateLimitedUntil = 0;
+    // Before deleting, confirm storage hasn't been extended by another tab. If
+    // Tab A's in-memory cooldown expired but Tab B wrote a longer one, a blind
+    // remove would erase Tab B's cooldown for any future-spawned tab that reads
+    // storage on first send. Adopt the longer value instead.
+    const key = this.getActiveRateLimitKey();
     try {
-      this.storeManager.removeItem(this.getRateLimitStorageKey());
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const stored = Number(raw);
+        if (Number.isFinite(stored) && stored > Date.now()) {
+          this.rateLimitedUntil = stored;
+          return;
+        }
+      }
+      this.storeManager.removeItem(key);
     } catch {
       // Ignore — cleared in-memory is enough
     }
+    this.rateLimitedUntil = 0;
+    this.rateLimitStorageKeyAtArm = null;
   }
 
   private isRateLimited(): boolean {
@@ -276,8 +329,10 @@ export class SenderManager extends StateManager {
     }
     if (this.rateLimitedUntil === 0) return false;
     if (Date.now() >= this.rateLimitedUntil) {
+      // clearRateLimitCooldown may adopt a longer cooldown written by another
+      // tab instead of clearing — re-check in-memory state after the call.
       this.clearRateLimitCooldown();
-      return false;
+      if (this.rateLimitedUntil === 0) return false;
     }
     return true;
   }
@@ -300,7 +355,8 @@ export class SenderManager extends StateManager {
    *
    * **Return Values**:
    * - `true`: Send succeeded OR skipped (standalone mode)
-   * - `false`: Send failed (network error, browser rejected beacon)
+   * - `false`: Send failed (network error, browser rejected beacon) OR skipped
+   *   due to active rate-limit cooldown (events persisted for later recovery)
    *
    * **Important**: No retry mechanism. Failed events are persisted to localStorage for
    * recovery on next page load via `recoverPersistedEvents()`.
@@ -798,7 +854,8 @@ export class SenderManager extends StateManager {
       return true;
     }
 
-    // Rate-limit cooldown (persisted across page navigations).
+    // Rate-limit cooldown (mirrored to localStorage — shared across page
+    // navigations and tabs on the same origin).
     // If a prior 429 response set a cooldown that has not yet elapsed, skip the
     // fetch entirely — caller will persist events to localStorage so the next
     // recovery attempt after cooldown succeeds. Returns `false` (same pattern
@@ -883,8 +940,7 @@ export class SenderManager extends StateManager {
           this.circuitOpenedAt = 0;
           allTimeouts = false;
           hadHttpResponse = true;
-          this.rateLimitedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-          this.persistRateLimitCooldown(this.rateLimitedUntil);
+          this.armRateLimitCooldown(Date.now() + RATE_LIMIT_COOLDOWN_MS);
           log('warn', `Rate limited, skipping retries${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
             data: { events: body.events.length, attempt, cooldownMs: RATE_LIMIT_COOLDOWN_MS },
           });

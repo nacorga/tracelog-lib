@@ -48,9 +48,10 @@ export const QUEUE_KEY = (id: string): string => (id ? `${STORAGE_BASE_KEY}:${id
 /**
  * Generates storage key for per-sender rate-limit cooldown timestamp.
  *
- * Used to respect server 429 responses across page navigations within the
- * same tab — without this, each page load resets the sender's in-memory
- * backoff and continues hammering the API.
+ * Persisted in `localStorage` so the cooldown survives both page navigations
+ * and is visible to other tabs/windows on the same origin. Without this, each
+ * fresh `SenderManager` starts with a zeroed backoff and would continue
+ * hammering the API through the server's 429 window.
  *
  * @param id - User ID
  * @returns localStorage key (e.g., 'tlog:user123:rate_limit')

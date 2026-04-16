@@ -1586,7 +1586,7 @@ TraceLog uses a **retry-first, then persistence-based recovery model**:
 | **2xx** | N/A (success) | Events removed from queue, delivery confirmed |
 | **4xx (except 408/429)** | None (permanent error) | Events discarded immediately (invalid data) |
 | **408** | Up to 2 retries with backoff | Persist after exhausting retries |
-| **429** | None (deferred to periodic backoff) | Persist immediately |
+| **429** | None — arms 60s cooldown (mirrored to localStorage, shared across tabs) | Persist immediately |
 | **5xx** | Up to 2 retries with backoff | Persist after exhausting retries |
 | **Network failure** | Up to 2 retries with backoff | Persist after exhausting retries |
 
@@ -1595,7 +1595,7 @@ TraceLog uses a **retry-first, then persistence-based recovery model**:
 - **Backoff Formula**: `100ms * (2 ^ attempt) + random(0-100ms)`
 - **Delays**: Attempt 1→2: 200-300ms, Attempt 2→3: 400-500ms
 - **Transient Errors**: 5xx, 408 Request Timeout, network failures
-- **Rate Limited**: 429 Too Many Requests - no inner retries, persisted immediately for periodic backoff
+- **Rate Limited**: 429 Too Many Requests — no inner retries; arms a 60s cooldown (mirrored to localStorage, shared across tabs on the same origin) and persists events immediately for recovery after the cooldown elapses
 - **Permanent Errors**: 4xx (except 408, 429) - no retries, immediate discard
 - **Jitter**: Random 0-100ms added to prevent thundering herd
 

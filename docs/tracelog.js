@@ -1522,11 +1522,18 @@ class SenderManager extends StateManager {
   circuitOpenedAt = 0;
   /**
    * Timestamp (epoch ms) before which `send()` must skip fetch() calls due to
-   * a prior 429 response. Persisted per-user to localStorage so traditional
-   * server-rendered sites (WordPress, Magento, etc.) don't lose the backoff
-   * on every page navigation.
+   * a prior 429 response. Mirrored to `localStorage` (keyed by userId) so the
+   * cooldown survives page navigations on traditional server-rendered sites
+   * and is discoverable by other tabs on the same origin.
    */
   rateLimitedUntil = 0;
+  /**
+   * Storage key used when the current in-memory cooldown was armed. Captured
+   * at arm time so `resetIdentity()` (which changes `userId` mid-cooldown)
+   * can't make persist/clear operations target the wrong key or leave the
+   * old user's cooldown orphaned in storage.
+   */
+  rateLimitStorageKeyAtArm = null;
   /**
    * Creates a SenderManager instance.
    *
@@ -1615,32 +1622,65 @@ class SenderManager extends StateManager {
     const baseKey = RATE_LIMIT_KEY(userId);
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
+  /**
+   * Returns the storage key bound to the *current* in-memory cooldown. Falls
+   * back to the current-userId key when no cooldown is armed (first read) so
+   * discovery-from-storage paths can still resolve a key.
+   */
+  getActiveRateLimitKey() {
+    return this.rateLimitStorageKeyAtArm ?? this.getRateLimitStorageKey();
+  }
+  armRateLimitCooldown(until) {
+    this.rateLimitedUntil = until;
+    this.rateLimitStorageKeyAtArm = this.getRateLimitStorageKey();
+    this.persistRateLimitCooldown(until);
+  }
   loadRateLimitCooldown() {
+    const key = this.getRateLimitStorageKey();
     try {
-      const raw = this.storeManager.getItem(this.getRateLimitStorageKey());
+      const raw = this.storeManager.getItem(key);
       if (!raw) return 0;
       const value = Number(raw);
       if (!Number.isFinite(value) || value <= Date.now()) {
-        this.storeManager.removeItem(this.getRateLimitStorageKey());
+        this.storeManager.removeItem(key);
         return 0;
       }
+      this.rateLimitStorageKeyAtArm = key;
       return value;
     } catch {
       return 0;
     }
   }
   persistRateLimitCooldown(until) {
+    const key = this.getActiveRateLimitKey();
     try {
-      this.storeManager.setItem(this.getRateLimitStorageKey(), String(until));
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const existing = Number(raw);
+        if (Number.isFinite(existing) && existing >= until) {
+          return;
+        }
+      }
+      this.storeManager.setItem(key, String(until));
     } catch {
     }
   }
   clearRateLimitCooldown() {
-    this.rateLimitedUntil = 0;
+    const key = this.getActiveRateLimitKey();
     try {
-      this.storeManager.removeItem(this.getRateLimitStorageKey());
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const stored = Number(raw);
+        if (Number.isFinite(stored) && stored > Date.now()) {
+          this.rateLimitedUntil = stored;
+          return;
+        }
+      }
+      this.storeManager.removeItem(key);
     } catch {
     }
+    this.rateLimitedUntil = 0;
+    this.rateLimitStorageKeyAtArm = null;
   }
   isRateLimited() {
     if (this.rateLimitedUntil === 0) {
@@ -1649,7 +1689,7 @@ class SenderManager extends StateManager {
     if (this.rateLimitedUntil === 0) return false;
     if (Date.now() >= this.rateLimitedUntil) {
       this.clearRateLimitCooldown();
-      return false;
+      if (this.rateLimitedUntil === 0) return false;
     }
     return true;
   }
@@ -1671,7 +1711,8 @@ class SenderManager extends StateManager {
    *
    * **Return Values**:
    * - `true`: Send succeeded OR skipped (standalone mode)
-   * - `false`: Send failed (network error, browser rejected beacon)
+   * - `false`: Send failed (network error, browser rejected beacon) OR skipped
+   *   due to active rate-limit cooldown (events persisted for later recovery)
    *
    * **Important**: No retry mechanism. Failed events are persisted to localStorage for
    * recovery on next page load via `recoverPersistedEvents()`.
@@ -2154,8 +2195,7 @@ class SenderManager extends StateManager {
           this.circuitOpenedAt = 0;
           allTimeouts = false;
           hadHttpResponse = true;
-          this.rateLimitedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-          this.persistRateLimitCooldown(this.rateLimitedUntil);
+          this.armRateLimitCooldown(Date.now() + RATE_LIMIT_COOLDOWN_MS);
           log("warn", `Rate limited, skipping retries${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
             data: { events: body.events.length, attempt, cooldownMs: RATE_LIMIT_COOLDOWN_MS }
           });

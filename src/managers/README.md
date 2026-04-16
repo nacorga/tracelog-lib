@@ -100,7 +100,7 @@ Core business logic components that handle analytics data processing, state mana
   - Independent storage keys prevent cross-integration interference
 - **In-session retry with exponential backoff** - Up to 2 additional attempts for transient errors
   - Transient errors (5xx, 408, network failures) trigger retry with exponential backoff
-  - Rate limit (429) skips inner retries, persists immediately for EventManager periodic backoff
+  - Rate limit (429) skips inner retries and arms a 60s cooldown (mirrored to localStorage, shared across tabs on the same origin); events persist immediately for recovery once the cooldown elapses
   - Backoff formula: `100ms * 2^attempt + random(0-100ms)` (delays: 200-300ms, 400-500ms)
   - Permanent errors (4xx except 408/429) bypass retries immediately
   - Failed events persist to localStorage after exhausting retries for next-page-load recovery
