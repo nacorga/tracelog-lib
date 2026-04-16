@@ -1,5 +1,6 @@
 import {
   QUEUE_KEY,
+  RATE_LIMIT_KEY,
   EVENT_EXPIRY_HOURS,
   REQUEST_TIMEOUT_MS,
   PERMANENT_ERROR_LOG_THROTTLE_MS,
@@ -12,6 +13,7 @@ import {
   MAX_CONSECUTIVE_NETWORK_FAILURES,
   MAX_RECOVERY_FAILURES,
   CIRCUIT_BREAKER_COOLDOWN_MS,
+  RATE_LIMIT_COOLDOWN_MS,
 } from '../constants';
 import {
   PersistedEventsQueue,
@@ -111,6 +113,20 @@ export class SenderManager extends StateManager {
    */
   private consecutiveNetworkFailures = 0;
   private circuitOpenedAt = 0;
+  /**
+   * Timestamp (epoch ms) before which `send()` must skip fetch() calls due to
+   * a prior 429 response. Mirrored to `localStorage` (keyed by userId) so the
+   * cooldown survives page navigations on traditional server-rendered sites
+   * and is discoverable by other tabs on the same origin.
+   */
+  private rateLimitedUntil = 0;
+  /**
+   * Storage key used when the current in-memory cooldown was armed. Captured
+   * at arm time so `resetIdentity()` (which changes `userId` mid-cooldown)
+   * can't make persist/clear operations target the wrong key or leave the
+   * old user's cooldown orphaned in storage.
+   */
+  private rateLimitStorageKeyAtArm: string | null = null;
 
   /**
    * Creates a SenderManager instance.
@@ -148,6 +164,7 @@ export class SenderManager extends StateManager {
     this.staticHeaders = staticHeaders;
     this.customHeadersProvider = customHeadersProvider;
     this.fetchCredentials = fetchCredentials;
+    this.rateLimitedUntil = this.loadRateLimitCooldown();
   }
 
   /**
@@ -218,6 +235,108 @@ export class SenderManager extends StateManager {
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
 
+  private getRateLimitStorageKey(): string {
+    const userId = this.get('userId') || 'anonymous';
+    const baseKey = RATE_LIMIT_KEY(userId);
+    return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
+  }
+
+  /**
+   * Returns the storage key bound to the *current* in-memory cooldown. Falls
+   * back to the current-userId key when no cooldown is armed (first read) so
+   * discovery-from-storage paths can still resolve a key.
+   */
+  private getActiveRateLimitKey(): string {
+    return this.rateLimitStorageKeyAtArm ?? this.getRateLimitStorageKey();
+  }
+
+  private armRateLimitCooldown(until: number): void {
+    this.rateLimitedUntil = until;
+    this.rateLimitStorageKeyAtArm = this.getRateLimitStorageKey();
+    this.persistRateLimitCooldown(until);
+  }
+
+  private loadRateLimitCooldown(): number {
+    const key = this.getRateLimitStorageKey();
+    try {
+      const raw = this.storeManager.getItem(key);
+      if (!raw) return 0;
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value <= Date.now()) {
+        this.storeManager.removeItem(key);
+        return 0;
+      }
+      // Snapshot the key so any subsequent persist/clear targets the user
+      // this cooldown was armed for, even if `resetIdentity()` changes the
+      // current userId while the cooldown is still active.
+      this.rateLimitStorageKeyAtArm = key;
+      return value;
+    } catch {
+      return 0;
+    }
+  }
+
+  private persistRateLimitCooldown(until: number): void {
+    // Don't shorten a longer cooldown written by another tab on the same origin.
+    // Example: Tab A writes T+60 at t=0; Tab B receives 429 at t=30 and computes
+    // T+90 — we want Tab B's longer window to win. But if Tab B's window is
+    // *shorter* than an existing one (clock skew, slower 429), keep the existing.
+    const key = this.getActiveRateLimitKey();
+    try {
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const existing = Number(raw);
+        if (Number.isFinite(existing) && existing >= until) {
+          return;
+        }
+      }
+      this.storeManager.setItem(key, String(until));
+    } catch {
+      // Storage full or disabled — cooldown still works in-memory for this instance
+    }
+  }
+
+  private clearRateLimitCooldown(): void {
+    // Before deleting, confirm storage hasn't been extended by another tab. If
+    // Tab A's in-memory cooldown expired but Tab B wrote a longer one, a blind
+    // remove would erase Tab B's cooldown for any future-spawned tab that reads
+    // storage on first send. Adopt the longer value instead.
+    const key = this.getActiveRateLimitKey();
+    try {
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const stored = Number(raw);
+        if (Number.isFinite(stored) && stored > Date.now()) {
+          this.rateLimitedUntil = stored;
+          return;
+        }
+      }
+      this.storeManager.removeItem(key);
+    } catch {
+      // Ignore — cleared in-memory is enough
+    }
+    this.rateLimitedUntil = 0;
+    this.rateLimitStorageKeyAtArm = null;
+  }
+
+  private isRateLimited(): boolean {
+    // Pick up a cooldown written by another tab on the same origin: when this
+    // instance has no in-memory cooldown (initial state or just cleared), check
+    // storage so Tab B doesn't keep hammering the API for 60s after Tab A's 429.
+    // Once this instance has its own cooldown we skip the storage read.
+    if (this.rateLimitedUntil === 0) {
+      this.rateLimitedUntil = this.loadRateLimitCooldown();
+    }
+    if (this.rateLimitedUntil === 0) return false;
+    if (Date.now() >= this.rateLimitedUntil) {
+      // clearRateLimitCooldown may adopt a longer cooldown written by another
+      // tab instead of clearing — re-check in-memory state after the call.
+      this.clearRateLimitCooldown();
+      if (this.rateLimitedUntil === 0) return false;
+    }
+    return true;
+  }
+
   /**
    * Sends events synchronously using `navigator.sendBeacon()`.
    *
@@ -236,7 +355,8 @@ export class SenderManager extends StateManager {
    *
    * **Return Values**:
    * - `true`: Send succeeded OR skipped (standalone mode)
-   * - `false`: Send failed (network error, browser rejected beacon)
+   * - `false`: Send failed (network error, browser rejected beacon) OR skipped
+   *   due to active rate-limit cooldown (events persisted for later recovery)
    *
    * **Important**: No retry mechanism. Failed events are persisted to localStorage for
    * recovery on next page load via `recoverPersistedEvents()`.
@@ -260,6 +380,34 @@ export class SenderManager extends StateManager {
   sendEventsQueueSync(body: EventsQueue): boolean {
     if (this.shouldSkipSend()) {
       return true;
+    }
+
+    // Honor the rate-limit cooldown persisted from a prior 429. sendBeacon
+    // fires fire-and-forget so we can't observe 429 on unload, but if we
+    // already know the server is rate-limiting this session, persist the
+    // batch instead of wasting a beacon and contributing to the ban.
+    // Preserve any existing `recoveryFailures` counter from the persisted
+    // batch so an unload-time overwrite can't reset progress toward
+    // MAX_RECOVERY_FAILURES for an unrelated earlier failure.
+    if (this.isRateLimited()) {
+      log(
+        'debug',
+        `Rate-limit cooldown active, skipping sync send${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+        {
+          data: {
+            cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
+            events: body.events.length,
+          },
+        },
+      );
+      const stableBody = this.ensureBatchMetadata(body);
+      const existing = this.getPersistedData();
+      const existingFailures =
+        typeof existing?.recoveryFailures === 'number' && Number.isFinite(existing.recoveryFailures)
+          ? existing.recoveryFailures
+          : 0;
+      this.persistEventsWithFailureCount(stableBody, existingFailures, true);
+      return false;
     }
 
     if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
@@ -444,6 +592,23 @@ export class SenderManager extends StateManager {
           `Discarding persisted events after ${recoveryFailures} failed recovery attempts${this.integrationId ? ` [${this.integrationId}]` : ''}`,
         );
         this.clearPersistedEvents();
+        callbacks?.onFailure?.();
+        return;
+      }
+
+      // Defer recovery while the rate-limit cooldown is active. The server is
+      // actively rejecting requests, so attempting a send would be wasted
+      // traffic AND — more importantly — would bump `recoveryFailures` toward
+      // MAX_RECOVERY_FAILURES purely because of rate limiting, eventually
+      // discarding events the user's network reloads could have saved.
+      if (this.isRateLimited()) {
+        log(
+          'debug',
+          `Rate-limit cooldown active, deferring recovery${this.integrationId ? ` [${this.integrationId}]` : ''}`,
+          {
+            data: { cooldownRemainingMs: this.rateLimitedUntil - Date.now() },
+          },
+        );
         callbacks?.onFailure?.();
         return;
       }
@@ -689,6 +854,24 @@ export class SenderManager extends StateManager {
       return true;
     }
 
+    // Rate-limit cooldown (mirrored to localStorage — shared across page
+    // navigations and tabs on the same origin).
+    // If a prior 429 response set a cooldown that has not yet elapsed, skip the
+    // fetch entirely — caller will persist events to localStorage so the next
+    // recovery attempt after cooldown succeeds. Returns `false` (same pattern
+    // as the circuit breaker below) instead of throwing, so recovery callers
+    // don't misclassify a deferred send as a hard failure and bump
+    // `recoveryFailures`.
+    if (this.isRateLimited()) {
+      log('debug', `Rate-limit cooldown active, skipping send${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
+        data: {
+          cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
+          events: requestBody.events.length,
+        },
+      });
+      return false;
+    }
+
     // Circuit breaker (Closed → Open → Half-Open):
     // After MAX_CONSECUTIVE_NETWORK_FAILURES consecutive fetch rejections (DNS,
     // connection refused), the circuit opens. After CIRCUIT_BREAKER_COOLDOWN_MS
@@ -749,15 +932,17 @@ export class SenderManager extends StateManager {
         }
 
         // Rate limit (429) — server is reachable but rejecting requests. Don't waste
-        // retries; let EventManager periodic backoff handle it. If the configured
-        // backend implements idempotency, it can deduplicate any later retry attempt.
+        // retries; persist a cooldown (also mirrored to localStorage) so subsequent
+        // page loads within the same tab respect the server's rate-limit window
+        // instead of hammering it on every navigation.
         if (error instanceof RateLimitError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
           allTimeouts = false;
           hadHttpResponse = true;
+          this.armRateLimitCooldown(Date.now() + RATE_LIMIT_COOLDOWN_MS);
           log('warn', `Rate limited, skipping retries${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
-            data: { events: body.events.length, attempt },
+            data: { events: body.events.length, attempt, cooldownMs: RATE_LIMIT_COOLDOWN_MS },
           });
           break;
         }
@@ -1178,7 +1363,16 @@ export class SenderManager extends StateManager {
    * @private
    */
   private persistEvents(body: EventsQueue): boolean {
-    return this.persistEventsWithFailureCount(body, 0);
+    // Preserve any existing `recoveryFailures` counter from the persisted batch
+    // so a fresh-batch overwrite can't reset progress toward MAX_RECOVERY_FAILURES.
+    // Without this, a broken URL can keep consuming the full 3-attempt budget on
+    // every new batch, delaying the circuit-breaker from ever giving up.
+    const existing = this.getPersistedData();
+    const existingFailures =
+      typeof existing?.recoveryFailures === 'number' && Number.isFinite(existing.recoveryFailures)
+        ? existing.recoveryFailures
+        : 0;
+    return this.persistEventsWithFailureCount(body, existingFailures);
   }
 
   /**

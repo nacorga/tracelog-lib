@@ -109,6 +109,7 @@ const RETRY_BACKOFF_JITTER_MS = 100;
 const MAX_SEND_INTERVAL_MS = 12e4;
 const MAX_CONSECUTIVE_NETWORK_FAILURES = 3;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 12e4;
+const RATE_LIMIT_COOLDOWN_MS = 6e4;
 const MAX_RECOVERY_FAILURES = 3;
 const MAX_CONSECUTIVE_SEND_FAILURES = 5;
 const VALIDATION_MESSAGES = {
@@ -150,6 +151,7 @@ const QA_MODE_URL_PARAM = "tlog_mode";
 const QA_MODE_ENABLE_VALUE = "qa";
 const QA_MODE_DISABLE_VALUE = "qa_off";
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
+const RATE_LIMIT_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:rate_limit` : `${STORAGE_BASE_KEY}:rate_limit`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
 const SESSION_COUNTS_KEY = (userId, sessionId) => `${STORAGE_BASE_KEY}:${userId}:session_counts:${sessionId}`;
@@ -502,7 +504,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.8.2";
+const version = "2.8.3";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1519,6 +1521,20 @@ class SenderManager extends StateManager {
   consecutiveNetworkFailures = 0;
   circuitOpenedAt = 0;
   /**
+   * Timestamp (epoch ms) before which `send()` must skip fetch() calls due to
+   * a prior 429 response. Mirrored to `localStorage` (keyed by userId) so the
+   * cooldown survives page navigations on traditional server-rendered sites
+   * and is discoverable by other tabs on the same origin.
+   */
+  rateLimitedUntil = 0;
+  /**
+   * Storage key used when the current in-memory cooldown was armed. Captured
+   * at arm time so `resetIdentity()` (which changes `userId` mid-cooldown)
+   * can't make persist/clear operations target the wrong key or leave the
+   * old user's cooldown orphaned in storage.
+   */
+  rateLimitStorageKeyAtArm = null;
+  /**
    * Creates a SenderManager instance.
    *
    * **Validation**: `integrationId` and `apiUrl` must both be provided or both be undefined.
@@ -1544,6 +1560,7 @@ class SenderManager extends StateManager {
     this.staticHeaders = staticHeaders;
     this.customHeadersProvider = customHeadersProvider;
     this.fetchCredentials = fetchCredentials;
+    this.rateLimitedUntil = this.loadRateLimitCooldown();
   }
   /**
    * Get the integration ID for this sender
@@ -1600,6 +1617,82 @@ class SenderManager extends StateManager {
     const baseKey = QUEUE_KEY(userId);
     return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
   }
+  getRateLimitStorageKey() {
+    const userId = this.get("userId") || "anonymous";
+    const baseKey = RATE_LIMIT_KEY(userId);
+    return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
+  }
+  /**
+   * Returns the storage key bound to the *current* in-memory cooldown. Falls
+   * back to the current-userId key when no cooldown is armed (first read) so
+   * discovery-from-storage paths can still resolve a key.
+   */
+  getActiveRateLimitKey() {
+    return this.rateLimitStorageKeyAtArm ?? this.getRateLimitStorageKey();
+  }
+  armRateLimitCooldown(until) {
+    this.rateLimitedUntil = until;
+    this.rateLimitStorageKeyAtArm = this.getRateLimitStorageKey();
+    this.persistRateLimitCooldown(until);
+  }
+  loadRateLimitCooldown() {
+    const key = this.getRateLimitStorageKey();
+    try {
+      const raw = this.storeManager.getItem(key);
+      if (!raw) return 0;
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value <= Date.now()) {
+        this.storeManager.removeItem(key);
+        return 0;
+      }
+      this.rateLimitStorageKeyAtArm = key;
+      return value;
+    } catch {
+      return 0;
+    }
+  }
+  persistRateLimitCooldown(until) {
+    const key = this.getActiveRateLimitKey();
+    try {
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const existing = Number(raw);
+        if (Number.isFinite(existing) && existing >= until) {
+          return;
+        }
+      }
+      this.storeManager.setItem(key, String(until));
+    } catch {
+    }
+  }
+  clearRateLimitCooldown() {
+    const key = this.getActiveRateLimitKey();
+    try {
+      const raw = this.storeManager.getItem(key);
+      if (raw) {
+        const stored = Number(raw);
+        if (Number.isFinite(stored) && stored > Date.now()) {
+          this.rateLimitedUntil = stored;
+          return;
+        }
+      }
+      this.storeManager.removeItem(key);
+    } catch {
+    }
+    this.rateLimitedUntil = 0;
+    this.rateLimitStorageKeyAtArm = null;
+  }
+  isRateLimited() {
+    if (this.rateLimitedUntil === 0) {
+      this.rateLimitedUntil = this.loadRateLimitCooldown();
+    }
+    if (this.rateLimitedUntil === 0) return false;
+    if (Date.now() >= this.rateLimitedUntil) {
+      this.clearRateLimitCooldown();
+      if (this.rateLimitedUntil === 0) return false;
+    }
+    return true;
+  }
   /**
    * Sends events synchronously using `navigator.sendBeacon()`.
    *
@@ -1618,7 +1711,8 @@ class SenderManager extends StateManager {
    *
    * **Return Values**:
    * - `true`: Send succeeded OR skipped (standalone mode)
-   * - `false`: Send failed (network error, browser rejected beacon)
+   * - `false`: Send failed (network error, browser rejected beacon) OR skipped
+   *   due to active rate-limit cooldown (events persisted for later recovery)
    *
    * **Important**: No retry mechanism. Failed events are persisted to localStorage for
    * recovery on next page load via `recoverPersistedEvents()`.
@@ -1642,6 +1736,23 @@ class SenderManager extends StateManager {
   sendEventsQueueSync(body) {
     if (this.shouldSkipSend()) {
       return true;
+    }
+    if (this.isRateLimited()) {
+      log(
+        "debug",
+        `Rate-limit cooldown active, skipping sync send${this.integrationId ? ` [${this.integrationId}]` : ""}`,
+        {
+          data: {
+            cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
+            events: body.events.length
+          }
+        }
+      );
+      const stableBody = this.ensureBatchMetadata(body);
+      const existing = this.getPersistedData();
+      const existingFailures = typeof existing?.recoveryFailures === "number" && Number.isFinite(existing.recoveryFailures) ? existing.recoveryFailures : 0;
+      this.persistEventsWithFailureCount(stableBody, existingFailures, true);
+      return false;
     }
     if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
       log(
@@ -1805,6 +1916,17 @@ class SenderManager extends StateManager {
           `Discarding persisted events after ${recoveryFailures} failed recovery attempts${this.integrationId ? ` [${this.integrationId}]` : ""}`
         );
         this.clearPersistedEvents();
+        callbacks?.onFailure?.();
+        return;
+      }
+      if (this.isRateLimited()) {
+        log(
+          "debug",
+          `Rate-limit cooldown active, deferring recovery${this.integrationId ? ` [${this.integrationId}]` : ""}`,
+          {
+            data: { cooldownRemainingMs: this.rateLimitedUntil - Date.now() }
+          }
+        );
         callbacks?.onFailure?.();
         return;
       }
@@ -2019,6 +2141,15 @@ class SenderManager extends StateManager {
       });
       return true;
     }
+    if (this.isRateLimited()) {
+      log("debug", `Rate-limit cooldown active, skipping send${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+        data: {
+          cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
+          events: requestBody.events.length
+        }
+      });
+      return false;
+    }
     if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
       const elapsed = Date.now() - this.circuitOpenedAt;
       if (elapsed < CIRCUIT_BREAKER_COOLDOWN_MS) {
@@ -2064,8 +2195,9 @@ class SenderManager extends StateManager {
           this.circuitOpenedAt = 0;
           allTimeouts = false;
           hadHttpResponse = true;
+          this.armRateLimitCooldown(Date.now() + RATE_LIMIT_COOLDOWN_MS);
           log("warn", `Rate limited, skipping retries${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-            data: { events: body.events.length, attempt }
+            data: { events: body.events.length, attempt, cooldownMs: RATE_LIMIT_COOLDOWN_MS }
           });
           break;
         }
@@ -2410,7 +2542,9 @@ class SenderManager extends StateManager {
    * @private
    */
   persistEvents(body) {
-    return this.persistEventsWithFailureCount(body, 0);
+    const existing = this.getPersistedData();
+    const existingFailures = typeof existing?.recoveryFailures === "number" && Number.isFinite(existing.recoveryFailures) ? existing.recoveryFailures : 0;
+    return this.persistEventsWithFailureCount(body, existingFailures);
   }
   /**
    * Persists failed events to localStorage, recording how many consecutive

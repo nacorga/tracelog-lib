@@ -822,8 +822,9 @@ TraceLog implements intelligent error handling with automatic retries for transi
 - **Persistence after exhaustion**: Events saved to localStorage for next-page recovery
 
 **Rate Limit** (429):
-- **No in-session retries** (deferred to EventManager periodic backoff)
-- **Events persisted immediately** to localStorage for next-cycle recovery
+- **No in-session retries** — arms a 60-second cooldown instead
+- **Cooldown is mirrored to localStorage** and shared across tabs/windows on the same origin (prevents every fresh page load from hammering the server's 429 window)
+- **Events persisted immediately** to localStorage; retried once the cooldown elapses
 - TraceLog SaaS deduplicates retries server-side; custom backends should implement idempotency
 
 **Permanent Errors** (4xx except 408, 429):
@@ -856,7 +857,7 @@ await tracelog.init({
 | **2xx** | Success | None | Cleared |
 | **4xx** (except 408, 429) | Permanent | ❌ None | ❌ Discarded |
 | **408** Request Timeout | Transient | ✅ Up to 2 | ✅ After exhaustion |
-| **429** Too Many Requests | Rate Limited | ❌ None | ✅ Immediate |
+| **429** Too Many Requests | Rate Limited (60s cooldown, shared across tabs) | ❌ None | ✅ Immediate |
 | **5xx** | Transient | ✅ Up to 2 | ✅ After exhaustion |
 | **Network Error** | Transient | ✅ Up to 2 | ✅ After exhaustion |
 | **Timeout** | Transient | ✅ Up to 2 | ✅ After exhaustion |

@@ -285,6 +285,22 @@ export const MAX_CONSECUTIVE_NETWORK_FAILURES = 3;
 export const CIRCUIT_BREAKER_COOLDOWN_MS = 120_000; // 2 minutes
 
 /**
+ * Cooldown period applied after receiving a 429 response from the ingestion API.
+ *
+ * During this window the sender skips fetch() calls (events are persisted to
+ * localStorage instead). Aligned with the server's session rate-limit window
+ * (1 minute) so the next attempt arrives after the server's counter resets.
+ *
+ * **Why persisted**: Traditional server-rendered sites fire a full page load
+ * on every navigation, and users frequently open multiple tabs on the same
+ * origin. The cooldown lives in `localStorage` so it survives navigations and
+ * is discoverable by any tab on the same origin — otherwise each fresh
+ * SenderManager starts with `consecutiveSendFailures = 0` and hammers the API
+ * through the 429 with no shared backoff memory.
+ */
+export const RATE_LIMIT_COOLDOWN_MS = 60_000; // 1 minute, matches server RATE_LIMIT_WINDOW_MS
+
+/**
  * Maximum number of cross-session recovery attempts for a persisted event batch.
  *
  * Each page load that attempts to recover a persisted batch and fails increments
