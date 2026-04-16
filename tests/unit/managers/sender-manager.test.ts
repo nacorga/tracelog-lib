@@ -2870,4 +2870,70 @@ describe('SenderManager - Rate-Limit Cooldown', () => {
     const persisted = JSON.parse(persistedRaw as string);
     expect(persisted.recoveryFailures).toBe(2);
   });
+
+  it('should pick up a cooldown armed by another tab after this instance was constructed', async () => {
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+
+    // Tab B constructs its sender BEFORE Tab A receives the 429
+    const tabB = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Tab A gets 429 → writes cooldown to shared storage
+    const tabA = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    await tabA.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'tabA', metadata: {} } })]),
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Tab B now tries to send — it must discover the cooldown via storage even though
+    // it has no in-memory state, otherwise it keeps hammering the API during cooldown.
+    await tabB.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'tabB', metadata: {} } })]),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1); // still 1 — Tab B short-circuited
+  });
+});
+
+describe('SenderManager - persistEvents (recoveryFailures preservation)', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should preserve recoveryFailures when a fresh batch overwrites a previously persisted batch', async () => {
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Seed storage with a batch carrying recoveryFailures = 2 (prior failed recoveries)
+    const seeded = createMockQueue([
+      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'seeded', metadata: {} } }),
+    ]);
+    (sender as any).persistEventsWithFailureCount(seeded, 2, true);
+
+    // Trigger a fresh persist via the public persistEvents helper (simulating a send failure)
+    const fresh = createMockQueue([
+      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'fresh', metadata: {} } }),
+    ]);
+    (sender as any).persistEvents(fresh);
+
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persisted = JSON.parse(storage.getItem(storageKey) as string);
+    expect(persisted.recoveryFailures).toBe(2); // counter preserved, not reset
+  });
 });

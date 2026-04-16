@@ -267,6 +267,13 @@ export class SenderManager extends StateManager {
   }
 
   private isRateLimited(): boolean {
+    // Pick up a cooldown written by another tab on the same origin: when this
+    // instance has no in-memory cooldown (initial state or just cleared), check
+    // storage so Tab B doesn't keep hammering the API for 60s after Tab A's 429.
+    // Once this instance has its own cooldown we skip the storage read.
+    if (this.rateLimitedUntil === 0) {
+      this.rateLimitedUntil = this.loadRateLimitCooldown();
+    }
     if (this.rateLimitedUntil === 0) return false;
     if (Date.now() >= this.rateLimitedUntil) {
       this.clearRateLimitCooldown();
@@ -1300,7 +1307,16 @@ export class SenderManager extends StateManager {
    * @private
    */
   private persistEvents(body: EventsQueue): boolean {
-    return this.persistEventsWithFailureCount(body, 0);
+    // Preserve any existing `recoveryFailures` counter from the persisted batch
+    // so a fresh-batch overwrite can't reset progress toward MAX_RECOVERY_FAILURES.
+    // Without this, a broken URL can keep consuming the full 3-attempt budget on
+    // every new batch, delaying the circuit-breaker from ever giving up.
+    const existing = this.getPersistedData();
+    const existingFailures =
+      typeof existing?.recoveryFailures === 'number' && Number.isFinite(existing.recoveryFailures)
+        ? existing.recoveryFailures
+        : 0;
+    return this.persistEventsWithFailureCount(body, existingFailures);
   }
 
   /**
