@@ -18,6 +18,31 @@
 
 
 
+
+## [2.8.4] - 2026-04-16
+
+### 🐛 Bug Fixes
+
+- Enhance rate-limit handling in SenderManager to support multi-tab cooldowns and improve persistence logic ([771ecc8](../../commit/771ecc811a0277d016332be75b6e36b0d5a3f4b9))
+- Enhance rate-limit handling in SenderManager to respect cooldowns across tabs and preserve recoveryFailures during event persistence ([82a3563](../../commit/82a3563af59dd655762aae22b7f5ef5fd114567d))
+- Implement rate-limit cooldown handling in SenderManager to respect server 429 responses ([b6d10f6](../../commit/b6d10f66fe25b24f3ed91e189eafca2747039546))
+
+### 🔧 Other Changes
+
+- Merge pull request #103 from nacorga/hotfix/20260416.1 ([1d1a9ef](../../commit/1d1a9ef93a4ae91607ca2fec440d08a97193cbb0))
+- Tracelog.js ([0b2b030](../../commit/0b2b0300d9488877c6ac0961cff0f0d8f713daf7))
+- Claude code skills ([137936c](../../commit/137936ce5e207801174cb31f898af744b4a9dff3))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.8.3...v2.8.4
+
+
 ## [2.8.3] - 2026-04-14
 
 ### 🐛 Bug Fixes
