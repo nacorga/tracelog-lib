@@ -2663,3 +2663,211 @@ describe('SenderManager - Recovery Failure Tracking', () => {
     expect(fetchPayload).not.toHaveProperty('timestamp');
   });
 });
+
+describe('SenderManager - Rate-Limit Cooldown', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('should skip fetch when rate-limit cooldown is active', async () => {
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    const event = createMockEvent(EventType.CUSTOM, { custom_event: { name: 'first', metadata: {} } });
+    const firstQueue = createMockQueue([event]);
+
+    // First send gets 429 → sets cooldown and persists
+    await sender.sendEventsQueue(firstQueue);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Second send within cooldown window should NOT hit the network
+    const secondQueue = createMockQueue([
+      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'second', metadata: {} } }),
+    ]);
+
+    await sender.sendEventsQueue(secondQueue);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1); // still 1 — cooldown short-circuited
+  });
+
+  it('should persist cooldown to storage so a fresh SenderManager respects it', async () => {
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const firstSender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    await firstSender.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Simulate a fresh page load: new SenderManager instance, same storage
+    const secondSender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    await secondSender.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'b', metadata: {} } })]),
+    );
+
+    // Fresh sender inherited the cooldown from storage → no new fetch
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should clear cooldown once the cooldown window has elapsed', async () => {
+    vi.useFakeTimers();
+    try {
+      const mockFetch = createMockFetch({ ok: false, status: 429 });
+      global.fetch = mockFetch;
+
+      const { StorageManager } = await import('../../../src/managers/storage.manager');
+      const { SenderManager } = await import('../../../src/managers/sender.manager');
+      const { RATE_LIMIT_COOLDOWN_MS } = await import('../../../src/constants');
+
+      setGlobalStateValue('userId', 'test-user-id');
+
+      const storage = new StorageManager();
+      const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+      await sender.sendEventsQueue(
+        createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
+      );
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      // Advance past the cooldown window
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_COOLDOWN_MS + 1);
+
+      // Server recovered — next attempt should succeed
+      global.fetch = createMockFetch({ ok: true, status: 200 });
+
+      await sender.sendEventsQueue(
+        createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'b', metadata: {} } })]),
+      );
+
+      expect((global.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should skip sync (sendBeacon) path during cooldown and persist instead', async () => {
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    await sender.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
+    );
+
+    const beaconSpy = vi.fn().mockReturnValue(true);
+    (global as any).navigator = { ...(global as any).navigator, sendBeacon: beaconSpy };
+
+    const result = sender.sendEventsQueueSync(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'b', metadata: {} } })]),
+    );
+
+    expect(result).toBe(false);
+    expect(beaconSpy).not.toHaveBeenCalled();
+  });
+
+  it('should defer recovery during cooldown without bumping recoveryFailures', async () => {
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const firstSender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // First send gets 429 → cooldown armed + batch persisted with recoveryFailures undefined (treated as 0)
+    await firstSender.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Fresh page loads repeatedly while cooldown is active; each triggers recovery.
+    // Without the cooldown check, three recoveries would bump recoveryFailures to 3
+    // (= MAX_RECOVERY_FAILURES) and the next load would discard the events.
+    for (let i = 0; i < 3; i++) {
+      const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+      await sender.recoverPersistedEvents();
+    }
+
+    // No extra fetches — cooldown short-circuited every recovery
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Persisted batch is still there with recoveryFailures absent/0 (not bumped)
+    const storageKey = (firstSender as any).getQueueStorageKey();
+    const persistedRaw = storage.getItem(storageKey);
+    expect(persistedRaw).not.toBeNull();
+    const persisted = JSON.parse(persistedRaw as string);
+    expect(persisted.recoveryFailures ?? 0).toBe(0);
+  });
+
+  it('should preserve existing recoveryFailures when sync-persisting during cooldown', async () => {
+    const mockFetch = createMockFetch({ ok: false, status: 429 });
+    global.fetch = mockFetch;
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+
+    // Seed a persisted batch with recoveryFailures = 2 (from a prior failed recovery)
+    const seededQueue = createMockQueue([
+      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'seeded', metadata: {} } }),
+    ]);
+    (sender as any).persistEventsWithFailureCount(seededQueue, 2, true);
+
+    // Arm the cooldown by sending a fresh batch that gets 429
+    await sender.sendEventsQueue(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'armer', metadata: {} } })]),
+    );
+
+    // Now an unload-time sync send should persist without clobbering the counter
+    (global as any).navigator = { ...(global as any).navigator, sendBeacon: vi.fn().mockReturnValue(true) };
+
+    sender.sendEventsQueueSync(
+      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'unload', metadata: {} } })]),
+    );
+
+    const storageKey = (sender as any).getQueueStorageKey();
+    const persistedRaw = storage.getItem(storageKey);
+    expect(persistedRaw).not.toBeNull();
+    const persisted = JSON.parse(persistedRaw as string);
+    expect(persisted.recoveryFailures).toBe(2);
+  });
+});

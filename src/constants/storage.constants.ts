@@ -46,6 +46,19 @@ export const QA_MODE_DISABLE_VALUE = 'qa_off';
 export const QUEUE_KEY = (id: string): string => (id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`);
 
 /**
+ * Generates storage key for per-sender rate-limit cooldown timestamp.
+ *
+ * Used to respect server 429 responses across page navigations within the
+ * same tab — without this, each page load resets the sender's in-memory
+ * backoff and continues hammering the API.
+ *
+ * @param id - User ID
+ * @returns localStorage key (e.g., 'tlog:user123:rate_limit')
+ */
+export const RATE_LIMIT_KEY = (id: string): string =>
+  id ? `${STORAGE_BASE_KEY}:${id}:rate_limit` : `${STORAGE_BASE_KEY}:rate_limit`;
+
+/**
  * Generates storage key for session data
  *
  * @param id - Project identifier
