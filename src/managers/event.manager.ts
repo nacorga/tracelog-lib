@@ -853,26 +853,13 @@ export class EventManager extends StateManager {
       return isSync ? true : Promise.resolve(true);
     }
 
-    // An async send is in-flight via fetch(). Two reasons we do NOT persist
-    // a recovery snapshot here:
-    //   1) The fetch body is already streaming over the wire — the server
-    //      most likely receives and persists the events even if the page
-    //      unloads before the response reaches us. Persisting the same
-    //      events for recovery would resurrect them on the next session
-    //      and re-submit them; the API would correctly reject every event
-    //      on the unique-id index, polluting ingestion telemetry with
-    //      `high_duplicate_rate` warnings on every page-unload race.
-    //   2) On async-send success, the SenderManager clears its localStorage
-    //      via clearPersistedEvents(); on async-send failure, it persists
-    //      the batch via persistEvents(). Either way the in-flight fetch
-    //      already owns the lifecycle of these events. A defensive write
-    //      here only adds the duplicate echo described in (1).
-    //
-    // Trade-off: if the page dies before the fetch streams the body to the
-    // network buffer, those events are lost. With HTTP/2 connection reuse
-    // and small payloads this window is small, and we prefer rare data
-    // loss over systematic duplicate-flagging of events the server has
-    // already accepted.
+    // The in-flight async fetch already owns these events: on success it clears
+    // its persisted snapshot, on failure it writes one. Persisting again here
+    // would resurrect the same events next session and the API would reject
+    // them on the unique-id index, flagging every page-unload race as a
+    // duplicate. Trade-off: if the page dies before the fetch flushes its body
+    // to the kernel send buffer, those events are lost — accepted as the rarer
+    // outcome versus systematic duplicate-flagging.
     if (isSync && this.sendInProgress) {
       log('debug', 'Sync flush skipped: async send already in-flight, trusting fetch to deliver', {
         data: { eventCount: eventIds.length },

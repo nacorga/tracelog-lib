@@ -980,7 +980,7 @@ describe('EventManager - Queue Flushing', () => {
 
     const senders = eventManager['dataSenders'];
     expect(senders.length).toBeGreaterThan(0);
-    const persistSpies = senders.map((sender) => vi.spyOn(sender, 'persistForRecovery'));
+    const persistSpies = senders.map((sender) => vi.spyOn(sender as any, 'persistEventsWithFailureCount'));
     const sendSyncSpies = senders.map((sender) => vi.spyOn(sender, 'sendEventsQueueSync'));
 
     eventManager['sendInProgress'] = true;

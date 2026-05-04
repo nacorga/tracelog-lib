@@ -827,96 +827,6 @@ describe('SenderManager - Event Persistence', () => {
   });
 });
 
-describe('SenderManager - persistForRecovery', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should persist events without sending', async () => {
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'recovery_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    sender.persistForRecovery(eventsQueue);
-
-    // Assert — persisted but no network call
-    expect(mockFetch).not.toHaveBeenCalled();
-    expect(persistSpy).toHaveBeenCalledTimes(1);
-    const body = persistSpy.mock.calls[0]?.[0] as { events?: Array<{ custom_event?: { name: string } }> };
-    expect(body.events).toHaveLength(1);
-    expect(body.events?.[0]?.custom_event?.name).toBe('recovery_event');
-  });
-
-  it('should persist with failureCount 0 and stable idempotency token', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    sender.persistForRecovery(eventsQueue);
-
-    // Assert — called with failureCount=0 and skipThrottle=true
-    expect(persistSpy).toHaveBeenCalledTimes(1);
-    expect(persistSpy).toHaveBeenCalledWith(expect.any(Object), 0, true);
-
-    // Verify idempotency token was generated
-    const body = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
-    expect(body._metadata?.idempotency_token).toBeDefined();
-  });
-
-  it('should skip persist when apiUrl is not set', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    // No integrationId + no apiUrl — shouldSkipSend() returns true
-    const sender = new SenderManager(storage);
-
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    sender.persistForRecovery(eventsQueue);
-
-    // Assert — should bail out via shouldSkipSend
-    expect(persistSpy).not.toHaveBeenCalled();
-  });
-});
-
 describe('SenderManager - Deterministic Idempotency Token', () => {
   beforeEach(() => {
     setupTestEnvironment();
@@ -935,25 +845,21 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
     const storage = new StorageManager();
     const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
 
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
-
     const events = [
       createMockEvent(EventType.CLICK, { id: 'evt_1' }),
       createMockEvent(EventType.CLICK, { id: 'evt_2' }),
       createMockEvent(EventType.CLICK, { id: 'evt_3' }),
     ];
 
-    // Two fresh bodies (no pre-existing _metadata.idempotency_token) with identical events
-    sender.persistForRecovery(createMockQueue(events));
-    sender.persistForRecovery(createMockQueue(events));
+    const first = (sender as any).ensureBatchMetadata(createMockQueue(events)) as {
+      _metadata?: { idempotency_token?: string };
+    };
+    const second = (sender as any).ensureBatchMetadata(createMockQueue(events)) as {
+      _metadata?: { idempotency_token?: string };
+    };
 
-    expect(persistSpy).toHaveBeenCalledTimes(2);
-
-    const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
-    const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
-
-    expect(firstBody._metadata?.idempotency_token).toBeDefined();
-    expect(firstBody._metadata?.idempotency_token).toBe(secondBody._metadata?.idempotency_token);
+    expect(first._metadata?.idempotency_token).toBeDefined();
+    expect(first._metadata?.idempotency_token).toBe(second._metadata?.idempotency_token);
   });
 
   it('should generate different tokens for different event sets', async () => {
@@ -965,17 +871,14 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
     const storage = new StorageManager();
     const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
 
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
+    const first = (sender as any).ensureBatchMetadata(
+      createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_a' })]),
+    ) as { _metadata?: { idempotency_token?: string } };
+    const second = (sender as any).ensureBatchMetadata(
+      createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_b' })]),
+    ) as { _metadata?: { idempotency_token?: string } };
 
-    sender.persistForRecovery(createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_a' })]));
-    sender.persistForRecovery(createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_b' })]));
-
-    expect(persistSpy).toHaveBeenCalledTimes(2);
-
-    const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
-    const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
-
-    expect(firstBody._metadata?.idempotency_token).not.toBe(secondBody._metadata?.idempotency_token);
+    expect(first._metadata?.idempotency_token).not.toBe(second._metadata?.idempotency_token);
   });
 
   it('should be order-independent (same events in different order produce same token)', async () => {
@@ -987,21 +890,18 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
     const storage = new StorageManager();
     const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
 
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
-
     const a = createMockEvent(EventType.CLICK, { id: 'evt_a' });
     const b = createMockEvent(EventType.CLICK, { id: 'evt_b' });
     const c = createMockEvent(EventType.CLICK, { id: 'evt_c' });
 
-    sender.persistForRecovery(createMockQueue([a, b, c]));
-    sender.persistForRecovery(createMockQueue([c, a, b]));
+    const first = (sender as any).ensureBatchMetadata(createMockQueue([a, b, c])) as {
+      _metadata?: { idempotency_token?: string };
+    };
+    const second = (sender as any).ensureBatchMetadata(createMockQueue([c, a, b])) as {
+      _metadata?: { idempotency_token?: string };
+    };
 
-    expect(persistSpy).toHaveBeenCalledTimes(2);
-
-    const firstBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
-    const secondBody = persistSpy.mock.calls[1]?.[0] as { _metadata?: { idempotency_token?: string } };
-
-    expect(firstBody._metadata?.idempotency_token).toBe(secondBody._metadata?.idempotency_token);
+    expect(first._metadata?.idempotency_token).toBe(second._metadata?.idempotency_token);
   });
 
   it('should preserve an existing idempotency token instead of recomputing', async () => {
@@ -1013,19 +913,16 @@ describe('SenderManager - Deterministic Idempotency Token', () => {
     const storage = new StorageManager();
     const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
 
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
-
     const events = [createMockEvent(EventType.CLICK, { id: 'evt_1' })];
     const bodyWithPreassignedToken = createMockQueue(events, {
       _metadata: { idempotency_token: 'legacy-token-from-storage' },
     });
 
-    sender.persistForRecovery(bodyWithPreassignedToken);
+    const result = (sender as any).ensureBatchMetadata(bodyWithPreassignedToken) as {
+      _metadata?: { idempotency_token?: string };
+    };
 
-    expect(persistSpy).toHaveBeenCalledTimes(1);
-
-    const persistedBody = persistSpy.mock.calls[0]?.[0] as { _metadata?: { idempotency_token?: string } };
-    expect(persistedBody._metadata?.idempotency_token).toBe('legacy-token-from-storage');
+    expect(result._metadata?.idempotency_token).toBe('legacy-token-from-storage');
   });
 });
 
