@@ -14,6 +14,7 @@ import {
   MAX_RECOVERY_FAILURES,
   CIRCUIT_BREAKER_COOLDOWN_MS,
   RATE_LIMIT_COOLDOWN_MS,
+  MAX_RESPONSE_CODE_LENGTH,
 } from '../constants';
 import {
   PersistedEventsQueue,
@@ -99,7 +100,7 @@ export class SenderManager extends StateManager {
   private readonly transformers: TransformerMap;
   private readonly staticHeaders: Record<string, string>;
   private customHeadersProvider?: CustomHeadersProvider;
-  private lastPermanentErrorLog: { statusCode?: number; timestamp: number } | null = null;
+  private lastPermanentErrorLog: { key: string; timestamp: number } | null = null;
   private recoveryInProgress = false;
   private lastMetadataTimestamp = 0;
   private readonly fetchCredentials: RequestCredentials;
@@ -435,22 +436,6 @@ export class SenderManager extends StateManager {
     }
 
     return this.sendQueueSyncInternal(body);
-  }
-
-  /**
-   * Persists events to localStorage for recovery without sending.
-   *
-   * Used when an async send is already in-flight to avoid sending the same
-   * events through two paths (fetch + sendBeacon) with different idempotency tokens.
-   * `ensureBatchMetadata()` assigns a stable token before persisting.
-   * On next page load, `recoverPersistedEvents()` sends with the persisted token.
-   *
-   * @param body - Event queue to persist
-   */
-  persistForRecovery(body: EventsQueue): void {
-    if (this.shouldSkipSend()) return;
-    const stableBody = this.ensureBatchMetadata(body);
-    this.persistEventsWithFailureCount(stableBody, 0, true);
   }
 
   /**
@@ -1078,7 +1063,11 @@ export class SenderManager extends StateManager {
           response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
 
         if (isPermanentError) {
-          throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+          const responseCode = await this.readTraceLogErrorCode(response);
+          const message = responseCode
+            ? `HTTP ${response.status}: ${response.statusText} (${responseCode})`
+            : `HTTP ${response.status}: ${response.statusText}`;
+          throw new PermanentError(message, response.status, responseCode);
         }
 
         if (response.status === 429) {
@@ -1101,6 +1090,30 @@ export class SenderManager extends StateManager {
       clearTimeout(timeoutId);
       this.pendingControllers.delete(controller);
     }
+  }
+
+  /**
+   * Best-effort extraction of an application `code` from a 4xx response body.
+   *
+   * Used purely for logging context (e.g. `PLAN_LIMIT_EXCEEDED`, `PROJECT_READ_ONLY`).
+   * Status alone already determines retry semantics, so this never affects the
+   * retry/persistence decision. Bounded to {@link MAX_RESPONSE_CODE_LENGTH} chars
+   * to keep noisy/untrusted payloads out of logs without coupling the lib to the
+   * API's evolving code catalogue.
+   *
+   * Only string `code` values are accepted — numeric or object codes are
+   * intentionally dropped to keep the log shape stable.
+   */
+  private async readTraceLogErrorCode(response: Response): Promise<string | undefined> {
+    try {
+      const body = (await response.clone().json()) as { code?: unknown };
+      if (typeof body.code === 'string' && body.code.length > 0 && body.code.length <= MAX_RESPONSE_CODE_LENGTH) {
+        return body.code;
+      }
+    } catch {
+      // Best-effort only. Status still determines permanence.
+    }
+    return undefined;
   }
 
   /**
@@ -1455,17 +1468,20 @@ export class SenderManager extends StateManager {
 
   private logPermanentError(context: string, error: PermanentError): void {
     const now = Date.now();
+    // Throttle on (statusCode, responseCode) so distinct API gates (e.g. two
+    // different 402 codes within the throttle window) each get one log line.
+    const key = `${error.statusCode ?? 'unknown'}:${error.responseCode ?? ''}`;
     const shouldLog =
       !this.lastPermanentErrorLog ||
-      this.lastPermanentErrorLog.statusCode !== error.statusCode ||
+      this.lastPermanentErrorLog.key !== key ||
       now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
 
     if (shouldLog) {
       log('error', `${context}${this.integrationId ? ` [${this.integrationId}]` : ''}`, {
-        data: { status: error.statusCode, message: error.message },
+        data: { status: error.statusCode, code: error.responseCode, message: error.message },
       });
 
-      this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
+      this.lastPermanentErrorLog = { key, timestamp: now };
     }
   }
 }
