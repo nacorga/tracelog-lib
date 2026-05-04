@@ -178,15 +178,17 @@ var EmitterEvent = /* @__PURE__ */ ((EmitterEvent2) => {
   return EmitterEvent2;
 })(EmitterEvent || {});
 class PermanentError extends Error {
-  constructor(message, statusCode) {
+  constructor(message, statusCode, responseCode) {
     super(message);
     this.statusCode = statusCode;
+    this.responseCode = responseCode;
     this.name = "PermanentError";
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, PermanentError);
     }
   }
   statusCode;
+  responseCode;
 }
 class RateLimitError extends Error {
   constructor(message) {
@@ -449,6 +451,16 @@ const ERROR_BURST_WINDOW_MS = 1e3;
 const ERROR_BURST_THRESHOLD = 10;
 const ERROR_BURST_BACKOFF_MS = 5e3;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
+const NON_RETRIABLE_TRACELOG_ERROR_CODES = /* @__PURE__ */ new Set([
+  "FREE_PROJECT_SELECTION_REQUIRED",
+  "PROJECT_READ_ONLY",
+  "PLAN_LIMIT_EXCEEDED",
+  "FEATURE_REQUIRES_UPGRADE",
+  "EVENT_QUOTA_EXHAUSTED",
+  "PROJECT_QUOTA_EXHAUSTED",
+  "COPILOT_QUOTA_EXHAUSTED",
+  "REPORT_QUOTA_EXHAUSTED"
+]);
 const WEB_VITALS_GOOD_THRESHOLDS = {
   LCP: 2500,
   // Good: ≤ 2.5s
@@ -504,7 +516,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.8.3";
+const version = "2.8.4";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -2298,7 +2310,9 @@ class SenderManager extends StateManager {
       if (!response.ok) {
         const isPermanentError = response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
         if (isPermanentError) {
-          throw new PermanentError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+          const responseCode = await this.readTraceLogErrorCode(response);
+          const message = responseCode ? `HTTP ${response.status}: ${response.statusText} (${responseCode})` : `HTTP ${response.status}: ${response.statusText}`;
+          throw new PermanentError(message, response.status, responseCode);
         }
         if (response.status === 429) {
           throw new RateLimitError(`HTTP 429: ${response.statusText}`);
@@ -2318,6 +2332,15 @@ class SenderManager extends StateManager {
       clearTimeout(timeoutId);
       this.pendingControllers.delete(controller);
     }
+  }
+  async readTraceLogErrorCode(response) {
+    try {
+      const body = await response.clone().json();
+      const code = body.code;
+      if (typeof code === "string" && NON_RETRIABLE_TRACELOG_ERROR_CODES.has(code)) return code;
+    } catch {
+    }
+    return void 0;
   }
   /**
    * Internal synchronous send logic using navigator.sendBeacon() for page unload scenarios.
@@ -2615,7 +2638,7 @@ class SenderManager extends StateManager {
     const shouldLog = !this.lastPermanentErrorLog || this.lastPermanentErrorLog.statusCode !== error.statusCode || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
     if (shouldLog) {
       log("error", `${context}${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        data: { status: error.statusCode, message: error.message }
+        data: { status: error.statusCode, code: error.responseCode, message: error.message }
       });
       this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
     }
@@ -3429,10 +3452,7 @@ class EventManager extends StateManager {
       return isSync ? true : Promise.resolve(true);
     }
     if (isSync && this.sendInProgress) {
-      for (const sender of this.dataSenders) {
-        sender.persistForRecovery(body);
-      }
-      log("debug", "Sync flush deferred: async send in progress, events persisted for recovery", {
+      log("debug", "Sync flush skipped: async send already in-flight, trusting fetch to deliver", {
         data: { eventCount: eventIds.length }
       });
       return true;

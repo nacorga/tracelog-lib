@@ -10,6 +10,7 @@ export class PermanentError extends Error {
   constructor(
     message: string,
     public readonly statusCode?: number,
+    public readonly responseCode?: string,
   ) {
     super(message);
     this.name = 'PermanentError';

@@ -828,21 +828,26 @@ describe('EventManager - Queue Flushing', () => {
     storageManager = new StorageManager();
     emitter = new Emitter();
 
-    // Setup state
+    // Seed singleton state BEFORE constructing the EventManager under test:
+    // its constructor reads `collectApiUrls` to instantiate SenderManager(s).
+    // If we set state on the same instance afterwards, dataSenders stays empty
+    // and tests fall through the standalone branch instead of hitting the
+    // sender-aware paths they assert on.
     const config = createMockConfig({
       integrations: {
         custom: { collectApiUrl: 'https://api.example.com' },
       },
     });
+    const seeder = new EventManager(storageManager, emitter, {});
+    seeder['set']('config', config);
+    seeder['set']('sessionId', 'test-session-id');
+    seeder['set']('userId', 'test-user-id');
+    seeder['set']('pageUrl', 'https://example.com/test');
+    seeder['set']('device', MOCK_DEVICE_INFO);
+    seeder['set']('collectApiUrls', { custom: 'https://api.example.com' });
+    seeder.stop();
 
     eventManager = new EventManager(storageManager, emitter, {});
-
-    eventManager['set']('config', config);
-    eventManager['set']('sessionId', 'test-session-id');
-    eventManager['set']('userId', 'test-user-id');
-    eventManager['set']('pageUrl', 'https://example.com/test');
-    eventManager['set']('device', MOCK_DEVICE_INFO);
-    eventManager['set']('collectApiUrls', { custom: 'https://api.example.com' });
 
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
   });
@@ -965,30 +970,36 @@ describe('EventManager - Queue Flushing', () => {
     expect(eventManager.getQueueLength()).toBeGreaterThan(0);
   });
 
-  it('should persist events for recovery on sync flush when sendInProgress is true (prevents duplicate idempotency tokens)', () => {
+  it('should skip sync flush entirely when sendInProgress is true (in-flight fetch owns delivery; avoids duplicate echo on next session)', () => {
     eventManager.track({
       type: EventType.CLICK,
       click_data: { x: 0, y: 0, relativeX: 0.5, relativeY: 0.5, tag: 'button' },
     });
+    const queueLengthBefore = eventManager.getQueueLength();
+    expect(queueLengthBefore).toBeGreaterThan(0);
 
-    // Spy on each SenderManager's persistForRecovery
     const senders = eventManager['dataSenders'];
+    expect(senders.length).toBeGreaterThan(0);
     const persistSpies = senders.map((sender) => vi.spyOn(sender, 'persistForRecovery'));
     const sendSyncSpies = senders.map((sender) => vi.spyOn(sender, 'sendEventsQueueSync'));
 
-    // Simulate a send already in progress
     eventManager['sendInProgress'] = true;
 
     const result = eventManager.flushImmediatelySync();
 
-    // Should persist for recovery, NOT send via sendBeacon
+    // No persistence write, no sendBeacon — just a no-op acknowledgement.
+    // The in-flight async fetch will resolve and either clear or persist
+    // these events itself (success → clearPersistedEvents, failure → persistEvents).
     expect(result).toBe(true);
     for (const spy of persistSpies) {
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).not.toHaveBeenCalled();
     }
     for (const spy of sendSyncSpies) {
       expect(spy).not.toHaveBeenCalled();
     }
+    // Queue is preserved so the in-flight fetch's success handler can clear it,
+    // and the next periodic tick can retry on its failure.
+    expect(eventManager.getQueueLength()).toBe(queueLengthBefore);
   });
 });
 

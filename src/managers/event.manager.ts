@@ -853,13 +853,28 @@ export class EventManager extends StateManager {
       return isSync ? true : Promise.resolve(true);
     }
 
-    // When async send is in-flight, persist events for recovery instead of
-    // double-sending via sendBeacon with a different idempotency token
+    // An async send is in-flight via fetch(). Two reasons we do NOT persist
+    // a recovery snapshot here:
+    //   1) The fetch body is already streaming over the wire — the server
+    //      most likely receives and persists the events even if the page
+    //      unloads before the response reaches us. Persisting the same
+    //      events for recovery would resurrect them on the next session
+    //      and re-submit them; the API would correctly reject every event
+    //      on the unique-id index, polluting ingestion telemetry with
+    //      `high_duplicate_rate` warnings on every page-unload race.
+    //   2) On async-send success, the SenderManager clears its localStorage
+    //      via clearPersistedEvents(); on async-send failure, it persists
+    //      the batch via persistEvents(). Either way the in-flight fetch
+    //      already owns the lifecycle of these events. A defensive write
+    //      here only adds the duplicate echo described in (1).
+    //
+    // Trade-off: if the page dies before the fetch streams the body to the
+    // network buffer, those events are lost. With HTTP/2 connection reuse
+    // and small payloads this window is small, and we prefer rare data
+    // loss over systematic duplicate-flagging of events the server has
+    // already accepted.
     if (isSync && this.sendInProgress) {
-      for (const sender of this.dataSenders) {
-        sender.persistForRecovery(body);
-      }
-      log('debug', 'Sync flush deferred: async send in progress, events persisted for recovery', {
+      log('debug', 'Sync flush skipped: async send already in-flight, trusting fetch to deliver', {
         data: { eventCount: eventIds.length },
       });
       return true;

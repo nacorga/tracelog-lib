@@ -600,6 +600,83 @@ describe('SenderManager - Retry Logic', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1); // No retries for 4xx
   });
 
+  it('should attach any application code from a 4xx body to the permanent error log without retrying', async () => {
+    // Use an arbitrary code that is NOT a TraceLog SaaS gate to prove we no
+    // longer rely on a hard-coded whitelist — any string `code` is accepted.
+    const clone = vi.fn().mockReturnValue({
+      json: vi.fn().mockResolvedValue({ code: 'BAD_TENANT_HEADER' }),
+    });
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      clone,
+      headers: new Headers(),
+    } as unknown as Response);
+    global.fetch = mockFetch;
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const eventsQueue = createMockQueue([createMockEvent(EventType.PAGE_VIEW)]);
+
+    const success = await sender.sendEventsQueue(eventsQueue);
+
+    expect(success).toBe(false);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(clone).toHaveBeenCalledTimes(1);
+
+    const loggedWithCode = consoleErrorSpy.mock.calls.some((call) => {
+      const payload = call[1] as { code?: string } | undefined;
+      return payload?.code === 'BAD_TENANT_HEADER';
+    });
+    expect(loggedWithCode).toBe(true);
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should ignore oversized response codes to keep logs clean', async () => {
+    const longCode = 'X'.repeat(200);
+    const clone = vi.fn().mockReturnValue({
+      json: vi.fn().mockResolvedValue({ code: longCode }),
+    });
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      clone,
+      headers: new Headers(),
+    } as unknown as Response);
+    global.fetch = mockFetch;
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { StorageManager } = await import('../../../src/managers/storage.manager');
+    const { SenderManager } = await import('../../../src/managers/sender.manager');
+
+    setGlobalStateValue('userId', 'test-user-id');
+
+    const storage = new StorageManager();
+    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const eventsQueue = createMockQueue([createMockEvent(EventType.PAGE_VIEW)]);
+
+    await sender.sendEventsQueue(eventsQueue);
+
+    const loggedWithLongCode = consoleErrorSpy.mock.calls.some((call) => {
+      const payload = call[1] as { code?: string } | undefined;
+      return payload?.code === longCode;
+    });
+    expect(loggedWithLongCode).toBe(false);
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('should use exponential backoff', async () => {
     // Arrange - Mock Math.random to eliminate jitter for deterministic timing
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);

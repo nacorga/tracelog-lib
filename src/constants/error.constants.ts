@@ -108,8 +108,15 @@ export const ERROR_BURST_BACKOFF_MS = 5000; // 5 seconds
 // ============================================================================
 
 /**
- * Time window for throttling permanent error logs in milliseconds
- * Same error status codes are logged at most once per this window
- * Prevents console spam when backend repeatedly returns 4xx errors
+ * Time window for throttling permanent error logs in milliseconds.
+ * Same (status, code) pairs are logged at most once per this window.
+ * Prevents console spam when backend repeatedly returns 4xx errors.
  */
 export const PERMANENT_ERROR_LOG_THROTTLE_MS = 60_000; // 1 minute
+
+/**
+ * Maximum length of the application `code` field accepted from a 4xx response body.
+ * Application codes are short identifiers (e.g. `PLAN_LIMIT_EXCEEDED`); anything
+ * longer is treated as untrusted noise and ignored to avoid log pollution.
+ */
+export const MAX_RESPONSE_CODE_LENGTH = 64;
