@@ -19,6 +19,38 @@
 
 
 
+
+## [2.8.5] - 2026-05-04
+
+### ✨ Features
+
+- Enhance error handling and logging in SenderManager and PermanentError classes ([e48c24a](../../commit/e48c24a3c256db43cc77fe443ccc6715193a1932))
+
+### 🐛 Bug Fixes
+
+- Update error handling in SenderManager to improve logging and response code extraction ([afeafd7](../../commit/afeafd758da95b9c4ad806754f18f48e634218fd))
+
+### ♻️ Refactoring
+
+- Streamline event persistence logic in SenderManager and update related tests ([b783125](../../commit/b7831257ed1ccdc120600e1ef7c400fc4f7fb16f))
+
+### 🔧 Other Changes
+
+- Merge pull request #104 from nacorga/hotfix/20260504.1 ([cb45afd](../../commit/cb45afd68995f5d958fec14a2d5a3a84dee53ac4))
+- Claude code config ([109f61c](../../commit/109f61c2c18c9f20b24e11be50312d8b23f06151))
+- Claude code skills ([cd6c311](../../commit/cd6c3114abbb7455818f0936a6632780d0076b1e))
+- Claude code skills ([c16a067](../../commit/c16a067993ced8d7652d5b063904e978af776214))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.8.4...v2.8.5
+
+
 ## [2.8.4] - 2026-04-16
 
 ### 🐛 Bug Fixes
