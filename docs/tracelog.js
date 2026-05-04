@@ -451,16 +451,7 @@ const ERROR_BURST_WINDOW_MS = 1e3;
 const ERROR_BURST_THRESHOLD = 10;
 const ERROR_BURST_BACKOFF_MS = 5e3;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
-const NON_RETRIABLE_TRACELOG_ERROR_CODES = /* @__PURE__ */ new Set([
-  "FREE_PROJECT_SELECTION_REQUIRED",
-  "PROJECT_READ_ONLY",
-  "PLAN_LIMIT_EXCEEDED",
-  "FEATURE_REQUIRES_UPGRADE",
-  "EVENT_QUOTA_EXHAUSTED",
-  "PROJECT_QUOTA_EXHAUSTED",
-  "COPILOT_QUOTA_EXHAUSTED",
-  "REPORT_QUOTA_EXHAUSTED"
-]);
+const MAX_RESPONSE_CODE_LENGTH = 64;
 const WEB_VITALS_GOOD_THRESHOLDS = {
   LCP: 2500,
   // Good: ≤ 2.5s
@@ -2333,11 +2324,21 @@ class SenderManager extends StateManager {
       this.pendingControllers.delete(controller);
     }
   }
+  /**
+   * Best-effort extraction of an application `code` from a 4xx response body.
+   *
+   * Used purely for logging context (e.g. `PLAN_LIMIT_EXCEEDED`, `PROJECT_READ_ONLY`).
+   * Status alone already determines retry semantics, so this never affects the
+   * retry/persistence decision. Bounded to {@link MAX_RESPONSE_CODE_LENGTH} chars
+   * to keep noisy/untrusted payloads out of logs without coupling the lib to the
+   * API's evolving code catalogue.
+   */
   async readTraceLogErrorCode(response) {
     try {
       const body = await response.clone().json();
-      const code = body.code;
-      if (typeof code === "string" && NON_RETRIABLE_TRACELOG_ERROR_CODES.has(code)) return code;
+      if (typeof body.code === "string" && body.code.length > 0 && body.code.length <= MAX_RESPONSE_CODE_LENGTH) {
+        return body.code;
+      }
     } catch {
     }
     return void 0;
@@ -2635,12 +2636,13 @@ class SenderManager extends StateManager {
   }
   logPermanentError(context, error) {
     const now = Date.now();
-    const shouldLog = !this.lastPermanentErrorLog || this.lastPermanentErrorLog.statusCode !== error.statusCode || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
+    const key = `${error.statusCode ?? "unknown"}:${error.responseCode ?? ""}`;
+    const shouldLog = !this.lastPermanentErrorLog || this.lastPermanentErrorLog.key !== key || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
     if (shouldLog) {
       log("error", `${context}${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
         data: { status: error.statusCode, code: error.responseCode, message: error.message }
       });
-      this.lastPermanentErrorLog = { statusCode: error.statusCode, timestamp: now };
+      this.lastPermanentErrorLog = { key, timestamp: now };
     }
   }
 }
