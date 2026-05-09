@@ -89,4 +89,10 @@ describe('sendBatch', () => {
       sendBatch({ projectId: 'proj-abc' }, BODY);
     }).not.toThrow();
   });
+
+  it('drops the request when projectId is empty (avoids 404 on `/p//collect`)', () => {
+    sendBatch({ projectId: '' }, BODY);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-import type { PixelEventBody, PixelSenderSettings } from './pixel-sender';
+import type { PixelEventBody } from './pixel-sender';
 
 const PIXEL_CLIENT_VERSION = 'shopify-web-pixel-1';
 
@@ -127,8 +127,12 @@ function buildMetadata(event: ShopifyEvent, name: ShopifyEventName): Record<stri
     setIfDefined(meta, 'currency', safeString(checkout?.currencyCode ?? checkout?.totalPrice?.currencyCode));
     const orderId = checkout?.order?.id;
     if (orderId !== undefined && orderId !== null) meta['orderId'] = String(orderId);
-    const items = mapLineItems(checkout?.lineItems);
-    if (items.length > 0) meta['items'] = items;
+    const rawItems = checkout?.lineItems ?? [];
+    const items = mapLineItems(rawItems);
+    if (items.length > 0) {
+      meta['items'] = items;
+      if (rawItems.length > MAX_LINE_ITEMS) meta['items_truncated'] = true;
+    }
   } else if (name === 'cart_viewed') {
     const cartTotal = cart?.cost?.totalAmount?.amount ?? cart?.totalAmount?.amount;
     setIfDefined(meta, 'cart_total', safeNumber(cartTotal));
@@ -156,6 +160,7 @@ function countLineItems(items: { quantity?: number }[] | undefined): number | un
     const q = safeNumber(item?.quantity);
     count += q ?? 0;
   }
+  // Fallback to row count when every line is missing a numeric quantity.
   return count > 0 ? count : items.length;
 }
 
@@ -196,7 +201,6 @@ function resolvePageUrl(event: ShopifyEvent): string {
 export function mapEventToBody(
   shopifyEvent: ShopifyEvent | null | undefined,
   shopifyEventName: ShopifyEventName,
-  _settings: PixelSenderSettings,
 ): PixelEventBody | null {
   if (!shopifyEvent) return null;
 

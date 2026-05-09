@@ -1,4 +1,4 @@
-import { mapEventToBody, SHOPIFY_EVENTS, type ShopifyEventName } from './event-mapper';
+import { mapEventToBody, type ShopifyEventName } from './event-mapper';
 import { sendBatch, type PixelSenderSettings } from './pixel-sender';
 
 interface ShopifyAnalyticsApi {
@@ -19,7 +19,7 @@ interface ShopifyPixelApi {
  */
 export function registerShopifyPixel(api: ShopifyPixelApi, settings: PixelSenderSettings): void {
   const handle = (eventName: ShopifyEventName, payload: unknown): void => {
-    const body = mapEventToBody(payload as Parameters<typeof mapEventToBody>[0], eventName, settings);
+    const body = mapEventToBody(payload as Parameters<typeof mapEventToBody>[0], eventName);
     if (!body) return;
     sendBatch(settings, body);
   };
@@ -46,6 +46,3 @@ export function registerShopifyPixel(api: ShopifyPixelApi, settings: PixelSender
     handle('checkout_completed', event);
   });
 }
-
-export { SHOPIFY_EVENTS };
-export type { ShopifyEventName, PixelSenderSettings };

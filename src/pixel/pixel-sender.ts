@@ -31,6 +31,11 @@ export interface PixelEventBody {
 }
 
 export function sendBatch(settings: PixelSenderSettings, body: PixelEventBody): void {
+  // Trust boundary is the Shopify extension settings form, but a misconfigured
+  // (empty) projectId would yield `https://ingest.tracelog.io/p//collect` and
+  // 404 every event. Drop silently so it can be diagnosed via Shopify pixel logs.
+  if (!settings.projectId) return;
+
   const url = `${INGEST_HOST}/p/${settings.projectId}/collect`;
   try {
     void fetch(url, {

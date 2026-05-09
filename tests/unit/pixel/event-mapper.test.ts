@@ -14,8 +14,6 @@
 import { describe, it, expect } from 'vitest';
 import { mapEventToBody } from '../../../src/pixel/event-mapper';
 
-const SETTINGS = { projectId: 'proj-test' };
-
 const SESSION_ATTR = { key: 'tracelog_session_id', value: 'sess-1', __typename: 'NoteAttribute' };
 const USER_ATTR = { key: 'tracelog_user_id', value: 'user-1', __typename: 'NoteAttribute' };
 
@@ -33,7 +31,6 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
         },
       },
       'checkout_started',
-      SETTINGS,
     );
 
     expect(body).not.toBeNull();
@@ -53,7 +50,6 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
         },
       },
       'cart_viewed',
-      SETTINGS,
     );
 
     expect(body).not.toBeNull();
@@ -77,7 +73,6 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
         },
       },
       'checkout_completed',
-      SETTINGS,
     );
 
     expect(body!.session_id).toBe('sess-2');
@@ -94,7 +89,6 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
         },
       },
       'checkout_started',
-      SETTINGS,
     );
 
     expect(body).toBeNull();
@@ -108,7 +102,6 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
         data: { checkout: { attributes: [SESSION_ATTR] } },
       },
       'checkout_started',
-      SETTINGS,
     );
 
     expect(body).toBeNull();
@@ -127,15 +120,14 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
         },
       },
       'checkout_started',
-      SETTINGS,
     );
 
     expect(body).toBeNull();
   });
 
   it('returns null on null/undefined event payload', () => {
-    expect(mapEventToBody(null, 'cart_viewed', SETTINGS)).toBeNull();
-    expect(mapEventToBody(undefined, 'cart_viewed', SETTINGS)).toBeNull();
+    expect(mapEventToBody(null, 'cart_viewed')).toBeNull();
+    expect(mapEventToBody(undefined, 'cart_viewed')).toBeNull();
   });
 });
 
@@ -148,7 +140,6 @@ describe('mapEventToBody — timestamp parsing', () => {
         data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'checkout_started',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.timestamp).toBe(Date.parse('2026-05-08T16:19:32.533Z'));
@@ -163,7 +154,6 @@ describe('mapEventToBody — timestamp parsing', () => {
         data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'checkout_started',
-      SETTINGS,
     )!;
     const after = Date.now();
 
@@ -180,7 +170,6 @@ describe('mapEventToBody — timestamp parsing', () => {
         data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'checkout_started',
-      SETTINGS,
     )!;
     const after = Date.now();
 
@@ -198,7 +187,6 @@ describe('mapEventToBody — event ID generation', () => {
         data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'checkout_started',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.id).toMatch(/-001-tail99$/);
@@ -212,7 +200,6 @@ describe('mapEventToBody — event ID generation', () => {
         data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'checkout_completed',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.id).toMatch(/-001-a31a7e$/);
@@ -225,7 +212,6 @@ describe('mapEventToBody — event ID generation', () => {
         data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'checkout_started',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.id).toMatch(/^\d+-001-[a-z0-9]+$/);
@@ -242,7 +228,6 @@ describe('mapEventToBody — stitching metadata', () => {
         data: { cart: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'cart_viewed',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.custom_event.metadata.shopify_client_id).toBe('f710986a-479a-4bf2-999e-9ca3e4e1026c');
@@ -261,7 +246,6 @@ describe('mapEventToBody — stitching metadata', () => {
         },
       },
       'checkout_started',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.custom_event.metadata.checkout_token).toBe('890690d206263a8f8a170cdc6f50caa2');
@@ -275,7 +259,6 @@ describe('mapEventToBody — stitching metadata', () => {
         data: { cart: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'cart_viewed',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.custom_event.metadata).not.toHaveProperty('checkout_token');
@@ -320,7 +303,6 @@ describe('mapEventToBody — per-event metadata', () => {
         },
       },
       'checkout_completed',
-      SETTINGS,
     )!;
 
     const metadata = body.events[0]!.custom_event.metadata;
@@ -357,11 +339,36 @@ describe('mapEventToBody — per-event metadata', () => {
         },
       },
       'checkout_completed',
-      SETTINGS,
     )!;
 
     const items = body.events[0]!.custom_event.metadata.items as unknown[];
     expect(items.length).toBe(100);
+    expect(body.events[0]!.custom_event.metadata.items_truncated).toBe(true);
+  });
+
+  it('checkout_completed: omits items_truncated when under cap', () => {
+    const lineItems = [
+      { title: 'Solo', quantity: 1, variant: { id: 'v-1', price: { amount: 10, currencyCode: 'USD' } } },
+    ];
+
+    const body = mapEventToBody(
+      {
+        id: 'evt-completed',
+        timestamp: '2026-05-08T16:21:37.519Z',
+        data: {
+          checkout: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            totalPrice: { amount: 10, currencyCode: 'USD' },
+            currencyCode: 'USD',
+            order: { id: 'ord-1' },
+            lineItems,
+          },
+        },
+      },
+      'checkout_completed',
+    )!;
+
+    expect(body.events[0]!.custom_event.metadata).not.toHaveProperty('items_truncated');
   });
 
   it('cart_viewed: emits cart_total + item_count', () => {
@@ -378,7 +385,6 @@ describe('mapEventToBody — per-event metadata', () => {
         },
       },
       'cart_viewed',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.custom_event.metadata.cart_total).toBe(49.99);
@@ -400,7 +406,6 @@ describe('mapEventToBody — per-event metadata', () => {
         },
       },
       'checkout_started',
-      SETTINGS,
     )!;
 
     const metadata = body.events[0]!.custom_event.metadata;
@@ -430,7 +435,6 @@ describe('mapEventToBody — body shape (EventsQueueDto contract)', () => {
         },
       },
       'checkout_started',
-      SETTINGS,
     )!;
 
     expect(body.user_id).toBe('user-1');
@@ -459,7 +463,6 @@ describe('mapEventToBody — body shape (EventsQueueDto contract)', () => {
         data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
       },
       'checkout_started',
-      SETTINGS,
     )!;
 
     expect(body.events[0]!.page_url).toBe('unknown');
@@ -487,7 +490,6 @@ describe('mapEventToBody — body shape (EventsQueueDto contract)', () => {
           },
         },
         eventName,
-        SETTINGS,
       )!;
 
       expect(body.events[0]!.custom_event.name).toBe(`shopify_${eventName}`);
