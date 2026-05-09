@@ -15,6 +15,11 @@
       "import": "./dist/public-api.js",
       "require": "./dist/public-api.cjs"
     },
+    "./pixel": {
+      "types": "./dist/pixel/index.d.ts",
+      "import": "./dist/pixel/index.js",
+      "require": "./dist/pixel/index.cjs"
+    },
     "./package.json": "./package.json"
   },
   "repository": {
@@ -32,7 +37,8 @@
     "build": "tsup",
     "build:browser": "NODE_ENV=production vite build",
     "build:browser:dev": "NODE_ENV=development vite build",
-    "build:all": "npm run build && npm run build:browser",
+    "build:pixel": "NODE_ENV=production vite build -c vite.pixel.config.mjs",
+    "build:all": "npm run build && npm run build:browser && npm run build:pixel",
     "type-check": "npx tsc --noEmit",
     "type-check:watch": "npx tsc --noEmit --watch",
     "lint": "npx eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
