@@ -164,17 +164,27 @@ function countLineItems(items: { quantity?: number }[] | undefined): number | un
   return count > 0 ? count : items.length;
 }
 
+// Caps merchant-controlled free-text to keep payloads under the API's per-string DTO limit.
+// IDs, tokens, and currency codes are naturally bounded by Shopify and skip capping.
+const MAX_TEXT_LEN = 255;
+const MAX_SKU_LEN = 128;
+
+function cap(value: string | undefined, max: number): string | undefined {
+  if (value === undefined) return undefined;
+  return value.length > max ? value.slice(0, max) : value;
+}
+
 function mapLineItems(items: ShopifyLineItem[] | undefined): Record<string, unknown>[] {
   if (!items || items.length === 0) return [];
   const capped = items.slice(0, MAX_LINE_ITEMS);
   return capped.map((item) => {
     const out: Record<string, unknown> = {};
     setIfDefined(out, 'id', safeString(item.variant?.id !== undefined ? String(item.variant.id) : undefined));
-    setIfDefined(out, 'title', safeString(item.title ?? item.variant?.product?.title));
+    setIfDefined(out, 'title', cap(safeString(item.title ?? item.variant?.product?.title), MAX_TEXT_LEN));
     setIfDefined(out, 'quantity', safeNumber(item.quantity));
     setIfDefined(out, 'price', safeNumber(item.variant?.price?.amount ?? item.finalLinePrice?.amount));
-    setIfDefined(out, 'sku', safeString(item.variant?.sku ?? undefined));
-    setIfDefined(out, 'vendor', safeString(item.variant?.product?.vendor));
+    setIfDefined(out, 'sku', cap(safeString(item.variant?.sku ?? undefined), MAX_SKU_LEN));
+    setIfDefined(out, 'vendor', cap(safeString(item.variant?.product?.vendor), MAX_TEXT_LEN));
     return out;
   });
 }
@@ -190,12 +200,23 @@ function resolveTimestamp(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
+function stripUrlParams(href: string): string {
+  // Pixel runs in the checkout sandbox where href can carry recovery tokens
+  // (`?recovery=...`, `?key=...`). Path alone identifies the funnel stage; drop
+  // query and hash to keep tokens out of telemetry. Mirrors the policy in
+  // `src/utils/network/url.utils.ts` (which is too heavy to import into the
+  // sub-5KB pixel bundle).
+  const queryIdx = href.indexOf('?');
+  const hashIdx = href.indexOf('#');
+  let cutoff = href.length;
+  if (queryIdx !== -1) cutoff = queryIdx;
+  if (hashIdx !== -1 && hashIdx < cutoff) cutoff = hashIdx;
+  return href.slice(0, cutoff);
+}
+
 function resolvePageUrl(event: ShopifyEvent): string {
-  return (
-    safeString(event.context?.window?.location?.href) ??
-    safeString(event.context?.document?.location?.href) ??
-    'unknown'
-  );
+  const href = safeString(event.context?.window?.location?.href) ?? safeString(event.context?.document?.location?.href);
+  return href ? stripUrlParams(href) : 'unknown';
 }
 
 export function mapEventToBody(

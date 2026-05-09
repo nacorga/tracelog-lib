@@ -9,7 +9,7 @@
  * - Failed map (no identity) → sendBatch NOT called
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { registerShopifyPixel } from '../../../src/pixel/shopify-pixel';
 
 describe('registerShopifyPixel', () => {
@@ -20,6 +20,11 @@ describe('registerShopifyPixel', () => {
     subscribeSpy = vi.fn();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true });
     global.fetch = fetchSpy;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (global as { fetch?: unknown }).fetch;
   });
 
   it('subscribes to all 7 standard Customer Events', () => {

@@ -37,6 +37,7 @@ describe('sendBatch', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete (global as { fetch?: unknown }).fetch;
   });
 
   it('posts to ingest.tracelog.io/p/<projectId>/collect', () => {
@@ -94,5 +95,12 @@ describe('sendBatch', () => {
     sendBatch({ projectId: '' }, BODY);
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('URL-encodes projectId so unsafe characters cannot break the path', () => {
+    sendBatch({ projectId: 'proj abc/foo?bar' }, BODY);
+
+    const url = fetchSpy.mock.calls[0]![0] as string;
+    expect(url).toBe('https://ingest.tracelog.io/p/proj%20abc%2Ffoo%3Fbar/collect');
   });
 });

@@ -36,7 +36,9 @@ export function sendBatch(settings: PixelSenderSettings, body: PixelEventBody): 
   // 404 every event. Drop silently so it can be diagnosed via Shopify pixel logs.
   if (!settings.projectId) return;
 
-  const url = `${INGEST_HOST}/p/${settings.projectId}/collect`;
+  // Encode in case the merchant pastes whitespace, slashes, or other unsafe
+  // characters into the Shopify extension settings form.
+  const url = `${INGEST_HOST}/p/${encodeURIComponent(settings.projectId)}/collect`;
   try {
     void fetch(url, {
       method: 'POST',

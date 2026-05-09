@@ -468,6 +468,77 @@ describe('mapEventToBody — body shape (EventsQueueDto contract)', () => {
     expect(body.events[0]!.page_url).toBe('unknown');
   });
 
+  it('strips query string from page_url (recovery tokens stay out of telemetry)', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
+        context: {
+          window: { location: { href: 'https://shop.example.com/checkouts/cn/abc?recovery=secret123&key=tok' } },
+        },
+      },
+      'checkout_started',
+    )!;
+
+    expect(body.events[0]!.page_url).toBe('https://shop.example.com/checkouts/cn/abc');
+  });
+
+  it('strips hash fragment from page_url', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
+        context: {
+          window: { location: { href: 'https://shop.example.com/checkouts/cn/abc#step=payment' } },
+        },
+      },
+      'checkout_started',
+    )!;
+
+    expect(body.events[0]!.page_url).toBe('https://shop.example.com/checkouts/cn/abc');
+  });
+
+  it('caps merchant-controlled item title/vendor/sku to keep payloads under DTO limits', () => {
+    const longTitle = 'T'.repeat(500);
+    const longVendor = 'V'.repeat(500);
+    const longSku = 'S'.repeat(300);
+
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        data: {
+          checkout: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            totalPrice: { amount: 10, currencyCode: 'USD' },
+            currencyCode: 'USD',
+            order: { id: 'ord-1' },
+            lineItems: [
+              {
+                title: longTitle,
+                quantity: 1,
+                variant: {
+                  id: 'v-1',
+                  sku: longSku,
+                  price: { amount: 10, currencyCode: 'USD' },
+                  product: { vendor: longVendor },
+                },
+              },
+            ],
+          },
+        },
+      },
+      'checkout_completed',
+    )!;
+
+    const item = (body.events[0]!.custom_event.metadata.items as Array<Record<string, unknown>>)[0]!;
+    expect((item.title as string).length).toBe(255);
+    expect((item.vendor as string).length).toBe(255);
+    expect((item.sku as string).length).toBe(128);
+  });
+
   it('uses event_name prefix `shopify_` for all 7 standard events', () => {
     const events = [
       'cart_viewed',
