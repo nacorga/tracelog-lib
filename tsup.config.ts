@@ -1,7 +1,10 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/public-api.ts'],
+  entry: {
+    'public-api': 'src/public-api.ts',
+    'pixel/index': 'src/pixel/index.ts',
+  },
   format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,

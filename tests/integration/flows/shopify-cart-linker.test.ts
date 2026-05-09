@@ -28,8 +28,12 @@ function getCartCalls(spy: ReturnType<typeof vi.fn>): Array<[string, { body: str
   return spy.mock.calls.filter((call: unknown[]) => call[0] === '/cart/update.js') as Array<[string, { body: string }]>;
 }
 
+function parseAttributes(call: [string, { body: string }]): Record<string, string> {
+  return (JSON.parse(call[1].body) as { attributes: Record<string, string> }).attributes;
+}
+
 function parseSessionId(call: [string, { body: string }]): string {
-  return (JSON.parse(call[1].body) as { attributes: { tracelog_session_id: string } }).attributes.tracelog_session_id;
+  return parseAttributes(call).tracelog_session_id!;
 }
 
 describe('Integration: Shopify Cart Linker', () => {
@@ -47,7 +51,7 @@ describe('Integration: Shopify Cart Linker', () => {
     cleanupTestEnvironment();
   });
 
-  it('should sync cart attribute on init with shopify enabled', async () => {
+  it('should sync cart attributes on init with shopify enabled (sessionId + userId)', async () => {
     await initTestBridge({
       integrations: {
         tracelog: { projectId: 'test-proj', shopify: true },
@@ -57,9 +61,11 @@ describe('Integration: Shopify Cart Linker', () => {
     const cartCalls = getCartCalls(fetchSpy);
     expect(cartCalls).toHaveLength(1);
 
-    const sessionId = parseSessionId(cartCalls[0]!);
-    expect(sessionId).toBeDefined();
-    expect(typeof sessionId).toBe('string');
+    const attributes = parseAttributes(cartCalls[0]!);
+    expect(attributes.tracelog_session_id).toBeDefined();
+    expect(typeof attributes.tracelog_session_id).toBe('string');
+    expect(attributes.tracelog_user_id).toBeDefined();
+    expect(typeof attributes.tracelog_user_id).toBe('string');
   });
 
   it('should not call /cart/update.js when shopify is not enabled', async () => {
