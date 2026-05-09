@@ -94,7 +94,7 @@ interface ShopifyEvent {
 function attrLookup(attrs: ShopifyAttribute[] | undefined, key: string): string | null {
   if (!Array.isArray(attrs)) return null;
   for (const a of attrs) {
-    if (a && a.key === key && typeof a.value === 'string' && a.value.length > 0) return a.value;
+    if (a.key === key && typeof a.value === 'string' && a.value.length > 0) return a.value;
   }
   return null;
 }
@@ -119,14 +119,14 @@ function buildMetadata(event: ShopifyEvent, name: ShopifyEventName): Record<stri
   setIfDefined(meta, 'shopify_client_id', safeString(event.clientId));
 
   const checkoutToken = safeString(checkout?.token);
-  if (checkoutToken) meta['checkout_token'] = checkoutToken;
+  if (checkoutToken !== undefined) meta['checkout_token'] = checkoutToken;
 
   if (name === 'checkout_completed') {
     const total = checkout?.totalPrice?.amount ?? checkout?.subtotalPrice?.amount;
     setIfDefined(meta, 'value', safeNumber(total));
     setIfDefined(meta, 'currency', safeString(checkout?.currencyCode ?? checkout?.totalPrice?.currencyCode));
     const orderId = checkout?.order?.id;
-    if (orderId !== undefined && orderId !== null) meta['orderId'] = String(orderId);
+    if (typeof orderId === 'string' || typeof orderId === 'number') meta['orderId'] = String(orderId);
     const rawItems = checkout?.lineItems ?? [];
     const items = mapLineItems(rawItems);
     if (items.length > 0) {
@@ -136,7 +136,7 @@ function buildMetadata(event: ShopifyEvent, name: ShopifyEventName): Record<stri
   } else if (name === 'cart_viewed') {
     const cartTotal = cart?.cost?.totalAmount?.amount ?? cart?.totalAmount?.amount;
     setIfDefined(meta, 'cart_total', safeNumber(cartTotal));
-    const itemCount = countLineItems(cart?.lines ?? cart?.lineItems);
+    const itemCount = countLineItems(cart?.lines) ?? countLineItems(cart?.lineItems);
     setIfDefined(meta, 'item_count', itemCount);
   } else if (name === 'checkout_started') {
     const total = checkout?.totalPrice?.amount ?? checkout?.subtotalPrice?.amount;
@@ -156,18 +156,45 @@ function buildMetadata(event: ShopifyEvent, name: ShopifyEventName): Record<stri
 function countLineItems(items: { quantity?: number }[] | undefined): number | undefined {
   if (!items || items.length === 0) return undefined;
   let count = 0;
+  let hasNumericQuantity = false;
   for (const item of items) {
-    const q = safeNumber(item?.quantity);
-    count += q ?? 0;
+    const q = safeNumber(item.quantity);
+    if (q !== undefined) {
+      hasNumericQuantity = true;
+      count += q;
+    }
   }
-  // Fallback to row count when every line is missing a numeric quantity.
-  return count > 0 ? count : items.length;
+  // Fallback to row count only when no line had a numeric quantity. An explicit
+  // sum of zero (e.g. `[{ quantity: 0 }]`) must be preserved, not replaced with
+  // `items.length`, otherwise empty carts over-report `item_count`.
+  return hasNumericQuantity ? count : items.length;
 }
 
 // Caps merchant-controlled free-text to keep payloads under the API's per-string DTO limit.
 // IDs, tokens, and currency codes are naturally bounded by Shopify and skip capping.
 const MAX_TEXT_LEN = 255;
 const MAX_SKU_LEN = 128;
+
+// Mirrors `src/constants/config.constants.ts` `XSS_PATTERNS`. Inlined because
+// the constants module pulls in unrelated dependencies that would blow the
+// pixel bundle's 5KB budget. Defense-in-depth: Shopify product titles/SKUs/
+// vendors are merchant-controlled; a compromised admin could inject HTML/JS
+// that lands in dashboards or logs.
+const XSS_PATTERNS: readonly RegExp[] = [
+  /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+  /javascript:/gi,
+  /on\w+\s*=/gi,
+  /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
+  /<embed\b[^>]*>/gi,
+  /<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi,
+];
+
+function sanitize(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  let out = value;
+  for (const pattern of XSS_PATTERNS) out = out.replace(pattern, '');
+  return out;
+}
 
 function cap(value: string | undefined, max: number): string | undefined {
   if (value === undefined) return undefined;
@@ -179,12 +206,15 @@ function mapLineItems(items: ShopifyLineItem[] | undefined): Record<string, unkn
   const capped = items.slice(0, MAX_LINE_ITEMS);
   return capped.map((item) => {
     const out: Record<string, unknown> = {};
-    setIfDefined(out, 'id', safeString(item.variant?.id !== undefined ? String(item.variant.id) : undefined));
-    setIfDefined(out, 'title', cap(safeString(item.title ?? item.variant?.product?.title), MAX_TEXT_LEN));
+    const variantId = item.variant?.id;
+    if (typeof variantId === 'string' || typeof variantId === 'number') {
+      out['id'] = String(variantId);
+    }
+    setIfDefined(out, 'title', cap(sanitize(safeString(item.title ?? item.variant?.product?.title)), MAX_TEXT_LEN));
     setIfDefined(out, 'quantity', safeNumber(item.quantity));
     setIfDefined(out, 'price', safeNumber(item.variant?.price?.amount ?? item.finalLinePrice?.amount));
-    setIfDefined(out, 'sku', cap(safeString(item.variant?.sku ?? undefined), MAX_SKU_LEN));
-    setIfDefined(out, 'vendor', cap(safeString(item.variant?.product?.vendor), MAX_TEXT_LEN));
+    setIfDefined(out, 'sku', cap(sanitize(safeString(item.variant?.sku ?? undefined)), MAX_SKU_LEN));
+    setIfDefined(out, 'vendor', cap(sanitize(safeString(item.variant?.product?.vendor)), MAX_TEXT_LEN));
     return out;
   });
 }
@@ -216,7 +246,7 @@ function stripUrlParams(href: string): string {
 
 function resolvePageUrl(event: ShopifyEvent): string {
   const href = safeString(event.context?.window?.location?.href) ?? safeString(event.context?.document?.location?.href);
-  return href ? stripUrlParams(href) : 'unknown';
+  return href !== undefined ? stripUrlParams(href) : 'unknown';
 }
 
 export function mapEventToBody(
@@ -231,7 +261,7 @@ export function mapEventToBody(
   const sessionId = attrLookup(checkoutAttrs, 'tracelog_session_id') ?? attrLookup(cartAttrs, 'tracelog_session_id');
   const userId = attrLookup(checkoutAttrs, 'tracelog_user_id') ?? attrLookup(cartAttrs, 'tracelog_user_id');
 
-  if (!sessionId || !userId) return null;
+  if (sessionId === null || userId === null) return null;
 
   const ts = resolveTimestamp(shopifyEvent.timestamp);
   const eventId = generateEventId(shopifyEvent, ts);

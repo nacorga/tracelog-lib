@@ -391,6 +391,63 @@ describe('mapEventToBody — per-event metadata', () => {
     expect(body.events[0]!.custom_event.metadata.item_count).toBe(3);
   });
 
+  it('cart_viewed: preserves explicit quantity:0 instead of falling back to row count', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-cart',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        data: {
+          cart: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            lines: [{ quantity: 0 }, { quantity: 0 }],
+          },
+        },
+      },
+      'cart_viewed',
+    )!;
+
+    // The original `count > 0 ? count : items.length` would have over-reported 2.
+    expect(body.events[0]!.custom_event.metadata.item_count).toBe(0);
+  });
+
+  it('cart_viewed: falls back to row count only when no line had a numeric quantity', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-cart',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        data: {
+          cart: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            lines: [{}, {}, {}],
+          },
+        },
+      },
+      'cart_viewed',
+    )!;
+
+    expect(body.events[0]!.custom_event.metadata.item_count).toBe(3);
+  });
+
+  it('cart_viewed: falls back to cart.lineItems when cart.lines is empty', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-cart',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        data: {
+          cart: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            totalAmount: { amount: 19.99, currencyCode: 'USD' },
+            lines: [],
+            lineItems: [{ quantity: 4 }],
+          },
+        },
+      },
+      'cart_viewed',
+    )!;
+
+    expect(body.events[0]!.custom_event.metadata.item_count).toBe(4);
+  });
+
   it('checkout_started: emits cart_total, currency, item_count', () => {
     const body = mapEventToBody(
       {
@@ -500,6 +557,47 @@ describe('mapEventToBody — body shape (EventsQueueDto contract)', () => {
     expect(body.events[0]!.page_url).toBe('https://shop.example.com/checkouts/cn/abc');
   });
 
+  it('strips XSS patterns from merchant-controlled title/vendor/sku before forwarding', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        data: {
+          checkout: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            totalPrice: { amount: 10, currencyCode: 'USD' },
+            currencyCode: 'USD',
+            order: { id: 'ord-1' },
+            lineItems: [
+              {
+                title: 'Snowboard<script>alert(1)</script>',
+                quantity: 1,
+                variant: {
+                  id: 'v-1',
+                  sku: 'sku-1<iframe src=evil></iframe>',
+                  price: { amount: 10, currencyCode: 'USD' },
+                  product: { vendor: 'Vendor onerror=alert(1)' },
+                },
+              },
+            ],
+          },
+        },
+      },
+      'checkout_completed',
+    )!;
+
+    const item = (body.events[0]!.custom_event.metadata.items as Array<Record<string, unknown>>)[0]!;
+    expect(item.title).toBe('Snowboard');
+    expect(item.sku).toBe('sku-1');
+    // `on\w+\s*=` strips event-handler attributes; the trailing payload remains
+    // but is harmless without the handler binding.
+    expect(item.vendor).toBe('Vendor alert(1)');
+    const serialized = JSON.stringify(item);
+    expect(serialized).not.toContain('<script');
+    expect(serialized).not.toContain('<iframe');
+    expect(serialized).not.toContain('onerror=');
+  });
+
   it('caps merchant-controlled item title/vendor/sku to keep payloads under DTO limits', () => {
     const longTitle = 'T'.repeat(500);
     const longVendor = 'V'.repeat(500);
@@ -537,6 +635,64 @@ describe('mapEventToBody — body shape (EventsQueueDto contract)', () => {
     expect((item.title as string).length).toBe(255);
     expect((item.vendor as string).length).toBe(255);
     expect((item.sku as string).length).toBe(128);
+  });
+
+  it('falls back to finalLinePrice.amount when variant.price.amount is missing', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:21:37.519Z',
+        data: {
+          checkout: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            totalPrice: { amount: 25, currencyCode: 'USD' },
+            currencyCode: 'USD',
+            order: { id: 'ord-1' },
+            lineItems: [
+              {
+                title: 'Bundled item',
+                quantity: 1,
+                variant: { id: 'v-bundle' },
+                finalLinePrice: { amount: 25, currencyCode: 'USD' },
+              },
+            ],
+          },
+        },
+      },
+      'checkout_completed',
+    )!;
+
+    const item = (body.events[0]!.custom_event.metadata.items as Array<Record<string, unknown>>)[0]!;
+    expect(item.price).toBe(25);
+  });
+
+  it('omits item.id when variant.id is null (defensive null-handling)', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:21:37.519Z',
+        data: {
+          checkout: {
+            attributes: [SESSION_ATTR, USER_ATTR],
+            totalPrice: { amount: 10, currencyCode: 'USD' },
+            currencyCode: 'USD',
+            order: { id: 'ord-1' },
+            lineItems: [
+              {
+                title: 'Item without variant id',
+                quantity: 1,
+                variant: { id: null as unknown as string, price: { amount: 10, currencyCode: 'USD' } },
+              },
+            ],
+          },
+        },
+      },
+      'checkout_completed',
+    )!;
+
+    const item = (body.events[0]!.custom_event.metadata.items as Array<Record<string, unknown>>)[0]!;
+    expect(item).not.toHaveProperty('id');
+    expect(item.title).toBe('Item without variant id');
   });
 
   it('uses event_name prefix `shopify_` for all 7 standard events', () => {
