@@ -2,9 +2,9 @@
  * EventManager - Session-Aware Queue Tests
  *
  * Verifies that each event freezes its `_session_id` at `track()` time, that
- * `buildBatches()` groups events by session_id and emits N batches when the
- * queue spans multiple sessions, and that the `_session_id` field never leaks
- * to the wire (backend uses `forbidNonWhitelisted: true`).
+ * `buildBatchesWithIds()` groups events by session_id and emits N batches when
+ * the queue spans multiple sessions, and that the `_session_id` field never
+ * leaks to the wire (backend uses `forbidNonWhitelisted: true`).
  *
  * Regression coverage for the production bug where session-timeout +
  * page-unload produced batches with `session_id: null` rejected by the backend.
@@ -18,6 +18,10 @@ import { StorageManager } from '../../../src/managers/storage.manager';
 import { EventType } from '../../../src/types';
 import type { EventsQueue, QueuedEvent } from '../../../src/types';
 import { Emitter } from '../../../src/utils';
+
+type Planned = Array<{ batch: EventsQueue; eventIds: string[] }>;
+
+const plannedBatches = (planned: Planned): EventsQueue[] => planned.map((p) => p.batch);
 
 describe('EventManager - Session-Aware Queue', () => {
   let eventManager: EventManager;
@@ -53,21 +57,21 @@ describe('EventManager - Session-Aware Queue', () => {
     expect((queue[0] as QueuedEvent)?._session_id).toBe('session-A');
   });
 
-  it('buildBatches() returns 1 batch when all events share one session_id', () => {
+  it('returns 1 batch when all events share one session_id', () => {
     eventManager['set']('sessionId', 'session-only');
 
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'a' } });
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'b' } });
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'c' } });
 
-    const batches: EventsQueue[] = eventManager['buildBatches']();
+    const batches = plannedBatches(eventManager['buildBatchesWithIds']());
 
     expect(batches).toHaveLength(1);
     expect(batches[0]?.session_id).toBe('session-only');
     expect(batches[0]?.events).toHaveLength(3);
   });
 
-  it('buildBatches() returns N batches in queued order when sessions span renewal', () => {
+  it('returns N batches in queued order when sessions span renewal', () => {
     eventManager['set']('sessionId', 'session-old');
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'old_a' } });
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'old_b' } });
@@ -78,13 +82,16 @@ describe('EventManager - Session-Aware Queue', () => {
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'new_a' } });
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'new_b' } });
 
-    const batches: EventsQueue[] = eventManager['buildBatches']();
+    const planned = eventManager['buildBatchesWithIds']();
+    const batches = plannedBatches(planned);
 
     expect(batches).toHaveLength(2);
     expect(batches[0]?.session_id).toBe('session-old');
     expect(batches[0]?.events).toHaveLength(3);
+    expect(planned[0]!.eventIds).toHaveLength(3);
     expect(batches[1]?.session_id).toBe('session-new');
     expect(batches[1]?.events).toHaveLength(2);
+    expect(planned[1]!.eventIds).toHaveLength(2);
   });
 
   it('emits batch with the original session_id when state.sessionId is null after renewal', () => {
@@ -97,7 +104,7 @@ describe('EventManager - Session-Aware Queue', () => {
     // session_id: null to the wire.
     eventManager['set']('sessionId', null);
 
-    const batches: EventsQueue[] = eventManager['buildBatches']();
+    const batches = plannedBatches(eventManager['buildBatchesWithIds']());
 
     expect(batches).toHaveLength(1);
     expect(batches[0]?.session_id).toBe('session-old');
@@ -108,7 +115,7 @@ describe('EventManager - Session-Aware Queue', () => {
     eventManager['set']('sessionId', 'session-strip');
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'strip_test' } });
 
-    const batches: EventsQueue[] = eventManager['buildBatches']();
+    const batches = plannedBatches(eventManager['buildBatchesWithIds']());
     expect(batches).toHaveLength(1);
     for (const event of batches[0]!.events) {
       expect(Object.keys(event)).not.toContain('_session_id');
@@ -132,10 +139,38 @@ describe('EventManager - Session-Aware Queue', () => {
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'a' } });
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'b' } });
 
-    const batches: EventsQueue[] = eventManager['buildBatches']();
+    const batches = plannedBatches(eventManager['buildBatchesWithIds']());
     const serialized = JSON.stringify(batches[0]);
 
     expect(serialized).not.toContain('_session_id');
     expect(serialized).toContain('"session_id":"session-serialize"');
+  });
+
+  it('self-heals by removing queue entries that lost their _session_id', () => {
+    // Defense-in-depth: an internal invariant violation (raw EventData pushed
+    // into the queue) should not block flush completion forever. The grouping
+    // pass drops corrupted entries from `eventsQueue` so the system stays
+    // flushable.
+    eventManager['set']('sessionId', 'session-heal');
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'valid' } });
+
+    // Push a corrupted entry directly into the private queue.
+    eventManager['eventsQueue'].push({
+      id: 'corrupted-1',
+      type: EventType.CUSTOM,
+      timestamp: Date.now(),
+      page_url: 'https://example.com/test',
+      custom_event: { name: 'corrupted' },
+    } as QueuedEvent);
+
+    expect(eventManager['eventsQueue']).toHaveLength(2);
+
+    const planned = eventManager['buildBatchesWithIds']();
+
+    // Only the valid event survives; the corrupted entry was dropped.
+    expect(planned).toHaveLength(1);
+    expect(planned[0]!.batch.events).toHaveLength(1);
+    expect(eventManager['eventsQueue']).toHaveLength(1);
+    expect(eventManager['eventsQueue'][0]?.id).not.toBe('corrupted-1');
   });
 });

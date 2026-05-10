@@ -318,13 +318,17 @@ export class ClickHandler extends StateManager {
     const x = event.clientX;
     const y = event.clientY;
 
-    // Reject synthetic / programmatic clicks: MouseEvent constructed without coords,
-    // element.click() calls, headless browser drivers — produce (0,0) or non-numeric
-    // values that the backend DTO (@IsNumber @IsNotEmpty) rejects, dropping the whole batch.
+    // Reject non-finite coordinates outright — never legitimate.
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
       return null;
     }
-    if (x === 0 && y === 0) {
+
+    // Reject (0, 0) only when the event was not user-generated. `element.click()`
+    // and `dispatchEvent(new MouseEvent(...))` both produce `isTrusted === false`
+    // and default coords to (0, 0). A real user clicking the top-left pixel
+    // produces `isTrusted === true`, so this preserves legitimate corner clicks
+    // while filtering programmatic noise.
+    if (x === 0 && y === 0 && !event.isTrusted) {
       return null;
     }
 

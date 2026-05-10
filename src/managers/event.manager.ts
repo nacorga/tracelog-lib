@@ -836,19 +836,61 @@ export class EventManager extends StateManager {
   }
 
   /**
+   * Groups the queue by frozen `_session_id`, preserving insertion order.
+   * Single pass — `buildBatchesWithIds()` builds one batch + one eventIds list
+   * per group, so the grouping cost is O(N) per flush regardless of session
+   * count.
+   *
+   * **Self-heal**: any entry missing `_session_id` (an internal invariant
+   * violation — `buildEventPayload` always stamps it) is removed from the
+   * queue rather than left behind, otherwise a single corrupted entry would
+   * keep `eventsQueue.length > 0` forever and re-trigger periodic sends.
+   */
+  private groupQueuedEventsBySession(): Map<string, QueuedEvent[]> {
+    const groups = new Map<string, QueuedEvent[]>();
+    const corruptedIds: string[] = [];
+    for (const event of this.eventsQueue) {
+      if (!event._session_id) {
+        // Logged at `debug` because no integrating-developer action can fix
+        // it — it's a TraceLog bug. The entry is dropped from the queue
+        // below to keep the system flushable.
+        log('debug', 'Queued event missing _session_id, dropping', {
+          data: { eventId: event.id, type: event.type },
+        });
+        corruptedIds.push(event.id);
+        continue;
+      }
+      const group = groups.get(event._session_id);
+      if (group) {
+        group.push(event);
+      } else {
+        groups.set(event._session_id, [event]);
+      }
+    }
+    if (corruptedIds.length > 0) {
+      this.removeProcessedEvents(corruptedIds);
+    }
+    return groups;
+  }
+
+  /**
    * Builds a parallel list of `(batch, eventIds)` for sending. The eventIds are
    * the original `_session_id`-tagged event IDs in the queue that map to this
    * batch — used for optimistic removal. We can't read them off the wrapper's
    * `events[]` because dedup may have removed some signatures.
    */
   private buildBatchesWithIds(): Array<{ batch: EventsQueue; eventIds: string[] }> {
-    const batches = this.buildBatches();
-    if (batches.length === 0) return [];
+    const groups = this.groupQueuedEventsBySession();
+    if (groups.size === 0) return [];
 
-    return batches.map((batch) => {
-      const eventIds = this.eventsQueue.filter((e) => e._session_id === batch.session_id).map((e) => e.id);
-      return { batch, eventIds };
-    });
+    const result: Array<{ batch: EventsQueue; eventIds: string[] }> = [];
+    for (const [sessionId, groupEvents] of groups) {
+      result.push({
+        batch: this.buildBatchFromGroup(sessionId, groupEvents),
+        eventIds: groupEvents.map((e) => e.id),
+      });
+    }
+    return result;
   }
 
   private flushEvents(isSync: boolean): boolean | Promise<boolean> {
@@ -894,23 +936,22 @@ export class EventManager extends StateManager {
     }
 
     if (isSync) {
-      let anySucceededOverall = false;
-      for (const { batch, eventIds } of planned) {
-        const succeeded = this.sendBatchSync(batch, eventIds);
-        if (succeeded) anySucceededOverall = true;
-      }
+      // sendBeacon path — already non-blocking at the browser level.
+      const results = planned.map(({ batch, eventIds }) => this.sendBatchSync(batch, eventIds));
       this.clearSendTimeout();
-      return anySucceededOverall;
+      return results.some(Boolean);
     }
 
     return (async (): Promise<boolean> => {
-      let anySucceededOverall = false;
-      for (const { batch, eventIds } of planned) {
-        const succeeded = await this.sendBatchAsync(batch, eventIds);
-        if (succeeded) anySucceededOverall = true;
-      }
+      // Multi-session is rare; when it happens we send all batches in parallel.
+      // Per-batch optimistic removal + per-integration persistence are
+      // independent, so concurrent completion is race-safe (single-threaded JS,
+      // disjoint event-id sets).
+      const results = await Promise.all(
+        planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds)),
+      );
       this.clearSendTimeout();
-      return anySucceededOverall;
+      return results.some(Boolean);
     })();
   }
 
@@ -990,11 +1031,10 @@ export class EventManager extends StateManager {
         return;
       }
 
-      let anySucceededOverall = false;
-      for (const { batch, eventIds } of planned) {
-        const succeeded = await this.sendBatchAsync(batch, eventIds);
-        if (succeeded) anySucceededOverall = true;
-      }
+      const results = await Promise.all(
+        planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds)),
+      );
+      const anySucceededOverall = results.some(Boolean);
 
       if (anySucceededOverall) {
         this.consecutiveSendFailures = 0;
@@ -1013,111 +1053,86 @@ export class EventManager extends StateManager {
   }
 
   /**
-   * Builds one or more batch payloads from the current event queue.
+   * Builds a single batch from a per-session group: dedup by signature,
+   * SESSION_START first, then timestamp order, strip `_session_id`, apply
+   * `beforeBatch` transformer when running standalone.
    *
-   * **Why N batches**: events freeze their `_session_id` at `track()` time. If the
-   * session was renewed (idle timeout) between two `track()` calls, the queue
-   * contains events from multiple sessions. We emit one batch per session so the
-   * backend's `EventsQueueDto.session_id` remains the single source of truth and
-   * stays consistent with the events it carries.
-   *
-   * **Order**: groups are returned in the order their first event was queued
-   * (oldest session first). Inside each group, dedup + SESSION_START priority +
-   * timestamp ordering apply, identical to the previous single-batch logic.
+   * **Why N batches per flush**: events freeze their `_session_id` at `track()`
+   * time. If the session was renewed (idle timeout) between two `track()`
+   * calls, the queue contains events from multiple sessions. `buildBatchesWithIds()`
+   * emits one batch per session so the backend's `EventsQueueDto.session_id`
+   * remains the single source of truth and stays consistent with the events it
+   * carries.
    *
    * **Strip**: `_session_id` is removed from each event in the wrapper's
    * `events[]` because the backend uses `forbidNonWhitelisted: true` and would
    * reject the batch if the field leaked through.
+   *
+   * **Transformer note**: `beforeBatch` is invoked **once per session-batch**,
+   * not once per flush. A queue spanning N sessions triggers N invocations.
    */
-  private buildBatches(): EventsQueue[] {
-    if (this.eventsQueue.length === 0) {
-      return [];
+  private buildBatchFromGroup(sessionId: string, groupEvents: QueuedEvent[]): EventsQueue {
+    const eventMap = new Map<string, QueuedEvent>();
+    const order: string[] = [];
+    for (const event of groupEvents) {
+      const signature = this.createEventSignature(event);
+      if (!eventMap.has(signature)) {
+        order.push(signature);
+      }
+      eventMap.set(signature, event);
     }
 
-    // Group events by their frozen session_id, preserving insertion order.
-    const groups = new Map<string, QueuedEvent[]>();
-    for (const event of this.eventsQueue) {
-      if (!event._session_id) {
-        log('warn', 'Queued event missing _session_id, dropping', {
-          data: { eventId: event.id, type: event.type },
-        });
-        continue;
-      }
-      const group = groups.get(event._session_id);
-      if (group) {
-        group.push(event);
-      } else {
-        groups.set(event._session_id, [event]);
-      }
-    }
+    const events: EventData[] = order
+      .map((signature) => eventMap.get(signature))
+      .filter((event): event is QueuedEvent => Boolean(event))
+      .sort((a, b) => {
+        if (a.type === EventType.SESSION_START && b.type !== EventType.SESSION_START) return -1;
+        if (b.type === EventType.SESSION_START && a.type !== EventType.SESSION_START) return 1;
+        return a.timestamp - b.timestamp;
+      })
+      .map(({ _session_id, ...rest }) => {
+        void _session_id;
+        return rest;
+      });
 
-    const userId = this.get('userId');
-    const device = this.get('device');
     const globalMetadata = this.get('config')?.globalMetadata;
     const identity = this.get('identity');
+
+    let queue: EventsQueue = {
+      user_id: this.get('userId'),
+      session_id: sessionId,
+      device: this.get('device'),
+      events,
+      ...(globalMetadata && { global_metadata: globalMetadata }),
+      ...(identity && { identify: identity }),
+    };
+
     const collectApiUrls = this.get('collectApiUrls');
     const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
     const beforeBatchTransformer = this.transformers.beforeBatch;
 
-    const batches: EventsQueue[] = [];
-
-    for (const [sessionId, groupEvents] of groups) {
-      // Dedup within the group via signature, preserving first-seen order.
-      const eventMap = new Map<string, QueuedEvent>();
-      const order: string[] = [];
-      for (const event of groupEvents) {
-        const signature = this.createEventSignature(event);
-        if (!eventMap.has(signature)) {
-          order.push(signature);
-        }
-        eventMap.set(signature, event);
+    if (!hasAnyBackend && beforeBatchTransformer) {
+      const transformed = transformBatch(queue, beforeBatchTransformer, 'EventManager');
+      if (transformed !== null) {
+        queue = transformed;
       }
-
-      const events: EventData[] = order
-        .map((signature) => eventMap.get(signature))
-        .filter((event): event is QueuedEvent => Boolean(event))
-        .sort((a, b) => {
-          if (a.type === EventType.SESSION_START && b.type !== EventType.SESSION_START) return -1;
-          if (b.type === EventType.SESSION_START && a.type !== EventType.SESSION_START) return 1;
-          return a.timestamp - b.timestamp;
-        })
-        .map(({ _session_id, ...rest }) => {
-          void _session_id;
-          return rest;
-        });
-
-      let queue: EventsQueue = {
-        user_id: userId,
-        session_id: sessionId,
-        device,
-        events,
-        ...(globalMetadata && { global_metadata: globalMetadata }),
-        ...(identity && { identify: identity }),
-      };
-
-      if (!hasAnyBackend && beforeBatchTransformer) {
-        const transformed = transformBatch(queue, beforeBatchTransformer, 'EventManager');
-        if (transformed !== null) {
-          queue = transformed;
-        }
-      }
-
-      batches.push(queue);
     }
 
-    return batches;
+    return queue;
   }
 
   private buildEventPayload(data: Partial<EventData>): QueuedEvent | null {
-    // Freeze the session ID at track() time. This is the single source of truth
-    // for batch attribution — buildBatches() groups by `_session_id`, so the
-    // event survives session renewal (idle timeout) without orphaning. Caller
-    // (`track()`) already routed events without a sessionId to pendingEventsBuffer,
-    // so reaching this point with no sessionId is an internal bug — log and bail.
+    // Freeze the session ID at track() time. This is the single source of
+    // truth for batch attribution — `groupQueuedEventsBySession()` groups by
+    // `_session_id`, so the event survives session renewal (idle timeout)
+    // without orphaning. Caller (`track()`) already routed events without a
+    // sessionId to `pendingEventsBuffer`, so reaching this point with no
+    // sessionId is an internal bug — log critical and bail.
     const currentSessionId = this.get('sessionId');
     if (!currentSessionId) {
       log('error', 'buildEventPayload reached without sessionId — event dropped', {
         data: { type: data.type },
+        visibility: 'critical',
       });
       return null;
     }

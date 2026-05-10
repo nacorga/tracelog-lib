@@ -2,9 +2,10 @@
  * ClickHandler - Synthetic Click Tests
  *
  * Verifies that clicks with invalid coordinates (programmatic clicks, headless
- * browser drivers, malformed MouseEvents) are NOT emitted as CLICK events,
- * because the backend DTO (@IsNumber @IsNotEmpty for click_data.{x,y,...}) would
- * reject the entire batch.
+ * browser drivers, malformed MouseEvents) are NOT emitted as CLICK events.
+ * `element.click()` and MouseEvents constructed without `clientX/Y` default to
+ * (0, 0); real users do not click the viewport's top-left pixel, so the
+ * heuristic is safe and avoids polluting analytics with bogus coordinates.
  *
  * CUSTOM events from `data-tlog-name` must still fire — they don't depend on
  * coordinates and are legitimate even when triggered programmatically.
@@ -106,6 +107,26 @@ describe('ClickHandler - Synthetic clicks', () => {
 
     const clickCalls = trackSpy.mock.calls.filter((call) => (call[0] as EventData).type === EventType.CLICK);
     expect(clickCalls).toHaveLength(0);
+
+    document.body.removeChild(button);
+  });
+
+  it('accepts (0, 0) coordinates when the event is user-generated (isTrusted)', () => {
+    // Real users clicking the very top-left pixel produce isTrusted === true.
+    // The (0, 0) heuristic is gated on !isTrusted so legitimate corner clicks
+    // are preserved. jsdom does not allow overriding isTrusted on a dispatched
+    // MouseEvent, so we exercise `calculateClickCoordinates` directly.
+    const button = createMockElement('button', {}, 'Corner click');
+    document.body.appendChild(button);
+
+    const trustedEvent = { clientX: 0, clientY: 0, isTrusted: true } as MouseEvent;
+    const coords = handler['calculateClickCoordinates'](trustedEvent, button);
+    expect(coords).not.toBeNull();
+    expect(coords?.x).toBe(0);
+    expect(coords?.y).toBe(0);
+
+    const syntheticEvent = { clientX: 0, clientY: 0, isTrusted: false } as MouseEvent;
+    expect(handler['calculateClickCoordinates'](syntheticEvent, button)).toBeNull();
 
     document.body.removeChild(button);
   });

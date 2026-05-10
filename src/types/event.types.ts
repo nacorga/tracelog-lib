@@ -294,8 +294,9 @@ export interface EventData {
  * Internal queue entry: an `EventData` enriched with the session ID frozen at
  * `track()` time. Survives session renewal — when the user is idle past the
  * timeout, `state.sessionId` is nulled but events already in the queue keep
- * their original `_session_id`, so `buildBatches()` can still attribute them
- * correctly instead of emitting `session_id: null` to the wire.
+ * their original `_session_id`, so `EventManager.buildBatchesWithIds()` can
+ * still attribute them correctly instead of emitting `session_id: null` to the
+ * wire.
  *
  * **Internal only.** The leading underscore mirrors `EventsQueue._metadata` —
  * this field is stripped from `events[]` at batch construction time, since the

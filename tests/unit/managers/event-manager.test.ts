@@ -2161,9 +2161,9 @@ describe('EventManager - beforeBatch Transformer', () => {
     // Batch transformer should be called
     expect(beforeBatchTransformer).toHaveBeenCalled();
 
-    // In standalone mode, queue event is still emitted even if transformer returns null
-    // The null check happens in buildEventsPayload, which returns the original if null
-    // So the queue event IS emitted
+    // In standalone mode, queue event is still emitted even if transformer returns null.
+    // The null check happens in `buildBatchFromGroup`, which keeps the original batch
+    // when the transformer returns null, so the queue event IS emitted.
     expect(queueCallback).toHaveBeenCalled();
 
     eventManager.stop();
