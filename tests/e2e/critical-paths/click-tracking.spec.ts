@@ -44,7 +44,7 @@ test.describe('E2E: Click Tracking', () => {
         // Click CTA button
         const button = document.querySelector('[data-testid="cta-ver-productos"]') as HTMLElement;
         if (button) {
-          button.click();
+          button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
         }
 
         // Wait for event processing
@@ -80,7 +80,7 @@ test.describe('E2E: Click Tracking', () => {
         // Click cart button (has id, class, and testid)
         const button = document.querySelector('[data-testid="cart-button"]') as HTMLElement;
         if (button) {
-          button.click();
+          button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
         }
 
         await new Promise((resolve) => setTimeout(resolve, 200));
@@ -116,7 +116,7 @@ test.describe('E2E: Click Tracking', () => {
         // Click button with text content
         const button = document.querySelector('[data-testid="cta-ver-productos"]') as HTMLElement;
         if (button) {
-          button.click();
+          button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
         }
 
         await new Promise((resolve) => setTimeout(resolve, 200));
@@ -150,7 +150,7 @@ test.describe('E2E: Click Tracking', () => {
 
         const button = document.querySelector('[data-testid="cta-ver-productos"]') as HTMLElement;
         if (button) {
-          button.click();
+          button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 120, clientY: 240 }));
         }
 
         await new Promise((resolve) => setTimeout(resolve, 200));
@@ -191,7 +191,7 @@ test.describe('E2E: Click Tracking', () => {
         input.setAttribute('data-testid', 'test-input');
         document.body.appendChild(input);
 
-        input.click();
+        input.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
 
         await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -233,7 +233,7 @@ test.describe('E2E: Click Tracking', () => {
         button.setAttribute('data-testid', 'pii-button');
         document.body.appendChild(button);
 
-        button.click();
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
 
         await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -275,7 +275,7 @@ test.describe('E2E: Click Tracking', () => {
         button.setAttribute('data-testid', 'ignored-button');
         document.body.appendChild(button);
 
-        button.click();
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
 
         await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -317,7 +317,7 @@ test.describe('E2E: Click Tracking', () => {
 
         const button = document.querySelector('[data-testid="cta-ver-productos"]') as HTMLElement;
         if (button) {
-          button.click();
+          button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
         }
 
         await new Promise((resolve) => setTimeout(resolve, 200));

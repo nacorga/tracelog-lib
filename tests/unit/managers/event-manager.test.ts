@@ -2393,6 +2393,7 @@ describe('EventManager - Send Backoff', () => {
         custom_event: { name: 'test' },
         timestamp: Date.now(),
         page_url: 'https://example.com',
+        _session_id: 'test-session',
       } as any,
     ];
 
@@ -2424,6 +2425,7 @@ describe('EventManager - Send Backoff', () => {
         custom_event: { name: 'test' },
         timestamp: Date.now(),
         page_url: 'https://example.com',
+        _session_id: 'test-session',
       } as any,
     ];
 

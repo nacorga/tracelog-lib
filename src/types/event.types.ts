@@ -289,3 +289,19 @@ export interface EventData {
   /** Campaign tracking parameters */
   utm?: UTM;
 }
+
+/**
+ * Internal queue entry: an `EventData` enriched with the session ID frozen at
+ * `track()` time. Survives session renewal — when the user is idle past the
+ * timeout, `state.sessionId` is nulled but events already in the queue keep
+ * their original `_session_id`, so `buildBatches()` can still attribute them
+ * correctly instead of emitting `session_id: null` to the wire.
+ *
+ * **Internal only.** The leading underscore mirrors `EventsQueue._metadata` —
+ * this field is stripped from `events[]` at batch construction time, since the
+ * backend's `EventDto` uses `forbidNonWhitelisted: true` and the wrapper
+ * `EventsQueue.session_id` is the contract.
+ */
+export interface QueuedEvent extends EventData {
+  _session_id: string;
+}

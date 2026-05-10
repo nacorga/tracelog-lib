@@ -3335,7 +3335,9 @@ class EventManager extends StateManager {
    * @internal Used by test-bridge.ts for test inspection
    */
   getQueueEvents() {
-    return [...this.eventsQueue];
+    return this.eventsQueue.map(({ _session_id, ...rest }) => {
+      return rest;
+    });
   }
   /**
    * Triggers immediate queue flush (test utility).
@@ -3424,6 +3426,20 @@ class EventManager extends StateManager {
   isSuccessfulResult(result) {
     return result.status === "fulfilled" && result.value === true;
   }
+  /**
+   * Builds a parallel list of `(batch, eventIds)` for sending. The eventIds are
+   * the original `_session_id`-tagged event IDs in the queue that map to this
+   * batch — used for optimistic removal. We can't read them off the wrapper's
+   * `events[]` because dedup may have removed some signatures.
+   */
+  buildBatchesWithIds() {
+    const batches = this.buildBatches();
+    if (batches.length === 0) return [];
+    return batches.map((batch) => {
+      const eventIds = this.eventsQueue.filter((e3) => e3._session_id === batch.session_id).map((e3) => e3.id);
+      return { batch, eventIds };
+    });
+  }
   flushEvents(isSync) {
     if (this.eventsQueue.length === 0) {
       return isSync ? true : Promise.resolve(true);
@@ -3432,97 +3448,115 @@ class EventManager extends StateManager {
       log("debug", "Async flush skipped: send already in progress");
       return Promise.resolve(false);
     }
-    const body = this.buildEventsPayload();
-    const eventsToSend = [...this.eventsQueue];
-    const eventIds = eventsToSend.map((e3) => e3.id);
+    const planned = this.buildBatchesWithIds();
+    if (planned.length === 0) {
+      return isSync ? true : Promise.resolve(true);
+    }
     if (this.dataSenders.length === 0) {
-      this.removeProcessedEvents(eventIds);
+      for (const { batch, eventIds } of planned) {
+        this.removeProcessedEvents(eventIds);
+        this.emitEventsQueue(batch);
+      }
       this.clearSendTimeout();
-      this.emitEventsQueue(body);
       return isSync ? true : Promise.resolve(true);
     }
     if (isSync && this.sendInProgress) {
+      const totalEvents = planned.reduce((acc, p2) => acc + p2.eventIds.length, 0);
       log("debug", "Sync flush skipped: async send already in-flight, trusting fetch to deliver", {
-        data: { eventCount: eventIds.length }
+        data: { eventCount: totalEvents }
       });
       return true;
     }
     if (isSync) {
-      const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(body));
-      const anySucceeded = results.some((success) => success);
-      if (anySucceeded) {
-        this.removeProcessedEvents(eventIds);
-        this.clearSendTimeout();
-        this.emitEventsQueue(body);
-      } else {
-        this.clearSendTimeout();
-        log("debug", "Sync flush complete failure, events kept in queue for retry", {
-          data: { eventCount: eventIds.length }
-        });
+      let anySucceededOverall = false;
+      for (const { batch, eventIds } of planned) {
+        const succeeded = this.sendBatchSync(batch, eventIds);
+        if (succeeded) anySucceededOverall = true;
       }
-      return anySucceeded;
+      this.clearSendTimeout();
+      return anySucceededOverall;
+    }
+    return (async () => {
+      let anySucceededOverall = false;
+      for (const { batch, eventIds } of planned) {
+        const succeeded = await this.sendBatchAsync(batch, eventIds);
+        if (succeeded) anySucceededOverall = true;
+      }
+      this.clearSendTimeout();
+      return anySucceededOverall;
+    })();
+  }
+  /**
+   * Sends one batch synchronously across all integrations (sendBeacon path).
+   * Optimistic removal: if any integration succeeds, we remove the batch's
+   * events from the queue and emit it locally. Failures persist per-integration.
+   */
+  sendBatchSync(batch, eventIds) {
+    const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(batch));
+    const anySucceeded = results.some((success) => success);
+    if (anySucceeded) {
+      this.removeProcessedEvents(eventIds);
+      this.emitEventsQueue(batch);
     } else {
-      const sendPromises = this.dataSenders.map(
-        async (sender) => sender.sendEventsQueue(body, {
-          onSuccess: () => {
-          },
-          onFailure: () => {
-          }
-        })
-      );
-      return Promise.allSettled(sendPromises).then((results) => {
-        const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
-        if (anySucceeded) {
-          this.removeProcessedEvents(eventIds);
-          this.clearSendTimeout();
-          this.emitEventsQueue(body);
-        } else {
-          log("debug", "Async flush complete failure, events kept in queue for retry", {
-            data: { eventCount: eventsToSend.length }
-          });
-        }
-        return anySucceeded;
+      log("debug", "Sync send complete failure, events kept in queue for retry", {
+        data: { eventCount: eventIds.length, sessionId: batch.session_id }
       });
     }
+    return anySucceeded;
+  }
+  /**
+   * Sends one batch asynchronously across all integrations (fetch path).
+   */
+  async sendBatchAsync(batch, eventIds) {
+    const sendPromises = this.dataSenders.map(
+      async (sender) => sender.sendEventsQueue(batch, {
+        onSuccess: () => {
+        },
+        onFailure: () => {
+        }
+      })
+    );
+    const results = await Promise.allSettled(sendPromises);
+    const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
+    if (anySucceeded) {
+      this.removeProcessedEvents(eventIds);
+      this.emitEventsQueue(batch);
+      const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
+      if (failedCount > 0) {
+        log("debug", "Async send completed with some failures, removed from queue and persisted per-integration", {
+          data: { eventCount: eventIds.length, failedCount, sessionId: batch.session_id }
+        });
+      }
+    } else {
+      log("debug", "Async send complete failure, events kept in queue for retry", {
+        data: { eventCount: eventIds.length, sessionId: batch.session_id }
+      });
+    }
+    return anySucceeded;
   }
   async sendEventsQueue() {
-    if (!this.get("sessionId") || this.eventsQueue.length === 0 || this.sendInProgress) {
+    if (this.eventsQueue.length === 0 || this.sendInProgress) {
       return;
     }
     this.sendInProgress = true;
     try {
-      const body = this.buildEventsPayload();
+      const planned = this.buildBatchesWithIds();
+      if (planned.length === 0) return;
       if (this.dataSenders.length === 0) {
-        this.emitEventsQueue(body);
+        for (const { batch } of planned) {
+          this.emitEventsQueue(batch);
+        }
         return;
       }
-      const eventsToSend = [...this.eventsQueue];
-      const eventIds = eventsToSend.map((e3) => e3.id);
-      const sendPromises = this.dataSenders.map(
-        async (sender) => sender.sendEventsQueue(body, {
-          onSuccess: () => {
-          },
-          onFailure: () => {
-          }
-        })
-      );
-      const results = await Promise.allSettled(sendPromises);
-      const anySucceeded = results.some((result) => this.isSuccessfulResult(result));
-      if (anySucceeded) {
+      let anySucceededOverall = false;
+      for (const { batch, eventIds } of planned) {
+        const succeeded = await this.sendBatchAsync(batch, eventIds);
+        if (succeeded) anySucceededOverall = true;
+      }
+      if (anySucceededOverall) {
         this.consecutiveSendFailures = 0;
-        this.removeProcessedEvents(eventIds);
-        this.emitEventsQueue(body);
-        const failedCount = results.filter((result) => !this.isSuccessfulResult(result)).length;
-        if (failedCount > 0) {
-          log("debug", "Periodic send completed with some failures, removed from queue and persisted per-integration", {
-            data: { eventCount: eventsToSend.length, failedCount }
-          });
-        }
       } else {
         this.consecutiveSendFailures = Math.min(this.consecutiveSendFailures + 1, MAX_CONSECUTIVE_SEND_FAILURES);
-        log("debug", "Periodic send complete failure, events kept in queue for retry", {
-          data: { eventCount: eventsToSend.length }
-        });
       }
       if (this.eventsQueue.length === 0) {
         this.clearSendTimeout();
@@ -3533,42 +3567,95 @@ class EventManager extends StateManager {
       this.sendInProgress = false;
     }
   }
-  buildEventsPayload() {
-    const eventMap = /* @__PURE__ */ new Map();
-    const order = [];
-    for (const event2 of this.eventsQueue) {
-      const signature = this.createEventSignature(event2);
-      if (!eventMap.has(signature)) {
-        order.push(signature);
-      }
-      eventMap.set(signature, event2);
+  /**
+   * Builds one or more batch payloads from the current event queue.
+   *
+   * **Why N batches**: events freeze their `_session_id` at `track()` time. If the
+   * session was renewed (idle timeout) between two `track()` calls, the queue
+   * contains events from multiple sessions. We emit one batch per session so the
+   * backend's `EventsQueueDto.session_id` remains the single source of truth and
+   * stays consistent with the events it carries.
+   *
+   * **Order**: groups are returned in the order their first event was queued
+   * (oldest session first). Inside each group, dedup + SESSION_START priority +
+   * timestamp ordering apply, identical to the previous single-batch logic.
+   *
+   * **Strip**: `_session_id` is removed from each event in the wrapper's
+   * `events[]` because the backend uses `forbidNonWhitelisted: true` and would
+   * reject the batch if the field leaked through.
+   */
+  buildBatches() {
+    if (this.eventsQueue.length === 0) {
+      return [];
     }
-    const events = order.map((signature) => eventMap.get(signature)).filter((event2) => Boolean(event2)).sort((a2, b2) => {
-      if (a2.type === EventType.SESSION_START && b2.type !== EventType.SESSION_START) return -1;
-      if (b2.type === EventType.SESSION_START && a2.type !== EventType.SESSION_START) return 1;
-      return a2.timestamp - b2.timestamp;
-    });
-    let queue = {
-      user_id: this.get("userId"),
-      session_id: this.get("sessionId"),
-      device: this.get("device"),
-      events,
-      ...this.get("config")?.globalMetadata && { global_metadata: this.get("config")?.globalMetadata },
-      ...this.get("identity") && { identify: this.get("identity") }
-    };
+    const groups = /* @__PURE__ */ new Map();
+    for (const event2 of this.eventsQueue) {
+      if (!event2._session_id) {
+        log("warn", "Queued event missing _session_id, dropping", {
+          data: { eventId: event2.id, type: event2.type }
+        });
+        continue;
+      }
+      const group = groups.get(event2._session_id);
+      if (group) {
+        group.push(event2);
+      } else {
+        groups.set(event2._session_id, [event2]);
+      }
+    }
+    const userId = this.get("userId");
+    const device = this.get("device");
+    const globalMetadata = this.get("config")?.globalMetadata;
+    const identity = this.get("identity");
     const collectApiUrls = this.get("collectApiUrls");
     const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
     const beforeBatchTransformer = this.transformers.beforeBatch;
-    if (!hasAnyBackend && beforeBatchTransformer) {
-      const transformed = transformBatch(queue, beforeBatchTransformer, "EventManager");
-      if (transformed !== null) {
-        queue = transformed;
+    const batches = [];
+    for (const [sessionId, groupEvents] of groups) {
+      const eventMap = /* @__PURE__ */ new Map();
+      const order = [];
+      for (const event2 of groupEvents) {
+        const signature = this.createEventSignature(event2);
+        if (!eventMap.has(signature)) {
+          order.push(signature);
+        }
+        eventMap.set(signature, event2);
       }
+      const events = order.map((signature) => eventMap.get(signature)).filter((event2) => Boolean(event2)).sort((a2, b2) => {
+        if (a2.type === EventType.SESSION_START && b2.type !== EventType.SESSION_START) return -1;
+        if (b2.type === EventType.SESSION_START && a2.type !== EventType.SESSION_START) return 1;
+        return a2.timestamp - b2.timestamp;
+      }).map(({ _session_id, ...rest }) => {
+        return rest;
+      });
+      let queue = {
+        user_id: userId,
+        session_id: sessionId,
+        device,
+        events,
+        ...globalMetadata && { global_metadata: globalMetadata },
+        ...identity && { identify: identity }
+      };
+      if (!hasAnyBackend && beforeBatchTransformer) {
+        const transformed = transformBatch(queue, beforeBatchTransformer, "EventManager");
+        if (transformed !== null) {
+          queue = transformed;
+        }
+      }
+      batches.push(queue);
     }
-    return queue;
+    return batches;
   }
   buildEventPayload(data) {
-    const currentPageUrl = data.page_url ?? this.get("pageUrl");
+    const currentSessionId = this.get("sessionId");
+    if (!currentSessionId) {
+      log("error", "buildEventPayload reached without sessionId — event dropped", {
+        data: { type: data.type }
+      });
+      return null;
+    }
+    const rawPageUrl = data.page_url ?? this.get("pageUrl");
+    const currentPageUrl = typeof rawPageUrl === "string" && rawPageUrl.length > 0 ? rawPageUrl : "unknown";
     const timestamp = this.timeManager.now();
     const validation = this.timeManager.validateTimestamp(timestamp);
     if (!validation.valid) {
@@ -3608,7 +3695,7 @@ class EventManager extends StateManager {
       }
       payload = transformed;
     }
-    return payload;
+    return { ...payload, _session_id: currentSessionId };
   }
   isDuplicateEvent(event2) {
     const now = Date.now();
@@ -3773,7 +3860,8 @@ class EventManager extends StateManager {
   }
   emitEvent(eventData) {
     if (this.emitter) {
-      this.emitter.emit(EmitterEvent.EVENT, eventData);
+      const { _session_id, ...publicEvent } = eventData;
+      this.emitter.emit(EmitterEvent.EVENT, publicEvent);
     }
   }
   emitEventsQueue(queue) {
@@ -4778,6 +4866,10 @@ class ClickHandler extends StateManager {
           });
         }
       }
+      if (!coordinates) {
+        log("debug", "Click skipped: invalid coordinates (likely synthetic)");
+        return;
+      }
       const clickData = this.generateClickData(clickedElement, relevantClickElement, coordinates);
       this.eventManager.track({
         type: EventType.CLICK,
@@ -4935,9 +5027,15 @@ class ClickHandler extends StateManager {
     return Math.max(0, Math.min(1, Number(value.toFixed(3))));
   }
   calculateClickCoordinates(event2, element) {
-    const rect = element.getBoundingClientRect();
     const x2 = event2.clientX;
     const y2 = event2.clientY;
+    if (typeof x2 !== "number" || typeof y2 !== "number" || !Number.isFinite(x2) || !Number.isFinite(y2)) {
+      return null;
+    }
+    if (x2 === 0 && y2 === 0) {
+      return null;
+    }
+    const rect = element.getBoundingClientRect();
     const relativeX = rect.width > 0 ? this.clamp((x2 - rect.left) / rect.width) : 0;
     const relativeY = rect.height > 0 ? this.clamp((y2 - rect.top) / rect.height) : 0;
     return { x: x2, y: y2, relativeX, relativeY };
