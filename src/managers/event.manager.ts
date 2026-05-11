@@ -1072,6 +1072,11 @@ export class EventManager extends StateManager {
    * not once per flush. A queue spanning N sessions triggers N invocations.
    */
   private buildBatchFromGroup(sessionId: string, groupEvents: QueuedEvent[]): EventsQueue {
+    // Per-batch dedup: collapse events sharing a signature into one slot.
+    // `order` preserves the first occurrence's position, but `eventMap.set`
+    // keeps the latest payload — so the most recent timestamp/metadata wins
+    // while the batch's overall event sequence stays stable. Matches the
+    // pre-refactor behavior in `buildEventsPayload`.
     const eventMap = new Map<string, QueuedEvent>();
     const order: string[] = [];
     for (const event of groupEvents) {

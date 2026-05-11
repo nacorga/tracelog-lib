@@ -507,7 +507,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.8.5";
+const version = "2.9.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -3427,18 +3427,56 @@ class EventManager extends StateManager {
     return result.status === "fulfilled" && result.value === true;
   }
   /**
+   * Groups the queue by frozen `_session_id`, preserving insertion order.
+   * Single pass — `buildBatchesWithIds()` builds one batch + one eventIds list
+   * per group, so the grouping cost is O(N) per flush regardless of session
+   * count.
+   *
+   * **Self-heal**: any entry missing `_session_id` (an internal invariant
+   * violation — `buildEventPayload` always stamps it) is removed from the
+   * queue rather than left behind, otherwise a single corrupted entry would
+   * keep `eventsQueue.length > 0` forever and re-trigger periodic sends.
+   */
+  groupQueuedEventsBySession() {
+    const groups = /* @__PURE__ */ new Map();
+    const corruptedIds = [];
+    for (const event2 of this.eventsQueue) {
+      if (!event2._session_id) {
+        log("debug", "Queued event missing _session_id, dropping", {
+          data: { eventId: event2.id, type: event2.type }
+        });
+        corruptedIds.push(event2.id);
+        continue;
+      }
+      const group = groups.get(event2._session_id);
+      if (group) {
+        group.push(event2);
+      } else {
+        groups.set(event2._session_id, [event2]);
+      }
+    }
+    if (corruptedIds.length > 0) {
+      this.removeProcessedEvents(corruptedIds);
+    }
+    return groups;
+  }
+  /**
    * Builds a parallel list of `(batch, eventIds)` for sending. The eventIds are
    * the original `_session_id`-tagged event IDs in the queue that map to this
    * batch — used for optimistic removal. We can't read them off the wrapper's
    * `events[]` because dedup may have removed some signatures.
    */
   buildBatchesWithIds() {
-    const batches = this.buildBatches();
-    if (batches.length === 0) return [];
-    return batches.map((batch) => {
-      const eventIds = this.eventsQueue.filter((e3) => e3._session_id === batch.session_id).map((e3) => e3.id);
-      return { batch, eventIds };
-    });
+    const groups = this.groupQueuedEventsBySession();
+    if (groups.size === 0) return [];
+    const result = [];
+    for (const [sessionId, groupEvents] of groups) {
+      result.push({
+        batch: this.buildBatchFromGroup(sessionId, groupEvents),
+        eventIds: groupEvents.map((e3) => e3.id)
+      });
+    }
+    return result;
   }
   flushEvents(isSync) {
     if (this.eventsQueue.length === 0) {
@@ -3468,22 +3506,16 @@ class EventManager extends StateManager {
       return true;
     }
     if (isSync) {
-      let anySucceededOverall = false;
-      for (const { batch, eventIds } of planned) {
-        const succeeded = this.sendBatchSync(batch, eventIds);
-        if (succeeded) anySucceededOverall = true;
-      }
+      const results = planned.map(({ batch, eventIds }) => this.sendBatchSync(batch, eventIds));
       this.clearSendTimeout();
-      return anySucceededOverall;
+      return results.some(Boolean);
     }
     return (async () => {
-      let anySucceededOverall = false;
-      for (const { batch, eventIds } of planned) {
-        const succeeded = await this.sendBatchAsync(batch, eventIds);
-        if (succeeded) anySucceededOverall = true;
-      }
+      const results = await Promise.all(
+        planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds))
+      );
       this.clearSendTimeout();
-      return anySucceededOverall;
+      return results.some(Boolean);
     })();
   }
   /**
@@ -3548,11 +3580,10 @@ class EventManager extends StateManager {
         }
         return;
       }
-      let anySucceededOverall = false;
-      for (const { batch, eventIds } of planned) {
-        const succeeded = await this.sendBatchAsync(batch, eventIds);
-        if (succeeded) anySucceededOverall = true;
-      }
+      const results = await Promise.all(
+        planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds))
+      );
+      const anySucceededOverall = results.some(Boolean);
       if (anySucceededOverall) {
         this.consecutiveSendFailures = 0;
       } else {
@@ -3568,89 +3599,68 @@ class EventManager extends StateManager {
     }
   }
   /**
-   * Builds one or more batch payloads from the current event queue.
+   * Builds a single batch from a per-session group: dedup by signature,
+   * SESSION_START first, then timestamp order, strip `_session_id`, apply
+   * `beforeBatch` transformer when running standalone.
    *
-   * **Why N batches**: events freeze their `_session_id` at `track()` time. If the
-   * session was renewed (idle timeout) between two `track()` calls, the queue
-   * contains events from multiple sessions. We emit one batch per session so the
-   * backend's `EventsQueueDto.session_id` remains the single source of truth and
-   * stays consistent with the events it carries.
-   *
-   * **Order**: groups are returned in the order their first event was queued
-   * (oldest session first). Inside each group, dedup + SESSION_START priority +
-   * timestamp ordering apply, identical to the previous single-batch logic.
+   * **Why N batches per flush**: events freeze their `_session_id` at `track()`
+   * time. If the session was renewed (idle timeout) between two `track()`
+   * calls, the queue contains events from multiple sessions. `buildBatchesWithIds()`
+   * emits one batch per session so the backend's `EventsQueueDto.session_id`
+   * remains the single source of truth and stays consistent with the events it
+   * carries.
    *
    * **Strip**: `_session_id` is removed from each event in the wrapper's
    * `events[]` because the backend uses `forbidNonWhitelisted: true` and would
    * reject the batch if the field leaked through.
+   *
+   * **Transformer note**: `beforeBatch` is invoked **once per session-batch**,
+   * not once per flush. A queue spanning N sessions triggers N invocations.
    */
-  buildBatches() {
-    if (this.eventsQueue.length === 0) {
-      return [];
-    }
-    const groups = /* @__PURE__ */ new Map();
-    for (const event2 of this.eventsQueue) {
-      if (!event2._session_id) {
-        log("warn", "Queued event missing _session_id, dropping", {
-          data: { eventId: event2.id, type: event2.type }
-        });
-        continue;
+  buildBatchFromGroup(sessionId, groupEvents) {
+    const eventMap = /* @__PURE__ */ new Map();
+    const order = [];
+    for (const event2 of groupEvents) {
+      const signature = this.createEventSignature(event2);
+      if (!eventMap.has(signature)) {
+        order.push(signature);
       }
-      const group = groups.get(event2._session_id);
-      if (group) {
-        group.push(event2);
-      } else {
-        groups.set(event2._session_id, [event2]);
-      }
+      eventMap.set(signature, event2);
     }
-    const userId = this.get("userId");
-    const device = this.get("device");
+    const events = order.map((signature) => eventMap.get(signature)).filter((event2) => Boolean(event2)).sort((a2, b2) => {
+      if (a2.type === EventType.SESSION_START && b2.type !== EventType.SESSION_START) return -1;
+      if (b2.type === EventType.SESSION_START && a2.type !== EventType.SESSION_START) return 1;
+      return a2.timestamp - b2.timestamp;
+    }).map(({ _session_id, ...rest }) => {
+      return rest;
+    });
     const globalMetadata = this.get("config")?.globalMetadata;
     const identity = this.get("identity");
+    let queue = {
+      user_id: this.get("userId"),
+      session_id: sessionId,
+      device: this.get("device"),
+      events,
+      ...globalMetadata && { global_metadata: globalMetadata },
+      ...identity && { identify: identity }
+    };
     const collectApiUrls = this.get("collectApiUrls");
     const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
     const beforeBatchTransformer = this.transformers.beforeBatch;
-    const batches = [];
-    for (const [sessionId, groupEvents] of groups) {
-      const eventMap = /* @__PURE__ */ new Map();
-      const order = [];
-      for (const event2 of groupEvents) {
-        const signature = this.createEventSignature(event2);
-        if (!eventMap.has(signature)) {
-          order.push(signature);
-        }
-        eventMap.set(signature, event2);
+    if (!hasAnyBackend && beforeBatchTransformer) {
+      const transformed = transformBatch(queue, beforeBatchTransformer, "EventManager");
+      if (transformed !== null) {
+        queue = transformed;
       }
-      const events = order.map((signature) => eventMap.get(signature)).filter((event2) => Boolean(event2)).sort((a2, b2) => {
-        if (a2.type === EventType.SESSION_START && b2.type !== EventType.SESSION_START) return -1;
-        if (b2.type === EventType.SESSION_START && a2.type !== EventType.SESSION_START) return 1;
-        return a2.timestamp - b2.timestamp;
-      }).map(({ _session_id, ...rest }) => {
-        return rest;
-      });
-      let queue = {
-        user_id: userId,
-        session_id: sessionId,
-        device,
-        events,
-        ...globalMetadata && { global_metadata: globalMetadata },
-        ...identity && { identify: identity }
-      };
-      if (!hasAnyBackend && beforeBatchTransformer) {
-        const transformed = transformBatch(queue, beforeBatchTransformer, "EventManager");
-        if (transformed !== null) {
-          queue = transformed;
-        }
-      }
-      batches.push(queue);
     }
-    return batches;
+    return queue;
   }
   buildEventPayload(data) {
     const currentSessionId = this.get("sessionId");
     if (!currentSessionId) {
       log("error", "buildEventPayload reached without sessionId — event dropped", {
-        data: { type: data.type }
+        data: { type: data.type },
+        visibility: "critical"
       });
       return null;
     }
@@ -5032,7 +5042,7 @@ class ClickHandler extends StateManager {
     if (typeof x2 !== "number" || typeof y2 !== "number" || !Number.isFinite(x2) || !Number.isFinite(y2)) {
       return null;
     }
-    if (x2 === 0 && y2 === 0) {
+    if (x2 === 0 && y2 === 0 && !event2.isTrusted) {
       return null;
     }
     const rect = element.getBoundingClientRect();
@@ -5731,14 +5741,15 @@ const SHOPIFY_SESSION_ATTR = "tracelog_session_id";
 const SHOPIFY_USER_ATTR = "tracelog_user_id";
 class ShopifyCartLinker extends StateManager {
   visibilityHandler = null;
+  pageshowHandler = null;
   lastSyncedKey = null;
   activate() {
-    this.cleanupVisibilityListener();
+    this.cleanupListeners();
     this.syncCartAttribute();
-    this.setupVisibilityListener();
+    this.setupListeners();
   }
   deactivate() {
-    this.cleanupVisibilityListener();
+    this.cleanupListeners();
     this.lastSyncedKey = null;
   }
   /** Re-syncs cart attributes when session rotates (called by App on SESSION_START). */
@@ -5778,18 +5789,36 @@ class ShopifyCartLinker extends StateManager {
       log("debug", "Shopify cart attribute update failed");
     }
   }
-  setupVisibilityListener() {
+  /**
+   * Sync triggers (theme-agnostic):
+   *  - `visibilitychange`: catches tab refocus (long sessions, OAuth round-trips).
+   *  - `pageshow` with `event.persisted === true`: catches bfcache restore so a
+   *    user returning from an external checkout / Shop Pay window picks up the
+   *    current sessionId before any further interaction.
+   *
+   * Both triggers go through `syncCartAttribute()` which dedupes by
+   * `sessionId|userId`, so spurious calls cost nothing.
+   */
+  setupListeners() {
     this.visibilityHandler = () => {
       if (!document.hidden) {
         this.syncCartAttribute();
       }
     };
     document.addEventListener("visibilitychange", this.visibilityHandler);
+    this.pageshowHandler = (event2) => {
+      if (event2.persisted) this.syncCartAttribute();
+    };
+    window.addEventListener("pageshow", this.pageshowHandler);
   }
-  cleanupVisibilityListener() {
+  cleanupListeners() {
     if (this.visibilityHandler) {
       document.removeEventListener("visibilitychange", this.visibilityHandler);
       this.visibilityHandler = null;
+    }
+    if (this.pageshowHandler) {
+      window.removeEventListener("pageshow", this.pageshowHandler);
+      this.pageshowHandler = null;
     }
   }
 }
