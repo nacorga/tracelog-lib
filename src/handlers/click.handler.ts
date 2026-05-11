@@ -117,6 +117,11 @@ export class ClickHandler extends StateManager {
         }
       }
 
+      if (!coordinates) {
+        log('debug', 'Click skipped: invalid coordinates (likely synthetic)');
+        return;
+      }
+
       const clickData = this.generateClickData(clickedElement, relevantClickElement, coordinates);
 
       this.eventManager.track({
@@ -309,10 +314,25 @@ export class ClickHandler extends StateManager {
     return Math.max(0, Math.min(1, Number(value.toFixed(3))));
   }
 
-  private calculateClickCoordinates(event: MouseEvent, element: HTMLElement): ClickCoordinates {
-    const rect = element.getBoundingClientRect();
+  private calculateClickCoordinates(event: MouseEvent, element: HTMLElement): ClickCoordinates | null {
     const x = event.clientX;
     const y = event.clientY;
+
+    // Reject non-finite coordinates outright — never legitimate.
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+
+    // Reject (0, 0) only when the event was not user-generated. `element.click()`
+    // and `dispatchEvent(new MouseEvent(...))` both produce `isTrusted === false`
+    // and default coords to (0, 0). A real user clicking the top-left pixel
+    // produces `isTrusted === true`, so this preserves legitimate corner clicks
+    // while filtering programmatic noise.
+    if (x === 0 && y === 0 && !event.isTrusted) {
+      return null;
+    }
+
+    const rect = element.getBoundingClientRect();
     const relativeX = rect.width > 0 ? this.clamp((x - rect.left) / rect.width) : 0;
     const relativeY = rect.height > 0 ? this.clamp((y - rect.top) / rect.height) : 0;
 
