@@ -17,6 +17,15 @@ export const SHOPIFY_EVENTS = [
 export type ShopifyEventName = (typeof SHOPIFY_EVENTS)[number];
 
 /**
+ * Final event names emitted by `mapEventToBody()`. Exported so consumers
+ * (tracelog-api event-catalog discovery, dashboards, contract validators)
+ * can recognise pixel events without re-deriving the `shopify_` prefix.
+ */
+export const SHOPIFY_PIXEL_EVENT_NAMES = SHOPIFY_EVENTS.map((name) => `shopify_${name}` as const);
+
+export type ShopifyPixelEventName = (typeof SHOPIFY_PIXEL_EVENT_NAMES)[number];
+
+/**
  * Spike-confirmed shape ([04-spike-report.md](../../docs/tasks/shopify-hybrid-capture/04-spike-report.md)):
  * `event.data.{cart,checkout}.attributes` is `Array<{key, value, __typename?}>`,
  * NOT a plain object. `__typename: 'NoteAttribute'` is added on `checkout_completed`

@@ -22,7 +22,6 @@ const SHOPIFY_USER_ATTR = 'tracelog_user_id';
 export class ShopifyCartLinker extends StateManager {
   private visibilityHandler: (() => void) | null = null;
   private pageshowHandler: ((event: PageTransitionEvent) => void) | null = null;
-  private submitHandler: (() => void) | null = null;
   private lastSyncedKey: string | null = null;
 
   activate(): void {
@@ -82,18 +81,14 @@ export class ShopifyCartLinker extends StateManager {
   }
 
   /**
-   * Sync triggers (theme-agnostic, no monkey-patching):
+   * Sync triggers (theme-agnostic):
+   *  - `visibilitychange`: catches tab refocus (long sessions, OAuth round-trips).
+   *  - `pageshow` with `event.persisted === true`: catches bfcache restore so a
+   *    user returning from an external checkout / Shop Pay window picks up the
+   *    current sessionId before any further interaction.
    *
-   * - `visibilitychange`: catches tab refocus (long sessions, OAuth round-trips).
-   * - `pageshow`: catches bfcache restore — Shopify's "Buy It Now" redirects keep
-   *   the original product page in bfcache; on back-navigation Shopify may reuse
-   *   the cart without re-running scripts.
-   * - `submit` (capture-phase, document-level): fires before any product form
-   *   submission (add-to-cart, buy-now). This maximizes the chance that the cart
-   *   attribute write completes before the page navigates to /cart or /checkout.
-   *
-   * All triggers go through `syncCartAttribute()` which dedupes by
-   * `sessionId|userId`, so spurious calls are cheap (early-return).
+   * Both triggers go through `syncCartAttribute()` which dedupes by
+   * `sessionId|userId`, so spurious calls cost nothing.
    */
   private setupListeners(): void {
     this.visibilityHandler = (): void => {
@@ -107,11 +102,6 @@ export class ShopifyCartLinker extends StateManager {
       if (event.persisted) this.syncCartAttribute();
     };
     window.addEventListener('pageshow', this.pageshowHandler);
-
-    this.submitHandler = (): void => {
-      this.syncCartAttribute();
-    };
-    document.addEventListener('submit', this.submitHandler, true);
   }
 
   private cleanupListeners(): void {
@@ -122,10 +112,6 @@ export class ShopifyCartLinker extends StateManager {
     if (this.pageshowHandler) {
       window.removeEventListener('pageshow', this.pageshowHandler);
       this.pageshowHandler = null;
-    }
-    if (this.submitHandler) {
-      document.removeEventListener('submit', this.submitHandler, true);
-      this.submitHandler = null;
     }
   }
 }

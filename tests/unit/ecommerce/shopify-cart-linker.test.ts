@@ -300,7 +300,7 @@ describe('ShopifyCartLinker - Visibility Change', () => {
   });
 });
 
-describe('ShopifyCartLinker - pageshow & submit triggers', () => {
+describe('ShopifyCartLinker - bfcache restore (pageshow)', () => {
   let linker: ShopifyCartLinker;
   let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -317,28 +317,18 @@ describe('ShopifyCartLinker - pageshow & submit triggers', () => {
     cleanupTestEnvironment();
   });
 
-  it('should register pageshow and submit listeners on activate', () => {
+  it('registers and cleans up the pageshow listener', () => {
     const windowAdd = vi.spyOn(window, 'addEventListener');
-    const docAdd = vi.spyOn(document, 'addEventListener');
-
-    linker.activate();
-
-    expect(windowAdd).toHaveBeenCalledWith('pageshow', expect.any(Function));
-    expect(docAdd).toHaveBeenCalledWith('submit', expect.any(Function), true);
-  });
-
-  it('should remove pageshow and submit listeners on deactivate', () => {
     const windowRemove = vi.spyOn(window, 'removeEventListener');
-    const docRemove = vi.spyOn(document, 'removeEventListener');
 
     linker.activate();
-    linker.deactivate();
+    expect(windowAdd).toHaveBeenCalledWith('pageshow', expect.any(Function));
 
+    linker.deactivate();
     expect(windowRemove).toHaveBeenCalledWith('pageshow', expect.any(Function));
-    expect(docRemove).toHaveBeenCalledWith('submit', expect.any(Function), true);
   });
 
-  it('should re-sync on bfcache restore (pageshow with persisted=true)', () => {
+  it('re-syncs on bfcache restore (pageshow with persisted=true)', () => {
     (linker as any).set('sessionId', 'sess-1');
     (linker as any).set('userId', 'user-1');
     linker.activate();
@@ -353,7 +343,7 @@ describe('ShopifyCartLinker - pageshow & submit triggers', () => {
     expect(body.attributes.tracelog_session_id).toBe('sess-2');
   });
 
-  it('should NOT re-sync on regular page load (pageshow with persisted=false)', () => {
+  it('does NOT re-sync on a regular (non-bfcache) page load', () => {
     (linker as any).set('sessionId', 'sess-1');
     (linker as any).set('userId', 'user-1');
     linker.activate();
@@ -364,30 +354,6 @@ describe('ShopifyCartLinker - pageshow & submit triggers', () => {
     handler({ persisted: false } as PageTransitionEvent);
 
     expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('should sync on form submit (catches add-to-cart / buy-now before navigation)', () => {
-    (linker as any).set('sessionId', 'sess-1');
-    (linker as any).set('userId', 'user-1');
-    linker.activate();
-    fetchSpy.mockClear();
-
-    (linker as any).set('sessionId', 'sess-2');
-    const handler = (linker as any).submitHandler as () => void;
-    handler();
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(fetchSpy.mock.calls[0]![1].body) as { attributes: Record<string, string> };
-    expect(body.attributes.tracelog_session_id).toBe('sess-2');
-  });
-
-  it('submit listener uses capture phase (fires before form default action)', () => {
-    const docAdd = vi.spyOn(document, 'addEventListener');
-    linker.activate();
-
-    const submitRegistration = docAdd.mock.calls.find(([type]) => type === 'submit');
-    expect(submitRegistration).toBeDefined();
-    expect(submitRegistration![2]).toBe(true);
   });
 });
 
