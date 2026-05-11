@@ -20,6 +20,37 @@
 
 
 
+
+## [2.9.0] - 2026-05-11
+
+### ✨ Features
+
+- Add pageshow and submit event listeners for cart attribute sync ([cd1e5f6](../../commit/cd1e5f6ff0cb59d10494e5fac8b98873b96c7dbd))
+- Enhance event mapping with XSS sanitization and item count logic ([da597c9](../../commit/da597c9f0ac45ffba4c6f53f6733d3ac6c09aceb))
+- Cap item title, vendor, and SKU lengths; strip URL parameters from page_url ([6372b60](../../commit/6372b603fb8d305f113c7c250e381a72f236b5d8))
+- Enhance event mapping and error handling in pixel sender ([c750f2c](../../commit/c750f2c9ce7ff2dcd41e5a65f04fd85c945c1e09))
+- Implement Shopify Web Pixel extension ([9507c42](../../commit/9507c42a51efc6b57c28abe567cee9daad334acf))
+
+### ♻️ Refactoring
+
+- Remove submit event listener and update tests for pageshow handling ([16827d5](../../commit/16827d55b7ad0a03fb8aaafa80a24152068ee137))
+
+### 🔧 Other Changes
+
+- Merge pull request #106 from nacorga/release/20260509.1 ([cc1817a](../../commit/cc1817a21d8e61d964f3f363073fa34fe984cc42))
+- Merge pull request #105 from nacorga/task/shopify-hybrid-capture ([37ae3aa](../../commit/37ae3aafdf28b5c02b34f47d4e962631d7581ebe))
+- Update dependencies for fast-uri, follow-redirects, and postcss to latest versions ([7a8dc7c](../../commit/7a8dc7c63e10faead5b5899f25dc15f0777206a8))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.8.5...v2.9.0
+
+
 ## [2.8.5] - 2026-05-04
 
 ### ✨ Features

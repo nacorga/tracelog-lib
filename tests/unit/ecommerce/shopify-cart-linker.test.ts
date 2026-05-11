@@ -300,6 +300,63 @@ describe('ShopifyCartLinker - Visibility Change', () => {
   });
 });
 
+describe('ShopifyCartLinker - bfcache restore (pageshow)', () => {
+  let linker: ShopifyCartLinker;
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    resetGlobalState();
+    fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    global.fetch = fetchSpy;
+    linker = new ShopifyCartLinker();
+  });
+
+  afterEach(() => {
+    linker.deactivate();
+    cleanupTestEnvironment();
+  });
+
+  it('registers and cleans up the pageshow listener', () => {
+    const windowAdd = vi.spyOn(window, 'addEventListener');
+    const windowRemove = vi.spyOn(window, 'removeEventListener');
+
+    linker.activate();
+    expect(windowAdd).toHaveBeenCalledWith('pageshow', expect.any(Function));
+
+    linker.deactivate();
+    expect(windowRemove).toHaveBeenCalledWith('pageshow', expect.any(Function));
+  });
+
+  it('re-syncs on bfcache restore (pageshow with persisted=true)', () => {
+    (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
+    linker.activate();
+    fetchSpy.mockClear();
+
+    (linker as any).set('sessionId', 'sess-2');
+    const handler = (linker as any).pageshowHandler as (event: PageTransitionEvent) => void;
+    handler({ persisted: true } as PageTransitionEvent);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchSpy.mock.calls[0]![1].body) as { attributes: Record<string, string> };
+    expect(body.attributes.tracelog_session_id).toBe('sess-2');
+  });
+
+  it('does NOT re-sync on a regular (non-bfcache) page load', () => {
+    (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
+    linker.activate();
+    fetchSpy.mockClear();
+
+    (linker as any).set('sessionId', 'sess-2');
+    const handler = (linker as any).pageshowHandler as (event: PageTransitionEvent) => void;
+    handler({ persisted: false } as PageTransitionEvent);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('ShopifyCartLinker - Fetch Failure Handling', () => {
   let linker: ShopifyCartLinker;
 

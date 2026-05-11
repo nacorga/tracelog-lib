@@ -21,16 +21,17 @@ const SHOPIFY_USER_ATTR = 'tracelog_user_id';
  */
 export class ShopifyCartLinker extends StateManager {
   private visibilityHandler: (() => void) | null = null;
+  private pageshowHandler: ((event: PageTransitionEvent) => void) | null = null;
   private lastSyncedKey: string | null = null;
 
   activate(): void {
-    this.cleanupVisibilityListener();
+    this.cleanupListeners();
     this.syncCartAttribute();
-    this.setupVisibilityListener();
+    this.setupListeners();
   }
 
   deactivate(): void {
-    this.cleanupVisibilityListener();
+    this.cleanupListeners();
     this.lastSyncedKey = null;
   }
 
@@ -79,19 +80,38 @@ export class ShopifyCartLinker extends StateManager {
     }
   }
 
-  private setupVisibilityListener(): void {
+  /**
+   * Sync triggers (theme-agnostic):
+   *  - `visibilitychange`: catches tab refocus (long sessions, OAuth round-trips).
+   *  - `pageshow` with `event.persisted === true`: catches bfcache restore so a
+   *    user returning from an external checkout / Shop Pay window picks up the
+   *    current sessionId before any further interaction.
+   *
+   * Both triggers go through `syncCartAttribute()` which dedupes by
+   * `sessionId|userId`, so spurious calls cost nothing.
+   */
+  private setupListeners(): void {
     this.visibilityHandler = (): void => {
       if (!document.hidden) {
         this.syncCartAttribute();
       }
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
+
+    this.pageshowHandler = (event: PageTransitionEvent): void => {
+      if (event.persisted) this.syncCartAttribute();
+    };
+    window.addEventListener('pageshow', this.pageshowHandler);
   }
 
-  private cleanupVisibilityListener(): void {
+  private cleanupListeners(): void {
     if (this.visibilityHandler) {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;
+    }
+    if (this.pageshowHandler) {
+      window.removeEventListener('pageshow', this.pageshowHandler);
+      this.pageshowHandler = null;
     }
   }
 }
