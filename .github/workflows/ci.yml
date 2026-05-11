@@ -133,8 +133,12 @@ jobs:
             "dist/public-api.js"
             "dist/public-api.d.ts"
             "dist/public-api.cjs"
+            "dist/pixel/index.js"
+            "dist/pixel/index.d.ts"
+            "dist/pixel/index.cjs"
             "dist/browser/tracelog.js"
             "dist/browser/tracelog.esm.js"
+            "dist/browser/tracelog-shopify-pixel.iife.js"
           )
 
           for file in "${required_files[@]}"; do
@@ -150,6 +154,21 @@ jobs:
 
           if [[ $size_kb -gt 100 ]]; then
             echo "⚠️ Browser build is large: ${size_kb}KB"
+          fi
+
+          # Shopify Web Pixel bundle ships inside Shopify's checkout sandbox; the
+          # 5KB gzipped budget is the design contract documented in
+          # vite.pixel.config.mjs. Regressions here violate the merchant-facing
+          # promise of a near-zero-overhead pixel.
+          pixel_build="dist/browser/tracelog-shopify-pixel.iife.js"
+          pixel_gzip_bytes=$(gzip -c "$pixel_build" | wc -c | tr -d ' ')
+          pixel_gzip_limit=5120
+
+          echo "📦 Shopify pixel bundle: ${pixel_gzip_bytes} bytes gzipped (limit: ${pixel_gzip_limit})"
+
+          if [[ $pixel_gzip_bytes -gt $pixel_gzip_limit ]]; then
+            echo "❌ Shopify pixel bundle exceeds 5KB gzipped budget: ${pixel_gzip_bytes} bytes"
+            exit 1
           fi
 
           echo "✅ Build completed successfully. Browser build: ${size_kb}KB"

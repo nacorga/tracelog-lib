@@ -1,6 +1,6 @@
 /**
  * ShopifyCartLinker Tests
- * Focus: Cart attribute sync lifecycle, dedup, session rotation, fetch failure
+ * Focus: Cart attribute sync lifecycle, dedup, session/user rotation, fetch failure
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -25,7 +25,20 @@ describe('ShopifyCartLinker - Activation', () => {
     cleanupTestEnvironment();
   });
 
-  it('should POST sessionId to /cart/update.js on activate', () => {
+  it('should POST sessionId + userId to /cart/update.js on activate when both are set', () => {
+    (linker as any).set('sessionId', 'sess-abc');
+    (linker as any).set('userId', 'user-xyz');
+    linker.activate();
+
+    expect(fetchSpy).toHaveBeenCalledWith('/cart/update.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attributes: { tracelog_session_id: 'sess-abc', tracelog_user_id: 'user-xyz' } }),
+      credentials: 'same-origin',
+    });
+  });
+
+  it('should POST only sessionId when userId is not set (cold start)', () => {
     (linker as any).set('sessionId', 'sess-abc');
     linker.activate();
 
@@ -35,6 +48,16 @@ describe('ShopifyCartLinker - Activation', () => {
       body: JSON.stringify({ attributes: { tracelog_session_id: 'sess-abc' } }),
       credentials: 'same-origin',
     });
+  });
+
+  it('should not write tracelog_user_id with null/empty value', () => {
+    (linker as any).set('sessionId', 'sess-abc');
+    (linker as any).set('userId', '');
+    linker.activate();
+
+    const body = JSON.parse(fetchSpy.mock.calls[0]![1].body) as { attributes: Record<string, string> };
+    expect(body.attributes).not.toHaveProperty('tracelog_user_id');
+    expect(body.attributes).toHaveProperty('tracelog_session_id', 'sess-abc');
   });
 
   it('should not fetch if sessionId is not set', () => {
@@ -99,7 +122,7 @@ describe('ShopifyCartLinker - Deactivation', () => {
     expect(removeSpy).toHaveBeenCalledWith('visibilitychange', handler);
   });
 
-  it('should reset lastSyncedSessionId on deactivate', () => {
+  it('should reset lastSyncedKey on deactivate', () => {
     (linker as any).set('sessionId', 'sess-1');
     linker.activate();
     linker.deactivate();
@@ -129,6 +152,7 @@ describe('ShopifyCartLinker - Session Change', () => {
 
   it('should re-sync when onSessionChange is called with new sessionId', () => {
     (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
     linker.activate();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
@@ -139,17 +163,32 @@ describe('ShopifyCartLinker - Session Change', () => {
     expect(fetchSpy).toHaveBeenLastCalledWith(
       '/cart/update.js',
       expect.objectContaining({
-        body: JSON.stringify({ attributes: { tracelog_session_id: 'sess-2' } }),
+        body: JSON.stringify({ attributes: { tracelog_session_id: 'sess-2', tracelog_user_id: 'user-1' } }),
       }),
     );
   });
 
-  it('should not re-sync if sessionId has not changed', () => {
+  it('should not re-sync if sessionId and userId have not changed', () => {
     (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
     linker.activate();
     linker.onSessionChange();
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should re-sync if userId changes mid-session (e.g., late identify)', () => {
+    (linker as any).set('sessionId', 'sess-1');
+    linker.activate();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // userId arrives after first sync — visibility/onSessionChange should pick it up
+    (linker as any).set('userId', 'user-late');
+    linker.onSessionChange();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(fetchSpy.mock.calls[1]![1].body) as { attributes: Record<string, string> };
+    expect(body.attributes.tracelog_user_id).toBe('user-late');
   });
 });
 
@@ -164,6 +203,7 @@ describe('ShopifyCartLinker - Deduplication', () => {
     global.fetch = fetchSpy;
     linker = new ShopifyCartLinker();
     (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
   });
 
   afterEach(() => {
@@ -171,7 +211,7 @@ describe('ShopifyCartLinker - Deduplication', () => {
     cleanupTestEnvironment();
   });
 
-  it('should not POST twice for the same sessionId', () => {
+  it('should not POST twice for the same sessionId+userId', () => {
     linker.activate();
     linker.onSessionChange();
     linker.onSessionChange();
@@ -215,6 +255,7 @@ describe('ShopifyCartLinker - Visibility Change', () => {
     const hiddenSpy = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
 
     (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
     linker.activate();
     fetchSpy.mockClear();
 
@@ -226,7 +267,7 @@ describe('ShopifyCartLinker - Visibility Change', () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       '/cart/update.js',
       expect.objectContaining({
-        body: JSON.stringify({ attributes: { tracelog_session_id: 'sess-2' } }),
+        body: JSON.stringify({ attributes: { tracelog_session_id: 'sess-2', tracelog_user_id: 'user-1' } }),
       }),
     );
 
@@ -256,6 +297,63 @@ describe('ShopifyCartLinker - Visibility Change', () => {
 
     // Verify handler was nulled
     expect((linker as any).visibilityHandler).toBeNull();
+  });
+});
+
+describe('ShopifyCartLinker - bfcache restore (pageshow)', () => {
+  let linker: ShopifyCartLinker;
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    resetGlobalState();
+    fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    global.fetch = fetchSpy;
+    linker = new ShopifyCartLinker();
+  });
+
+  afterEach(() => {
+    linker.deactivate();
+    cleanupTestEnvironment();
+  });
+
+  it('registers and cleans up the pageshow listener', () => {
+    const windowAdd = vi.spyOn(window, 'addEventListener');
+    const windowRemove = vi.spyOn(window, 'removeEventListener');
+
+    linker.activate();
+    expect(windowAdd).toHaveBeenCalledWith('pageshow', expect.any(Function));
+
+    linker.deactivate();
+    expect(windowRemove).toHaveBeenCalledWith('pageshow', expect.any(Function));
+  });
+
+  it('re-syncs on bfcache restore (pageshow with persisted=true)', () => {
+    (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
+    linker.activate();
+    fetchSpy.mockClear();
+
+    (linker as any).set('sessionId', 'sess-2');
+    const handler = (linker as any).pageshowHandler as (event: PageTransitionEvent) => void;
+    handler({ persisted: true } as PageTransitionEvent);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchSpy.mock.calls[0]![1].body) as { attributes: Record<string, string> };
+    expect(body.attributes.tracelog_session_id).toBe('sess-2');
+  });
+
+  it('does NOT re-sync on a regular (non-bfcache) page load', () => {
+    (linker as any).set('sessionId', 'sess-1');
+    (linker as any).set('userId', 'user-1');
+    linker.activate();
+    fetchSpy.mockClear();
+
+    (linker as any).set('sessionId', 'sess-2');
+    const handler = (linker as any).pageshowHandler as (event: PageTransitionEvent) => void;
+    handler({ persisted: false } as PageTransitionEvent);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -297,7 +395,7 @@ describe('ShopifyCartLinker - Fetch Failure Handling', () => {
     linker.activate();
 
     await vi.waitFor(() => {
-      expect((linker as any).lastSyncedSessionId).toBeNull();
+      expect((linker as any).lastSyncedKey).toBeNull();
     });
 
     const successFetch = vi.fn().mockResolvedValue({ ok: true });
@@ -313,7 +411,7 @@ describe('ShopifyCartLinker - Fetch Failure Handling', () => {
 
     // Wait for the rejection to propagate
     await vi.waitFor(() => {
-      expect((linker as any).lastSyncedSessionId).toBeNull();
+      expect((linker as any).lastSyncedKey).toBeNull();
     });
 
     // Now fix fetch and trigger again — should retry
@@ -331,7 +429,7 @@ describe('ShopifyCartLinker - Fetch Failure Handling', () => {
     linker.activate();
 
     // Synchronous throw resets immediately
-    expect((linker as any).lastSyncedSessionId).toBeNull();
+    expect((linker as any).lastSyncedKey).toBeNull();
 
     const successFetch = vi.fn().mockResolvedValue({ ok: true });
     global.fetch = successFetch;
