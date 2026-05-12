@@ -132,7 +132,7 @@ test.describe('E2E: Page Lifecycle Listeners', () => {
   });
 
   test.describe('SPA navigation flush', () => {
-    test('flushes on pushState to a new URL (default config)', async ({ page }) => {
+    test('flushes on pushState to a new URL when flushOnSpaNavigation=true', async ({ page }) => {
       const callCount = await page.evaluate(async (): Promise<number> => {
         let retries = 0;
         while (!window.__traceLogBridge && retries < 50) {
@@ -144,7 +144,7 @@ test.describe('E2E: Page Lifecycle Listeners', () => {
         }
 
         window.__traceLogBridge.destroy(true);
-        await window.__traceLogBridge.init({ pageViewThrottleMs: 0 });
+        await window.__traceLogBridge.init({ pageViewThrottleMs: 0, flushOnSpaNavigation: true });
 
         const em = window.__traceLogBridge.getEventManager() as unknown as {
           flushImmediately: () => Promise<boolean>;
