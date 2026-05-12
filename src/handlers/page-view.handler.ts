@@ -126,7 +126,8 @@ export class PageViewHandler extends StateManager {
       ...(pageViewData && { page_view: pageViewData }),
     });
 
-    // Flush buffered events from the previous route before the user can close the tab.
+    // Flush the queue now (previous-route events + this PAGE_VIEW) so the
+    // batch lands before the user can close the tab on the next route.
     if (this.get('config').flushOnSpaNavigation !== false) {
       void this.eventManager.flushImmediately();
     }

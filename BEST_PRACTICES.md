@@ -177,6 +177,23 @@ window.location.href = '/thanks'; // ❌ Event likely lost
 
 **Caveats**: `sendBeacon` is capped at 64KB and does not apply custom headers. Failed batches are persisted to `localStorage` and recovered on the next `init()` via their idempotency token.
 
+### ✅ DO: Force-flush before route teardown when auto-flush is disabled
+
+The library auto-flushes on SPA navigation (`flushOnSpaNavigation`, default `true`). If you opt out — e.g. you want to control timing yourself — call `flushImmediately()` (async, with retries) before tearing down route-scoped state. For unload listeners use `flushImmediatelySync()` instead so the browser queues the request.
+
+```typescript
+// Angular: flush on every NavigationStart with auto-flush disabled
+await tracelog.init({ flushOnSpaNavigation: false, /* ... */ });
+
+router.events
+  .pipe(filter((e) => e instanceof NavigationStart))
+  .subscribe(async () => {
+    await tracelog.flushImmediately();
+  });
+```
+
+Both helpers resolve to `false` (rather than throwing) if the library is not initialized or another flush is in flight, so they are safe to call from guards and listeners without try/catch.
+
 ---
 
 ## Event Listeners

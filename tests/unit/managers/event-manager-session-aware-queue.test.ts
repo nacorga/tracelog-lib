@@ -278,4 +278,52 @@ describe('EventManager - Multi-session × multi-integration partial failure', ()
     expect(eventManager.getQueueLength()).toBe(2);
     expect(eventManager['eventsQueue'].every((e) => e._session_id === 'session-B')).toBe(true);
   });
+
+  it('serializes concurrent flushImmediately() calls so events are sent exactly once', async () => {
+    // Two back-to-back flushImmediately() calls (e.g., SPA navigation closely
+    // followed by visibilitychange) must not both build the same `planned`
+    // array and fire duplicate network requests. The second call should see
+    // sendInProgress=true and resolve to false without invoking the senders.
+    eventManager['set']('sessionId', 'session-A');
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'a1' } });
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'a2' } });
+
+    expect(eventManager.getQueueLength()).toBe(2);
+
+    const [saasSender, customSender] = eventManager['dataSenders'];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slowSend = async (): Promise<boolean> => {
+      await gate;
+      return true;
+    };
+    (saasSender!.sendEventsQueue as ReturnType<typeof vi.fn>).mockImplementation(slowSend);
+    (customSender!.sendEventsQueue as ReturnType<typeof vi.fn>).mockImplementation(slowSend);
+
+    // Kick off the first flush but don't await it yet — leaves sendInProgress=true.
+    const first = eventManager.flushImmediately();
+    // Microtask boundary so the first flush has time to enter the async IIFE
+    // and set sendInProgress before the second call inspects it.
+    await Promise.resolve();
+
+    const second = await eventManager.flushImmediately();
+    expect(second).toBe(false);
+    expect(saasSender!.sendEventsQueue).toHaveBeenCalledTimes(1);
+    expect(customSender!.sendEventsQueue).toHaveBeenCalledTimes(1);
+
+    release();
+    const firstResult = await first;
+    expect(firstResult).toBe(true);
+    expect(eventManager.getQueueLength()).toBe(0);
+
+    // A third flush after the first one resolves must work normally — the
+    // sendInProgress flag is released in `finally`.
+    const third = await eventManager.flushImmediately();
+    expect(third).toBe(true);
+    // No new send calls because the queue is empty by this point.
+    expect(saasSender!.sendEventsQueue).toHaveBeenCalledTimes(1);
+    expect(customSender!.sendEventsQueue).toHaveBeenCalledTimes(1);
+  });
 });

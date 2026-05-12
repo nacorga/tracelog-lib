@@ -198,7 +198,15 @@ export const event = (
  * {@link flushImmediatelySync} which uses `sendBeacon` and is guaranteed to be queued
  * by the browser even after the page closes.
  *
- * @returns Promise<boolean> — `true` if all integrations sent successfully, `false` if not initialized, destroying, or any send failed
+ * **Error semantics**: Unlike {@link event}, this function does not throw if
+ * called before `init()` or during teardown — it resolves to `false`. Safe to
+ * call in route guards / unload listeners without try/catch.
+ *
+ * **Concurrency**: A second `flushImmediately()` call while another is still
+ * in flight resolves to `false` (the in-flight call already owns the events).
+ * `await` the returned promise if you need ordered flushes.
+ *
+ * @returns Promise<boolean> — `true` if all integrations sent successfully, `false` if not initialized, destroying, another flush is in flight, or any send failed
  *
  * @example
  * ```typescript
@@ -233,6 +241,10 @@ export const flushImmediately = async (): Promise<boolean> => {
  * - No retry on failure (`sendBeacon` is fire-and-forget).
  *
  * For non-unload scenarios use {@link flushImmediately} (async with retries).
+ *
+ * **Error semantics**: Unlike {@link event}, this function does not throw if
+ * called before `init()` or during teardown — it returns `false`. Safe to call
+ * in unload listeners without try/catch.
  *
  * @returns `true` if all integrations sent successfully, `false` if not initialized, destroying, or any send failed
  *

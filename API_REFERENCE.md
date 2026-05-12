@@ -168,7 +168,11 @@ Use when you need to ensure events are sent before a critical user action (e.g.,
 
 Uses `fetch()` with retries internally. For page-unload scenarios, prefer `flushImmediatelySync()` which uses `sendBeacon` and is guaranteed to be queued by the browser even after the page closes.
 
-**Returns:** `Promise<boolean>` — `true` if all integrations sent successfully, `false` if not initialized, destroying, or any send failed.
+**Error semantics:** Unlike `event()`, this method does not throw if called before `init()` or during teardown — it resolves to `false`. Safe to call from route guards and unload listeners without try/catch.
+
+**Concurrency:** A second `flushImmediately()` call while another is still in flight resolves to `false` (the in-flight call already owns the events). `await` the returned promise if you need ordered flushes.
+
+**Returns:** `Promise<boolean>` — `true` if all integrations sent successfully, `false` if not initialized, destroying, another flush is in flight, or any send failed.
 
 **Example:**
 
@@ -195,6 +199,8 @@ The library already wires this to `pagehide`, `beforeunload`, and `visibilitycha
 - No retry on failure (`sendBeacon` is fire-and-forget).
 
 For non-unload scenarios use `flushImmediately()` (async with retries).
+
+**Error semantics:** Unlike `event()`, this method does not throw if called before `init()` or during teardown — it returns `false`. Safe to call from unload listeners without try/catch.
 
 **Returns:** `boolean` — `true` if all integrations sent successfully, `false` if not initialized, destroying, or any send failed.
 
@@ -536,6 +542,10 @@ This is the same behavior as the removed `disabledEvents` configuration in v2.x,
 **Event Listeners:**
 
 Event listeners (`tracelog.on('event', ...)`) receive **original events**, not transformed events. Transformers only affect data sent to backends. If you need enriched events in listeners (e.g., for GTM relay), apply the transformation manually in your callback.
+
+**`beforeBatch` invocation count:**
+
+`beforeBatch` is invoked **once per session-batch**, not once per flush. If the in-memory queue spans more than one session (e.g. after a session-timeout renewal that happened between two `track()` calls), the flush produces one batch per `session_id` and the transformer runs once per batch. Avoid stateful transformers that assume a single invocation per flush.
 
 **Examples:**
 

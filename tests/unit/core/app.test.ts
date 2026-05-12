@@ -323,16 +323,14 @@ describe('App - Initialization', () => {
       recoverSpy.mockRestore();
     });
 
-    it('should flush events when document.hidden becomes true (default config)', async () => {
+    it('should flush via sendBeacon when document.hidden becomes true (default config)', async () => {
       const bridge = await initTestBridge();
-      const eventManager = (bridge as unknown as { managers: { event: { flushImmediately: () => Promise<boolean> } } })
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediatelySync: () => boolean } } })
         .managers.event;
-      const flushSpy = vi.spyOn(eventManager, 'flushImmediately').mockResolvedValue(true);
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(true);
 
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
       document.dispatchEvent(new Event('visibilitychange'));
-
-      await Promise.resolve();
 
       expect(flushSpy).toHaveBeenCalledTimes(1);
       flushSpy.mockRestore();
@@ -340,14 +338,12 @@ describe('App - Initialization', () => {
 
     it('should NOT flush when document.hidden becomes false', async () => {
       const bridge = await initTestBridge();
-      const eventManager = (bridge as unknown as { managers: { event: { flushImmediately: () => Promise<boolean> } } })
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediatelySync: () => boolean } } })
         .managers.event;
-      const flushSpy = vi.spyOn(eventManager, 'flushImmediately').mockResolvedValue(true);
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(true);
 
       Object.defineProperty(document, 'hidden', { configurable: true, value: false });
       document.dispatchEvent(new Event('visibilitychange'));
-
-      await Promise.resolve();
 
       expect(flushSpy).not.toHaveBeenCalled();
       flushSpy.mockRestore();
@@ -355,14 +351,12 @@ describe('App - Initialization', () => {
 
     it('should NOT flush when flushOnPageHidden is false', async () => {
       const bridge = await initTestBridge(createMockConfig({ flushOnPageHidden: false }));
-      const eventManager = (bridge as unknown as { managers: { event: { flushImmediately: () => Promise<boolean> } } })
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediatelySync: () => boolean } } })
         .managers.event;
-      const flushSpy = vi.spyOn(eventManager, 'flushImmediately').mockResolvedValue(true);
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(true);
 
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
       document.dispatchEvent(new Event('visibilitychange'));
-
-      await Promise.resolve();
 
       expect(flushSpy).not.toHaveBeenCalled();
       flushSpy.mockRestore();

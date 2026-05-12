@@ -9,7 +9,7 @@ import { ScrollHandler } from './handlers/scroll.handler';
 import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
-import { State, TraceLogTestBridge, EventData, InitResult } from './types';
+import { State, TraceLogTestBridge, EventData, EventOptions, InitResult } from './types';
 import { setQaMode as setQaModeUtil } from './utils/browser/mode.utils';
 
 /**
@@ -50,7 +50,7 @@ export class TestBridge extends App implements TraceLogTestBridge {
   override sendCustomEvent(
     name: string,
     data?: Record<string, unknown> | Record<string, unknown>[],
-    options?: { critical?: boolean },
+    options?: EventOptions,
   ): void {
     if (!this.initialized) {
       return;
@@ -60,13 +60,15 @@ export class TestBridge extends App implements TraceLogTestBridge {
   }
 
   /**
-   * Alias for sendCustomEvent (E2E test convenience)
+   * Alias for sendCustomEvent (E2E test convenience).
+   *
+   * @param name - Event name
+   * @param metadata - Optional metadata
+   * @param options - Optional flags. `{ critical: true }` flushes via
+   *   sendBeacon immediately after tracking — used by E2E tests that simulate
+   *   purchase-then-navigate flows.
    */
-  event(
-    name: string,
-    metadata?: Record<string, unknown> | Record<string, unknown>[],
-    options?: { critical?: boolean },
-  ): void {
+  event(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[], options?: EventOptions): void {
     this.sendCustomEvent(name, metadata, options);
   }
 

@@ -676,6 +676,10 @@ export class App extends StateManager {
     };
 
     // Mobile Safari often skips pagehide/beforeunload; flushing on visibilitychange covers tab switch and app backgrounding.
+    // Use sendBeacon (sync) rather than async fetch — when the OS backgrounds
+    // or terminates the tab, an in-flight fetch can be aborted before its body
+    // reaches the network, but sendBeacon is queued by the browser and survives
+    // suspension. Matches the contract documented in README / API_REFERENCE.
     this.visibilityFlushHandler = (): void => {
       if (typeof document === 'undefined' || !document.hidden) {
         return;
@@ -683,9 +687,7 @@ export class App extends StateManager {
       if (this.get('config').flushOnPageHidden === false) {
         return;
       }
-      void this.managers.event?.flushImmediately().catch((error) => {
-        log('warn', 'Failed to flush events on visibilitychange', { error });
-      });
+      this.managers.event?.flushImmediatelySync();
     };
 
     window.addEventListener('pagehide', this.pageUnloadHandler);

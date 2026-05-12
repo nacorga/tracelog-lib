@@ -10,7 +10,7 @@ import { StorageManager } from '../managers/storage.manager';
 import { Config } from './config.types';
 import { InitResult } from './common.types';
 import { State } from './state.types';
-import { EventData } from './event.types';
+import { EventData, EventOptions } from './event.types';
 import {
   BeforeSendTransformer,
   BeforeBatchTransformer,
@@ -37,15 +37,11 @@ export interface TraceLogTestBridge {
   sendCustomEvent(
     name: string,
     data?: Record<string, unknown> | Record<string, unknown>[],
-    options?: { critical?: boolean },
+    options?: EventOptions,
   ): void;
 
   // Convenience alias for sendCustomEvent (used in tests)
-  event(
-    name: string,
-    metadata?: Record<string, unknown> | Record<string, unknown>[],
-    options?: { critical?: boolean },
-  ): void;
+  event(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[], options?: EventOptions): void;
 
   // Event subscription methods (inherited from App)
   on(event: string, callback: (data: any) => void): void;
