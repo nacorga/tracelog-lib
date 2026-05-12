@@ -225,6 +225,8 @@ export interface ErrorData {
   type: ErrorType;
   /** Error message text */
   message: string;
+  /** Error constructor name (TypeError, ReferenceError, etc.) when available */
+  name?: string;
   /** Source file where error occurred */
   filename?: string;
   /** Line number in source file */
