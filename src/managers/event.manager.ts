@@ -137,6 +137,9 @@ export class EventManager extends StateManager {
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
   private lastSessionId: string | null = null;
+  // Set when a sync flush is requested mid-async-send; drained by the async
+  // finally block. See `drainPendingSyncFlush` for the full rationale.
+  private pendingSyncFlush = false;
 
   private sessionEventCounts: SessionEventCounts = {
     total: 0,
@@ -566,6 +569,7 @@ export class EventManager extends StateManager {
     // and those are destroyed during this stop() call anyway
     this.clearSendTimeout();
     this.sendInProgress = false;
+    this.pendingSyncFlush = false;
     this.consecutiveSendFailures = 0;
 
     // Save session counts immediately before cleanup (bypass debounce)
@@ -671,6 +675,79 @@ export class EventManager extends StateManager {
    */
   flushImmediatelySync(): boolean {
     return this.flushEvents(true) as boolean;
+  }
+
+  /**
+   * Sends ONLY the most recently queued event via `navigator.sendBeacon()` in
+   * a dedicated single-event batch.
+   *
+   * **Purpose**: Guarantee delivery of an event that *must* survive an
+   * imminent page unload (purchase confirmation, signup completion, etc.),
+   * independent of the main queue's size or in-flight async send state.
+   *
+   * **Why a dedicated batch**: `flushImmediatelySync()` serialises the entire
+   * queue into one `sendBeacon` call. If the queue is heavy (>64KB) the
+   * beacon fails and the batch is persisted to `localStorage`, which is only
+   * recovered on the next `init()` — useless for one-shot conversion events
+   * where the user never returns.
+   *
+   * **Behaviour**:
+   * - Reads the last entry of `eventsQueue` (the just-tracked event).
+   * - Wraps it in its own `EventsQueue` and dispatches synchronously through
+   *   every `SenderManager` via `sendEventsQueueSync()`.
+   * - Leaves the main queue untouched; the same event will be re-delivered by
+   *   the next periodic / unload flush. Idempotency is the caller-side
+   *   contract: the backend MUST deduplicate by `event.id` (e.g. unique index
+   *   on the ingestion collection) — same guarantee the library already
+   *   relies on for the persisted-events recovery path.
+   *
+   * **Use it after** `track()` so the event is in the queue. Caller is
+   * responsible for verifying that `track()` actually queued the event
+   * (it can be dropped by rate limiting / sampling / `beforeSend`).
+   *
+   * **Standalone mode** (no senders configured): returns `false` without
+   * emitting. The subsequent main-queue drain (`flushImmediatelySync()`) is
+   * responsible for delivering the event to local listeners — emitting here
+   * too would surface the same event twice to a `tracelog.on('queue', ...)`
+   * subscriber.
+   *
+   * @returns `true` if at least one sender delivered the beacon successfully,
+   * `false` otherwise (including standalone mode — the drain handles it).
+   */
+  flushLastEventSync(): boolean {
+    if (this.dataSenders.length === 0) {
+      return false;
+    }
+
+    const last = this.eventsQueue[this.eventsQueue.length - 1];
+
+    if (!last) {
+      return false;
+    }
+
+    const { _session_id: sessionId, ...publicEvent } = last;
+
+    if (!sessionId) {
+      // Invariant violation: buildEventPayload always stamps _session_id.
+      // Log and bail rather than ship a batch with no session attribution.
+      log('debug', 'flushLastEventSync: last queued event missing _session_id, skipping');
+      return false;
+    }
+
+    const globalMetadata = this.get('config')?.globalMetadata;
+    const identity = this.get('identity');
+
+    const batch: EventsQueue = {
+      user_id: this.get('userId'),
+      session_id: sessionId,
+      device: this.get('device'),
+      events: [publicEvent as EventData],
+      ...(globalMetadata && { global_metadata: globalMetadata }),
+      ...(identity && { identify: identity }),
+    };
+
+    const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(batch));
+    return results.some(Boolean);
   }
 
   /**
@@ -929,7 +1006,14 @@ export class EventManager extends StateManager {
     // outcome versus systematic duplicate-flagging.
     if (isSync && this.sendInProgress) {
       const totalEvents = planned.reduce((acc, p) => acc + p.eventIds.length, 0);
-      log('debug', 'Sync flush skipped: async send already in-flight, trusting fetch to deliver', {
+      // Defer the sync flush until the in-flight async send settles. The async
+      // fetch was built before the event(s) prompting this sync call, so it
+      // does NOT include them; without the deferred re-flush the events would
+      // sit in the queue until the next periodic tick (potentially lost on
+      // navigation). The sendBatchAsync/sendEventsQueue finally blocks re-call
+      // flushImmediatelySync when this flag is set.
+      this.pendingSyncFlush = true;
+      log('debug', 'Sync flush deferred: async send in-flight, will retry on settle', {
         data: { eventCount: totalEvents },
       });
       return true;
@@ -962,8 +1046,24 @@ export class EventManager extends StateManager {
         return results.some(Boolean);
       } finally {
         this.sendInProgress = false;
+        this.drainPendingSyncFlush();
       }
     })();
+  }
+
+  /**
+   * Re-runs a sync flush that was deferred while an async send was in flight.
+   *
+   * Called from the `finally` blocks of `flushEvents(false)` and
+   * `sendEventsQueue()`. If `pendingSyncFlush` is set, clears the flag and
+   * invokes `flushImmediatelySync()` synchronously so any events that arrived
+   * after the deferred sync call are delivered before the next event loop
+   * tick. Critical for high-stakes events tracked mid-async-send.
+   */
+  private drainPendingSyncFlush(): void {
+    if (!this.pendingSyncFlush) return;
+    this.pendingSyncFlush = false;
+    this.flushImmediatelySync();
   }
 
   /**
@@ -1060,6 +1160,7 @@ export class EventManager extends StateManager {
       }
     } finally {
       this.sendInProgress = false;
+      this.drainPendingSyncFlush();
     }
   }
 
