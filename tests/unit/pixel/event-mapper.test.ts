@@ -94,7 +94,7 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
     expect(body).toBeNull();
   });
 
-  it('returns null when only session_id is present (no user_id)', () => {
+  it('returns null when session_id is missing, user_id is missing, AND no clientId fallback', () => {
     const body = mapEventToBody(
       {
         id: 'evt-1',
@@ -105,6 +105,65 @@ describe('mapEventToBody — identity resolution (array-lookup)', () => {
     );
 
     expect(body).toBeNull();
+  });
+
+  it('falls back to shopifyEvent.clientId when tracelog_user_id is missing (legacy storefront)', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        clientId: 'shopify-visitor-abc-123',
+        data: { checkout: { attributes: [SESSION_ATTR] } },
+      },
+      'checkout_started',
+    );
+
+    expect(body).not.toBeNull();
+    expect(body!.session_id).toBe('sess-1');
+    expect(body!.user_id).toBe('shopify-visitor-abc-123');
+  });
+
+  it('prefers tracelog_user_id over clientId when both are set', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        clientId: 'shopify-visitor-fallback',
+        data: { checkout: { attributes: [SESSION_ATTR, USER_ATTR] } },
+      },
+      'checkout_started',
+    );
+
+    expect(body!.user_id).toBe('user-1');
+  });
+
+  it('returns null when tracelog_session_id is missing even if clientId is set (session is hard-required)', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        clientId: 'shopify-visitor-abc-123',
+        data: { checkout: { attributes: [{ key: 'unrelated', value: 'x' }] } },
+      },
+      'checkout_started',
+    );
+
+    expect(body).toBeNull();
+  });
+
+  it('falls back to clientId from cart.attributes path (cart_viewed legacy)', () => {
+    const body = mapEventToBody(
+      {
+        id: 'evt-1',
+        timestamp: '2026-05-08T16:19:32.533Z',
+        clientId: 'shopify-cart-visitor',
+        data: { cart: { attributes: [SESSION_ATTR] } },
+      },
+      'cart_viewed',
+    );
+
+    expect(body).not.toBeNull();
+    expect(body!.user_id).toBe('shopify-cart-visitor');
   });
 
   it('returns null when attributes is mistakenly an object (no array-iteration)', () => {

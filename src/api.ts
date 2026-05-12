@@ -246,7 +246,15 @@ export const flushImmediately = async (): Promise<boolean> => {
  * called before `init()` or during teardown — it returns `false`. Safe to call
  * in unload listeners without try/catch.
  *
- * @returns `true` if all integrations sent successfully, `false` if not initialized, destroying, or any send failed
+ * **In-flight contract**: if an async flush is already running, this call is
+ * deferred (queued for replay once the async send settles) and returns `false`.
+ * Mirrors {@link flushImmediately}: `true` ⇒ at least one integration accepted
+ * the batch *during this call*.
+ *
+ * @returns `true` if at least one integration accepted the beacon batch during
+ *          this call, `false` otherwise (not initialized, destroying, no
+ *          events, all senders failed, or the call was deferred behind an
+ *          in-flight async send)
  *
  * @example
  * ```typescript
@@ -531,6 +539,35 @@ export const getSessionId = (): string | null => {
   }
 
   return app.getSessionId();
+};
+
+/**
+ * Returns the current user ID, or null if `init()` has not been called yet.
+ *
+ * The user ID is the stable identifier TraceLog uses to stitch sessions across
+ * tabs and visits. Surface use cases: writing it as a Shopify cart attribute
+ * (`tracelog_user_id`) so checkout-funnel events fired from the Web Pixel
+ * stitch back to the storefront visitor — required if the storefront does not
+ * use `integrations.tracelog.shopify: true` (which wires this automatically).
+ *
+ * @returns User ID string, or null if not initialized
+ *
+ * @example
+ * ```typescript
+ * await tracelog.init();
+ * const userId = tracelog.getUserId();
+ * ```
+ */
+export const getUserId = (): string | null => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+
+  if (!app) {
+    return null;
+  }
+
+  return app.getUserId();
 };
 
 /**

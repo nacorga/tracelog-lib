@@ -164,13 +164,12 @@ tracelog.event('signup', {
 
 ### ✅ DO: Mark events as critical when they precede a navigation
 
-For high-value events that fire right before a page unload (purchase confirmation that redirects to a thank-you page, signup that redirects to onboarding, etc.) pass `{ critical: true }`. The library uses a **double-write** strategy that guarantees delivery under every browser lifecycle quirk we've observed in production:
+For high-value events that fire right before a page unload (purchase confirmation that redirects to a thank-you page, signup that redirects to onboarding, etc.) pass `{ critical: true }`. The library flushes the queue via `navigator.sendBeacon()` synchronously, which the browser guarantees to deliver even if the page is closing immediately after.
 
-1. **Dedicated single-event `sendBeacon`** — the critical event is sent on its own in a tiny (<1KB) batch. Guarantees delivery even when the main queue would exceed the 64KB `sendBeacon` cap, and is independent of any async fetch already in flight.
-2. **Main-queue drain via `sendBeacon`** — the rest of the queue is flushed too. If an async send is in flight when the critical event arrives, the drain is deferred and re-runs after that fetch settles (the deferred re-flush mechanism), so events tracked just before the critical one are not stranded.
+If an asynchronous send happens to be in flight when the critical event is tracked, the sync flush is deferred and re-runs from the in-flight send's `finally` block — the critical event is never stranded in the queue waiting for the next periodic tick.
 
 ```typescript
-// GOOD - dedicated sendBeacon for the conversion + queue drain
+// GOOD - sendBeacon survives the navigation
 tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 }, { critical: true });
 window.location.href = '/thanks';
 
@@ -179,11 +178,9 @@ tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 });
 window.location.href = '/thanks'; // ❌ Event likely lost
 ```
 
-**Backend prerequisite (MUST)**: the double-write strategy may cause the same event to be sent twice — once via the dedicated beacon, once via the periodic / unload flush. Your collector backend **must** deduplicate by `event.id` (e.g. unique index on the ingestion collection) or you'll see visible duplicates. This is the same guarantee the library already relies on for its persisted-events recovery path, so most consumers already satisfy it.
+**Caveats**: `sendBeacon` is capped at 64KB per request and does not apply custom headers. Payloads exceeding the cap are persisted to `localStorage` and recovered on the next `init()` via the idempotency token — relevant only if the same user returns to the same origin.
 
-**Other caveats**: `sendBeacon` is capped at 64KB per request and does not apply custom headers. If the queue drain exceeds the cap, the failed portion is persisted to `localStorage` and recovered on the next `init()` via the idempotency token. The dedicated single-event beacon is always under the cap.
-
-**When NOT to mark critical**: events that don't immediately precede a navigation (mid-funnel `add_to_cart`, page views, web vitals, etc.) — marking them critical sends an extra beacon per call and adds queue chatter without measurable benefit.
+**When NOT to mark critical**: events that don't immediately precede a navigation (mid-funnel `add_to_cart`, page views, web vitals, etc.) — the default batched send (`sendIntervalMs`) plus auto-flush on `pagehide`/`visibilitychange` already covers them.
 
 ### ✅ DO: Force-flush before route teardown when auto-flush is disabled
 

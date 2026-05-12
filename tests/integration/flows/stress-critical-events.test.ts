@@ -2,22 +2,15 @@
  * Integration: stress concurrency for critical events
  *
  * Simulates rapid-fire bursts of critical events and verifies:
- *   1. Every critical event that survives validation reaches the dedicated
- *      single-event beacon (Concern #1B / Plan #2).
- *   2. `sendInProgress` correctly serializes — no overlapping async sends.
- *   3. The deferred re-flush mechanism (Concern #1 / Plan #1) actually fires
- *      when sync flushes hit the in-flight guard.
- *   4. The library's own rate limiting silently drops the dedicated beacon
- *      for events that don't reach the queue (cannot send the *previous*
- *      last event under a critical name — misattribution would be worse than
- *      drop).
+ *   1. `sendInProgress` correctly serializes — no overlapping async sends.
+ *   2. The deferred re-flush mechanism actually fires when sync flushes hit
+ *      the in-flight guard (so critical events tracked mid-fetch are not
+ *      stranded in the queue).
  *
  * To keep the bursts realistic without fighting the library's 50 events/sec
  * global rate limit, we reset the rate-limit window between waves via the
  * private accessor. This is a test-only hatch; production code never touches
  * the counter directly.
- *
- * Backend idempotency by `event.id` is the documented contract.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -52,41 +45,6 @@ describe('Integration: stress concurrency for critical events', () => {
     cleanupTestEnvironment();
   });
 
-  it('every critical event that survives validation reaches the dedicated beacon', () => {
-    const em = bridge.getEventManager()!;
-    const dedicatedCalls: Array<{ name: string }> = [];
-
-    const originalDedicated = em.flushLastEventSync.bind(em);
-    em.flushLastEventSync = (): boolean => {
-      const last = (em as unknown as { eventsQueue: Array<{ custom_event?: { name: string } }> }).eventsQueue.at(-1);
-      const name = last?.custom_event?.name;
-      if (name !== undefined && name.length > 0) {
-        dedicatedCalls.push({ name });
-      }
-      return originalDedicated();
-    };
-
-    // Fire 5 waves of 10 events each (5 critical per wave), resetting the
-    // rate-limit window between waves so all events pass validation.
-    const WAVES = 5;
-    const PER_WAVE = 10;
-    const expectedCriticalNames: string[] = [];
-    for (let wave = 0; wave < WAVES; wave++) {
-      resetRateLimit(em);
-      for (let i = 0; i < PER_WAVE; i++) {
-        const isCritical = i % 2 === 1;
-        const name = isCritical ? `critical_w${wave}_i${i}` : `regular_w${wave}_i${i}`;
-        bridge.event(name, { wave, i }, isCritical ? { critical: true } : undefined);
-        if (isCritical) {
-          expectedCriticalNames.push(name);
-        }
-      }
-    }
-
-    expect(dedicatedCalls).toHaveLength(expectedCriticalNames.length);
-    expect(dedicatedCalls.map((c) => c.name)).toEqual(expectedCriticalNames);
-  });
-
   it('serializes concurrent flushes — critical events tracked mid-fetch defer correctly', async () => {
     const em = bridge.getEventManager()!;
 
@@ -114,8 +72,7 @@ describe('Integration: stress concurrency for critical events', () => {
     expect(em['sendInProgress']).toBe(true);
 
     // Critical event tracked mid-flight. Its flushImmediatelySync sees
-    // sendInProgress=true and defers (pendingSyncFlush=true). The dedicated
-    // beacon (flushLastEventSync) runs synchronously regardless.
+    // sendInProgress=true and defers (pendingSyncFlush=true).
     resetRateLimit(em);
     bridge.event('critical_now', { i: 1 }, { critical: true });
 
@@ -131,24 +88,25 @@ describe('Integration: stress concurrency for critical events', () => {
     expect(em['pendingSyncFlush']).toBe(false);
   });
 
-  it('drops critical=true silently when the event is filtered (per-event rate limit)', () => {
+  it('does nothing extra when critical=true is dropped before queueing (per-event rate limit)', () => {
     const em = bridge.getEventManager()!;
-    const dedicatedSpy = vi.spyOn(em, 'flushLastEventSync');
+    const flushSpy = vi.spyOn(em, 'flushImmediatelySync');
 
     // Burn the per-event rate limit (MAX_SAME_EVENT_PER_MINUTE = 60 for same name).
-    // Resetting global rate-limit window so the per-event limiter is the only one in play.
     for (let i = 0; i < 60; i++) {
       resetRateLimit(em);
       bridge.event('same_name', { i });
     }
-    dedicatedSpy.mockClear();
+    flushSpy.mockClear();
 
     resetRateLimit(em);
     bridge.event('same_name', { i: 61 }, { critical: true });
 
-    // Filtered before queueing → no dedicated beacon. Critical correctness:
-    // sending the *previously last* event under the critical name would
-    // misattribute the conversion. Silent drop is the right behaviour.
-    expect(dedicatedSpy).not.toHaveBeenCalled();
+    // The event is filtered before queueing. flushImmediatelySync is still
+    // called (sendCustomEvent unconditionally calls it for critical=true) but
+    // it just drains whatever else is in the queue — there is nothing extra
+    // to do, and no risk of misattribution because the dropped event simply
+    // never made it onto the queue.
+    expect(flushSpy).toHaveBeenCalledTimes(1);
   });
 });

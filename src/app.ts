@@ -157,14 +157,14 @@ export class App extends StateManager {
    *
    * @param name - Event name
    * @param metadata - Optional metadata
-   * @param options - Optional event options. `{ critical: true }` triggers the
-   *   double-write delivery path: (1) the just-tracked event is sent in its
-   *   own dedicated single-event `sendBeacon` (immune to the 64KB queue cap),
-   *   and (2) the main queue is drained too — deferred to the in-flight
-   *   async send's `finally` block when one is running, so events tracked
-   *   immediately before the critical one are not stranded. Backend must
-   *   deduplicate by `event.id` since both paths may deliver the same event.
-   *   No-op for events dropped by rate limiting / sampling / `beforeSend`.
+   * @param options - Optional event options. `{ critical: true }` drains the
+   *   queue via `navigator.sendBeacon()` immediately after tracking — the
+   *   browser guarantees the request is queued for delivery even if the page
+   *   is about to unload (typical pattern: tracking a purchase, then
+   *   `window.location.href = '/thanks'`). If an async fetch is already in
+   *   flight when the critical event is tracked, the sync flush is deferred
+   *   and re-runs from the async send's `finally` block so the critical
+   *   event is not stranded in the queue.
    * @internal Called from api.event()
    */
   sendCustomEvent(
@@ -196,13 +196,6 @@ export class App extends StateManager {
       return;
     }
 
-    // Snapshot the queue length so we can detect whether `track()` actually
-    // queued the event (it may be dropped by rate limiting, sampling, or a
-    // `beforeSend` transformer returning `null`). For critical events we only
-    // dispatch the dedicated beacon if the event was successfully queued —
-    // otherwise we'd send the previously-last event, which is incorrect.
-    const queueLengthBefore = this.managers.event.getQueueLength();
-
     this.managers.event.track({
       type: EventType.CUSTOM,
       custom_event: {
@@ -212,29 +205,16 @@ export class App extends StateManager {
     });
 
     if (options?.critical === true) {
-      const wasQueued = this.managers.event.getQueueLength() > queueLengthBefore;
-
-      if (!wasQueued) {
-        log('debug', 'Critical event was dropped before queueing — no flush triggered', { data: { name } });
-        return;
-      }
-
-      // Dedicated single-event sendBeacon: guarantees delivery even if the
-      // main queue exceeds the 64KB sendBeacon cap or an async fetch is in
-      // flight. Returns false in standalone mode — the drain below handles
-      // local-listener delivery in that case. Idempotency by `event.id`
-      // (backend unique index) absorbs the duplicate when the periodic /
-      // unload flush also delivers it to a real backend.
-      const dedicatedOk = this.managers.event.flushLastEventSync();
-
-      // Drain the rest of the queue too. If an async send is in flight this
-      // returns true and sets `pendingSyncFlush` so the deferred re-flush
-      // runs after the async settles, covering events tracked just before
-      // this critical event that would otherwise miss the next tick.
-      const drainOk = this.managers.event.flushImmediatelySync();
-
-      if (!dedicatedOk && !drainOk) {
-        log('debug', 'Critical event: dedicated beacon and queue drain both failed', { data: { name } });
+      // Synchronous queue drain via sendBeacon — guaranteed to be queued by
+      // the browser even if a navigation happens immediately after this call
+      // (e.g. `window.location.href = '/thanks'`). If an async fetch is in
+      // flight this sets `pendingSyncFlush` and returns `false`; the deferred
+      // re-flush will run from the async send's `finally` block.
+      const ok = this.managers.event.flushImmediatelySync();
+      if (!ok) {
+        log('debug', 'Critical event flush returned false (deferred to in-flight send or empty queue)', {
+          data: { name },
+        });
       }
     }
   }
@@ -425,6 +405,16 @@ export class App extends StateManager {
    */
   public getSessionId(): string | null {
     return this.get('sessionId');
+  }
+
+  /**
+   * Returns the current user ID.
+   *
+   * @returns The user ID string, or null if not yet initialized
+   * @internal Used by api.getUserId()
+   */
+  public getUserId(): string | null {
+    return this.get('userId');
   }
 
   /**

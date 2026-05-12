@@ -101,6 +101,11 @@ export class ClickHandler extends StateManager {
       const relevantClickElement = this.getRelevantClickElement(clickedElement);
       const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);
 
+      // Order matters: the `data-tlog-name` CUSTOM event runs BEFORE the
+      // synthetic-coordinate guard below, so a programmatic `element.click()`
+      // on a tracked element still fires its explicit opt-in custom event. The
+      // implicit CLICK event is suppressed only for synthetic clicks to avoid
+      // polluting heatmaps with `(0, 0)` coordinates.
       if (trackingElement) {
         const trackingData = this.extractTrackingData(trackingElement);
 

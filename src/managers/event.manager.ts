@@ -660,7 +660,14 @@ export class EventManager extends StateManager {
    * - No retry on failure (sendBeacon is fire-and-forget)
    * - 64KB payload limit (large batches may be truncated)
    *
-   * @returns `true` if all sends succeeded, `false` if any failed
+   * **In-flight contract**: if an async send is already running this call is
+   * deferred (queued for replay in the async send's `finally` block) and
+   * returns `false` — nothing has been delivered yet at the point of return.
+   * Mirrors `flushImmediately()`'s behaviour for the same condition.
+   *
+   * @returns `true` if at least one integration accepted the beacon batch
+   *          *during this call*, `false` otherwise (no events, all senders
+   *          failed, or the call was deferred behind an in-flight async send)
    *
    * @example
    * ```typescript
@@ -675,79 +682,6 @@ export class EventManager extends StateManager {
    */
   flushImmediatelySync(): boolean {
     return this.flushEvents(true) as boolean;
-  }
-
-  /**
-   * Sends ONLY the most recently queued event via `navigator.sendBeacon()` in
-   * a dedicated single-event batch.
-   *
-   * **Purpose**: Guarantee delivery of an event that *must* survive an
-   * imminent page unload (purchase confirmation, signup completion, etc.),
-   * independent of the main queue's size or in-flight async send state.
-   *
-   * **Why a dedicated batch**: `flushImmediatelySync()` serialises the entire
-   * queue into one `sendBeacon` call. If the queue is heavy (>64KB) the
-   * beacon fails and the batch is persisted to `localStorage`, which is only
-   * recovered on the next `init()` — useless for one-shot conversion events
-   * where the user never returns.
-   *
-   * **Behaviour**:
-   * - Reads the last entry of `eventsQueue` (the just-tracked event).
-   * - Wraps it in its own `EventsQueue` and dispatches synchronously through
-   *   every `SenderManager` via `sendEventsQueueSync()`.
-   * - Leaves the main queue untouched; the same event will be re-delivered by
-   *   the next periodic / unload flush. Idempotency is the caller-side
-   *   contract: the backend MUST deduplicate by `event.id` (e.g. unique index
-   *   on the ingestion collection) — same guarantee the library already
-   *   relies on for the persisted-events recovery path.
-   *
-   * **Use it after** `track()` so the event is in the queue. Caller is
-   * responsible for verifying that `track()` actually queued the event
-   * (it can be dropped by rate limiting / sampling / `beforeSend`).
-   *
-   * **Standalone mode** (no senders configured): returns `false` without
-   * emitting. The subsequent main-queue drain (`flushImmediatelySync()`) is
-   * responsible for delivering the event to local listeners — emitting here
-   * too would surface the same event twice to a `tracelog.on('queue', ...)`
-   * subscriber.
-   *
-   * @returns `true` if at least one sender delivered the beacon successfully,
-   * `false` otherwise (including standalone mode — the drain handles it).
-   */
-  flushLastEventSync(): boolean {
-    if (this.dataSenders.length === 0) {
-      return false;
-    }
-
-    const last = this.eventsQueue[this.eventsQueue.length - 1];
-
-    if (!last) {
-      return false;
-    }
-
-    const { _session_id: sessionId, ...publicEvent } = last;
-
-    if (!sessionId) {
-      // Invariant violation: buildEventPayload always stamps _session_id.
-      // Log and bail rather than ship a batch with no session attribution.
-      log('debug', 'flushLastEventSync: last queued event missing _session_id, skipping');
-      return false;
-    }
-
-    const globalMetadata = this.get('config')?.globalMetadata;
-    const identity = this.get('identity');
-
-    const batch: EventsQueue = {
-      user_id: this.get('userId'),
-      session_id: sessionId,
-      device: this.get('device'),
-      events: [publicEvent as EventData],
-      ...(globalMetadata && { global_metadata: globalMetadata }),
-      ...(identity && { identify: identity }),
-    };
-
-    const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(batch));
-    return results.some(Boolean);
   }
 
   /**
@@ -1012,11 +946,16 @@ export class EventManager extends StateManager {
       // sit in the queue until the next periodic tick (potentially lost on
       // navigation). The sendBatchAsync/sendEventsQueue finally blocks re-call
       // flushImmediatelySync when this flag is set.
+      //
+      // Return `false`: nothing has been delivered yet at this point. Mirrors
+      // `flushImmediately()`'s in-flight contract (also returns `false` when a
+      // send is already in progress) so callers can read both methods the
+      // same way: `true` ⇒ at least one integration received the batch *now*.
       this.pendingSyncFlush = true;
       log('debug', 'Sync flush deferred: async send in-flight, will retry on settle', {
         data: { eventCount: totalEvents },
       });
-      return true;
+      return false;
     }
 
     if (isSync) {

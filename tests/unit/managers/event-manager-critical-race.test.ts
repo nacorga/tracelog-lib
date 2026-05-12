@@ -86,8 +86,11 @@ describe('EventManager - critical event race with in-flight async send', () => {
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'critical_now' } });
     const syncResult = eventManager.flushImmediatelySync();
 
-    // The sync path returns true (deferred) without invoking the sender.
-    expect(syncResult).toBe(true);
+    // The sync path returns `false` because nothing has actually been delivered
+    // yet — the call was deferred until the in-flight async send settles. This
+    // mirrors `flushImmediately()`'s contract: `true` ⇒ at least one
+    // integration received the batch *now*.
+    expect(syncResult).toBe(false);
     expect(customSender.sendEventsQueueSync).not.toHaveBeenCalled();
     expect(eventManager['pendingSyncFlush']).toBe(true);
 

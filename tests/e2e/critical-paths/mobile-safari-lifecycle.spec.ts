@@ -74,64 +74,51 @@ test.describe('E2E: Mobile Safari visibility-only flush', () => {
   });
 
   test('critical=true event survives the visibility-only path', async ({ page }) => {
-    const counters = await page.evaluate(
-      async (): Promise<{
-        dedicatedCount: number;
-        syncCount: number;
-        asyncCount: number;
-      }> => {
-        let retries = 0;
-        while (!window.__traceLogBridge && retries < 50) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          retries++;
-        }
-        if (!window.__traceLogBridge) {
-          throw new Error(`TraceLog bridge not available after ${retries * 100}ms`);
-        }
+    const counters = await page.evaluate(async (): Promise<{ syncCount: number; asyncCount: number }> => {
+      let retries = 0;
+      while (!window.__traceLogBridge && retries < 50) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        retries++;
+      }
+      if (!window.__traceLogBridge) {
+        throw new Error(`TraceLog bridge not available after ${retries * 100}ms`);
+      }
 
-        window.__traceLogBridge.destroy(true);
-        await window.__traceLogBridge.init();
+      window.__traceLogBridge.destroy(true);
+      await window.__traceLogBridge.init();
 
-        const em = window.__traceLogBridge.getEventManager() as unknown as {
-          flushImmediately: () => Promise<boolean>;
-          flushImmediatelySync: () => boolean;
-          flushLastEventSync: () => boolean;
-        };
-        let dedicatedCount = 0;
-        let syncCount = 0;
-        let asyncCount = 0;
-        em.flushLastEventSync = (): boolean => {
-          dedicatedCount++;
-          return true;
-        };
-        em.flushImmediatelySync = (): boolean => {
-          syncCount++;
-          return true;
-        };
-        em.flushImmediately = async (): Promise<boolean> => {
-          asyncCount++;
-          await Promise.resolve();
-          return true;
-        };
+      const em = window.__traceLogBridge.getEventManager() as unknown as {
+        flushImmediately: () => Promise<boolean>;
+        flushImmediatelySync: () => boolean;
+      };
+      let syncCount = 0;
+      let asyncCount = 0;
+      em.flushImmediatelySync = (): boolean => {
+        syncCount++;
+        return true;
+      };
+      em.flushImmediately = async (): Promise<boolean> => {
+        asyncCount++;
+        await Promise.resolve();
+        return true;
+      };
 
-        // Critical event right before iOS backgrounds the tab.
-        window.__traceLogBridge.event('purchase_completed', { orderId: 'ord-1' }, { critical: true });
+      // Critical event right before iOS backgrounds the tab.
+      window.__traceLogBridge.event('purchase_completed', { orderId: 'ord-1' }, { critical: true });
 
-        // Now simulate the backgrounding — visibilitychange but no pagehide.
-        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
-        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
-        document.dispatchEvent(new Event('visibilitychange'));
+      // Now simulate the backgrounding — visibilitychange but no pagehide.
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
 
-        await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
-        return { dedicatedCount, syncCount, asyncCount };
-      },
-    );
+      return { syncCount, asyncCount };
+    });
 
-    // The critical event fired the dedicated single-event beacon synchronously
-    // when `event(..., {critical: true})` was called — independent of the
-    // visibility path. The visibility listener then also drained the queue.
-    expect(counters.dedicatedCount).toBe(1);
+    // `critical: true` fires sendBeacon synchronously inside `event()`. The
+    // visibility listener fires another sendBeacon. Both contribute to syncCount.
+    // No async fetch should run for either path.
     expect(counters.syncCount).toBeGreaterThanOrEqual(1);
     expect(counters.asyncCount).toBe(0);
   });

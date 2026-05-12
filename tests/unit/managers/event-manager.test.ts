@@ -987,10 +987,13 @@ describe('EventManager - Queue Flushing', () => {
 
     const result = eventManager.flushImmediatelySync();
 
-    // No persistence write, no sendBeacon — just a no-op acknowledgement.
-    // The in-flight async fetch will resolve and either clear or persist
-    // these events itself (success → clearPersistedEvents, failure → persistEvents).
-    expect(result).toBe(true);
+    // No persistence write, no sendBeacon — the call is deferred (queued for
+    // replay once the async send settles via `pendingSyncFlush`). Returns
+    // `false` because nothing was delivered *during this call*; mirrors
+    // `flushImmediately()`'s in-flight contract. The in-flight async fetch
+    // will resolve and either clear or persist these events itself
+    // (success → clearPersistedEvents, failure → persistEvents).
+    expect(result).toBe(false);
     for (const spy of persistSpies) {
       expect(spy).not.toHaveBeenCalled();
     }
