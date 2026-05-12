@@ -235,12 +235,17 @@ tracelog.removeCustomHeaders();
 **Core Principle**: Optimistic Removal with Per-Integration Persistence
 
 - **Batching**: Every 10s OR 50-event threshold
-- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload, persists on failure)
+- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload + `critical: true` events, persists on failure)
 - **Retries**: Up to 2 attempts for transient errors (5xx, timeout)
 - **Backoff**: 200-300ms (retry 1), 400-500ms (retry 2)
 - **Persistence**: Failed events saved per-integration to localStorage with `idempotency_token` for backend deduplication
-- **Recovery**: Auto-recovered on next `init()` with same idempotency token
+- **Recovery**: Auto-recovered on next `init()` with same idempotency token (also on `pageshow.persisted === true` for bfcache restore)
 - **Optimistic Removal**: Queue cleared if AT LEAST ONE integration succeeds
+- **Auto-flush triggers** (in addition to the 10s/50-event interval):
+  - SPA navigation (`pushState`/`replaceState`/`popstate`/`hashchange`) — opt out via `flushOnSpaNavigation: false`
+  - Document hidden (`visibilitychange` to hidden) — opt out via `flushOnPageHidden: false`. Covers mobile Safari where `pagehide`/`beforeunload` may not fire
+  - `pagehide` / `beforeunload` — always on, uses `sendBeacon`
+  - `tracelog.event(name, meta, { critical: true })` — uses `sendBeacon` so the event survives an imminent navigation
 
 **Why Optimistic Removal is Critical**:
 - EventManager queue = "events not yet attempted to send"

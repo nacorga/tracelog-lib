@@ -125,6 +125,11 @@ export class PageViewHandler extends StateManager {
       from_page_url: fromUrl,
       ...(pageViewData && { page_view: pageViewData }),
     });
+
+    // Flush buffered events from the previous route before the user can close the tab.
+    if (this.get('config').flushOnSpaNavigation !== false) {
+      void this.eventManager.flushImmediately();
+    }
   };
 
   private trackInitialPageView(): void {

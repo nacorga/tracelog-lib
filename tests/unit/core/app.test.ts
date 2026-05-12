@@ -269,18 +269,151 @@ describe('App - Initialization', () => {
 
       const pagehideAdd = addSpy.mock.calls.find(([event]) => event === 'pagehide');
       const beforeunloadAdd = addSpy.mock.calls.find(([event]) => event === 'beforeunload');
+      const pageshowAdd = addSpy.mock.calls.find(([event]) => event === 'pageshow');
       expect(pagehideAdd).toBeDefined();
       expect(beforeunloadAdd).toBeDefined();
+      expect(pageshowAdd).toBeDefined();
 
       bridge.destroy();
 
       const pagehideRemove = removeSpy.mock.calls.find(([event]) => event === 'pagehide');
       const beforeunloadRemove = removeSpy.mock.calls.find(([event]) => event === 'beforeunload');
+      const pageshowRemove = removeSpy.mock.calls.find(([event]) => event === 'pageshow');
       expect(pagehideRemove).toBeDefined();
       expect(beforeunloadRemove).toBeDefined();
+      expect(pageshowRemove).toBeDefined();
 
       addSpy.mockRestore();
       removeSpy.mockRestore();
+    });
+
+    it('should recover persisted events on bfcache restore (persisted=true)', async () => {
+      const bridge = await initTestBridge();
+      const eventManager = (
+        bridge as unknown as { managers: { event: { recoverPersistedEvents: () => Promise<void> } } }
+      ).managers.event;
+      const recoverSpy = vi.spyOn(eventManager, 'recoverPersistedEvents').mockResolvedValue();
+
+      // Simulate bfcache restore
+      const pageShowEvent = new PageTransitionEvent('pageshow', { persisted: true });
+      window.dispatchEvent(pageShowEvent);
+
+      // Wait microtask for the void-promise chain to settle
+      await Promise.resolve();
+
+      expect(recoverSpy).toHaveBeenCalledTimes(1);
+      recoverSpy.mockRestore();
+    });
+
+    it('should NOT recover persisted events on normal page show (persisted=false)', async () => {
+      const bridge = await initTestBridge();
+      const eventManager = (
+        bridge as unknown as { managers: { event: { recoverPersistedEvents: () => Promise<void> } } }
+      ).managers.event;
+      const recoverSpy = vi.spyOn(eventManager, 'recoverPersistedEvents').mockResolvedValue();
+      // Clear initial init-time call (recoverPersistedEvents is also invoked during App.init)
+      recoverSpy.mockClear();
+
+      const pageShowEvent = new PageTransitionEvent('pageshow', { persisted: false });
+      window.dispatchEvent(pageShowEvent);
+
+      await Promise.resolve();
+
+      expect(recoverSpy).not.toHaveBeenCalled();
+      recoverSpy.mockRestore();
+    });
+
+    it('should flush events when document.hidden becomes true (default config)', async () => {
+      const bridge = await initTestBridge();
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediately: () => Promise<boolean> } } })
+        .managers.event;
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediately').mockResolvedValue(true);
+
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      await Promise.resolve();
+
+      expect(flushSpy).toHaveBeenCalledTimes(1);
+      flushSpy.mockRestore();
+    });
+
+    it('should NOT flush when document.hidden becomes false', async () => {
+      const bridge = await initTestBridge();
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediately: () => Promise<boolean> } } })
+        .managers.event;
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediately').mockResolvedValue(true);
+
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      await Promise.resolve();
+
+      expect(flushSpy).not.toHaveBeenCalled();
+      flushSpy.mockRestore();
+    });
+
+    it('should NOT flush when flushOnPageHidden is false', async () => {
+      const bridge = await initTestBridge(createMockConfig({ flushOnPageHidden: false }));
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediately: () => Promise<boolean> } } })
+        .managers.event;
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediately').mockResolvedValue(true);
+
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      await Promise.resolve();
+
+      expect(flushSpy).not.toHaveBeenCalled();
+      flushSpy.mockRestore();
+    });
+
+    it('should flush via sendBeacon when sendCustomEvent is called with critical=true', async () => {
+      const bridge = await initTestBridge();
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediatelySync: () => boolean } } })
+        .managers.event;
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(true);
+
+      (
+        bridge as unknown as {
+          sendCustomEvent: (name: string, metadata?: unknown, options?: { critical?: boolean }) => void;
+        }
+      ).sendCustomEvent('purchase', { revenue: 100 }, { critical: true });
+
+      expect(flushSpy).toHaveBeenCalledTimes(1);
+      flushSpy.mockRestore();
+    });
+
+    it('should NOT flush when sendCustomEvent is called without critical', async () => {
+      const bridge = await initTestBridge();
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediatelySync: () => boolean } } })
+        .managers.event;
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(true);
+
+      (
+        bridge as unknown as {
+          sendCustomEvent: (name: string, metadata?: unknown, options?: { critical?: boolean }) => void;
+        }
+      ).sendCustomEvent('regular_event', { foo: 'bar' });
+
+      expect(flushSpy).not.toHaveBeenCalled();
+      flushSpy.mockRestore();
+    });
+
+    it('should NOT flush when critical=false', async () => {
+      const bridge = await initTestBridge();
+      const eventManager = (bridge as unknown as { managers: { event: { flushImmediatelySync: () => boolean } } })
+        .managers.event;
+      const flushSpy = vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(true);
+
+      (
+        bridge as unknown as {
+          sendCustomEvent: (name: string, metadata?: unknown, options?: { critical?: boolean }) => void;
+        }
+      ).sendCustomEvent('regular_event', { foo: 'bar' }, { critical: false });
+
+      expect(flushSpy).not.toHaveBeenCalled();
+      flushSpy.mockRestore();
     });
   });
 

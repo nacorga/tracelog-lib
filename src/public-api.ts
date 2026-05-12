@@ -15,6 +15,8 @@ import {
   mergeGlobalMetadata,
   identify,
   resetIdentity,
+  flushImmediately,
+  flushImmediatelySync,
 } from './api';
 
 // Constants
@@ -41,4 +43,6 @@ export const tracelog = {
   mergeGlobalMetadata,
   identify,
   resetIdentity,
+  flushImmediately,
+  flushImmediatelySync,
 };

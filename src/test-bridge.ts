@@ -47,19 +47,27 @@ export class TestBridge extends App implements TraceLogTestBridge {
     }
   }
 
-  override sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void {
+  override sendCustomEvent(
+    name: string,
+    data?: Record<string, unknown> | Record<string, unknown>[],
+    options?: { critical?: boolean },
+  ): void {
     if (!this.initialized) {
       return;
     }
 
-    super.sendCustomEvent(name, data);
+    super.sendCustomEvent(name, data, options);
   }
 
   /**
    * Alias for sendCustomEvent (E2E test convenience)
    */
-  event(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
-    this.sendCustomEvent(name, metadata);
+  event(
+    name: string,
+    metadata?: Record<string, unknown> | Record<string, unknown>[],
+    options?: { critical?: boolean },
+  ): void {
+    this.sendCustomEvent(name, metadata, options);
   }
 
   /**

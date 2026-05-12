@@ -932,6 +932,18 @@ const validateAppConfig = (config) => {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_SEND_INTERVAL, "config");
     }
   }
+  if (config.flushOnSpaNavigation !== void 0 && typeof config.flushOnSpaNavigation !== "boolean") {
+    throw new AppConfigValidationError(
+      `Invalid flushOnSpaNavigation type: ${typeof config.flushOnSpaNavigation}. Must be a boolean`,
+      "config"
+    );
+  }
+  if (config.flushOnPageHidden !== void 0 && typeof config.flushOnPageHidden !== "boolean") {
+    throw new AppConfigValidationError(
+      `Invalid flushOnPageHidden type: ${typeof config.flushOnPageHidden}. Must be a boolean`,
+      "config"
+    );
+  }
   if (config.viewport !== void 0) {
     validateViewportConfig(config.viewport);
   }
@@ -1069,7 +1081,9 @@ const validateAndNormalizeConfig = (config) => {
     pageViewThrottleMs: config?.pageViewThrottleMs ?? DEFAULT_PAGE_VIEW_THROTTLE_MS,
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
-    sendIntervalMs: config?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS
+    sendIntervalMs: config?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS,
+    flushOnSpaNavigation: config?.flushOnSpaNavigation ?? true,
+    flushOnPageHidden: config?.flushOnPageHidden ?? true
   };
   if (normalizedConfig.integrations?.custom) {
     normalizedConfig.integrations.custom = {
@@ -4790,6 +4804,9 @@ class PageViewHandler extends StateManager {
       from_page_url: fromUrl,
       ...pageViewData && { page_view: pageViewData }
     });
+    if (this.get("config").flushOnSpaNavigation !== false) {
+      void this.eventManager.flushImmediately();
+    }
   };
   trackInitialPageView() {
     const normalizedUrl = normalizeUrl(window.location.href, this.get("config").sensitiveQueryParams);
@@ -6638,6 +6655,8 @@ class App extends StateManager {
   isInitialized = false;
   suppressNextScrollTimer = null;
   pageUnloadHandler = null;
+  pageShowHandler = null;
+  visibilityFlushHandler = null;
   emitter = new Emitter();
   transformers = {};
   customHeadersProvider;
@@ -6686,13 +6705,40 @@ class App extends StateManager {
     }
   }
   /**
-   * Sends a custom event with optional metadata.
+   * Asynchronously flushes all pending events in the queue.
+   *
+   * Internally calls `EventManager.flushImmediately()` which uses `fetch()` with retries.
+   * Use when you need to force-send buffered events without waiting for the next send interval
+   * (e.g., before a critical user action like sign-out, or before a SPA route teardown).
+   *
+   * @returns Promise<boolean> — `true` if all integrations sent successfully, `false` otherwise
+   * @internal Called from api.flushImmediately()
+   */
+  async flushImmediately() {
+    return await this.managers.event?.flushImmediately() ?? false;
+  }
+  /**
+   * Synchronously flushes all pending events using `navigator.sendBeacon()`.
+   *
+   * Use only for page-unload scenarios (or equivalent) where async fetch may be cancelled.
+   * For general flush needs, prefer {@link flushImmediately}.
+   *
+   * @returns `true` if all integrations sent successfully, `false` otherwise
+   * @internal Called from api.flushImmediatelySync()
+   */
+  flushImmediatelySync() {
+    return this.managers.event?.flushImmediatelySync() ?? false;
+  }
+  /**
+   * Sends a custom event with optional metadata and options.
    *
    * @param name - Event name
    * @param metadata - Optional metadata
+   * @param options - Optional event options. `{ critical: true }` flushes the
+   *   queue via `sendBeacon` immediately after tracking (survives navigation).
    * @internal Called from api.event()
    */
-  sendCustomEvent(name, metadata) {
+  sendCustomEvent(name, metadata, options) {
     if (!this.managers.event) {
       log("warn", "Cannot send custom event: TraceLog not initialized", { data: { name } });
       return;
@@ -6718,6 +6764,12 @@ class App extends StateManager {
         ...sanitizedMetadata && { metadata: sanitizedMetadata }
       }
     });
+    if (options?.critical) {
+      const ok = this.managers.event.flushImmediatelySync();
+      if (!ok) {
+        log("debug", "Critical event flush returned false", { data: { name } });
+      }
+    }
   }
   on(event2, callback) {
     this.emitter.on(event2, callback);
@@ -6790,6 +6842,14 @@ class App extends StateManager {
       window.removeEventListener("pagehide", this.pageUnloadHandler);
       window.removeEventListener("beforeunload", this.pageUnloadHandler);
       this.pageUnloadHandler = null;
+    }
+    if (this.pageShowHandler) {
+      window.removeEventListener("pageshow", this.pageShowHandler);
+      this.pageShowHandler = null;
+    }
+    if (this.visibilityFlushHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityFlushHandler);
+      this.visibilityFlushHandler = null;
     }
     this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
@@ -7080,8 +7140,28 @@ class App extends StateManager {
     this.pageUnloadHandler = () => {
       this.managers.event?.flushImmediatelySync();
     };
+    this.pageShowHandler = (event2) => {
+      if (event2.persisted) {
+        void this.managers.event?.recoverPersistedEvents().catch((error) => {
+          log("warn", "Failed to recover persisted events on bfcache restore", { error });
+        });
+      }
+    };
+    this.visibilityFlushHandler = () => {
+      if (typeof document === "undefined" || !document.hidden) {
+        return;
+      }
+      if (this.get("config").flushOnPageHidden === false) {
+        return;
+      }
+      void this.managers.event?.flushImmediately().catch((error) => {
+        log("warn", "Failed to flush events on visibilitychange", { error });
+      });
+    };
     window.addEventListener("pagehide", this.pageUnloadHandler);
     window.addEventListener("beforeunload", this.pageUnloadHandler);
+    window.addEventListener("pageshow", this.pageShowHandler);
+    document.addEventListener("visibilitychange", this.visibilityFlushHandler);
   }
   initializeHandlers() {
     const config = this.get("config");
@@ -7197,7 +7277,7 @@ const init = async (config) => {
   })();
   return initPromise;
 };
-const event = (name, metadata) => {
+const event = (name, metadata, options) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
@@ -7207,7 +7287,25 @@ const event = (name, metadata) => {
   if (isDestroying) {
     throw new Error("[TraceLog] Cannot send events while TraceLog is being destroyed");
   }
-  app.sendCustomEvent(name, metadata);
+  app.sendCustomEvent(name, metadata, options);
+};
+const flushImmediately = async () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return false;
+  }
+  if (!app || isDestroying) {
+    return false;
+  }
+  return app.flushImmediately();
+};
+const flushImmediatelySync = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return false;
+  }
+  if (!app || isDestroying) {
+    return false;
+  }
+  return app.flushImmediatelySync();
 };
 const on = (event2, callback) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -7464,6 +7562,8 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   __setAppInstance,
   destroy,
   event,
+  flushImmediately,
+  flushImmediatelySync,
   getSessionId,
   identify,
   init,
@@ -7495,7 +7595,9 @@ const tracelog = {
   updateGlobalMetadata,
   mergeGlobalMetadata,
   identify,
-  resetIdentity
+  resetIdentity,
+  flushImmediately,
+  flushImmediatelySync
 };
 var e, n, t, r, i, o = -1, a = function(e3) {
   addEventListener("pageshow", (function(n2) {
@@ -7759,17 +7861,17 @@ class TestBridge extends App {
       throw error;
     }
   }
-  sendCustomEvent(name, data) {
+  sendCustomEvent(name, data, options) {
     if (!this.initialized) {
       return;
     }
-    super.sendCustomEvent(name, data);
+    super.sendCustomEvent(name, data, options);
   }
   /**
    * Alias for sendCustomEvent (E2E test convenience)
    */
-  event(name, metadata) {
-    this.sendCustomEvent(name, metadata);
+  event(name, metadata, options) {
+    this.sendCustomEvent(name, metadata, options);
   }
   /**
    * QA mode control for debugging tests

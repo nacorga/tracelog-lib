@@ -45,6 +45,20 @@ export interface Config {
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
   /** Interval in milliseconds between event batch sends. @default 10000 (10 seconds) */
   sendIntervalMs?: number;
+  /**
+   * If true, the event queue is flushed automatically after every SPA navigation
+   * (`pushState`, `replaceState`, `popstate`, `hashchange`). Prevents batch loss when the
+   * user closes the tab mid-buffer between SPA route changes. No-op for MPAs (no SPA nav).
+   * @default true
+   */
+  flushOnSpaNavigation?: boolean;
+  /**
+   * If true, the event queue is flushed when `document.hidden` becomes `true`
+   * (tab switch, lock screen, app backgrounding). Especially relevant on mobile Safari
+   * where `pagehide`/`beforeunload` may not fire reliably.
+   * @default true
+   */
+  flushOnPageHidden?: boolean;
   /** Optional configuration for third-party integrations. */
   integrations?: {
     /** TraceLog integration options. */

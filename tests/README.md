@@ -53,10 +53,12 @@ tests/
     └── critical-paths/          # Critical user scenarios
         ├── initialization.spec.ts
         ├── page-view-tracking.spec.ts
+        ├── page-lifecycle.spec.ts   # SPA flush, visibilitychange, bfcache, critical events
         ├── custom-events.spec.ts
         ├── click-tracking.spec.ts
         ├── scroll-tracking.spec.ts
-        └── error-capture.spec.ts
+        ├── error-capture.spec.ts
+        └── ingestion-pipeline.spec.ts
 ```
 
 ## 🎯 Test Coverage Strategy

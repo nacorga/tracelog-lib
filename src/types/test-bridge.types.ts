@@ -34,10 +34,18 @@ export interface TraceLogTestBridge {
   destroy(force?: boolean): void;
 
   // Core event methods (inherited from App)
-  sendCustomEvent(name: string, data?: Record<string, unknown> | Record<string, unknown>[]): void;
+  sendCustomEvent(
+    name: string,
+    data?: Record<string, unknown> | Record<string, unknown>[],
+    options?: { critical?: boolean },
+  ): void;
 
   // Convenience alias for sendCustomEvent (used in tests)
-  event(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void;
+  event(
+    name: string,
+    metadata?: Record<string, unknown> | Record<string, unknown>[],
+    options?: { critical?: boolean },
+  ): void;
 
   // Event subscription methods (inherited from App)
   on(event: string, callback: (data: any) => void): void;

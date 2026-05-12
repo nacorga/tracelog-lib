@@ -10,6 +10,7 @@ import {
   BeforeBatchTransformer,
   CustomHeadersProvider,
   InitResult,
+  EventOptions,
 } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil, sanitizeTraits } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
@@ -144,6 +145,11 @@ export const init = async (config?: Config): Promise<InitResult> => {
  *
  * @param name - Event identifier (e.g., 'checkout_completed')
  * @param metadata - Optional event data (object or array of objects)
+ * @param options - Optional event options. Pass `{ critical: true }` for
+ *   high-value events that must survive an imminent page unload (e.g., a
+ *   purchase tracked right before `window.location.href = '/thanks'`).
+ *   Critical events flush via `sendBeacon`, which the browser guarantees
+ *   to queue for delivery even if the page closes immediately after.
  * @throws {Error} If called before init() or during destroy()
  *
  * @example
@@ -152,11 +158,19 @@ export const init = async (config?: Config): Promise<InitResult> => {
  *   productId: 'abc-123',
  *   price: 299.99
  * });
+ *
+ * // Critical event (e.g., right before redirecting to a thank-you page)
+ * tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 }, { critical: true });
+ * window.location.href = '/thanks'; // sendBeacon survives this navigation
  * ```
  *
  * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#event} for rate limiting details
  */
-export const event = (name: string, metadata?: Record<string, MetadataType> | Record<string, MetadataType>[]): void => {
+export const event = (
+  name: string,
+  metadata?: Record<string, MetadataType> | Record<string, MetadataType>[],
+  options?: EventOptions,
+): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -169,7 +183,77 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
     throw new Error('[TraceLog] Cannot send events while TraceLog is being destroyed');
   }
 
-  app.sendCustomEvent(name, metadata);
+  app.sendCustomEvent(name, metadata, options);
+};
+
+/**
+ * Forces an asynchronous flush of all pending events in the queue.
+ *
+ * Use when you need to ensure events are sent before a critical user action
+ * (e.g., before sign-out, before a SPA route teardown when you can't rely on
+ * the automatic SPA-navigation flush, or before initiating a long-running task
+ * that might prevent the next batch from firing).
+ *
+ * Uses `fetch()` with retries internally. For page-unload scenarios, prefer
+ * {@link flushImmediatelySync} which uses `sendBeacon` and is guaranteed to be queued
+ * by the browser even after the page closes.
+ *
+ * @returns Promise<boolean> — `true` if all integrations sent successfully, `false` if not initialized, destroying, or any send failed
+ *
+ * @example
+ * ```typescript
+ * // Force-flush before navigating away in an Angular SPA when auto-flush is disabled
+ * router.events.pipe(filter(e => e instanceof NavigationStart)).subscribe(async () => {
+ *   await tracelog.flushImmediately();
+ * });
+ * ```
+ */
+export const flushImmediately = async (): Promise<boolean> => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
+  if (!app || isDestroying) {
+    return false;
+  }
+
+  return app.flushImmediately();
+};
+
+/**
+ * Synchronously flushes all pending events using `navigator.sendBeacon()`.
+ *
+ * The browser queues the request even if the page is closing, making this suitable for
+ * page-unload scenarios. The library already wires this to `pagehide` and `beforeunload`
+ * automatically; consumers usually don't need to call it directly.
+ *
+ * **Limitations**:
+ * - 64KB payload limit (enforced by `sendBeacon`). Larger batches are persisted to storage
+ *   for recovery on next page load.
+ * - No retry on failure (`sendBeacon` is fire-and-forget).
+ *
+ * For non-unload scenarios use {@link flushImmediately} (async with retries).
+ *
+ * @returns `true` if all integrations sent successfully, `false` if not initialized, destroying, or any send failed
+ *
+ * @example
+ * ```typescript
+ * // Custom unload handler that bypasses the library's default listeners
+ * window.addEventListener('pagehide', () => {
+ *   tracelog.flushImmediatelySync();
+ * });
+ * ```
+ */
+export const flushImmediatelySync = (): boolean => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
+  if (!app || isDestroying) {
+    return false;
+  }
+
+  return app.flushImmediatelySync();
 };
 
 /**
