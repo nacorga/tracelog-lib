@@ -190,6 +190,13 @@ export class App extends StateManager {
       return;
     }
 
+    // Snapshot the queue length so we can detect whether `track()` actually
+    // queued the event (it may be dropped by rate limiting, sampling, or a
+    // `beforeSend` transformer returning `null`). For critical events we only
+    // dispatch the dedicated beacon if the event was successfully queued —
+    // otherwise we'd send the previously-last event, which is incorrect.
+    const queueLengthBefore = this.managers.event.getQueueLength();
+
     this.managers.event.track({
       type: EventType.CUSTOM,
       custom_event: {
@@ -199,10 +206,27 @@ export class App extends StateManager {
     });
 
     if (options?.critical === true) {
-      // sendBeacon survives an immediate navigation (e.g., redirect to /thanks); async fetch would not.
-      const ok = this.managers.event.flushImmediatelySync();
-      if (!ok) {
-        log('debug', 'Critical event flush returned false', { data: { name } });
+      const wasQueued = this.managers.event.getQueueLength() > queueLengthBefore;
+
+      if (!wasQueued) {
+        log('debug', 'Critical event was dropped before queueing — no flush triggered', { data: { name } });
+        return;
+      }
+
+      // Dedicated single-event sendBeacon: guarantees delivery even if the
+      // main queue exceeds the 64KB sendBeacon cap or an async fetch is in
+      // flight. Idempotency by `event.id` (backend unique index) absorbs the
+      // duplicate when the periodic / unload flush also delivers it.
+      const dedicatedOk = this.managers.event.flushLastEventSync();
+
+      // Drain the rest of the queue too. If an async send is in flight this
+      // sets `pendingSyncFlush` so the deferred re-flush runs after the
+      // async settles, covering events tracked just before this critical
+      // event that would otherwise miss the next tick.
+      const drainOk = this.managers.event.flushImmediatelySync();
+
+      if (!dedicatedOk && !drainOk) {
+        log('debug', 'Critical event flush returned false on both paths', { data: { name } });
       }
     }
   }

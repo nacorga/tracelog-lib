@@ -507,7 +507,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.9.0";
+const version = "2.10.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -2838,6 +2838,13 @@ class EventManager extends StateManager {
   rateLimitCounter = 0;
   rateLimitWindowStart = 0;
   lastSessionId = null;
+  // When a sync flush is requested while an async send is in flight, the sync
+  // path skips to avoid duplicating the network request. The skipped intent is
+  // remembered here so the async finally block can re-trigger the sync flush
+  // once the in-flight send settles. Without this, a critical event tracked
+  // mid-flight stays in the queue and is lost if the user navigates before the
+  // next periodic tick.
+  pendingSyncFlush = false;
   sessionEventCounts = {
     total: 0,
     [EventType.CLICK]: 0,
@@ -3195,6 +3202,7 @@ class EventManager extends StateManager {
   stop() {
     this.clearSendTimeout();
     this.sendInProgress = false;
+    this.pendingSyncFlush = false;
     this.consecutiveSendFailures = 0;
     const currentSessionId = this.get("sessionId");
     if (currentSessionId) {
@@ -3293,6 +3301,64 @@ class EventManager extends StateManager {
    */
   flushImmediatelySync() {
     return this.flushEvents(true);
+  }
+  /**
+   * Sends ONLY the most recently queued event via `navigator.sendBeacon()` in
+   * a dedicated single-event batch.
+   *
+   * **Purpose**: Guarantee delivery of an event that *must* survive an
+   * imminent page unload (purchase confirmation, signup completion, etc.),
+   * independent of the main queue's size or in-flight async send state.
+   *
+   * **Why a dedicated batch**: `flushImmediatelySync()` serialises the entire
+   * queue into one `sendBeacon` call. If the queue is heavy (>64KB) the
+   * beacon fails and the batch is persisted to `localStorage`, which is only
+   * recovered on the next `init()` — useless for one-shot conversion events
+   * where the user never returns.
+   *
+   * **Behaviour**:
+   * - Reads the last entry of `eventsQueue` (the just-tracked event).
+   * - Wraps it in its own `EventsQueue` and dispatches synchronously through
+   *   every `SenderManager` via `sendEventsQueueSync()`.
+   * - Leaves the main queue untouched; the same event will be re-delivered by
+   *   the next periodic / unload flush. Idempotency is the caller-side
+   *   contract: the backend MUST deduplicate by `event.id` (e.g. unique index
+   *   on the ingestion collection) — same guarantee the library already
+   *   relies on for the persisted-events recovery path.
+   *
+   * **Use it after** `track()` so the event is in the queue. Caller is
+   * responsible for verifying that `track()` actually queued the event
+   * (it can be dropped by rate limiting / sampling / `beforeSend`).
+   *
+   * @returns `true` if at least one sender delivered the beacon successfully
+   * (or if running in standalone mode — emitted locally), `false` otherwise.
+   */
+  flushLastEventSync() {
+    const last = this.eventsQueue[this.eventsQueue.length - 1];
+    if (!last) {
+      return false;
+    }
+    const { _session_id: sessionId, ...publicEvent } = last;
+    if (!sessionId) {
+      log("debug", "flushLastEventSync: last queued event missing _session_id, skipping");
+      return false;
+    }
+    const globalMetadata = this.get("config")?.globalMetadata;
+    const identity = this.get("identity");
+    const batch = {
+      user_id: this.get("userId"),
+      session_id: sessionId,
+      device: this.get("device"),
+      events: [publicEvent],
+      ...globalMetadata && { global_metadata: globalMetadata },
+      ...identity && { identify: identity }
+    };
+    if (this.dataSenders.length === 0) {
+      this.emitEventsQueue(batch);
+      return true;
+    }
+    const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(batch));
+    return results.some(Boolean);
   }
   /**
    * Sets the custom headers provider callback for the custom integration.
@@ -3514,7 +3580,8 @@ class EventManager extends StateManager {
     }
     if (isSync && this.sendInProgress) {
       const totalEvents = planned.reduce((acc, p2) => acc + p2.eventIds.length, 0);
-      log("debug", "Sync flush skipped: async send already in-flight, trusting fetch to deliver", {
+      this.pendingSyncFlush = true;
+      log("debug", "Sync flush deferred: async send in-flight, will retry on settle", {
         data: { eventCount: totalEvents }
       });
       return true;
@@ -3524,13 +3591,33 @@ class EventManager extends StateManager {
       this.clearSendTimeout();
       return results.some(Boolean);
     }
+    this.sendInProgress = true;
     return (async () => {
-      const results = await Promise.all(
-        planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds))
-      );
-      this.clearSendTimeout();
-      return results.some(Boolean);
+      try {
+        const results = await Promise.all(
+          planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds))
+        );
+        this.clearSendTimeout();
+        return results.some(Boolean);
+      } finally {
+        this.sendInProgress = false;
+        this.drainPendingSyncFlush();
+      }
     })();
+  }
+  /**
+   * Re-runs a sync flush that was deferred while an async send was in flight.
+   *
+   * Called from the `finally` blocks of `flushEvents(false)` and
+   * `sendEventsQueue()`. If `pendingSyncFlush` is set, clears the flag and
+   * invokes `flushImmediatelySync()` synchronously so any events that arrived
+   * after the deferred sync call are delivered before the next event loop
+   * tick. Critical for high-stakes events tracked mid-async-send.
+   */
+  drainPendingSyncFlush() {
+    if (!this.pendingSyncFlush) return;
+    this.pendingSyncFlush = false;
+    this.flushImmediatelySync();
   }
   /**
    * Sends one batch synchronously across all integrations (sendBeacon path).
@@ -3610,6 +3697,7 @@ class EventManager extends StateManager {
       }
     } finally {
       this.sendInProgress = false;
+      this.drainPendingSyncFlush();
     }
   }
   /**
@@ -6547,11 +6635,13 @@ class ErrorHandler extends StateManager {
       return;
     }
     const stack = typeof event2.error?.stack === "string" ? this.truncateStack(event2.error.stack) : void 0;
+    const errorName = typeof event2.error?.name === "string" && event2.error.name !== "Error" ? event2.error.name : void 0;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
         message: sanitizedMessage,
+        ...errorName !== void 0 && { name: errorName },
         ...event2.filename !== "" && { filename: event2.filename },
         ...event2.lineno !== 0 && { line: event2.lineno },
         ...event2.colno !== 0 && { column: event2.colno },
@@ -6569,11 +6659,13 @@ class ErrorHandler extends StateManager {
       return;
     }
     const stack = event2.reason instanceof Error && typeof event2.reason.stack === "string" ? this.truncateStack(event2.reason.stack) : void 0;
+    const errorName = event2.reason instanceof Error && event2.reason.name !== "Error" ? event2.reason.name : void 0;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.PROMISE_REJECTION,
         message: sanitizedMessage,
+        ...errorName !== void 0 && { name: errorName },
         ...stack !== void 0 && { stack }
       }
     });
@@ -6757,6 +6849,7 @@ class App extends StateManager {
       log("warn", `Custom event "${name}" dropped: ${error}`);
       return;
     }
+    const queueLengthBefore = this.managers.event.getQueueLength();
     this.managers.event.track({
       type: EventType.CUSTOM,
       custom_event: {
@@ -6764,10 +6857,16 @@ class App extends StateManager {
         ...sanitizedMetadata && { metadata: sanitizedMetadata }
       }
     });
-    if (options?.critical) {
-      const ok = this.managers.event.flushImmediatelySync();
-      if (!ok) {
-        log("debug", "Critical event flush returned false", { data: { name } });
+    if (options?.critical === true) {
+      const wasQueued = this.managers.event.getQueueLength() > queueLengthBefore;
+      if (!wasQueued) {
+        log("debug", "Critical event was dropped before queueing — no flush triggered", { data: { name } });
+        return;
+      }
+      const dedicatedOk = this.managers.event.flushLastEventSync();
+      const drainOk = this.managers.event.flushImmediatelySync();
+      if (!dedicatedOk && !drainOk) {
+        log("debug", "Critical event flush returned false on both paths", { data: { name } });
       }
     }
   }
@@ -7154,9 +7253,7 @@ class App extends StateManager {
       if (this.get("config").flushOnPageHidden === false) {
         return;
       }
-      void this.managers.event?.flushImmediately().catch((error) => {
-        log("warn", "Failed to flush events on visibilitychange", { error });
-      });
+      this.managers.event?.flushImmediatelySync();
     };
     window.addEventListener("pagehide", this.pageUnloadHandler);
     window.addEventListener("beforeunload", this.pageUnloadHandler);
@@ -7868,7 +7965,13 @@ class TestBridge extends App {
     super.sendCustomEvent(name, data, options);
   }
   /**
-   * Alias for sendCustomEvent (E2E test convenience)
+   * Alias for sendCustomEvent (E2E test convenience).
+   *
+   * @param name - Event name
+   * @param metadata - Optional metadata
+   * @param options - Optional flags. `{ critical: true }` flushes via
+   *   sendBeacon immediately after tracking — used by E2E tests that simulate
+   *   purchase-then-navigate flows.
    */
   event(name, metadata, options) {
     this.sendCustomEvent(name, metadata, options);

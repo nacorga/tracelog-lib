@@ -25,6 +25,9 @@ test.describe('E2E: Page Lifecycle Listeners', () => {
   });
 
   test.describe('visibilitychange flush', () => {
+    // The visibilitychange handler uses `flushImmediatelySync` (sendBeacon)
+    // rather than `flushImmediately` (async fetch) because mobile Safari can
+    // abort an in-flight fetch when it backgrounds the tab. See commit 2dc147b.
     test('flushes when document.hidden becomes true (default config)', async ({ page }) => {
       const callCount = await page.evaluate(async (): Promise<number> => {
         let retries = 0;
@@ -40,12 +43,11 @@ test.describe('E2E: Page Lifecycle Listeners', () => {
         await window.__traceLogBridge.init();
 
         const em = window.__traceLogBridge.getEventManager() as unknown as {
-          flushImmediately: () => Promise<boolean>;
+          flushImmediatelySync: () => boolean;
         };
         let count = 0;
-        em.flushImmediately = async (): Promise<boolean> => {
+        em.flushImmediatelySync = (): boolean => {
           count++;
-          await Promise.resolve();
           return true;
         };
 
@@ -75,12 +77,11 @@ test.describe('E2E: Page Lifecycle Listeners', () => {
         await window.__traceLogBridge.init();
 
         const em = window.__traceLogBridge.getEventManager() as unknown as {
-          flushImmediately: () => Promise<boolean>;
+          flushImmediatelySync: () => boolean;
         };
         let count = 0;
-        em.flushImmediately = async (): Promise<boolean> => {
+        em.flushImmediatelySync = (): boolean => {
           count++;
-          await Promise.resolve();
           return true;
         };
 
@@ -110,12 +111,11 @@ test.describe('E2E: Page Lifecycle Listeners', () => {
         await window.__traceLogBridge.init({ flushOnPageHidden: false });
 
         const em = window.__traceLogBridge.getEventManager() as unknown as {
-          flushImmediately: () => Promise<boolean>;
+          flushImmediatelySync: () => boolean;
         };
         let count = 0;
-        em.flushImmediately = async (): Promise<boolean> => {
+        em.flushImmediatelySync = (): boolean => {
           count++;
-          await Promise.resolve();
           return true;
         };
 
@@ -270,43 +270,60 @@ test.describe('E2E: Page Lifecycle Listeners', () => {
   });
 
   test.describe('critical event option', () => {
-    test('critical=true triggers sendBeacon (flushImmediatelySync)', async ({ page }) => {
-      const result = await page.evaluate(async (): Promise<{ syncCount: number; asyncCount: number }> => {
-        let retries = 0;
-        while (!window.__traceLogBridge && retries < 50) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          retries++;
-        }
-        if (!window.__traceLogBridge) {
-          throw new Error(`TraceLog bridge not available after ${retries * 100}ms`);
-        }
+    test('critical=true triggers dedicated sendBeacon + main-queue drain (double-write)', async ({ page }) => {
+      const result = await page.evaluate(
+        async (): Promise<{
+          syncCount: number;
+          asyncCount: number;
+          dedicatedCount: number;
+        }> => {
+          let retries = 0;
+          while (!window.__traceLogBridge && retries < 50) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            retries++;
+          }
+          if (!window.__traceLogBridge) {
+            throw new Error(`TraceLog bridge not available after ${retries * 100}ms`);
+          }
 
-        window.__traceLogBridge.destroy(true);
-        await window.__traceLogBridge.init();
+          window.__traceLogBridge.destroy(true);
+          await window.__traceLogBridge.init();
 
-        const em = window.__traceLogBridge.getEventManager() as unknown as {
-          flushImmediately: () => Promise<boolean>;
-          flushImmediatelySync: () => boolean;
-        };
-        let syncCount = 0;
-        let asyncCount = 0;
-        em.flushImmediatelySync = (): boolean => {
-          syncCount++;
-          return true;
-        };
-        em.flushImmediately = async (): Promise<boolean> => {
-          asyncCount++;
-          await Promise.resolve();
-          return true;
-        };
+          const em = window.__traceLogBridge.getEventManager() as unknown as {
+            flushImmediately: () => Promise<boolean>;
+            flushImmediatelySync: () => boolean;
+            flushLastEventSync: () => boolean;
+          };
+          let syncCount = 0;
+          let asyncCount = 0;
+          let dedicatedCount = 0;
+          em.flushImmediatelySync = (): boolean => {
+            syncCount++;
+            return true;
+          };
+          em.flushImmediately = async (): Promise<boolean> => {
+            asyncCount++;
+            await Promise.resolve();
+            return true;
+          };
+          em.flushLastEventSync = (): boolean => {
+            dedicatedCount++;
+            return true;
+          };
 
-        window.__traceLogBridge.event('purchase_completed', { revenue: 100 }, { critical: true });
+          window.__traceLogBridge.event('purchase_completed', { revenue: 100 }, { critical: true });
 
-        await new Promise((resolve) => setTimeout(resolve, 50));
+          await new Promise((resolve) => setTimeout(resolve, 50));
 
-        return { syncCount, asyncCount };
-      });
+          return { syncCount, asyncCount, dedicatedCount };
+        },
+      );
 
+      // New contract: critical=true sends a single-event sendBeacon for the
+      // just-tracked event AND drains the main queue. The dedicated beacon
+      // guarantees delivery even if the main batch exceeds 64KB; the queue
+      // drain catches any deferred sync flush from a concurrent async send.
+      expect(result.dedicatedCount).toBe(1);
       expect(result.syncCount).toBe(1);
       expect(result.asyncCount).toBe(0);
     });
