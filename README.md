@@ -127,7 +127,9 @@ tracelog.destroy();
 | Method | Description |
 |--------|-------------|
 | `init(config?)` | Initialize tracking (see [Configuration](#configuration)) |
-| `event(name, metadata?)` | Track custom events |
+| `event(name, metadata?, options?)` | Track custom events. `options.critical: true` flushes via `sendBeacon` so the event survives an imminent navigation. |
+| `flushImmediately()` | Force an async `fetch` flush of all pending events. Returns `Promise<boolean>`. |
+| `flushImmediatelySync()` | Force a `sendBeacon` flush. Use for custom unload handlers; the library already wires this to `pagehide`/`beforeunload`/`visibilitychange`. |
 | `updateGlobalMetadata(metadata)` | Replace all global metadata |
 | `mergeGlobalMetadata(metadata)` | Merge with existing global metadata |
 | `on(event, callback)` | Subscribe to events (`'event'` or `'queue'`) |
@@ -188,6 +190,10 @@ await tracelog.init({
   // Privacy
   samplingRate: 1.0,               // 100% (default)
   sensitiveQueryParams: ['token'], // Add to defaults
+
+  // Flush behavior (defaults below; both flags default to true)
+  flushOnSpaNavigation: true,  // Flush after pushState/replaceState/popstate/hashchange
+  flushOnPageHidden: true,     // Flush when document.hidden becomes true (mobile Safari coverage)
 
   // Integrations (pick one, multiple, or none)
   integrations: {

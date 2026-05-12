@@ -942,16 +942,27 @@ export class EventManager extends StateManager {
       return results.some(Boolean);
     }
 
+    // Claim sendInProgress for the lifetime of the async fetch. Two rapid
+    // flushImmediately() calls (e.g., SPA navigation followed by pagehide,
+    // or visibilitychange firing alongside an explicit flush) would otherwise
+    // both pass the guard above, build the same `planned`, and fire duplicate
+    // network requests. The periodic sender uses the same flag, so periodic
+    // and explicit flushes serialize correctly against each other too.
+    this.sendInProgress = true;
     return (async (): Promise<boolean> => {
-      // Multi-session is rare; when it happens we send all batches in parallel.
-      // Per-batch optimistic removal + per-integration persistence are
-      // independent, so concurrent completion is race-safe (single-threaded JS,
-      // disjoint event-id sets).
-      const results = await Promise.all(
-        planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds)),
-      );
-      this.clearSendTimeout();
-      return results.some(Boolean);
+      try {
+        // Multi-session is rare; when it happens we send all batches in parallel.
+        // Per-batch optimistic removal + per-integration persistence are
+        // independent, so concurrent completion is race-safe (single-threaded JS,
+        // disjoint event-id sets).
+        const results = await Promise.all(
+          planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds)),
+        );
+        this.clearSendTimeout();
+        return results.some(Boolean);
+      } finally {
+        this.sendInProgress = false;
+      }
     })();
   }
 

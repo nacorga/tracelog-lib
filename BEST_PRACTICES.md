@@ -161,6 +161,39 @@ tracelog.event('signup', {
 });
 ```
 
+### ✅ DO: Mark events as critical when they precede a navigation
+
+For high-value events that fire right before a page unload (purchase confirmation that redirects to a thank-you page, signup that redirects to onboarding, etc.) pass `{ critical: true }`. The library flushes the queue via `navigator.sendBeacon()`, which the browser guarantees to deliver even if the page is closing.
+
+```typescript
+// GOOD - sendBeacon survives the navigation
+tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 }, { critical: true });
+window.location.href = '/thanks';
+
+// BAD - async fetch is cancelled by the navigation
+tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 });
+window.location.href = '/thanks'; // ❌ Event likely lost
+```
+
+**Caveats**: `sendBeacon` is capped at 64KB and does not apply custom headers. Failed batches are persisted to `localStorage` and recovered on the next `init()` via their idempotency token.
+
+### ✅ DO: Force-flush before route teardown when auto-flush is disabled
+
+The library auto-flushes on SPA navigation (`flushOnSpaNavigation`, default `true`). If you opt out — e.g. you want to control timing yourself — call `flushImmediately()` (async, with retries) before tearing down route-scoped state. For unload listeners use `flushImmediatelySync()` instead so the browser queues the request.
+
+```typescript
+// Angular: flush on every NavigationStart with auto-flush disabled
+await tracelog.init({ flushOnSpaNavigation: false, /* ... */ });
+
+router.events
+  .pipe(filter((e) => e instanceof NavigationStart))
+  .subscribe(async () => {
+    await tracelog.flushImmediately();
+  });
+```
+
+Both helpers resolve to `false` (rather than throwing) if the library is not initialized or another flush is in flight, so they are safe to call from guards and listeners without try/catch.
+
 ---
 
 ## Event Listeners

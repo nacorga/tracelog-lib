@@ -145,6 +145,18 @@ describe('Public API - event()', () => {
       api.event('test', { key: null } as any);
     }).not.toThrow();
   });
+
+  it('should accept optional EventOptions as third argument', async () => {
+    await api.init();
+
+    expect(() => {
+      api.event('test_event', { key: 'value' }, { critical: true });
+    }).not.toThrow();
+
+    expect(() => {
+      api.event('test_event_2', undefined, { critical: false });
+    }).not.toThrow();
+  });
 });
 
 describe('Public API - on()', () => {
@@ -836,5 +848,81 @@ describe('Public API - mergeGlobalMetadata()', () => {
         tags: ['tag1', 'tag2', 'tag3'],
       });
     }).not.toThrow();
+  });
+});
+
+describe('Public API - flushImmediately()', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+    try {
+      destroy();
+    } catch {
+      // Ignore errors during cleanup
+    }
+  });
+
+  it('should expose flushImmediately method globally', () => {
+    expect(api.flushImmediately).toBeDefined();
+    expect(typeof api.flushImmediately).toBe('function');
+  });
+
+  it('should return false when called before init()', async () => {
+    const result = await api.flushImmediately();
+    expect(result).toBe(false);
+  });
+
+  it('should return a boolean after init()', async () => {
+    await api.init();
+    const result = await api.flushImmediately();
+    expect(typeof result).toBe('boolean');
+  });
+
+  it('should return false after destroy()', async () => {
+    await api.init();
+    destroy();
+    const result = await api.flushImmediately();
+    expect(result).toBe(false);
+  });
+});
+
+describe('Public API - flushImmediatelySync()', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    cleanupTestEnvironment();
+    try {
+      destroy();
+    } catch {
+      // Ignore errors during cleanup
+    }
+  });
+
+  it('should expose flushImmediatelySync method globally', () => {
+    expect(api.flushImmediatelySync).toBeDefined();
+    expect(typeof api.flushImmediatelySync).toBe('function');
+  });
+
+  it('should return false when called before init()', () => {
+    const result = api.flushImmediatelySync();
+    expect(result).toBe(false);
+  });
+
+  it('should return a boolean after init()', async () => {
+    await api.init();
+    const result = api.flushImmediatelySync();
+    expect(typeof result).toBe('boolean');
+  });
+
+  it('should return false after destroy()', async () => {
+    await api.init();
+    destroy();
+    const result = api.flushImmediatelySync();
+    expect(result).toBe(false);
   });
 });

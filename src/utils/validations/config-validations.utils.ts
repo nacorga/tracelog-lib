@@ -129,6 +129,20 @@ export const validateAppConfig = (config?: Config): void => {
     }
   }
 
+  if (config.flushOnSpaNavigation !== undefined && typeof config.flushOnSpaNavigation !== 'boolean') {
+    throw new AppConfigValidationError(
+      `Invalid flushOnSpaNavigation type: ${typeof config.flushOnSpaNavigation}. Must be a boolean`,
+      'config',
+    );
+  }
+
+  if (config.flushOnPageHidden !== undefined && typeof config.flushOnPageHidden !== 'boolean') {
+    throw new AppConfigValidationError(
+      `Invalid flushOnPageHidden type: ${typeof config.flushOnPageHidden}. Must be a boolean`,
+      'config',
+    );
+  }
+
   if (config.viewport !== undefined) {
     validateViewportConfig(config.viewport);
   }
@@ -338,6 +352,8 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
     sendIntervalMs: config?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS,
+    flushOnSpaNavigation: config?.flushOnSpaNavigation ?? true,
+    flushOnPageHidden: config?.flushOnPageHidden ?? true,
   };
 
   if (normalizedConfig.integrations?.custom) {
