@@ -678,6 +678,29 @@ tracelog.setTransformer('beforeBatch', (data) => {
 });
 ```
 
+### ⚠️ `beforeBatch` may be invoked more than once per flush
+
+A single flush produces **one batch per `session_id`** carried in the queue. When the user is idle past the session timeout and the queue still holds events from the previous session, the next flush emits two batches — one per session — and `beforeBatch` runs **once per batch**, not once per flush.
+
+Avoid stateful transformers that assume a single invocation per flush (counters, cursors, one-shot side effects). If you need per-flush bookkeeping, do it in `beforeSend` or maintain the state outside the transformer.
+
+```typescript
+// ❌ DON'T: assume one invocation per flush
+let flushCount = 0;
+tracelog.setTransformer('beforeBatch', (batch) => {
+  flushCount++; // Wrong: counts batches, not flushes
+  return batch;
+});
+
+// ✅ DO: keep per-batch logic stateless
+tracelog.setTransformer('beforeBatch', (batch) => {
+  if ('events' in batch) {
+    return { ...batch, batchSize: batch.events.length };
+  }
+  return batch;
+});
+```
+
 ### ✅ DO: Handle transformer errors gracefully
 
 ```typescript

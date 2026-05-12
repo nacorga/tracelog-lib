@@ -206,7 +206,7 @@ export const event = (
  * in flight resolves to `false` (the in-flight call already owns the events).
  * `await` the returned promise if you need ordered flushes.
  *
- * @returns Promise<boolean> — `true` if all integrations sent successfully, `false` if not initialized, destroying, another flush is in flight, or any send failed
+ * @returns Promise<boolean> — `true` if at least one integration accepted the batch during this call (optimistic removal — per-integration failures persist for retry on the next flush). `false` if not initialized, destroying, another flush is already in flight, or all senders failed.
  *
  * @example
  * ```typescript

@@ -147,9 +147,11 @@ window.location.href = '/thanks';
 | ---------- | --------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `critical` | `boolean` | `false` | If `true`, drains the event queue via `navigator.sendBeacon()` synchronously right after this event is tracked. The browser guarantees the request is queued for delivery even if the page is about to unload (typical pattern: tracking a purchase, then `window.location.href = '/thanks'`). If an async fetch is in flight when the critical event arrives, the sync flush is deferred and re-runs from the async send's `finally` block, so the critical event is not stranded in the queue. `sendBeacon` limits apply (64KB cap, no custom headers, no retry); oversized payloads are persisted to `localStorage` for recovery on next `init()`. |
 
-**Transformers and critical events:** `critical: true` does NOT bypass `beforeSend` or `beforeBatch`. If your `beforeBatch` returns `null`, the critical event is silently dropped on both delivery paths — that is the contract you opted into when you installed the transformer. To guarantee a specific event always reaches the backend, short-circuit your transformer on its `name` and return the batch unchanged.
+**Transformers and critical events:** `critical: true` does NOT bypass `beforeSend` or `beforeBatch`. If your `beforeBatch` returns `null`, the resulting batch — including the critical event — is dropped before it reaches `sendBeacon`. That is the contract you opted into when you installed the transformer. To guarantee a specific event always reaches the backend, short-circuit your transformer on its `name` and return the batch unchanged.
 
-**Standalone mode** (`tracelog.init()` with no `integrations`): `critical: true` is a no-op for the dedicated-beacon path (there is no backend to beacon to). Local listeners registered via `tracelog.on('queue', ...)` still observe the event exactly once via the normal flush path — no double-emission.
+**Standalone mode** (`tracelog.init()` with no `integrations`): `critical: true` is a no-op for the network path (there is no backend to beacon to). Local listeners registered via `tracelog.on('queue', ...)` still observe the event exactly once via the normal flush path — no double-emission.
+
+**Rate limits and deduplication apply to critical events too.** `critical: true` is a delivery-transport hint, not a bypass: if the event exceeds `maxSameEventPerMinute` for its name, or is a near-duplicate of a recent event (same fingerprint within the LRU window), it is dropped *before* it reaches the queue. The subsequent `sendBeacon` flush still runs, but it only carries whatever was already queued — not the dropped event. If you need an event to be guaranteed delivered regardless of bursts, choose a unique event name and call it sparingly.
 
 **Rate Limiting:**
 
@@ -176,7 +178,7 @@ Uses `fetch()` with retries internally. For page-unload scenarios, prefer `flush
 
 **Concurrency:** A second `flushImmediately()` call while another is still in flight resolves to `false` (the in-flight call already owns the events). `await` the returned promise if you need ordered flushes.
 
-**Returns:** `Promise<boolean>` — `true` if all integrations sent successfully, `false` if not initialized, destroying, another flush is in flight, or any send failed.
+**Returns:** `Promise<boolean>` — `true` if at least one integration accepted the batch during this call (optimistic removal — per-integration failures persist for retry on the next flush). `false` if not initialized, destroying, another flush is already in flight, or all senders failed. Mirrors `flushImmediatelySync()`'s contract — `true` ⇒ at least one integration received the batch _during this call_, not "all integrations delivered".
 
 **Example:**
 

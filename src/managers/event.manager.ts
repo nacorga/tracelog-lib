@@ -621,7 +621,10 @@ export class EventManager extends StateManager {
    * **Note**: For page unload, use `flushImmediatelySync()` instead,
    * which uses `sendBeacon()` for guaranteed delivery.
    *
-   * @returns Promise resolving to `true` if all sends succeeded, `false` if any failed
+   * @returns Promise resolving to `true` if at least one integration accepted
+   *          the batch during this call (optimistic removal — failures
+   *          persist per-integration for retry). `false` if no events, all
+   *          senders failed, or a flush is already in flight.
    *
    * @example
    * ```typescript
@@ -961,7 +964,7 @@ export class EventManager extends StateManager {
     if (isSync) {
       // sendBeacon path — already non-blocking at the browser level.
       const results = planned.map(({ batch, eventIds }) => this.sendBatchSync(batch, eventIds));
-      this.clearSendTimeout();
+      this.settleSendTimeout();
       return results.some(Boolean);
     }
 
@@ -981,13 +984,32 @@ export class EventManager extends StateManager {
         const results = await Promise.all(
           planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds)),
         );
-        this.clearSendTimeout();
+        this.settleSendTimeout();
         return results.some(Boolean);
       } finally {
         this.sendInProgress = false;
         this.drainPendingSyncFlush();
       }
     })();
+  }
+
+  /**
+   * Reconciles the periodic send timer after a flush attempt. Clears the
+   * timer when the queue is empty, otherwise (re)schedules a retry tick.
+   *
+   * **Why**: a `flushImmediately()` / `flushImmediatelySync()` call where all
+   * integrations fail leaves events in `eventsQueue` for retry. The periodic
+   * timer is the safety net that drains them when the backend recovers — if
+   * we cleared it unconditionally here, the queue would sit untouched until
+   * the next tracked event resurrects the timer in `addToQueue`. Mirrors the
+   * pattern in `sendEventsQueue()` (the periodic path).
+   */
+  private settleSendTimeout(): void {
+    if (this.eventsQueue.length === 0) {
+      this.clearSendTimeout();
+    } else {
+      this.scheduleSendTimeout();
+    }
   }
 
   /**

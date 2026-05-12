@@ -245,7 +245,7 @@ tracelog.removeCustomHeaders();
   - SPA navigation (`pushState`/`replaceState`/`popstate`/`hashchange`) — **opt-in** via `flushOnSpaNavigation: true` (default `false`; off by default to avoid per-route request amplification on SPAs)
   - Document hidden (`visibilitychange` to hidden) — uses `sendBeacon` (sync) so the OS can't abort it mid-suspension. Opt out via `flushOnPageHidden: false`. Covers mobile Safari where `pagehide`/`beforeunload` may not fire
   - `pagehide` / `beforeunload` — always on, uses `sendBeacon`
-  - `tracelog.event(name, meta, { critical: true })` — **double-write**: a dedicated single-event `sendBeacon` (immune to the 64KB main-queue cap) plus a main-queue drain. If an async send is in flight when the critical event arrives, the queue drain is deferred via `pendingSyncFlush` and re-runs in the async `finally`. Backend MUST deduplicate by `event.id`
+  - `tracelog.event(name, meta, { critical: true })` — drains the queue via `sendBeacon` synchronously right after the event is tracked. The batch carries the critical event plus anything already queued in a single request (subject to `sendBeacon`'s 64KB cap; oversized batches persist to `localStorage` for recovery on next `init()`). If an async send is in flight when the critical event arrives, the sync flush is deferred via `pendingSyncFlush` and re-runs in the async send's `finally`. Backend MUST deduplicate by `event.id`
 
 **Why Optimistic Removal is Critical**:
 - EventManager queue = "events not yet attempted to send"

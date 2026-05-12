@@ -132,7 +132,10 @@ export class App extends StateManager {
    * Use when you need to force-send buffered events without waiting for the next send interval
    * (e.g., before a critical user action like sign-out, or before a SPA route teardown).
    *
-   * @returns Promise<boolean> — `true` if all integrations sent successfully, `false` otherwise
+   * @returns Promise<boolean> — `true` if at least one integration accepted
+   *          the batch (optimistic removal — failures persist per-integration
+   *          and retry on the next flush). `false` if not initialized,
+   *          destroying, another flush is in flight, or all senders failed.
    * @internal Called from api.flushImmediately()
    */
   async flushImmediately(): Promise<boolean> {
@@ -145,7 +148,10 @@ export class App extends StateManager {
    * Use only for page-unload scenarios (or equivalent) where async fetch may be cancelled.
    * For general flush needs, prefer {@link flushImmediately}.
    *
-   * @returns `true` if all integrations sent successfully, `false` otherwise
+   * @returns `true` if at least one integration accepted the beacon batch
+   *          during this call (optimistic removal — failures persist
+   *          per-integration). `false` if no events, all senders failed, or
+   *          the call was deferred behind an in-flight async send.
    * @internal Called from api.flushImmediatelySync()
    */
   flushImmediatelySync(): boolean {

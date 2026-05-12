@@ -127,7 +127,7 @@ tracelog.destroy();
 | Method | Description |
 |--------|-------------|
 | `init(config?)` | Initialize tracking (see [Configuration](#configuration)) |
-| `event(name, metadata?, options?)` | Track custom events. `options.critical: true` triggers a double-write delivery (dedicated single-event `sendBeacon` + main-queue drain) so the event survives an imminent navigation. Backend must deduplicate by `event.id`. See [API_REFERENCE.md](./API_REFERENCE.md#eventname-metadata-options) for the full contract. |
+| `event(name, metadata?, options?)` | Track custom events. `options.critical: true` drains the queue via `sendBeacon` right after tracking, so the batch (the critical event + anything already queued) survives an imminent navigation. Subject to `sendBeacon`'s 64KB cap — oversized batches are persisted to `localStorage` and recovered on next `init()` via their idempotency token; the backend deduplicates by `event.id`. See [API_REFERENCE.md](./API_REFERENCE.md#eventname-metadata-options) for the full contract. |
 | `flushImmediately()` | Force an async `fetch` flush of all pending events. Returns `Promise<boolean>`. |
 | `flushImmediatelySync()` | Force a `sendBeacon` flush. Use for custom unload handlers; the library already wires this to `pagehide`/`beforeunload`/`visibilitychange`. |
 | `updateGlobalMetadata(metadata)` | Replace all global metadata |

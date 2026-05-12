@@ -17,6 +17,7 @@ import { EventManager } from '../../../src/managers/event.manager';
 import { SenderManager } from '../../../src/managers/sender.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { EventType } from '../../../src/types';
+import type { EventsQueue } from '../../../src/types';
 import { Emitter } from '../../../src/utils';
 
 describe('EventManager - critical event race with in-flight async send', () => {
@@ -141,5 +142,139 @@ describe('EventManager - critical event race with in-flight async send', () => {
     (eventManager as unknown as { pendingSyncFlush: boolean }).pendingSyncFlush = true;
     eventManager.stop();
     expect(eventManager['pendingSyncFlush']).toBe(false);
+  });
+
+  it('emits one sendBeacon batch per session when a critical event lands after session renewal', () => {
+    // Production scenario: user is idle past the session timeout while events
+    // from the previous session are still queued, then taps "Pay" — which
+    // tracks a critical event under the new session. The synchronous flush
+    // must emit two batches (one per session_id), not one merged batch with
+    // the wrong attribution.
+    eventManager['set']('sessionId', 'session-old');
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'old_a' } });
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'old_b' } });
+
+    // Simulate enterRenewalMode → renewSession: state sessionId switches.
+    eventManager['set']('sessionId', 'session-new');
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'critical_purchase' } });
+
+    // No async send in flight — the critical flush runs immediately.
+    const syncResult = eventManager.flushImmediatelySync();
+
+    expect(syncResult).toBe(true);
+    expect(customSender.sendEventsQueueSync).toHaveBeenCalledTimes(2);
+
+    const batches = customSender.sendEventsQueueSync.mock.calls.map((call) => call[0] as EventsQueue);
+    const oldBatch = batches.find((b) => b.session_id === 'session-old');
+    const newBatch = batches.find((b) => b.session_id === 'session-new');
+
+    expect(oldBatch).toBeDefined();
+    expect(oldBatch!.events).toHaveLength(2);
+    expect(newBatch).toBeDefined();
+    expect(newBatch!.events).toHaveLength(1);
+    expect(newBatch!.events[0]!.custom_event?.name).toBe('critical_purchase');
+
+    // Optimistic removal cleared the entire queue across both batches.
+    expect(eventManager.getQueueLength()).toBe(0);
+  });
+
+  it('keeps the periodic timer scheduled after a sync flush where all integrations fail', () => {
+    // Regression: `flushImmediatelySync()` used to unconditionally clear the
+    // periodic timer. When all senders failed, events stayed in the queue but
+    // the timer was killed — no retry would fire until the next `track()`
+    // call resurrected the timer in `addToQueue`. The fix mirrors the
+    // periodic-send pattern (clear only when queue is empty, otherwise
+    // reschedule), so the backend can recover without depending on user
+    // activity.
+    eventManager['set']('sessionId', 'session-retry');
+    customSender.sendEventsQueueSync.mockReturnValue(false);
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'will_fail' } });
+
+    // Pre-condition: addToQueue already scheduled the timer.
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+    const initialTimerId = eventManager['sendTimeoutId'];
+
+    const result = eventManager.flushImmediatelySync();
+
+    expect(result).toBe(false);
+    expect(customSender.sendEventsQueueSync).toHaveBeenCalledTimes(1);
+    // Event stayed in the queue for retry.
+    expect(eventManager.getQueueLength()).toBe(1);
+    // Timer is still active so the periodic safety-net can retry — same ID
+    // because `scheduleSendTimeout()` is a no-op if a timer already exists.
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+    expect(eventManager['sendTimeoutId']).toBe(initialTimerId);
+  });
+
+  it('keeps the periodic timer scheduled after an async flush where all integrations fail', async () => {
+    // Same regression for the async fetch path.
+    eventManager['set']('sessionId', 'session-retry-async');
+    customSender.sendEventsQueue.mockResolvedValue(false);
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'will_fail' } });
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+
+    const result = await eventManager.flushImmediately();
+
+    expect(result).toBe(false);
+    expect(eventManager.getQueueLength()).toBe(1);
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+  });
+
+  it('clears the periodic timer when a flush empties the queue', async () => {
+    // Complementary case: when the queue *is* drained, the timer should be
+    // cleared. Verifies we did not regress the happy path.
+    eventManager['set']('sessionId', 'session-drained');
+    customSender.sendEventsQueue.mockResolvedValue(true);
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'will_succeed' } });
+    expect(eventManager['sendTimeoutId']).not.toBeNull();
+
+    const result = await eventManager.flushImmediately();
+
+    expect(result).toBe(true);
+    expect(eventManager.getQueueLength()).toBe(0);
+    expect(eventManager['sendTimeoutId']).toBeNull();
+  });
+
+  it('defers a multi-session critical flush behind an in-flight async send and drains both batches on settle', async () => {
+    // Same multi-session scenario, but a periodic async send is mid-flight
+    // when the critical event arrives. The sync call must defer; on settle,
+    // the deferred re-flush emits one sendBeacon batch per remaining session.
+    eventManager['set']('sessionId', 'session-old');
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'old_a' } });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    customSender.sendEventsQueue.mockImplementation(async () => {
+      await gate;
+      return true;
+    });
+
+    // Periodic-style send claims sendInProgress while session-old is queued.
+    const periodic = eventManager['sendEventsQueue']();
+    await Promise.resolve();
+    expect(eventManager['sendInProgress']).toBe(true);
+
+    // Session renewal mid-fetch, then a critical event in the new session.
+    eventManager['set']('sessionId', 'session-new');
+    eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'critical_purchase' } });
+    const syncResult = eventManager.flushImmediatelySync();
+
+    expect(syncResult).toBe(false);
+    expect(customSender.sendEventsQueueSync).not.toHaveBeenCalled();
+    expect(eventManager['pendingSyncFlush']).toBe(true);
+
+    release();
+    await periodic;
+
+    // Deferred re-flush runs in the async finally. The periodic send already
+    // removed session-old's event optimistically, so only session-new remains
+    // and sendBeacon fires exactly once for it.
+    expect(customSender.sendEventsQueueSync).toHaveBeenCalledTimes(1);
+    const [batchArg] = customSender.sendEventsQueueSync.mock.calls[0]!;
+    expect((batchArg as EventsQueue).session_id).toBe('session-new');
+    expect(eventManager['pendingSyncFlush']).toBe(false);
+    expect(eventManager.getQueueLength()).toBe(0);
   });
 });
