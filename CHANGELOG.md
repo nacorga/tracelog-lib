@@ -21,6 +21,51 @@
 
 
 
+
+## [2.10.0] - 2026-05-12
+
+### ✨ Features
+
+- Implement dedicated sendBeacon for critical events ([b22f102](../../commit/b22f1029358424131913f52ae83198951425da46))
+- Enhance event flushing semantics and error handling across API and documentation ([2dc147b](../../commit/2dc147b5b76bd90560689d2d2b210da5e6c8a143))
+- Add error constructor name to error tracking data ([f6d69b0](../../commit/f6d69b0ab75d8c83ba886f2201a2b168c5adc316))
+- Enhance event tracking with critical options and auto-flush capabilities ([42884c6](../../commit/42884c60354174a8ea723a55a8c0e3ed99ab3300))
+- Implement session-aware event grouping and enhance batch processing ([b77f0fa](../../commit/b77f0fa3d31d4ab8508aedd65ea33acda233c7fc))
+- Implement session-aware event queuing and enhance click coordinate validation ([560da86](../../commit/560da86a487b93b2b34acb1b2962a07e7f194c41))
+- Enhance event tracking with session-aware queue and synthetic click handling ([bb08172](../../commit/bb0817299b6a1f61ab9bcc25134e2709aca0a13b))
+
+### 🧪 Tests
+
+- Update SPA navigation test to enable flushOnSpaNavigation ([3a2b232](../../commit/3a2b232ebcba3a77ff0c37ef2f2940c89a2127a7))
+
+### 📚 Documentation
+
+- Update API documentation and best practices for critical event handling and flush behavior ([933f447](../../commit/933f447cf3f0dea165b7bbcb8f90833a274cddc1))
+
+### ♻️ Refactoring
+
+- Change flushOnSpaNavigation to opt-in and update related documentation ([49b30b4](../../commit/49b30b4fe8fe88f18ea380b89a065a4c29753d86))
+- Update EventManager to improve async send handling and documentation ([15cd8eb](../../commit/15cd8eb279aeec3adfd0d71052dfa3cf300eaefb))
+- Enhance critical event handling and documentation ([f02dfb4](../../commit/f02dfb4a23634bba0225a13f999b326f4ed5523a))
+
+### 🔧 Other Changes
+
+- Merge pull request #108 from nacorga/release/20260511.1 ([362a0c9](../../commit/362a0c9b815c7c394693357b46c62d670ad64dbd))
+- Merge pull request #110 from nacorga/fix/critical-event-guarantees ([4387827](../../commit/43878276df1006fba3444e31c887d318457db85d))
+- Merge pull request #109 from nacorga/refactor/event-tracking ([9c7fb94](../../commit/9c7fb946cdbe76c15805dd9098c55a1df30bc0b8))
+- Merge pull request #107 from nacorga/fix/session-aware-queue ([7c2df46](../../commit/7c2df460cb251bef8e443bdb1217c065559566a3))
+- Merge branch 'develop' of github.com:nacorga/tracelog-lib into fix/session-aware-queue ([90fb39a](../../commit/90fb39a0d2a34e611f2fd57c6b54459f82cbc8a4))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.9.0...v2.10.0
+
+
 ## [2.9.0] - 2026-05-11
 
 ### ✨ Features
