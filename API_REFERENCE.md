@@ -147,6 +147,10 @@ window.location.href = '/thanks';
 | ---------- | --------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `critical` | `boolean` | `false` | If `true`, the library uses a **double-write** delivery strategy: (1) sends the event in its own dedicated single-event `sendBeacon` (guaranteed <1KB, immune to the 64KB queue cap), then (2) drains the main queue too. If an async fetch is in flight when the critical event arrives, the main-queue drain is deferred and re-runs after the fetch settles. Backend MUST deduplicate by `event.id` (unique index) — the same event may be delivered twice across the two paths. Typical pattern: tracking a purchase, then `window.location.href = '/thanks'`. `sendBeacon` limits still apply (no custom headers, no retry). |
 
+**Transformers and critical events:** `critical: true` does NOT bypass `beforeSend` or `beforeBatch`. If your `beforeBatch` returns `null`, the critical event is silently dropped on both delivery paths — that is the contract you opted into when you installed the transformer. To guarantee a specific event always reaches the backend, short-circuit your transformer on its `name` and return the batch unchanged.
+
+**Standalone mode** (`tracelog.init()` with no `integrations`): `critical: true` is a no-op for the dedicated-beacon path (there is no backend to beacon to). Local listeners registered via `tracelog.on('queue', ...)` still observe the event exactly once via the normal flush path — no double-emission.
+
 **Rate Limiting:**
 
 - Maximum 60 events per minute per event name (configurable via `maxSameEventPerMinute`)

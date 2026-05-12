@@ -37,7 +37,7 @@ Core business logic components that handle analytics data processing, state mana
   - Independent error handling (4xx/5xx) and persistence per integration
 - **Standalone mode**: Queue events emitted and cleared after emission when no integrations configured
 - **Synchronous and asynchronous flushing**: Dual-mode for normal operation and page unload scenarios
-- **Sync flush deferral**: When an async send is in-flight (`sendInProgress`), sync flush persists events for recovery instead of double-sending via `sendBeacon` with a different idempotency token
+- **Sync flush deferral**: When an async send is in-flight (`sendInProgress`), `flushEvents(true)` sets `pendingSyncFlush = true` and returns without sending — the in-flight async path re-runs `flushImmediatelySync()` from its `finally` block (`drainPendingSyncFlush()`). Prevents double-sending the same batch with a different idempotency token while still delivering events tracked mid-flight (notably critical events that would otherwise sit in the queue until the next periodic tick)
 - **Event persistence recovery**: Automatic recovery from localStorage on initialization (independent per integration)
 - **QA mode**: Console logging for custom events without backend transmission
 - **Event emitter integration**: Local event consumption via `EmitterEvent.EVENT` and `EmitterEvent.QUEUE`
@@ -47,6 +47,7 @@ Core business logic components that handle analytics data processing, state mana
 - `stop()`: Stops interval timer, clears queues and state (includes resetting `hasStartSession` flag for clean reinit cycles)
 - `flushImmediately()`: Asynchronously flushes event queue (returns Promise<boolean>)
 - `flushImmediatelySync()`: Synchronously flushes queue for page unload (returns boolean)
+- `flushLastEventSync()`: Sends ONLY the most recently queued event in a dedicated single-event `sendBeacon` batch (returns boolean). Used by the `{ critical: true }` double-write path to guarantee delivery even when the main queue exceeds 64KB. No-op (returns `false`) in standalone mode — the drain path owns local-listener emission
 - `getQueueLength()`: Returns current event queue size
 - `flushPendingEvents()`: Flushes pre-session buffered events after session initialization
 - `recoverPersistedEvents()`: Recovers events from localStorage after crashes/failures

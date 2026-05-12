@@ -218,7 +218,13 @@ Set to `false` only if you want to control flush timing manually — the default
 
 ### Mobile networks lose async fetches mid-suspension
 
-When the OS suspends a backgrounded tab, an in-flight `fetch()` can be aborted before its body reaches the network. `sendBeacon` is queued by the browser and survives suspension, which is why the visibility path uses the sync flush. For conversion-critical events that immediately precede a navigation, also pass `{ critical: true }` (see the dedicated section above) so the conversion is delivered before the OS gets a chance to suspend you.
+When the OS suspends a backgrounded tab, an in-flight `fetch()` can be aborted before its body reaches the network. `sendBeacon` is queued by the browser and survives suspension, which is why the visibility-hide / `pagehide` / `beforeunload` flush paths all use the sync (sendBeacon) path. For conversion-critical events that immediately precede a navigation, also pass `{ critical: true }` (see the dedicated section above) so the conversion is delivered before the OS gets a chance to suspend you.
+
+**`sendBeacon` caveats apply to the visibility-hide flush too** (not just `critical: true`):
+
+- **64KB cap per request.** If the in-memory queue is heavy when the tab backgrounds, the oversized batch is persisted to `localStorage` and only re-sent on the next `init()` (typically the next session). Most callers stay well under this; if you emit large per-event metadata, sample heavier event types or shorten `SEND_EVENTS_INTERVAL_MS` so the queue stays small.
+- **Custom headers are NOT applied.** `navigator.sendBeacon()` is a fire-and-forget API with no header customisation. If your custom backend authenticates requests via `setCustomHeaders()` (e.g. `Authorization: Bearer ...`), the visibility-hide beacon will arrive unauthenticated. Mitigation: also accept cookie/origin-based auth at the collector, or accept that visibility-hide batches without auth will be re-delivered (with headers) on next `init()` via persisted-events recovery.
+- **No retry.** Visibility-hide is one-shot. Transient network failures fall through to the localStorage recovery path.
 
 ### Don't rely on `beforeunload` alone
 

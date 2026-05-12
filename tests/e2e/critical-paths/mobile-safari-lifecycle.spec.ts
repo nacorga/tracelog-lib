@@ -14,7 +14,12 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('E2E: Mobile Safari visibility-only flush', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    // Gate to the `Mobile Safari` Playwright project only. The visibility-only
+    // failure mode this file reproduces is iOS-specific; running on chromium /
+    // Mobile Chrome / firefox / webkit would either pass trivially or fail for
+    // unrelated browser reasons (the lifecycle event ordering is not the same).
+    test.skip(testInfo.project.name !== 'Mobile Safari', 'iOS Safari-specific lifecycle behavior');
     await page.goto('/?auto-init=false');
   });
 

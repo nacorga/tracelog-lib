@@ -143,8 +143,13 @@ describe('EventManager - flushLastEventSync (dedicated beacon for critical event
     expect(ok).toBe(false);
   });
 
-  it('emits the batch locally in standalone mode (no senders)', () => {
-    // Drop all senders to emulate standalone mode.
+  it('is a no-op in standalone mode (no senders) — drain path handles local emission', () => {
+    // In standalone, the dedicated beacon would emit the event to listeners,
+    // and the subsequent drain via flushImmediatelySync would emit it again
+    // (the standalone branch of flushEvents emits each planned batch). To
+    // avoid double-delivery to `tracelog.on('queue', ...)` subscribers,
+    // flushLastEventSync stays silent in standalone — the drain owns listener
+    // delivery in that mode.
     eventManager['dataSenders'].length = 0;
     const queueListener = vi.fn();
     emitter.on(EmitterEvent.QUEUE, queueListener);
@@ -152,9 +157,7 @@ describe('EventManager - flushLastEventSync (dedicated beacon for critical event
     eventManager.track({ type: EventType.CUSTOM, custom_event: { name: 'purchase' } });
     const ok = eventManager.flushLastEventSync();
 
-    expect(ok).toBe(true);
-    expect(queueListener).toHaveBeenCalled();
-    const emitted = queueListener.mock.calls.at(-1)![0] as EventsQueue;
-    expect(emitted.events[0]!.custom_event?.name).toBe('purchase');
+    expect(ok).toBe(false);
+    expect(queueListener).not.toHaveBeenCalled();
   });
 });

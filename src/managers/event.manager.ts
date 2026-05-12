@@ -137,12 +137,8 @@ export class EventManager extends StateManager {
   private rateLimitCounter = 0;
   private rateLimitWindowStart = 0;
   private lastSessionId: string | null = null;
-  // When a sync flush is requested while an async send is in flight, the sync
-  // path skips to avoid duplicating the network request. The skipped intent is
-  // remembered here so the async finally block can re-trigger the sync flush
-  // once the in-flight send settles. Without this, a critical event tracked
-  // mid-flight stays in the queue and is lost if the user navigates before the
-  // next periodic tick.
+  // Set when a sync flush is requested mid-async-send; drained by the async
+  // finally block. See `drainPendingSyncFlush` for the full rationale.
   private pendingSyncFlush = false;
 
   private sessionEventCounts: SessionEventCounts = {
@@ -709,10 +705,20 @@ export class EventManager extends StateManager {
    * responsible for verifying that `track()` actually queued the event
    * (it can be dropped by rate limiting / sampling / `beforeSend`).
    *
-   * @returns `true` if at least one sender delivered the beacon successfully
-   * (or if running in standalone mode — emitted locally), `false` otherwise.
+   * **Standalone mode** (no senders configured): returns `false` without
+   * emitting. The subsequent main-queue drain (`flushImmediatelySync()`) is
+   * responsible for delivering the event to local listeners — emitting here
+   * too would surface the same event twice to a `tracelog.on('queue', ...)`
+   * subscriber.
+   *
+   * @returns `true` if at least one sender delivered the beacon successfully,
+   * `false` otherwise (including standalone mode — the drain handles it).
    */
   flushLastEventSync(): boolean {
+    if (this.dataSenders.length === 0) {
+      return false;
+    }
+
     const last = this.eventsQueue[this.eventsQueue.length - 1];
 
     if (!last) {
@@ -739,12 +745,6 @@ export class EventManager extends StateManager {
       ...(globalMetadata && { global_metadata: globalMetadata }),
       ...(identity && { identify: identity }),
     };
-
-    if (this.dataSenders.length === 0) {
-      // Standalone mode: emit locally so listeners observe the dedicated send.
-      this.emitEventsQueue(batch);
-      return true;
-    }
 
     const results = this.dataSenders.map((sender) => sender.sendEventsQueueSync(batch));
     return results.some(Boolean);
