@@ -268,9 +268,21 @@ export function mapEventToBody(
   const cartAttrs = shopifyEvent.data?.cart?.attributes;
 
   const sessionId = attrLookup(checkoutAttrs, 'tracelog_session_id') ?? attrLookup(cartAttrs, 'tracelog_session_id');
-  const userId = attrLookup(checkoutAttrs, 'tracelog_user_id') ?? attrLookup(cartAttrs, 'tracelog_user_id');
+  if (sessionId === null) return null;
 
-  if (sessionId === null || userId === null) return null;
+  // Identity stitching: prefer `tracelog_user_id` written by `ShopifyCartLinker`
+  // (lib opt-in via `integrations.tracelog.shopify: true`). Fall back to Shopify's
+  // per-visitor `clientId` so legacy storefronts that only write `tracelog_session_id`
+  // (manual inline script pattern, no public `getUserId()` available) still emit
+  // funnel events instead of silently no-op'ing. Trade-off: with the fallback,
+  // pre-checkout (storefront) and pixel events have different `user_id` values,
+  // splitting one buyer into two TraceLog users. Merchants on `shopify: true` keep
+  // full stitching.
+  const userId =
+    attrLookup(checkoutAttrs, 'tracelog_user_id') ??
+    attrLookup(cartAttrs, 'tracelog_user_id') ??
+    safeString(shopifyEvent.clientId);
+  if (userId === undefined) return null;
 
   const ts = resolveTimestamp(shopifyEvent.timestamp);
   const eventId = generateEventId(shopifyEvent, ts);

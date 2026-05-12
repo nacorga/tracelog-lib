@@ -987,10 +987,13 @@ describe('EventManager - Queue Flushing', () => {
 
     const result = eventManager.flushImmediatelySync();
 
-    // No persistence write, no sendBeacon — just a no-op acknowledgement.
-    // The in-flight async fetch will resolve and either clear or persist
-    // these events itself (success → clearPersistedEvents, failure → persistEvents).
-    expect(result).toBe(true);
+    // No persistence write, no sendBeacon — the call is deferred (queued for
+    // replay once the async send settles via `pendingSyncFlush`). Returns
+    // `false` because nothing was delivered *during this call*; mirrors
+    // `flushImmediately()`'s in-flight contract. The in-flight async fetch
+    // will resolve and either clear or persist these events itself
+    // (success → clearPersistedEvents, failure → persistEvents).
+    expect(result).toBe(false);
     for (const spy of persistSpies) {
       expect(spy).not.toHaveBeenCalled();
     }
@@ -2161,9 +2164,9 @@ describe('EventManager - beforeBatch Transformer', () => {
     // Batch transformer should be called
     expect(beforeBatchTransformer).toHaveBeenCalled();
 
-    // In standalone mode, queue event is still emitted even if transformer returns null
-    // The null check happens in buildEventsPayload, which returns the original if null
-    // So the queue event IS emitted
+    // In standalone mode, queue event is still emitted even if transformer returns null.
+    // The null check happens in `buildBatchFromGroup`, which keeps the original batch
+    // when the transformer returns null, so the queue event IS emitted.
     expect(queueCallback).toHaveBeenCalled();
 
     eventManager.stop();
@@ -2393,6 +2396,7 @@ describe('EventManager - Send Backoff', () => {
         custom_event: { name: 'test' },
         timestamp: Date.now(),
         page_url: 'https://example.com',
+        _session_id: 'test-session',
       } as any,
     ];
 
@@ -2424,6 +2428,7 @@ describe('EventManager - Send Backoff', () => {
         custom_event: { name: 'test' },
         timestamp: Date.now(),
         page_url: 'https://example.com',
+        _session_id: 'test-session',
       } as any,
     ];
 

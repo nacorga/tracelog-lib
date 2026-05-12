@@ -10,6 +10,7 @@ import {
   BeforeBatchTransformer,
   CustomHeadersProvider,
   InitResult,
+  EventOptions,
 } from './types';
 import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil, sanitizeTraits } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
@@ -144,6 +145,11 @@ export const init = async (config?: Config): Promise<InitResult> => {
  *
  * @param name - Event identifier (e.g., 'checkout_completed')
  * @param metadata - Optional event data (object or array of objects)
+ * @param options - Optional event options. Pass `{ critical: true }` for
+ *   high-value events that must survive an imminent page unload (e.g., a
+ *   purchase tracked right before `window.location.href = '/thanks'`).
+ *   Critical events flush via `sendBeacon`, which the browser guarantees
+ *   to queue for delivery even if the page closes immediately after.
  * @throws {Error} If called before init() or during destroy()
  *
  * @example
@@ -152,11 +158,19 @@ export const init = async (config?: Config): Promise<InitResult> => {
  *   productId: 'abc-123',
  *   price: 299.99
  * });
+ *
+ * // Critical event (e.g., right before redirecting to a thank-you page)
+ * tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 }, { critical: true });
+ * window.location.href = '/thanks'; // sendBeacon survives this navigation
  * ```
  *
  * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#event} for rate limiting details
  */
-export const event = (name: string, metadata?: Record<string, MetadataType> | Record<string, MetadataType>[]): void => {
+export const event = (
+  name: string,
+  metadata?: Record<string, MetadataType> | Record<string, MetadataType>[],
+  options?: EventOptions,
+): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -169,7 +183,97 @@ export const event = (name: string, metadata?: Record<string, MetadataType> | Re
     throw new Error('[TraceLog] Cannot send events while TraceLog is being destroyed');
   }
 
-  app.sendCustomEvent(name, metadata);
+  app.sendCustomEvent(name, metadata, options);
+};
+
+/**
+ * Forces an asynchronous flush of all pending events in the queue.
+ *
+ * Use when you need to ensure events are sent before a critical user action
+ * (e.g., before sign-out, before a SPA route teardown when you can't rely on
+ * the automatic SPA-navigation flush, or before initiating a long-running task
+ * that might prevent the next batch from firing).
+ *
+ * Uses `fetch()` with retries internally. For page-unload scenarios, prefer
+ * {@link flushImmediatelySync} which uses `sendBeacon` and is guaranteed to be queued
+ * by the browser even after the page closes.
+ *
+ * **Error semantics**: Unlike {@link event}, this function does not throw if
+ * called before `init()` or during teardown — it resolves to `false`. Safe to
+ * call in route guards / unload listeners without try/catch.
+ *
+ * **Concurrency**: A second `flushImmediately()` call while another is still
+ * in flight resolves to `false` (the in-flight call already owns the events).
+ * `await` the returned promise if you need ordered flushes.
+ *
+ * @returns Promise<boolean> — `true` if at least one integration accepted the batch during this call (optimistic removal — per-integration failures persist for retry on the next flush). `false` if not initialized, destroying, another flush is already in flight, or all senders failed.
+ *
+ * @example
+ * ```typescript
+ * // Force-flush before navigating away in an Angular SPA when auto-flush is disabled
+ * router.events.pipe(filter(e => e instanceof NavigationStart)).subscribe(async () => {
+ *   await tracelog.flushImmediately();
+ * });
+ * ```
+ */
+export const flushImmediately = async (): Promise<boolean> => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
+  if (!app || isDestroying) {
+    return false;
+  }
+
+  return app.flushImmediately();
+};
+
+/**
+ * Synchronously flushes all pending events using `navigator.sendBeacon()`.
+ *
+ * The browser queues the request even if the page is closing, making this suitable for
+ * page-unload scenarios. The library already wires this to `pagehide` and `beforeunload`
+ * automatically; consumers usually don't need to call it directly.
+ *
+ * **Limitations**:
+ * - 64KB payload limit (enforced by `sendBeacon`). Larger batches are persisted to storage
+ *   for recovery on next page load.
+ * - No retry on failure (`sendBeacon` is fire-and-forget).
+ *
+ * For non-unload scenarios use {@link flushImmediately} (async with retries).
+ *
+ * **Error semantics**: Unlike {@link event}, this function does not throw if
+ * called before `init()` or during teardown — it returns `false`. Safe to call
+ * in unload listeners without try/catch.
+ *
+ * **In-flight contract**: if an async flush is already running, this call is
+ * deferred (queued for replay once the async send settles) and returns `false`.
+ * Mirrors {@link flushImmediately}: `true` ⇒ at least one integration accepted
+ * the batch *during this call*.
+ *
+ * @returns `true` if at least one integration accepted the beacon batch during
+ *          this call, `false` otherwise (not initialized, destroying, no
+ *          events, all senders failed, or the call was deferred behind an
+ *          in-flight async send)
+ *
+ * @example
+ * ```typescript
+ * // Custom unload handler that bypasses the library's default listeners
+ * window.addEventListener('pagehide', () => {
+ *   tracelog.flushImmediatelySync();
+ * });
+ * ```
+ */
+export const flushImmediatelySync = (): boolean => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
+  if (!app || isDestroying) {
+    return false;
+  }
+
+  return app.flushImmediatelySync();
 };
 
 /**
@@ -435,6 +539,35 @@ export const getSessionId = (): string | null => {
   }
 
   return app.getSessionId();
+};
+
+/**
+ * Returns the current user ID, or null if `init()` has not been called yet.
+ *
+ * The user ID is the stable identifier TraceLog uses to stitch sessions across
+ * tabs and visits. Surface use cases: writing it as a Shopify cart attribute
+ * (`tracelog_user_id`) so checkout-funnel events fired from the Web Pixel
+ * stitch back to the storefront visitor — required if the storefront does not
+ * use `integrations.tracelog.shopify: true` (which wires this automatically).
+ *
+ * @returns User ID string, or null if not initialized
+ *
+ * @example
+ * ```typescript
+ * await tracelog.init();
+ * const userId = tracelog.getUserId();
+ * ```
+ */
+export const getUserId = (): string | null => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+
+  if (!app) {
+    return null;
+  }
+
+  return app.getUserId();
 };
 
 /**

@@ -29,9 +29,9 @@ tracelog.setTransformer('beforeSend', (event) => {
         ...event.custom_event,
         metadata: {
           ...event.custom_event?.metadata,
-          app_version: '1.0.0'
-        }
-      }
+          app_version: '1.0.0',
+        },
+      },
     };
   }
   return event;
@@ -40,8 +40,8 @@ tracelog.setTransformer('beforeSend', (event) => {
 // STEP 3: Initialize LAST (starts tracking immediately)
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://api.example.com' }
-  }
+    custom: { collectApiUrl: 'https://api.example.com' },
+  },
 });
 
 // STEP 4: Send custom events AFTER init
@@ -49,6 +49,7 @@ tracelog.event('app_ready', { timestamp: Date.now() });
 ```
 
 **Why this order matters:**
+
 - `SESSION_START` and `PAGE_VIEW` events fire **immediately** during `init()`
 - Listeners registered after `init()` will miss these critical initial events
 - Transformers set after `init()` won't transform initial events
@@ -125,7 +126,7 @@ tracelog.event('event1', {}); // Meaningless
 tracelog.event('product_viewed', {
   productId: 'abc-123',
   category: 'electronics',
-  price: 299.99
+  price: 299.99,
 });
 
 // BAD - deeply nested
@@ -133,10 +134,10 @@ tracelog.event('product_viewed', {
   product: {
     details: {
       info: {
-        id: 'abc-123' // Too deep
-      }
-    }
-  }
+        id: 'abc-123', // Too deep
+      },
+    },
+  },
 });
 ```
 
@@ -146,8 +147,8 @@ tracelog.event('product_viewed', {
 // BAD - violates privacy
 tracelog.event('signup', {
   email: 'user@example.com', // ❌ PII
-  phone: '+1234567890',      // ❌ PII
-  address: '123 Main St'     // ❌ PII
+  phone: '+1234567890', // ❌ PII
+  address: '123 Main St', // ❌ PII
 });
 
 // GOOD - use hashed IDs
@@ -155,11 +156,79 @@ import { SHA256 } from 'crypto-js';
 
 const userId = SHA256('user@example.com' + 'your-salt').toString();
 tracelog.event('signup', {
-  userId: userId,           // ✅ Hashed
-  plan: 'premium',          // ✅ Non-sensitive
-  source: 'landing_page'    // ✅ Non-sensitive
+  userId: userId, // ✅ Hashed
+  plan: 'premium', // ✅ Non-sensitive
+  source: 'landing_page', // ✅ Non-sensitive
 });
 ```
+
+### ✅ DO: Mark events as critical when they precede a navigation
+
+For high-value events that fire right before a page unload (purchase confirmation that redirects to a thank-you page, signup that redirects to onboarding, etc.) pass `{ critical: true }`. The library flushes the queue via `navigator.sendBeacon()` synchronously, which the browser guarantees to deliver even if the page is closing immediately after.
+
+If an asynchronous send happens to be in flight when the critical event is tracked, the sync flush is deferred and re-runs from the in-flight send's `finally` block — the critical event is never stranded in the queue waiting for the next periodic tick.
+
+```typescript
+// GOOD - sendBeacon survives the navigation
+tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 }, { critical: true });
+window.location.href = '/thanks';
+
+// BAD - async fetch is cancelled by the navigation
+tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 });
+window.location.href = '/thanks'; // ❌ Event likely lost
+```
+
+**Caveats**: `sendBeacon` is capped at 64KB per request and does not apply custom headers. Payloads exceeding the cap are persisted to `localStorage` and recovered on the next `init()` via the idempotency token — relevant only if the same user returns to the same origin.
+
+**When NOT to mark critical**: events that don't immediately precede a navigation (mid-funnel `add_to_cart`, page views, web vitals, etc.) — the default batched send (`sendIntervalMs`) plus auto-flush on `pagehide`/`visibilitychange` already covers them.
+
+### ✅ DO: Force-flush on SPA route changes when you need sub-`sendIntervalMs` delivery
+
+SPA-navigation auto-flush is opt-in (`flushOnSpaNavigation`, default `false`) to avoid amplifying request volume on SPA-heavy apps. If a specific flow needs delivery between route changes that's faster than `sendIntervalMs` (e.g. step-by-step funnels you analyze in near-real-time), either enable the flag globally or call `flushImmediately()` (async, with retries) on the navigation event yourself. For unload listeners use `flushImmediatelySync()` instead so the browser queues the request.
+
+```typescript
+// Option A: opt-in globally (flushes on every route change)
+await tracelog.init({ flushOnSpaNavigation: true /* ... */ });
+
+// Option B: flush manually only on selected navigations
+await tracelog.init({ /* ... */ });
+
+router.events.pipe(filter((e) => e instanceof NavigationStart)).subscribe(async () => {
+  await tracelog.flushImmediately();
+});
+```
+
+Both helpers resolve to `false` (rather than throwing) if the library is not initialized or another flush is in flight, so they are safe to call from guards and listeners without try/catch.
+
+---
+
+## Mobile platforms
+
+### iOS Safari often skips `pagehide`/`beforeunload`
+
+When the OS backgrounds, freezes or terminates an iOS Safari tab, the unload events the library normally relies on may never fire. To cover this, the library also flushes on `visibilitychange` when `document.hidden` becomes `true` (covers tab switch, lock screen, app backgrounding). This is gated by:
+
+```typescript
+await tracelog.init({
+  flushOnPageHidden: true, // default
+});
+```
+
+Set to `false` only if you want to control flush timing manually — the default is the safe choice for almost every consumer.
+
+### Mobile networks lose async fetches mid-suspension
+
+When the OS suspends a backgrounded tab, an in-flight `fetch()` can be aborted before its body reaches the network. `sendBeacon` is queued by the browser and survives suspension, which is why the visibility-hide / `pagehide` / `beforeunload` flush paths all use the sync (sendBeacon) path. For conversion-critical events that immediately precede a navigation, also pass `{ critical: true }` (see the dedicated section above) so the conversion is delivered before the OS gets a chance to suspend you.
+
+**`sendBeacon` caveats apply to the visibility-hide flush too** (not just `critical: true`):
+
+- **64KB cap per request.** If the in-memory queue is heavy when the tab backgrounds, the oversized batch is persisted to `localStorage` and only re-sent on the next `init()` (typically the next session). Most callers stay well under this; if you emit large per-event metadata, sample heavier event types or shorten `SEND_EVENTS_INTERVAL_MS` so the queue stays small.
+- **Custom headers are NOT applied.** `navigator.sendBeacon()` is a fire-and-forget API with no header customisation. If your custom backend authenticates requests via `setCustomHeaders()` (e.g. `Authorization: Bearer ...`), the visibility-hide beacon will arrive unauthenticated. Mitigation: also accept cookie/origin-based auth at the collector, or accept that visibility-hide batches without auth will be re-delivered (with headers) on next `init()` via persisted-events recovery.
+- **No retry.** Visibility-hide is one-shot. Transient network failures fall through to the localStorage recovery path.
+
+### Don't rely on `beforeunload` alone
+
+`beforeunload` has been deprecated or restricted by every major browser at some point. The library wires it as a belt-and-braces fallback alongside `pagehide` and `visibilitychange`. If you're building your own unload handler, prefer `pagehide` + `visibilitychange` (`document.hidden === true`) over `beforeunload`.
 
 ---
 
@@ -229,8 +298,8 @@ if (userConsent.analytics) {
   // Only initialize after consent is granted
   await tracelog.init({
     integrations: {
-      tracelog: { projectId: 'your-project-id' }
-    }
+      tracelog: { projectId: 'your-project-id' },
+    },
   });
 } else {
   console.log('User declined tracking - TraceLog not initialized');
@@ -243,9 +312,9 @@ If the user revokes consent, stop tracking immediately:
 
 ```typescript
 function handleConsentRevoke() {
-  tracelog.destroy();           // Stop all tracking
-  localStorage.clear();          // Clear stored session data
-  sessionStorage.clear();        // Clear temporary data
+  tracelog.destroy(); // Stop all tracking
+  localStorage.clear(); // Clear stored session data
+  sessionStorage.clear(); // Clear temporary data
 }
 ```
 
@@ -268,11 +337,11 @@ Extend the default sensitive query params list:
 ```typescript
 await tracelog.init({
   sensitiveQueryParams: [
-    'auth_token',        // App-specific params
+    'auth_token', // App-specific params
     'api_key',
-    'reset_token'
+    'reset_token',
     // Merged with defaults: token, auth, key, password, etc.
-  ]
+  ],
 });
 ```
 
@@ -283,15 +352,15 @@ YOU are responsible for sanitizing metadata passed to `tracelog.event()`:
 ```typescript
 // ❌ BAD: Contains PII
 tracelog.event('purchase', {
-  email: 'user@example.com',      // ❌ Email
-  phone: '+1-555-123-4567'         // ❌ Phone number
+  email: 'user@example.com', // ❌ Email
+  phone: '+1-555-123-4567', // ❌ Phone number
 });
 
 // ✅ GOOD: Generic identifiers only
 tracelog.event('purchase', {
-  userId: 'usr_abc123',            // ✅ Hashed/anonymized ID
-  amount: 99.99,                   // ✅ Non-PII data
-  currency: 'USD'
+  userId: 'usr_abc123', // ✅ Hashed/anonymized ID
+  amount: 99.99, // ✅ Non-PII data
+  currency: 'USD',
 });
 ```
 
@@ -314,8 +383,8 @@ tracelog.setTransformer('beforeSend', (event) => {
 
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://api.example.com' }
-  }
+    custom: { collectApiUrl: 'https://api.example.com' },
+  },
 });
 
 // High-frequency scrolls not needed in data warehouse?
@@ -352,6 +421,7 @@ tracelog.setTransformer('beforeSend', (event) => {
 ```
 
 **Benefits:**
+
 - Lower bandwidth usage for custom backends
 - Reduced backend storage costs
 - Complete control over filtering logic
@@ -364,8 +434,8 @@ tracelog.setTransformer('beforeSend', (event) => {
 
 ```typescript
 await tracelog.init({
-  samplingRate: 0.1,      // Track 10% of users
-  errorSampling: 0.5      // Track 50% of errors
+  samplingRate: 0.1, // Track 10% of users
+  errorSampling: 0.5, // Track 50% of errors
 });
 ```
 
@@ -377,11 +447,11 @@ await tracelog.init({
     elements: [
       // Only track critical CTAs
       { selector: '.primary-cta', id: 'hero-cta', name: 'Hero CTA' },
-      { selector: '.checkout-button', id: 'checkout', name: 'Checkout' }
+      { selector: '.checkout-button', id: 'checkout', name: 'Checkout' },
     ],
-    threshold: 0.5,       // 50% visible
-    minDwellTime: 2000    // 2 seconds
-  }
+    threshold: 0.5, // 50% visible
+    minDwellTime: 2000, // 2 seconds
+  },
 });
 ```
 
@@ -419,12 +489,12 @@ if (import.meta.env.DEV) {
 ```typescript
 // Production: reduce noise
 await tracelog.init({
-  errorSampling: 0.1 // 10% of errors
+  errorSampling: 0.1, // 10% of errors
 });
 
 // Staging: higher sampling
 await tracelog.init({
-  errorSampling: 1.0 // 100% of errors
+  errorSampling: 1.0, // 100% of errors
 });
 ```
 
@@ -445,8 +515,8 @@ tracelog.on('event', (event) => {
 // 2. TraceLog SaaS - managed platform
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'project-id' }
-  }
+    tracelog: { projectId: 'project-id' },
+  },
 });
 
 // 3. Custom backend - your own API
@@ -454,18 +524,18 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect',
-      allowHttp: false,            // NEVER true in production
-      fetchCredentials: 'include'  // Cookie policy: 'include' | 'same-origin' | 'omit'
-    }
-  }
+      allowHttp: false, // NEVER true in production
+      fetchCredentials: 'include', // Cookie policy: 'include' | 'same-origin' | 'omit'
+    },
+  },
 });
 
 // 4. Multi-Integration - simultaneous sending
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'project-id' },           // Analytics dashboard
-    custom: { collectApiUrl: 'https://warehouse.com' } // Data warehouse
-  }
+    tracelog: { projectId: 'project-id' }, // Analytics dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }, // Data warehouse
+  },
 });
 ```
 
@@ -475,30 +545,31 @@ await tracelog.init({
 // Use Case 1: Analytics + Data Warehouse
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'abc-123' },                    // Real-time dashboard
-    custom: { collectApiUrl: 'https://warehouse.com' }     // Long-term storage
-  }
+    tracelog: { projectId: 'abc-123' }, // Real-time dashboard
+    custom: { collectApiUrl: 'https://warehouse.com' }, // Long-term storage
+  },
 });
 
 // Use Case 2: Production + Compliance
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'prod-analytics' },             // Business analytics
-    custom: { collectApiUrl: 'https://compliance.gov' }    // Regulatory logging
-  }
+    tracelog: { projectId: 'prod-analytics' }, // Business analytics
+    custom: { collectApiUrl: 'https://compliance.gov' }, // Regulatory logging
+  },
 });
 
 // Use Case 3: Migration (Dual-Send)
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://old-system.com' },   // Legacy system
-    tracelog: { projectId: 'new-project' }                 // New TraceLog
-  }
+    custom: { collectApiUrl: 'https://old-system.com' }, // Legacy system
+    tracelog: { projectId: 'new-project' }, // New TraceLog
+  },
 });
 // Gradually migrate traffic from old to new without data loss
 ```
 
 **Key Benefits:**
+
 - ✅ **Independent error handling:** 4xx/5xx errors handled per integration
 - ✅ **Independent retry:** Failed events persisted separately for each backend
 - ✅ **Parallel sending:** Non-blocking async requests to all endpoints
@@ -512,14 +583,14 @@ await tracelog.init({
   integrations: {
     custom: { collectApiUrl: 'https://api1.example.com' },
     // ❌ Can't add second custom integration for load balancing
-  }
+  },
 });
 
 // GOOD - use a load balancer endpoint
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://lb.example.com' } // Handles distribution to endpoints
-  }
+    custom: { collectApiUrl: 'https://lb.example.com' }, // Handles distribution to endpoints
+  },
 });
 ```
 
@@ -531,9 +602,9 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'http://api.example.com/collect', // ❌ HTTP
-      allowHttp: true // ❌ Never in production
-    }
-  }
+      allowHttp: true, // ❌ Never in production
+    },
+  },
 });
 
 // GOOD - HTTPS only
@@ -541,9 +612,9 @@ await tracelog.init({
   integrations: {
     custom: {
       collectApiUrl: 'https://api.example.com/collect', // ✅ HTTPS
-      allowHttp: false // ✅ Default
-    }
-  }
+      allowHttp: false, // ✅ Default
+    },
+  },
 });
 ```
 
@@ -567,9 +638,9 @@ tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
           ...data.custom_event?.metadata,
           appVersion: '2.1.0',
           environment: process.env.NODE_ENV,
-          region: getUserRegion()
-        }
-      }
+          region: getUserRegion(),
+        },
+      },
     };
   }
   return data;
@@ -607,6 +678,29 @@ tracelog.setTransformer('beforeBatch', (data) => {
 });
 ```
 
+### ⚠️ `beforeBatch` may be invoked more than once per flush
+
+A single flush produces **one batch per `session_id`** carried in the queue. When the user is idle past the session timeout and the queue still holds events from the previous session, the next flush emits two batches — one per session — and `beforeBatch` runs **once per batch**, not once per flush.
+
+Avoid stateful transformers that assume a single invocation per flush (counters, cursors, one-shot side effects). If you need per-flush bookkeeping, do it in `beforeSend` or maintain the state outside the transformer.
+
+```typescript
+// ❌ DON'T: assume one invocation per flush
+let flushCount = 0;
+tracelog.setTransformer('beforeBatch', (batch) => {
+  flushCount++; // Wrong: counts batches, not flushes
+  return batch;
+});
+
+// ✅ DO: keep per-batch logic stateless
+tracelog.setTransformer('beforeBatch', (batch) => {
+  if ('events' in batch) {
+    return { ...batch, batchSize: batch.events.length };
+  }
+  return batch;
+});
+```
+
 ### ✅ DO: Handle transformer errors gracefully
 
 ```typescript
@@ -637,9 +731,9 @@ tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
         ...data.custom_event,
         metadata: {
           ...data.custom_event?.metadata,
-          transformed: true
-        }
-      }
+          transformed: true,
+        },
+      },
     };
   }
   return data;
@@ -653,8 +747,8 @@ tracelog.setTransformer('beforeBatch', (data) => {
       ...data,
       global_metadata: {
         ...data.global_metadata,
-        batchTransformed: true
-      }
+        batchTransformed: true,
+      },
     };
   }
   return data;
@@ -667,8 +761,8 @@ tracelog.setTransformer('beforeBatch', (data) => {
 // ✅ GOOD - Use with custom backend
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://api.example.com' }
-  }
+    custom: { collectApiUrl: 'https://api.example.com' },
+  },
 });
 
 // Transformers WILL be applied
@@ -678,8 +772,8 @@ tracelog.setTransformer('beforeBatch', transformFn);
 // ✅ ALSO GOOD - But transformers silently ignored
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'project-id' }
-  }
+    tracelog: { projectId: 'project-id' },
+  },
 });
 
 // Transformers set but NOT applied (SaaS schema protection)
@@ -688,6 +782,7 @@ tracelog.setTransformer('beforeBatch', transformFn); // Ignored
 ```
 
 **Key Points:**
+
 - **TraceLog SaaS**: Transformers silently ignored (no errors thrown)
 - **Custom Backend**: Transformers applied as configured
 - **Multi-Integration**: Transformers only apply to custom backend
@@ -698,8 +793,8 @@ tracelog.setTransformer('beforeBatch', transformFn); // Ignored
 // BAD - won't work with TraceLog SaaS
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'project-id' }
-  }
+    tracelog: { projectId: 'project-id' },
+  },
 });
 
 // This won't be applied (SaaS schema protection)
@@ -711,8 +806,8 @@ tracelog.setTransformer('beforeSend', (data) => {
 // GOOD - use custom backend if you need transformers
 await tracelog.init({
   integrations: {
-    custom: { collectApiUrl: 'https://api.example.com' }
-  }
+    custom: { collectApiUrl: 'https://api.example.com' },
+  },
 });
 
 tracelog.setTransformer('beforeSend', (data) => {
@@ -734,9 +829,9 @@ tracelog.setTransformer('beforeSend', (data) => {
         metadata: {
           ...data.custom_event?.metadata,
           userEmail: currentUser.email, // ❌ PII leak
-          creditCard: paymentInfo.card   // ❌ Sensitive data
-        }
-      }
+          creditCard: paymentInfo.card, // ❌ Sensitive data
+        },
+      },
     };
   }
   return data;
@@ -751,10 +846,10 @@ tracelog.setTransformer('beforeSend', (data) => {
         ...data.custom_event,
         metadata: {
           ...data.custom_event?.metadata,
-          userId: currentUser.id,                    // ✅ ID only
-          paymentMethodType: paymentInfo.cardType    // ✅ Generic info
-        }
-      }
+          userId: currentUser.id, // ✅ ID only
+          paymentMethodType: paymentInfo.cardType, // ✅ Generic info
+        },
+      },
     };
   }
   return data;
@@ -784,9 +879,9 @@ tracelog.setTransformer('beforeSend', (data) => {
         ...data.custom_event,
         metadata: {
           ...data.custom_event?.metadata,
-          transformed: true
-        }
-      }
+          transformed: true,
+        },
+      },
     };
   }
   return data;
@@ -817,9 +912,9 @@ tracelog.setTransformer('beforeSend', (data) => {
         ...data.custom_event,
         metadata: {
           ...data.custom_event?.metadata,
-          ...enrichmentData // Pre-computed
-        }
-      }
+          ...enrichmentData, // Pre-computed
+        },
+      },
     };
   }
   return data;
@@ -882,7 +977,7 @@ console.log('Session ID:', tracelog.getSessionId()); // Same as Tab 1
 
 ```typescript
 await tracelog.init({
-  sessionTimeout: 900000  // 15 minutes (default)
+  sessionTimeout: 900000, // 15 minutes (default)
   // sessionTimeout: 1800000  // 30 minutes (longer sessions)
   // sessionTimeout: 300000   // 5 minutes (strict timeout)
 });
@@ -912,26 +1007,26 @@ window.addEventListener('beforeunload', () => {
 ```typescript
 // Default: Track metrics needing improvement (balanced)
 await tracelog.init({
-  webVitalsMode: 'needs-improvement' // LCP > 2500ms, INP > 200ms, etc.
+  webVitalsMode: 'needs-improvement', // LCP > 2500ms, INP > 200ms, etc.
 });
 
 // All metrics: For trend analysis and P75 calculations
 await tracelog.init({
-  webVitalsMode: 'all' // Track every metric
+  webVitalsMode: 'all', // Track every metric
 });
 
 // Poor only: Minimize data volume
 await tracelog.init({
-  webVitalsMode: 'poor' // LCP > 4000ms, INP > 500ms, etc.
+  webVitalsMode: 'poor', // LCP > 4000ms, INP > 500ms, etc.
 });
 
 // Custom thresholds: Fine-grained control
 await tracelog.init({
   webVitalsMode: 'needs-improvement',
   webVitalsThresholds: {
-    LCP: 3000,  // Stricter than default 2500ms
-    INP: 150    // Stricter than default 200ms
-  }
+    LCP: 3000, // Stricter than default 2500ms
+    INP: 150, // Stricter than default 200ms
+  },
 });
 ```
 
@@ -992,7 +1087,7 @@ document.addEventListener('keydown', (e) => {
 // GOOD - track meaningful interactions
 document.querySelector('.search-form').addEventListener('submit', (e) => {
   tracelog.event('search_submitted', {
-    query: e.target.query.value
+    query: e.target.query.value,
   }); // ✅ Actionable
 });
 ```
@@ -1021,20 +1116,22 @@ Before deploying to production:
 
 Expected impact on your application:
 
-| Metric | Impact |
-|--------|--------|
-| **Bundle size** | +15KB gzipped |
-| **Init time** | <10ms |
-| **Event capture** | ~1ms per event (includes deduplication & ID generation) |
-| **Memory usage** | ~500KB (queue + session state) |
-| **Network requests** | 1 per 10 seconds OR 50 events (batched) |
-| **Event ID generation** | <1ms with zero-collision guarantees (sequence counter) |
+| Metric                  | Impact                                                  |
+| ----------------------- | ------------------------------------------------------- |
+| **Bundle size**         | +15KB gzipped                                           |
+| **Init time**           | <10ms                                                   |
+| **Event capture**       | ~1ms per event (includes deduplication & ID generation) |
+| **Memory usage**        | ~500KB (queue + session state)                          |
+| **Network requests**    | 1 per 10 seconds OR 50 events (batched)                 |
+| **Event ID generation** | <1ms with zero-collision guarantees (sequence counter)  |
 
 **Efficiency Improvements (v1.7.0+):**
+
 - **Sequence counter in event IDs**: Guarantees unique IDs even in high-frequency bursts (1000 events/ms capacity)
 - **Client version tracking**: Automatic version reporting for adoption monitoring and debugging
 
 **Optimization tips:**
+
 - Use `samplingRate` to reduce load
 - Limit viewport tracking to critical elements
 - Configure `webVitalsMode: 'needs-improvement'` or `'poor'`

@@ -119,11 +119,14 @@ export class ErrorHandler extends StateManager {
     }
 
     const stack = typeof event.error?.stack === 'string' ? this.truncateStack(event.error.stack) : undefined;
+    const errorName =
+      typeof event.error?.name === 'string' && event.error.name !== 'Error' ? event.error.name : undefined;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.JS_ERROR,
         message: sanitizedMessage,
+        ...(errorName !== undefined && { name: errorName }),
         ...(event.filename !== '' && { filename: event.filename }),
         ...(event.lineno !== 0 && { line: event.lineno }),
         ...(event.colno !== 0 && { column: event.colno }),
@@ -148,11 +151,13 @@ export class ErrorHandler extends StateManager {
       event.reason instanceof Error && typeof event.reason.stack === 'string'
         ? this.truncateStack(event.reason.stack)
         : undefined;
+    const errorName = event.reason instanceof Error && event.reason.name !== 'Error' ? event.reason.name : undefined;
     this.eventManager.track({
       type: EventType.ERROR,
       error_data: {
         type: ErrorType.PROMISE_REJECTION,
         message: sanitizedMessage,
+        ...(errorName !== undefined && { name: errorName }),
         ...(stack !== undefined && { stack }),
       },
     });

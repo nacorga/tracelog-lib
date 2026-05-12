@@ -13,6 +13,7 @@ import {
   EmitterCallback,
   EmitterEvent,
   EmitterMap,
+  EventOptions,
   IdentifyData,
   Mode,
   TransformerHook,
@@ -45,6 +46,8 @@ export class App extends StateManager {
   private isInitialized = false;
   private suppressNextScrollTimer: number | null = null;
   private pageUnloadHandler: (() => void) | null = null;
+  private pageShowHandler: ((event: PageTransitionEvent) => void) | null = null;
+  private visibilityFlushHandler: (() => void) | null = null;
 
   private readonly emitter = new Emitter();
   private readonly transformers: TransformerMap = {};
@@ -123,13 +126,58 @@ export class App extends StateManager {
   }
 
   /**
-   * Sends a custom event with optional metadata.
+   * Asynchronously flushes all pending events in the queue.
+   *
+   * Internally calls `EventManager.flushImmediately()` which uses `fetch()` with retries.
+   * Use when you need to force-send buffered events without waiting for the next send interval
+   * (e.g., before a critical user action like sign-out, or before a SPA route teardown).
+   *
+   * @returns Promise<boolean> — `true` if at least one integration accepted
+   *          the batch (optimistic removal — failures persist per-integration
+   *          and retry on the next flush). `false` if not initialized,
+   *          destroying, another flush is in flight, or all senders failed.
+   * @internal Called from api.flushImmediately()
+   */
+  async flushImmediately(): Promise<boolean> {
+    return (await this.managers.event?.flushImmediately()) ?? false;
+  }
+
+  /**
+   * Synchronously flushes all pending events using `navigator.sendBeacon()`.
+   *
+   * Use only for page-unload scenarios (or equivalent) where async fetch may be cancelled.
+   * For general flush needs, prefer {@link flushImmediately}.
+   *
+   * @returns `true` if at least one integration accepted the beacon batch
+   *          during this call (optimistic removal — failures persist
+   *          per-integration). `false` if no events, all senders failed, or
+   *          the call was deferred behind an in-flight async send.
+   * @internal Called from api.flushImmediatelySync()
+   */
+  flushImmediatelySync(): boolean {
+    return this.managers.event?.flushImmediatelySync() ?? false;
+  }
+
+  /**
+   * Sends a custom event with optional metadata and options.
    *
    * @param name - Event name
    * @param metadata - Optional metadata
+   * @param options - Optional event options. `{ critical: true }` drains the
+   *   queue via `navigator.sendBeacon()` immediately after tracking — the
+   *   browser guarantees the request is queued for delivery even if the page
+   *   is about to unload (typical pattern: tracking a purchase, then
+   *   `window.location.href = '/thanks'`). If an async fetch is already in
+   *   flight when the critical event is tracked, the sync flush is deferred
+   *   and re-runs from the async send's `finally` block so the critical
+   *   event is not stranded in the queue.
    * @internal Called from api.event()
    */
-  sendCustomEvent(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[]): void {
+  sendCustomEvent(
+    name: string,
+    metadata?: Record<string, unknown> | Record<string, unknown>[],
+    options?: EventOptions,
+  ): void {
     if (!this.managers.event) {
       log('warn', 'Cannot send custom event: TraceLog not initialized', { data: { name } });
       return;
@@ -161,6 +209,20 @@ export class App extends StateManager {
         ...(sanitizedMetadata && { metadata: sanitizedMetadata }),
       },
     });
+
+    if (options?.critical === true) {
+      // Synchronous queue drain via sendBeacon — guaranteed to be queued by
+      // the browser even if a navigation happens immediately after this call
+      // (e.g. `window.location.href = '/thanks'`). If an async fetch is in
+      // flight this sets `pendingSyncFlush` and returns `false`; the deferred
+      // re-flush will run from the async send's `finally` block.
+      const ok = this.managers.event.flushImmediatelySync();
+      if (!ok) {
+        log('debug', 'Critical event flush returned false (deferred to in-flight send or empty queue)', {
+          data: { name },
+        });
+      }
+    }
   }
 
   on<K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void {
@@ -258,6 +320,16 @@ export class App extends StateManager {
       this.pageUnloadHandler = null;
     }
 
+    if (this.pageShowHandler) {
+      window.removeEventListener('pageshow', this.pageShowHandler);
+      this.pageShowHandler = null;
+    }
+
+    if (this.visibilityFlushHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityFlushHandler);
+      this.visibilityFlushHandler = null;
+    }
+
     this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
 
@@ -339,6 +411,16 @@ export class App extends StateManager {
    */
   public getSessionId(): string | null {
     return this.get('sessionId');
+  }
+
+  /**
+   * Returns the current user ID.
+   *
+   * @returns The user ID string, or null if not yet initialized
+   * @internal Used by api.getUserId()
+   */
+  public getUserId(): string | null {
+    return this.get('userId');
   }
 
   /**
@@ -611,8 +693,35 @@ export class App extends StateManager {
     this.pageUnloadHandler = (): void => {
       this.managers.event?.flushImmediatelySync();
     };
+
+    // bfcache restore: recover persisted events on back/forward navigation without waiting for the next reload.
+    this.pageShowHandler = (event: PageTransitionEvent): void => {
+      if (event.persisted) {
+        void this.managers.event?.recoverPersistedEvents().catch((error) => {
+          log('warn', 'Failed to recover persisted events on bfcache restore', { error });
+        });
+      }
+    };
+
+    // Mobile Safari often skips pagehide/beforeunload; flushing on visibilitychange covers tab switch and app backgrounding.
+    // Use sendBeacon (sync) rather than async fetch — when the OS backgrounds
+    // or terminates the tab, an in-flight fetch can be aborted before its body
+    // reaches the network, but sendBeacon is queued by the browser and survives
+    // suspension. Matches the contract documented in README / API_REFERENCE.
+    this.visibilityFlushHandler = (): void => {
+      if (typeof document === 'undefined' || !document.hidden) {
+        return;
+      }
+      if (this.get('config').flushOnPageHidden === false) {
+        return;
+      }
+      this.managers.event?.flushImmediatelySync();
+    };
+
     window.addEventListener('pagehide', this.pageUnloadHandler);
     window.addEventListener('beforeunload', this.pageUnloadHandler);
+    window.addEventListener('pageshow', this.pageShowHandler);
+    document.addEventListener('visibilitychange', this.visibilityFlushHandler);
   }
 
   private initializeHandlers(): void {

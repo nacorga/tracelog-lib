@@ -541,4 +541,111 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       dateSpy.mockRestore();
     });
   });
+
+  describe('Auto-flush on SPA navigation', () => {
+    let handler: PageViewHandler;
+    let eventManager: EventManager;
+    let storageManager: StorageManager;
+    let flushSpy: ReturnType<typeof vi.spyOn>;
+    let getSpy: ReturnType<typeof vi.spyOn>;
+    let setSpy: ReturnType<typeof vi.spyOn>;
+    let currentUrl: string;
+    let previousUrl: string;
+    let configFlushOnSpaNavigation: boolean | undefined;
+
+    beforeEach(() => {
+      setupTestEnvironment();
+      setupNavigationEnvironment();
+
+      currentUrl = 'http://localhost:3000/';
+      previousUrl = 'http://localhost:3000/';
+      configFlushOnSpaNavigation = undefined;
+
+      storageManager = new StorageManager();
+      eventManager = new EventManager(storageManager, null, {});
+
+      handler = new PageViewHandler(eventManager, vi.fn());
+
+      flushSpy = vi.spyOn(eventManager, 'flushImmediately').mockResolvedValue(true);
+      getSpy = vi.spyOn(handler as any, 'get');
+      setSpy = vi.spyOn(handler as any, 'set');
+
+      // @ts-expect-error - Mock implementation type
+      getSpy.mockImplementation((key: string) => {
+        if (key === 'config') {
+          return {
+            sensitiveQueryParams: [],
+            pageViewThrottleMs: 100,
+            flushOnSpaNavigation: configFlushOnSpaNavigation,
+          };
+        }
+        if (key === 'pageUrl') {
+          return previousUrl;
+        }
+        return undefined;
+      });
+
+      // @ts-expect-error - Mock implementation type
+      setSpy.mockImplementation((key: string, value: unknown) => {
+        if (key === 'pageUrl') {
+          previousUrl = value as string;
+        }
+      });
+
+      vi.spyOn(window.location, 'href', 'get').mockImplementation(() => currentUrl);
+    });
+
+    afterEach(() => {
+      handler.stopTracking();
+      cleanupTestEnvironment();
+    });
+
+    it('should NOT auto-flush after SPA navigation when config is undefined (default false)', async () => {
+      handler.startTracking();
+      flushSpy.mockClear();
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      currentUrl = 'http://localhost:3000/new-page';
+      window.history.pushState({}, '', '/new-page');
+
+      expect(flushSpy).not.toHaveBeenCalled();
+    });
+
+    it('should auto-flush after SPA navigation when flushOnSpaNavigation is true', async () => {
+      configFlushOnSpaNavigation = true;
+      handler.startTracking();
+      flushSpy.mockClear();
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      currentUrl = 'http://localhost:3000/another-page';
+      window.history.pushState({}, '', '/another-page');
+
+      expect(flushSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT auto-flush when flushOnSpaNavigation is false', async () => {
+      configFlushOnSpaNavigation = false;
+      handler.startTracking();
+      flushSpy.mockClear();
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      currentUrl = 'http://localhost:3000/silent-page';
+      window.history.pushState({}, '', '/silent-page');
+
+      expect(flushSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT auto-flush on duplicate URL navigation', () => {
+      handler.startTracking();
+      flushSpy.mockClear();
+
+      // Same URL → throttle blocks track, so no flush either
+      window.history.pushState({}, '', '/');
+
+      expect(flushSpy).not.toHaveBeenCalled();
+    });
+  });
 });

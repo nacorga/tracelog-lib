@@ -17,6 +17,13 @@ function getTrackedEvent(spy: ReturnType<typeof vi.spyOn>, index = 0): EventData
   return spy.mock.calls[index]?.[0] as EventData;
 }
 
+// Helper to dispatch a click with valid coordinates. The handler skips clicks
+// with (0,0) coords (synthetic / programmatic), so `element.click()` doesn't
+// produce a CLICK event in jsdom.
+function dispatchClick(element: Element, x = 100, y = 100): void {
+  element.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+}
+
 describe('ClickHandler - Basic Tracking', () => {
   let handler: ClickHandler;
   let eventManager: EventManager;
@@ -58,7 +65,7 @@ describe('ClickHandler - Basic Tracking', () => {
 
     const button = createMockElement('button', { id: 'test-btn' }, 'Click Me');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     expect(trackSpy).toHaveBeenCalled();
     const event = getTrackedEvent(trackSpy);
@@ -72,7 +79,7 @@ describe('ClickHandler - Basic Tracking', () => {
 
     const anchor = createMockElement('a', { href: '#' }, 'Link');
     document.body.appendChild(anchor);
-    anchor.click();
+    dispatchClick(anchor);
 
     expect(trackSpy).toHaveBeenCalled();
     const event = getTrackedEvent(trackSpy);
@@ -86,7 +93,7 @@ describe('ClickHandler - Basic Tracking', () => {
 
     const button = createMockElement('button', { id: 'my-button' }, 'Click');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.id).toBe('my-button');
@@ -99,7 +106,7 @@ describe('ClickHandler - Basic Tracking', () => {
 
     const button = createMockElement('button', { class: 'btn btn-primary' }, 'Click');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.class).toBe('btn btn-primary');
@@ -112,7 +119,7 @@ describe('ClickHandler - Basic Tracking', () => {
 
     const button = createMockElement('button', {}, 'Submit Form');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.text).toBe('Submit Form');
@@ -178,7 +185,7 @@ describe('ClickHandler - PII Sanitization', () => {
     input.type = 'text';
     input.value = 'sensitive-data@example.com';
     document.body.appendChild(input);
-    input.click();
+    dispatchClick(input);
 
     const event = getTrackedEvent(trackSpy);
     // Input values should not appear in text (text should be empty or undefined)
@@ -193,7 +200,7 @@ describe('ClickHandler - PII Sanitization', () => {
     const textarea = document.createElement('textarea');
     textarea.value = 'Secret message with user@example.com';
     document.body.appendChild(textarea);
-    textarea.click();
+    dispatchClick(textarea);
 
     const event = getTrackedEvent(trackSpy);
     // Textarea values should not appear in text (text should be empty or undefined)
@@ -211,7 +218,7 @@ describe('ClickHandler - PII Sanitization', () => {
     option.textContent = 'Sensitive Option';
     select.appendChild(option);
     document.body.appendChild(select);
-    select.click();
+    dispatchClick(select);
 
     // Select element should be tracked, but not show option values in a sensitive way
     expect(trackSpy).toHaveBeenCalled();
@@ -224,7 +231,7 @@ describe('ClickHandler - PII Sanitization', () => {
 
     const div = createMockElement('div', {}, 'Contact: user@example.com for help');
     document.body.appendChild(div);
-    div.click();
+    dispatchClick(div);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.text).toContain('[REDACTED]');
@@ -238,7 +245,7 @@ describe('ClickHandler - PII Sanitization', () => {
 
     const div = createMockElement('div', {}, 'Call: 555-123-4567');
     document.body.appendChild(div);
-    div.click();
+    dispatchClick(div);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.text).toContain('[REDACTED]');
@@ -252,7 +259,7 @@ describe('ClickHandler - PII Sanitization', () => {
 
     const div = createMockElement('div', {}, 'Card: 4532-1234-5678-9010');
     document.body.appendChild(div);
-    div.click();
+    dispatchClick(div);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.text).toContain('[REDACTED]');
@@ -266,7 +273,7 @@ describe('ClickHandler - PII Sanitization', () => {
 
     const button = createMockElement('button', { 'data-tlog-ignore': 'true' }, 'Ignored Button');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     // Should not track ignored element
     expect(trackSpy).not.toHaveBeenCalled();
@@ -282,7 +289,7 @@ describe('ClickHandler - PII Sanitization', () => {
     container.appendChild(button);
     document.body.appendChild(container);
 
-    button.click();
+    dispatchClick(button);
 
     // Should not track children of ignored elements
     expect(trackSpy).not.toHaveBeenCalled();
@@ -315,7 +322,7 @@ describe('ClickHandler - Element Data Capture', () => {
 
     const button = createMockElement('button', { class: 'btn btn-primary btn-lg' }, 'Click');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.class).toBe('btn btn-primary btn-lg');
@@ -329,7 +336,7 @@ describe('ClickHandler - Element Data Capture', () => {
     const longText = 'a'.repeat(300); // Longer than MAX_TEXT_LENGTH (255)
     const div = createMockElement('div', {}, longText);
     document.body.appendChild(div);
-    div.click();
+    dispatchClick(div);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.text?.length).toBeLessThanOrEqual(255);
@@ -343,7 +350,7 @@ describe('ClickHandler - Element Data Capture', () => {
 
     const button = createMockElement('button', {}, 'No ID');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.id).toBeUndefined();
@@ -357,7 +364,7 @@ describe('ClickHandler - Element Data Capture', () => {
 
     const button = createMockElement('button', { id: 'test' }, 'No Class');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.class).toBeUndefined();
@@ -371,7 +378,7 @@ describe('ClickHandler - Element Data Capture', () => {
 
     const button = createMockElement('button', { id: 'icon-btn' }, '');
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     const event = getTrackedEvent(trackSpy);
     expect(event.click_data?.text).toBeFalsy();
@@ -388,7 +395,7 @@ describe('ClickHandler - Element Data Capture', () => {
     button.appendChild(span);
     document.body.appendChild(button);
 
-    span.click();
+    dispatchClick(span);
 
     const event = getTrackedEvent(trackSpy);
     // Should find the button as the interactive element
@@ -461,9 +468,9 @@ describe('ClickHandler - Edge Cases', () => {
     document.body.appendChild(button);
 
     // Click multiple times rapidly
-    button.click();
-    button.click();
-    button.click();
+    dispatchClick(button);
+    dispatchClick(button);
+    dispatchClick(button);
 
     // Should track all clicks (though some may be throttled)
     expect(trackSpy).toHaveBeenCalled();
@@ -478,7 +485,7 @@ describe('ClickHandler - Edge Cases', () => {
 
     // Add element after handler is tracking
     document.body.appendChild(button);
-    button.click();
+    dispatchClick(button);
 
     expect(trackSpy).toHaveBeenCalled();
     const event = getTrackedEvent(trackSpy);
@@ -498,17 +505,17 @@ describe('ClickHandler - Edge Cases', () => {
     document.body.appendChild(button);
 
     // First click should be tracked
-    button.click();
+    dispatchClick(button);
     expect(trackSpy).toHaveBeenCalledTimes(1);
 
     // Immediate second click should be throttled (within 300ms default)
     mockTime += 100; // Only 100ms later
-    button.click();
+    dispatchClick(button);
     expect(trackSpy).toHaveBeenCalledTimes(1); // Still 1, throttled
 
     // After throttle period, should track again
     mockTime += 300; // Total 400ms later
-    button.click();
+    dispatchClick(button);
     expect(trackSpy).toHaveBeenCalledTimes(2);
 
     document.body.removeChild(button);

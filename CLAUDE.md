@@ -228,19 +228,24 @@ tracelog.removeCustomHeaders();
 
 **Merge Behavior**: Dynamic headers override static headers when keys collide.
 
-**sendBeacon Limitation**: Custom headers are NOT applied to `sendBeacon()` requests (browser API limitation). Only affects page unload scenarios.
+**sendBeacon Limitation**: Custom headers are NOT applied to `sendBeacon()` requests (browser API limitation). Affects `pagehide` / `beforeunload`, `visibilitychange` to hidden (mobile Safari coverage), and `{ critical: true }` events — i.e. every sync flush path. For these batches the visibility-hide/unload beacons will arrive unauthenticated; the persisted-events recovery path on next `init()` re-sends with headers.
 
 ### 5. Event Queue & Sending
 
 **Core Principle**: Optimistic Removal with Per-Integration Persistence
 
 - **Batching**: Every 10s OR 50-event threshold
-- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload, persists on failure)
+- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload + `critical: true` events, persists on failure)
 - **Retries**: Up to 2 attempts for transient errors (5xx, timeout)
 - **Backoff**: 200-300ms (retry 1), 400-500ms (retry 2)
 - **Persistence**: Failed events saved per-integration to localStorage with `idempotency_token` for backend deduplication
-- **Recovery**: Auto-recovered on next `init()` with same idempotency token
+- **Recovery**: Auto-recovered on next `init()` with same idempotency token (also on `pageshow.persisted === true` for bfcache restore)
 - **Optimistic Removal**: Queue cleared if AT LEAST ONE integration succeeds
+- **Auto-flush triggers** (in addition to the 10s/50-event interval):
+  - SPA navigation (`pushState`/`replaceState`/`popstate`/`hashchange`) — **opt-in** via `flushOnSpaNavigation: true` (default `false`; off by default to avoid per-route request amplification on SPAs)
+  - Document hidden (`visibilitychange` to hidden) — uses `sendBeacon` (sync) so the OS can't abort it mid-suspension. Opt out via `flushOnPageHidden: false`. Covers mobile Safari where `pagehide`/`beforeunload` may not fire
+  - `pagehide` / `beforeunload` — always on, uses `sendBeacon`
+  - `tracelog.event(name, meta, { critical: true })` — drains the queue via `sendBeacon` synchronously right after the event is tracked. The batch carries the critical event plus anything already queued in a single request (subject to `sendBeacon`'s 64KB cap; oversized batches persist to `localStorage` for recovery on next `init()`). If an async send is in flight when the critical event arrives, the sync flush is deferred via `pendingSyncFlush` and re-runs in the async send's `finally`. Backend MUST deduplicate by `event.id`
 
 **Why Optimistic Removal is Critical**:
 - EventManager queue = "events not yet attempted to send"

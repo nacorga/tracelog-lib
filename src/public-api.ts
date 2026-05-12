@@ -5,6 +5,7 @@ import {
   off,
   isInitialized,
   getSessionId,
+  getUserId,
   destroy,
   setQaMode,
   setTransformer,
@@ -15,6 +16,8 @@ import {
   mergeGlobalMetadata,
   identify,
   resetIdentity,
+  flushImmediately,
+  flushImmediatelySync,
 } from './api';
 
 // Constants
@@ -35,10 +38,13 @@ export const tracelog = {
   removeCustomHeaders,
   isInitialized,
   getSessionId,
+  getUserId,
   destroy,
   setQaMode,
   updateGlobalMetadata,
   mergeGlobalMetadata,
   identify,
   resetIdentity,
+  flushImmediately,
+  flushImmediatelySync,
 };

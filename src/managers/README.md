@@ -7,6 +7,7 @@ Core business logic components that handle analytics data processing, state mana
 **Purpose**: Core component responsible for event tracking, queue management, deduplication, rate limiting, and multi-integration API communication coordination.
 
 **Core Functionality**:
+
 - **Event Tracking**: Captures user interactions (clicks, scrolls, page views, custom events, web vitals, errors)
 - **Queue Management**: Batches events and manages sending intervals (configurable, default 10 seconds via `SEND_EVENTS_INTERVAL_MS`) to optimize network requests
 - **Deduplication**: Prevents duplicate events using LRU cache with 1000-entry fingerprint storage
@@ -21,6 +22,7 @@ Core business logic components that handle analytics data processing, state mana
 - **Event Emitter**: Emits events locally for standalone mode and external integrations
 
 **Key Features**:
+
 - **LRU Cache Deduplication**: 1000-entry fingerprint cache with automatic cleanup
   - 10px coordinate precision for click events, 500ms time threshold
   - Prunes fingerprints older than 5 seconds automatically
@@ -37,30 +39,34 @@ Core business logic components that handle analytics data processing, state mana
   - Independent error handling (4xx/5xx) and persistence per integration
 - **Standalone mode**: Queue events emitted and cleared after emission when no integrations configured
 - **Synchronous and asynchronous flushing**: Dual-mode for normal operation and page unload scenarios
-- **Sync flush deferral**: When an async send is in-flight (`sendInProgress`), sync flush persists events for recovery instead of double-sending via `sendBeacon` with a different idempotency token
+- **Sync flush deferral**: When an async send is in-flight (`sendInProgress`), `flushEvents(true)` sets `pendingSyncFlush = true` and returns without sending — the in-flight async path re-runs `flushImmediatelySync()` from its `finally` block (`drainPendingSyncFlush()`). Prevents double-sending the same batch with a different idempotency token while still delivering events tracked mid-flight (notably critical events that would otherwise sit in the queue until the next periodic tick)
 - **Event persistence recovery**: Automatic recovery from localStorage on initialization (independent per integration)
 - **QA mode**: Console logging for custom events without backend transmission
 - **Event emitter integration**: Local event consumption via `EmitterEvent.EVENT` and `EmitterEvent.QUEUE`
 
 **Public API Methods**:
+
 - `track(event: Partial<EventData>)`: Adds event to queue with validation and deduplication
 - `stop()`: Stops interval timer, clears queues and state (includes resetting `hasStartSession` flag for clean reinit cycles)
 - `flushImmediately()`: Asynchronously flushes event queue (returns Promise<boolean>)
-- `flushImmediatelySync()`: Synchronously flushes queue for page unload (returns boolean)
+- `flushImmediatelySync()`: Synchronously flushes queue for page unload (returns boolean). When an async send is in flight, sets `pendingSyncFlush` and returns `false`; the deferred re-flush runs from the async send's `finally` block so events tracked mid-fetch (including `{ critical: true }`) are not stranded.
 - `getQueueLength()`: Returns current event queue size
 - `flushPendingEvents()`: Flushes pre-session buffered events after session initialization
 - `recoverPersistedEvents()`: Recovers events from localStorage after crashes/failures
 
 **State Management**:
+
 - **`hasStartSession` Flag**: Prevents duplicate SESSION_START events across init cycles
   - Set to `true` when SESSION_START is tracked via `track()` method
   - Reset to `false` in `stop()` method to allow subsequent init() → destroy() → init() cycles
   - NOT set by SessionManager's BroadcastChannel message handler (secondary tabs don't track SESSION_START)
 
 **Application Lifecycle Integration**:
+
 - **App.destroy() Flow**: When `App.destroy()` is called, handlers are stopped first (including `SessionHandler.stopTracking()`), which cleans up SessionManager resources. EventManager.stop() is called AFTER handlers are stopped. In v2.0.0+, no events are emitted during cleanup.
 
 **Transformer Support**:
+
 - **`beforeSend` Hook**: Applied conditionally in `buildEventPayload()` based on integration mode
   - **Custom-only mode**: Applied in EventManager (before dedup/sampling/queueing)
     - Uses `transformEvent()` utility for error handling and validation
@@ -81,6 +87,7 @@ Core business logic components that handle analytics data processing, state mana
 **Purpose**: Integration-aware event transmission with network resilience, independent persistence per integration (SaaS/Custom), and automatic request enrichment with client version tracking.
 
 **Core Functionality**:
+
 - **Integration-Specific Sending**: Each instance handles one integration (identified by `integrationId`: 'saas' or 'custom')
 - **Network Transmission**: Sends analytics events via HTTP POST (async) or sendBeacon (sync)
 - **Request Enrichment**: Automatically adds `_metadata` wrapper with:
@@ -95,6 +102,7 @@ Core business logic components that handle analytics data processing, state mana
 - **Recovery Guard**: Prevents concurrent recovery attempts during rapid navigation
 
 **Key Features**:
+
 - **Integration-aware architecture** - Constructor accepts `integrationId` and `apiUrl` parameters
   - Multiple instances can coexist (one per integration)
   - Independent storage keys prevent cross-integration interference
@@ -132,11 +140,13 @@ Core business logic components that handle analytics data processing, state mana
   - Backward-compatible: existing data without counter treated as 0
 
 **Integration Storage Keys**:
+
 - **SaaS**: `tlog:queue:{userId}:saas`
 - **Custom**: `tlog:queue:{userId}:custom`
 - **Legacy/Standalone**: `tlog:queue:{userId}` (no suffix)
 
 **Transformer Support**:
+
 - **`beforeSend` Hook**: Applied in `applyBeforeSendTransformer()` for multi-integration mode
   - Operates on **array of events** (not individual events)
   - Uses `transformEvents()` utility for per-event transformation with error handling
@@ -156,6 +166,7 @@ Core business logic components that handle analytics data processing, state mana
   - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
 
 **Custom Headers Support** (v2.1.2+):
+
 - **Purpose**: Adds custom HTTP headers to requests sent to custom backends
 - **Static Headers**: Configured via `config.integrations.custom.headers` at initialization
 - **Dynamic Headers**: Configured via `setCustomHeadersProvider()` at runtime
@@ -166,6 +177,7 @@ Core business logic components that handle analytics data processing, state mana
 - **Error Handling**: Provider errors caught and logged, falls back to static headers only
 
 **Fetch Credentials Support** (v2.2.0+):
+
 - **Purpose**: Controls whether cookies/credentials are sent with `fetch()` requests
 - **Config**: `config.integrations.custom.fetchCredentials` — `'include'` (default), `'same-origin'`, or `'omit'`
 - **Integration-Specific**: Only configurable for custom backend (`integrationId === 'custom'`)
@@ -181,6 +193,7 @@ Core business logic components that handle analytics data processing, state mana
 **Purpose**: Manages user session lifecycle across browser tabs with cross-tab synchronization and session recovery capabilities.
 
 **Core Functionality** (v2.0.0+):
+
 - **Session Lifecycle**: Creates and tracks user sessions based on configurable timeouts
 - **Cross-Tab Sync**: Uses BroadcastChannel API to maintain consistent session state across tabs with explicit action validation
 - **Session Recovery**: Automatically recovers existing sessions from localStorage on page refresh (validates session ID format)
@@ -188,6 +201,7 @@ Core business logic components that handle analytics data processing, state mana
 - **Event Integration**: Tracks SESSION_START events only via EventManager (SESSION_END removed in v2.0.0)
 
 **Key Features**:
+
 - Configurable session timeouts (default: 15 minutes, range: 30s - 24 hours)
 - BroadcastChannel-based cross-tab communication with project-scoped namespacing, 5-second message freshness validation, and explicit `action` type validation
 - **BroadcastChannel initialization timing**: ALWAYS initialized BEFORE SESSION_START tracking to ensure cross-tab sync is ready when events are emitted
@@ -202,6 +216,7 @@ Core business logic components that handle analytics data processing, state mana
 - **Error rollback**: On initialization error in `startTracking()`, all setup is rolled back (cleanup listeners, timers, state) and error re-thrown to caller
 
 **Critical Implementation Details** (v2.0.0+):
+
 - **Initialization Order**: `initCrossTabSync()` MUST be called before `eventManager.track(SESSION_START)` to prevent message loss during session initialization
 - **Cross-Tab Message Handling**: Secondary tabs receiving session broadcasts do NOT set `hasStartSession` flag - this flag is managed exclusively by EventManager when SESSION_START event is tracked
 - **hasStartSession Flag**: Consolidated reset in EventManager.stop() only (single source of truth, prevents inconsistencies)
@@ -217,12 +232,14 @@ Core business logic components that handle analytics data processing, state mana
 **Purpose**: Foundational abstract base class providing centralized state management for all TraceLog components.
 
 **Core Functionality**:
+
 - **Global State Access**: Synchronous read/write access to shared in-memory application state
 - **Runtime State Management**: Maintains component state during application lifecycle
 - **Type-Safe Operations**: Generic getter/setter methods with TypeScript constraints
 - **Component Coordination**: Shared state bridge between managers and handlers
 
 **Key Features**:
+
 - Simple key-value store with minimal overhead
 - Type-safe operations via `get<T>()`, `set<T>()`, and `getState()` methods
 - Memory-efficient synchronous operations (no async overhead)
@@ -230,6 +247,7 @@ Core business logic components that handle analytics data processing, state mana
 - Read-only state snapshots via `getGlobalState()` utility function
 
 **Supported State Properties**:
+
 - **Core State**: `collectApiUrls`, `config`, `sessionId`, `userId`, `device`, `pageUrl`
 - **Control Flags**: `mode` (QA/production), `hasStartSession`, `suppressNextScroll`
 - **Runtime Counters**: `scrollEventCount` (optional)
@@ -237,6 +255,7 @@ Core business logic components that handle analytics data processing, state mana
 See `src/types/state.types.ts` for complete `State` interface definition.
 
 **Implementation Details**:
+
 - Abstract class pattern - all managers/handlers extend StateManager
 - Access pattern: `this.get('key')`, `this.set('key', value)`, `this.getState()`
 - No built-in logging - consumers handle their own state change logging
@@ -244,6 +263,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - Single global state instance shared across all StateManager subclasses
 
 **Public API**:
+
 - `getGlobalState(): Readonly<State>` - Returns immutable state snapshot for testing/debugging
 - `resetGlobalState(): void` - Clears all state properties (test isolation)
 
@@ -252,6 +272,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 **Purpose**: Robust localStorage and sessionStorage wrapper with automatic fallback to in-memory storage for browser environments where storage APIs are unavailable.
 
 **Core Functionality**:
+
 - **Dual Storage Interface**: Provides consistent APIs for both localStorage and sessionStorage with automatic fallback
 - **localStorage Methods**: `getItem()`, `setItem()`, `removeItem()`, `clear()`
 - **sessionStorage Methods**: `getSessionItem()`, `setSessionItem()`, `removeSessionItem()`
@@ -260,6 +281,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - **Data Persistence**: Manages session data, configuration cache, and analytics metadata
 
 **Key Features**:
+
 - Dual storage support: localStorage (persistent) and sessionStorage (tab-scoped)
 - Separate automatic fallback Maps for each storage type
 - SSR-safe initialization with window availability checks
@@ -276,6 +298,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 **Purpose**: GDPR/CCPA-compliant consent management with cross-tab synchronization and automatic consent persistence.
 
 **Core Functionality**:
+
 - **Consent State Management**: Tracks consent status per integration (TraceLog SaaS, Custom Backend)
 - **Cross-Tab Synchronization**: Syncs consent state across browser tabs via storage events
 - **Automatic Persistence**: Debounced localStorage persistence with 50ms delay to prevent thrashing
@@ -284,6 +307,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - **Browser Environment Checks**: Verifies browser context before consent operations
 
 **Key Features**:
+
 - Per-integration consent tracking (`tracelog`, `custom`)
 - Debounced persistence (50ms) to optimize localStorage writes during rapid consent changes
 - Cross-tab sync via storage events with message validation
@@ -294,6 +318,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - Automatic cleanup with `cleanup()` method for memory leak prevention
 
 **Public API Methods**:
+
 - `setConsent(integration: 'tracelog' | 'custom' | 'all', granted: boolean)`: Grants or revokes consent for specific integration or all integrations at once
 - `hasConsent(integration: 'tracelog' | 'custom')`: Checks if consent granted for integration
 - `getConsentState()`: Returns full consent state object with all integrations
@@ -302,6 +327,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - `cleanup()`: Cleans up resources (timers, listeners) without clearing persisted consent
 
 **Integration with EventManager**:
+
 - EventManager checks consent via `ConsentManager.hasConsent()` before tracking events
 - Events tracked before consent granted are buffered in `EventManager.consentEventsBuffer`
 - When consent granted, EventManager calls `flushConsentBuffer()` to send buffered events
@@ -309,6 +335,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - Per-integration consent allows mixed scenarios (e.g., TraceLog SaaS consent granted, Custom Backend denied)
 
 **Consent Persistence**:
+
 - Storage key: `tracelog_consent`
 - Format:
   ```json
@@ -325,6 +352,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - Cross-tab sync: Automatic via storage event listener
 
 **Important Implementation Details**:
+
 - **Does NOT extend StateManager**: ConsentManager is intentionally standalone (doesn't need global state access)
 - **Debouncing Strategy**: 50ms delay provides optimal balance between responsiveness and localStorage write performance
 - **SSR Safety**: All operations check `typeof window !== 'undefined'` before DOM/storage access
@@ -335,12 +363,14 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 **Purpose**: Simple utility for managing unique user identification for analytics tracking across browser sessions.
 
 **Core Functionality**:
+
 - **User ID Generation**: Creates RFC4122-compliant UUID v4 identifiers
 - **Persistence**: Stores user IDs in localStorage with automatic fallback
 - **Session Continuity**: Reuses existing user IDs across browser sessions
 - **Global User Identity**: Single user ID shared across all TraceLog projects in the same browser
 
 **Key Features**:
+
 - Static utility method pattern (no object instantiation required)
 - UUID v4 generation for globally unique identifiers
 - Fixed storage key (`tlog:uid`) for consistent user identification across projects
@@ -348,6 +378,7 @@ See `src/types/state.types.ts` for complete `State` interface definition.
 - Minimal dependencies and zero allocation approach
 
 **API**:
+
 ```typescript
 static getId(storageManager: StorageManager): string
 ```

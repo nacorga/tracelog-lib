@@ -127,7 +127,9 @@ tracelog.destroy();
 | Method | Description |
 |--------|-------------|
 | `init(config?)` | Initialize tracking (see [Configuration](#configuration)) |
-| `event(name, metadata?)` | Track custom events |
+| `event(name, metadata?, options?)` | Track custom events. `options.critical: true` drains the queue via `sendBeacon` right after tracking, so the batch (the critical event + anything already queued) survives an imminent navigation. Subject to `sendBeacon`'s 64KB cap — oversized batches are persisted to `localStorage` and recovered on next `init()` via their idempotency token; the backend deduplicates by `event.id`. See [API_REFERENCE.md](./API_REFERENCE.md#eventname-metadata-options) for the full contract. |
+| `flushImmediately()` | Force an async `fetch` flush of all pending events. Returns `Promise<boolean>`. |
+| `flushImmediatelySync()` | Force a `sendBeacon` flush. Use for custom unload handlers; the library already wires this to `pagehide`/`beforeunload`/`visibilitychange`. |
 | `updateGlobalMetadata(metadata)` | Replace all global metadata |
 | `mergeGlobalMetadata(metadata)` | Merge with existing global metadata |
 | `on(event, callback)` | Subscribe to events (`'event'` or `'queue'`) |
@@ -188,6 +190,10 @@ await tracelog.init({
   // Privacy
   samplingRate: 1.0,               // 100% (default)
   sensitiveQueryParams: ['token'], // Add to defaults
+
+  // Flush behavior (defaults shown)
+  flushOnSpaNavigation: false, // Opt-in: flush after pushState/replaceState/popstate/hashchange (default false; per-route flushing multiplies request volume on SPAs)
+  flushOnPageHidden: true,     // Flush when document.hidden becomes true (mobile Safari coverage)
 
   // Integrations (pick one, multiple, or none)
   integrations: {

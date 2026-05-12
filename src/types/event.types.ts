@@ -180,6 +180,34 @@ export interface CustomEventData {
 }
 
 /**
+ * Optional flags for `tracelog.event()`.
+ */
+export interface EventOptions {
+  /**
+   * If `true`, the event queue is flushed via `navigator.sendBeacon()`
+   * immediately after this event is tracked. The browser guarantees the
+   * request is queued for delivery even if the page is about to unload
+   * (e.g., `window.location.href = '/thanks'` right after tracking a
+   * purchase). Async fetch would be cancelled by the navigation;
+   * sendBeacon survives.
+   *
+   * Use for high-value events where loss is unacceptable (Purchase, Signup,
+   * AddPaymentInfo). The critical event plus any previously queued events
+   * are sent in a single request — this does not bypass the queue.
+   *
+   * **Limitations** (inherited from `sendBeacon`):
+   * - 64KB payload cap. If the combined queue + critical event exceeds it,
+   *   the failed batch is persisted to localStorage and recovered on next
+   *   `init()` via its idempotency token.
+   * - No retry on failure (fire-and-forget).
+   * - Custom headers are not applied (browser API limitation).
+   *
+   * @default false
+   */
+  critical?: boolean;
+}
+
+/**
  * Web performance metrics data
  */
 export interface WebVitalsData {
@@ -197,6 +225,8 @@ export interface ErrorData {
   type: ErrorType;
   /** Error message text */
   message: string;
+  /** Error constructor name (TypeError, ReferenceError, etc.) when available */
+  name?: string;
   /** Source file where error occurred */
   filename?: string;
   /** Line number in source file */
@@ -288,4 +318,21 @@ export interface EventData {
   viewport_data?: ViewportEventData;
   /** Campaign tracking parameters */
   utm?: UTM;
+}
+
+/**
+ * Internal queue entry: an `EventData` enriched with the session ID frozen at
+ * `track()` time. Survives session renewal — when the user is idle past the
+ * timeout, `state.sessionId` is nulled but events already in the queue keep
+ * their original `_session_id`, so `EventManager.buildBatchesWithIds()` can
+ * still attribute them correctly instead of emitting `session_id: null` to the
+ * wire.
+ *
+ * **Internal only.** The leading underscore mirrors `EventsQueue._metadata` —
+ * this field is stripped from `events[]` at batch construction time, since the
+ * backend's `EventDto` uses `forbidNonWhitelisted: true` and the wrapper
+ * `EventsQueue.session_id` is the contract.
+ */
+export interface QueuedEvent extends EventData {
+  _session_id: string;
 }

@@ -158,8 +158,8 @@ describe('Integration: Event Deduplication Flow', () => {
 
     const initialLength = bridge.getQueueLength();
 
-    button.click();
-    button.click();
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 50, clientY: 50 }));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 50, clientY: 50 }));
 
     const finalLength = bridge.getQueueLength();
     expect(finalLength).toBe(initialLength + 1);
@@ -186,11 +186,11 @@ describe('Integration: Event Deduplication Flow', () => {
 
     const initialLength = bridge.getQueueLength();
 
-    button.click();
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 60, clientY: 60 }));
 
     await wait(1100);
 
-    button.click();
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 60, clientY: 60 }));
 
     const finalLength = bridge.getQueueLength();
     expect(finalLength).toBe(initialLength + 2);

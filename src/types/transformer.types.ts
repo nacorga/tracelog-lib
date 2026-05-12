@@ -14,6 +14,11 @@ export type BeforeSendTransformer = (event: EventData) => EventData | null;
  * Transform entire batch before sending to backend.
  * Applied per-batch (10s interval or 50 events), can filter by returning null.
  *
+ * **Multi-batch flushes**: when the queue spans more than one session (e.g.
+ * after an idle-timeout renewal), one flush produces one batch per session,
+ * and this transformer is invoked **once per session-batch**. Avoid stateful
+ * transformers that assume a single invocation per flush.
+ *
  * @param batch - The batch to transform
  * @returns Transformed batch or null to filter
  */
