@@ -242,7 +242,7 @@ tracelog.removeCustomHeaders();
 - **Recovery**: Auto-recovered on next `init()` with same idempotency token (also on `pageshow.persisted === true` for bfcache restore)
 - **Optimistic Removal**: Queue cleared if AT LEAST ONE integration succeeds
 - **Auto-flush triggers** (in addition to the 10s/50-event interval):
-  - SPA navigation (`pushState`/`replaceState`/`popstate`/`hashchange`) — opt out via `flushOnSpaNavigation: false`
+  - SPA navigation (`pushState`/`replaceState`/`popstate`/`hashchange`) — **opt-in** via `flushOnSpaNavigation: true` (default `false`; off by default to avoid per-route request amplification on SPAs)
   - Document hidden (`visibilitychange` to hidden) — uses `sendBeacon` (sync) so the OS can't abort it mid-suspension. Opt out via `flushOnPageHidden: false`. Covers mobile Safari where `pagehide`/`beforeunload` may not fire
   - `pagehide` / `beforeunload` — always on, uses `sendBeacon`
   - `tracelog.event(name, meta, { critical: true })` — **double-write**: a dedicated single-event `sendBeacon` (immune to the 64KB main-queue cap) plus a main-queue drain. If an async send is in flight when the critical event arrives, the queue drain is deferred via `pendingSyncFlush` and re-runs in the async `finally`. Backend MUST deduplicate by `event.id`

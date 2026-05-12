@@ -46,10 +46,14 @@ export interface Config {
   /** Interval in milliseconds between event batch sends. @default 10000 (10 seconds) */
   sendIntervalMs?: number;
   /**
-   * If true, the event queue is flushed automatically after every SPA navigation
-   * (`pushState`, `replaceState`, `popstate`, `hashchange`). Prevents batch loss when the
-   * user closes the tab mid-buffer between SPA route changes. No-op for MPAs (no SPA nav).
-   * @default true
+   * Opt-in: when `true`, the event queue is flushed after every SPA navigation
+   * (`pushState`, `replaceState`, `popstate`, `hashchange`). Defaults to `false`
+   * because per-route flushing can multiply request volume on SPA-heavy apps
+   * (one request per route change vs. one per `sendIntervalMs`). Enable only
+   * if you need delivery between route changes that's faster than
+   * `sendIntervalMs`; `flushOnPageHidden` (default `true`) already covers the
+   * common tab-close / app-background case on every stack. No-op for MPAs.
+   * @default false
    */
   flushOnSpaNavigation?: boolean;
   /**

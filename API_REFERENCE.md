@@ -1042,12 +1042,12 @@ await tracelog.init({
 #### `flushOnSpaNavigation`
 
 - **Type:** `boolean`
-- **Default:** `true`
-- **Description:** Auto-flushes the event queue after every SPA navigation (`pushState` / `replaceState` / `popstate` / `hashchange`). Prevents batch loss when users close the tab mid-buffer between SPA route changes. No-op for MPAs (no SPA navigation to react to).
+- **Default:** `false`
+- **Description:** Opt-in. When `true`, auto-flushes the event queue after every SPA navigation (`pushState` / `replaceState` / `popstate` / `hashchange`). Off by default because per-route flushing multiplies request volume on SPA-heavy apps (one request per route change vs. one per `sendIntervalMs`). Enable only if you need delivery between route changes faster than `sendIntervalMs` — `flushOnPageHidden` (default `true`) already covers the common tab-close / app-background case. No-op for MPAs.
 
 ```typescript
-// Opt-out (rare — useful if you aggregate events deliberately)
-await tracelog.init({ flushOnSpaNavigation: false });
+// Opt-in: aggressive per-route delivery for high-stakes SPA flows
+await tracelog.init({ flushOnSpaNavigation: true });
 ```
 
 #### `flushOnPageHidden`

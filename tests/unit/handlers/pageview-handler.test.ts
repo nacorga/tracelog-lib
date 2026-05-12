@@ -600,7 +600,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       cleanupTestEnvironment();
     });
 
-    it('should auto-flush after SPA navigation when config is undefined (default true)', async () => {
+    it('should NOT auto-flush after SPA navigation when config is undefined (default false)', async () => {
       handler.startTracking();
       flushSpy.mockClear();
 
@@ -609,7 +609,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       currentUrl = 'http://localhost:3000/new-page';
       window.history.pushState({}, '', '/new-page');
 
-      expect(flushSpy).toHaveBeenCalledTimes(1);
+      expect(flushSpy).not.toHaveBeenCalled();
     });
 
     it('should auto-flush after SPA navigation when flushOnSpaNavigation is true', async () => {

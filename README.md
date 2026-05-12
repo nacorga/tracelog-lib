@@ -191,8 +191,8 @@ await tracelog.init({
   samplingRate: 1.0,               // 100% (default)
   sensitiveQueryParams: ['token'], // Add to defaults
 
-  // Flush behavior (defaults below; both flags default to true)
-  flushOnSpaNavigation: true,  // Flush after pushState/replaceState/popstate/hashchange
+  // Flush behavior (defaults shown)
+  flushOnSpaNavigation: false, // Opt-in: flush after pushState/replaceState/popstate/hashchange (default false; per-route flushing multiplies request volume on SPAs)
   flushOnPageHidden: true,     // Flush when document.hidden becomes true (mobile Safari coverage)
 
   // Integrations (pick one, multiple, or none)

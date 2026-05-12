@@ -352,7 +352,7 @@ export const validateAndNormalizeConfig = (config?: Config): Config => {
     clickThrottleMs: config?.clickThrottleMs ?? DEFAULT_CLICK_THROTTLE_MS,
     maxSameEventPerMinute: config?.maxSameEventPerMinute ?? MAX_SAME_EVENT_PER_MINUTE,
     sendIntervalMs: config?.sendIntervalMs ?? EVENT_SENT_INTERVAL_MS,
-    flushOnSpaNavigation: config?.flushOnSpaNavigation ?? true,
+    flushOnSpaNavigation: config?.flushOnSpaNavigation ?? false,
     flushOnPageHidden: config?.flushOnPageHidden ?? true,
   };
 

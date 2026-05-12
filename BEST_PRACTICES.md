@@ -182,13 +182,16 @@ window.location.href = '/thanks'; // ❌ Event likely lost
 
 **When NOT to mark critical**: events that don't immediately precede a navigation (mid-funnel `add_to_cart`, page views, web vitals, etc.) — the default batched send (`sendIntervalMs`) plus auto-flush on `pagehide`/`visibilitychange` already covers them.
 
-### ✅ DO: Force-flush before route teardown when auto-flush is disabled
+### ✅ DO: Force-flush on SPA route changes when you need sub-`sendIntervalMs` delivery
 
-The library auto-flushes on SPA navigation (`flushOnSpaNavigation`, default `true`). If you opt out — e.g. you want to control timing yourself — call `flushImmediately()` (async, with retries) before tearing down route-scoped state. For unload listeners use `flushImmediatelySync()` instead so the browser queues the request.
+SPA-navigation auto-flush is opt-in (`flushOnSpaNavigation`, default `false`) to avoid amplifying request volume on SPA-heavy apps. If a specific flow needs delivery between route changes that's faster than `sendIntervalMs` (e.g. step-by-step funnels you analyze in near-real-time), either enable the flag globally or call `flushImmediately()` (async, with retries) on the navigation event yourself. For unload listeners use `flushImmediatelySync()` instead so the browser queues the request.
 
 ```typescript
-// Angular: flush on every NavigationStart with auto-flush disabled
-await tracelog.init({ flushOnSpaNavigation: false /* ... */ });
+// Option A: opt-in globally (flushes on every route change)
+await tracelog.init({ flushOnSpaNavigation: true /* ... */ });
+
+// Option B: flush manually only on selected navigations
+await tracelog.init({ /* ... */ });
 
 router.events.pipe(filter((e) => e instanceof NavigationStart)).subscribe(async () => {
   await tracelog.flushImmediately();
