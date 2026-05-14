@@ -19,15 +19,39 @@ import { QUEUE_KEY, RATE_LIMIT_KEY } from '../../../src/constants/storage.consta
 const PROD_URL = 'https://api.tracelog.io/p/proj-123/collect';
 const USER_ID = 'user-test';
 
-function jsonResponse(status: number, body: unknown = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+/**
+ * Lightweight Response-shaped object. We avoid `new Response()` because CI's
+ * Node version may not expose `Response` as a global, and the SenderManager
+ * only touches `.ok`, `.status`, `.statusText`, `.json()`, and `.clone()`.
+ */
+interface MockResponse {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  json: () => Promise<unknown>;
+  clone: () => MockResponse;
 }
 
-function emptyResponse(status: number): Response {
-  return new Response(null, { status });
+function jsonResponse(status: number, body: unknown = {}): MockResponse {
+  const resp: MockResponse = {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: `Status ${status}`,
+    json: async () => Promise.resolve(body),
+    clone: () => resp,
+  };
+  return resp;
+}
+
+function emptyResponse(status: number): MockResponse {
+  const resp: MockResponse = {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: `Status ${status}`,
+    json: async () => Promise.resolve({}),
+    clone: () => resp,
+  };
+  return resp;
 }
 
 function makeSender(apiUrl = PROD_URL): { sender: SenderManager; storage: StorageManager } {
@@ -388,10 +412,10 @@ describe('SenderManager - persistence recovery', () => {
   }, 10_000);
 
   it('is idempotent — concurrent calls do not double-send', async () => {
-    let resolveFetch!: (value: Response) => void;
+    let resolveFetch!: (value: MockResponse) => void;
     const fetchMock = vi.fn().mockImplementation(
       async () =>
-        new Promise<Response>((resolve) => {
+        new Promise<MockResponse>((resolve) => {
           resolveFetch = resolve;
         }),
     );
