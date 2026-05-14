@@ -7,10 +7,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 import { ErrorHandler } from '../../../src/handlers/error.handler';
 import { EventManager } from '../../../src/managers/event.manager';
-import { EventType, ErrorType } from '../../../src/types';
+import { EmitterEvent, EventType, ErrorType } from '../../../src/types';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { getGlobalState } from '../../../src/managers/state.manager';
-import { MAX_STACK_TRACE_LENGTH } from '../../../src/constants/error.constants';
+import { MAX_STACK_TRACE_LENGTH, MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW } from '../../../src/constants/error.constants';
+import { Emitter } from '../../../src/utils/emitter.utils';
 
 describe('ErrorHandler - Error Tracking', () => {
   let errorHandler: ErrorHandler;
@@ -572,5 +573,228 @@ describe('ErrorHandler - Rejection Message Extraction', () => {
         }),
       }),
     );
+  });
+});
+
+describe('ErrorHandler - Per-Pageview Signature Throttle', () => {
+  let errorHandler: ErrorHandler;
+  let eventManager: EventManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    const storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+    errorHandler = new ErrorHandler(eventManager);
+    errorHandler.startTracking();
+  });
+
+  afterEach(() => {
+    errorHandler.stopTracking();
+    cleanupTestEnvironment();
+  });
+
+  function fireErrorWithVariation(idx: number): void {
+    // Distinct numeric content bypasses the 5s identical-message suppression window,
+    // but the normalized signature collapses both to `failed to load [n]` so the cap applies.
+    window.dispatchEvent(
+      new ErrorEvent('error', {
+        message: `Failed to load 1${String(idx).padStart(4, '0')}`,
+        filename: 'app.js',
+        lineno: 42,
+      }),
+    );
+  }
+
+  it('drops events that share a signature after the per-pageview cap', () => {
+    for (let i = 1; i <= 6; i += 1) {
+      fireErrorWithVariation(i);
+    }
+
+    const calls = trackSpy.mock.calls.filter((call) => {
+      const event = call[0] as { type?: EventType };
+      return event.type === EventType.ERROR;
+    });
+    expect(calls).toHaveLength(MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW);
+  });
+
+  it('lets the 3rd error pass and drops the 4th (boundary)', () => {
+    fireErrorWithVariation(1);
+    fireErrorWithVariation(2);
+    fireErrorWithVariation(3);
+    expect(trackSpy).toHaveBeenCalledTimes(3);
+
+    trackSpy.mockClear();
+    fireErrorWithVariation(4);
+    expect(trackSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not throttle errors with distinct signatures', () => {
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Boom A', filename: 'a.js', lineno: 1 }));
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Boom B', filename: 'b.js', lineno: 1 }));
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Boom C', filename: 'c.js', lineno: 1 }));
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Boom D', filename: 'd.js', lineno: 1 }));
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Boom E', filename: 'e.js', lineno: 1 }));
+
+    expect(trackSpy).toHaveBeenCalledTimes(5);
+  });
+
+  it('resets the counter on pagehide', () => {
+    fireErrorWithVariation(1);
+    fireErrorWithVariation(2);
+    fireErrorWithVariation(3);
+    fireErrorWithVariation(4);
+    expect(trackSpy).toHaveBeenCalledTimes(3);
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    trackSpy.mockClear();
+    fireErrorWithVariation(5);
+    fireErrorWithVariation(6);
+    fireErrorWithVariation(7);
+    expect(trackSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('resets the counter when resetPageviewCounter() is called directly', () => {
+    fireErrorWithVariation(1);
+    fireErrorWithVariation(2);
+    fireErrorWithVariation(3);
+    fireErrorWithVariation(4);
+    expect(trackSpy).toHaveBeenCalledTimes(3);
+
+    errorHandler.resetPageviewCounter();
+    trackSpy.mockClear();
+
+    fireErrorWithVariation(5);
+    expect(trackSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the counter on stopTracking so a restart starts from zero', () => {
+    fireErrorWithVariation(1);
+    fireErrorWithVariation(2);
+    fireErrorWithVariation(3);
+    fireErrorWithVariation(4);
+    expect(trackSpy).toHaveBeenCalledTimes(3);
+
+    errorHandler.stopTracking();
+    errorHandler.startTracking();
+    trackSpy.mockClear();
+
+    fireErrorWithVariation(5);
+    fireErrorWithVariation(6);
+    fireErrorWithVariation(7);
+    expect(trackSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('resets the counter when SESSION_START is observed via the emitter', () => {
+    const emitter = new Emitter();
+    const storageManager = new StorageManager();
+    const localEventManager = new EventManager(storageManager);
+    const localTrackSpy = vi.spyOn(localEventManager, 'track');
+
+    const localHandler = new ErrorHandler(localEventManager, emitter);
+    localHandler.startTracking();
+
+    try {
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 11111', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 22222', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 33333', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 44444', filename: 'app.js', lineno: 1 }));
+      expect(localTrackSpy).toHaveBeenCalledTimes(3);
+
+      // Simulate a new session being broadcast through the emitter (mirrors SessionManager.track flow).
+      emitter.emit(EmitterEvent.EVENT, {
+        id: 'evt-1',
+        type: EventType.SESSION_START,
+        page_url: 'https://example.com',
+        timestamp: Date.now(),
+      } as never);
+
+      localTrackSpy.mockClear();
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 55555', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 66666', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 77777', filename: 'app.js', lineno: 1 }));
+      expect(localTrackSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      localHandler.stopTracking();
+    }
+  });
+
+  it('does not subscribe to the emitter when none is provided (no SESSION_START reset)', () => {
+    // Reusing the suite-level `errorHandler` (no emitter): firing 4 errors with the same
+    // signature should still cap at 3 even though SESSION_START events would normally reset.
+    fireErrorWithVariation(1);
+    fireErrorWithVariation(2);
+    fireErrorWithVariation(3);
+    fireErrorWithVariation(4);
+    expect(trackSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('resets the counter when PAGE_VIEW is observed via the emitter (SPA navigation)', () => {
+    const emitter = new Emitter();
+    const storageManager = new StorageManager();
+    const localEventManager = new EventManager(storageManager);
+    const localTrackSpy = vi.spyOn(localEventManager, 'track');
+
+    const localHandler = new ErrorHandler(localEventManager, emitter);
+    localHandler.startTracking();
+
+    try {
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 11111', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 22222', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 33333', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 44444', filename: 'app.js', lineno: 1 }));
+      expect(localTrackSpy).toHaveBeenCalledTimes(3);
+
+      // Simulate an SPA route change being broadcast through the emitter
+      // (mirrors PageViewHandler.trackCurrentPage → EventManager.track flow).
+      emitter.emit(EmitterEvent.EVENT, {
+        id: 'evt-pv-1',
+        type: EventType.PAGE_VIEW,
+        page_url: 'https://example.com/route-2',
+        timestamp: Date.now(),
+      } as never);
+
+      localTrackSpy.mockClear();
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 55555', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 66666', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 77777', filename: 'app.js', lineno: 1 }));
+      expect(localTrackSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      localHandler.stopTracking();
+    }
+  });
+
+  it('ignores non-reset event types observed via the emitter', () => {
+    const emitter = new Emitter();
+    const storageManager = new StorageManager();
+    const localEventManager = new EventManager(storageManager);
+    const localTrackSpy = vi.spyOn(localEventManager, 'track');
+
+    const localHandler = new ErrorHandler(localEventManager, emitter);
+    localHandler.startTracking();
+
+    try {
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 11111', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 22222', filename: 'app.js', lineno: 1 }));
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 33333', filename: 'app.js', lineno: 1 }));
+      expect(localTrackSpy).toHaveBeenCalledTimes(3);
+
+      // A CUSTOM event flowing through the emitter must NOT reset the counter —
+      // only SESSION_START and PAGE_VIEW are reset triggers.
+      emitter.emit(EmitterEvent.EVENT, {
+        id: 'evt-custom-1',
+        type: EventType.CUSTOM,
+        custom_event: { name: 'noop' },
+        timestamp: Date.now(),
+      } as never);
+
+      localTrackSpy.mockClear();
+      window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 44444', filename: 'app.js', lineno: 1 }));
+      expect(localTrackSpy).not.toHaveBeenCalled();
+    } finally {
+      localHandler.stopTracking();
+    }
   });
 });

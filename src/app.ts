@@ -760,7 +760,7 @@ export class App extends StateManager {
       log('warn', 'Failed to start performance tracking', { error });
     });
 
-    this.handlers.error = new ErrorHandler(this.managers.event as EventManager);
+    this.handlers.error = new ErrorHandler(this.managers.event as EventManager, this.emitter);
     this.handlers.error.startTracking();
 
     if (config.viewport) {

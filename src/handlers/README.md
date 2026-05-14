@@ -183,6 +183,14 @@ Captures JavaScript errors and unhandled promise rejections for debugging and mo
   - Prevents error floods from overwhelming server
   - Automatic recovery after cooldown period
   - Configured via `ERROR_BURST_THRESHOLD` and `ERROR_BURST_BACKOFF_MS` constants
+- **Per-Pageview Signature Cap**: After the 5s dedup window expires, the same
+  `(normalizedMessage, filename, line)` signature is capped at 3 events per pageview
+  (`MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW`). Normalization mirrors the API's
+  `ErrorFingerprintService` (URLs, UUIDs, hex addresses, long numbers, long quoted
+  strings are collapsed to placeholders). Counter resets on `pagehide`, `SESSION_START`,
+  and `PAGE_VIEW` (covers SPA navigation via patched History API + popstate/hashchange).
+  Not configurable — for QA scenarios that legitimately need every error, use
+  `errorSampling: 0` or QA mode (`?tlog_mode=qa`).
 
 **Event Data**:
 ```javascript

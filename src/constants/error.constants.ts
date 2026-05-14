@@ -104,6 +104,46 @@ export const ERROR_BURST_THRESHOLD = 10; // 10 unique errors
 export const ERROR_BURST_BACKOFF_MS = 5000; // 5 seconds
 
 // ============================================================================
+// PER-PAGEVIEW SIGNATURE CAP
+// ============================================================================
+
+/**
+ * Hard cap on how many error events with the same `(normalizedMessage, filename, line)`
+ * signature may be tracked within a single pageview. After the cap, additional matches
+ * are dropped at the handler before reaching `EventManager.track()` — both bandwidth
+ * and the merchant's monthly event quota are protected at the source.
+ *
+ * Counter resets on:
+ *   - `pagehide` (hard reload, navigation away)
+ *   - `SESSION_START` (new session detected mid-pageview)
+ *   - `PAGE_VIEW` (covers SPA navigation via patched History API + popstate/hashchange,
+ *     which never fires `pagehide`)
+ *
+ * Orthogonal to:
+ *   - the 5s identical-error dedup window (`ERROR_SUPPRESSION_WINDOW_MS`)
+ *   - the burst detector (`ERROR_BURST_THRESHOLD` / `ERROR_BURST_BACKOFF_MS`)
+ *   - the server-side per-day cap that runs on ingest (defensive second layer)
+ *
+ * Signature is built by `buildErrorSignatureKey`, which mirrors the regex set in
+ * `tracelog-api/src/lib/error-classification/error-fingerprint.service.ts`. Single knob —
+ * no public config surface. Symmetric with `ERROR_BURST_THRESHOLD`, also hardcoded.
+ * Customers needing to disable throttling for QA can use `errorSampling: 0` or QA mode
+ * (`?tlog_mode=qa`).
+ */
+export const MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW = 3;
+
+/**
+ * Memory safety cap on distinct signatures tracked between counter resets. The
+ * PAGE_VIEW / SESSION_START / pagehide reset triggers already bound the map in
+ * normal use, but a long-running SPA route that produces hundreds of unique
+ * error shapes (e.g. a misbehaving page firing one-off errors with different
+ * dynamic content) could otherwise grow the map without a ceiling. Once the
+ * size exceeds this constant, the entire map is cleared as a memory safety
+ * valve. Mirrors the `MAX_TRACKED_ERRORS_HARD_LIMIT` pattern on `recentErrors`.
+ */
+export const MAX_PAGEVIEW_SIGNATURE_KEYS = 200;
+
+// ============================================================================
 // PERMANENT ERROR LOGGING
 // ============================================================================
 
