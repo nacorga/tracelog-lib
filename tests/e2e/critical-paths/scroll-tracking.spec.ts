@@ -142,44 +142,8 @@ test.describe('E2E: Scroll Tracking', () => {
       }
     });
 
-    test('should track max depth reached', async ({ page }) => {
-      const result = await page.evaluate(async (): Promise<CapturedEvent[]> => {
-        let retries = 0;
-        while (!window.__traceLogBridge && retries < 50) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          retries++;
-        }
-        if (!window.__traceLogBridge) {
-          throw new Error(`TraceLog bridge not available after ${retries * 100}ms`);
-        }
-
-        window.__traceLogBridge.destroy(true);
-
-        const events: any[] = [];
-        window.__traceLogBridge.on('event', (event) => {
-          events.push(event);
-        });
-
-        await window.__traceLogBridge.init();
-
-        await new Promise((resolve) => setTimeout(resolve, 300));
-
-        // Scroll to mid-point
-        window.scrollTo(0, 300);
-
-        await new Promise((resolve) => setTimeout(resolve, 800));
-
-        return events;
-      });
-
-      const scrollEvent = findEventByType(result, 'scroll');
-
-      if (scrollEvent) {
-        assertEventStructure(scrollEvent, 'scroll');
-        expect(scrollEvent.scroll_data!.max_depth_reached).toBeDefined();
-        expect(scrollEvent.scroll_data!.max_depth_reached).toBeGreaterThanOrEqual(scrollEvent.scroll_data!.depth);
-      }
-    });
+    // v3.0: max_depth_reached was removed from scroll_data; the test for that
+    // dropped field went with it.
   });
 
   test.describe('Debouncing & Rate Limiting', () => {
