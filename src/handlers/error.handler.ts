@@ -16,6 +16,7 @@ import {
   ERROR_BURST_THRESHOLD,
   ERROR_BURST_BACKOFF_MS,
   MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW,
+  MAX_PAGEVIEW_SIGNATURE_KEYS,
 } from '../constants/error.constants';
 
 /**
@@ -180,7 +181,14 @@ export class ErrorHandler extends StateManager {
       return true;
     }
 
-    this.pageviewSignatureCounts.set(key, current + 1);
+    const nextCount = current + 1;
+    this.pageviewSignatureCounts.set(key, nextCount);
+
+    if (this.pageviewSignatureCounts.size > MAX_PAGEVIEW_SIGNATURE_KEYS) {
+      this.pageviewSignatureCounts.clear();
+      this.pageviewSignatureCounts.set(key, nextCount);
+    }
+
     return false;
   }
 
@@ -234,6 +242,11 @@ export class ErrorHandler extends StateManager {
       return;
     }
 
+    // PromiseRejectionEvent carries no filename/line, so the signature collapses
+    // to `(normalizedMessage, '', '')` — rejections from different code paths that
+    // happen to share a message hit the same cap. Accepted trade-off: the message
+    // alone is usually distinctive enough, and over-throttling rejections is safer
+    // than letting them flood the queue.
     if (this.shouldThrottleBySignature({ message: sanitizedMessage })) {
       return;
     }

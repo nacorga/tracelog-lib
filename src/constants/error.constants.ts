@@ -132,6 +132,17 @@ export const ERROR_BURST_BACKOFF_MS = 5000; // 5 seconds
  */
 export const MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW = 3;
 
+/**
+ * Memory safety cap on distinct signatures tracked between counter resets. The
+ * PAGE_VIEW / SESSION_START / pagehide reset triggers already bound the map in
+ * normal use, but a long-running SPA route that produces hundreds of unique
+ * error shapes (e.g. a misbehaving page firing one-off errors with different
+ * dynamic content) could otherwise grow the map without a ceiling. Once the
+ * size exceeds this constant, the entire map is cleared as a memory safety
+ * valve. Mirrors the `MAX_TRACKED_ERRORS_HARD_LIMIT` pattern on `recentErrors`.
+ */
+export const MAX_PAGEVIEW_SIGNATURE_KEYS = 200;
+
 // ============================================================================
 // PERMANENT ERROR LOGGING
 // ============================================================================

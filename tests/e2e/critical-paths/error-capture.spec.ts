@@ -374,7 +374,10 @@ test.describe('E2E: Error Capture', () => {
         }
 
         window.__traceLogBridge.destroy(true);
-        await window.__traceLogBridge.init();
+        // pageViewThrottleMs: 0 disables PageViewHandler's 1s SPA-navigation throttle
+        // so the synthetic pushState below produces a PAGE_VIEW deterministically without
+        // having to wait out DEFAULT_PAGE_VIEW_THROTTLE_MS in the test.
+        await window.__traceLogBridge.init({ pageViewThrottleMs: 0 });
 
         const events: any[] = [];
         window.__traceLogBridge.on('event', (event) => {

@@ -450,6 +450,8 @@ const DEFAULT_ERROR_SAMPLING_RATE = 1;
 const ERROR_BURST_WINDOW_MS = 1e3;
 const ERROR_BURST_THRESHOLD = 10;
 const ERROR_BURST_BACKOFF_MS = 5e3;
+const MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW = 3;
+const MAX_PAGEVIEW_SIGNATURE_KEYS = 200;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const MAX_RESPONSE_CODE_LENGTH = 64;
 const WEB_VITALS_GOOD_THRESHOLDS = {
@@ -507,7 +509,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
 };
 const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.9.0";
+const version = "2.10.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1409,6 +1411,22 @@ class Emitter {
   removeAllListeners() {
     this.listeners.clear();
   }
+}
+const URL_PATTERN = /https?:\/\/\S+/g;
+const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const HEX_ADDR_PATTERN = /0x[0-9a-fA-F]{4,}/g;
+const LONG_NUMBER_PATTERN = /(?<!\d)\d{4,}(?!\d)/g;
+const LONG_QUOTED_PATTERN = /(['"])[^'"]{20,}\1/g;
+function normalizeErrorMessage(message) {
+  return message.replace(URL_PATTERN, "[URL]").replace(UUID_PATTERN, "[ID]").replace(HEX_ADDR_PATTERN, "[ADDR]").replace(LONG_NUMBER_PATTERN, "[N]").replace(LONG_QUOTED_PATTERN, "$1[VAR]$1").toLowerCase().trim();
+}
+function buildErrorSignatureKey(input) {
+  const message = normalizeErrorMessage(input.message);
+  const rawFilename = (input.filename ?? "").trim();
+  const cut = rawFilename.search(/[?#]/);
+  const filename = cut === -1 ? rawFilename : rawFilename.slice(0, cut);
+  const line = input.line == null ? "" : String(input.line);
+  return `${message}|${filename}|${line}`;
 }
 function transformEvent(event2, transformer, context) {
   try {
@@ -3244,7 +3262,10 @@ class EventManager extends StateManager {
    * **Note**: For page unload, use `flushImmediatelySync()` instead,
    * which uses `sendBeacon()` for guaranteed delivery.
    *
-   * @returns Promise resolving to `true` if all sends succeeded, `false` if any failed
+   * @returns Promise resolving to `true` if at least one integration accepted
+   *          the batch during this call (optimistic removal — failures
+   *          persist per-integration for retry). `false` if no events, all
+   *          senders failed, or a flush is already in flight.
    *
    * @example
    * ```typescript
@@ -3533,7 +3554,7 @@ class EventManager extends StateManager {
     }
     if (isSync) {
       const results = planned.map(({ batch, eventIds }) => this.sendBatchSync(batch, eventIds));
-      this.clearSendTimeout();
+      this.settleSendTimeout();
       return results.some(Boolean);
     }
     this.sendInProgress = true;
@@ -3542,13 +3563,31 @@ class EventManager extends StateManager {
         const results = await Promise.all(
           planned.map(async ({ batch, eventIds }) => this.sendBatchAsync(batch, eventIds))
         );
-        this.clearSendTimeout();
+        this.settleSendTimeout();
         return results.some(Boolean);
       } finally {
         this.sendInProgress = false;
         this.drainPendingSyncFlush();
       }
     })();
+  }
+  /**
+   * Reconciles the periodic send timer after a flush attempt. Clears the
+   * timer when the queue is empty, otherwise (re)schedules a retry tick.
+   *
+   * **Why**: a `flushImmediately()` / `flushImmediatelySync()` call where all
+   * integrations fail leaves events in `eventsQueue` for retry. The periodic
+   * timer is the safety net that drains them when the backend recovers — if
+   * we cleared it unconditionally here, the queue would sit untouched until
+   * the next tracked event resurrects the timer in `addToQueue`. Mirrors the
+   * pattern in `sendEventsQueue()` (the periodic path).
+   */
+  settleSendTimeout() {
+    if (this.eventsQueue.length === 0) {
+      this.clearSendTimeout();
+    } else {
+      this.scheduleSendTimeout();
+    }
   }
   /**
    * Re-runs a sync flush that was deferred while an async send was in flight.
@@ -6510,38 +6549,77 @@ class PerformanceHandler extends StateManager {
 }
 class ErrorHandler extends StateManager {
   eventManager;
+  emitter;
   recentErrors = /* @__PURE__ */ new Map();
+  pageviewSignatureCounts = /* @__PURE__ */ new Map();
   errorBurstCounter = 0;
   burstWindowStart = 0;
   burstBackoffUntil = 0;
-  constructor(eventManager) {
+  pagehideHandler = null;
+  pageviewResetListener = null;
+  constructor(eventManager, emitter) {
     super();
     this.eventManager = eventManager;
+    this.emitter = emitter;
   }
   /**
    * Starts tracking JavaScript errors and promise rejections.
    *
    * - Registers global error event listener
    * - Registers unhandledrejection event listener
+   * - Registers pagehide listener to reset the per-pageview signature counter
+   * - Subscribes to emitter SESSION_START + PAGE_VIEW to reset the counter on new
+   *   sessions and SPA route changes (the only signal `pagehide` does not cover)
    */
   startTracking() {
     window.addEventListener("error", this.handleError);
     window.addEventListener("unhandledrejection", this.handleRejection);
+    this.pagehideHandler = () => {
+      this.resetPageviewCounter();
+    };
+    window.addEventListener("pagehide", this.pagehideHandler, { passive: true });
+    if (this.emitter) {
+      this.pageviewResetListener = (event2) => {
+        if (event2.type === EventType.SESSION_START || event2.type === EventType.PAGE_VIEW) {
+          this.resetPageviewCounter();
+        }
+      };
+      this.emitter.on(EmitterEvent.EVENT, this.pageviewResetListener);
+    }
   }
   /**
    * Stops tracking errors and cleans up resources.
    *
    * - Removes error event listeners
-   * - Clears recent errors map
+   * - Removes pagehide listener and unsubscribes from emitter
+   * - Clears recent errors and pageview signature counters
    * - Resets burst detection counters
    */
   stopTracking() {
     window.removeEventListener("error", this.handleError);
     window.removeEventListener("unhandledrejection", this.handleRejection);
+    if (this.pagehideHandler) {
+      window.removeEventListener("pagehide", this.pagehideHandler);
+      this.pagehideHandler = null;
+    }
+    if (this.emitter && this.pageviewResetListener) {
+      this.emitter.off(EmitterEvent.EVENT, this.pageviewResetListener);
+      this.pageviewResetListener = null;
+    }
     this.recentErrors.clear();
+    this.pageviewSignatureCounts.clear();
     this.errorBurstCounter = 0;
     this.burstWindowStart = 0;
     this.burstBackoffUntil = 0;
+  }
+  /**
+   * Clears the per-pageview signature counter.
+   *
+   * Public so `App` or tests can drive a reset explicitly; the handler itself wires
+   * `pagehide` and emitter `SESSION_START` / `PAGE_VIEW` in `startTracking()`.
+   */
+  resetPageviewCounter() {
+    this.pageviewSignatureCounts.clear();
   }
   /**
    * Checks sampling rate and burst detection
@@ -6571,12 +6649,46 @@ class ErrorHandler extends StateManager {
     const samplingRate = config.errorSampling ?? DEFAULT_ERROR_SAMPLING_RATE;
     return Math.random() < samplingRate;
   }
+  /**
+   * Returns true when the per-pageview signature cap has been hit for this error.
+   * Dropped errors do not increment the counter — the 5s suppression window already
+   * silences identical repeats, and double-counting here would skew the cap for any
+   * later signature that recycles the same map key after a counter reset.
+   */
+  shouldThrottleBySignature(input) {
+    const key = buildErrorSignatureKey({
+      message: input.message,
+      filename: input.filename,
+      line: input.line
+    });
+    const current = this.pageviewSignatureCounts.get(key) ?? 0;
+    if (current >= MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW) {
+      log("debug", "Error throttled (pageview cap)", {
+        data: { signature: key, count: current }
+      });
+      return true;
+    }
+    const nextCount = current + 1;
+    this.pageviewSignatureCounts.set(key, nextCount);
+    if (this.pageviewSignatureCounts.size > MAX_PAGEVIEW_SIGNATURE_KEYS) {
+      this.pageviewSignatureCounts.clear();
+      this.pageviewSignatureCounts.set(key, nextCount);
+    }
+    return false;
+  }
   handleError = (event2) => {
     if (!this.shouldSample()) {
       return;
     }
     const sanitizedMessage = this.sanitize(event2.message || "Unknown error");
     if (this.shouldSuppressError(ErrorType.JS_ERROR, sanitizedMessage)) {
+      return;
+    }
+    if (this.shouldThrottleBySignature({
+      message: sanitizedMessage,
+      filename: event2.filename,
+      line: event2.lineno
+    })) {
       return;
     }
     const stack = typeof event2.error?.stack === "string" ? this.truncateStack(event2.error.stack) : void 0;
@@ -6601,6 +6713,9 @@ class ErrorHandler extends StateManager {
     const message = this.extractRejectionMessage(event2.reason);
     const sanitizedMessage = this.sanitize(message);
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
+      return;
+    }
+    if (this.shouldThrottleBySignature({ message: sanitizedMessage })) {
       return;
     }
     const stack = event2.reason instanceof Error && typeof event2.reason.stack === "string" ? this.truncateStack(event2.reason.stack) : void 0;
@@ -6748,7 +6863,10 @@ class App extends StateManager {
    * Use when you need to force-send buffered events without waiting for the next send interval
    * (e.g., before a critical user action like sign-out, or before a SPA route teardown).
    *
-   * @returns Promise<boolean> — `true` if all integrations sent successfully, `false` otherwise
+   * @returns Promise<boolean> — `true` if at least one integration accepted
+   *          the batch (optimistic removal — failures persist per-integration
+   *          and retry on the next flush). `false` if not initialized,
+   *          destroying, another flush is in flight, or all senders failed.
    * @internal Called from api.flushImmediately()
    */
   async flushImmediately() {
@@ -6760,7 +6878,10 @@ class App extends StateManager {
    * Use only for page-unload scenarios (or equivalent) where async fetch may be cancelled.
    * For general flush needs, prefer {@link flushImmediately}.
    *
-   * @returns `true` if all integrations sent successfully, `false` otherwise
+   * @returns `true` if at least one integration accepted the beacon batch
+   *          during this call (optimistic removal — failures persist
+   *          per-integration). `false` if no events, all senders failed, or
+   *          the call was deferred behind an in-flight async send.
    * @internal Called from api.flushImmediatelySync()
    */
   flushImmediatelySync() {
@@ -7241,7 +7362,7 @@ class App extends StateManager {
     this.handlers.performance.startTracking().catch((error) => {
       log("warn", "Failed to start performance tracking", { error });
     });
-    this.handlers.error = new ErrorHandler(this.managers.event);
+    this.handlers.error = new ErrorHandler(this.managers.event, this.emitter);
     this.handlers.error.startTracking();
     if (config.viewport) {
       this.handlers.viewport = new ViewportHandler(this.managers.event);
