@@ -2,9 +2,8 @@ import { MetadataType } from './common.types';
 
 /**
  * Coordinate information from a click event
- * Includes absolute and relative positioning
  */
-export type ClickCoordinates = Pick<ClickData, 'x' | 'y' | 'relativeX' | 'relativeY'>;
+export type ClickCoordinates = Pick<ClickData, 'x' | 'y'>;
 
 /**
  * Web performance metric types tracked by the library
@@ -13,9 +12,8 @@ export type ClickCoordinates = Pick<ClickData, 'x' | 'y' | 'relativeX' | 'relati
  * - INP: Interaction to Next Paint
  * - FCP: First Contentful Paint
  * - TTFB: Time to First Byte
- * - LONG_TASK: Tasks exceeding 50ms
  */
-export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
+export type WebVitalType = 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB';
 
 /**
  * Event type name
@@ -40,32 +38,13 @@ export enum EventType {
   WEB_VITALS = 'web_vitals',
   /** JavaScript errors and rejections */
   ERROR = 'error',
-  /** Element visibility tracking */
-  VIEWPORT_VISIBLE = 'viewport_visible',
 }
 
 /**
- * Per-session event counts structure for rate limiting
+ * Per-session event counts structure for rate limiting.
  *
- * **Purpose**: Tracks how many events of each type have been generated
- * during the current session to enforce per-session limits and prevent
- * runaway event generation.
- *
- * **Usage**:
- * - Persisted to localStorage: `tlog:{userId}:session_counts:{sessionId}`
- * - Restored on page reload to maintain limits across navigations
- * - Debounced writes for performance (500ms delay)
- *
- * **Limits** (from config.constants.ts):
- * - Total: 1000 events per session
- * - Clicks: 500 per session
- * - Page Views: 100 per session
- * - Custom: 500 per session
- * - Viewport: 200 per session
- * - Scroll: 120 per session
- *
- * @see src/managers/event.manager.ts for implementation
- * @see src/constants/config.constants.ts for limit values
+ * Persisted to localStorage: `tlog:{userId}:session_counts:{sessionId}`
+ * Restored on page reload to maintain limits across navigations.
  */
 export interface SessionEventCounts {
   /** Total events across all types */
@@ -76,8 +55,6 @@ export interface SessionEventCounts {
   [EventType.PAGE_VIEW]: number;
   /** Custom events count */
   [EventType.CUSTOM]: number;
-  /** Viewport visibility events count */
-  [EventType.VIEWPORT_VISIBLE]: number;
   /** Scroll events count */
   [EventType.SCROLL]: number;
   /** Index signature for dynamic event type access */
@@ -114,12 +91,6 @@ export interface ScrollData {
   direction: ScrollDirection;
   /** CSS selector of the scrolled container */
   container_selector: string;
-  /** Whether this is the primary viewport scroll */
-  is_primary: boolean;
-  /** Scroll velocity in pixels per second */
-  velocity: number;
-  /** Maximum scroll depth reached during session (0-100) */
-  max_depth_reached: number;
 }
 
 /**
@@ -130,10 +101,6 @@ export interface ClickData {
   x: number;
   /** Absolute Y coordinate in viewport (pixels) */
   y: number;
-  /** Relative X position within element (0-1) */
-  relativeX: number;
-  /** Relative Y position within element (0-1) */
-  relativeY: number;
   /** Element ID attribute */
   id?: string;
   /** Element class attribute */
@@ -144,16 +111,6 @@ export interface ClickData {
   text?: string;
   /** Link href for anchor elements */
   href?: string;
-  /** Element title attribute */
-  title?: string;
-  /** Image alt text for img elements */
-  alt?: string;
-  /** ARIA role attribute */
-  role?: string;
-  /** ARIA label attribute */
-  ariaLabel?: string;
-  /** Custom data attributes (data-*) */
-  dataAttributes?: Record<string, string>;
 }
 
 /**
@@ -186,21 +143,10 @@ export interface EventOptions {
   /**
    * If `true`, the event queue is flushed via `navigator.sendBeacon()`
    * immediately after this event is tracked. The browser guarantees the
-   * request is queued for delivery even if the page is about to unload
-   * (e.g., `window.location.href = '/thanks'` right after tracking a
-   * purchase). Async fetch would be cancelled by the navigation;
-   * sendBeacon survives.
+   * request is queued for delivery even if the page is about to unload.
    *
    * Use for high-value events where loss is unacceptable (Purchase, Signup,
-   * AddPaymentInfo). The critical event plus any previously queued events
-   * are sent in a single request — this does not bypass the queue.
-   *
-   * **Limitations** (inherited from `sendBeacon`):
-   * - 64KB payload cap. If the combined queue + critical event exceeds it,
-   *   the failed batch is persisted to localStorage and recovered on next
-   *   `init()` via its idempotency token.
-   * - No retry on failure (fire-and-forget).
-   * - Custom headers are not applied (browser API limitation).
+   * AddPaymentInfo).
    *
    * @default false
    */
@@ -261,28 +207,6 @@ export interface PageViewData {
   referrer?: string;
   /** Page title from document */
   title?: string;
-  /** URL pathname */
-  pathname?: string;
-  /** URL query string */
-  search?: string;
-  /** URL hash fragment */
-  hash?: string;
-}
-
-/**
- * Data captured when element becomes visible
- */
-export interface ViewportEventData {
-  /** CSS selector that matched the element */
-  selector: string;
-  /** Optional unique identifier for analytics (if configured) */
-  id?: string;
-  /** Optional human-readable name (if configured) */
-  name?: string;
-  /** Actual time (ms) element was visible before event fired */
-  dwellTime: number;
-  /** Actual visibility ratio when event fired (0-1) */
-  visibilityRatio: number;
 }
 
 /**
@@ -314,8 +238,6 @@ export interface EventData {
   page_view?: PageViewData;
   /** Error details (when type is ERROR) */
   error_data?: ErrorData;
-  /** Viewport visibility details (when type is VIEWPORT_VISIBLE) */
-  viewport_data?: ViewportEventData;
   /** Campaign tracking parameters */
   utm?: UTM;
 }
@@ -327,11 +249,6 @@ export interface EventData {
  * their original `_session_id`, so `EventManager.buildBatchesWithIds()` can
  * still attribute them correctly instead of emitting `session_id: null` to the
  * wire.
- *
- * **Internal only.** The leading underscore mirrors `EventsQueue._metadata` —
- * this field is stripped from `events[]` at batch construction time, since the
- * backend's `EventDto` uses `forbidNonWhitelisted: true` and the wrapper
- * `EventsQueue.session_id` is the contract.
  */
 export interface QueuedEvent extends EventData {
   _session_id: string;

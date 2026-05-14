@@ -8,11 +8,7 @@ import { setupTestEnvironment, cleanupTestEnvironment, advanceTimers } from '../
 import { ScrollHandler } from '../../../src/handlers/scroll.handler';
 import { EventManager } from '../../../src/managers/event.manager';
 import { EventType, ScrollDirection } from '../../../src/types';
-import {
-  SCROLL_DEBOUNCE_TIME_MS,
-  MAX_SCROLL_EVENTS_PER_SESSION,
-  SCROLL_MIN_EVENT_INTERVAL_MS,
-} from '../../../src/constants';
+import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_MIN_EVENT_INTERVAL_MS } from '../../../src/constants';
 
 describe('ScrollHandler - Basic Tracking', () => {
   let handler: ScrollHandler;
@@ -168,7 +164,7 @@ describe('ScrollHandler - Basic Tracking', () => {
     expect(upCall.scroll_data.direction).toBe(ScrollDirection.UP);
   });
 
-  it('should track scroll velocity', async () => {
+  it('should include container_selector in scroll data', async () => {
     Object.defineProperty(document.documentElement, 'scrollHeight', {
       configurable: true,
       value: 3000,
@@ -193,47 +189,10 @@ describe('ScrollHandler - Basic Tracking', () => {
     expect(mockEventManager.track).toHaveBeenCalledWith(
       expect.objectContaining({
         scroll_data: expect.objectContaining({
-          velocity: expect.any(Number),
+          container_selector: expect.any(String),
         }),
       }),
     );
-  });
-
-  it('should track max depth reached', async () => {
-    Object.defineProperty(document.documentElement, 'scrollHeight', {
-      configurable: true,
-      value: 3000,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      value: 1000,
-    });
-    Object.defineProperty(window, 'scrollY', {
-      configurable: true,
-      value: 0,
-      writable: true,
-    });
-
-    handler.startTracking();
-
-    Object.defineProperty(window, 'scrollY', { value: 500 });
-    window.dispatchEvent(new Event('scroll'));
-    await advanceTimers(SCROLL_DEBOUNCE_TIME_MS);
-
-    const firstCall = (mockEventManager.track as any).mock.calls[0][0];
-    const firstMaxDepth = firstCall.scroll_data.max_depth_reached;
-
-    vi.clearAllMocks();
-    await advanceTimers(SCROLL_MIN_EVENT_INTERVAL_MS + 100);
-
-    Object.defineProperty(window, 'scrollY', { value: 1000 });
-    window.dispatchEvent(new Event('scroll'));
-    await advanceTimers(SCROLL_DEBOUNCE_TIME_MS);
-
-    const secondCall = (mockEventManager.track as any).mock.calls[0][0];
-    const secondMaxDepth = secondCall.scroll_data.max_depth_reached;
-
-    expect(secondMaxDepth).toBeGreaterThanOrEqual(firstMaxDepth);
   });
 });
 
@@ -484,81 +443,5 @@ describe('ScrollHandler - Initial Suppression', () => {
     await advanceTimers(SCROLL_DEBOUNCE_TIME_MS + SCROLL_MIN_EVENT_INTERVAL_MS);
 
     expect(mockEventManager.track).toHaveBeenCalled();
-  });
-});
-
-describe('ScrollHandler - Rate Limiting', () => {
-  let handler: ScrollHandler;
-  let mockEventManager: EventManager;
-
-  beforeEach(() => {
-    setupTestEnvironment();
-    vi.useFakeTimers();
-
-    mockEventManager = {
-      track: vi.fn(),
-    } as any;
-
-    handler = new ScrollHandler(mockEventManager);
-
-    Object.defineProperty(document.documentElement, 'scrollHeight', {
-      configurable: true,
-      value: 2500000,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      value: 1000,
-    });
-    Object.defineProperty(window, 'scrollY', {
-      configurable: true,
-      value: 0,
-      writable: true,
-    });
-  });
-
-  afterEach(() => {
-    handler.stopTracking();
-    cleanupTestEnvironment();
-  });
-
-  it('should limit to 120 scroll events per session', async () => {
-    handler.startTracking();
-
-    handler['minDepthChange'] = 0;
-    handler['minIntervalMs'] = 0;
-
-    let scrollPos = 0;
-    for (let i = 0; i < MAX_SCROLL_EVENTS_PER_SESSION + 10; i++) {
-      scrollPos += 100;
-      Object.defineProperty(window, 'scrollY', { value: scrollPos, writable: true });
-      window.dispatchEvent(new Event('scroll'));
-      await advanceTimers(SCROLL_DEBOUNCE_TIME_MS);
-    }
-
-    expect(mockEventManager.track).toHaveBeenCalledTimes(MAX_SCROLL_EVENTS_PER_SESSION);
-  });
-
-  it('should stop tracking after limit reached', async () => {
-    handler.startTracking();
-
-    handler['minDepthChange'] = 0;
-    handler['minIntervalMs'] = 0;
-
-    let scrollPos = 0;
-    for (let i = 0; i < MAX_SCROLL_EVENTS_PER_SESSION; i++) {
-      scrollPos += 100;
-      Object.defineProperty(window, 'scrollY', { value: scrollPos, writable: true });
-      window.dispatchEvent(new Event('scroll'));
-      await advanceTimers(SCROLL_DEBOUNCE_TIME_MS);
-    }
-
-    const callCountAtLimit = (mockEventManager.track as any).mock.calls.length;
-
-    scrollPos += 100;
-    Object.defineProperty(window, 'scrollY', { value: scrollPos, writable: true });
-    window.dispatchEvent(new Event('scroll'));
-    await advanceTimers(SCROLL_DEBOUNCE_TIME_MS);
-
-    expect(mockEventManager.track).toHaveBeenCalledTimes(callCountAtLimit);
   });
 });

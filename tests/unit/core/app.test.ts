@@ -52,39 +52,6 @@ describe('App - Initialization', () => {
       await expect(initTestBridge(config)).rejects.toThrow('SaaS integration not supported on localhost');
     });
 
-    it('should initialize with custom backend integration', async () => {
-      const config = createMockConfig({
-        integrations: {
-          custom: {
-            collectApiUrl: 'https://api.custom.com/collect',
-          },
-        },
-      });
-
-      const bridge = await initTestBridge(config);
-
-      expect(bridge.initialized).toBe(true);
-      const collectApiUrls = bridge.get('collectApiUrls');
-      expect(collectApiUrls.custom).toBe('https://api.custom.com/collect');
-    });
-
-    it('should initialize with multiple integrations', async () => {
-      // Use only custom backend since SaaS not supported on localhost
-      const config = createMockConfig({
-        integrations: {
-          custom: {
-            collectApiUrl: 'https://api.custom.com/collect',
-          },
-        },
-      });
-
-      const bridge = await initTestBridge(config);
-
-      expect(bridge.initialized).toBe(true);
-      const collectApiUrls = bridge.get('collectApiUrls');
-      expect(collectApiUrls.custom).toBe('https://api.custom.com/collect');
-    });
-
     it('should throw error if already initialized', async () => {
       const bridge = await initTestBridge();
 
@@ -595,20 +562,6 @@ describe('App - Error Handling', () => {
     expect(session).toBeDefined();
     expect(pageView).toBeDefined();
     expect(click).toBeDefined();
-  });
-
-  it('should handle invalid integration config', async () => {
-    const config = createMockConfig({
-      integrations: {
-        custom: {
-          collectApiUrl: '',
-        },
-      },
-    });
-
-    const bridge = await initTestBridge(config);
-
-    expect(bridge.initialized).toBe(true);
   });
 
   it('should log errors without throwing', async () => {

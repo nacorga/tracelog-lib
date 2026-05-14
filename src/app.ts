@@ -5,7 +5,6 @@ import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { ViewportHandler } from './handlers/viewport.handler';
 import { ShopifyCartLinker } from './ecommerce';
 import {
   Config,
@@ -16,29 +15,12 @@ import {
   EventOptions,
   IdentifyData,
   Mode,
-  TransformerHook,
-  TransformerMap,
-  BeforeSendTransformer,
-  BeforeBatchTransformer,
-  MetadataType,
-  CustomHeadersProvider,
   InitResult,
 } from './types';
-import {
-  isEventValid,
-  getDeviceInfo,
-  normalizeUrl,
-  Emitter,
-  getCollectApiUrls,
-  detectQaMode,
-  log,
-  isValidMetadata,
-  generateUUID,
-  sanitizeTraits,
-} from './utils';
+import { isEventValid, getDeviceInfo, normalizeUrl, Emitter, getCollectApiUrls, detectQaMode, log } from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
-import { IDENTITY_KEY, PENDING_IDENTITY_KEY, USER_ID_KEY } from './constants/storage.constants';
+import { IDENTITY_KEY, PENDING_IDENTITY_KEY } from './constants/storage.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 
@@ -50,8 +32,6 @@ export class App extends StateManager {
   private visibilityFlushHandler: (() => void) | null = null;
 
   private readonly emitter = new Emitter();
-  private readonly transformers: TransformerMap = {};
-  private customHeadersProvider?: CustomHeadersProvider;
 
   protected managers: {
     storage?: StorageManager;
@@ -65,7 +45,6 @@ export class App extends StateManager {
     scroll?: ScrollHandler;
     performance?: PerformanceHandler;
     error?: ErrorHandler;
-    viewport?: ViewportHandler;
   } = {};
 
   private integrationInstances: {
@@ -79,8 +58,6 @@ export class App extends StateManager {
   /**
    * Initializes TraceLog with configuration.
    *
-   * @param config - Configuration object
-   * @throws {Error} If initialization fails
    * @internal Called from api.init()
    */
   async init(config: Config = {}): Promise<InitResult> {
@@ -93,18 +70,7 @@ export class App extends StateManager {
     try {
       this.setupState(config);
 
-      // Extract static headers and fetchCredentials from custom integration config
-      const staticHeaders = config.integrations?.custom?.headers ?? {};
-      const fetchCredentials = config.integrations?.custom?.fetchCredentials ?? 'include';
-
-      this.managers.event = new EventManager(
-        this.managers.storage,
-        this.emitter,
-        this.transformers,
-        staticHeaders,
-        this.customHeadersProvider,
-        fetchCredentials,
-      );
+      this.managers.event = new EventManager(this.managers.storage, this.emitter);
 
       this.loadPersistedIdentity();
 
@@ -126,51 +92,8 @@ export class App extends StateManager {
   }
 
   /**
-   * Asynchronously flushes all pending events in the queue.
-   *
-   * Internally calls `EventManager.flushImmediately()` which uses `fetch()` with retries.
-   * Use when you need to force-send buffered events without waiting for the next send interval
-   * (e.g., before a critical user action like sign-out, or before a SPA route teardown).
-   *
-   * @returns Promise<boolean> — `true` if at least one integration accepted
-   *          the batch (optimistic removal — failures persist per-integration
-   *          and retry on the next flush). `false` if not initialized,
-   *          destroying, another flush is in flight, or all senders failed.
-   * @internal Called from api.flushImmediately()
-   */
-  async flushImmediately(): Promise<boolean> {
-    return (await this.managers.event?.flushImmediately()) ?? false;
-  }
-
-  /**
-   * Synchronously flushes all pending events using `navigator.sendBeacon()`.
-   *
-   * Use only for page-unload scenarios (or equivalent) where async fetch may be cancelled.
-   * For general flush needs, prefer {@link flushImmediately}.
-   *
-   * @returns `true` if at least one integration accepted the beacon batch
-   *          during this call (optimistic removal — failures persist
-   *          per-integration). `false` if no events, all senders failed, or
-   *          the call was deferred behind an in-flight async send.
-   * @internal Called from api.flushImmediatelySync()
-   */
-  flushImmediatelySync(): boolean {
-    return this.managers.event?.flushImmediatelySync() ?? false;
-  }
-
-  /**
    * Sends a custom event with optional metadata and options.
    *
-   * @param name - Event name
-   * @param metadata - Optional metadata
-   * @param options - Optional event options. `{ critical: true }` drains the
-   *   queue via `navigator.sendBeacon()` immediately after tracking — the
-   *   browser guarantees the request is queued for delivery even if the page
-   *   is about to unload (typical pattern: tracking a purchase, then
-   *   `window.location.href = '/thanks'`). If an async fetch is already in
-   *   flight when the critical event is tracked, the sync flush is deferred
-   *   and re-runs from the async send's `finally` block so the critical
-   *   event is not stranded in the queue.
    * @internal Called from api.event()
    */
   sendCustomEvent(
@@ -211,11 +134,6 @@ export class App extends StateManager {
     });
 
     if (options?.critical === true) {
-      // Synchronous queue drain via sendBeacon — guaranteed to be queued by
-      // the browser even if a navigation happens immediately after this call
-      // (e.g. `window.location.href = '/thanks'`). If an async fetch is in
-      // flight this sets `pendingSyncFlush` and returns `false`; the deferred
-      // re-flush will run from the async send's `finally` block.
       const ok = this.managers.event.flushImmediatelySync();
       if (!ok) {
         log('debug', 'Critical event flush returned false (deferred to in-flight send or empty queue)', {
@@ -233,65 +151,9 @@ export class App extends StateManager {
     this.emitter.off(event, callback);
   }
 
-  setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
-  setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
-  setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void {
-    if (typeof fn !== 'function') {
-      throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
-    }
-
-    this.transformers[hook] = fn as BeforeSendTransformer & BeforeBatchTransformer;
-  }
-
-  removeTransformer(hook: TransformerHook): void {
-    delete this.transformers[hook];
-  }
-
-  getTransformer(hook: 'beforeSend'): BeforeSendTransformer | undefined;
-  getTransformer(hook: 'beforeBatch'): BeforeBatchTransformer | undefined;
-  getTransformer(hook: TransformerHook): BeforeSendTransformer | BeforeBatchTransformer | undefined {
-    return this.transformers[hook];
-  }
-
-  /**
-   * Sets a callback to provide custom HTTP headers for requests to custom backends.
-   * Only applies to custom backend integration (not TraceLog SaaS).
-   *
-   * @param provider - Callback function that returns custom headers
-   * @throws {Error} If provider is not a function
-   * @internal Called from api.setCustomHeaders()
-   */
-  setCustomHeaders(provider: CustomHeadersProvider): void {
-    if (typeof provider !== 'function') {
-      throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
-    }
-
-    this.customHeadersProvider = provider;
-
-    // Update EventManager if already initialized
-    if (this.managers.event) {
-      this.managers.event.setCustomHeadersProvider(provider);
-    }
-  }
-
-  /**
-   * Removes the custom headers provider callback.
-   *
-   * @internal Called from api.removeCustomHeaders()
-   */
-  removeCustomHeaders(): void {
-    this.customHeadersProvider = undefined;
-
-    // Update EventManager if already initialized
-    if (this.managers.event) {
-      this.managers.event.removeCustomHeadersProvider();
-    }
-  }
-
   /**
    * Destroys the TraceLog instance and cleans up all resources.
    *
-   * @param force - If true, forces cleanup even if not initialized (used during init failure)
    * @internal Called from api.destroy()
    */
   destroy(force = false): void {
@@ -334,9 +196,6 @@ export class App extends StateManager {
     this.managers.event?.stop();
 
     this.emitter.removeAllListeners();
-    this.transformers.beforeSend = undefined;
-    this.transformers.beforeBatch = undefined;
-    this.customHeadersProvider = undefined;
 
     this.set('suppressNextScroll', false);
     this.set('sessionId', null);
@@ -374,9 +233,6 @@ export class App extends StateManager {
   }
 
   /**
-   * Returns the current configuration object.
-   *
-   * @returns The Config object passed to init()
    * @internal Used by api.ts for configuration access
    */
   public getConfig(): Config {
@@ -384,19 +240,13 @@ export class App extends StateManager {
   }
 
   /**
-   * Returns the configured backend API URLs for event collection.
-   *
-   * @returns Object containing optional saas and custom API URLs
    * @internal Used by api.ts for backend URL access
    */
-  public getCollectApiUrls(): { saas?: string; custom?: string } {
+  public getCollectApiUrls(): { saas?: string } {
     return this.get('collectApiUrls');
   }
 
   /**
-   * Returns the EventManager instance for event tracking operations.
-   *
-   * @returns The EventManager instance, or undefined if not initialized
    * @internal Used by api.ts for event operations
    */
   public getEventManager(): EventManager | undefined {
@@ -404,9 +254,6 @@ export class App extends StateManager {
   }
 
   /**
-   * Returns the current session ID.
-   *
-   * @returns The session ID string, or null if not yet initialized
    * @internal Used by api.getSessionId()
    */
   public getSessionId(): string | null {
@@ -414,98 +261,10 @@ export class App extends StateManager {
   }
 
   /**
-   * Returns the current user ID.
-   *
-   * @returns The user ID string, or null if not yet initialized
    * @internal Used by api.getUserId()
    */
   public getUserId(): string | null {
     return this.get('userId');
-  }
-
-  /**
-   * Validates metadata object structure and values.
-   *
-   * @param metadata - The metadata object to validate
-   * @returns Validation result with error message if invalid
-   * @internal Helper for updateGlobalMetadata and mergeGlobalMetadata
-   */
-  private validateGlobalMetadata(metadata: Record<string, unknown>): { valid: boolean; error?: string } {
-    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
-      return {
-        valid: false,
-        error: 'Global metadata must be a plain object',
-      };
-    }
-
-    const validation = isValidMetadata('Global', metadata, 'globalMetadata');
-
-    if (!validation.valid) {
-      return {
-        valid: false,
-        error: validation.error,
-      };
-    }
-
-    return { valid: true };
-  }
-
-  /**
-   * Replaces global metadata with new values.
-   *
-   * @param metadata - New global metadata object
-   * @throws {Error} If metadata validation fails
-   * @internal Called from api.updateGlobalMetadata()
-   */
-  public updateGlobalMetadata(metadata: Record<string, unknown>): void {
-    const validation = this.validateGlobalMetadata(metadata);
-
-    if (!validation.valid) {
-      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
-    }
-
-    const currentConfig = this.get('config');
-
-    const updatedConfig: Config = {
-      ...currentConfig,
-      globalMetadata: metadata as Record<string, MetadataType>,
-    };
-
-    this.set('config', updatedConfig);
-
-    log('debug', 'Global metadata updated (replaced)', { data: { keys: Object.keys(metadata) } });
-  }
-
-  /**
-   * Merges new metadata with existing global metadata.
-   *
-   * @param metadata - Metadata to merge with existing values
-   * @throws {Error} If metadata validation fails
-   * @internal Called from api.mergeGlobalMetadata()
-   */
-  public mergeGlobalMetadata(metadata: Record<string, unknown>): void {
-    const validation = this.validateGlobalMetadata(metadata);
-
-    if (!validation.valid) {
-      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
-    }
-
-    const currentConfig = this.get('config');
-    const existingMetadata = currentConfig.globalMetadata ?? {};
-
-    const mergedMetadata: Record<string, MetadataType> = {
-      ...existingMetadata,
-      ...(metadata as Record<string, MetadataType>),
-    };
-
-    const updatedConfig: Config = {
-      ...currentConfig,
-      globalMetadata: mergedMetadata,
-    };
-
-    this.set('config', updatedConfig);
-
-    log('debug', 'Global metadata updated (merged)', { data: { keys: Object.keys(metadata) } });
   }
 
   /**
@@ -514,76 +273,30 @@ export class App extends StateManager {
    * Identity is persisted to localStorage (project-scoped) and included in every
    * subsequent batch payload so the backend always has the latest identity.
    *
-   * Validation is duplicated here (also in api.ts) as defense-in-depth since
-   * TestBridge and internal callers bypass the API layer.
-   *
-   * @param userId - External user identifier (email, customer_id, etc.)
-   * @param traits - Optional user attributes (name, email, plan, etc.)
    * @internal Called from api.identify()
    */
-  public identify(userId: string, traits?: Record<string, string>): void {
+  public identify(userId: string): void {
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
-      log('warn', 'identify() called with invalid userId', {
-        data: { type: typeof userId, length: typeof userId === 'string' ? userId.trim().length : 0 },
-      });
+      log('warn', 'identify() called with invalid userId');
       return;
     }
 
     if (userId.trim().length > 256) {
-      log('warn', 'identify() userId exceeds 256 characters', { data: { length: userId.trim().length } });
+      log('warn', 'identify() userId exceeds 256 characters');
       return;
     }
 
     const trimmedUserId = userId.trim();
-    const validTraits = sanitizeTraits(traits);
-    const identity: IdentifyData = {
-      userId: trimmedUserId,
-      ...(validTraits ? { traits: validTraits } : {}),
-    };
+    const identity: IdentifyData = { userId: trimmedUserId };
 
     this.set('identity', identity);
     this.persistIdentity(identity);
 
-    log('debug', 'Visitor identified', {
-      data: { userIdLength: trimmedUserId.length, traitKeys: validTraits ? Object.keys(validTraits) : [] },
-    });
-  }
-
-  /**
-   * Clears identity, regenerates UUID, and starts a new session.
-   *
-   * Used for logout flows. The previous visitor profile with its identity
-   * remains in MongoDB — this method ensures the next user in the same browser
-   * gets a fresh anonymous profile.
-   *
-   * @internal Called from api.resetIdentity()
-   */
-  public async resetIdentity(): Promise<void> {
-    // 1. Flush pending events with the OLD identity before clearing anything
-    // Uses async flush (fetch) instead of sync (sendBeacon) to preserve custom headers
-    await this.managers.event?.flushImmediately();
-
-    // 2. Clear identity from state and storage
-    this.set('identity', undefined);
-    this.clearPersistedIdentity();
-
-    // 3. Regenerate UUID — closes the old visitor profile
-    const newUserId = generateUUID();
-    (this.managers.storage as StorageManager).setItem(USER_ID_KEY, newUserId);
-    this.set('userId', newUserId);
-
-    // 4. Trigger new session with the new UUID
-    this.set('hasStartSession', false);
-    this.set('sessionId', null);
-    this.handlers.session?.stopTracking();
-    this.handlers.session?.startTracking();
-
-    log('debug', 'Identity reset, new UUID generated');
+    log('debug', 'Visitor identified', { data: { userIdLength: trimmedUserId.length } });
   }
 
   /**
    * Returns the project ID used for identity storage scoping.
-   * Matches the same logic used by SessionHandler.
    */
   private getProjectId(): string {
     const config = this.get('config');
@@ -612,7 +325,6 @@ export class App extends StateManager {
     const projectId = this.getProjectId();
     const projectKey = IDENTITY_KEY(projectId);
 
-    // Check for pending identity (set before init)
     try {
       const pendingRaw = storage.getItem(PENDING_IDENTITY_KEY);
       if (pendingRaw) {
@@ -634,7 +346,6 @@ export class App extends StateManager {
       storage.removeItem(PENDING_IDENTITY_KEY);
     }
 
-    // Load from project-scoped key
     try {
       const raw = storage.getItem(projectKey);
       if (raw) {
@@ -657,20 +368,12 @@ export class App extends StateManager {
 
   /**
    * Validates identity data loaded from localStorage.
-   * Guards against tampered or corrupted localStorage values.
    */
   private isValidIdentityData(data: unknown): data is IdentifyData {
     if (!data || typeof data !== 'object') return false;
-    const { userId, traits } = data as Record<string, unknown>;
+    const { userId } = data as Record<string, unknown>;
 
     if (typeof userId !== 'string' || userId.trim().length === 0 || userId.trim().length > 256) return false;
-
-    if (traits !== undefined) {
-      if (typeof traits !== 'object' || traits === null || Array.isArray(traits)) return false;
-      for (const value of Object.values(traits as Record<string, unknown>)) {
-        if (typeof value !== 'string') return false;
-      }
-    }
 
     return true;
   }
@@ -694,7 +397,6 @@ export class App extends StateManager {
       this.managers.event?.flushImmediatelySync();
     };
 
-    // bfcache restore: recover persisted events on back/forward navigation without waiting for the next reload.
     this.pageShowHandler = (event: PageTransitionEvent): void => {
       if (event.persisted) {
         void this.managers.event?.recoverPersistedEvents().catch((error) => {
@@ -703,11 +405,6 @@ export class App extends StateManager {
       }
     };
 
-    // Mobile Safari often skips pagehide/beforeunload; flushing on visibilitychange covers tab switch and app backgrounding.
-    // Use sendBeacon (sync) rather than async fetch — when the OS backgrounds
-    // or terminates the tab, an in-flight fetch can be aborted before its body
-    // reaches the network, but sendBeacon is queued by the browser and survives
-    // suspension. Matches the contract documented in README / API_REFERENCE.
     this.visibilityFlushHandler = (): void => {
       if (typeof document === 'undefined' || !document.hidden) {
         return;
@@ -762,11 +459,6 @@ export class App extends StateManager {
 
     this.handlers.error = new ErrorHandler(this.managers.event as EventManager, this.emitter);
     this.handlers.error.startTracking();
-
-    if (config.viewport) {
-      this.handlers.viewport = new ViewportHandler(this.managers.event as EventManager);
-      this.handlers.viewport.startTracking();
-    }
 
     if (config.integrations?.tracelog?.shopify) {
       const linker = new ShopifyCartLinker();

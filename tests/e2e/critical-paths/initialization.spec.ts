@@ -35,36 +35,6 @@ test.describe('E2E: Initialization', () => {
   });
 
   test.describe('Integration Configuration', () => {
-    test('should initialize with custom backend integration', async ({ page }) => {
-      const result = await page.evaluate(async () => {
-        let retries = 0;
-        while (!window.__traceLogBridge && retries < 50) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          retries++;
-        }
-        if (!window.__traceLogBridge) {
-          throw new Error(`TraceLog bridge not available after ${retries * 100}ms`);
-        }
-
-        window.__traceLogBridge.destroy(true);
-        await window.__traceLogBridge.init({
-          integrations: {
-            custom: {
-              collectApiUrl: 'https://custom-backend.example.com/collect',
-            },
-          },
-        });
-
-        return {
-          initialized: window.__traceLogBridge.initialized,
-          hasCustomBackend: Boolean(window.__traceLogBridge.getFullState().collectApiUrls?.custom),
-        };
-      });
-
-      expect(result.initialized).toBe(true);
-      expect(result.hasCustomBackend).toBe(true);
-    });
-
     test('should reject tracelog integration on localhost', async ({ page }) => {
       const result = await page.evaluate(async () => {
         let retries = 0;
@@ -101,7 +71,7 @@ test.describe('E2E: Initialization', () => {
       expect(result.initError).toContain('SaaS integration not supported on localhost');
     });
 
-    test('should initialize with custom integration (SaaS rejected on localhost)', async ({ page }) => {
+    test('should reject saas integration on localhost (duplicate guard)', async ({ page }) => {
       const result = await page.evaluate(async () => {
         let retries = 0;
         while (!window.__traceLogBridge && retries < 50) {
@@ -114,16 +84,12 @@ test.describe('E2E: Initialization', () => {
 
         window.__traceLogBridge.destroy(true);
 
-        // Multi-integration with SaaS should fail on localhost
         let initError: string | null = null;
         try {
           await window.__traceLogBridge.init({
             integrations: {
               tracelog: {
                 projectId: 'test-project-456',
-              },
-              custom: {
-                collectApiUrl: 'https://warehouse.example.com/collect',
               },
             },
           });

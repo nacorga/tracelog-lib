@@ -41,13 +41,12 @@ const cleanUrlParameter = (): void => {
 // ============================================================================
 
 /**
- * Detects QA mode from URL parameter or sessionStorage
+ * Detects QA mode from URL parameter or sessionStorage.
  *
  * QA mode shows custom event logs to help verify tracking implementation.
  *
  * Activation:
- * - URL: `?tlog_mode=qa` to enable, `?tlog_mode=qa_off` to disable
- * - Programmatic: `tracelog.setQaMode(true/false)`
+ * - URL: `?tlog_mode=qa` to enable, `?tlog_mode=qa_off` to disable.
  *
  * @returns True if QA mode is active, false otherwise
  */
@@ -86,45 +85,6 @@ export const detectQaMode = (): boolean => {
     }
 
     return newState ?? storedState === 'true';
-  } catch {
-    return false;
-  }
-};
-
-/**
- * Set QA mode state programmatically
- *
- * @param enabled - True to enable, false to disable
- */
-export const setQaMode = (enabled: boolean): void => {
-  if (!isBrowserEnvironment()) {
-    return;
-  }
-
-  try {
-    sessionStorage.setItem(QA_MODE_KEY, enabled ? 'true' : 'false');
-
-    log('info', enabled ? 'QA Mode ACTIVE' : 'QA Mode DISABLED', {
-      visibility: 'qa',
-      style: enabled ? LOG_STYLE_ACTIVE : LOG_STYLE_DISABLED,
-    });
-  } catch {
-    log('debug', 'Cannot set QA mode: sessionStorage unavailable');
-  }
-};
-
-/**
- * Check if QA mode is currently active
- *
- * @returns True if QA mode is active, false otherwise
- */
-export const isQaModeActive = (): boolean => {
-  if (!isBrowserEnvironment()) {
-    return false;
-  }
-
-  try {
-    return sessionStorage.getItem(QA_MODE_KEY) === 'true';
   } catch {
     return false;
   }

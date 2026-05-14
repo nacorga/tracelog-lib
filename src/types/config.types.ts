@@ -1,5 +1,4 @@
 import { MetadataType } from './common.types';
-import { ViewportConfig } from './viewport.types';
 import { WebVitalType } from './event.types';
 
 /**
@@ -23,8 +22,6 @@ export interface Config {
   samplingRate?: number;
   /** CSS selector to manually override primary scroll container detection. */
   primaryScrollSelector?: string;
-  /** Viewport visibility tracking configuration. */
-  viewport?: ViewportConfig;
   /** Page view throttle duration in milliseconds to prevent rapid navigation spam. @default 1000 */
   pageViewThrottleMs?: number;
   /** Click throttle duration in milliseconds to prevent double-clicks and rapid spam. @default 300 */
@@ -48,11 +45,7 @@ export interface Config {
   /**
    * Opt-in: when `true`, the event queue is flushed after every SPA navigation
    * (`pushState`, `replaceState`, `popstate`, `hashchange`). Defaults to `false`
-   * because per-route flushing can multiply request volume on SPA-heavy apps
-   * (one request per route change vs. one per `sendIntervalMs`). Enable only
-   * if you need delivery between route changes that's faster than
-   * `sendIntervalMs`; `flushOnPageHidden` (default `true`) already covers the
-   * common tab-close / app-background case on every stack. No-op for MPAs.
+   * because per-route flushing can multiply request volume on SPA-heavy apps.
    * @default false
    */
   flushOnSpaNavigation?: boolean;
@@ -63,35 +56,13 @@ export interface Config {
    * @default true
    */
   flushOnPageHidden?: boolean;
-  /** Optional configuration for third-party integrations. */
+  /** TraceLog SaaS integration. */
   integrations?: {
-    /** TraceLog integration options. */
     tracelog?: {
-      /** Required project ID TraceLog SaaS integration. */
+      /** Required project ID for TraceLog SaaS integration. */
       projectId: string;
       /** Enable Shopify cart attribute linking for webhook revenue attribution. */
       shopify?: boolean;
-    };
-    /** Custom integration options. */
-    custom?: {
-      /** Endpoint for collecting events. */
-      collectApiUrl: string;
-      /** Allow HTTP URLs (not recommended for production). @default false */
-      allowHttp?: boolean;
-      /**
-       * Static HTTP headers to include in every request.
-       * For dynamic headers, use `setCustomHeaders()` instead.
-       * @example { 'X-Brand': 'my-brand', 'X-Tenant-Id': 'tenant-123' }
-       */
-      headers?: Record<string, string>;
-      /**
-       * Controls whether cookies and credentials are sent with fetch requests.
-       * - `'include'`: Always send cookies (even cross-origin) — required for cookie-based auth
-       * - `'same-origin'`: Only send cookies for same-origin requests
-       * - `'omit'`: Never send cookies
-       * @default 'include'
-       */
-      fetchCredentials?: RequestCredentials;
     };
   };
 }

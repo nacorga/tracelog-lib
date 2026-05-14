@@ -149,22 +149,16 @@ export class PageViewHandler extends StateManager {
   }
 
   private extractPageViewData(): PageViewData | undefined {
-    const { pathname, search, hash } = window.location;
     const { referrer } = document;
     const { title } = document;
 
-    if (!referrer && !title && !pathname && !search && !hash) {
+    if (!referrer && !title) {
       return undefined;
     }
 
-    const data: PageViewData = {
+    return {
       ...(referrer && { referrer }),
       ...(title && { title }),
-      ...(pathname && { pathname }),
-      ...(search && { search }),
-      ...(hash && { hash }),
     };
-
-    return data;
   }
 }

@@ -367,7 +367,7 @@ export function createConfigWithFailureSimulation(): {
  *
  * @example
  * const specialUrls = getSpecialApiUrls();
- * expect(config.integrations.custom.collectApiUrl).toBe(specialUrls.Localhost);
+ * expect(specialUrls.Localhost).toBe('localhost:8080');
  */
 export function getSpecialApiUrls(): {
   Localhost: string;

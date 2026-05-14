@@ -1,18 +1,6 @@
 import { App } from './app';
-import {
-  MetadataType,
-  IdentifyData,
-  Config,
-  EmitterCallback,
-  EmitterMap,
-  TransformerHook,
-  BeforeSendTransformer,
-  BeforeBatchTransformer,
-  CustomHeadersProvider,
-  InitResult,
-  EventOptions,
-} from './types';
-import { log, validateAndNormalizeConfig, setQaMode as setQaModeUtil, sanitizeTraits } from './utils';
+import { MetadataType, IdentifyData, Config, EmitterCallback, EmitterMap, InitResult, EventOptions } from './types';
+import { log, validateAndNormalizeConfig } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import { PENDING_IDENTITY_KEY } from './constants/storage.constants';
 import './types/window.types';
@@ -22,14 +10,7 @@ interface PendingListener {
   callback: EmitterCallback<EmitterMap[keyof EmitterMap]>;
 }
 
-interface PendingTransformer {
-  hook: TransformerHook;
-  fn: BeforeSendTransformer | BeforeBatchTransformer;
-}
-
 const pendingListeners: PendingListener[] = [];
-const pendingTransformers: PendingTransformer[] = [];
-let pendingCustomHeadersProvider: CustomHeadersProvider | null = null;
 
 let app: App | null = null;
 let isInitializing = false;
@@ -54,8 +35,6 @@ let initPromise: Promise<InitResult> | null = null;
  * });
  * console.log('Session:', sessionId);
  * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#init} for configuration options
  */
 export const init = async (config?: Config): Promise<InitResult> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -89,22 +68,6 @@ export const init = async (config?: Config): Promise<InitResult> => {
         });
 
         pendingListeners.length = 0;
-
-        pendingTransformers.forEach(({ hook, fn }) => {
-          if (hook === 'beforeSend') {
-            instance.setTransformer('beforeSend', fn as BeforeSendTransformer);
-          } else {
-            instance.setTransformer('beforeBatch', fn as BeforeBatchTransformer);
-          }
-        });
-
-        pendingTransformers.length = 0;
-
-        // Apply pending custom headers provider
-        if (pendingCustomHeadersProvider) {
-          instance.setCustomHeaders(pendingCustomHeadersProvider);
-          pendingCustomHeadersProvider = null;
-        }
 
         const appInitPromise = instance.init(validatedConfig);
 
@@ -154,17 +117,12 @@ export const init = async (config?: Config): Promise<InitResult> => {
  *
  * @example
  * ```typescript
- * tracelog.event('product_viewed', {
- *   productId: 'abc-123',
- *   price: 299.99
- * });
+ * tracelog.event('product_viewed', { productId: 'abc-123', price: 299.99 });
  *
  * // Critical event (e.g., right before redirecting to a thank-you page)
- * tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 }, { critical: true });
- * window.location.href = '/thanks'; // sendBeacon survives this navigation
+ * tracelog.event('purchase_completed', { orderId: 'ord-789' }, { critical: true });
+ * window.location.href = '/thanks';
  * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#event} for rate limiting details
  */
 export const event = (
   name: string,
@@ -187,96 +145,6 @@ export const event = (
 };
 
 /**
- * Forces an asynchronous flush of all pending events in the queue.
- *
- * Use when you need to ensure events are sent before a critical user action
- * (e.g., before sign-out, before a SPA route teardown when you can't rely on
- * the automatic SPA-navigation flush, or before initiating a long-running task
- * that might prevent the next batch from firing).
- *
- * Uses `fetch()` with retries internally. For page-unload scenarios, prefer
- * {@link flushImmediatelySync} which uses `sendBeacon` and is guaranteed to be queued
- * by the browser even after the page closes.
- *
- * **Error semantics**: Unlike {@link event}, this function does not throw if
- * called before `init()` or during teardown — it resolves to `false`. Safe to
- * call in route guards / unload listeners without try/catch.
- *
- * **Concurrency**: A second `flushImmediately()` call while another is still
- * in flight resolves to `false` (the in-flight call already owns the events).
- * `await` the returned promise if you need ordered flushes.
- *
- * @returns Promise<boolean> — `true` if at least one integration accepted the batch during this call (optimistic removal — per-integration failures persist for retry on the next flush). `false` if not initialized, destroying, another flush is already in flight, or all senders failed.
- *
- * @example
- * ```typescript
- * // Force-flush before navigating away in an Angular SPA when auto-flush is disabled
- * router.events.pipe(filter(e => e instanceof NavigationStart)).subscribe(async () => {
- *   await tracelog.flushImmediately();
- * });
- * ```
- */
-export const flushImmediately = async (): Promise<boolean> => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return false;
-  }
-
-  if (!app || isDestroying) {
-    return false;
-  }
-
-  return app.flushImmediately();
-};
-
-/**
- * Synchronously flushes all pending events using `navigator.sendBeacon()`.
- *
- * The browser queues the request even if the page is closing, making this suitable for
- * page-unload scenarios. The library already wires this to `pagehide` and `beforeunload`
- * automatically; consumers usually don't need to call it directly.
- *
- * **Limitations**:
- * - 64KB payload limit (enforced by `sendBeacon`). Larger batches are persisted to storage
- *   for recovery on next page load.
- * - No retry on failure (`sendBeacon` is fire-and-forget).
- *
- * For non-unload scenarios use {@link flushImmediately} (async with retries).
- *
- * **Error semantics**: Unlike {@link event}, this function does not throw if
- * called before `init()` or during teardown — it returns `false`. Safe to call
- * in unload listeners without try/catch.
- *
- * **In-flight contract**: if an async flush is already running, this call is
- * deferred (queued for replay once the async send settles) and returns `false`.
- * Mirrors {@link flushImmediately}: `true` ⇒ at least one integration accepted
- * the batch *during this call*.
- *
- * @returns `true` if at least one integration accepted the beacon batch during
- *          this call, `false` otherwise (not initialized, destroying, no
- *          events, all senders failed, or the call was deferred behind an
- *          in-flight async send)
- *
- * @example
- * ```typescript
- * // Custom unload handler that bypasses the library's default listeners
- * window.addEventListener('pagehide', () => {
- *   tracelog.flushImmediatelySync();
- * });
- * ```
- */
-export const flushImmediatelySync = (): boolean => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return false;
-  }
-
-  if (!app || isDestroying) {
-    return false;
-  }
-
-  return app.flushImmediatelySync();
-};
-
-/**
  * Subscribes to TraceLog events for real-time consumption.
  *
  * Important: Register listeners BEFORE calling init() to capture SESSION_START and PAGE_VIEW.
@@ -289,8 +157,6 @@ export const flushImmediatelySync = (): boolean => {
  * tracelog.on('event', (event) => console.log(event.type));
  * await tracelog.init();
  * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib#event-listeners} for timing details
  */
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -310,13 +176,6 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
  *
  * @param event - Event type to unsubscribe from
  * @param callback - Exact callback function reference used in on()
- *
- * @example
- * ```typescript
- * const handler = (event) => console.log(event.type);
- * tracelog.on('event', handler);
- * tracelog.off('event', handler);
- * ```
  */
 export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -335,176 +194,7 @@ export const off = <K extends keyof EmitterMap>(event: K, callback: EmitterCallb
 };
 
 /**
- * Transforms events at runtime before sending to custom backend.
- *
- * Note: Only applies to custom backend integration. TraceLog SaaS ignores transformers.
- *
- * @param hook - 'beforeSend' (per-event) or 'beforeBatch' (batch-level)
- * @param fn - Transformer function. Return null to filter event/batch.
- * @throws {Error} If called during destroy()
- * @throws {Error} If fn is not a function
- *
- * @example
- * ```typescript
- * tracelog.setTransformer('beforeSend', (data) => {
- *   if ('type' in data) {
- *     return { ...data, appVersion: '1.0.0' };
- *   }
- *   return data;
- * });
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#settransformer} for integration behavior
- */
-export function setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
-export function setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
-export function setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (typeof fn !== 'function') {
-    throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
-  }
-
-  if (!app || isInitializing) {
-    const existingIndex = pendingTransformers.findIndex((t) => t.hook === hook);
-
-    if (existingIndex !== -1) {
-      pendingTransformers.splice(existingIndex, 1);
-    }
-
-    pendingTransformers.push({ hook, fn });
-
-    return;
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot set transformers while TraceLog is being destroyed');
-  }
-
-  if (hook === 'beforeSend') {
-    app.setTransformer('beforeSend', fn as BeforeSendTransformer);
-  } else {
-    app.setTransformer('beforeBatch', fn as BeforeBatchTransformer);
-  }
-}
-
-/**
- * Removes a previously set transformer function.
- *
- * @param hook - Transformer hook type to remove ('beforeSend' or 'beforeBatch')
- * @throws {Error} If called during destroy()
- *
- * @example
- * ```typescript
- * tracelog.removeTransformer('beforeSend');
- * ```
- */
-export const removeTransformer = (hook: TransformerHook): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (!app) {
-    const index = pendingTransformers.findIndex((t) => t.hook === hook);
-
-    if (index !== -1) {
-      pendingTransformers.splice(index, 1);
-    }
-
-    return;
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot remove transformers while TraceLog is being destroyed');
-  }
-
-  app.removeTransformer(hook);
-};
-
-/**
- * Sets a callback to provide custom HTTP headers for requests to custom backends.
- *
- * Can be called before or after init(). Only applies to custom backend integration
- * (not TraceLog SaaS). Headers are NOT applied to sendBeacon requests (page unload).
- *
- * @param provider - Callback function that returns custom headers object
- * @throws {Error} If provider is not a function
- * @throws {Error} If called during destroy()
- *
- * @example
- * ```typescript
- * // Set before or after init
- * tracelog.setCustomHeaders(() => ({
- *   'Authorization': `Bearer ${getAuthToken()}`,
- *   'X-Request-ID': crypto.randomUUID()
- * }));
- *
- * await tracelog.init({ integrations: { custom: { collectApiUrl: '...' } } });
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#setcustomheaders} for full documentation
- */
-export const setCustomHeaders = (provider: CustomHeadersProvider): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (typeof provider !== 'function') {
-    throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
-  }
-
-  if (!app || isInitializing) {
-    pendingCustomHeadersProvider = provider;
-    return;
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot set custom headers while TraceLog is being destroyed');
-  }
-
-  app.setCustomHeaders(provider);
-};
-
-/**
- * Removes the custom headers provider callback.
- *
- * @throws {Error} If called during destroy()
- *
- * @example
- * ```typescript
- * tracelog.removeCustomHeaders();
- * ```
- */
-export const removeCustomHeaders = (): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (!app) {
-    pendingCustomHeadersProvider = null;
-    return;
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot remove custom headers while TraceLog is being destroyed');
-  }
-
-  app.removeCustomHeaders();
-};
-
-/**
  * Checks if TraceLog is currently initialized.
- *
- * @returns true if initialized, false otherwise
- *
- * @example
- * ```typescript
- * if (tracelog.isInitialized()) {
- *   tracelog.event('app_ready');
- * }
- * ```
  */
 export const isInitialized = (): boolean => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -521,13 +211,6 @@ export const isInitialized = (): boolean => {
  * within the session timeout window (default 15 minutes).
  *
  * @returns Session ID string, or null if not initialized
- *
- * @example
- * ```typescript
- * await tracelog.init();
- * const sessionId = tracelog.getSessionId();
- * console.log('Session:', sessionId); // e.g., "1704896400000-a3b4c5d6e"
- * ```
  */
 export const getSessionId = (): string | null => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -543,20 +226,6 @@ export const getSessionId = (): string | null => {
 
 /**
  * Returns the current user ID, or null if `init()` has not been called yet.
- *
- * The user ID is the stable identifier TraceLog uses to stitch sessions across
- * tabs and visits. Surface use cases: writing it as a Shopify cart attribute
- * (`tracelog_user_id`) so checkout-funnel events fired from the Web Pixel
- * stitch back to the storefront visitor — required if the storefront does not
- * use `integrations.tracelog.shopify: true` (which wires this automatically).
- *
- * @returns User ID string, or null if not initialized
- *
- * @example
- * ```typescript
- * await tracelog.init();
- * const userId = tracelog.getUserId();
- * ```
  */
 export const getUserId = (): string | null => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -576,13 +245,6 @@ export const getUserId = (): string | null => {
  * Sends remaining events with sendBeacon before cleanup.
  *
  * @throws {Error} If destroy operation is already in progress
- *
- * @example
- * ```typescript
- * tracelog.destroy();
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#destroy} for usage patterns
  */
 export const destroy = (): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -607,8 +269,6 @@ export const destroy = (): void => {
     isInitializing = false;
     initPromise = null;
     pendingListeners.length = 0;
-    pendingTransformers.length = 0;
-    pendingCustomHeadersProvider = null;
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__traceLogBridge) {
       window.__traceLogBridge = undefined;
@@ -621,104 +281,11 @@ export const destroy = (): void => {
     initPromise = null;
 
     pendingListeners.length = 0;
-    pendingTransformers.length = 0;
-    pendingCustomHeadersProvider = null;
 
     isDestroying = false;
 
     log('warn', 'Error during destroy, forced cleanup completed', { error });
   }
-};
-
-/**
- * Enables or disables QA (Quality Assurance) mode for debugging.
- *
- * QA mode logs custom events to console instead of sending to backend.
- *
- * @param enabled - true to enable, false to disable
- *
- * @example
- * ```typescript
- * tracelog.setQaMode(true);
- * tracelog.event('test', { key: 'value' }); // Logged to console
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#setqamode} for URL activation
- */
-export const setQaMode = (enabled: boolean): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  setQaModeUtil(enabled);
-};
-
-/**
- * Replaces all global metadata with new values.
- *
- * Global metadata is automatically appended to every event.
- *
- * @param metadata - New metadata object (replaces existing)
- * @throws {Error} If TraceLog not initialized
- * @throws {Error} If called during destroy()
- * @throws {Error} If validation fails (max 100 keys, 48KB limit)
- *
- * @example
- * ```typescript
- * tracelog.updateGlobalMetadata({ userId: 'user-123', plan: 'pro' });
- * // Replaces all existing metadata
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#updateglobalmetadata} for validation rules
- */
-export const updateGlobalMetadata = (metadata: Record<string, MetadataType>): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (!app) {
-    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot update metadata while TraceLog is being destroyed');
-  }
-
-  app.updateGlobalMetadata(metadata);
-};
-
-/**
- * Merges new metadata with existing global metadata (shallow merge).
- *
- * Global metadata is automatically appended to every event.
- *
- * @param metadata - Metadata to merge with existing values
- * @throws {Error} If TraceLog not initialized
- * @throws {Error} If called during destroy()
- * @throws {Error} If validation fails (max 100 keys, 48KB limit)
- *
- * @example
- * ```typescript
- * tracelog.mergeGlobalMetadata({ userId: 'user-123' });
- * // Preserves existing keys, adds/overwrites specified keys
- * ```
- *
- * @see {@link https://github.com/tracelog/tracelog-lib/blob/main/API_REFERENCE.md#mergeglobalmetadata} for validation rules
- */
-export const mergeGlobalMetadata = (metadata: Record<string, MetadataType>): void => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (!app) {
-    throw new Error('[TraceLog] TraceLog not initialized. Please call init() first.');
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot update metadata while TraceLog is being destroyed');
-  }
-
-  app.mergeGlobalMetadata(metadata);
 };
 
 /**
@@ -732,19 +299,18 @@ export const mergeGlobalMetadata = (metadata: Record<string, MetadataType>): voi
  * (last-write-wins).
  *
  * @param userId - External user identifier (email, customer_id, etc.). Max 256 chars.
- * @param traits - Optional user attributes. Record<string, string> only in v1.
  *
  * @example
  * ```typescript
  * // After login
- * tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
+ * tracelog.identify('cust_123');
  *
  * // Before init (identity queued, applied on init)
  * tracelog.identify('cust_123');
  * await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
  * ```
  */
-export const identify = (userId: string, traits?: Record<string, string>): void => {
+export const identify = (userId: string): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -764,63 +330,18 @@ export const identify = (userId: string, traits?: Record<string, string>): void 
     return;
   }
 
-  // If initialized, delegate to App
   if (app) {
-    app.identify(userId, traits);
+    app.identify(userId);
     return;
   }
 
-  // Pre-init: persist to localStorage under pending key
-  // App.init() → loadPersistedIdentity() will pick this up
   try {
-    const validTraits = sanitizeTraits(traits);
-    const identity: IdentifyData = {
-      userId: userId.trim(),
-      ...(validTraits ? { traits: validTraits } : {}),
-    };
+    const identity: IdentifyData = { userId: userId.trim() };
     localStorage.setItem(PENDING_IDENTITY_KEY, JSON.stringify(identity));
     log('debug', 'Identity persisted pre-init (will be applied on init)');
   } catch {
     log('debug', 'Failed to persist pre-init identity');
   }
-};
-
-/**
- * Clears identity, regenerates UUID, and starts a new session.
- *
- * Use for logout flows. The previous visitor profile remains in the backend.
- * The next user in the same browser gets a fresh anonymous profile.
- *
- * If called before init(), any pending identity is cleared silently.
- *
- * @throws {Error} If called during destroy()
- *
- * @example
- * ```typescript
- * // On logout
- * await tracelog.resetIdentity();
- * ```
- */
-export const resetIdentity = async (): Promise<void> => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  if (!app) {
-    // Pre-init: just clear any pending identity
-    try {
-      localStorage.removeItem(PENDING_IDENTITY_KEY);
-    } catch {
-      // Silent
-    }
-    return;
-  }
-
-  if (isDestroying) {
-    throw new Error('[TraceLog] Cannot reset identity while TraceLog is being destroyed');
-  }
-
-  await app.resetIdentity();
 };
 
 /**

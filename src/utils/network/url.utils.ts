@@ -3,18 +3,11 @@ import { DEFAULT_SENSITIVE_QUERY_PARAMS } from '../../constants';
 import { log } from '../logging.utils';
 
 /**
- * Validates if a URL is valid and optionally allows HTTP URLs
- * @param url - The URL to validate
- * @param allowHttp - Whether to allow HTTP URLs (default: false)
- * @returns True if the URL is valid, false otherwise
+ * Validates if a URL is valid HTTPS
  */
-const isValidUrl = (url: string, allowHttp = false): boolean => {
+const isValidUrl = (url: string): boolean => {
   try {
-    const parsed = new URL(url);
-    const isHttps = parsed.protocol === 'https:';
-    const isHttp = parsed.protocol === 'http:';
-
-    return isHttps || (allowHttp && isHttp);
+    return new URL(url).protocol === 'https:';
   } catch {
     return false;
   }
@@ -35,9 +28,7 @@ const generateSaasApiUrl = (projectId: string): string => {
     }
 
     if (host === 'localhost' || host === '127.0.0.1' || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
-      throw new Error(
-        'SaaS integration not supported on localhost or IP addresses. Use custom backend integration instead.',
-      );
+      throw new Error('SaaS integration not supported on localhost or IP addresses.');
     }
 
     const parts = host.split('.');
@@ -50,22 +41,15 @@ const generateSaasApiUrl = (projectId: string): string => {
       throw new Error('Single-part domain not supported for SaaS integration');
     }
 
-    let cleanDomain: string;
-
-    if (parts.length === 2) {
-      cleanDomain = parts.join('.');
-    } else {
-      cleanDomain = parts.slice(-2).join('.');
-    }
+    const cleanDomain = parts.length === 2 ? parts.join('.') : parts.slice(-2).join('.');
 
     if (!cleanDomain || cleanDomain.split('.').length < 2) {
       throw new Error('Invalid domain structure for SaaS');
     }
 
     const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
-    const isValid = isValidUrl(collectApiUrl);
 
-    if (!isValid) {
+    if (!isValidUrl(collectApiUrl)) {
       throw new Error('Generated URL failed validation');
     }
 
@@ -76,29 +60,15 @@ const generateSaasApiUrl = (projectId: string): string => {
 };
 
 /**
- * Generates collection API URLs for all configured integrations
+ * Generates collection API URLs for the configured TraceLog SaaS integration
  * @param config - The TraceLog configuration
- * @returns Object containing API URLs for each configured integration
+ * @returns Object containing the SaaS API URL (if configured)
  */
-export const getCollectApiUrls = (config: Config): { saas?: string; custom?: string } => {
-  const urls: { saas?: string; custom?: string } = {};
+export const getCollectApiUrls = (config: Config): { saas?: string } => {
+  const urls: { saas?: string } = {};
 
-  // TraceLog SaaS integration
   if (config.integrations?.tracelog?.projectId) {
     urls.saas = generateSaasApiUrl(config.integrations.tracelog.projectId);
-  }
-
-  // Custom backend integration
-  const customApiUrl = config.integrations?.custom?.collectApiUrl;
-  if (customApiUrl) {
-    const allowHttp = config.integrations?.custom?.allowHttp ?? false;
-    const isValid = isValidUrl(customApiUrl, allowHttp);
-
-    if (!isValid) {
-      throw new Error('Invalid custom API URL');
-    }
-
-    urls.custom = customApiUrl;
   }
 
   return urls;
@@ -139,12 +109,9 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
     }
 
     urlObject.search = searchParams.toString();
-    const result = urlObject.toString();
-
-    return result;
+    return urlObject.toString();
   } catch (error) {
     log('warn', 'URL normalization failed, returning original', { error, data: { urlLength: url?.length } });
-
     return url;
   }
 };

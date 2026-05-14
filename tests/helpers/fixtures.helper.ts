@@ -56,8 +56,6 @@ export function createMockEvent(type: EventType, overrides?: Partial<EventData>)
       click_data: {
         x: 100,
         y: 200,
-        relativeX: 0.5,
-        relativeY: 0.5,
         id: 'test-button',
         class: 'btn btn-primary',
         tag: 'button',
@@ -70,16 +68,12 @@ export function createMockEvent(type: EventType, overrides?: Partial<EventData>)
         depth: 50,
         direction: ScrollDirection.DOWN,
         container_selector: 'body',
-        is_primary: true,
-        velocity: 10,
-        max_depth_reached: 50,
       },
     };
   } else if (type === EventType.PAGE_VIEW) {
     typeSpecificData = {
       page_view: {
         title: 'Test Page',
-        pathname: '/',
         referrer: '',
       },
     };
@@ -99,7 +93,7 @@ export function createMockEvent(type: EventType, overrides?: Partial<EventData>)
         value: 2500,
       },
     };
-  } else if (type === EventType.ERROR) {
+  } else {
     typeSpecificData = {
       error_data: {
         type: ErrorType.JS_ERROR,
@@ -107,17 +101,6 @@ export function createMockEvent(type: EventType, overrides?: Partial<EventData>)
         filename: 'test.js',
         line: 1,
         column: 1,
-      },
-    };
-  } else {
-    // EventType.VIEWPORT_VISIBLE
-    typeSpecificData = {
-      viewport_data: {
-        selector: '.test-element',
-        id: 'test-id',
-        name: 'Test Element',
-        dwellTime: 1000,
-        visibilityRatio: 0.75,
       },
     };
   }

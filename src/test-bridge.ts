@@ -6,11 +6,9 @@ import { SessionHandler } from './handlers/session.handler';
 import { PageViewHandler } from './handlers/page-view.handler';
 import { ClickHandler } from './handlers/click.handler';
 import { ScrollHandler } from './handlers/scroll.handler';
-import { ViewportHandler } from './handlers/viewport.handler';
 import { EventManager } from './managers/event.manager';
 import { StorageManager } from './managers/storage.manager';
 import { State, TraceLogTestBridge, EventData, EventOptions, InitResult } from './types';
-import { setQaMode as setQaModeUtil } from './utils/browser/mode.utils';
 
 /**
  * Test bridge for E2E and integration testing (development only)
@@ -18,8 +16,6 @@ import { setQaMode as setQaModeUtil } from './utils/browser/mode.utils';
  * Provides comprehensive test-specific helpers while inheriting core App functionality.
  * Exposes internal managers and handlers for inspection and validation.
  * Auto-injects into window.__traceLogBridge for Playwright tests.
- *
- * **Key Principle**: Library code should NOT adapt to tests. TestBridge adapts tests to library.
  */
 export class TestBridge extends App implements TraceLogTestBridge {
   constructor() {
@@ -59,29 +55,10 @@ export class TestBridge extends App implements TraceLogTestBridge {
     super.sendCustomEvent(name, data, options);
   }
 
-  /**
-   * Alias for sendCustomEvent (E2E test convenience).
-   *
-   * @param name - Event name
-   * @param metadata - Optional metadata
-   * @param options - Optional flags. `{ critical: true }` flushes via
-   *   sendBeacon immediately after tracking — used by E2E tests that simulate
-   *   purchase-then-navigate flows.
-   */
   event(name: string, metadata?: Record<string, unknown> | Record<string, unknown>[], options?: EventOptions): void {
     this.sendCustomEvent(name, metadata, options);
   }
 
-  /**
-   * QA mode control for debugging tests
-   */
-  setQaMode(enabled: boolean): void {
-    setQaModeUtil(enabled);
-  }
-
-  /**
-   * Session data inspection for E2E tests
-   */
   getSessionData(): Record<string, unknown> | null {
     const sessionId = this.get('sessionId');
     const config = this.get('config');
@@ -93,72 +70,38 @@ export class TestBridge extends App implements TraceLogTestBridge {
     };
   }
 
-  /**
-   * Queue length inspection for E2E tests
-   */
   getQueueLength(): number {
     return this.managers.event?.getQueueLength() ?? 0;
   }
 
-  /**
-   * Event manager accessor for E2E tests
-   */
   override getEventManager(): EventManager | undefined {
     return this.managers.event;
   }
 
-  /**
-   * Performance handler accessor for tests
-   */
   getPerformanceHandler(): PerformanceHandler | null {
     return this.handlers.performance ?? null;
   }
 
-  /**
-   * Error handler accessor for tests
-   */
   getErrorHandler(): ErrorHandler | null {
     return this.handlers.error ?? null;
   }
 
-  /**
-   * Session handler accessor for tests
-   */
   getSessionHandler(): SessionHandler | null {
     return this.handlers.session ?? null;
   }
 
-  /**
-   * PageView handler accessor for tests
-   */
   getPageViewHandler(): PageViewHandler | null {
     return this.handlers.pageView ?? null;
   }
 
-  /**
-   * Click handler accessor for tests
-   */
   getClickHandler(): ClickHandler | null {
     return this.handlers.click ?? null;
   }
 
-  /**
-   * Scroll handler accessor for tests
-   */
   getScrollHandler(): ScrollHandler | null {
     return this.handlers.scroll ?? null;
   }
 
-  /**
-   * Viewport handler accessor for tests
-   */
-  getViewportHandler(): ViewportHandler | null {
-    return this.handlers.viewport ?? null;
-  }
-
-  /**
-   * Get all handlers at once (convenience method)
-   */
   getHandlers(): {
     performance: PerformanceHandler | null;
     error: ErrorHandler | null;
@@ -166,7 +109,6 @@ export class TestBridge extends App implements TraceLogTestBridge {
     pageView: PageViewHandler | null;
     click: ClickHandler | null;
     scroll: ScrollHandler | null;
-    viewport: ViewportHandler | null;
   } {
     return {
       performance: this.getPerformanceHandler(),
@@ -175,66 +117,29 @@ export class TestBridge extends App implements TraceLogTestBridge {
       pageView: this.getPageViewHandler(),
       click: this.getClickHandler(),
       scroll: this.getScrollHandler(),
-      viewport: this.getViewportHandler(),
     };
   }
 
-  /**
-   * Storage manager accessor for tests
-   */
   getStorageManager(): StorageManager | null {
     return this.managers.storage ?? null;
   }
 
-  /**
-   * Get events from queue (for validation in tests)
-   */
   getQueueEvents(): EventData[] {
     return this.managers.event?.getQueueEvents() ?? [];
   }
 
-  /**
-   * State accessor (make public for tests)
-   */
   public override get<T extends keyof State>(key: T): State[T] {
     return super.get(key);
   }
 
-  /**
-   * Full state snapshot (for test inspection)
-   */
   public getFullState(): Readonly<State> {
     return this.getState();
   }
 
-  /**
-   * Update global metadata (delegates to App method)
-   */
-  override updateGlobalMetadata(metadata: Record<string, unknown>): void {
-    super.updateGlobalMetadata(metadata);
-  }
-
-  /**
-   * Merge global metadata (delegates to App method)
-   */
-  override mergeGlobalMetadata(metadata: Record<string, unknown>): void {
-    super.mergeGlobalMetadata(metadata);
-  }
-
-  /**
-   * Get state object (public override for test access)
-   *
-   * Exposes protected StateManager.getState() as public for integration tests.
-   * Equivalent to getFullState() but maintains consistency with test patterns
-   * that use bridge.getState().config pattern.
-   */
   override getState(): Readonly<State> {
     return super.getState();
   }
 
-  /**
-   * Wait for initialization to complete (test utility)
-   */
   async waitForInitialization(timeout = 5000): Promise<void> {
     const startTime = Date.now();
     while (!this.initialized && Date.now() - startTime < timeout) {
@@ -245,23 +150,14 @@ export class TestBridge extends App implements TraceLogTestBridge {
     }
   }
 
-  /**
-   * Trigger manual queue flush (test utility)
-   */
   async flushQueue(): Promise<void> {
     await this.managers.event?.flushQueue();
   }
 
-  /**
-   * Clear event queue (test utility - use with caution)
-   */
   clearQueue(): void {
     this.managers.event?.clearQueue();
   }
 
-  /**
-   * Cleanup (syncs with api.ts)
-   */
   override destroy(force = false): void {
     if (!this.initialized && !force) {
       return;

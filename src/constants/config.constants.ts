@@ -15,12 +15,8 @@ export const MAX_SEND_INTERVAL_MS_CONFIG = 60000; // 60 seconds
 
 // Throttling and debouncing
 export const SCROLL_DEBOUNCE_TIME_MS = 250;
-export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
 export const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1000; // 1 second throttle for page views
 export const DEFAULT_CLICK_THROTTLE_MS = 300; // 300ms throttle for clicks per element
-export const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 60000; // 60 seconds cooldown for viewport events
-export const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100; // Maximum elements to track (Phase 3)
-export const VIEWPORT_MUTATION_DEBOUNCE_MS = 100; // Debounce for mutation observer re-scanning
 
 // Click throttle cache limits
 export const MAX_THROTTLE_CACHE_ENTRIES = 1000; // Maximum element signatures to track
@@ -61,7 +57,6 @@ export const MAX_EVENTS_PER_SESSION = 1000;
 export const MAX_CLICKS_PER_SESSION = 500;
 export const MAX_PAGE_VIEWS_PER_SESSION = 100;
 export const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
-export const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
@@ -349,7 +344,6 @@ export const VALIDATION_MESSAGES = {
   INVALID_SAMPLING_RATE: 'Sampling rate must be between 0 and 1',
   INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
   INVALID_TRACELOG_PROJECT_ID: 'TraceLog project ID is required when integration is enabled',
-  INVALID_CUSTOM_API_URL: 'Custom API URL is required when integration is enabled',
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
   INVALID_GLOBAL_METADATA: 'Global metadata must be an object',
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',
@@ -358,15 +352,6 @@ export const VALIDATION_MESSAGES = {
   INVALID_PAGE_VIEW_THROTTLE: 'Page view throttle must be a non-negative number',
   INVALID_CLICK_THROTTLE: 'Click throttle must be a non-negative number',
   INVALID_MAX_SAME_EVENT_PER_MINUTE: 'Max same event per minute must be a positive number',
-  INVALID_VIEWPORT_CONFIG: 'Viewport config must be an object',
-  INVALID_VIEWPORT_ELEMENTS: 'Viewport elements must be a non-empty array',
-  INVALID_VIEWPORT_ELEMENT: 'Each viewport element must have a valid selector string',
-  INVALID_VIEWPORT_ELEMENT_ID: 'Viewport element id must be a non-empty string',
-  INVALID_VIEWPORT_ELEMENT_NAME: 'Viewport element name must be a non-empty string',
-  INVALID_VIEWPORT_THRESHOLD: 'Viewport threshold must be a number between 0 and 1',
-  INVALID_VIEWPORT_MIN_DWELL_TIME: 'Viewport minDwellTime must be a non-negative number',
-  INVALID_VIEWPORT_COOLDOWN_PERIOD: 'Viewport cooldownPeriod must be a non-negative number',
-  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: 'Viewport maxTrackedElements must be a positive number',
   INVALID_SEND_INTERVAL: `Send interval must be between ${MIN_SEND_INTERVAL_MS}ms (1 second) and ${MAX_SEND_INTERVAL_MS_CONFIG}ms (60 seconds)`,
 } as const;
 
