@@ -11,12 +11,17 @@
  * global rate limit, we reset the rate-limit window between waves via the
  * private accessor. This is a test-only hatch; production code never touches
  * the counter directly.
+ *
+ * v3.0 note: backend integration only initialises a SenderManager when
+ * `integrations.tracelog.projectId` is set on a non-localhost host. Since
+ * jsdom runs on localhost, we instead inject a fake sender into the
+ * `dataSenders` array after init to exercise the coordination between
+ * EventManager and SenderManager without depending on a real backend URL.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 import { initTestBridge, destroyTestBridge } from '../../helpers/bridge.helper';
-import { createMockFetch } from '../../helpers/mocks.helper';
 import type { TraceLogTestBridge } from '../../../src/types';
 
 /**
@@ -29,15 +34,26 @@ function resetRateLimit(em: ReturnType<TraceLogTestBridge['getEventManager']>): 
   (em as unknown as { rateLimitCounter: number; rateLimitWindowStart: number }).rateLimitWindowStart = Date.now();
 }
 
+interface FakeSender {
+  sendEventsQueue: ReturnType<typeof vi.fn>;
+  sendEventsQueueSync: ReturnType<typeof vi.fn>;
+  recoverPersistedEvents: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+}
+
+function attachFakeSender(em: ReturnType<TraceLogTestBridge['getEventManager']>, sender: FakeSender): void {
+  if (!em) return;
+  const senders = (em as unknown as { dataSenders: FakeSender[] }).dataSenders;
+  senders.length = 0;
+  senders.push(sender);
+}
+
 describe('Integration: stress concurrency for critical events', () => {
   let bridge: TraceLogTestBridge;
 
   beforeEach(async () => {
     setupTestEnvironment();
-    global.fetch = createMockFetch({ ok: true, status: 200 });
-    bridge = await initTestBridge({
-      integrations: { custom: { collectApiUrl: 'https://api.test.com/collect' } },
-    });
+    bridge = await initTestBridge();
   });
 
   afterEach(() => {
@@ -54,13 +70,17 @@ describe('Integration: stress concurrency for critical events', () => {
     });
 
     let sendCalls = 0;
-    const sender = (em as unknown as { dataSenders: Array<{ sendEventsQueue: (..._: unknown[]) => Promise<boolean> }> })
-      .dataSenders[0]!;
-    sender.sendEventsQueue = vi.fn(async () => {
-      sendCalls++;
-      await gate;
-      return true;
-    }) as unknown as typeof sender.sendEventsQueue;
+    const fakeSender: FakeSender = {
+      sendEventsQueue: vi.fn(async () => {
+        sendCalls++;
+        await gate;
+        return true;
+      }),
+      sendEventsQueueSync: vi.fn(() => true),
+      recoverPersistedEvents: vi.fn(async () => {}),
+      stop: vi.fn(),
+    };
+    attachFakeSender(em, fakeSender);
 
     // Small fill: a couple of events to have something to flush.
     bridge.event('fill_1');
