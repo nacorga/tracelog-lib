@@ -17,10 +17,20 @@ import {
   Mode,
   InitResult,
 } from './types';
-import { isEventValid, getDeviceInfo, normalizeUrl, Emitter, getCollectApiUrls, detectQaMode, log } from './utils';
+import {
+  isEventValid,
+  getDeviceInfo,
+  normalizeUrl,
+  Emitter,
+  getCollectApiUrls,
+  detectQaMode,
+  log,
+  generateUUID,
+  sanitizeTraits,
+} from './utils';
 import { StorageManager } from './managers/storage.manager';
 import { SCROLL_DEBOUNCE_TIME_MS, SCROLL_SUPPRESS_MULTIPLIER } from './constants/config.constants';
-import { IDENTITY_KEY, PENDING_IDENTITY_KEY } from './constants/storage.constants';
+import { IDENTITY_KEY, PENDING_IDENTITY_KEY, USER_ID_KEY } from './constants/storage.constants';
 import { PerformanceHandler } from './handlers/performance.handler';
 import { ErrorHandler } from './handlers/error.handler';
 
@@ -273,9 +283,13 @@ export class App extends StateManager {
    * Identity is persisted to localStorage (project-scoped) and included in every
    * subsequent batch payload so the backend always has the latest identity.
    *
+   * @param userId - External user identifier (email, customer_id, etc.). Trimmed; max 256 chars.
+   * @param traits - Optional user attributes (name, email, plan, etc.). Only string values
+   *   are kept; non-string fields, arrays, and null are dropped silently.
+   *
    * @internal Called from api.identify()
    */
-  public identify(userId: string): void {
+  public identify(userId: string, traits?: Record<string, string>): void {
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
       log('warn', 'identify() called with invalid userId');
       return;
@@ -287,12 +301,52 @@ export class App extends StateManager {
     }
 
     const trimmedUserId = userId.trim();
-    const identity: IdentifyData = { userId: trimmedUserId };
+    const validTraits = sanitizeTraits(traits);
+    const identity: IdentifyData = {
+      userId: trimmedUserId,
+      ...(validTraits ? { traits: validTraits } : {}),
+    };
 
     this.set('identity', identity);
     this.persistIdentity(identity);
 
-    log('debug', 'Visitor identified', { data: { userIdLength: trimmedUserId.length } });
+    log('debug', 'Visitor identified', {
+      data: { userIdLength: trimmedUserId.length, traitKeys: validTraits ? Object.keys(validTraits) : [] },
+    });
+  }
+
+  /**
+   * Clears identity, regenerates UUID, and starts a fresh session.
+   *
+   * Use for logout flows: the previous visitor profile remains in the backend,
+   * and the next user in the same browser gets a clean anonymous profile.
+   *
+   * Pending events are flushed under the OLD identity first via async fetch
+   * (so any in-flight authentication headers are preserved). Then the identity
+   * is cleared, the userId is regenerated, and the session handler is
+   * restarted to emit a new `SESSION_START`.
+   *
+   * @internal Called from api.resetIdentity()
+   */
+  public async resetIdentity(): Promise<void> {
+    await this.managers.event?.flushImmediately().catch((error) => {
+      log('debug', 'Failed to flush before identity reset', { error });
+      return false;
+    });
+
+    this.set('identity', undefined);
+    this.clearPersistedIdentity();
+
+    const newUserId = generateUUID();
+    (this.managers.storage as StorageManager).setItem(USER_ID_KEY, newUserId);
+    this.set('userId', newUserId);
+
+    this.set('hasStartSession', false);
+    this.set('sessionId', null);
+    this.handlers.session?.stopTracking();
+    this.handlers.session?.startTracking();
+
+    log('debug', 'Identity reset, new UUID generated');
   }
 
   /**

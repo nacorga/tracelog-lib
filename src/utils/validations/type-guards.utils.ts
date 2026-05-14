@@ -50,3 +50,23 @@ export const isOnlyPrimitiveFields = (object: Record<string, unknown>): boolean 
 
   return isSerializable(object);
 };
+
+/**
+ * Extracts a plain `Record<string, string>` from an untrusted traits value.
+ *
+ * Rejects arrays, nulls, and non-string values (TS types erased at runtime).
+ * Used by `identify(userId, traits?)` to defend against consumers passing
+ * `null`, deeply-nested objects, or non-string fields.
+ *
+ * @returns Sanitized traits, or `undefined` if the input has no string fields.
+ */
+export const sanitizeTraits = (traits: unknown): Record<string, string> | undefined => {
+  if (typeof traits !== 'object' || traits === null || Array.isArray(traits)) return undefined;
+
+  const filtered: Record<string, string> = {};
+  for (const [key, value] of Object.entries(traits as Record<string, unknown>)) {
+    if (typeof value === 'string') filtered[key] = value;
+  }
+
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
+};

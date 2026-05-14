@@ -28,7 +28,11 @@ const generateSaasApiUrl = (projectId: string): string => {
     }
 
     if (host === 'localhost' || host === '127.0.0.1' || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
-      throw new Error('SaaS integration not supported on localhost or IP addresses.');
+      throw new Error(
+        'SaaS integration requires a domain hostname; localhost and IP addresses are not supported. ' +
+          'For local development, omit `integrations.tracelog` to run in standalone mode (events emitted locally, ' +
+          'no network requests), or test against a staging domain that resolves to your dev machine via /etc/hosts.',
+      );
     }
 
     const parts = host.split('.');

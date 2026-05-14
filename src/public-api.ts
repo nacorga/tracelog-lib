@@ -1,4 +1,4 @@
-import { init, event, on, off, isInitialized, getSessionId, getUserId, destroy, identify } from './api';
+import { init, event, on, off, isInitialized, getSessionId, getUserId, destroy, identify, resetIdentity } from './api';
 
 // Constants
 export * from './app.constants';
@@ -17,4 +17,5 @@ export const tracelog = {
   getUserId,
   destroy,
   identify,
+  resetIdentity,
 };

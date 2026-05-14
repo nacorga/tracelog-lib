@@ -78,7 +78,98 @@ export class SenderManager extends StateManager {
 
     this.storeManager = storeManager;
     this.apiUrl = apiUrl;
+    this.migrateLegacyV2Keys();
     this.rateLimitedUntil = this.loadRateLimitCooldown();
+  }
+
+  /**
+   * Migrates v2 multi-integration localStorage keys to the v3 single-integration layout.
+   *
+   * V2 stored per-integration suffixes (`tlog:{userId}:queue:saas`,
+   * `tlog:{userId}:queue:custom`, plus matching `:rate_limit:saas` / `:rate_limit:custom`).
+   * V3 is SaaS-only, so the `:saas` queue is merged into the new unscoped key
+   * `tlog:{userId}:queue` while preserving the original `timestamp` (so the
+   * expiry check still applies) and bumping `recoveryFailures` if both keys
+   * carry one. The `:custom` queue is intentionally discarded — its events were
+   * destined for a different backend that no longer exists in v3; forwarding
+   * them to SaaS would be data leakage. The legacy keys are removed in all
+   * cases so the migration is one-shot per browser.
+   */
+  private migrateLegacyV2Keys(): void {
+    const userId = this.get('userId') || 'anonymous';
+    const legacySaasQueueKey = `${QUEUE_KEY(userId)}:saas`;
+    const legacyCustomQueueKey = `${QUEUE_KEY(userId)}:custom`;
+    const legacySaasRateLimitKey = `${RATE_LIMIT_KEY(userId)}:saas`;
+    const legacyCustomRateLimitKey = `${RATE_LIMIT_KEY(userId)}:custom`;
+
+    try {
+      const legacyRaw = this.storeManager.getItem(legacySaasQueueKey);
+      if (legacyRaw) {
+        const targetKey = this.getQueueStorageKey();
+        const currentRaw = this.storeManager.getItem(targetKey);
+
+        if (!currentRaw) {
+          this.storeManager.setItem(targetKey, legacyRaw);
+          log('debug', 'Migrated v2 SaaS queue to v3 unscoped key');
+        } else {
+          this.mergeLegacyIntoCurrent(targetKey, legacyRaw, currentRaw);
+        }
+
+        this.storeManager.removeItem(legacySaasQueueKey);
+      }
+    } catch (error) {
+      log('debug', 'Failed to migrate v2 SaaS queue, discarding legacy key', { error });
+      try {
+        this.storeManager.removeItem(legacySaasQueueKey);
+      } catch {
+        // Already best-effort; nothing more to do.
+      }
+    }
+
+    [legacyCustomQueueKey, legacySaasRateLimitKey, legacyCustomRateLimitKey].forEach((key) => {
+      try {
+        if (this.storeManager.getItem(key) !== null) {
+          this.storeManager.removeItem(key);
+        }
+      } catch {
+        // Best-effort cleanup — leaving an orphan key is harmless.
+      }
+    });
+  }
+
+  private mergeLegacyIntoCurrent(targetKey: string, legacyRaw: string, currentRaw: string): void {
+    try {
+      const legacy = JSON.parse(legacyRaw) as PersistedEventsQueue;
+      const current = JSON.parse(currentRaw) as PersistedEventsQueue;
+
+      if (!Array.isArray(legacy?.events) || !Array.isArray(current?.events)) {
+        log('debug', 'Legacy or current queue malformed, keeping current only');
+        return;
+      }
+
+      const seen = new Set<string>(current.events.map((e) => e.id));
+      const mergedEvents = [
+        ...current.events,
+        ...legacy.events.filter((e) => typeof e.id === 'string' && !seen.has(e.id)),
+      ];
+
+      const merged: PersistedEventsQueue = {
+        ...current,
+        events: mergedEvents,
+        timestamp:
+          typeof current.timestamp === 'number' && typeof legacy.timestamp === 'number'
+            ? Math.min(current.timestamp, legacy.timestamp)
+            : (current.timestamp ?? legacy.timestamp ?? Date.now()),
+        recoveryFailures: Math.max(current.recoveryFailures ?? 0, legacy.recoveryFailures ?? 0) || undefined,
+      };
+
+      this.storeManager.setItem(targetKey, JSON.stringify(merged));
+      log('debug', 'Merged v2 SaaS queue into existing v3 queue', {
+        data: { added: mergedEvents.length - current.events.length, total: mergedEvents.length },
+      });
+    } catch (error) {
+      log('debug', 'Failed to merge legacy queue, keeping current', { error });
+    }
   }
 
   private getQueueStorageKey(): string {

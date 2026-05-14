@@ -1,6 +1,6 @@
 import { App } from './app';
 import { MetadataType, IdentifyData, Config, EmitterCallback, EmitterMap, InitResult, EventOptions } from './types';
-import { log, validateAndNormalizeConfig } from './utils';
+import { log, validateAndNormalizeConfig, sanitizeTraits } from './utils';
 import { INITIALIZATION_TIMEOUT_MS } from './constants';
 import { PENDING_IDENTITY_KEY } from './constants/storage.constants';
 import './types/window.types';
@@ -299,18 +299,20 @@ export const destroy = (): void => {
  * (last-write-wins).
  *
  * @param userId - External user identifier (email, customer_id, etc.). Max 256 chars.
+ * @param traits - Optional user attributes (name, email, plan, etc.). Only string
+ *   values are kept; non-string fields, arrays, and null are dropped silently.
  *
  * @example
  * ```typescript
- * // After login
- * tracelog.identify('cust_123');
+ * // After login, with traits
+ * tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
  *
  * // Before init (identity queued, applied on init)
  * tracelog.identify('cust_123');
  * await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
  * ```
  */
-export const identify = (userId: string): void => {
+export const identify = (userId: string, traits?: Record<string, string>): void => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -331,17 +333,63 @@ export const identify = (userId: string): void => {
   }
 
   if (app) {
-    app.identify(userId);
+    app.identify(userId, traits);
     return;
   }
 
   try {
-    const identity: IdentifyData = { userId: userId.trim() };
+    const validTraits = sanitizeTraits(traits);
+    const identity: IdentifyData = {
+      userId: userId.trim(),
+      ...(validTraits ? { traits: validTraits } : {}),
+    };
     localStorage.setItem(PENDING_IDENTITY_KEY, JSON.stringify(identity));
     log('debug', 'Identity persisted pre-init (will be applied on init)');
   } catch {
     log('debug', 'Failed to persist pre-init identity');
   }
+};
+
+/**
+ * Clears identity, regenerates the visitor UUID, and starts a new session.
+ *
+ * Use for logout flows. The previous visitor profile remains intact in the
+ * backend; the next user in the same browser gets a clean anonymous profile.
+ *
+ * Pending events are flushed under the OLD identity first via async fetch
+ * (so any in-flight authentication headers are preserved), then the identity
+ * is cleared, a fresh `user_id` is generated, and a new `SESSION_START` is
+ * emitted.
+ *
+ * Safe to call before init(): clears any pending pre-init identity silently.
+ *
+ * @throws {Error} If called during destroy()
+ *
+ * @example
+ * ```typescript
+ * // On logout
+ * await tracelog.resetIdentity();
+ * ```
+ */
+export const resetIdentity = async (): Promise<void> => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (!app) {
+    try {
+      localStorage.removeItem(PENDING_IDENTITY_KEY);
+    } catch {
+      // Silent — storage may be disabled or full
+    }
+    return;
+  }
+
+  if (isDestroying) {
+    throw new Error('[TraceLog] Cannot reset identity while TraceLog is being destroyed');
+  }
+
+  await app.resetIdentity();
 };
 
 /**

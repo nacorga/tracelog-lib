@@ -68,7 +68,7 @@ test.describe('E2E: Initialization', () => {
       });
 
       // SaaS integration should fail on localhost
-      expect(result.initError).toContain('SaaS integration not supported on localhost');
+      expect(result.initError).toMatch(/SaaS integration .* localhost/);
     });
 
     test('should reject saas integration on localhost (duplicate guard)', async ({ page }) => {
@@ -103,7 +103,7 @@ test.describe('E2E: Initialization', () => {
       });
 
       // SaaS integration should fail on localhost
-      expect(result.initError).toContain('SaaS integration not supported on localhost');
+      expect(result.initError).toMatch(/SaaS integration .* localhost/);
     });
   });
 

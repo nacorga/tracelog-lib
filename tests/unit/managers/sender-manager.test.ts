@@ -500,3 +500,159 @@ describe('SenderManager - idempotency token', () => {
     expect(tokens[0]).not.toBe(tokens[1]);
   });
 });
+
+describe('SenderManager - v2→v3 storage migration', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  function seedV2Storage(
+    storage: StorageManager,
+    payloads: { saasQueue?: unknown; customQueue?: unknown; saasRateLimit?: number; customRateLimit?: number },
+  ): void {
+    const baseQueue = QUEUE_KEY(USER_ID);
+    const baseRl = RATE_LIMIT_KEY(USER_ID);
+    if (payloads.saasQueue !== undefined) storage.setItem(`${baseQueue}:saas`, JSON.stringify(payloads.saasQueue));
+    if (payloads.customQueue !== undefined)
+      storage.setItem(`${baseQueue}:custom`, JSON.stringify(payloads.customQueue));
+    if (payloads.saasRateLimit !== undefined) storage.setItem(`${baseRl}:saas`, String(payloads.saasRateLimit));
+    if (payloads.customRateLimit !== undefined) storage.setItem(`${baseRl}:custom`, String(payloads.customRateLimit));
+  }
+
+  function seedUserId(storage: StorageManager): void {
+    // Sender constructor reads userId before setupState in app — for tests we
+    // mirror the production order by pre-seeding state through a throwaway
+    // sender, since the v2→v3 migration runs in the constructor itself.
+    const sentinel = new SenderManager(storage, PROD_URL);
+    sentinel['set']('userId', USER_ID);
+  }
+
+  it('migrates legacy SaaS queue events into the v3 unscoped key on first construction', () => {
+    const storage = new StorageManager();
+    seedUserId(storage);
+
+    const legacyEvents = [
+      createMockEvent(EventType.CUSTOM, { id: 'legacy-a' }),
+      createMockEvent(EventType.CLICK, { id: 'legacy-b' }),
+    ];
+    const legacyTimestamp = Date.now() - 60_000;
+    seedV2Storage(storage, {
+      saasQueue: {
+        user_id: USER_ID,
+        session_id: 'sess-legacy',
+        device: MOCK_DEVICE_INFO,
+        events: legacyEvents,
+        timestamp: legacyTimestamp,
+      },
+    });
+
+    // Construct sender — migration runs in constructor.
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
+
+    const migratedRaw = storage.getItem(QUEUE_KEY(USER_ID));
+    expect(migratedRaw).not.toBeNull();
+    const migrated = JSON.parse(migratedRaw as string);
+    expect(migrated.events).toHaveLength(2);
+    expect(migrated.events.map((e: any) => e.id)).toEqual(legacyEvents.map((e) => e.id));
+    expect(migrated.timestamp).toBe(legacyTimestamp);
+
+    // Legacy SaaS queue cleared.
+    expect(storage.getItem(`${QUEUE_KEY(USER_ID)}:saas`)).toBeNull();
+  });
+
+  it('merges legacy SaaS events with an existing v3 queue, deduping by event id', () => {
+    const storage = new StorageManager();
+    seedUserId(storage);
+
+    // Explicit ids — createMockEvent derives id from Date.now(), so back-to-back
+    // calls in the same millisecond would otherwise collide and falsely dedup.
+    const sharedEvent = createMockEvent(EventType.CUSTOM, { id: 'shared-evt' });
+    const legacyOnly = createMockEvent(EventType.CLICK, { id: 'legacy-evt' });
+    const currentOnly = createMockEvent(EventType.PAGE_VIEW, { id: 'current-evt' });
+    const legacyTs = Date.now() - 120_000;
+    const currentTs = Date.now() - 30_000;
+
+    // Pre-seed v3 queue first.
+    storage.setItem(
+      QUEUE_KEY(USER_ID),
+      JSON.stringify({
+        user_id: USER_ID,
+        session_id: 'sess-current',
+        device: MOCK_DEVICE_INFO,
+        events: [sharedEvent, currentOnly],
+        timestamp: currentTs,
+        recoveryFailures: 1,
+      }),
+    );
+
+    // Then seed legacy v2 SaaS queue (overlap on sharedEvent.id).
+    seedV2Storage(storage, {
+      saasQueue: {
+        user_id: USER_ID,
+        session_id: 'sess-legacy',
+        device: MOCK_DEVICE_INFO,
+        events: [sharedEvent, legacyOnly],
+        timestamp: legacyTs,
+        recoveryFailures: 2,
+      },
+    });
+
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
+
+    const mergedRaw = storage.getItem(QUEUE_KEY(USER_ID));
+    expect(mergedRaw).not.toBeNull();
+    const merged = JSON.parse(mergedRaw as string);
+
+    expect(merged.events).toHaveLength(3); // sharedEvent kept once
+    const ids = merged.events.map((e: any) => e.id);
+    expect(new Set(ids).size).toBe(3);
+    expect(merged.timestamp).toBe(legacyTs); // older timestamp wins (closer to expiry)
+    expect(merged.recoveryFailures).toBe(2); // max wins
+    expect(storage.getItem(`${QUEUE_KEY(USER_ID)}:saas`)).toBeNull();
+  });
+
+  it('discards legacy custom-integration queue and rate-limit keys without sending them to SaaS', () => {
+    const storage = new StorageManager();
+    seedUserId(storage);
+
+    seedV2Storage(storage, {
+      customQueue: {
+        user_id: USER_ID,
+        session_id: 'sess-custom',
+        device: MOCK_DEVICE_INFO,
+        events: [createMockEvent(EventType.CUSTOM)],
+        timestamp: Date.now(),
+      },
+      customRateLimit: Date.now() + 60_000,
+      saasRateLimit: Date.now() + 60_000,
+    });
+
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
+
+    // Legacy custom events MUST NOT leak into the v3 queue.
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+    expect(storage.getItem(`${QUEUE_KEY(USER_ID)}:custom`)).toBeNull();
+    expect(storage.getItem(`${RATE_LIMIT_KEY(USER_ID)}:custom`)).toBeNull();
+    expect(storage.getItem(`${RATE_LIMIT_KEY(USER_ID)}:saas`)).toBeNull();
+  });
+
+  it('is a no-op when no legacy keys exist', () => {
+    const storage = new StorageManager();
+    seedUserId(storage);
+
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
+
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+});

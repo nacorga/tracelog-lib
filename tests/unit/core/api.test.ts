@@ -2,7 +2,7 @@
  * Public API Tests
  *
  * Covers the 9-method public surface of src/api.ts:
- *   init, event, on, off, identify, destroy, getSessionId, getUserId, isInitialized
+ *   init, event, on, off, identify, resetIdentity, destroy, getSessionId, getUserId, isInitialized
  *
  * App.prototype methods are stubbed with vi.spyOn so the real api.ts wiring
  * (singleton lifecycle, pre-init queueing, SSR no-ops) is exercised end-to-end
@@ -25,6 +25,7 @@ let spyOn: any;
 let spyOff: any;
 let spySendCustomEvent: any;
 let spyIdentify: any;
+let spyResetIdentity: any;
 
 function freshApi(): typeof api {
   try {
@@ -47,6 +48,7 @@ beforeEach(() => {
   vi.spyOn(App.prototype, 'getSessionId').mockReturnValue(sessionIdValue);
   vi.spyOn(App.prototype, 'getUserId').mockReturnValue(userIdValue);
   spyIdentify = vi.spyOn(App.prototype, 'identify').mockImplementation(() => {});
+  spyResetIdentity = vi.spyOn(App.prototype, 'resetIdentity').mockResolvedValue();
 });
 
 afterEach(() => {
@@ -205,16 +207,25 @@ describe('api.on() / api.off()', () => {
 });
 
 describe('api.identify()', () => {
-  it('forwards to App.identify() when initialized', async () => {
+  it('forwards userId and traits to App.identify() when initialized', async () => {
+    const { init, identify } = freshApi();
+    await init();
+
+    identify('cust_42', { plan: 'pro', name: 'Maria' });
+
+    expect(spyIdentify).toHaveBeenCalledWith('cust_42', { plan: 'pro', name: 'Maria' });
+  });
+
+  it('forwards undefined traits when none provided', async () => {
     const { init, identify } = freshApi();
     await init();
 
     identify('cust_42');
 
-    expect(spyIdentify).toHaveBeenCalledWith('cust_42');
+    expect(spyIdentify).toHaveBeenCalledWith('cust_42', undefined);
   });
 
-  it('persists identity to localStorage when called pre-init', () => {
+  it('persists identity (without traits) to localStorage when called pre-init', () => {
     const { identify } = freshApi();
     identify('cust_42');
 
@@ -222,6 +233,15 @@ describe('api.identify()', () => {
     expect(raw).not.toBeNull();
     expect(JSON.parse(raw!)).toEqual({ userId: 'cust_42' });
     expect(spyIdentify).not.toHaveBeenCalled();
+  });
+
+  it('persists sanitized traits to localStorage when called pre-init', () => {
+    const { identify } = freshApi();
+    identify('cust_42', { plan: 'pro', age: 30 as unknown as string });
+
+    const stored = JSON.parse(localStorage.getItem(PENDING_IDENTITY_KEY)!);
+    // Only string-valued fields survive sanitizeTraits.
+    expect(stored).toEqual({ userId: 'cust_42', traits: { plan: 'pro' } });
   });
 
   it('trims whitespace from userId before persisting', () => {
@@ -249,6 +269,28 @@ describe('api.identify()', () => {
     identify('a'.repeat(257));
 
     expect(spyIdentify).not.toHaveBeenCalled();
+  });
+});
+
+describe('api.resetIdentity()', () => {
+  it('forwards to App.resetIdentity() when initialized', async () => {
+    const { init, resetIdentity } = freshApi();
+    await init();
+
+    await resetIdentity();
+
+    expect(spyResetIdentity).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears any pending pre-init identity silently when not initialized', async () => {
+    const { identify, resetIdentity } = freshApi();
+    identify('cust_42');
+    expect(localStorage.getItem(PENDING_IDENTITY_KEY)).not.toBeNull();
+
+    await resetIdentity();
+
+    expect(localStorage.getItem(PENDING_IDENTITY_KEY)).toBeNull();
+    expect(spyResetIdentity).not.toHaveBeenCalled();
   });
 });
 

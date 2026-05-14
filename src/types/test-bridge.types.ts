@@ -72,8 +72,9 @@ export interface TraceLogTestBridge {
     scroll: ScrollHandler | null;
   };
 
-  // Identity method (for testing identify flow)
-  identify(userId: string): void;
+  // Identity methods (for testing identify / logout flows)
+  identify(userId: string, traits?: Record<string, string>): void;
+  resetIdentity(): Promise<void>;
 
   // Test utilities
   waitForInitialization(timeout?: number): Promise<void>;
