@@ -1,7 +1,9 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { ErrorType, EventType } from '../types';
-import { log } from '../utils';
+import { EmitterEvent, ErrorType, EventType } from '../types';
+import type { EmitterCallback, EmitterMap } from '../types';
+import type { Emitter } from '../utils';
+import { buildErrorSignatureKey, log } from '../utils';
 import {
   PII_PATTERNS,
   MAX_ERROR_MESSAGE_LENGTH,
@@ -13,6 +15,7 @@ import {
   ERROR_BURST_WINDOW_MS,
   ERROR_BURST_THRESHOLD,
   ERROR_BURST_BACKOFF_MS,
+  MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW,
 } from '../constants/error.constants';
 
 /**
@@ -27,23 +30,32 @@ import {
  * - Message truncation (500 character limit)
  * - Burst detection (>10 errors/second triggers 5-second cooldown)
  * - Deduplication within 5-second window per error type+message
+ * - Per-pageview signature cap (`MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW`): after the
+ *   5s dedup window expires, the same `(normalizedMessage, filename, line)` may only
+ *   recur up to N times per pageview. Counter resets on `pagehide`, `SESSION_START`,
+ *   and `PAGE_VIEW` (covers SPA navigation via patched History API + popstate/hashchange).
  *
  * **Privacy Protection**:
  * - Automatically redacts PII from error messages before storage
  * - Sanitizes emails, phone numbers, credit cards, IBAN, API keys, Bearer tokens
  *
- * @see src/handlers/README.md (lines 167-218) for detailed documentation
+ * @see src/handlers/README.md (`## ErrorHandler` section) for detailed documentation
  */
 export class ErrorHandler extends StateManager {
   private readonly eventManager: EventManager;
+  private readonly emitter?: Emitter;
   private readonly recentErrors = new Map<string, number>();
+  private readonly pageviewSignatureCounts = new Map<string, number>();
   private errorBurstCounter = 0;
   private burstWindowStart = 0;
   private burstBackoffUntil = 0;
+  private pagehideHandler: (() => void) | null = null;
+  private pageviewResetListener: EmitterCallback<EmitterMap[EmitterEvent.EVENT]> | null = null;
 
-  constructor(eventManager: EventManager) {
+  constructor(eventManager: EventManager, emitter?: Emitter) {
     super();
     this.eventManager = eventManager;
+    this.emitter = emitter;
   }
 
   /**
@@ -51,26 +63,66 @@ export class ErrorHandler extends StateManager {
    *
    * - Registers global error event listener
    * - Registers unhandledrejection event listener
+   * - Registers pagehide listener to reset the per-pageview signature counter
+   * - Subscribes to emitter SESSION_START + PAGE_VIEW to reset the counter on new
+   *   sessions and SPA route changes (the only signal `pagehide` does not cover)
    */
   startTracking(): void {
     window.addEventListener('error', this.handleError);
     window.addEventListener('unhandledrejection', this.handleRejection);
+
+    this.pagehideHandler = (): void => {
+      this.resetPageviewCounter();
+    };
+    window.addEventListener('pagehide', this.pagehideHandler, { passive: true });
+
+    if (this.emitter) {
+      this.pageviewResetListener = (event): void => {
+        if (event.type === EventType.SESSION_START || event.type === EventType.PAGE_VIEW) {
+          this.resetPageviewCounter();
+        }
+      };
+      this.emitter.on(EmitterEvent.EVENT, this.pageviewResetListener);
+    }
   }
 
   /**
    * Stops tracking errors and cleans up resources.
    *
    * - Removes error event listeners
-   * - Clears recent errors map
+   * - Removes pagehide listener and unsubscribes from emitter
+   * - Clears recent errors and pageview signature counters
    * - Resets burst detection counters
    */
   stopTracking(): void {
     window.removeEventListener('error', this.handleError);
     window.removeEventListener('unhandledrejection', this.handleRejection);
+
+    if (this.pagehideHandler) {
+      window.removeEventListener('pagehide', this.pagehideHandler);
+      this.pagehideHandler = null;
+    }
+
+    if (this.emitter && this.pageviewResetListener) {
+      this.emitter.off(EmitterEvent.EVENT, this.pageviewResetListener);
+      this.pageviewResetListener = null;
+    }
+
     this.recentErrors.clear();
+    this.pageviewSignatureCounts.clear();
     this.errorBurstCounter = 0;
     this.burstWindowStart = 0;
     this.burstBackoffUntil = 0;
+  }
+
+  /**
+   * Clears the per-pageview signature counter.
+   *
+   * Public so `App` or tests can drive a reset explicitly; the handler itself wires
+   * `pagehide` and emitter `SESSION_START` / `PAGE_VIEW` in `startTracking()`.
+   */
+  resetPageviewCounter(): void {
+    this.pageviewSignatureCounts.clear();
   }
 
   /**
@@ -107,6 +159,31 @@ export class ErrorHandler extends StateManager {
     return Math.random() < samplingRate;
   }
 
+  /**
+   * Returns true when the per-pageview signature cap has been hit for this error.
+   * Dropped errors do not increment the counter — the 5s suppression window already
+   * silences identical repeats, and double-counting here would skew the cap for any
+   * later signature that recycles the same map key after a counter reset.
+   */
+  private shouldThrottleBySignature(input: { message: string; filename?: string; line?: number }): boolean {
+    const key = buildErrorSignatureKey({
+      message: input.message,
+      filename: input.filename,
+      line: input.line,
+    });
+    const current = this.pageviewSignatureCounts.get(key) ?? 0;
+
+    if (current >= MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW) {
+      log('debug', 'Error throttled (pageview cap)', {
+        data: { signature: key, count: current },
+      });
+      return true;
+    }
+
+    this.pageviewSignatureCounts.set(key, current + 1);
+    return false;
+  }
+
   private readonly handleError = (event: ErrorEvent): void => {
     if (!this.shouldSample()) {
       return;
@@ -115,6 +192,16 @@ export class ErrorHandler extends StateManager {
     const sanitizedMessage = this.sanitize(event.message || 'Unknown error');
 
     if (this.shouldSuppressError(ErrorType.JS_ERROR, sanitizedMessage)) {
+      return;
+    }
+
+    if (
+      this.shouldThrottleBySignature({
+        message: sanitizedMessage,
+        filename: event.filename,
+        line: event.lineno,
+      })
+    ) {
       return;
     }
 
@@ -144,6 +231,10 @@ export class ErrorHandler extends StateManager {
     const sanitizedMessage = this.sanitize(message);
 
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
+      return;
+    }
+
+    if (this.shouldThrottleBySignature({ message: sanitizedMessage })) {
       return;
     }
 
