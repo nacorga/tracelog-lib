@@ -84,27 +84,7 @@ expect(sessionStartCount).toBe(1);  // ✅ Passes
 
 **Reference**: `src/types/event.types.ts:29-41`
 
-#### B. Events in Consent Buffer (Not Main Queue)
-
-```typescript
-// ❌ PROBLEM - Looking in wrong place
-const queueState = getQueueState(bridge);
-const events = queueState.events;  // Empty if buffered!
-
-// ✅ SOLUTION - Check consent buffers too
-import { getConsentBufferState } from '../helpers/bridge.helper';
-
-const customBuffer = getConsentBufferState(bridge, 'custom');
-const tracelogBuffer = getConsentBufferState(bridge, 'tracelog');
-
-console.log('[DEBUG] Queue:', getQueueState(bridge).length);
-console.log('[DEBUG] Custom buffer:', customBuffer.length);
-console.log('[DEBUG] Tracelog buffer:', tracelogBuffer.length);
-```
-
-**When to check**: Tests with `waitForConsent: true` configuration
-
-#### C. Events Filtered by Rate Limiting or Sampling
+#### B. Events Filtered by Rate Limiting or Sampling
 
 ```typescript
 // Events might be filtered before reaching queue
@@ -202,15 +182,10 @@ console.log('[DEBUG] Session ID:', bridge.getSessionData().id);
 
 #### Step 2: Check All Storage Locations
 ```typescript
-// Main queue
+// Main in-memory queue
 const queue = getQueueState(bridge);
 console.log('[DEBUG] Main queue:', queue.length);
-
-// Consent buffers
-const customBuffer = getConsentBufferState(bridge, 'custom');
-const tracelogBuffer = getConsentBufferState(bridge, 'tracelog');
-console.log('[DEBUG] Custom buffer:', customBuffer.length);
-console.log('[DEBUG] Tracelog buffer:', tracelogBuffer.length);
+console.log('[DEBUG] Bridge queue length:', bridge.getQueueLength());
 ```
 
 #### Step 3: Check localStorage Recovery
@@ -229,8 +204,10 @@ for (let i = 0; i < localStorage.length; i++) {
 ```typescript
 const config = bridge.getFullState().config;
 console.log('[DEBUG] integrations:', config?.integrations);
-console.log('[DEBUG] waitForConsent:', config?.waitForConsent);
-// Note: Event filtering is now done via setTransformer('beforeSend', ...)
+console.log('[DEBUG] sampling:', { samplingRate: config?.samplingRate, errorSampling: config?.errorSampling });
+// To exclude specific event types from a destination, filter inside your
+// `tracelog.on('event', ...)` listener (standalone mode) — the v3 library
+// does not expose a runtime transformer or event-filter API.
 ```
 
 ---
@@ -239,42 +216,13 @@ console.log('[DEBUG] waitForConsent:', config?.waitForConsent);
 
 **Symptom**: `expect(sessionId).toBeNull()` fails, sessionId still has value
 
-**Common Causes**:
+**Why**: v3 has no `SESSION_END` event and no `session_end` broadcast action — the server infers session end from the last event timestamp. The only way to drop the in-memory `sessionId` from a test is to:
 
-#### A. ProjectId Mismatch in session_end
-```typescript
-// ❌ PROBLEM
-onMessageHandler!({
-  data: {
-    action: 'session_end',
-    sessionId: sessionId,
-    projectId: 'wrong-project',  // ← Rejected!
-  }
-});
+- Wait for the session timeout to elapse (configurable via `sessionTimeout`), or
+- Call `tracelog.destroy()` / `bridge.destroy(true)`, or
+- Call `tracelog.resetIdentity()` (clears the session along with the visitor UUID, then restarts the session handler — so the resulting `sessionId` will be a **new** value, not `null`).
 
-// Session NOT cleared because message rejected
-
-// ✅ SOLUTION
-onMessageHandler!({
-  data: {
-    action: 'session_end',
-    sessionId: sessionId,
-    projectId: 'custom',  // ← Correct!
-  }
-});
-```
-
-#### B. Not Waiting for Async Operations
-```typescript
-// ❌ PROBLEM - Check too early
-onMessageHandler!({ data: { action: 'session_end', ... } });
-const sessionId = bridge.getSessionData().id;  // Still set!
-
-// ✅ SOLUTION - Wait for processing
-onMessageHandler!({ data: { action: 'session_end', ... } });
-await new Promise(resolve => setTimeout(resolve, 100));
-const sessionId = bridge.getSessionData().id;  // Now null
-```
+If you previously asserted `sessionId === null` after broadcasting a `session_end` action, that test was relying on a v2 code path that no longer exists. Update it to one of the patterns above.
 
 ---
 
@@ -577,13 +525,14 @@ onMessageHandler!({
 ### Event Type Values (Always Lowercase)
 ```typescript
 'session_start'  // NOT 'SESSION_START'
-'session_end'    // NOT 'SESSION_END'
 'custom'         // NOT 'CUSTOM'
 'page_view'      // NOT 'PAGE_VIEW'
 'click'          // NOT 'CLICK'
 'scroll'         // NOT 'SCROLL'
 'web_vitals'     // NOT 'WEB_VITALS'
 'error'          // NOT 'ERROR'
+// Note: there is no 'session_end' event — the server infers session end
+// from the last event timestamp.
 ```
 
 ### Default ProjectId Values

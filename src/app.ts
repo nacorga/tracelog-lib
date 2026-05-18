@@ -291,12 +291,14 @@ export class App extends StateManager {
    */
   public identify(userId: string, traits?: Record<string, string>): void {
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
-      log('warn', 'identify() called with invalid userId');
+      log('warn', 'identify() called with invalid userId', {
+        data: { type: typeof userId, length: typeof userId === 'string' ? userId.trim().length : 0 },
+      });
       return;
     }
 
     if (userId.trim().length > 256) {
-      log('warn', 'identify() userId exceeds 256 characters');
+      log('warn', 'identify() userId exceeds 256 characters', { data: { length: userId.trim().length } });
       return;
     }
 
@@ -390,7 +392,7 @@ export class App extends StateManager {
           return;
         }
 
-        const normalizedPending: IdentifyData = { ...pending, userId: pending.userId.trim() };
+        const normalizedPending = this.normalizePersistedIdentity(pending);
         storage.setItem(projectKey, JSON.stringify(normalizedPending));
         this.set('identity', normalizedPending);
         log('debug', 'Migrated pending identity to project-scoped key');
@@ -411,7 +413,7 @@ export class App extends StateManager {
           return;
         }
 
-        const normalizedIdentity: IdentifyData = { ...identity, userId: identity.userId.trim() };
+        const normalizedIdentity = this.normalizePersistedIdentity(identity);
         this.set('identity', normalizedIdentity);
         log('debug', 'Loaded persisted identity');
       }
@@ -421,7 +423,10 @@ export class App extends StateManager {
   }
 
   /**
-   * Validates identity data loaded from localStorage.
+   * Validates identity data loaded from localStorage. `traits` is intentionally
+   * accepted as `unknown` here: `normalizePersistedIdentity()` runs it through
+   * `sanitizeTraits()` so tampered values are dropped silently instead of
+   * rejecting an otherwise-valid identity.
    */
   private isValidIdentityData(data: unknown): data is IdentifyData {
     if (!data || typeof data !== 'object') return false;
@@ -430,6 +435,19 @@ export class App extends StateManager {
     if (typeof userId !== 'string' || userId.trim().length === 0 || userId.trim().length > 256) return false;
 
     return true;
+  }
+
+  /**
+   * Trims the `userId` and re-sanitizes `traits` through the same gate
+   * `identify()` uses at call time, defending later batches against tampered
+   * localStorage values.
+   */
+  private normalizePersistedIdentity(identity: IdentifyData): IdentifyData {
+    const validTraits = sanitizeTraits(identity.traits);
+    return {
+      userId: identity.userId.trim(),
+      ...(validTraits ? { traits: validTraits } : {}),
+    };
   }
 
   /**

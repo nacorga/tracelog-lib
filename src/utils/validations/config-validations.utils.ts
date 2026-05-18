@@ -76,23 +76,6 @@ export const validateAppConfig = (config?: Config): void => {
     }
   }
 
-  if (config.primaryScrollSelector !== undefined) {
-    if (typeof config.primaryScrollSelector !== 'string' || !config.primaryScrollSelector.trim()) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR, 'config');
-    }
-
-    if (config.primaryScrollSelector !== 'window') {
-      try {
-        document.querySelector(config.primaryScrollSelector);
-      } catch {
-        throw new AppConfigValidationError(
-          `${VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX}: "${config.primaryScrollSelector}"`,
-          'config',
-        );
-      }
-    }
-  }
-
   if (config.pageViewThrottleMs !== undefined) {
     if (typeof config.pageViewThrottleMs !== 'number' || config.pageViewThrottleMs < 0) {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PAGE_VIEW_THROTTLE, 'config');

@@ -273,28 +273,6 @@ export function expectEventCountInArray(events: any[], eventType: EventType, exp
 }
 
 /**
- * Validate queue was flushed (localStorage cleared)
- */
-export function expectQueueFlushed(userId: string, integrationId = 'custom'): void {
-  const key = `tlog:queue:${userId}:${integrationId}`;
-  const value = localStorage.getItem(key);
-  expect(value).toBeNull();
-}
-
-/**
- * Validate queue was persisted (localStorage has data)
- */
-export function expectQueuePersisted(userId: string, integrationId = 'custom'): void {
-  const key = `tlog:queue:${userId}:${integrationId}`;
-  const value = localStorage.getItem(key);
-  expect(value).not.toBeNull();
-
-  const parsed = JSON.parse(value!);
-  expect(parsed).toBeDefined();
-  expect(parsed.events).toBeInstanceOf(Array);
-}
-
-/**
  * Validate state has expected shape
  */
 export function expectStateShape(state: any, expectedKeys: string[]): void {

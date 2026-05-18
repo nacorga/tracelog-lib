@@ -347,8 +347,6 @@ export const VALIDATION_MESSAGES = {
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
   INVALID_GLOBAL_METADATA: 'Global metadata must be an object',
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',
-  INVALID_PRIMARY_SCROLL_SELECTOR: 'Primary scroll selector must be a non-empty string',
-  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: 'Invalid CSS selector syntax for primaryScrollSelector',
   INVALID_PAGE_VIEW_THROTTLE: 'Page view throttle must be a non-negative number',
   INVALID_CLICK_THROTTLE: 'Click throttle must be a non-negative number',
   INVALID_MAX_SAME_EVENT_PER_MINUTE: 'Max same event per minute must be a positive number',

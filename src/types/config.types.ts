@@ -20,8 +20,6 @@ export interface Config {
   errorSampling?: number;
   /** Event sampling rate between 0 and 1. @default 1 */
   samplingRate?: number;
-  /** CSS selector to manually override primary scroll container detection. */
-  primaryScrollSelector?: string;
   /** Page view throttle duration in milliseconds to prevent rapid navigation spam. @default 1000 */
   pageViewThrottleMs?: number;
   /** Click throttle duration in milliseconds to prevent double-clicks and rapid spam. @default 300 */

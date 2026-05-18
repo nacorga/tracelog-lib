@@ -74,9 +74,9 @@ App (orchestrator)
 ├── Managers (core logic)
 │   ├── StateManager (global state - base class for all)
 │   ├── StorageManager (localStorage/sessionStorage with fallback)
-│   ├── EventManager (queue, dedup, rate limiting, transformers)
+│   ├── EventManager (queue, dedup, rate limiting)
 │   ├── SessionManager (lifecycle, BroadcastChannel sync)
-│   ├── SenderManager (per-integration, retry logic, persistence)
+│   ├── SenderManager (SaaS transport, retry, persistence, 429 cooldown)
 │   ├── UserManager (UUID generation)
 │   └── TimeManager (timestamps with monotonic guarantee)
 │
@@ -84,10 +84,9 @@ App (orchestrator)
     ├── SessionHandler (wrapper around SessionManager)
     ├── PageViewHandler (navigation, SPA routes)
     ├── ClickHandler (interactions, PII sanitization)
-    ├── ScrollHandler (depth, velocity, multi-container)
+    ├── ScrollHandler (depth + direction, multi-container)
     ├── PerformanceHandler (Web Vitals via web-vitals lib)
-    ├── ErrorHandler (JS errors, promise rejections)
-    └── ViewportHandler (IntersectionObserver visibility)
+    └── ErrorHandler (JS errors, promise rejections)
 ```
 
 ### State Access Pattern
@@ -109,174 +108,72 @@ Users must follow this sequence to capture all events:
 // 1. FIRST: Register listeners (before init)
 tracelog.on('event', eventHandler);
 
-// 2. SECOND: Configure transformers (before init, custom backend only)
-tracelog.setTransformer('beforeSend', (event) => ({ ...event, custom: true }));
-
-// 3. THIRD: Configure custom headers (before init, custom backend only)
-tracelog.setCustomHeaders(() => ({ 'Authorization': `Bearer ${token}` }));
-
-// 4. FOURTH: Initialize (starts tracking immediately, returns sessionId)
-const { sessionId } = await tracelog.init({ integrations: { custom: { collectApiUrl: '...' } } });
-
-// 5. FIFTH: Identify user (after init, optional — can also be called before init)
+// 2. SECOND: Identify the user (optional — can be called before or after init)
 tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
 
-// 6. SIXTH: Custom events (after init)
+// 3. THIRD: Initialize (starts tracking immediately, returns sessionId)
+const { sessionId } = await tracelog.init({
+  integrations: { tracelog: { projectId: 'proj-123' } },
+});
+
+// 4. FOURTH: Custom events (after init)
 tracelog.event('button_click', { id: 'signup-cta' });
 console.log('Tracked in session:', sessionId);
 ```
 
-**Why**: `SESSION_START` and `PAGE_VIEW` fire during `App.init()`. Listeners, transformers, and custom headers registered after miss these initial events or send them without proper authentication.
+**Why**: `SESSION_START` and `PAGE_VIEW` fire during `App.init()`. Listeners registered after init miss those initial events. Identity registered before init is buffered and applied automatically when `init()` runs.
 
 ### 2. Integration Modes
 
+Only two modes are supported in v3:
+
 ```typescript
-// Standalone (default) - NO network requests
+// Standalone (default) — NO network requests
 const { sessionId } = await tracelog.init();
 tracelog.on('event', (e) => console.log(e)); // Local consumption only
 
 // TraceLog SaaS
 await tracelog.init({
-  integrations: { tracelog: { projectId: 'proj-123' } }
-});
-
-// Custom Backend
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com/collect',
-      headers: { 'X-Tenant-Id': 'tenant-123' },  // Optional static headers
-      fetchCredentials: 'include'                  // Optional: 'include' | 'same-origin' | 'omit'
-    }
-  }
-});
-
-// Multi-Integration (parallel sends, independent error handling)
-await tracelog.init({
-  integrations: {
-    tracelog: { projectId: 'proj-123' },           // Analytics dashboard
-    custom: { collectApiUrl: 'https://warehouse.com' } // Data warehouse
-  }
+  integrations: { tracelog: { projectId: 'proj-123' } },
 });
 ```
 
-### 3. Transformer System
+**Domain requirement.** The SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`), so `init()` rejects when called from `localhost` or a raw IP address. For local development, omit `integrations.tracelog` to run in standalone mode.
 
-**Integration-Specific Behavior**:
+**Removed in v3:** `integrations.custom`, transformers (`setTransformer` / `removeTransformer`), custom headers (`setCustomHeaders` / `removeCustomHeaders`), multi-integration, `flushImmediately()` / `flushImmediatelySync()` public surface, `setQaMode()` programmatic API, `updateGlobalMetadata()` / `mergeGlobalMetadata()`, viewport handler / events / config, `LONG_TASK` web vital, `relativeX/Y` and extended attribute fields on click data, `is_primary` / `velocity` / `max_depth_reached` on scroll data, `pathname` / `search` / `hash` on page-view data (full URL still on event envelope), `StorageManager.clear()` / `isAvailable()` / `hasQuotaError()`, `TimeManager.getClockSkew()` / `getBootInfo()`.
 
-| Mode | `beforeSend` | `beforeBatch` | Notes |
-|------|--------------|---------------|-------|
-| Standalone | ✅ Applied | ❌ Not supported | No SenderManager created |
-| TraceLog SaaS | ❌ Ignored | ❌ Ignored | Schema protection |
-| Custom Backend | ✅ Applied | ✅ Applied | Full control |
-| Multi-Integration | ⚠️ Custom only | ⚠️ Custom only | SaaS gets original, custom gets transformed |
+### 3. Event Queue & Sending
 
-**Event Listeners**: `tracelog.on('event', ...)` receives **original events** (not transformed). Transformers only affect backend sends. For GTM relay, apply transformation manually in listener callback.
+**Core principle**: optimistic removal with localStorage persistence on failure.
 
-```typescript
-// beforeSend: Per-event, before dedup/sampling/queueing
-tracelog.setTransformer('beforeSend', (event) => {
-  if ('type' in event) {
-    return { ...event, timestamp: Date.now() };
-  }
-  return event;
-});
-
-// beforeBatch: Batch-level, before network send (custom backend only)
-tracelog.setTransformer('beforeBatch', (batch) => {
-  if ('events' in batch) {
-    return { ...batch, batchSize: batch.events.length };
-  }
-  return batch;
-});
-```
-
-**Validation Philosophy**: Minimal validation (only discriminator fields). Allows custom schemas for maximum flexibility.
-
-### 4. Custom Headers System
-
-**Integration-Specific Behavior** (same as transformers):
-
-| Mode | Static Headers | Dynamic Headers | Notes |
-|------|----------------|-----------------|-------|
-| Standalone | ❌ Not applicable | ❌ Not applicable | No network requests |
-| TraceLog SaaS | ❌ Ignored | ❌ Ignored | Schema protection |
-| Custom Backend | ✅ Applied | ✅ Applied | Full control |
-| Multi-Integration | ⚠️ Custom only | ⚠️ Custom only | SaaS gets standard headers |
-
-```typescript
-// Static headers in config
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com/collect',
-      headers: { 'X-Tenant-Id': 'tenant-123' },
-      fetchCredentials: 'include' // Controls cookie/credential policy for fetch()
-    }
-  }
-});
-
-// Dynamic headers via provider (can be set before or after init)
-tracelog.setCustomHeaders(() => ({
-  'Authorization': `Bearer ${getAuthToken()}`,
-  'X-Request-ID': crypto.randomUUID()
-}));
-
-// Remove dynamic provider
-tracelog.removeCustomHeaders();
-```
-
-**Merge Behavior**: Dynamic headers override static headers when keys collide.
-
-**sendBeacon Limitation**: Custom headers are NOT applied to `sendBeacon()` requests (browser API limitation). Affects `pagehide` / `beforeunload`, `visibilitychange` to hidden (mobile Safari coverage), and `{ critical: true }` events — i.e. every sync flush path. For these batches the visibility-hide/unload beacons will arrive unauthenticated; the persisted-events recovery path on next `init()` re-sends with headers.
-
-### 5. Event Queue & Sending
-
-**Core Principle**: Optimistic Removal with Per-Integration Persistence
-
-- **Batching**: Every 10s OR 50-event threshold
-- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload + `critical: true` events, persists on failure)
-- **Retries**: Up to 2 attempts for transient errors (5xx, timeout)
-- **Backoff**: 200-300ms (retry 1), 400-500ms (retry 2)
-- **Persistence**: Failed events saved per-integration to localStorage with `idempotency_token` for backend deduplication
-- **Recovery**: Auto-recovered on next `init()` with same idempotency token (also on `pageshow.persisted === true` for bfcache restore)
-- **Optimistic Removal**: Queue cleared if AT LEAST ONE integration succeeds
-- **Auto-flush triggers** (in addition to the 10s/50-event interval):
-  - SPA navigation (`pushState`/`replaceState`/`popstate`/`hashchange`) — **opt-in** via `flushOnSpaNavigation: true` (default `false`; off by default to avoid per-route request amplification on SPAs)
-  - Document hidden (`visibilitychange` to hidden) — uses `sendBeacon` (sync) so the OS can't abort it mid-suspension. Opt out via `flushOnPageHidden: false`. Covers mobile Safari where `pagehide`/`beforeunload` may not fire
+- **Batching**: every 10s OR 50-event threshold
+- **Transport**: `fetch()` (async) or `navigator.sendBeacon()` (page unload + `critical: true` events; persists on failure)
+- **Retries**: up to 2 attempts for transient errors (5xx, timeout) — exponential backoff with jitter (200–300 ms, 400–500 ms)
+- **Persistence**: failed events saved to `tracelog_queue:{userId}` in localStorage with `_metadata.idempotency_token` for backend dedup
+- **Recovery**: auto-recovered on next `init()` and on `pageshow.persisted === true` (bfcache restore)
+- **Cross-tab protection**: 1-second window prevents two tabs from re-sending the same persisted batch
+- **429 rate limit**: arms a 60s cooldown mirrored to localStorage and shared across tabs on the same origin
+- **Circuit breaker**: after `MAX_CONSECUTIVE_NETWORK_FAILURES` consecutive DNS / connection-refused failures, opens until `CIRCUIT_BREAKER_COOLDOWN_MS` elapses; allows one probe (half-open) before fully closing
+- **v2→v3 migration**: `SenderManager` constructor migrates legacy `:saas` queue keys into the new unscoped key on first run, then drops the legacy `:custom` keys (their events were destined for a different backend and must not be forwarded)
+- **Auto-flush triggers** (in addition to the 10s / 50-event interval):
+  - SPA navigation (`pushState` / `replaceState` / `popstate` / `hashchange`) — opt-in via `flushOnSpaNavigation: true` (default `false`)
+  - Document hidden (`visibilitychange` to hidden) — uses `sendBeacon` (sync) so the OS can't abort it mid-suspension. Opt out via `flushOnPageHidden: false`. Covers mobile Safari where `pagehide` / `beforeunload` may not fire
   - `pagehide` / `beforeunload` — always on, uses `sendBeacon`
-  - `tracelog.event(name, meta, { critical: true })` — drains the queue via `sendBeacon` synchronously right after the event is tracked. The batch carries the critical event plus anything already queued in a single request (subject to `sendBeacon`'s 64KB cap; oversized batches persist to `localStorage` for recovery on next `init()`). If an async send is in flight when the critical event arrives, the sync flush is deferred via `pendingSyncFlush` and re-runs in the async send's `finally`. Backend MUST deduplicate by `event.id`
+  - `tracelog.event(name, meta, { critical: true })` — drains the queue via `sendBeacon` synchronously right after the event is tracked. If an async send is in flight when the critical event arrives, the sync flush is deferred via `pendingSyncFlush` and re-runs in the async send's `finally`. Backend MUST deduplicate by `event.id`.
 
-**Why Optimistic Removal is Critical**:
-- EventManager queue = "events not yet attempted to send"
-- Each SenderManager has independent localStorage: `tracelog_queue:{userId}:{integrationId}`
-- When integration fails, only that SenderManager persists events
-- Keeping events in queue after ANY success would cause duplicates to successful integrations
-- Pessimistic removal (waiting for ALL) causes infinite queue buildup if one integration permanently fails
+| Error type                        | Retries                                                              | Persistence       |
+|-----------------------------------|----------------------------------------------------------------------|-------------------|
+| 2xx success                       | None                                                                 | Cleared           |
+| 4xx (except 408, 429)             | ❌ None                                                              | ❌ Discarded       |
+| 408 Timeout                       | ✅ Up to 2                                                           | ✅ After exhaustion |
+| Request timeout (AbortController) | ✅ Up to 2                                                           | ✅ After exhaustion |
+| 429 Rate limit                    | ❌ None (60s cooldown, mirrored to localStorage, shared across tabs) | ✅ Immediate       |
+| 5xx, network errors               | ✅ Up to 2                                                           | ✅ After exhaustion |
+| `sendBeacon` failure              | ❌ None                                                              | ✅ Immediate       |
 
-**Multi-Integration Example**:
-```typescript
-// Two integrations: TraceLog (working) + Custom (broken)
-// 1. Send attempt: TraceLog ✅ succeeds, Custom ❌ fails
-// 2. EventManager removes events (optimistic - at least one succeeded)
-// 3. SenderManager[Custom] persists to its own localStorage
-// 4. Next page load: Only Custom retries from its localStorage
-// 5. TraceLog never receives duplicates ✅
-```
+All persisted batches carry `_metadata.idempotency_token` (deterministic FNV-1a hash of sorted event IDs, salted by `user_id` and `session_id`) for backend deduplication on recovery.
 
-| Error Type | Retries | Persistence |
-|------------|---------|-------------|
-| 2xx Success | None | Cleared |
-| 4xx (except 408, 429) | ❌ None | ❌ Discarded |
-| 408 Timeout | ✅ Up to 2 | ✅ After exhaustion |
-| Request Timeout (AbortController) | ✅ Up to 2 | ✅ After exhaustion |
-| 429 Rate Limit | ❌ None (60s cooldown, mirrored to localStorage, shared across tabs) | ✅ Immediate |
-| 5xx, Network Errors | ✅ Up to 2 | ✅ After exhaustion |
-| sendBeacon failure | ❌ None | ✅ Immediate |
-
-All persisted batches carry `_metadata.idempotency_token` for backend deduplication on recovery.
-
-### 6. Session Management
+### 4. Session Management
 
 - Cross-tab sync via BroadcastChannel
 - Primary tab creates session
@@ -436,7 +333,7 @@ npm test             # 100% pass rate (REQUIRED)
 - ✅ USE `vi.advanceTimersByTimeAsync()` + `vi.runOnlyPendingTimersAsync()`
 - ❌ DON'T use `page.waitForFunction()` in E2E (CSP-blocked)
 - ❌ DON'T use uppercase event types in filters (`'click'` not `'CLICK'`)
-- ❌ DON'T use wrong projectId in tests (default is `'custom'` for standalone)
+- ❌ DON'T pass an `integrations.tracelog.projectId` in standalone tests (omitting `integrations` is the standalone signal)
 - ❌ DON'T access `window.__traceLogBridge` directly in integration tests (use `bridge.helper.ts`)
 - ❌ DON'T forget `destroy(true)` before `init()` in E2E tests
 
@@ -485,7 +382,7 @@ All logs visible for debugging:
 - `error`: Critical failures requiring attention
 
 ### QA Mode (Production Debugging)
-Activate with `?tlog_mode=qa` or `tracelog.setQaMode(true)` to see logs marked with `visibility: 'qa'`.
+Activate with `?tlog_mode=qa` (persists in `sessionStorage`; deactivate with `?tlog_mode=qa_off`) to see logs marked with `visibility: 'qa'`.
 
 ### Golden Rule
 **Production = Silent. Development = Verbose.**
