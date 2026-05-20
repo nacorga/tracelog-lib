@@ -1,7 +1,6 @@
-applyTo:
-  - src/api.ts
-  - src/public-api.ts
-  - src/app.ts
+---
+applyTo: 'src/api.ts,src/public-api.ts,src/app.ts'
+---
 
 # Public API & App Layer Review Instructions
 
@@ -22,6 +21,7 @@ User Code → public-api.ts (tracelog namespace)
 ## Critical Checks
 
 ### 1. SSR Safety (BLOCKING)
+
 **ALL** public API methods MUST be SSR-safe:
 
 ```typescript
@@ -40,12 +40,14 @@ export const init = async (config?: Config): Promise<void> => {
 ```
 
 **SSR Requirements:**
+
 - ✅ Check `typeof window === 'undefined'` at the START of every public method
 - ✅ Check `typeof document === 'undefined'` at the START of every public method
 - ✅ Return early (silently) when not in browser
 - ❌ **BLOCK**: Missing SSR checks → Crashes in Next.js, Nuxt, Angular Universal, SvelteKit
 
 ### 2. State Management (BLOCKING)
+
 - ✅ Single app instance (`let app: App | null = null`)
 - ✅ Prevent multiple initializations (`if (app) { return; }`)
 - ✅ Guard flags: `isInitializing`, `isDestroying`
@@ -53,6 +55,7 @@ export const init = async (config?: Config): Promise<void> => {
 - ❌ **BLOCK**: Multiple app instances → Memory leaks, duplicate events
 
 ### 3. Error Handling (HIGH)
+
 - ✅ Try-catch around ALL async operations
 - ✅ Cleanup partially initialized state on errors
 - ✅ Throw errors with context (`[TraceLog] prefix`)
@@ -60,6 +63,7 @@ export const init = async (config?: Config): Promise<void> => {
 - ⚠️ **HIGH**: Missing error handling → Unhandled promise rejections
 
 ### 4. Event Listener Buffering (HIGH)
+
 - ✅ Buffer listeners registered before `init()` completes
 - ✅ Flush buffer after initialization
 - ✅ Clear buffer on destroy
@@ -70,6 +74,7 @@ export const init = async (config?: Config): Promise<void> => {
 ### `init(config?: Config): Promise<void>`
 
 **Critical checks:**
+
 1. SSR safety check FIRST
 2. Global disable check (`window.__traceLogDisabled`)
 3. Already initialized check
@@ -79,6 +84,7 @@ export const init = async (config?: Config): Promise<void> => {
 7. Cleanup on failure
 
 **Pattern:**
+
 ```typescript
 export const init = async (config?: Config): Promise<void> => {
   // 1. SSR safety
@@ -148,12 +154,14 @@ export const init = async (config?: Config): Promise<void> => {
 ### `event(name: string, metadata?: Record<string, MetadataType>): void`
 
 **Critical checks:**
+
 1. SSR safety check
 2. Not initialized check (throw error - user mistake)
 3. Not destroying check (throw error - prevent race condition)
 4. Validation before sending
 
 **Pattern:**
+
 ```typescript
 export const event = (name: string, metadata?: Record<string, MetadataType>): void => {
   // 1. SSR safety
@@ -179,11 +187,13 @@ export const event = (name: string, metadata?: Record<string, MetadataType>): vo
 ### `on<K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void`
 
 **Critical checks:**
+
 1. SSR safety check
 2. Buffer listeners if not initialized (IMPORTANT!)
 3. Register immediately if initialized
 
 **Listener buffering pattern:**
+
 ```typescript
 export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void => {
   // 1. SSR safety
@@ -205,6 +215,7 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
 ### `off<K extends keyof EmitterMap>(event: K, callback: EmitterCallback<EmitterMap[K]>): void`
 
 **Critical checks:**
+
 1. SSR safety check
 2. Remove from pending buffer if not initialized
 3. Unregister from app if initialized
@@ -212,6 +223,7 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
 ### `destroy(): void`
 
 **Critical checks:**
+
 1. SSR safety check
 2. Destroy in progress check (prevent double-destroy)
 3. Not initialized check (throw error)
@@ -219,6 +231,7 @@ export const on = <K extends keyof EmitterMap>(event: K, callback: EmitterCallba
 5. Clear all state (app, flags, buffer)
 
 **Pattern:**
+
 ```typescript
 export const destroy = (): void => {
   // 1. SSR safety
@@ -261,6 +274,7 @@ export const destroy = (): void => {
 ## App Class Pattern
 
 ### Initialization Flow
+
 1. **Setup state** - Call `setupState(config)` to initialize global state
 2. **Setup integrations** - Load third-party scripts (Google Analytics, etc.)
 3. **Create managers** - EventManager, StorageManager, SessionManager
@@ -269,6 +283,7 @@ export const destroy = (): void => {
 6. **Set initialized flag** - Mark ready for use
 
 ### Destroy Flow
+
 1. **Cleanup integrations** - Remove third-party scripts
 2. **Stop handlers** - Call `stopTracking()` on all handlers
 3. **Clear timers** - `clearTimeout()` for all timers
@@ -279,6 +294,7 @@ export const destroy = (): void => {
 8. **Set initialized to false** - Prevent further operations
 
 ### Error Handling in App
+
 ```typescript
 // ✅ GOOD: Graceful degradation
 async init(config: Config = {}): Promise<void> {
@@ -320,6 +336,7 @@ async init(config: Config = {}): Promise<void> {
 ## Testing Requirements
 
 ### Unit Tests (api.ts)
+
 - Test SSR safety (mock `window`/`document` as undefined)
 - Test state management (prevent double init, etc.)
 - Test listener buffering (register before init)
@@ -327,12 +344,14 @@ async init(config: Config = {}): Promise<void> {
 - Test guard flags (isInitializing, isDestroying)
 
 ### Integration Tests (app.ts)
+
 - Test full initialization flow
 - Test destroy cleans up all resources
 - Test error recovery (partial init failure)
 - Test handler lifecycle (start → stop)
 
 ### E2E Tests
+
 - Test real-world usage patterns
 - Test SSR frameworks (Next.js, Nuxt, Angular Universal)
 - Test consent flow (init after consent, destroy on revoke)
@@ -340,6 +359,7 @@ async init(config: Config = {}): Promise<void> {
 ## Common Issues
 
 ### Critical (Must Fix)
+
 - ❌ Missing SSR safety checks (`typeof window === 'undefined'`)
 - ❌ No guard flags (multiple init, double destroy)
 - ❌ No cleanup on initialization failure
@@ -347,6 +367,7 @@ async init(config: Config = {}): Promise<void> {
 - ❌ State mutation without proper checks
 
 ### High Priority
+
 - ⚠️ Missing error handling in async operations
 - ⚠️ No timeout protection on initialization
 - ⚠️ Throwing errors from `destroy()` (should always succeed)
@@ -354,6 +375,7 @@ async init(config: Config = {}): Promise<void> {
 - ⚠️ No validation before operations
 
 ### Medium Priority
+
 - 💡 Complex initialization logic not extracted to methods
 - 💡 Missing JSDoc comments on public API
 - 💡 No logging for important state changes
@@ -364,6 +386,7 @@ async init(config: Config = {}): Promise<void> {
 ## Code Comments Policy
 
 **✅ Use comments for:**
+
 - SSR compatibility rationale and edge cases
 - Complex initialization flow steps
 - State guard patterns (prevent race conditions)
@@ -371,6 +394,7 @@ async init(config: Config = {}): Promise<void> {
 - Listener buffering mechanism
 
 **❌ NEVER use comments for:**
+
 - Obvious SSR checks (e.g., `// Check window exists`)
 - Simple flag checks (e.g., `// Check if initialized`)
 - Method call descriptions (e.g., `// Initialize app`)

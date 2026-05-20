@@ -16,15 +16,10 @@ No package-level skills. Uses shared monorepo skills from project root:
 
 Defined in `.claude/commands/`. Invocable via `/slash-command`.
 
-| Command                     | Purpose                                                                                                                                                            |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/precommit`                | Full acceptance criteria validation: lint, type-check, build, unit/integration/E2E tests. All must pass (0 errors).                                                |
-| `/coverage`                 | Generate and analyze test coverage report. Target: 90%+ for core modules.                                                                                          |
-| `/perf`                     | Analyze bundle size and performance impact. Budget: browser bundle <60KB, gzipped <20KB.                                                                           |
-| `/security-audit`           | Scan for PII leaks, sensitive query params, consent management, localStorage security. References `SECURITY.md`.                                                   |
-| `/compare-branch [branch]`  | Pre-merge audit: change analysis, quality audit, security scan, testing analysis, performance impact, breaking changes, docs review. Scores merge readiness 0-100. |
-| `/fix`                      | Auto-fix all lint and format issues (`npm run fix` + verification).                                                                                                |
-| `/research-team <scenario>` | Deep research with 3 agents investigating in parallel.                                                                                                             |
+| Command | Purpose |
+| ------- | ------- |
+
+_(Package-specific commands removed in cleanup — use root skills like `/review-staged`, `/review-fullstack`, and `/sync-types`, plus `npm run` scripts for build/test/lint.)_
 
 ## Agents
 
@@ -50,38 +45,25 @@ Configured in `settings.json` / `settings.local.json`.
 ### Before commit
 
 ```bash
-/precommit      # Full validation: lint + type-check + build + tests
+npm run check && npm test   # Lint + format + type-check + tests
+git add . && /review-staged # Final quality gate
 ```
 
-### Test coverage check
+### Test coverage
 
 ```bash
-/coverage       # Generate coverage report with per-module breakdown
+npm run test:coverage       # Generate coverage report (target: 90%+ core)
 ```
 
-### Performance check
+### Performance / bundle size
 
 ```bash
-/perf           # Bundle size + runtime dependencies
-```
-
-### Security audit
-
-```bash
-/security-audit # PII scan, consent, localStorage security
-```
-
-### Pre-merge audit
-
-```bash
-/compare-branch [target]   # Defaults to main. Scores merge readiness 0-100.
+npm run build:all           # Inspect dist/browser/* sizes (<60KB raw, <20KB gz)
 ```
 
 ### Investigating an issue
 
-```bash
-/research-team <problem>   # 3 agents in parallel
-```
+Spawn parallel Explore agents via the `Agent` tool, or use `tracelog-specialist` for cross-package synthesis.
 
 ## Permissions
 

@@ -1,5 +1,6 @@
-applyTo:
-  - src/integrations/**/*.ts
+---
+applyTo: 'src/integrations/**/*.ts'
+---
 
 # Integration Review Instructions
 
@@ -33,6 +34,7 @@ export class CustomIntegration {
 ## Critical Checks
 
 ### 1. Initialization Safety (BLOCKING)
+
 - ✅ Check `isInitialized` before sending data
 - ✅ Handle initialization failures gracefully (no throw)
 - ✅ Return early if integration not configured
@@ -40,6 +42,7 @@ export class CustomIntegration {
 - ❌ **BLOCK**: Sending data before initialization → Potential crashes
 
 ### 2. Script Injection Safety (BLOCKING)
+
 - ✅ Check if script already exists before injecting
 - ✅ Use async/defer attributes on script tags
 - ✅ Remove scripts in `cleanup()`
@@ -47,12 +50,14 @@ export class CustomIntegration {
 - ❌ **BLOCK**: Duplicate script injection → Multiple instances
 
 ### 3. Third-Party API Safety (HIGH)
+
 - ✅ Validate third-party API availability
 - ✅ Check for ad blockers (graceful degradation)
 - ✅ Rate limiting for API calls (prevent abuse)
 - ⚠️ **HIGH**: Assuming third-party API exists → Crashes when blocked
 
 ### 4. Error Handling (HIGH)
+
 - ✅ Try-catch around all third-party API calls
 - ✅ Silent failures (no throw) - integrations are optional
 - ✅ Log errors with context via `log()` utility
@@ -61,6 +66,7 @@ export class CustomIntegration {
 ## Custom Backend Integration
 
 ### URL Validation
+
 ```typescript
 // ✅ GOOD: Strict URL validation
 if (!collectApiUrl.startsWith('http://') && !collectApiUrl.startsWith('https://')) {
@@ -71,7 +77,7 @@ const allowHttp = config.allowHttp ?? false;
 
 if (!allowHttp && collectApiUrl.startsWith('http://')) {
   throw new IntegrationValidationError(
-    'HTTP not allowed in production. Set allowHttp: true to enable (not recommended)'
+    'HTTP not allowed in production. Set allowHttp: true to enable (not recommended)',
   );
 }
 
@@ -82,6 +88,7 @@ if (!collectApiUrl) {
 ```
 
 ### Request Pattern
+
 ```typescript
 // ✅ GOOD: Proper request handling
 async sendBatch(events: Event[]): Promise<void> {
@@ -117,6 +124,7 @@ async sendBatch(events: Event[]): Promise<void> {
 ## Integration Lifecycle
 
 ### Initialization Order
+
 1. **Validate configuration** - Check required fields, throw if invalid
 2. **Check existing scripts** - Prevent duplicate injection
 3. **Inject scripts** - Async load with error handling
@@ -124,6 +132,7 @@ async sendBatch(events: Event[]): Promise<void> {
 5. **Set initialized flag** - Mark ready for use
 
 ### Event Flow
+
 1. **Check initialized** - Return early if not ready
 2. **Validate third-party API** - Check `window.gtag`, `window.dataLayer`, etc.
 3. **Transform event** - Convert TraceLog event to third-party format
@@ -131,6 +140,7 @@ async sendBatch(events: Event[]): Promise<void> {
 5. **Log errors** - Use `log()` for debugging
 
 ### Cleanup Flow
+
 1. **Set initialized to false** - Prevent new events
 2. **Remove scripts** - Clean up DOM
 3. **Clear global state** - Delete `window.gtag`, etc.
@@ -139,22 +149,26 @@ async sendBatch(events: Event[]): Promise<void> {
 ## Testing Requirements
 
 ### Unit Tests
+
 - Test initialization with valid/invalid config
 - Test duplicate script injection prevention
 - Test event forwarding when initialized/not initialized
 - Test cleanup removes all artifacts
 
 ### Integration Tests
+
 - Test actual script loading (may require mocks)
 - Test interaction with real third-party APIs (in E2E tests)
 - Test ad blocker scenarios (graceful degradation)
 
 ### E2E Tests
+
 Test integration behavior with actual script loading and third-party API interaction.
 
 ## Common Issues
 
 ### Critical (Must Fix)
+
 - ❌ Sending events before initialization check
 - ❌ No duplicate script injection prevention
 - ❌ Throwing errors from integration code (should be silent)
@@ -163,6 +177,7 @@ Test integration behavior with actual script loading and third-party API interac
 - ❌ Allowing HTTP in production without explicit opt-in
 
 ### High Priority
+
 - ⚠️ Missing try-catch around third-party API calls
 - ⚠️ No validation of third-party API response
 - ⚠️ No logging of integration failures
@@ -170,6 +185,7 @@ Test integration behavior with actual script loading and third-party API interac
 - ⚠️ Script injection without async/defer attributes
 
 ### Medium Priority
+
 - 💡 Missing JSDoc comments on public methods
 - 💡 Complex transformation logic not extracted to helpers
 - 💡 Missing test coverage for error paths
@@ -180,6 +196,7 @@ Test integration behavior with actual script loading and third-party API interac
 ## Code Comments Policy
 
 **✅ Use comments for:**
+
 - Third-party API quirks and workarounds
 - Script injection safety mechanisms
 - Event transformation logic
@@ -187,6 +204,7 @@ Test integration behavior with actual script loading and third-party API interac
 - Ad blocker detection patterns
 
 **❌ NEVER use comments for:**
+
 - Obvious initialization checks (e.g., `// Check if initialized`)
 - Simple API existence checks (e.g., `// Check if API exists`)
 - Script element creation (e.g., `// Create script tag`)
