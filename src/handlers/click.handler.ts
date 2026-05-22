@@ -2,7 +2,6 @@ import {
   HTML_DATA_ATTR_PREFIX,
   MAX_TEXT_LENGTH,
   INTERACTIVE_SELECTORS,
-  PII_PATTERNS,
   DEFAULT_CLICK_THROTTLE_MS,
   MAX_THROTTLE_CACHE_ENTRIES,
   THROTTLE_ENTRY_TTL_MS,
@@ -11,7 +10,7 @@ import {
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { log } from '../utils';
+import { log, sanitizePii } from '../utils';
 
 /**
  * Captures mouse clicks and converts them into analytics events with element context and coordinates.
@@ -99,7 +98,7 @@ export class ClickHandler extends StateManager {
 
       const trackingElement = this.findTrackingElement(clickedElement);
       const relevantClickElement = this.getRelevantClickElement(clickedElement);
-      const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);
+      const coordinates = this.calculateClickCoordinates(mouseEvent);
 
       // Order matters: the `data-tlog-name` CUSTOM event runs BEFORE the
       // synthetic-coordinate guard below, so a programmatic `element.click()`
@@ -304,26 +303,10 @@ export class ClickHandler extends StateManager {
     return element;
   }
 
-  /**
-   * Clamps relative coordinate values to [0, 1] range with 3 decimal precision.
-   *
-   * @param value - Raw relative coordinate value
-   * @returns Clamped value between 0 and 1 with 3 decimal places (e.g., 0.123)
-   *
-   * @example
-   * clamp(1.234)   // returns 1.000
-   * clamp(0.12345) // returns 0.123
-   * clamp(-0.5)    // returns 0.000
-   */
-  private clamp(value: number): number {
-    return Math.max(0, Math.min(1, Number(value.toFixed(3))));
-  }
-
-  private calculateClickCoordinates(event: MouseEvent, element: HTMLElement): ClickCoordinates | null {
+  private calculateClickCoordinates(event: MouseEvent): ClickCoordinates | null {
     const x = event.clientX;
     const y = event.clientY;
 
-    // Reject non-finite coordinates outright — never legitimate.
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
       return null;
     }
@@ -337,11 +320,7 @@ export class ClickHandler extends StateManager {
       return null;
     }
 
-    const rect = element.getBoundingClientRect();
-    const relativeX = rect.width > 0 ? this.clamp((x - rect.left) / rect.width) : 0;
-    const relativeY = rect.height > 0 ? this.clamp((y - rect.top) / rect.height) : 0;
-
-    return { x, y, relativeX, relativeY };
+    return { x, y };
   }
 
   private extractTrackingData(trackingElement: HTMLElement): ClickTrackingElementData | undefined {
@@ -364,56 +343,19 @@ export class ClickHandler extends StateManager {
     relevantElement: HTMLElement,
     coordinates: ClickCoordinates,
   ): ClickData {
-    const { x, y, relativeX, relativeY } = coordinates;
+    const { x, y } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
-    const attributes = this.extractElementAttributes(relevantElement);
+    const href = relevantElement.getAttribute('href') ?? undefined;
 
     return {
       x,
       y,
-      relativeX,
-      relativeY,
       tag: relevantElement.tagName.toLowerCase(),
       ...(relevantElement.id && { id: relevantElement.id }),
       ...(relevantElement.className && { class: relevantElement.className }),
       ...(text && { text }),
-      ...(attributes.href && { href: attributes.href }),
-      ...(attributes.title && { title: attributes.title }),
-      ...(attributes.alt && { alt: attributes.alt }),
-      ...(attributes.role && { role: attributes.role }),
-      ...(attributes['aria-label'] && { ariaLabel: attributes['aria-label'] }),
-      ...(Object.keys(attributes).length > 0 && { dataAttributes: attributes }),
+      ...(href && { href }),
     };
-  }
-
-  /**
-   * Sanitizes text by replacing PII patterns with [REDACTED].
-   *
-   * Protects against:
-   * - Email addresses
-   * - Phone numbers (US format)
-   * - Credit card numbers
-   * - IBAN numbers
-   * - API keys/tokens
-   * - Bearer tokens
-   *
-   * @param text - Raw text content from element
-   * @returns Sanitized text with PII replaced by [REDACTED]
-   *
-   * @example
-   * sanitizeText('Email: user@example.com')      // returns 'Email: [REDACTED]'
-   * sanitizeText('Card: 1234-5678-9012-3456')    // returns 'Card: [REDACTED]'
-   * sanitizeText('Bearer token123')              // returns '[REDACTED]'
-   */
-  private sanitizeText(text: string): string {
-    let sanitized = text;
-
-    for (const pattern of PII_PATTERNS) {
-      const regex = new RegExp(pattern.source, pattern.flags);
-      sanitized = sanitized.replace(regex, '[REDACTED]');
-    }
-
-    return sanitized;
   }
 
   private getRelevantText(clickedElement: HTMLElement, relevantElement: HTMLElement): string {
@@ -434,33 +376,7 @@ export class ClickHandler extends StateManager {
       finalText = relevantText.slice(0, MAX_TEXT_LENGTH - 3) + '...';
     }
 
-    return this.sanitizeText(finalText);
-  }
-
-  private extractElementAttributes(element: HTMLElement): Record<string, string> {
-    const commonAttributes = [
-      'id',
-      'class',
-      'data-testid',
-      'aria-label',
-      'title',
-      'href',
-      'type',
-      'name',
-      'alt',
-      'role',
-    ];
-    const result: Record<string, string> = {};
-
-    for (const attributeName of commonAttributes) {
-      const value = element.getAttribute(attributeName);
-
-      if (value) {
-        result[attributeName] = value;
-      }
-    }
-
-    return result;
+    return sanitizePii(finalText);
   }
 
   private createCustomEventData(trackingData: ClickTrackingElementData): { name: string; value?: string } {

@@ -4,19 +4,12 @@ import { SessionHandler } from '../handlers/session.handler';
 import { PageViewHandler } from '../handlers/page-view.handler';
 import { ClickHandler } from '../handlers/click.handler';
 import { ScrollHandler } from '../handlers/scroll.handler';
-import { ViewportHandler } from '../handlers/viewport.handler';
 import { EventManager } from '../managers/event.manager';
 import { StorageManager } from '../managers/storage.manager';
 import { Config } from './config.types';
 import { InitResult } from './common.types';
 import { State } from './state.types';
 import { EventData, EventOptions } from './event.types';
-import {
-  BeforeSendTransformer,
-  BeforeBatchTransformer,
-  TransformerHook,
-  CustomHeadersProvider,
-} from './transformer.types';
 
 /**
  * Testing bridge interface for E2E and integration tests
@@ -52,27 +45,10 @@ export interface TraceLogTestBridge {
   getFullState(): Readonly<State>;
   getState(): Readonly<State>;
 
-  // Global metadata management (for testing)
-  updateGlobalMetadata(metadata: Record<string, unknown>): void;
-  mergeGlobalMetadata(metadata: Record<string, unknown>): void;
-
   // Test inspection methods
   getSessionData(): Record<string, unknown> | null;
   getQueueLength(): number;
   getQueueEvents(): EventData[];
-
-  // QA mode for testing
-  setQaMode(enabled: boolean): void;
-
-  // Transformer methods (for testing event transformation)
-  setTransformer(hook: 'beforeSend', fn: BeforeSendTransformer): void;
-  setTransformer(hook: 'beforeBatch', fn: BeforeBatchTransformer): void;
-  setTransformer(hook: TransformerHook, fn: BeforeSendTransformer | BeforeBatchTransformer): void;
-  removeTransformer(hook: TransformerHook): void;
-
-  // Custom headers methods (for testing custom backend headers)
-  setCustomHeaders(provider: CustomHeadersProvider): void;
-  removeCustomHeaders(): void;
 
   // Manager accessors (for unit/integration tests)
   getEventManager(): EventManager | undefined;
@@ -85,7 +61,6 @@ export interface TraceLogTestBridge {
   getPageViewHandler(): PageViewHandler | null;
   getClickHandler(): ClickHandler | null;
   getScrollHandler(): ScrollHandler | null;
-  getViewportHandler(): ViewportHandler | null;
 
   // Convenience method to get all handlers at once
   getHandlers(): {
@@ -95,10 +70,9 @@ export interface TraceLogTestBridge {
     pageView: PageViewHandler | null;
     click: ClickHandler | null;
     scroll: ScrollHandler | null;
-    viewport: ViewportHandler | null;
   };
 
-  // Identity methods (for testing identify/resetIdentity flow)
+  // Identity methods (for testing identify / logout flows)
   identify(userId: string, traits?: Record<string, string>): void;
   resetIdentity(): Promise<void>;
 

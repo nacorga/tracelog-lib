@@ -111,17 +111,17 @@ export function getConfig(): any {
 }
 
 /**
- * Check if integration is configured
+ * Check if SaaS integration is configured
  */
-export function hasIntegration(integration: 'saas' | 'custom'): boolean {
+export function hasIntegration(integration: 'saas'): boolean {
   const collectApiUrls = getGlobalStateValue('collectApiUrls');
   return collectApiUrls?.[integration] !== undefined;
 }
 
 /**
- * Get API URL for integration
+ * Get SaaS API URL
  */
-export function getApiUrl(integration: 'saas' | 'custom'): string | undefined {
+export function getApiUrl(integration: 'saas'): string | undefined {
   const collectApiUrls = getGlobalStateValue('collectApiUrls');
   return collectApiUrls?.[integration];
 }

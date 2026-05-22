@@ -52,9 +52,13 @@ export const isOnlyPrimitiveFields = (object: Record<string, unknown>): boolean 
 };
 
 /**
- * Extracts a plain Record<string, string> from an untrusted traits value.
- * Rejects arrays and non-string values (TS types erased at runtime).
- * @returns Sanitized traits or undefined if empty/invalid
+ * Extracts a plain `Record<string, string>` from an untrusted traits value.
+ *
+ * Rejects arrays, nulls, and non-string values (TS types erased at runtime).
+ * Used by `identify(userId, traits?)` to defend against consumers passing
+ * `null`, deeply-nested objects, or non-string fields.
+ *
+ * @returns Sanitized traits, or `undefined` if the input has no string fields.
  */
 export const sanitizeTraits = (traits: unknown): Record<string, string> | undefined => {
   if (typeof traits !== 'object' || traits === null || Array.isArray(traits)) return undefined;

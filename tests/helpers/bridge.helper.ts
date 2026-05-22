@@ -90,7 +90,6 @@ export function getHandlers(bridge: TraceLogTestBridge) {
     scroll: bridge.getScrollHandler(),
     performance: bridge.getPerformanceHandler(),
     error: bridge.getErrorHandler(),
-    viewport: bridge.getViewportHandler(),
   };
 }
 

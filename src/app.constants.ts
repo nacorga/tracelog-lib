@@ -1,5 +1,4 @@
 export {
-  PII_PATTERNS,
   MAX_CUSTOM_EVENT_NAME_LENGTH,
   MAX_CUSTOM_EVENT_STRING_SIZE,
   MAX_CUSTOM_EVENT_KEYS,
@@ -15,3 +14,4 @@ export {
   DEFAULT_SESSION_TIMEOUT,
   getWebVitalsThresholds,
 } from './constants';
+export { PII_PATTERNS } from './utils/security/pii.utils';

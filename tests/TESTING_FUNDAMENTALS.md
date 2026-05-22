@@ -156,7 +156,6 @@ bridge.off('event', callback);        // Unsubscribe
 ```typescript
 const eventManager = bridge.getEventManager();
 const storageManager = bridge.getStorageManager();
-const consentManager = bridge.getConsentManager();
 ```
 
 **Handler Access** (for validation):
@@ -167,7 +166,6 @@ const clickHandler = bridge.getClickHandler();
 const scrollHandler = bridge.getScrollHandler();
 const performanceHandler = bridge.getPerformanceHandler();
 const errorHandler = bridge.getErrorHandler();
-const viewportHandler = bridge.getViewportHandler();
 ```
 
 **State Inspection**:
@@ -186,19 +184,9 @@ await bridge.flushQueue();
 bridge.clearQueue(); // Use with caution
 ```
 
-**Consent Management**:
-```typescript
-await bridge.setConsent('tracelog', true);
-const hasConsent = bridge.hasConsent('tracelog');
-const consentState = bridge.getConsentState();
-const bufferLength = bridge.getConsentBufferLength();
-const bufferEvents = bridge.getConsentBufferEvents('tracelog');
-```
-
 **Test Utilities**:
 ```typescript
 await bridge.waitForInitialization(5000);
-bridge.setQaMode(true);
 ```
 
 ### Using TestBridge in Tests
@@ -226,7 +214,7 @@ import { createMockFetch } from '../helpers/mocks.helper';
 import { expectEventStructure, expectSessionId } from '../helpers/assertions.helper';
 import type { TraceLogTestBridge } from '../../src/types';
 
-describe('Integration: Event Pipeline with Consent', () => {
+describe('Integration: Event Pipeline (TraceLog SaaS)', () => {
   let bridge: TraceLogTestBridge;
   let mockFetch: ReturnType<typeof createMockFetch>;
 
@@ -235,91 +223,58 @@ describe('Integration: Event Pipeline with Consent', () => {
     setupTestEnvironment();
     setupBrowserAPIs();
 
-    // 2. Mock external dependencies
+    // 2. Mock the network
     mockFetch = createMockFetch({ ok: true, status: 200 });
     global.fetch = mockFetch;
 
-    // 3. Initialize TestBridge
+    // 3. Initialize TestBridge with a SaaS integration
     bridge = await initTestBridge({
-      waitForConsent: true,
-      integrations: {
-        custom: {
-          collectApiUrl: 'https://api.test.com/collect'
-        }
-      }
+      integrations: { tracelog: { projectId: 'test-project' } },
     });
   });
 
   afterEach(() => {
-    // 4. Complete cleanup
     destroyTestBridge();
     cleanupTestEnvironment();
   });
 
-  it('should buffer events until consent granted, then flush', async () => {
-    // Arrange: Get managers for inspection
-    const { event: eventManager, consent: consentManager } = getManagers(bridge);
+  it('should batch custom events and flush them to the SaaS endpoint', async () => {
+    const { event: eventManager } = getManagers(bridge);
     expect(eventManager).toBeDefined();
-    expect(consentManager).toBeDefined();
 
-    // Arrange: Setup event collector
     const [getEvents, cleanupEvents] = collectEvents(bridge, 'event');
 
-    // Act: Track events before consent
     bridge.event('view_product', { productId: '123' });
     bridge.event('add_to_cart', { productId: '123', quantity: 1 });
 
-    // Assert: Events buffered, not sent
-    expect(bridge.getConsentBufferLength()).toBe(2);
-    expect(bridge.getQueueLength()).toBe(0);
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(bridge.getQueueLength()).toBeGreaterThanOrEqual(2);
 
-    // Act: Grant consent
-    await bridge.setConsent('custom', true);
+    await bridge.flushQueue();
 
-    // Wait for consent buffer flush
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Assert: Events flushed to queue and sent
-    expect(bridge.getConsentBufferLength()).toBe(0);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    // Assert: Verify sent payload structure
-    const fetchCall = mockFetch.mock.calls[0];
-    const [url, options] = fetchCall;
-    expect(url).toBe('https://api.test.com/collect');
+    expect(mockFetch).toHaveBeenCalled();
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(String(url)).toContain('/collect');
     expect(options.method).toBe('POST');
 
     const payload = JSON.parse(options.body as string);
-    expect(payload.events).toHaveLength(2);
     expectSessionId(payload.session_id);
+    expect(payload.events.length).toBeGreaterThanOrEqual(2);
 
-    // Assert: Verify events structure
     const events = getEvents();
-    expect(events.length).toBeGreaterThanOrEqual(2);
     events.forEach(event => expectEventStructure(event));
-
-    // Cleanup event collector
     cleanupEvents();
   });
 
-  it('should track new events normally after consent granted', async () => {
-    // Arrange: Grant consent first
-    await bridge.setConsent('custom', true);
-
-    // Act: Track event after consent
+  it('should batch and send custom events on the periodic tick', async () => {
     bridge.event('purchase', { orderId: 'ORD-456', total: 99.99 });
 
-    // Wait for queue flush (10s default)
-    await new Promise(resolve => setTimeout(resolve, 10500));
+    // Manually trigger a flush instead of waiting 10s
+    await bridge.flushQueue();
 
-    // Assert: Event sent directly (not buffered)
-    expect(bridge.getConsentBufferLength()).toBe(0);
     expect(mockFetch).toHaveBeenCalled();
-
     const payload = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-    expect(payload.events).toHaveLength(1);
-    expect(payload.events[0].custom_event.name).toBe('purchase');
+    const purchase = payload.events.find((e: { type: string }) => e.type === 'custom');
+    expect(purchase?.custom_event?.name).toBe('purchase');
   });
 });
 ```
@@ -576,386 +531,57 @@ tests/
 
 ### Overview
 
-TraceLog includes **built-in network simulation** for testing without real servers. The `SpecialApiUrl` enum provides special URLs that trigger simulated network behavior in `SenderManager`.
+TraceLog ships two reserved hostnames the `SenderManager` short-circuits on, so unit tests can exercise the success / failure paths without a real server.
 
-**Location**: `src/types/config.types.ts` (lines 118-121)
+**Location**: `src/types/config.types.ts` — `SpecialApiUrl` enum.
 
 ```typescript
 export enum SpecialApiUrl {
-  Localhost = 'localhost:8080',  // Simulates successful network requests
-  Fail = 'localhost:9999',        // Simulates network failures
+  Localhost = 'localhost:8080', // Simulates successful network requests
+  Fail = 'localhost:9999',      // Simulates network failures
 }
 ```
 
 ### How It Works
 
-When `SenderManager` detects a `SpecialApiUrl` value, it **short-circuits** normal network logic:
+When `SenderManager` detects either hostname in its `apiUrl`, it short-circuits the real network calls:
 
 **Implementation** (`src/managers/sender.manager.ts`):
+
 ```typescript
-// Line 184 - In sendQueueSync() [sendBeacon flow]
-if (this.apiUrl === SpecialApiUrl.Fail) {
-  log('warn', `Fail mode: simulating network failure (sync)...`);
-  return false; // Triggers retry/persistence logic
+if (this.apiUrl.includes(SpecialApiUrl.Fail)) {
+  log('warn', 'Fail mode: simulating network failure', { ... });
+  return false; // Triggers retry / persistence logic
 }
 
-// Line 559 - In send() [fetch flow]
-if (this.apiUrl === SpecialApiUrl.Fail) {
-  log('warn', `Fail mode: simulating network failure...`);
-  return false; // Triggers retry/persistence logic
+if (this.apiUrl.includes(SpecialApiUrl.Localhost)) {
+  log('debug', 'Success mode: simulating successful send', { ... });
+  return true;
 }
 ```
 
-**Key behaviors**:
-- ✅ No actual HTTP request made (no real server needed)
-- ✅ Works in both `send()` (async/fetch) and `sendQueueSync()` (sync/sendBeacon)
-- ✅ Requires `allowHttp: true` in config to pass URL validation
-- ✅ `localhost:8080` → Returns `true` (simulates success)
-- ✅ `localhost:9999` → Returns `false` (simulates failure, triggers retry + persistence)
+**Key behaviors:**
 
-### When to Use
+- No actual HTTP request made (no real server needed)
+- Works in both `send()` (async / `fetch`) and `sendQueueSync()` (sync / `sendBeacon`) paths
+- `localhost:8080` → returns `true` (simulates success)
+- `localhost:9999` → returns `false` (simulates failure, triggers retry + persistence)
 
-| Scenario | Use SpecialApiUrl | Why |
-|----------|-------------------|-----|
-| **Testing event transmission** | `SpecialApiUrl.Localhost` | Verify events reach SenderManager without real server |
-| **Testing retry logic** | `SpecialApiUrl.Fail` | Trigger in-session retry attempts (up to 2 retries) |
-| **Testing persistence** | `SpecialApiUrl.Fail` | Verify failed events persist to localStorage |
-| **Testing recovery** | `SpecialApiUrl.Fail` | Verify next-page recovery loads persisted events |
-| **Testing multi-integration** | Both URLs | Test parallel sends with mixed success/failure |
-| **Unit tests (SenderManager)** | Both URLs | Isolate SenderManager logic without network dependency |
+### Wiring SpecialApiUrl in tests
 
-### Helper Functions
-
-The `tests/helpers/mocks.helper.ts` module provides utilities for SpecialApiUrl:
+In v3 the SaaS endpoint is derived from the host page's domain, so these URLs cannot be reached through `Config`. Pass them directly to a `SenderManager` instance in your unit tests — see `tests/unit/managers/sender-manager.test.ts` for the canonical pattern:
 
 ```typescript
-import {
-  createConfigWithSuccessSimulation,
-  createConfigWithFailureSimulation,
-  getSpecialApiUrls
-} from '../helpers/mocks.helper';
+import { SpecialApiUrl, type EventsQueue } from '../../../src/types';
+import { SenderManager } from '../../../src/managers/sender.manager';
 
-// 1. Success simulation (no real server)
-const successConfig = createConfigWithSuccessSimulation();
-await tracelog.init(successConfig);
-// Events will "succeed" without HTTP requests
-
-// 2. Failure simulation (triggers retry/persistence)
-const failureConfig = createConfigWithFailureSimulation();
-await tracelog.init(failureConfig);
-// Events will fail → retry 2 times → persist to localStorage
-
-// 3. Get enum values for assertions
-const specialUrls = getSpecialApiUrls();
-expect(config.integrations.custom.collectApiUrl).toBe(specialUrls.Localhost);
+const sender = new SenderManager(storage, `http://${SpecialApiUrl.Fail}/collect`);
+const ok = await sender.sendEventsQueue(batch);
+expect(ok).toBe(false); // Failure path
 ```
 
-### Testing Patterns
+For integration / E2E tests that need the full app pipeline, prefer mocking `fetch` (see `createMockFetch`, `createMockFetchNetworkError` in `tests/helpers/mocks.helper.ts`).
 
-#### Pattern 1: Test Successful Event Transmission
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { initTestBridge, destroyTestBridge } from '../helpers/bridge.helper';
-import { createConfigWithSuccessSimulation } from '../helpers/mocks.helper';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../helpers/setup.helper';
-
-describe('Event Transmission - Success', () => {
-  let bridge: TraceLogTestBridge;
-
-  beforeEach(async () => {
-    setupTestEnvironment();
-
-    const config = createConfigWithSuccessSimulation();
-    bridge = await initTestBridge(config);
-  });
-
-  afterEach(() => {
-    destroyTestBridge();
-    cleanupTestEnvironment();
-  });
-
-  it('should successfully send events without real server', async () => {
-    vi.useFakeTimers();
-
-    // Track event
-    bridge.event('purchase', { orderId: 'ORD-123', total: 99.99 });
-
-    // Verify queued
-    expect(bridge.getQueueLength()).toBe(1);
-
-    // Advance to trigger flush (10s interval)
-    await vi.advanceTimersByTimeAsync(10000);
-    await vi.runOnlyPendingTimersAsync();
-
-    // Verify sent successfully (queue cleared)
-    expect(bridge.getQueueLength()).toBe(0);
-
-    vi.useRealTimers();
-  });
-});
-```
-
-#### Pattern 2: Test Network Failure and Retry
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { initTestBridge, destroyTestBridge } from '../helpers/bridge.helper';
-import { createConfigWithFailureSimulation } from '../helpers/mocks.helper';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../helpers/setup.helper';
-
-describe('Event Transmission - Failure', () => {
-  let bridge: TraceLogTestBridge;
-
-  beforeEach(async () => {
-    setupTestEnvironment();
-
-    const config = createConfigWithFailureSimulation();
-    bridge = await initTestBridge(config);
-  });
-
-  afterEach(() => {
-    destroyTestBridge();
-    cleanupTestEnvironment();
-  });
-
-  it('should retry failed events up to 2 times, then persist', async () => {
-    vi.useFakeTimers();
-
-    // Track event
-    bridge.event('add_to_cart', { productId: 'PROD-456', quantity: 2 });
-
-    // Verify queued
-    expect(bridge.getQueueLength()).toBe(1);
-
-    // Advance to trigger initial send attempt
-    await vi.advanceTimersByTimeAsync(10000);
-    await vi.runOnlyPendingTimersAsync();
-
-    // First retry after 200-300ms
-    await vi.advanceTimersByTimeAsync(300);
-    await vi.runOnlyPendingTimersAsync();
-
-    // Second retry after 400-500ms
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runOnlyPendingTimersAsync();
-
-    // After exhausting retries, events persist to localStorage
-    const persistedQueue = localStorage.getItem('tlog:queue:test-user-id:custom');
-    expect(persistedQueue).toBeDefined();
-
-    const parsed = JSON.parse(persistedQueue!);
-    expect(parsed.events).toHaveLength(1);
-    expect(parsed.events[0].custom_event.name).toBe('add_to_cart');
-
-    vi.useRealTimers();
-  });
-});
-```
-
-#### Pattern 3: Test Event Recovery After Failure
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { initTestBridge, destroyTestBridge } from '../helpers/bridge.helper';
-import { createConfigWithFailureSimulation } from '../helpers/mocks.helper';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../helpers/setup.helper';
-
-describe('Event Recovery', () => {
-  it('should recover persisted events on next init', async () => {
-    setupTestEnvironment();
-    vi.useFakeTimers();
-
-    // Session 1: Track event with failure simulation
-    const failConfig = createConfigWithFailureSimulation();
-    let bridge = await initTestBridge(failConfig);
-
-    bridge.event('checkout_started', { cartTotal: 199.99 });
-
-    // Trigger send → fail → retry → persist
-    await vi.advanceTimersByTimeAsync(10000);
-    await vi.runOnlyPendingTimersAsync();
-    await vi.advanceTimersByTimeAsync(800); // Both retries
-
-    // Verify persisted
-    const persisted = localStorage.getItem('tlog:queue:test-user-id:custom');
-    expect(persisted).toBeDefined();
-
-    // Cleanup session 1
-    destroyTestBridge();
-    cleanupTestEnvironment();
-
-    // Session 2: Init with success simulation (recovery should work)
-    setupTestEnvironment();
-    const successConfig = createConfigWithSuccessSimulation();
-    bridge = await initTestBridge(successConfig);
-
-    // Wait for recovery to complete
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runOnlyPendingTimersAsync();
-
-    // Verify recovered event sent successfully
-    expect(bridge.getQueueLength()).toBe(0); // Queue cleared after successful send
-    expect(localStorage.getItem('tlog:queue:test-user-id:custom')).toBeNull();
-
-    destroyTestBridge();
-    cleanupTestEnvironment();
-    vi.useRealTimers();
-  });
-});
-```
-
-#### Pattern 4: Test Multi-Integration with Mixed Results
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { initTestBridge, destroyTestBridge } from '../helpers/bridge.helper';
-import { getSpecialApiUrls } from '../helpers/mocks.helper';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../helpers/setup.helper';
-
-describe('Multi-Integration - Mixed Success/Failure', () => {
-  let bridge: TraceLogTestBridge;
-
-  beforeEach(async () => {
-    setupTestEnvironment();
-
-    const specialUrls = getSpecialApiUrls();
-
-    // Configure: SaaS succeeds, custom fails
-    bridge = await initTestBridge({
-      integrations: {
-        tracelog: {
-          projectId: 'test-project'
-          // Uses real API (can mock fetch for success)
-        },
-        custom: {
-          collectApiUrl: specialUrls.Fail, // Simulates failure
-          allowHttp: true
-        }
-      }
-    });
-  });
-
-  afterEach(() => {
-    destroyTestBridge();
-    cleanupTestEnvironment();
-  });
-
-  it('should handle mixed integration results (optimistic removal)', async () => {
-    vi.useFakeTimers();
-
-    // Track event
-    bridge.event('page_view', { path: '/products' });
-
-    // Advance to trigger send
-    await vi.advanceTimersByTimeAsync(10000);
-    await vi.runOnlyPendingTimersAsync();
-
-    // OPTIMISTIC REMOVAL: Queue cleared because SaaS succeeded
-    // (even though custom failed)
-    expect(bridge.getQueueLength()).toBe(0);
-
-    // Only custom integration persisted failed events
-    const customPersisted = localStorage.getItem('tlog:queue:test-user-id:custom');
-    expect(customPersisted).toBeDefined();
-
-    // SaaS did NOT persist (succeeded)
-    const saasPersisted = localStorage.getItem('tlog:queue:test-user-id:saas');
-    expect(saasPersisted).toBeNull();
-
-    vi.useRealTimers();
-  });
-});
-```
-
-### Important Notes
-
-1. **URL Validation**: Both SpecialApiUrl values require `allowHttp: true` in config
-   ```typescript
-   {
-     integrations: {
-       custom: {
-         collectApiUrl: 'localhost:8080', // or 'localhost:9999'
-         allowHttp: true // REQUIRED
-       }
-     }
-   }
-   ```
-
-2. **No Real Network**: No actual HTTP requests made when using SpecialApiUrl values
-
-3. **Retry Strategy**: `SpecialApiUrl.Fail` triggers full retry sequence:
-   - Initial attempt (fails immediately)
-   - Retry 1 after 200-300ms (fails)
-   - Retry 2 after 400-500ms (fails)
-   - Persist to localStorage after exhausting retries
-
-4. **Works in Both Send Modes**:
-   - `send()` - Async mode using `fetch()` API
-   - `sendQueueSync()` - Sync mode using `navigator.sendBeacon()` (page unload)
-
-5. **Multi-Integration**: Can mix SpecialApiUrl with real URLs for testing complex scenarios
-
-### Complete Example: Testing Full Lifecycle
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { initTestBridge, destroyTestBridge } from '../helpers/bridge.helper';
-import { createConfigWithFailureSimulation, createConfigWithSuccessSimulation } from '../helpers/mocks.helper';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../helpers/setup.helper';
-
-describe('Complete Network Simulation Lifecycle', () => {
-  it('should simulate failure → retry → persist → recover → succeed', async () => {
-    vi.useFakeTimers();
-
-    // ========== SESSION 1: Failure + Retry + Persist ==========
-    setupTestEnvironment();
-    const failConfig = createConfigWithFailureSimulation();
-    let bridge = await initTestBridge(failConfig);
-
-    // Track events
-    bridge.event('view_product', { productId: 'PROD-1' });
-    bridge.event('add_to_cart', { productId: 'PROD-1', quantity: 1 });
-
-    // Verify queued
-    expect(bridge.getQueueLength()).toBe(2);
-
-    // Trigger send → fail → retry → persist
-    await vi.advanceTimersByTimeAsync(10000);  // Initial send
-    await vi.runOnlyPendingTimersAsync();
-    await vi.advanceTimersByTimeAsync(300);    // Retry 1
-    await vi.runOnlyPendingTimersAsync();
-    await vi.advanceTimersByTimeAsync(500);    // Retry 2
-    await vi.runOnlyPendingTimersAsync();
-
-    // Verify persisted after retries exhausted
-    const persisted = localStorage.getItem('tlog:queue:test-user-id:custom');
-    expect(persisted).toBeDefined();
-    const parsed = JSON.parse(persisted!);
-    expect(parsed.events).toHaveLength(2);
-
-    destroyTestBridge();
-    cleanupTestEnvironment();
-
-    // ========== SESSION 2: Recovery + Success ==========
-    setupTestEnvironment();
-    const successConfig = createConfigWithSuccessSimulation();
-    bridge = await initTestBridge(successConfig);
-
-    // Wait for recovery + send
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runOnlyPendingTimersAsync();
-
-    // Verify recovered events sent successfully
-    expect(bridge.getQueueLength()).toBe(0);
-    expect(localStorage.getItem('tlog:queue:test-user-id:custom')).toBeNull();
-
-    destroyTestBridge();
-    cleanupTestEnvironment();
-    vi.useRealTimers();
-  });
-});
-```
 
 ---
 

@@ -4,572 +4,346 @@ This document outlines TraceLog's security guarantees, privacy protections, and 
 
 ---
 
-## 🔒 What TraceLog Guarantees
+## What TraceLog Guarantees
 
-### ✅ We DO
+### We DO
 
-1. **Input Value Protection**
+1. **Input value protection**
    - **NEVER** capture values from `<input>`, `<textarea>`, or `<select>` elements automatically
    - Click events on form fields only capture element metadata (tag, id, class), never the `value` attribute
-   - [Test Coverage: `tests/e2e/input-value-protection.spec.ts`](./tests/e2e/input-value-protection.spec.ts)
 
-2. **PII Sanitization**
-   - Automatically redact sensitive data patterns in error messages and click text:
+2. **PII sanitization**
+   - Automatically redact sensitive data patterns in error messages, stack traces, and click text:
      - Email addresses → `[REDACTED]`
-     - Phone numbers (US format) → `[REDACTED]`
+     - Phone numbers (US formats) → `[REDACTED]`
      - Credit card numbers → `[REDACTED]`
-     - API keys/tokens → `[REDACTED]`
-     - Bearer tokens → `[REDACTED]`
      - IBAN numbers → `[REDACTED]`
-   - Patterns applied: [`src/constants/error.constants.ts`](./src/constants/error.constants.ts)
+     - API keys / tokens (Stripe-style) → `[REDACTED]`
+     - Bearer tokens (JWT-like) → `[REDACTED]`
+     - Connection-string passwords (`protocol://user:password@host`) → `[REDACTED]`
+     - Sensitive URL query params (token, password, auth, secret, api_key, …) → `[REDACTED]`
+   - Patterns live in [`src/utils/security/pii.utils.ts`](./src/utils/security/pii.utils.ts) and apply to `ClickHandler` and `ErrorHandler` automatically
 
-3. **Default URL Parameter Filtering**
-   - Automatically remove sensitive query parameters from tracked URLs:
-     - `token`, `auth`, `key`, `session`, `reset`, `password`
-     - `api_key`, `apikey`, `secret`, `access_token`, `refresh_token`
-     - `verification`, `code`, `otp`
+3. **Default URL parameter filtering**
+   - Automatically remove sensitive query parameters from tracked URLs (15-param default deny-list: `token`, `auth`, `key`, `password`, `secret`, `api_key`, `apikey`, `access_token`, `refresh_token`, `session`, `sessionid`, `jwt`, `bearer`, `code`, `state`, `nonce`)
    - Common parameters like `email` and `user` are NOT filtered by default (legitimate use in confirmation links, attribution)
-   - You can extend this list with custom parameters via `config.sensitiveQueryParams`
-   - Full list: [`src/constants/config.constants.ts`](./src/constants/config.constants.ts)
+   - Extend the list via `config.sensitiveQueryParams`
 
-4. **Client-Side Controls**
+4. **Client-side controls**
    - All sampling, deduplication, and validation happen in the browser
    - No backend dependency required for privacy controls
-   - Rate limiting (200 events/sec) prevents abuse
+   - Per-event-name rate limiting (default 60/min, configurable) prevents accidental loops
 
-5. **XSS Protection**
-   - All string metadata is sanitized against common XSS patterns
-   - HTML entities encoded automatically
+5. **XSS sanitization on custom metadata**
+   - String values in custom-event metadata are scanned against an `XSS_PATTERNS` deny-list and stripped of matching content
+   - A warning is logged when patterns are removed, so you can audit your own event-emitting code
 
-### ❌ We Do NOT
+### We Do NOT
 
-1. **Track Form Submissions Automatically**
+1. **Track form submissions automatically**
    - You must explicitly send form data via custom events
-   - This is by design to give you full control over what data is collected
+   - This is by design — you control exactly what is collected
 
-2. **Fingerprint Users**
-   - No canvas fingerprinting, browser fingerprinting, or tracking without consent
-   - User IDs are optional and controlled by you
+2. **Fingerprint users**
+   - No canvas fingerprinting, no browser fingerprinting
+   - The visitor UUID is randomly generated and stored in `localStorage` only
 
-3. **Store Data Long-Term Client-Side**
-   - Events expire after 2 hours in localStorage
-   - Session recovery window is configurable (default: 2x session timeout)
+3. **Store data long-term client-side**
+   - Failed events expire after 2 hours in `localStorage`
+   - Session timeout is configurable (default 15 min, max 24 h)
 
 ---
 
-## 🛡️ Your Responsibilities
+## Your Responsibilities
 
 TraceLog is a **tool**, not a compliance solution. You must:
 
-### 1. **GDPR/LOPD Consent Management**
+### 1. GDPR / LOPD consent management
 
 TraceLog does NOT handle consent banners or cookie consent. You must:
 
-- **DO NOT** initialize TraceLog until user grants consent
-- Use `tracelog.init()` only after consent is obtained
-- Call `tracelog.destroy()` if user rejects or revokes consent
+- **Not** initialize TraceLog until the user grants consent
+- Call `tracelog.init()` only after consent is obtained
+- Call `tracelog.destroy()` if the user rejects or revokes consent
 
-**Example: Correct Pattern**
+**Correct pattern:**
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
 
-// Wait for consent
 const userConsent = await showCookieBanner(); // Your consent solution
 
 if (userConsent.analytics) {
-  // Initialize only after consent
   await tracelog.init({
-    integrations: {
-      tracelog: { projectId: 'your-project-id' }
-    }
+    integrations: { tracelog: { projectId: 'your-project-id' } },
   });
 } else {
-  // User rejected - don't initialize
   console.log('Analytics consent denied');
 }
 
-// If user revokes consent later
+// If consent is revoked later
 function handleConsentRevoke() {
-  tracelog.destroy(); // Stop tracking immediately
-  localStorage.clear(); // Clear stored session data
+  tracelog.destroy();
+  localStorage.clear();
 }
 ```
 
-**❌ WRONG: Initializing Before Consent**
+**Wrong — initializing before consent:**
 
 ```typescript
 // DON'T DO THIS
 await tracelog.init(); // Started without consent!
 if (userConsent.analytics) {
-  // Too late - already tracking
+  // Too late — already tracking
 }
 ```
 
 ---
 
-### 2. **Protecting Sensitive UI Elements**
+### 2. Protecting sensitive UI elements
 
-Use `data-tlog-ignore` attribute to exclude sensitive elements from tracking:
+Use `data-tlog-ignore` to exclude sensitive elements from tracking:
 
 ```html
-<!-- Payment form - completely ignored -->
+<!-- Payment form — completely ignored -->
 <div data-tlog-ignore>
   <input type="text" name="card_number">
   <input type="text" name="cvv">
   <button>Pay Now</button>
 </div>
 
-<!-- Admin panel - ignored -->
+<!-- Admin panel — ignored -->
 <button data-tlog-ignore>Delete All Users</button>
 
-<!-- Password reset - ignored -->
+<!-- Password reset — ignored -->
 <form data-tlog-ignore action="/reset-password">
   <input type="password" name="new_password">
   <button>Reset Password</button>
 </form>
 
-<!-- Public action - tracked normally -->
+<!-- Public action — tracked normally -->
 <button>Subscribe to Newsletter</button>
 ```
 
 **When to use `data-tlog-ignore`:**
+
 - Payment forms (credit card, billing info)
 - Password inputs and reset forms
-- Admin/privileged actions (delete, ban, promote)
+- Admin / privileged actions (delete, ban, promote)
 - Personal data forms (SSN, ID numbers, medical info)
 - Any element where even metadata (class, id) could leak sensitive context
 
 ---
 
-### 3. **Custom Event Data Sanitization**
+### 3. Custom-event data sanitization
 
-TraceLog automatically sanitizes error messages and click text, but **YOU** are responsible for sanitizing custom event metadata:
+TraceLog automatically sanitizes error messages and click text, but **you** are responsible for sanitizing custom-event metadata.
 
-**✅ GOOD: Sanitized Custom Events**
+**Good — sanitized custom events:**
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
 
 // Hash sensitive IDs before sending
-const userId = await hashUserId(user.id); // Use SHA-256 or similar
+const userId = await hashUserId(user.id); // SHA-256 or similar
 
 tracelog.event('purchase_completed', {
-  user_id: userId, // Hashed, not raw
+  user_id: userId,    // Hashed, not raw
   amount: 99.99,
   currency: 'USD',
   // Do NOT send: email, card_number, address, etc.
 });
 ```
 
-**❌ BAD: Sending PII in Custom Events**
+**Bad — sending PII in custom events:**
 
 ```typescript
 // DON'T DO THIS
 tracelog.event('user_registered', {
-  email: user.email, // ❌ PII leak
-  phone: user.phone, // ❌ PII leak
-  address: user.address, // ❌ PII leak
-  credit_card: user.payment.card, // ❌ Critical PII leak
+  email: user.email,
+  phone: user.phone,
+  address: user.address,
+  credit_card: user.payment.card, // Critical PII leak
 });
 ```
 
 ---
 
-### 4. **Conditional Sampling Based on Consent**
+### 4. Conditional sampling based on consent
 
 Different users may have different consent levels. Adjust sampling accordingly:
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
 
-const consent = getUserConsent(); // Your consent manager
+const consent = getUserConsent();
 
 if (consent.level === 'full') {
-  // Full analytics consent
   await tracelog.init({
-    samplingRate: 1.0, // 100%
+    samplingRate: 1.0,
     errorSampling: 1.0,
+    integrations: { tracelog: { projectId: 'your-project-id' } },
   });
 } else if (consent.level === 'essential') {
-  // Essential only (minimal tracking)
-  // Filter high-volume events from custom backend
-  tracelog.setTransformer('beforeSend', (event) => {
-    if (['scroll', 'web_vitals'].includes(event.type)) {
-      return null; // Only track core events in backend
-    }
-    return event;
-  });
-
   await tracelog.init({
-    samplingRate: 0.1, // 10%
-    errorSampling: 0.5, // 50% errors only
-    integrations: {
-      custom: {
-        collectApiUrl: 'https://api.example.com',
-      }
-    }
+    samplingRate: 0.1,   // 10% of users
+    errorSampling: 0.5,  // 50% of errors
+    integrations: { tracelog: { projectId: 'your-project-id' } },
   });
 } else {
-  // No consent - don't initialize
+  // No consent — don't initialize
 }
+```
+
+For event-type-level filtering (e.g. exclude `scroll` for essential-consent users), use the `'event'` listener in standalone mode and only forward the events you're allowed to:
+
+```typescript
+const allowedTypes = new Set(['session_start', 'page_view', 'custom']);
+
+tracelog.on('event', (event) => {
+  if (!allowedTypes.has(event.type)) return;
+  myAnalytics.process(event);
+});
+
+await tracelog.init(); // Standalone — no automatic backend send
 ```
 
 ---
 
-### 5. **URL Parameter Configuration**
+### 5. URL parameter configuration
 
-Extend default sensitive parameters with your application-specific ones:
+Extend the default sensitive parameters with your application-specific ones:
 
 ```typescript
 await tracelog.init({
-  // Merged with defaults (token, auth, key, etc.)
+  // Merged with defaults
   sensitiveQueryParams: [
-    'affiliate_id', // Your custom param
-    'promo_code',   // Your custom param
-    'referral',     // Your custom param
+    'affiliate_id',
+    'promo_code',
+    'referral',
   ],
 });
 
-// Example URLs before/after:
+// Example:
 // Before: https://example.com/checkout?token=abc123&promo_code=SAVE20
 // After:  https://example.com/checkout (both params removed)
 ```
 
 ---
 
-## 📋 Pre-Production Security Checklist
+## Pre-Production Security Checklist
 
-Before deploying TraceLog to production (especially e-commerce):
+Before deploying TraceLog to production:
 
-### Code Review
+### Code review
 
-- [ ] **Consent flow implemented** - TraceLog only initialized after user consent
-- [ ] **Destroy on revoke** - `tracelog.destroy()` called when consent revoked
-- [ ] **Sensitive elements marked** - All payment/admin UI has `data-tlog-ignore`
-- [ ] **Custom events sanitized** - No PII in `tracelog.event()` metadata
-- [ ] **URL params configured** - Application-specific sensitive params added to config
+- [ ] **Consent flow implemented** — `init()` only called after user consent
+- [ ] **Destroy on revoke** — `tracelog.destroy()` called when consent revoked
+- [ ] **Sensitive elements marked** — all payment / admin UI has `data-tlog-ignore`
+- [ ] **Custom events sanitized** — no PII in `tracelog.event()` metadata
+- [ ] **URL params configured** — application-specific sensitive params added
 
 ### Testing
 
-- [ ] **Test checkout flow** - Verify NO credit card data in events (use browser DevTools → Network)
-- [ ] **Test password reset** - Verify NO password values captured
-- [ ] **Test admin actions** - Verify privileged actions properly ignored
-- [ ] **Test consent rejection** - Verify library destroyed and no events sent
-- [ ] **Test QA mode** - Add `?tlog_mode=qa` to URL, verify events in console
+- [ ] **Checkout flow** — verify NO credit card data in events (DevTools → Network)
+- [ ] **Password reset** — verify NO password values captured
+- [ ] **Admin actions** — verify privileged actions are properly ignored
+- [ ] **Consent rejection** — verify library is destroyed and no events are sent
+- [ ] **QA mode** — add `?tlog_mode=qa` to URL, verify events appear in console
 
 ### Configuration
 
-- [ ] **`sessionTimeout` appropriate** - Consider GDPR session limits (default 15min OK)
-- [ ] **`errorSampling` set** - Reduce noise in production (0.1 = 10% recommended)
-- [ ] **`beforeSend` transformer configured** - Exclude unnecessary events from custom backend for privacy/performance using `setTransformer('beforeSend', ...)` (TraceLog SaaS always receives all events)
-- [ ] **`globalMetadata` reviewed** - No PII in metadata added to ALL events
-- [ ] **Integration configured** - TraceLog SaaS or custom backend URL validated
+- [ ] **`sessionTimeout` reviewed** — default 15 min meets typical GDPR expectations
+- [ ] **`errorSampling` set** — reduce noise in production (e.g. `0.1`)
+- [ ] **`samplingRate` set** — appropriate for traffic volume
+- [ ] **`globalMetadata` reviewed** — no PII in metadata added to every event
+- [ ] **Integration configured** — TraceLog SaaS `projectId` matches the target project
 
 ### Documentation
 
-- [ ] **Privacy policy updated** - Disclose what data is collected and how
-- [ ] **Cookie banner includes TraceLog** - List library in consent management
-- [ ] **Data retention documented** - Explain how long data is stored (client: 2hr, server: varies)
+- [ ] **Privacy policy updated** — disclose what data is collected and how
+- [ ] **Cookie banner includes TraceLog** — list the library in your consent management
+- [ ] **Data retention documented** — explain how long data is stored (client: 2 h failed-event retention; server: per your TraceLog plan)
 
 ---
 
-## 🔐 Advanced Security Patterns
+## Advanced Security Patterns
 
-### User ID Anonymization
+### Hashing user identifiers
+
+Use `identify()` with a hashed user ID instead of raw PII:
 
 ```typescript
 import { tracelog } from '@tracelog/lib';
 import { SHA256 } from 'crypto-js'; // Or native Web Crypto API
 
-// Hash user ID before setting
-async function setAnonymousUser(userId: string) {
-  const hashedId = SHA256(userId + 'your-secret-salt').toString();
-  tracelog.setUserId(hashedId);
+async function identifyAnonymous(rawUserId: string) {
+  const hashedId = SHA256(rawUserId + 'your-secret-salt').toString();
+  tracelog.identify(hashedId);
 }
 
-setAnonymousUser('user-12345'); // Stored as hashed value
+await identifyAnonymous('user-12345'); // Stored as hashed value
 ```
 
-### Contextual Tracking (Respecting DNT)
+### Respecting Do Not Track
 
 ```typescript
-// Respect "Do Not Track" browser setting
 if (navigator.doNotTrack === '1') {
-  console.log('User has Do Not Track enabled - skipping analytics');
+  console.log('User has Do Not Track enabled — skipping analytics');
 } else {
   await tracelog.init({
-    integrations: {
-      tracelog: { projectId: 'your-project-id' }
-    }
+    integrations: { tracelog: { projectId: 'your-project-id' } },
   });
 }
 ```
 
-### Secure Custom Backend Integration
+### Logout / re-identification
+
+For logout flows, use `resetIdentity()` rather than `destroy()`. It flushes pending events under the old identity, then regenerates the visitor UUID and starts a new session:
 
 ```typescript
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://your-api.com/collect',
-      allowHttp: false,            // NEVER enable in production
-      fetchCredentials: 'include', // Use 'omit' if cookies are not needed (privacy-conscious)
-    }
-  }
-});
+async function handleLogout() {
+  await tracelog.resetIdentity();
+  // The next user on this browser starts with a fresh anonymous profile.
+}
 ```
+
+`destroy()` is the right choice when consent is revoked — it stops all tracking and clears local state.
 
 ---
 
-### Transformer Security Considerations
+## Security Testing
 
-#### ✅ DO: Use transformers for additional PII sanitization
-
-```typescript
-import type { EventData, EventsQueue } from '@tracelog/lib';
-
-// Strip PII from custom backend events
-tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-  if ('type' in data && data.custom_event?.metadata) {
-    const sanitized = { ...data.custom_event.metadata };
-
-    // Remove known PII fields
-    delete sanitized.email;
-    delete sanitized.phone;
-    delete sanitized.ssn;
-    delete sanitized.creditCard;
-
-    return {
-      ...data,
-      custom_event: {
-        ...data.custom_event,
-        metadata: sanitized
-      }
-    };
-  }
-  return data;
-});
-```
-
-#### ✅ DO: Filter events based on user consent level
-
-```typescript
-// Example: Filter events for users with limited consent
-const userConsent = getUserConsent(); // Your consent manager
-
-tracelog.setTransformer('beforeSend', (data) => {
-  if ('type' in data) {
-    // Users with "essential only" consent
-    if (userConsent.level === 'essential') {
-      // Only allow core events (page_view, session)
-      if (data.type !== 'page_view' && data.type !== 'session_start' && data.type !== 'session_end') {
-        return null; // Filter out non-essential events
-      }
-    }
-  }
-  return data;
-});
-```
-
-#### ✅ DO: Remember transformers are integration-specific
-
-**Critical Security Note:**
-- **TraceLog SaaS**: Transformers silently ignored (schema protection)
-- **Custom Backend**: Transformers applied (YOUR responsibility to secure)
-
-```typescript
-// Custom backend - transformers applied (YOU control security)
-await tracelog.init({
-  integrations: {
-    custom: { collectApiUrl: 'https://your-api.com' }
-  }
-});
-
-// YOUR responsibility to sanitize when using transformers with custom backend
-tracelog.setTransformer('beforeSend', sanitizePII);
-
-// TraceLog SaaS - transformers ignored (TraceLog controls security)
-await tracelog.init({
-  integrations: {
-    tracelog: { projectId: 'project-id' }
-  }
-});
-
-// Transformers NOT applied (SaaS schema protection)
-tracelog.setTransformer('beforeSend', anyTransformer); // Ignored
-```
-
-#### ❌ DON'T: Add PII via transformers
-
-```typescript
-// BAD - introducing PII leak
-tracelog.setTransformer('beforeSend', (data) => {
-  if ('type' in data) {
-    return {
-      ...data,
-      custom_event: {
-        ...data.custom_event,
-        metadata: {
-          ...data.custom_event?.metadata,
-          userEmail: currentUser.email, // ❌ PII leak
-          userPhone: currentUser.phone   // ❌ PII leak
-        }
-      }
-    };
-  }
-  return data;
-});
-
-// GOOD - use hashed/anonymized IDs only (precompute async values)
-const hashedUserId = await hashUserId(currentUser.id); // Precompute outside transformer
-
-tracelog.setTransformer('beforeSend', (data) => {
-  if ('type' in data) {
-    return {
-      ...data,
-      custom_event: {
-        ...data.custom_event,
-        metadata: {
-          ...data.custom_event?.metadata,
-          userId: hashedUserId,              // ✅ Precomputed hashed ID
-          userSegment: currentUser.segment   // ✅ Generic category
-        }
-      }
-    };
-  }
-  return data;
-});
-```
-
-#### ❌ DON'T: Trust transformer input blindly
-
-```typescript
-// BAD - no validation
-tracelog.setTransformer('beforeSend', (data) => {
-  if ('type' in data) {
-    // Directly using external data without validation
-    return {
-      ...data,
-      custom_event: {
-        ...data.custom_event,
-        metadata: {
-          ...data.custom_event?.metadata,
-          ...window.externalData // ❌ Unvalidated external data
-        }
-      }
-    };
-  }
-  return data;
-});
-
-// GOOD - validate and sanitize
-tracelog.setTransformer('beforeSend', (data) => {
-  if ('type' in data) {
-    const validated = validateExternalData(window.externalData);
-    const sanitized = sanitizePII(validated);
-
-    return {
-      ...data,
-      custom_event: {
-        ...data.custom_event,
-        metadata: {
-          ...data.custom_event?.metadata,
-          ...sanitized // ✅ Validated and sanitized
-        }
-      }
-    };
-  }
-  return data;
-});
-```
-
-#### ❌ DON'T: Log sensitive data in transformers
-
-```typescript
-// BAD - logging PII in transformer
-tracelog.setTransformer('beforeSend', (data) => {
-  console.log('Event data:', data); // ❌ May contain PII in production logs
-  return data;
-});
-
-// GOOD - conditional logging with sanitization
-tracelog.setTransformer('beforeSend', (data) => {
-  if (import.meta.env.DEV) {
-    // Only log in development, and redact sensitive fields
-    const sanitized = { ...data, custom_event: { name: data.custom_event?.name } };
-    console.log('Event (sanitized):', sanitized);
-  }
-  return data;
-});
-```
-
-#### Security Checklist for Transformers
-
-Before using transformers in production:
-
-- [ ] **Integration type confirmed** - Know whether transformers will be applied (SaaS vs custom)
-- [ ] **PII removal verified** - Ensure transformers don't introduce PII leaks
-- [ ] **Input validation** - Validate any external data added via transformers
-- [ ] **Error handling** - Transformers wrapped in try-catch for safe fallback
-- [ ] **Logging reviewed** - No sensitive data logged in transformer code
-- [ ] **Performance tested** - Transformers don't block event processing (<5ms per call)
-- [ ] **Testing completed** - Test transformers with real events in QA mode
-
-**Example Test:**
-
-```typescript
-// Test transformer in QA mode
-tracelog.setQaMode(true);
-
-// Set transformer
-tracelog.setTransformer('beforeSend', myTransformer);
-
-// Send test event
-tracelog.event('test_event', { key: 'value' });
-
-// Check browser console - verify:
-// 1. Transformation applied correctly
-// 2. No PII leaked
-// 3. Performance acceptable
-```
-
----
-
-## 🧪 Security Testing
-
-TraceLog includes comprehensive E2E security tests:
+TraceLog includes E2E security tests:
 
 ```bash
-# Run all security-related tests
 npm run test:e2e -- input-value-protection
 npm run test:e2e -- data-tlog-ignore
-
-# Test PII sanitization
 npm run test:e2e -- error-tracking
 ```
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
-- [GDPR Compliance Checklist](https://gdpr.eu/checklist/)
-- [OWASP Privacy Risks](https://owasp.org/www-project-top-10-privacy-risks/)
+- [GDPR compliance checklist](https://gdpr.eu/checklist/)
+- [OWASP Top 10 privacy risks](https://owasp.org/www-project-top-10-privacy-risks/)
 - [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) (for hashing)
-- [Do Not Track Specification](https://www.w3.org/TR/tracking-dnt/)
+- [Do Not Track specification](https://www.w3.org/TR/tracking-dnt/)
 
 ---
 
-## 📝 Summary
+## Summary
 
-| Aspect | TraceLog's Role | Your Role |
-|--------|----------------|-----------|
-| **Input value protection** | ✅ Guaranteed - never captured | Trust but verify in tests |
-| **PII in text/errors** | ✅ Auto-sanitized (email, phone, cards) | Extend for domain-specific PII |
-| **URL parameters** | ✅ Default list provided | Add app-specific params |
-| **Consent management** | ❌ Not handled | Implement before init() |
-| **Sensitive UI elements** | ✅ `data-tlog-ignore` support | Mark all sensitive elements |
-| **Custom event data** | ❌ Not sanitized | Sanitize before sending |
-| **Data retention** | ✅ Client: 2hr auto-cleanup | Server: configure in backend |
+| Aspect                       | TraceLog's role                                | Your role                          |
+|------------------------------|------------------------------------------------|------------------------------------|
+| **Input value protection**   | ✅ Never captured                              | Trust but verify in tests          |
+| **PII in text / errors**     | ✅ Auto-sanitized (emails, phones, cards, …)   | Extend for domain-specific PII     |
+| **URL parameters**           | ✅ Default 15-param deny-list                  | Add app-specific params            |
+| **Consent management**       | ❌ Not handled                                 | Implement before `init()`          |
+| **Sensitive UI elements**    | ✅ `data-tlog-ignore` support                  | Mark all sensitive elements        |
+| **Custom-event data**        | ⚠️ XSS-scanned only                            | Sanitize for PII before sending    |
+| **Client-side data retention** | ✅ Failed events cleared after 2 h           | —                                  |
+| **Server-side data retention** | ❌ Depends on your TraceLog plan / contract | Configure per your retention needs |
 
-**Remember:** TraceLog is privacy-first by design, but **you** are ultimately responsible for GDPR/LOPD compliance in your application.
+**Remember:** TraceLog is privacy-first by design, but **you** are ultimately responsible for GDPR / LOPD compliance in your application.

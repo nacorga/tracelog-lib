@@ -2,7 +2,6 @@ import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType } from '../types';
 import {
-  LONG_TASK_THROTTLE_MS,
   MAX_NAVIGATION_HISTORY,
   PRECISION_TWO_DECIMALS,
   getWebVitalsThresholds,
@@ -53,7 +52,6 @@ export class PerformanceHandler extends StateManager {
   private readonly navigationHistory: string[] = []; // FIFO queue for tracking navigation order
   private readonly observers: PerformanceObserver[] = [];
   private vitalThresholds: Record<WebVitalType, number>;
-  private lastLongTaskSentAt = 0;
   private navigationCounter = 0; // Counter for handling simultaneous navigations edge case
 
   constructor(eventManager: EventManager) {
@@ -87,7 +85,6 @@ export class PerformanceHandler extends StateManager {
     }
 
     await this.initWebVitals();
-    this.observeLongTasks();
   }
 
   /**
@@ -232,28 +229,6 @@ export class PerformanceHandler extends StateManager {
     } catch (error) {
       log('debug', 'Failed to report TTFB', { error });
     }
-  }
-
-  private observeLongTasks(): void {
-    this.safeObserve(
-      'longtask',
-      (list) => {
-        const entries = list.getEntries() as Array<{ duration: number }>;
-
-        for (const entry of entries) {
-          const duration = Number(entry.duration.toFixed(PRECISION_TWO_DECIMALS));
-          const now = Date.now();
-
-          if (now - this.lastLongTaskSentAt >= LONG_TASK_THROTTLE_MS) {
-            if (this.shouldSendVital('LONG_TASK', duration)) {
-              this.trackWebVital('LONG_TASK', duration);
-            }
-            this.lastLongTaskSentAt = now;
-          }
-        }
-      },
-      { type: 'longtask', buffered: true },
-    );
   }
 
   private sendVital(sample: { type: WebVitalType; value: number }): void {

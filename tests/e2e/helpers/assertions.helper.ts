@@ -17,39 +17,35 @@
 import { expect } from '@playwright/test';
 
 /**
- * Click event data structure
+ * Click event data structure (v3.0)
  */
 export interface ClickData {
   /** HTML tag name (e.g., 'button', 'a', 'div') */
-  tag: string;
+  tag?: string;
   /** Element ID attribute */
   id?: string;
   /** Element class attribute */
   class?: string;
   /** Element text content (PII-sanitized) */
   text?: string;
+  /** Anchor href, if the clicked element is/is inside an <a> tag */
+  href?: string;
   /** Absolute X coordinate of click */
   x: number;
   /** Absolute Y coordinate of click */
   y: number;
-  /** Relative X coordinate (0-1) within element */
-  relativeX: number;
-  /** Relative Y coordinate (0-1) within element */
-  relativeY: number;
 }
 
 /**
- * Scroll event data structure
+ * Scroll event data structure (v3.0)
  */
 export interface ScrollData {
   /** Current scroll depth percentage (0-100) */
   depth: number;
   /** Scroll direction: 'up' or 'down' */
   direction: 'up' | 'down';
-  /** Maximum depth reached in this session (0-100) */
-  max_depth_reached: number;
-  /** Scroll velocity (pixels per second) */
-  velocity?: number;
+  /** CSS selector for the scrolled container */
+  container_selector?: string;
 }
 
 /**
@@ -77,19 +73,16 @@ export interface ErrorData {
 }
 
 /**
- * Page view event data structure
+ * Page view event data structure (v3.0)
+ *
+ * Pathname, search and hash are intentionally not part of the payload anymore —
+ * the full URL is sent via `page_url` instead.
  */
 export interface PageViewDataDetails {
   /** Document referrer URL */
   referrer?: string;
   /** Document title */
   title?: string;
-  /** URL pathname */
-  pathname?: string;
-  /** URL query string (including leading ?) */
-  search?: string;
-  /** URL hash fragment (including leading #) */
-  hash?: string;
 }
 
 /**
@@ -254,7 +247,7 @@ export function assertValidTimestamp(event: CapturedEvent): void {
 
 /**
  * Assert that click event has valid coordinates.
- * Checks that x, y, relativeX, relativeY are present and within valid ranges.
+ * Checks that x, y are present and >= 0.
  *
  * @param clickData - Click data to validate
  *
@@ -264,17 +257,10 @@ export function assertValidTimestamp(event: CapturedEvent): void {
  * ```
  */
 export function assertValidClickCoordinates(clickData: ClickData): void {
-  // Absolute coordinates
   expect(clickData.x, 'Click X coordinate should be defined').toBeDefined();
   expect(clickData.y, 'Click Y coordinate should be defined').toBeDefined();
   expect(clickData.x, 'Click X should be >= 0').toBeGreaterThanOrEqual(0);
   expect(clickData.y, 'Click Y should be >= 0').toBeGreaterThanOrEqual(0);
-
-  // Relative coordinates (0-1 range)
-  expect(clickData.relativeX, 'Relative X should be >= 0').toBeGreaterThanOrEqual(0);
-  expect(clickData.relativeX, 'Relative X should be <= 1').toBeLessThanOrEqual(1);
-  expect(clickData.relativeY, 'Relative Y should be >= 0').toBeGreaterThanOrEqual(0);
-  expect(clickData.relativeY, 'Relative Y should be <= 1').toBeLessThanOrEqual(1);
 }
 
 /**
@@ -291,12 +277,6 @@ export function assertValidScrollDepth(scrollData: ScrollData): void {
   expect(scrollData.depth, 'Scroll depth should be defined').toBeDefined();
   expect(scrollData.depth, 'Scroll depth should be >= 0').toBeGreaterThanOrEqual(0);
   expect(scrollData.depth, 'Scroll depth should be <= 100').toBeLessThanOrEqual(100);
-
-  if (scrollData.max_depth_reached !== undefined) {
-    expect(scrollData.max_depth_reached, 'Max depth should be >= current depth').toBeGreaterThanOrEqual(
-      scrollData.depth,
-    );
-  }
 }
 
 /**
@@ -315,9 +295,7 @@ export function assertValidScrollDepth(scrollData: ScrollData): void {
 export function assertPageViewData(event: CapturedEvent): void {
   expect(event.type, 'Event should be page_view type').toBe('page_view');
   expect(event.page_url, 'Page view event should have page_url').toBeDefined();
-  expect(event.page_view, 'Page view event should have page_view data object').toBeDefined();
-  expect(event.page_view!.pathname, 'Page view should have pathname').toBeDefined();
-  expect(typeof event.page_view!.pathname, 'Pathname should be a string').toBe('string');
+  expect(typeof event.page_url, 'page_url should be a string').toBe('string');
 }
 
 /**
@@ -338,20 +316,11 @@ export function assertPageViewData(event: CapturedEvent): void {
 export function assertPageViewDataContains(event: CapturedEvent, expected: Partial<PageViewDataDetails>): void {
   expect(event.page_view, 'Page view event should have page_view data').toBeDefined();
 
-  if (expected.pathname !== undefined) {
-    expect(event.page_view!.pathname, 'Pathname should match expected').toBe(expected.pathname);
-  }
   if (expected.title !== undefined) {
     expect(event.page_view!.title, 'Title should match expected').toBe(expected.title);
   }
   if (expected.referrer !== undefined) {
     expect(event.page_view!.referrer, 'Referrer should match expected').toBe(expected.referrer);
-  }
-  if (expected.search !== undefined) {
-    expect(event.page_view!.search, 'Search should match expected').toBe(expected.search);
-  }
-  if (expected.hash !== undefined) {
-    expect(event.page_view!.hash, 'Hash should match expected').toBe(expected.hash);
   }
 }
 

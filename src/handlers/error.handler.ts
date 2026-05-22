@@ -3,9 +3,8 @@ import { StateManager } from '../managers/state.manager';
 import { EmitterEvent, ErrorType, EventType } from '../types';
 import type { EmitterCallback, EmitterMap } from '../types';
 import type { Emitter } from '../utils';
-import { buildErrorSignatureKey, log } from '../utils';
+import { buildErrorSignatureKey, log, sanitizePii } from '../utils';
 import {
-  PII_PATTERNS,
   MAX_ERROR_MESSAGE_LENGTH,
   MAX_STACK_TRACE_LENGTH,
   ERROR_SUPPRESSION_WINDOW_MS,
@@ -289,18 +288,7 @@ export class ErrorHandler extends StateManager {
 
   private sanitize(text: string): string {
     const truncated = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + '...' : text;
-    return this.sanitizePii(truncated);
-  }
-
-  private sanitizePii(text: string): string {
-    let sanitized = text;
-
-    for (const pattern of PII_PATTERNS) {
-      const regex = new RegExp(pattern.source, pattern.flags);
-      sanitized = sanitized.replace(regex, '[REDACTED]');
-    }
-
-    return sanitized;
+    return sanitizePii(truncated);
   }
 
   private shouldSuppressError(type: ErrorType, message: string): boolean {
@@ -332,10 +320,10 @@ export class ErrorHandler extends StateManager {
   private static readonly TRUNCATION_SUFFIX = '\n...truncated';
 
   private truncateStack(stack: string): string {
-    if (stack.length <= MAX_STACK_TRACE_LENGTH) return this.sanitizePii(stack);
+    if (stack.length <= MAX_STACK_TRACE_LENGTH) return sanitizePii(stack);
     const limit = MAX_STACK_TRACE_LENGTH - ErrorHandler.TRUNCATION_SUFFIX.length;
     const truncated = stack.slice(0, limit) + ErrorHandler.TRUNCATION_SUFFIX;
-    return this.sanitizePii(truncated);
+    return sanitizePii(truncated);
   }
 
   private pruneOldErrors(): void {
