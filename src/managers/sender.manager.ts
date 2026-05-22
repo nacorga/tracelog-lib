@@ -2,6 +2,7 @@ import {
   QUEUE_KEY,
   RATE_LIMIT_KEY,
   EVENT_EXPIRY_HOURS,
+  MAX_EVENT_AGE_MS_ON_RECOVERY,
   REQUEST_TIMEOUT_MS,
   PERMANENT_ERROR_LOG_THROTTLE_MS,
   MAX_BEACON_PAYLOAD_SIZE,
@@ -369,6 +370,13 @@ export class SenderManager extends StateManager {
       }
 
       recoveryBody = this.ensureBatchMetadata(this.createRecoveryBody(persistedData));
+
+      if (recoveryBody.events.length === 0) {
+        log('debug', 'All persisted events exceeded the recovery age cutoff; discarding batch');
+        this.clearPersistedEvents();
+        return;
+      }
+
       const success = await this.send(recoveryBody);
 
       if (success) {
@@ -731,7 +739,26 @@ export class SenderManager extends StateManager {
   private createRecoveryBody(data: PersistedEventsQueue): EventsQueue {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { timestamp, recoveryFailures, ...queue } = data;
-    return queue;
+    const originalEvents = queue.events ?? [];
+    const cutoff = Date.now() - MAX_EVENT_AGE_MS_ON_RECOVERY;
+    const filteredEvents = originalEvents.filter((event) => {
+      const eventTimestamp =
+        typeof event.timestamp === 'number'
+          ? event.timestamp
+          : new Date(event.timestamp as unknown as string).getTime();
+      return Number.isFinite(eventTimestamp) && eventTimestamp >= cutoff;
+    });
+
+    if (filteredEvents.length < originalEvents.length) {
+      log('debug', 'Recovery dropped stale events', {
+        data: {
+          dropped: originalEvents.length - filteredEvents.length,
+          kept: filteredEvents.length,
+        },
+      });
+    }
+
+    return { ...queue, events: filteredEvents };
   }
 
   private persistEvents(body: EventsQueue): boolean {

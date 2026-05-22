@@ -457,6 +457,95 @@ describe('SenderManager - persistence recovery', () => {
   });
 });
 
+describe('SenderManager - recovery age filter', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('drops events older than the recovery age cutoff during replay', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200));
+    (global as any).fetch = fetchMock;
+
+    const cutoffMs = 6 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const staleEvent = createMockEvent(EventType.CUSTOM, {
+      id: 'stale-evt',
+      timestamp: now - cutoffMs - 60_000,
+    });
+    const freshEvent = createMockEvent(EventType.CUSTOM, {
+      id: 'fresh-evt',
+      timestamp: now - 60_000,
+    });
+
+    const persisted = {
+      ...makeQueue(0, { events: [staleEvent, freshEvent] }),
+      timestamp: now - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
+
+    await sender.recoverPersistedEvents();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].id).toBe('fresh-evt');
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('discards the whole batch and skips the network call when every event is stale', async () => {
+    const fetchMock = vi.fn();
+    (global as any).fetch = fetchMock;
+
+    const cutoffMs = 6 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const staleEvents = [
+      createMockEvent(EventType.CUSTOM, { id: 'a', timestamp: now - cutoffMs - 60_000 }),
+      createMockEvent(EventType.CUSTOM, { id: 'b', timestamp: now - cutoffMs - 120_000 }),
+    ];
+
+    const persisted = {
+      ...makeQueue(0, { events: staleEvents }),
+      timestamp: now - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
+
+    await sender.recoverPersistedEvents();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('keeps every event when all timestamps are within the recovery age cutoff', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200));
+    (global as any).fetch = fetchMock;
+
+    const now = Date.now();
+    const events = [
+      createMockEvent(EventType.CUSTOM, { id: 'recent-1', timestamp: now - 60_000 }),
+      createMockEvent(EventType.CUSTOM, { id: 'recent-2', timestamp: now - 120_000 }),
+    ];
+
+    const persisted = {
+      ...makeQueue(0, { events }),
+      timestamp: now - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
+
+    await sender.recoverPersistedEvents();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.events).toHaveLength(2);
+    expect(body.events.map((e: { id: string }) => e.id)).toEqual(['recent-1', 'recent-2']);
+  });
+});
+
 describe('SenderManager - idempotency token', () => {
   beforeEach(() => {
     setupTestEnvironment();

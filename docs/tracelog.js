@@ -4,17 +4,14 @@ const EVENT_SENT_INTERVAL_MS = 1e4;
 const MIN_SEND_INTERVAL_MS = 1e3;
 const MAX_SEND_INTERVAL_MS_CONFIG = 6e4;
 const SCROLL_DEBOUNCE_TIME_MS = 250;
-const DEFAULT_VISIBILITY_TIMEOUT_MS = 2e3;
 const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1e3;
 const DEFAULT_CLICK_THROTTLE_MS = 300;
-const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 6e4;
-const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100;
-const VIEWPORT_MUTATION_DEBOUNCE_MS = 100;
 const MAX_THROTTLE_CACHE_ENTRIES = 1e3;
 const THROTTLE_ENTRY_TTL_MS = 3e5;
 const THROTTLE_PRUNE_INTERVAL_MS = 3e4;
 const EVENT_EXPIRY_HOURS = 2;
 const PERSISTENCE_THROTTLE_MS = 1e3;
+const MAX_EVENT_AGE_MS_ON_RECOVERY = 6 * 24 * 60 * 60 * 1e3;
 const MAX_EVENTS_QUEUE_LENGTH = 100;
 const REQUEST_TIMEOUT_MS = 15e3;
 const SIGNIFICANT_SCROLL_DELTA = 10;
@@ -30,7 +27,6 @@ const MAX_EVENTS_PER_SESSION = 1e3;
 const MAX_CLICKS_PER_SESSION = 500;
 const MAX_PAGE_VIEWS_PER_SESSION = 100;
 const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
-const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 const BATCH_SIZE_THRESHOLD = 50;
 const MAX_PENDING_EVENTS_BUFFER = 100;
 const MIN_SESSION_TIMEOUT_MS = 3e4;
@@ -117,23 +113,11 @@ const VALIDATION_MESSAGES = {
   INVALID_SAMPLING_RATE: "Sampling rate must be between 0 and 1",
   INVALID_ERROR_SAMPLING_RATE: "Error sampling must be between 0 and 1",
   INVALID_TRACELOG_PROJECT_ID: "TraceLog project ID is required when integration is enabled",
-  INVALID_CUSTOM_API_URL: "Custom API URL is required when integration is enabled",
   INVALID_GLOBAL_METADATA: "Global metadata must be an object",
   INVALID_SENSITIVE_QUERY_PARAMS: "Sensitive query params must be an array of strings",
-  INVALID_PRIMARY_SCROLL_SELECTOR: "Primary scroll selector must be a non-empty string",
-  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: "Invalid CSS selector syntax for primaryScrollSelector",
   INVALID_PAGE_VIEW_THROTTLE: "Page view throttle must be a non-negative number",
   INVALID_CLICK_THROTTLE: "Click throttle must be a non-negative number",
   INVALID_MAX_SAME_EVENT_PER_MINUTE: "Max same event per minute must be a positive number",
-  INVALID_VIEWPORT_CONFIG: "Viewport config must be an object",
-  INVALID_VIEWPORT_ELEMENTS: "Viewport elements must be a non-empty array",
-  INVALID_VIEWPORT_ELEMENT: "Each viewport element must have a valid selector string",
-  INVALID_VIEWPORT_ELEMENT_ID: "Viewport element id must be a non-empty string",
-  INVALID_VIEWPORT_ELEMENT_NAME: "Viewport element name must be a non-empty string",
-  INVALID_VIEWPORT_THRESHOLD: "Viewport threshold must be a number between 0 and 1",
-  INVALID_VIEWPORT_MIN_DWELL_TIME: "Viewport minDwellTime must be a non-negative number",
-  INVALID_VIEWPORT_COOLDOWN_PERIOD: "Viewport cooldownPeriod must be a non-negative number",
-  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: "Viewport maxTrackedElements must be a positive number",
   INVALID_SEND_INTERVAL: `Send interval must be between ${MIN_SEND_INTERVAL_MS}ms (1 second) and ${MAX_SEND_INTERVAL_MS_CONFIG}ms (60 seconds)`
 };
 const XSS_PATTERNS = [
@@ -216,7 +200,6 @@ var EventType = /* @__PURE__ */ ((EventType2) => {
   EventType2["CUSTOM"] = "custom";
   EventType2["WEB_VITALS"] = "web_vitals";
   EventType2["ERROR"] = "error";
-  EventType2["VIEWPORT_VISIBLE"] = "viewport_visible";
   return EventType2;
 })(EventType || {});
 var ScrollDirection = /* @__PURE__ */ ((ScrollDirection2) => {
@@ -233,12 +216,6 @@ var Mode = /* @__PURE__ */ ((Mode2) => {
   Mode2["QA"] = "qa";
   return Mode2;
 })(Mode || {});
-const isPrimaryScrollEvent = (event2) => {
-  return event2.type === EventType.SCROLL && "scroll_data" in event2 && event2.scroll_data.is_primary === true;
-};
-const isSecondaryScrollEvent = (event2) => {
-  return event2.type === EventType.SCROLL && "scroll_data" in event2 && event2.scroll_data.is_primary === false;
-};
 class TraceLogValidationError extends Error {
   constructor(message, errorCode, layer) {
     super(message);
@@ -423,24 +400,6 @@ const getDeviceInfo = () => {
     };
   }
 };
-const PII_PATTERNS = [
-  // Email addresses
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
-  // US Phone numbers (various formats)
-  /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
-  // Credit card numbers (16 digits with optional separators)
-  /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-  // IBAN (International Bank Account Number)
-  /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi,
-  // API keys/tokens (sk_test_, sk_live_, pk_test_, pk_live_, etc.)
-  /\b[sp]k_(test|live)_[a-zA-Z0-9]{10,}\b/gi,
-  // Bearer tokens (JWT-like patterns - matches complete and partial tokens)
-  /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
-  // Passwords in connection strings (protocol://user:password@host)
-  /:\/\/[^:/]+:([^@]+)@/gi,
-  // Sensitive URL query parameters (token=, password=, auth=, secret=, api_key=, etc.)
-  /[?&](token|password|passwd|auth|secret|secret_key|private_key|auth_key|api_key|apikey|access_token)=[^&\s]+/gi
-];
 const MAX_ERROR_MESSAGE_LENGTH = 500;
 const MAX_STACK_TRACE_LENGTH = 2e3;
 const ERROR_SUPPRESSION_WINDOW_MS = 5e3;
@@ -456,49 +415,30 @@ const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const MAX_RESPONSE_CODE_LENGTH = 64;
 const WEB_VITALS_GOOD_THRESHOLDS = {
   LCP: 2500,
-  // Good: ≤ 2.5s
   FCP: 1800,
-  // Good: ≤ 1.8s
   CLS: 0.1,
-  // Good: ≤ 0.1
   INP: 200,
-  // Good: ≤ 200ms
-  TTFB: 800,
-  // Good: ≤ 800ms
-  LONG_TASK: 50
+  TTFB: 800
 };
 const WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS = {
   LCP: 2500,
-  // Needs improvement: > 2.5s (same as good boundary)
   FCP: 1800,
-  // Needs improvement: > 1.8s
   CLS: 0.1,
-  // Needs improvement: > 0.1
   INP: 200,
-  // Needs improvement: > 200ms
-  TTFB: 800,
-  // Needs improvement: > 800ms
-  LONG_TASK: 50
+  TTFB: 800
 };
 const WEB_VITALS_POOR_THRESHOLDS = {
   LCP: 4e3,
-  // Poor: > 4s
   FCP: 3e3,
-  // Poor: > 3s
   CLS: 0.25,
-  // Poor: > 0.25
   INP: 500,
-  // Poor: > 500ms
-  TTFB: 1800,
-  // Poor: > 1800ms
-  LONG_TASK: 50
+  TTFB: 1800
 };
 const DEFAULT_WEB_VITALS_MODE = "needs-improvement";
 const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
   switch (mode) {
     case "all":
-      return { LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0, LONG_TASK: 0 };
-    // Track everything
+      return { LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0 };
     case "needs-improvement":
       return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
     case "poor":
@@ -507,7 +447,6 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
       return WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS;
   }
 };
-const LONG_TASK_THROTTLE_MS = 1e3;
 const MAX_NAVIGATION_HISTORY = 50;
 const version = "2.10.0";
 const LIB_VERSION = version;
@@ -556,35 +495,9 @@ const detectQaMode = () => {
     return false;
   }
 };
-const setQaMode$1 = (enabled) => {
-  if (!isBrowserEnvironment()) {
-    return;
-  }
-  try {
-    sessionStorage.setItem(QA_MODE_KEY, enabled ? "true" : "false");
-    log("info", enabled ? "QA Mode ACTIVE" : "QA Mode DISABLED", {
-      visibility: "qa",
-      style: enabled ? LOG_STYLE_ACTIVE : LOG_STYLE_DISABLED
-    });
-  } catch {
-    log("debug", "Cannot set QA mode: sessionStorage unavailable");
-  }
-};
-const isQaModeActive = () => {
-  if (!isBrowserEnvironment()) {
-    return false;
-  }
-  try {
-    return sessionStorage.getItem(QA_MODE_KEY) === "true";
-  } catch {
-    return false;
-  }
-};
 const mode_utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  detectQaMode,
-  isQaModeActive,
-  setQaMode: setQaMode$1
+  detectQaMode
 }, Symbol.toStringTag, { value: "Module" }));
 const COMPOUND_TLDS = [
   "co.uk",
@@ -685,12 +598,9 @@ const generateEventId = () => {
   }
   return `${timestamp}-${sequence}-${random}`;
 };
-const isValidUrl = (url, allowHttp = false) => {
+const isValidUrl = (url) => {
   try {
-    const parsed = new URL(url);
-    const isHttps = parsed.protocol === "https:";
-    const isHttp = parsed.protocol === "http:";
-    return isHttps || allowHttp && isHttp;
+    return new URL(url).protocol === "https:";
   } catch {
     return false;
   }
@@ -704,7 +614,7 @@ const generateSaasApiUrl = (projectId) => {
     }
     if (host === "localhost" || host === "127.0.0.1" || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
       throw new Error(
-        "SaaS integration not supported on localhost or IP addresses. Use custom backend integration instead."
+        "SaaS integration requires a domain hostname; localhost and IP addresses are not supported. For local development, omit `integrations.tracelog` to run in standalone mode (events emitted locally, no network requests), or test against a staging domain that resolves to your dev machine via /etc/hosts."
       );
     }
     const parts = host.split(".");
@@ -714,18 +624,12 @@ const generateSaasApiUrl = (projectId) => {
     if (parts.length === 1) {
       throw new Error("Single-part domain not supported for SaaS integration");
     }
-    let cleanDomain;
-    if (parts.length === 2) {
-      cleanDomain = parts.join(".");
-    } else {
-      cleanDomain = parts.slice(-2).join(".");
-    }
+    const cleanDomain = parts.length === 2 ? parts.join(".") : parts.slice(-2).join(".");
     if (!cleanDomain || cleanDomain.split(".").length < 2) {
       throw new Error("Invalid domain structure for SaaS");
     }
     const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
-    const isValid = isValidUrl(collectApiUrl);
-    if (!isValid) {
+    if (!isValidUrl(collectApiUrl)) {
       throw new Error("Generated URL failed validation");
     }
     return collectApiUrl;
@@ -737,15 +641,6 @@ const getCollectApiUrls = (config) => {
   const urls = {};
   if (config.integrations?.tracelog?.projectId) {
     urls.saas = generateSaasApiUrl(config.integrations.tracelog.projectId);
-  }
-  const customApiUrl = config.integrations?.custom?.collectApiUrl;
-  if (customApiUrl) {
-    const allowHttp = config.integrations?.custom?.allowHttp ?? false;
-    const isValid = isValidUrl(customApiUrl, allowHttp);
-    if (!isValid) {
-      throw new Error("Invalid custom API URL");
-    }
-    urls.custom = customApiUrl;
   }
   return urls;
 };
@@ -771,8 +666,7 @@ const normalizeUrl = (url, sensitiveQueryParams = []) => {
       return url;
     }
     urlObject.search = searchParams.toString();
-    const result = urlObject.toString();
-    return result;
+    return urlObject.toString();
   } catch (error) {
     log("warn", "URL normalization failed, returning original", { error, data: { urlLength: url?.length } });
     return url;
@@ -859,6 +753,31 @@ const sanitizeMetadata = (metadata) => {
     throw new Error(`[TraceLog] Metadata sanitization failed: ${errorMessage}`);
   }
 };
+const PII_PATTERNS = [
+  // Email addresses
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
+  // US Phone numbers (various formats)
+  /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
+  // Credit card numbers (16 digits with optional separators)
+  /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
+  // IBAN (International Bank Account Number)
+  /\b[A-Z]{2}\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi,
+  // API keys / tokens (sk_test_, sk_live_, pk_test_, pk_live_, …)
+  /\b[sp]k_(test|live)_[a-zA-Z0-9]{10,}\b/gi,
+  // Bearer tokens (JWT-like patterns — matches complete and partial tokens)
+  /Bearer\s+[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?(?:\.[A-Za-z0-9_-]+)?/gi,
+  // Passwords in connection strings (protocol://user:password@host)
+  /:\/\/[^:/]+:([^@]+)@/gi,
+  // Sensitive URL query parameters (token=, password=, auth=, secret=, api_key=, …)
+  /[?&](token|password|passwd|auth|secret|secret_key|private_key|auth_key|api_key|apikey|access_token)=[^&\s]+/gi
+];
+const sanitizePii = (text) => {
+  let sanitized = text;
+  for (const pattern of PII_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "[REDACTED]");
+  }
+  return sanitized;
+};
 const validateAppConfig = (config) => {
   if (config !== void 0 && (config === null || typeof config !== "object")) {
     throw new AppConfigValidationError("Configuration must be an object", "config");
@@ -899,21 +818,6 @@ const validateAppConfig = (config) => {
       throw new SamplingRateValidationError(VALIDATION_MESSAGES.INVALID_SAMPLING_RATE, "config");
     }
   }
-  if (config.primaryScrollSelector !== void 0) {
-    if (typeof config.primaryScrollSelector !== "string" || !config.primaryScrollSelector.trim()) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR, "config");
-    }
-    if (config.primaryScrollSelector !== "window") {
-      try {
-        document.querySelector(config.primaryScrollSelector);
-      } catch {
-        throw new AppConfigValidationError(
-          `${VALIDATION_MESSAGES.INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX}: "${config.primaryScrollSelector}"`,
-          "config"
-        );
-      }
-    }
-  }
   if (config.pageViewThrottleMs !== void 0) {
     if (typeof config.pageViewThrottleMs !== "number" || config.pageViewThrottleMs < 0) {
       throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_PAGE_VIEW_THROTTLE, "config");
@@ -946,9 +850,6 @@ const validateAppConfig = (config) => {
       "config"
     );
   }
-  if (config.viewport !== void 0) {
-    validateViewportConfig(config.viewport);
-  }
   if (config.webVitalsMode !== void 0) {
     if (typeof config.webVitalsMode !== "string") {
       throw new AppConfigValidationError(
@@ -968,7 +869,7 @@ const validateAppConfig = (config) => {
     if (typeof config.webVitalsThresholds !== "object" || config.webVitalsThresholds === null || Array.isArray(config.webVitalsThresholds)) {
       throw new AppConfigValidationError("webVitalsThresholds must be an object", "config");
     }
-    const validKeys = ["LCP", "FCP", "CLS", "INP", "TTFB", "LONG_TASK"];
+    const validKeys = ["LCP", "FCP", "CLS", "INP", "TTFB"];
     for (const [key, value] of Object.entries(config.webVitalsThresholds)) {
       if (!validKeys.includes(key)) {
         throw new AppConfigValidationError(
@@ -985,57 +886,6 @@ const validateAppConfig = (config) => {
     }
   }
 };
-const validateViewportConfig = (viewport) => {
-  if (typeof viewport !== "object" || viewport === null) {
-    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_CONFIG, "config");
-  }
-  if (!viewport.elements || !Array.isArray(viewport.elements)) {
-    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, "config");
-  }
-  if (viewport.elements.length === 0) {
-    throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENTS, "config");
-  }
-  const uniqueSelectors = /* @__PURE__ */ new Set();
-  for (const element of viewport.elements) {
-    if (!element.selector || typeof element.selector !== "string" || !element.selector.trim()) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT, "config");
-    }
-    const normalizedSelector = element.selector.trim();
-    if (uniqueSelectors.has(normalizedSelector)) {
-      throw new AppConfigValidationError(
-        `Duplicate viewport selector found: "${normalizedSelector}". Each selector should appear only once.`,
-        "config"
-      );
-    }
-    uniqueSelectors.add(normalizedSelector);
-    if (element.id !== void 0 && (typeof element.id !== "string" || !element.id.trim())) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_ID, "config");
-    }
-    if (element.name !== void 0 && (typeof element.name !== "string" || !element.name.trim())) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_ELEMENT_NAME, "config");
-    }
-  }
-  if (viewport.threshold !== void 0) {
-    if (typeof viewport.threshold !== "number" || viewport.threshold < 0 || viewport.threshold > 1) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_THRESHOLD, "config");
-    }
-  }
-  if (viewport.minDwellTime !== void 0) {
-    if (typeof viewport.minDwellTime !== "number" || viewport.minDwellTime < 0) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MIN_DWELL_TIME, "config");
-    }
-  }
-  if (viewport.cooldownPeriod !== void 0) {
-    if (typeof viewport.cooldownPeriod !== "number" || viewport.cooldownPeriod < 0) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_COOLDOWN_PERIOD, "config");
-    }
-  }
-  if (viewport.maxTrackedElements !== void 0) {
-    if (typeof viewport.maxTrackedElements !== "number" || viewport.maxTrackedElements <= 0) {
-      throw new AppConfigValidationError(VALIDATION_MESSAGES.INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS, "config");
-    }
-  }
-};
 const validateIntegrations = (integrations) => {
   if (!integrations) {
     return;
@@ -1044,31 +894,9 @@ const validateIntegrations = (integrations) => {
     if (!integrations.tracelog.projectId || typeof integrations.tracelog.projectId !== "string" || integrations.tracelog.projectId.trim() === "") {
       throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_TRACELOG_PROJECT_ID, "config");
     }
-  }
-  if (integrations.custom) {
-    if (!integrations.custom.collectApiUrl || typeof integrations.custom.collectApiUrl !== "string" || integrations.custom.collectApiUrl.trim() === "") {
-      throw new IntegrationValidationError(VALIDATION_MESSAGES.INVALID_CUSTOM_API_URL, "config");
+    if (integrations.tracelog.shopify !== void 0 && typeof integrations.tracelog.shopify !== "boolean") {
+      throw new IntegrationValidationError("tracelog.shopify must be a boolean", "config");
     }
-    if (integrations.custom.allowHttp !== void 0 && typeof integrations.custom.allowHttp !== "boolean") {
-      throw new IntegrationValidationError("allowHttp must be a boolean", "config");
-    }
-    const collectApiUrl = integrations.custom.collectApiUrl.trim();
-    if (!collectApiUrl.startsWith("http://") && !collectApiUrl.startsWith("https://")) {
-      throw new IntegrationValidationError('Custom API URL must start with "http://" or "https://"', "config");
-    }
-    const allowHttp = integrations.custom.allowHttp ?? false;
-    if (!allowHttp && collectApiUrl.startsWith("http://")) {
-      throw new IntegrationValidationError(
-        "Custom API URL must use HTTPS in production. Set allowHttp: true in integration config to allow HTTP (not recommended)",
-        "config"
-      );
-    }
-    if (integrations.custom.fetchCredentials !== void 0 && !["include", "same-origin", "omit"].includes(integrations.custom.fetchCredentials)) {
-      throw new IntegrationValidationError('fetchCredentials must be "include", "same-origin", or "omit"', "config");
-    }
-  }
-  if (integrations.tracelog?.shopify !== void 0 && typeof integrations.tracelog.shopify !== "boolean") {
-    throw new IntegrationValidationError("tracelog.shopify must be a boolean", "config");
   }
 };
 const validateAndNormalizeConfig = (config) => {
@@ -1087,21 +915,6 @@ const validateAndNormalizeConfig = (config) => {
     flushOnSpaNavigation: config?.flushOnSpaNavigation ?? false,
     flushOnPageHidden: config?.flushOnPageHidden ?? true
   };
-  if (normalizedConfig.integrations?.custom) {
-    normalizedConfig.integrations.custom = {
-      ...normalizedConfig.integrations.custom,
-      allowHttp: normalizedConfig.integrations.custom.allowHttp ?? false
-    };
-  }
-  if (normalizedConfig.viewport) {
-    normalizedConfig.viewport = {
-      ...normalizedConfig.viewport,
-      threshold: normalizedConfig.viewport.threshold ?? 0.5,
-      minDwellTime: normalizedConfig.viewport.minDwellTime ?? DEFAULT_VISIBILITY_TIMEOUT_MS,
-      cooldownPeriod: normalizedConfig.viewport.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD,
-      maxTrackedElements: normalizedConfig.viewport.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS
-    };
-  }
   return normalizedConfig;
 };
 const isSerializable = (value, seen = /* @__PURE__ */ new Set()) => {
@@ -1177,7 +990,7 @@ const isValidEventName = (eventName) => {
 };
 const validateSingleMetadata = (eventName, metadata, type) => {
   const sanitizedMetadata = sanitizeMetadata(metadata);
-  const intro = type && type === "customEvent" ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
+  const intro = `${type} "${eventName}" metadata error`;
   if (!isOnlyPrimitiveFields(sanitizedMetadata)) {
     return {
       valid: false,
@@ -1239,7 +1052,7 @@ const validateSingleMetadata = (eventName, metadata, type) => {
 const isValidMetadata = (eventName, metadata, type) => {
   if (Array.isArray(metadata)) {
     const sanitizedArray = [];
-    const intro = type && type === "customEvent" ? `${type} "${eventName}" metadata error` : `${eventName} metadata error`;
+    const intro = `${type} "${eventName}" metadata error`;
     for (let i2 = 0; i2 < metadata.length; i2++) {
       const item = metadata[i2];
       if (typeof item !== "object" || item === null || Array.isArray(item)) {
@@ -1428,107 +1241,22 @@ function buildErrorSignatureKey(input) {
   const line = input.line == null ? "" : String(input.line);
   return `${message}|${filename}|${line}`;
 }
-function transformEvent(event2, transformer, context) {
-  try {
-    const result = transformer(event2);
-    if (result === null) {
-      return null;
-    }
-    if (typeof result === "object" && result !== null && "type" in result) {
-      return result;
-    }
-    log("warn", `beforeSend transformer returned invalid data, using original [${context}]`);
-    return event2;
-  } catch (error) {
-    log("error", `beforeSend transformer threw error, using original event [${context}]`, {
-      error,
-      visibility: "critical"
-    });
-    return event2;
-  }
-}
-function transformEvents(events, transformer, context) {
-  return events.map((event2) => transformEvent(event2, transformer, context)).filter((event2) => event2 !== null);
-}
-function transformBatch(batch, transformer, context) {
-  try {
-    const result = transformer(batch);
-    if (result === null) {
-      log("debug", `Batch filtered by beforeBatch transformer [${context}]`, {
-        data: { eventCount: batch.events.length }
-      });
-      return null;
-    }
-    if (typeof result === "object" && result !== null && Array.isArray(result.events)) {
-      return result;
-    }
-    log("warn", `beforeBatch transformer returned invalid data, using original [${context}]`, {
-      data: { eventCount: batch.events.length }
-    });
-    return batch;
-  } catch (error) {
-    log("error", `beforeBatch transformer threw error, using original batch [${context}]`, {
-      error,
-      data: { eventCount: batch.events.length },
-      visibility: "critical"
-    });
-    return batch;
-  }
-}
 const globalState = { config: {} };
 class StateManager {
   /**
    * Retrieves a value from global state.
-   *
-   * Type-safe getter with compile-time key validation.
-   *
-   * @template T - State key type (compile-time validated)
-   * @param key - State property key
-   * @returns Current value for the given key (may be undefined)
-   *
-   * @example
-   * ```typescript
-   * const userId = this.get('userId');
-   * const config = this.get('config');
-   * const sessionId = this.get('sessionId');
-   * ```
    */
   get(key) {
     return globalState[key];
   }
   /**
    * Sets a value in global state.
-   *
-   * Type-safe setter with compile-time type checking.
-   * Changes are immediately visible to all StateManager subclasses.
-   *
-   * @template T - State key type (compile-time validated)
-   * @param key - State property key
-   * @param value - New value (type must match State[T])
-   *
-   * @example
-   * ```typescript
-   * this.set('sessionId', 'session-123');
-   * this.set('mode', Mode.QA);
-   * this.set('hasStartSession', true);
-   * ```
    */
   set(key, value) {
     globalState[key] = value;
   }
   /**
    * Returns an immutable snapshot of the entire global state.
-   *
-   * Creates a shallow copy to prevent accidental mutations.
-   * Use for debugging or when multiple state properties are needed.
-   *
-   * @returns Readonly shallow copy of global state
-   *
-   * @example
-   * ```typescript
-   * const snapshot = this.getState();
-   * console.log(snapshot.userId, snapshot.sessionId);
-   * ```
    */
   getState() {
     return { ...globalState };
@@ -1536,132 +1264,122 @@ class StateManager {
 }
 class SenderManager extends StateManager {
   storeManager;
-  integrationId;
   apiUrl;
-  transformers;
-  staticHeaders;
-  customHeadersProvider;
   lastPermanentErrorLog = null;
   recoveryInProgress = false;
   lastMetadataTimestamp = 0;
-  fetchCredentials;
   pendingControllers = /* @__PURE__ */ new Set();
   /**
    * Counts consecutive fetch() rejections where no HTTP response was received
-   * (DNS failure, connection refused, etc.). Resets on success.
-   * When this reaches MAX_CONSECUTIVE_NETWORK_FAILURES the circuit opens and
-   * further send attempts are skipped until CIRCUIT_BREAKER_COOLDOWN_MS elapses,
-   * at which point a single probe request is allowed (half-open state).
+   * (DNS failure, connection refused). Resets on success. When this reaches
+   * MAX_CONSECUTIVE_NETWORK_FAILURES the circuit opens and further send attempts
+   * are skipped until CIRCUIT_BREAKER_COOLDOWN_MS elapses.
    */
   consecutiveNetworkFailures = 0;
   circuitOpenedAt = 0;
   /**
-   * Timestamp (epoch ms) before which `send()` must skip fetch() calls due to
-   * a prior 429 response. Mirrored to `localStorage` (keyed by userId) so the
-   * cooldown survives page navigations on traditional server-rendered sites
-   * and is discoverable by other tabs on the same origin.
+   * Timestamp (epoch ms) before which `send()` must skip fetch() calls due to a
+   * prior 429 response. Mirrored to `localStorage` (keyed by userId) so the
+   * cooldown survives page navigations on traditional server-rendered sites and
+   * is discoverable by other tabs on the same origin.
    */
   rateLimitedUntil = 0;
   /**
-   * Storage key used when the current in-memory cooldown was armed. Captured
-   * at arm time so `resetIdentity()` (which changes `userId` mid-cooldown)
-   * can't make persist/clear operations target the wrong key or leave the
-   * old user's cooldown orphaned in storage.
+   * Storage key used when the current in-memory cooldown was armed. Captured at
+   * arm time so identity changes mid-cooldown can't make persist/clear
+   * operations target the wrong key.
    */
   rateLimitStorageKeyAtArm = null;
-  /**
-   * Creates a SenderManager instance.
-   *
-   * **Validation**: `integrationId` and `apiUrl` must both be provided or both be undefined.
-   * Throws error if only one is provided.
-   *
-   * @param storeManager - Storage manager for event persistence
-   * @param integrationId - Optional integration identifier ('saas' or 'custom')
-   * @param apiUrl - Optional API endpoint URL
-   * @param transformers - Optional event transformation hooks
-   * @param staticHeaders - Optional static HTTP headers (from config)
-   * @param customHeadersProvider - Optional callback for dynamic headers
-   * @throws Error if integrationId and apiUrl are not both provided or both undefined
-   */
-  constructor(storeManager, integrationId, apiUrl, transformers = {}, staticHeaders = {}, customHeadersProvider, fetchCredentials = "include") {
+  constructor(storeManager, apiUrl) {
     super();
-    if (integrationId && !apiUrl || !integrationId && apiUrl) {
-      throw new Error("SenderManager: integrationId and apiUrl must either both be provided or both be undefined");
-    }
     this.storeManager = storeManager;
-    this.integrationId = integrationId;
     this.apiUrl = apiUrl;
-    this.transformers = transformers;
-    this.staticHeaders = staticHeaders;
-    this.customHeadersProvider = customHeadersProvider;
-    this.fetchCredentials = fetchCredentials;
+    this.migrateLegacyV2Keys();
     this.rateLimitedUntil = this.loadRateLimitCooldown();
   }
   /**
-   * Get the integration ID for this sender
-   * @returns The integration ID ('saas' or 'custom') or undefined if not set
-   */
-  getIntegrationId() {
-    return this.integrationId;
-  }
-  /**
-   * Sets the custom headers provider callback.
-   * Only applies to 'custom' integration (ignored for 'saas').
+   * Migrates v2 multi-integration localStorage keys to the v3 single-integration layout.
    *
-   * @param provider - Callback function that returns custom headers
+   * V2 stored per-integration suffixes (`tlog:{userId}:queue:saas`,
+   * `tlog:{userId}:queue:custom`, plus matching `:rate_limit:saas` / `:rate_limit:custom`).
+   * V3 is SaaS-only, so the `:saas` queue is merged into the new unscoped key
+   * `tlog:{userId}:queue` while preserving the original `timestamp` (so the
+   * expiry check still applies) and bumping `recoveryFailures` if both keys
+   * carry one. The `:custom` queue is intentionally discarded — its events were
+   * destined for a different backend that no longer exists in v3; forwarding
+   * them to SaaS would be data leakage. The legacy keys are removed in all
+   * cases so the migration is one-shot per browser.
    */
-  setCustomHeadersProvider(provider) {
-    this.customHeadersProvider = provider;
-  }
-  /**
-   * Removes the custom headers provider callback.
-   */
-  removeCustomHeadersProvider() {
-    this.customHeadersProvider = void 0;
-  }
-  /**
-   * Builds custom headers by merging static headers with dynamic headers from provider.
-   * Only applies to 'custom' integration (returns empty object for 'saas').
-   *
-   * @returns Merged custom headers object (dynamic headers override static)
-   * @private
-   */
-  getCustomHeaders() {
-    if (this.integrationId !== "custom") {
-      return {};
-    }
-    let dynamicHeaders = {};
-    if (this.customHeadersProvider) {
-      try {
-        const result = this.customHeadersProvider();
-        if (typeof result === "object" && result !== null && !Array.isArray(result)) {
-          dynamicHeaders = result;
+  migrateLegacyV2Keys() {
+    const userId = this.get("userId") || "anonymous";
+    const legacySaasQueueKey = `${QUEUE_KEY(userId)}:saas`;
+    const legacyCustomQueueKey = `${QUEUE_KEY(userId)}:custom`;
+    const legacySaasRateLimitKey = `${RATE_LIMIT_KEY(userId)}:saas`;
+    const legacyCustomRateLimitKey = `${RATE_LIMIT_KEY(userId)}:custom`;
+    try {
+      const legacyRaw = this.storeManager.getItem(legacySaasQueueKey);
+      if (legacyRaw) {
+        const targetKey = this.getQueueStorageKey();
+        const currentRaw = this.storeManager.getItem(targetKey);
+        if (!currentRaw) {
+          this.storeManager.setItem(targetKey, legacyRaw);
+          log("debug", "Migrated v2 SaaS queue to v3 unscoped key");
         } else {
-          log("warn", "Custom headers provider returned invalid value, expected object", {
-            data: { received: typeof result }
-          });
+          this.mergeLegacyIntoCurrent(targetKey, legacyRaw, currentRaw);
         }
-      } catch (error) {
-        log("warn", "Custom headers provider threw an error, using static headers only", { error });
+        this.storeManager.removeItem(legacySaasQueueKey);
+      }
+    } catch (error) {
+      log("debug", "Failed to migrate v2 SaaS queue, discarding legacy key", { error });
+      try {
+        this.storeManager.removeItem(legacySaasQueueKey);
+      } catch {
       }
     }
-    return { ...this.staticHeaders, ...dynamicHeaders };
+    [legacyCustomQueueKey, legacySaasRateLimitKey, legacyCustomRateLimitKey].forEach((key) => {
+      try {
+        if (this.storeManager.getItem(key) !== null) {
+          this.storeManager.removeItem(key);
+        }
+      } catch {
+      }
+    });
+  }
+  mergeLegacyIntoCurrent(targetKey, legacyRaw, currentRaw) {
+    try {
+      const legacy = JSON.parse(legacyRaw);
+      const current = JSON.parse(currentRaw);
+      if (!Array.isArray(legacy?.events) || !Array.isArray(current?.events)) {
+        log("debug", "Legacy or current queue malformed, keeping current only");
+        return;
+      }
+      const seen = new Set(current.events.map((e3) => e3.id));
+      const mergedEvents = [
+        ...current.events,
+        ...legacy.events.filter((e3) => typeof e3.id === "string" && !seen.has(e3.id))
+      ];
+      const merged = {
+        ...current,
+        events: mergedEvents,
+        timestamp: typeof current.timestamp === "number" && typeof legacy.timestamp === "number" ? Math.min(current.timestamp, legacy.timestamp) : current.timestamp ?? legacy.timestamp ?? Date.now(),
+        recoveryFailures: Math.max(current.recoveryFailures ?? 0, legacy.recoveryFailures ?? 0) || void 0
+      };
+      this.storeManager.setItem(targetKey, JSON.stringify(merged));
+      log("debug", "Merged v2 SaaS queue into existing v3 queue", {
+        data: { added: mergedEvents.length - current.events.length, total: mergedEvents.length }
+      });
+    } catch (error) {
+      log("debug", "Failed to merge legacy queue, keeping current", { error });
+    }
   }
   getQueueStorageKey() {
     const userId = this.get("userId") || "anonymous";
-    const baseKey = QUEUE_KEY(userId);
-    return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
+    return QUEUE_KEY(userId);
   }
   getRateLimitStorageKey() {
     const userId = this.get("userId") || "anonymous";
-    const baseKey = RATE_LIMIT_KEY(userId);
-    return this.integrationId ? `${baseKey}:${this.integrationId}` : baseKey;
+    return RATE_LIMIT_KEY(userId);
   }
-  /**
-   * Returns the storage key bound to the *current* in-memory cooldown. Falls
-   * back to the current-userId key when no cooldown is armed (first read) so
-   * discovery-from-storage paths can still resolve a key.
-   */
   getActiveRateLimitKey() {
     return this.rateLimitStorageKeyAtArm ?? this.getRateLimitStorageKey();
   }
@@ -1731,115 +1449,36 @@ class SenderManager extends StateManager {
   /**
    * Sends events synchronously using `navigator.sendBeacon()`.
    *
-   * **Purpose**: Guarantees event delivery before page unload even if network is slow.
-   *
-   * **Use Cases**:
-   * - Page unload (`beforeunload`, `pagehide` events)
-   * - Tab close scenarios
-   * - Any case where async send might be interrupted
-   *
-   * **Behavior**:
-   * - Uses `navigator.sendBeacon()` (browser-queued, synchronous API)
-   * - Payload size limited to 64KB (enforced by browser)
-   * - Browser guarantees delivery attempt (survives page close)
-   * - Persists to localStorage on beacon failure/size overflow for later recovery
-   *
-   * **Return Values**:
-   * - `true`: Send succeeded OR skipped (standalone mode)
-   * - `false`: Send failed (network error, browser rejected beacon) OR skipped
-   *   due to active rate-limit cooldown (events persisted for later recovery)
-   *
-   * **Important**: No retry mechanism. Failed events are persisted to localStorage for
-   * recovery on next page load via `recoverPersistedEvents()`.
-   *
-   * **Custom Headers Limitation**: Custom headers set via `setCustomHeaders()` are NOT applied
-   * to sendBeacon requests due to browser API limitations. The sendBeacon API only supports
-   * Content-Type header via Blob. For scenarios requiring custom headers, ensure async
-   * sends complete before page unload.
-   *
-   * **Credentials Limitation**: The `fetchCredentials` config option is NOT applied to
-   * sendBeacon requests. `sendBeacon()` always sends cookies (equivalent to `credentials: 'include'`)
-   * regardless of the configured value. If `fetchCredentials` is set to `'omit'` or `'same-origin'`,
-   * only async `fetch()` calls honor that setting.
-   *
-   * @param body - Event queue to send
-   * @returns `true` if send succeeded or was skipped, `false` if failed
-   *
-   * @see sendEventsQueue for async send with persistence
-   * @see src/managers/README.md (lines 82-139) for send details
+   * Falls back to localStorage persistence on rate-limit cooldown, beacon
+   * rejection, or oversized payloads.
    */
   sendEventsQueueSync(body) {
-    if (this.shouldSkipSend()) {
-      return true;
-    }
     if (this.isRateLimited()) {
-      log(
-        "debug",
-        `Rate-limit cooldown active, skipping sync send${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-        {
-          data: {
-            cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
-            events: body.events.length
-          }
+      log("debug", "Rate-limit cooldown active, skipping sync send", {
+        data: {
+          cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
+          events: body.events.length
         }
-      );
+      });
       const stableBody = this.ensureBatchMetadata(body);
       const existing = this.getPersistedData();
       const existingFailures = typeof existing?.recoveryFailures === "number" && Number.isFinite(existing.recoveryFailures) ? existing.recoveryFailures : 0;
       this.persistEventsWithFailureCount(stableBody, existingFailures, true);
       return false;
     }
-    if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
-      log(
-        "warn",
-        `Fail mode: simulating network failure (sync)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-        {
-          data: { events: body.events.length }
-        }
-      );
+    if (this.apiUrl.includes(SpecialApiUrl.Fail)) {
+      log("warn", "Fail mode: simulating network failure (sync)", { data: { events: body.events.length } });
       return false;
     }
-    if (this.apiUrl?.includes(SpecialApiUrl.Localhost)) {
-      log(
-        "debug",
-        `Success mode: simulating successful send (sync)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-        {
-          data: { events: body.events.length }
-        }
-      );
+    if (this.apiUrl.includes(SpecialApiUrl.Localhost)) {
+      log("debug", "Success mode: simulating successful send (sync)", { data: { events: body.events.length } });
       return true;
     }
     return this.sendQueueSyncInternal(body);
   }
   /**
-   * Sends events asynchronously using `fetch()` API with automatic persistence on failure.
-   *
-   * **Purpose**: Reliable event transmission with localStorage fallback for failed sends.
-   *
-   * **Flow**:
-   * 1. Calls internal `send()` method (applies transformers, consent checks)
-   * 2. On success: Clears persisted events, invokes `onSuccess` callback
-   * 3. On failure: Persists events to localStorage, invokes `onFailure` callback
-   * 4. On permanent error (4xx): Clears persisted events (no retry)
-   *
-   * **Callbacks**:
-   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
-   * - `onFailure()`: Called after failed transmission or permanent error
-   *
-   * **Error Handling**:
-   * - **Permanent errors** (4xx except 408, 429): Events discarded, not persisted
-   * - **Timeout errors**: Events persisted for retry with the same batch idempotency token
-   * - **Transient errors** (5xx, network, mixed): Events persisted for recovery
-   *
-   * **Important**: Events are NOT retried in-session. Persistence is for
-   * recovery on next page load via `recoverPersistedEvents()`.
-   *
-   * @param body - Event queue to send
-   * @param callbacks - Optional success/failure callbacks
-   * @returns Promise resolving to `true` if send succeeded, `false` if failed
-   *
-   * @see recoverPersistedEvents for recovery flow
-   * @see src/managers/README.md (lines 82-139) for send details
+   * Sends events asynchronously using `fetch()` with retry, circuit breaker, and 429 cooldown.
+   * Persists on failure for recovery on next page load.
    */
   async sendEventsQueue(body, callbacks) {
     const stableBody = this.ensureBatchMetadata(body);
@@ -1866,53 +1505,9 @@ class SenderManager extends StateManager {
     }
   }
   /**
-   * Recovers and attempts to resend events persisted from previous session.
+   * Recovers and attempts to resend events persisted from a previous session.
    *
-   * **Purpose**: Zero data loss guarantee - recovers events that failed to send
-   * in previous session due to network errors or crashes.
-   *
-   * **Flow**:
-   * 1. Checks if recovery already in progress (prevents duplicate attempts)
-   * 2. Loads persisted events from localStorage
-   * 3. Validates freshness (discards events older than 2 hours)
-   * 4. Applies multi-tab protection (skips events persisted within 1 second)
-   * 5. Attempts to resend via `send()` method
-   * 6. On success: Clears persisted events, invokes `onSuccess` callback
-   * 7. On failure: Keeps events in localStorage, invokes `onFailure` callback
-   * 8. On permanent error (4xx): Clears persisted events (no further retry)
-   *
-   * **Multi-Tab Protection**:
-   * - Events persisted within last 1 second are skipped (active tab may retry)
-   * - Prevents duplicate sends when multiple tabs recover simultaneously
-   *
-   * **Event Expiry**:
-   * - Events older than 2 hours are discarded (prevents stale data accumulation)
-   * - Expiry check uses event timestamps, not persistence time
-   *
-   * **Callbacks**:
-   * - `onSuccess(eventCount, events, body)`: Called after successful transmission
-   * - `onFailure()`: Called on send failure or permanent error
-   *
-   * **Called by**: `EventManager.recoverPersistedEvents()` during `App.init()`
-   *
-   * **Important**: This method is idempotent and safe to call multiple times.
-   * Recovery flag prevents concurrent attempts.
-   *
-   * @param callbacks - Optional success/failure callbacks
-   *
-   * @example
-   * ```typescript
-   * await senderManager.recoverPersistedEvents({
-   *   onSuccess: (count, events, body) => {
-   *     console.log(`Recovered ${count} events`);
-   *   },
-   *   onFailure: () => {
-   *     console.warn('Recovery failed, will retry on next init');
-   *   }
-   * });
-   * ```
-   *
-   * @see src/managers/README.md (lines 82-139) for recovery details
+   * Idempotent: safe to call multiple times (recovery flag prevents concurrent attempts).
    */
   async recoverPersistedEvents(callbacks) {
     if (this.recoveryInProgress) {
@@ -1931,26 +1526,24 @@ class SenderManager extends StateManager {
       const rawFailures = persistedData.recoveryFailures;
       recoveryFailures = typeof rawFailures === "number" && Number.isFinite(rawFailures) && rawFailures >= 0 ? rawFailures : 0;
       if (recoveryFailures >= MAX_RECOVERY_FAILURES) {
-        log(
-          "debug",
-          `Discarding persisted events after ${recoveryFailures} failed recovery attempts${this.integrationId ? ` [${this.integrationId}]` : ""}`
-        );
+        log("debug", `Discarding persisted events after ${recoveryFailures} failed recovery attempts`);
         this.clearPersistedEvents();
         callbacks?.onFailure?.();
         return;
       }
       if (this.isRateLimited()) {
-        log(
-          "debug",
-          `Rate-limit cooldown active, deferring recovery${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-          {
-            data: { cooldownRemainingMs: this.rateLimitedUntil - Date.now() }
-          }
-        );
+        log("debug", "Rate-limit cooldown active, deferring recovery", {
+          data: { cooldownRemainingMs: this.rateLimitedUntil - Date.now() }
+        });
         callbacks?.onFailure?.();
         return;
       }
       recoveryBody = this.ensureBatchMetadata(this.createRecoveryBody(persistedData));
+      if (recoveryBody.events.length === 0) {
+        log("debug", "All persisted events exceeded the recovery age cutoff; discarding batch");
+        this.clearPersistedEvents();
+        return;
+      }
       const success = await this.send(recoveryBody);
       if (success) {
         this.clearPersistedEvents();
@@ -1976,193 +1569,28 @@ class SenderManager extends StateManager {
     }
   }
   /**
-   * Cleanup method called during `App.destroy()`.
-   *
-   * **Purpose**: Reserved for future cleanup logic (currently no-op).
-   *
-   * **Note**: This method is intentionally empty. SenderManager has no
-   * cleanup requirements (no timers, no event listeners, no active connections).
-   * Persisted events are intentionally kept in localStorage for recovery.
-   *
-   * **Called by**: `EventManager.stop()` during application teardown
+   * Cleanup method called during `App.destroy()`. No-op — persisted events
+   * intentionally kept in localStorage for recovery.
    */
   stop() {
   }
-  /**
-   * Applies beforeSend transformer to event array for custom backend integrations.
-   *
-   * **Purpose**: Per-event transformation in multi-integration mode for custom backends only.
-   * Bypassed for TraceLog SaaS to maintain schema integrity.
-   *
-   * **Application Context**:
-   * - Only applied in multi-integration mode (SaaS + Custom)
-   * - EventManager applies beforeSend for standalone/custom-only modes
-   * - This method handles the multi-integration scenario
-   *
-   * **Transformation Flow**:
-   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
-   * 2. Check if beforeSend transformer exists
-   * 3. Apply transformer to each event via transformEvents() utility
-   * 4. Filter out events (empty array = filter entire batch)
-   * 5. Return transformed queue or null
-   *
-   * **Error Handling**:
-   * - transformEvents() utility catches and logs transformer errors
-   * - Failed transformations fall back to original event
-   * - Empty result array treated as filter signal (returns null)
-   *
-   * @param body - Event queue to transform
-   * @returns Transformed queue with modified events, or null to filter entire batch
-   */
-  applyBeforeSendTransformer(body) {
-    if (this.integrationId === "saas") {
-      return body;
-    }
-    const beforeSendTransformer = this.transformers.beforeSend;
-    if (!beforeSendTransformer) {
-      return body;
-    }
-    const transformedEvents = transformEvents(
-      body.events,
-      beforeSendTransformer,
-      this.integrationId || "SenderManager"
-    );
-    if (transformedEvents.length === 0) {
-      return null;
-    }
-    return {
-      ...body,
-      events: transformedEvents
-    };
-  }
-  /**
-   * Applies beforeBatch transformer to entire event queue for custom backend integrations.
-   *
-   * **Purpose**: Batch-level transformation before network transmission for custom backends only.
-   * Bypassed for TraceLog SaaS to maintain schema integrity.
-   *
-   * **Application Context**:
-   * - Applied in both sync (`sendQueueSyncInternal`) and async (`send`) methods
-   * - Operates on entire queue after beforeSend transformations
-   * - Final transformation step before network transmission
-   *
-   * **Transformation Flow**:
-   * 1. Skip for TraceLog SaaS integration (returns untransformed body)
-   * 2. Check if beforeBatch transformer exists
-   * 3. Apply transformer to entire queue via transformBatch() utility
-   * 4. Return transformed queue or null to filter
-   *
-   * **Use Cases**:
-   * - Add batch-level metadata (timestamps, signatures)
-   * - Compress or encrypt entire payload
-   * - Apply custom formatting to queue structure
-   * - Filter entire batch based on conditions
-   *
-   * **Error Handling**:
-   * - transformBatch() utility catches and logs transformer errors
-   * - Failed transformations fall back to original batch
-   * - Returning null filters entire batch (prevents send)
-   *
-   * @param body - Event queue to transform
-   * @returns Transformed queue, or null to filter entire batch
-   */
-  applyBeforeBatchTransformer(body) {
-    if (this.integrationId === "saas") {
-      return body;
-    }
-    const beforeBatchTransformer = this.transformers.beforeBatch;
-    if (!beforeBatchTransformer) {
-      return body;
-    }
-    const transformed = transformBatch(body, beforeBatchTransformer, this.integrationId || "SenderManager");
-    return transformed;
-  }
-  /**
-   * Calculates exponential backoff delay with jitter for retry attempts.
-   *
-   * **Purpose**: Prevents thundering herd problem when multiple clients retry simultaneously.
-   *
-   * **Formula**: `RETRY_BACKOFF_BASE_MS * (2 ^ attempt) + random(0, RETRY_BACKOFF_JITTER_MS)`
-   *
-   * **Examples**:
-   * - Attempt 1: 100ms * 2^1 + jitter = 200ms + 0-100ms = 200-300ms
-   * - Attempt 2: 100ms * 2^2 + jitter = 400ms + 0-100ms = 400-500ms
-   *
-   * **Why Jitter?**
-   * - Distributes retry timing across clients
-   * - Reduces server load spikes from synchronized retries
-   * - Industry standard pattern (AWS, Google, Netflix use similar approaches)
-   *
-   * @param attempt - Current retry attempt number (1-based)
-   * @returns Promise that resolves after calculated delay
-   */
   async backoffDelay(attempt) {
     const exponentialDelay = RETRY_BACKOFF_BASE_MS * Math.pow(2, attempt);
     const jitter = Math.random() * RETRY_BACKOFF_JITTER_MS;
-    const totalDelay = exponentialDelay + jitter;
-    return new Promise((resolve) => setTimeout(resolve, totalDelay));
+    return new Promise((resolve) => setTimeout(resolve, exponentialDelay + jitter));
   }
-  /**
-   * Sends event queue with automatic retry logic for transient failures.
-   *
-   * **Purpose**: Reliable event transmission with intelligent retry mechanism
-   * for transient network/server errors while avoiding unnecessary retries for
-   * permanent client errors.
-   *
-   * **Retry Strategy**:
-   * - **Maximum Attempts**: Up to `MAX_SEND_RETRIES` (2) retry attempts
-   * - **Backoff**: Exponential backoff with jitter (200-300ms, 400-500ms)
-   * - **Transient Errors**: 5xx status codes, network failures, timeouts
-   * - **Permanent Errors**: 4xx status codes (except 408, 429) - no retries
-   *
-   * **Retry Flow**:
-   * 1. Attempt send with `sendWithTimeout()`
-   * 2. If success (2xx) → return true immediately
-   * 3. If permanent error (4xx) → throw PermanentError immediately
-   * 4. If transient error (5xx/timeout/network):
-   *    - If attempts remaining → wait backoff delay → retry
-   *    - If no attempts remaining → return false (caller persists)
-   *
-   * **Important Behaviors**:
-   * - Transformers applied once before retry loop (not re-applied per attempt)
-   * - Each retry uses same transformed payload
-   * - Permanent errors bypass retries immediately
-   *
-   * **Error Classification**:
-   * - **Permanent** (4xx except 408, 429): Schema errors, auth failures, invalid data
-   * - **Transient** (5xx, timeout, network): Server overload, network hiccups, DNS issues
-   *
-   * @param body - Event queue to send
-   * @returns Promise resolving to true if send succeeded, false if all retries exhausted
-   * @throws PermanentError for 4xx errors (caller should not retry)
-   */
   async send(body) {
-    if (this.shouldSkipSend()) {
-      return this.simulateSuccessfulSend();
-    }
-    const afterBeforeSend = this.applyBeforeSendTransformer(body);
-    if (!afterBeforeSend) {
-      return true;
-    }
-    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
-    if (!transformedBody) {
-      return true;
-    }
-    const requestBody = this.ensureBatchMetadata(transformedBody, body._metadata?.idempotency_token);
-    if (this.apiUrl?.includes(SpecialApiUrl.Fail)) {
-      log("debug", `Fail mode: simulating network failure${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        data: { events: requestBody.events.length }
-      });
+    const requestBody = this.ensureBatchMetadata(body, body._metadata?.idempotency_token);
+    if (this.apiUrl.includes(SpecialApiUrl.Fail)) {
+      log("debug", "Fail mode: simulating network failure", { data: { events: requestBody.events.length } });
       return false;
     }
-    if (this.apiUrl?.includes(SpecialApiUrl.Localhost)) {
-      log("debug", `Success mode: simulating successful send${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        data: { events: requestBody.events.length }
-      });
+    if (this.apiUrl.includes(SpecialApiUrl.Localhost)) {
+      log("debug", "Success mode: simulating successful send", { data: { events: requestBody.events.length } });
       return true;
     }
     if (this.isRateLimited()) {
-      log("debug", `Rate-limit cooldown active, skipping send${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+      log("debug", "Rate-limit cooldown active, skipping send", {
         data: {
           cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
           events: requestBody.events.length
@@ -2173,7 +1601,7 @@ class SenderManager extends StateManager {
     if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
       const elapsed = Date.now() - this.circuitOpenedAt;
       if (elapsed < CIRCUIT_BREAKER_COOLDOWN_MS) {
-        log("debug", `Network circuit open, skipping send${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+        log("debug", "Network circuit open, skipping send", {
           data: {
             consecutiveNetworkFailures: this.consecutiveNetworkFailures,
             cooldownRemainingMs: CIRCUIT_BREAKER_COOLDOWN_MS - elapsed
@@ -2190,13 +1618,9 @@ class SenderManager extends StateManager {
         const response = await this.sendWithTimeout(url, payload);
         if (response.ok) {
           if (attempt > 1) {
-            log(
-              "info",
-              `Send succeeded after ${attempt - 1} retry attempt(s)${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-              {
-                data: { events: requestBody.events.length, attempt }
-              }
-            );
+            log("info", `Send succeeded after ${attempt - 1} retry attempt(s)`, {
+              data: { events: requestBody.events.length, attempt }
+            });
           }
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
@@ -2216,7 +1640,7 @@ class SenderManager extends StateManager {
           allTimeouts = false;
           hadHttpResponse = true;
           this.armRateLimitCooldown(Date.now() + RATE_LIMIT_COOLDOWN_MS);
-          log("warn", `Rate limited, skipping retries${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+          log("warn", "Rate limited, skipping retries", {
             data: { events: body.events.length, attempt, cooldownMs: RATE_LIMIT_COOLDOWN_MS }
           });
           break;
@@ -2229,7 +1653,7 @@ class SenderManager extends StateManager {
         }
         log(
           isLastAttempt ? "error" : "warn",
-          `Send attempt ${attempt} failed${this.integrationId ? ` [${this.integrationId}]` : ""}${isLastAttempt ? " (all retries exhausted)" : ", will retry"}`,
+          `Send attempt ${attempt} failed${isLastAttempt ? " (all retries exhausted)" : ", will retry"}`,
           {
             error,
             data: {
@@ -2245,13 +1669,9 @@ class SenderManager extends StateManager {
           continue;
         }
         if (allTimeouts) {
-          log(
-            "debug",
-            `All retry attempts timed out, preserving batch for retry${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-            {
-              data: { events: requestBody.events.length }
-            }
-          );
+          log("debug", "All retry attempts timed out, preserving batch for retry", {
+            data: { events: requestBody.events.length }
+          });
           return false;
         }
         if (!hadHttpResponse) {
@@ -2271,29 +1691,6 @@ class SenderManager extends StateManager {
     }
     return false;
   }
-  /**
-   * Sends HTTP POST request with 10-second timeout and AbortController.
-   *
-   * **Purpose**: Wraps fetch() with timeout protection to prevent hanging requests.
-   * Throws PermanentError for 4xx status codes (except 408, 429) to bypass retries.
-   *
-   * **Timeout Behavior**:
-   * - 10-second timeout via AbortController (REQUEST_TIMEOUT_MS constant)
-   * - Aborted requests throw TimeoutError
-   *
-   * **Error Classification**:
-   * - 4xx (except 408, 429): PermanentError thrown → no retries
-   * - Timeout: TimeoutError thrown → caller treats it as a retryable failure
-   * - 408, 429, 5xx, network: Standard Error thrown → triggers retry
-   *
-   * @param url - API endpoint URL
-   * @param payload - JSON-stringified EventsQueue body
-   * @returns Response object if successful
-   * @throws PermanentError for unrecoverable 4xx errors
-   * @throws TimeoutError when request times out
-   * @throws Error for transient errors (5xx, network)
-   * @private
-   */
   async sendWithTimeout(url, payload) {
     const controller = new AbortController();
     this.pendingControllers.add(controller);
@@ -2303,15 +1700,13 @@ class SenderManager extends StateManager {
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
     try {
-      const customHeaders = this.getCustomHeaders();
       const response = await fetch(url, {
         method: "POST",
         body: payload,
         keepalive: true,
-        credentials: this.fetchCredentials,
+        credentials: "include",
         signal: controller.signal,
         headers: {
-          ...customHeaders,
           "Content-Type": "application/json"
         }
       });
@@ -2341,18 +1736,6 @@ class SenderManager extends StateManager {
       this.pendingControllers.delete(controller);
     }
   }
-  /**
-   * Best-effort extraction of an application `code` from a 4xx response body.
-   *
-   * Used purely for logging context (e.g. `PLAN_LIMIT_EXCEEDED`, `PROJECT_READ_ONLY`).
-   * Status alone already determines retry semantics, so this never affects the
-   * retry/persistence decision. Bounded to {@link MAX_RESPONSE_CODE_LENGTH} chars
-   * to keep noisy/untrusted payloads out of logs without coupling the lib to the
-   * API's evolving code catalogue.
-   *
-   * Only string `code` values are accepted — numeric or object codes are
-   * intentionally dropped to keep the log shape stable.
-   */
   async readTraceLogErrorCode(response) {
     try {
       const body = await response.clone().json();
@@ -2363,91 +1746,30 @@ class SenderManager extends StateManager {
     }
     return void 0;
   }
-  /**
-   * Internal synchronous send logic using navigator.sendBeacon() for page unload scenarios.
-   *
-   * **Purpose**: Sends events synchronously during page unload when async fetch() is unreliable.
-   * Uses sendBeacon() browser API which queues request even after page closes.
-   *
-   * **Flow**:
-   * 1. Apply beforeSend transformer (per-event transformation)
-   * 2. Apply beforeBatch transformer (batch-level transformation)
-   * 3. Validate payload size (64KB browser limit for sendBeacon)
-   * 4. Send via sendBeacon() or fallback to persistence if unavailable
-   * 5. Persist events on failure for next-page-load recovery
-   *
-   * **Payload Size Limit**: 64KB enforced by browser for sendBeacon()
-   * - Oversized payloads persisted instead of silently failing
-   *
-   * @param body - EventsQueue to send
-   * @returns `true` on success, `false` on failure (events persisted for recovery)
-   * @private
-   */
   sendQueueSyncInternal(body) {
     const stableBody = this.ensureBatchMetadata(body);
-    const afterBeforeSend = this.applyBeforeSendTransformer(stableBody);
-    if (!afterBeforeSend) {
-      return true;
-    }
-    const transformedBody = this.applyBeforeBatchTransformer(afterBeforeSend);
-    if (!transformedBody) {
-      return true;
-    }
-    const requestBody = this.ensureBatchMetadata(transformedBody, stableBody._metadata?.idempotency_token);
+    const requestBody = this.ensureBatchMetadata(stableBody, stableBody._metadata?.idempotency_token);
     const { url, payload } = this.prepareRequest(requestBody);
     if (payload.length > MAX_BEACON_PAYLOAD_SIZE) {
-      log(
-        "warn",
-        `Payload exceeds sendBeacon limit, persisting for recovery${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-        {
-          data: {
-            size: payload.length,
-            limit: MAX_BEACON_PAYLOAD_SIZE,
-            events: requestBody.events.length
-          }
-        }
-      );
+      log("warn", "Payload exceeds sendBeacon limit, persisting for recovery", {
+        data: { size: payload.length, limit: MAX_BEACON_PAYLOAD_SIZE, events: requestBody.events.length }
+      });
       this.persistEvents(stableBody);
       return false;
     }
     const blob = new Blob([payload], { type: "application/json" });
     if (!this.isSendBeaconAvailable()) {
-      log(
-        "warn",
-        `sendBeacon not available, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ""}`
-      );
+      log("warn", "sendBeacon not available, persisting events for recovery");
       this.persistEvents(stableBody);
       return false;
     }
     const accepted = navigator.sendBeacon(url, blob);
     if (!accepted) {
-      log(
-        "warn",
-        `sendBeacon rejected request, persisting events for recovery${this.integrationId ? ` [${this.integrationId}]` : ""}`
-      );
+      log("warn", "sendBeacon rejected request, persisting events for recovery");
       this.persistEvents(stableBody);
     }
     return accepted;
   }
-  /**
-   * Prepares request by enriching payload with metadata and serializing to JSON.
-   *
-   * **Purpose**: Adds request metadata (referer, timestamp) before transmission.
-   *
-   * **Metadata Enrichment**:
-   * - `referer`: Current page URL (browser only, undefined in Node.js)
-   * - `timestamp`: Request generation time in milliseconds
-   *
-   * **Idempotency Token**:
-   * - Set upstream by ensureBatchMetadata() before this method is called
-   * - Fallback computeContentToken() is defensive only (should not trigger in normal flow)
-   * - Same token persists across all retry attempts of the same batch
-   * - Backend uses this to deduplicate retries
-   *
-   * @param body - EventsQueue to send
-   * @returns Object with `url` (API endpoint) and `payload` (JSON string)
-   * @private
-   */
   prepareRequest(body) {
     let timestamp = Date.now();
     if (timestamp < this.lastMetadataTimestamp) {
@@ -2465,7 +1787,7 @@ class SenderManager extends StateManager {
       }
     };
     return {
-      url: this.apiUrl || "",
+      url: this.apiUrl,
       payload: JSON.stringify(enrichedBody)
     };
   }
@@ -2484,21 +1806,8 @@ class SenderManager extends StateManager {
   }
   /**
    * Deterministic 32-bit FNV-1a hash of sorted event IDs, salted with
-   * `user_id` and `session_id`.
-   *
-   * **Purpose**: Produces the same idempotency token for the same set of events
-   * across retries, so the backend's success cache catches in-session retries
-   * before any MongoDB work. Replaces a random token that caused the API to
-   * treat retried batches as new and emit `high_duplicate_rate` warnings.
-   *
-   * **Salting**: Scoping the hash by `user_id` + `session_id` ensures that
-   * batches from different users/sessions cannot share a token even if their
-   * event IDs hypothetically collided, eliminating cross-scope dedup risk
-   * regardless of how the backend keys its success cache.
-   *
-   * @param body - Event queue whose events determine the token
-   * @returns 8-char hex string
-   * @private
+   * `user_id` and `session_id`. Produces the same idempotency token for the
+   * same set of events across retries.
    */
   computeContentToken(body) {
     const ids = body.events.map((e3) => e3.id).sort().join(",");
@@ -2510,18 +1819,6 @@ class SenderManager extends StateManager {
     }
     return hash.toString(16).padStart(8, "0");
   }
-  /**
-   * Retrieves persisted events from localStorage with error recovery.
-   *
-   * **Purpose**: Loads previously failed events from storage for recovery attempt.
-   *
-   * **Error Handling**:
-   * - JSON parse failures logged and storage cleared (corrupted data)
-   * - Missing data returns null (no recovery needed)
-   *
-   * @returns Persisted events object or null if none exist/invalid
-   * @private
-   */
   getPersistedData() {
     try {
       const storageKey = this.getQueueStorageKey();
@@ -2530,24 +1827,11 @@ class SenderManager extends StateManager {
         return JSON.parse(persistedDataString);
       }
     } catch (error) {
-      log("debug", `Failed to parse persisted data${this.integrationId ? ` [${this.integrationId}]` : ""}`, { error });
+      log("debug", "Failed to parse persisted data", { error });
       this.clearPersistedEvents();
     }
     return null;
   }
-  /**
-   * Checks if persisted events are within the 2-hour expiry window.
-   *
-   * **Purpose**: Prevents recovery of stale events that are too old to be relevant.
-   *
-   * **Expiry Logic**:
-   * - Events older than 2 hours (EVENT_EXPIRY_HOURS) are considered expired
-   * - Invalid/missing timestamps treated as expired
-   *
-   * @param data - Persisted events object with timestamp
-   * @returns `true` if events are recent (< 2 hours old), `false` otherwise
-   * @private
-   */
   isDataRecent(data) {
     if (!data.timestamp || typeof data.timestamp !== "number") {
       return false;
@@ -2555,68 +1839,38 @@ class SenderManager extends StateManager {
     const ageInHours = (Date.now() - data.timestamp) / (1e3 * 60 * 60);
     return ageInHours < EVENT_EXPIRY_HOURS;
   }
-  /**
-   * Creates EventsQueue from persisted data by removing storage-specific timestamp field.
-   *
-   * **Purpose**: Converts PersistedEventsQueue (with timestamp) to EventsQueue for sending.
-   *
-   * @param data - Persisted events with timestamp
-   * @returns EventsQueue ready for transmission (timestamp removed)
-   * @private
-   */
   createRecoveryBody(data) {
     const { timestamp, recoveryFailures, ...queue } = data;
-    return queue;
+    const originalEvents = queue.events ?? [];
+    const cutoff = Date.now() - MAX_EVENT_AGE_MS_ON_RECOVERY;
+    const filteredEvents = originalEvents.filter((event2) => {
+      const eventTimestamp = typeof event2.timestamp === "number" ? event2.timestamp : new Date(event2.timestamp).getTime();
+      return Number.isFinite(eventTimestamp) && eventTimestamp >= cutoff;
+    });
+    if (filteredEvents.length < originalEvents.length) {
+      log("debug", "Recovery dropped stale events", {
+        data: {
+          dropped: originalEvents.length - filteredEvents.length,
+          kept: filteredEvents.length
+        }
+      });
+    }
+    return { ...queue, events: filteredEvents };
   }
-  /**
-   * Persists failed events to localStorage for next-page-load recovery.
-   *
-   * **Purpose**: Saves events that couldn't be sent due to network/server errors.
-   * Implements multi-tab protection to prevent data loss during simultaneous failures.
-   *
-   * **Multi-Tab Protection**:
-   * - Throttles persistence (1-second window via PERSISTENCE_THROTTLE_MS)
-   * - If another tab persisted within 1 second, skips write (last-write-wins)
-   * - Prevents redundant storage writes when multiple tabs fail together
-   *
-   * **Storage Format**: PersistedEventsQueue (EventsQueue + timestamp)
-   *
-   * @param body - EventsQueue to persist
-   * @returns `true` on successful persistence or throttled write, `false` on error
-   * @private
-   */
   persistEvents(body) {
     const existing = this.getPersistedData();
     const existingFailures = typeof existing?.recoveryFailures === "number" && Number.isFinite(existing.recoveryFailures) ? existing.recoveryFailures : 0;
     return this.persistEventsWithFailureCount(body, existingFailures);
   }
-  /**
-   * Persists failed events to localStorage, recording how many consecutive
-   * cross-session recovery attempts have already been made for this batch.
-   *
-   * When `recoveryFailures` reaches MAX_RECOVERY_FAILURES on the next page load,
-   * the batch is discarded rather than retried, preventing an infinite persistence
-   * loop caused by a permanently unreachable backend URL.
-   *
-   * @param body - EventsQueue to persist
-   * @param recoveryFailures - Number of failed recovery attempts already made
-   * @param skipThrottle - Bypass the multi-tab throttle (used during recovery re-persistence)
-   * @returns `true` on successful persistence or throttled write, `false` on error
-   * @private
-   */
   persistEventsWithFailureCount(body, recoveryFailures, skipThrottle = false) {
     try {
       const existing = this.getPersistedData();
       if (!skipThrottle && existing && existing.timestamp) {
         const timeSinceExisting = Date.now() - existing.timestamp;
         if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
-          log(
-            "debug",
-            `Skipping persistence, another tab recently persisted events${this.integrationId ? ` [${this.integrationId}]` : ""}`,
-            {
-              data: { timeSinceExisting }
-            }
-          );
+          log("debug", "Skipping persistence, another tab recently persisted events", {
+            data: { timeSinceExisting }
+          });
           return true;
         }
       }
@@ -2629,7 +1883,7 @@ class SenderManager extends StateManager {
       this.storeManager.setItem(storageKey, JSON.stringify(persistedData));
       return !!this.storeManager.getItem(storageKey);
     } catch (error) {
-      log("debug", `Failed to persist events${this.integrationId ? ` [${this.integrationId}]` : ""}`, { error });
+      log("debug", "Failed to persist events", { error });
       return false;
     }
   }
@@ -2638,18 +1892,8 @@ class SenderManager extends StateManager {
       const key = this.getQueueStorageKey();
       this.storeManager.removeItem(key);
     } catch (error) {
-      log("debug", `Failed to clear persisted events${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
-        error
-      });
+      log("debug", "Failed to clear persisted events", { error });
     }
-  }
-  shouldSkipSend() {
-    return !this.apiUrl;
-  }
-  async simulateSuccessfulSend() {
-    const delay = Math.random() * 400 + 100;
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    return true;
   }
   isSendBeaconAvailable() {
     return typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function";
@@ -2659,7 +1903,7 @@ class SenderManager extends StateManager {
     const key = `${error.statusCode ?? "unknown"}:${error.responseCode ?? ""}`;
     const shouldLog = !this.lastPermanentErrorLog || this.lastPermanentErrorLog.key !== key || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
     if (shouldLog) {
-      log("error", `${context}${this.integrationId ? ` [${this.integrationId}]` : ""}`, {
+      log("error", context, {
         data: { status: error.statusCode, code: error.responseCode, message: error.message }
       });
       this.lastPermanentErrorLog = { key, timestamp: now };
@@ -2670,22 +1914,6 @@ class TimeManager extends StateManager {
   bootTime;
   bootTimestamp;
   hasPerformanceNow;
-  lastClockSkewCheck = 0;
-  detectedSkew = 0;
-  /**
-   * Creates a TimeManager instance and establishes boot time reference.
-   *
-   * **Initialization**:
-   * 1. Captures `performance.now()` as boot time (monotonic clock)
-   * 2. Captures `Date.now()` as boot timestamp (wall clock)
-   * 3. Detects if `performance.now()` is available (for fallback)
-   *
-   * **Boot Time**: Reference point for all subsequent timestamp calculations
-   * - All timestamps are relative to this boot time
-   * - Immune to system clock changes after initialization
-   *
-   * **SSR Safety**: In non-browser environments (Node.js, SSR), falls back to Date.now()
-   */
   constructor() {
     super();
     if (typeof window === "undefined") {
@@ -2698,12 +1926,6 @@ class TimeManager extends StateManager {
     if (this.hasPerformanceNow) {
       this.bootTime = performance.now();
       this.bootTimestamp = Date.now();
-      log("debug", "TimeManager initialized with monotonic clock", {
-        data: {
-          bootTime: this.bootTime.toFixed(3),
-          bootTimestamp: this.bootTimestamp
-        }
-      });
     } else {
       this.bootTime = 0;
       this.bootTimestamp = Date.now();
@@ -2711,24 +1933,8 @@ class TimeManager extends StateManager {
     }
   }
   /**
-   * Returns current timestamp in milliseconds since epoch.
-   *
-   * **Calculation**:
-   * - If `performance.now()` available: `bootTimestamp + (performance.now() - bootTime)`
-   * - Otherwise: `Date.now()` (fallback)
-   *
-   * **Advantages over Date.now()**:
-   * - Immune to system clock changes during session
-   * - More accurate (microsecond precision)
-   * - Prevents future timestamp errors from clock adjustments
-   *
-   * @returns Timestamp in milliseconds since Unix epoch
-   *
-   * @example
-   * ```typescript
-   * const eventTimestamp = timeManager.now();
-   * // Always accurate relative to boot time, even if system clock changes
-   * ```
+   * Returns current timestamp in milliseconds since epoch, immune to clock
+   * changes during the session.
    */
   now() {
     if (!this.hasPerformanceNow) {
@@ -2738,84 +1944,13 @@ class TimeManager extends StateManager {
     return Math.round(this.bootTimestamp + elapsed);
   }
   /**
-   * Detects clock skew by comparing monotonic time vs system time.
-   *
-   * **Purpose**: Identifies when the system clock has changed during the session.
-   *
-   * **Detection Method**:
-   * 1. Calculate expected timestamp using monotonic clock: `now()`
-   * 2. Compare with actual system time: `Date.now()`
-   * 3. Difference is the clock skew
-   *
-   * **Clock Skew Scenarios**:
-   * - Positive skew: System clock jumped forward (e.g., NTP correction)
-   * - Negative skew: System clock jumped backward (rare, usually manual adjustment)
-   * - Near zero: No significant clock drift
-   *
-   * **Throttling**: Only checks every 5 seconds to avoid performance impact
-   *
-   * @returns Clock skew in milliseconds (positive = clock ahead, negative = clock behind)
-   *
-   * @example
-   * ```typescript
-   * const skew = timeManager.getClockSkew();
-   * if (Math.abs(skew) > 30000) {
-   *   console.warn(`System clock drifted by ${skew}ms`);
-   * }
-   * ```
-   */
-  getClockSkew() {
-    if (!this.hasPerformanceNow) {
-      return 0;
-    }
-    const now = Date.now();
-    if (now - this.lastClockSkewCheck < 5e3) {
-      return this.detectedSkew;
-    }
-    this.lastClockSkewCheck = now;
-    const monotonicTimestamp = this.now();
-    const systemTimestamp = Date.now();
-    this.detectedSkew = systemTimestamp - monotonicTimestamp;
-    if (Math.abs(this.detectedSkew) > 3e4) {
-      log("warn", "Significant clock skew detected", {
-        data: {
-          skewMs: this.detectedSkew,
-          skewMinutes: (this.detectedSkew / 1e3 / 60).toFixed(2),
-          monotonicTime: new Date(monotonicTimestamp).toISOString(),
-          systemTime: new Date(systemTimestamp).toISOString()
-        }
-      });
-    }
-    return this.detectedSkew;
-  }
-  /**
-   * Validates if a timestamp is reasonable (not too far in the future).
-   *
-   * **Purpose**: Client-side validation to catch obviously wrong timestamps
-   * before sending to backend.
-   *
-   * **Validation Rules**:
-   * - Timestamp must not be >2 minutes in the future (relative to monotonic clock)
-   * - Prevents backend rejections due to clock skew
-   * - More lenient than backend (allows up to 2 min vs backend's 3 min)
-   *
-   * **Use Case**: Validate event timestamps before adding to queue
-   *
-   * @param timestamp - Timestamp to validate (milliseconds since epoch)
-   * @returns Object with `valid` boolean and optional `error` message
-   *
-   * @example
-   * ```typescript
-   * const validation = timeManager.validateTimestamp(eventTimestamp);
-   * if (!validation.valid) {
-   *   console.error('Invalid timestamp:', validation.error);
-   * }
-   * ```
+   * Validates a timestamp is not more than 2 minutes in the future relative
+   * to the monotonic clock. Backend allows 3 minutes — keep client tighter
+   * so obvious clock-skew events are flagged before they hit the wire.
    */
   validateTimestamp(timestamp) {
     const maxFutureOffset = 2 * 60 * 1e3;
-    const currentTime = this.now();
-    const offset = timestamp - currentTime;
+    const offset = timestamp - this.now();
     if (offset > maxFutureOffset) {
       return {
         valid: false,
@@ -2824,27 +1959,11 @@ class TimeManager extends StateManager {
     }
     return { valid: true };
   }
-  /**
-   * Returns boot time information for debugging.
-   *
-   * **Purpose**: Diagnostic utility for troubleshooting timestamp issues.
-   *
-   * @returns Object with boot time details
-   */
-  getBootInfo() {
-    return {
-      bootTime: this.bootTime,
-      bootTimestamp: this.bootTimestamp,
-      hasPerformanceNow: this.hasPerformanceNow,
-      clockSkew: this.getClockSkew()
-    };
-  }
 }
 const VALID_EVENT_TYPES = new Set(Object.values(EventType));
 class EventManager extends StateManager {
   dataSenders;
   emitter;
-  transformers;
   timeManager;
   recentEventFingerprints = /* @__PURE__ */ new Map();
   perEventRateLimits = /* @__PURE__ */ new Map();
@@ -2864,46 +1983,23 @@ class EventManager extends StateManager {
     [EventType.CLICK]: 0,
     [EventType.PAGE_VIEW]: 0,
     [EventType.CUSTOM]: 0,
-    [EventType.VIEWPORT_VISIBLE]: 0,
     [EventType.SCROLL]: 0
   };
   saveSessionCountsDebounced = null;
   /**
    * Creates an EventManager instance.
    *
-   * **Initialization**:
-   * - Creates SenderManager instances for configured integrations (SaaS/Custom)
-   * - Initializes event emitter for local consumption
-   *
    * @param storeManager - Storage manager for persistence
    * @param emitter - Optional event emitter for local event consumption
-   * @param transformers - Optional event transformation hooks
-   * @param staticHeaders - Optional static HTTP headers for custom backend (from config)
-   * @param customHeadersProvider - Optional callback for dynamic headers
-   * @param fetchCredentials - Fetch credentials mode for custom backend. @default 'include'
    */
-  constructor(storeManager, emitter = null, transformers = {}, staticHeaders = {}, customHeadersProvider, fetchCredentials = "include") {
+  constructor(storeManager, emitter = null) {
     super();
     this.emitter = emitter;
-    this.transformers = transformers;
     this.timeManager = new TimeManager();
     this.dataSenders = [];
     const collectApiUrls = this.get("collectApiUrls");
     if (collectApiUrls?.saas) {
-      this.dataSenders.push(new SenderManager(storeManager, "saas", collectApiUrls.saas, transformers));
-    }
-    if (collectApiUrls?.custom) {
-      this.dataSenders.push(
-        new SenderManager(
-          storeManager,
-          "custom",
-          collectApiUrls.custom,
-          transformers,
-          staticHeaders,
-          customHeadersProvider,
-          fetchCredentials
-        )
-      );
+      this.dataSenders.push(new SenderManager(storeManager, collectApiUrls.saas));
     }
     this.saveSessionCountsDebounced = this.debounce((sessionId) => {
       this.saveSessionCounts(sessionId);
@@ -3021,7 +2117,6 @@ class EventManager extends StateManager {
     custom_event,
     web_vitals,
     error_data,
-    viewport_data,
     page_view
   }) {
     if (!type) {
@@ -3051,7 +2146,6 @@ class EventManager extends StateManager {
         custom_event,
         web_vitals,
         error_data,
-        viewport_data,
         page_view
       });
       return;
@@ -3113,7 +2207,6 @@ class EventManager extends StateManager {
       custom_event,
       web_vitals,
       error_data,
-      viewport_data,
       page_view
     });
     if (!payload) {
@@ -3139,33 +2232,16 @@ class EventManager extends StateManager {
     if (this.isDuplicateEvent(payload)) {
       return;
     }
-    if (this.get("mode") === Mode.QA) {
-      if (eventType === EventType.CUSTOM && custom_event) {
-        log("info", `Custom Event: ${custom_event.name}`, {
-          visibility: "qa",
-          data: {
-            name: custom_event.name,
-            ...custom_event.metadata && { metadata: custom_event.metadata }
-          }
-        });
-        this.emitEvent(payload);
-        return;
-      }
-      if (eventType === EventType.VIEWPORT_VISIBLE && viewport_data) {
-        const displayName = viewport_data.name || viewport_data.id || viewport_data.selector;
-        log("info", `Viewport Visible: ${displayName}`, {
-          visibility: "qa",
-          data: {
-            selector: viewport_data.selector,
-            ...viewport_data.name && { name: viewport_data.name },
-            ...viewport_data.id && { id: viewport_data.id },
-            visibilityRatio: viewport_data.visibilityRatio,
-            dwellTime: viewport_data.dwellTime
-          }
-        });
-        this.emitEvent(payload);
-        return;
-      }
+    if (this.get("mode") === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
+      log("info", `Custom Event: ${custom_event.name}`, {
+        visibility: "qa",
+        data: {
+          name: custom_event.name,
+          ...custom_event.metadata && { metadata: custom_event.metadata }
+        }
+      });
+      this.emitEvent(payload);
+      return;
     }
     this.addToQueue(payload);
     if (!isCriticalEvent) {
@@ -3233,7 +2309,6 @@ class EventManager extends StateManager {
       [EventType.CLICK]: 0,
       [EventType.PAGE_VIEW]: 0,
       [EventType.CUSTOM]: 0,
-      [EventType.VIEWPORT_VISIBLE]: 0,
       [EventType.SCROLL]: 0
     };
     this.lastSessionId = null;
@@ -3325,29 +2400,6 @@ class EventManager extends StateManager {
    */
   flushImmediatelySync() {
     return this.flushEvents(true);
-  }
-  /**
-   * Sets the custom headers provider callback for the custom integration.
-   * Only affects requests to custom backend (not TraceLog SaaS).
-   *
-   * @param provider - Callback function that returns custom headers
-   */
-  setCustomHeadersProvider(provider) {
-    for (const sender of this.dataSenders) {
-      if (sender.getIntegrationId() === "custom") {
-        sender.setCustomHeadersProvider(provider);
-      }
-    }
-  }
-  /**
-   * Removes the custom headers provider callback from the custom integration.
-   */
-  removeCustomHeadersProvider() {
-    for (const sender of this.dataSenders) {
-      if (sender.getIntegrationId() === "custom") {
-        sender.removeCustomHeadersProvider();
-      }
-    }
   }
   /**
    * Returns the current number of events in the main queue.
@@ -3722,7 +2774,7 @@ class EventManager extends StateManager {
     });
     const globalMetadata = this.get("config")?.globalMetadata;
     const identity = this.get("identity");
-    let queue = {
+    const queue = {
       user_id: this.get("userId"),
       session_id: sessionId,
       device: this.get("device"),
@@ -3730,15 +2782,6 @@ class EventManager extends StateManager {
       ...globalMetadata && { global_metadata: globalMetadata },
       ...identity && { identify: identity }
     };
-    const collectApiUrls = this.get("collectApiUrls");
-    const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
-    const beforeBatchTransformer = this.transformers.beforeBatch;
-    if (!hasAnyBackend && beforeBatchTransformer) {
-      const transformed = transformBatch(queue, beforeBatchTransformer, "EventManager");
-      if (transformed !== null) {
-        queue = transformed;
-      }
-    }
     return queue;
   }
   buildEventPayload(data) {
@@ -3761,7 +2804,7 @@ class EventManager extends StateManager {
     }
     const sessionReferrer = this.get("sessionReferrer");
     const sessionUtm = this.get("sessionUtm");
-    let payload = {
+    const payload = {
       id: generateEventId(),
       type: data.type,
       page_url: currentPageUrl,
@@ -3773,24 +2816,9 @@ class EventManager extends StateManager {
       ...data.custom_event && { custom_event: data.custom_event },
       ...data.web_vitals && { web_vitals: data.web_vitals },
       ...data.error_data && { error_data: data.error_data },
-      ...data.viewport_data && { viewport_data: data.viewport_data },
       ...data.page_view && { page_view: data.page_view },
       ...sessionUtm && { utm: sessionUtm }
     };
-    const collectApiUrls = this.get("collectApiUrls");
-    const hasCustomBackend = Boolean(collectApiUrls?.custom);
-    const hasSaasBackend = Boolean(collectApiUrls?.saas);
-    const hasAnyBackend = hasCustomBackend || hasSaasBackend;
-    const isMultiIntegration = hasCustomBackend && hasSaasBackend;
-    const beforeSendTransformer = this.transformers.beforeSend;
-    const shouldApplyBeforeSend = beforeSendTransformer && (!hasAnyBackend || hasCustomBackend && !isMultiIntegration);
-    if (shouldApplyBeforeSend) {
-      const transformed = transformEvent(payload, beforeSendTransformer, "EventManager");
-      if (transformed === null) {
-        return null;
-      }
-      payload = transformed;
-    }
     return { ...payload, _session_id: currentSessionId };
   }
   isDuplicateEvent(event2) {
@@ -3943,7 +2971,6 @@ class EventManager extends StateManager {
       [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
       [EventType.PAGE_VIEW]: MAX_PAGE_VIEWS_PER_SESSION,
       [EventType.CUSTOM]: MAX_CUSTOM_EVENTS_PER_SESSION,
-      [EventType.VIEWPORT_VISIBLE]: MAX_VIEWPORT_EVENTS_PER_SESSION,
       [EventType.SCROLL]: MAX_SCROLL_EVENTS_PER_SESSION
     };
     return limits[type] ?? null;
@@ -4013,7 +3040,6 @@ class EventManager extends StateManager {
       [EventType.CLICK]: 0,
       [EventType.PAGE_VIEW]: 0,
       [EventType.CUSTOM]: 0,
-      [EventType.VIEWPORT_VISIBLE]: 0,
       [EventType.SCROLL]: 0
     };
   }
@@ -4059,13 +3085,12 @@ class EventManager extends StateManager {
         localStorage.removeItem(storageKey);
         return this.getInitialCounts();
       }
-      if (typeof parsed.total === "number" && typeof parsed[EventType.CLICK] === "number" && typeof parsed[EventType.PAGE_VIEW] === "number" && typeof parsed[EventType.CUSTOM] === "number" && typeof parsed[EventType.VIEWPORT_VISIBLE] === "number" && typeof parsed[EventType.SCROLL] === "number") {
+      if (typeof parsed.total === "number" && typeof parsed[EventType.CLICK] === "number" && typeof parsed[EventType.PAGE_VIEW] === "number" && typeof parsed[EventType.CUSTOM] === "number" && typeof parsed[EventType.SCROLL] === "number") {
         return {
           total: parsed.total,
           [EventType.CLICK]: parsed[EventType.CLICK],
           [EventType.PAGE_VIEW]: parsed[EventType.PAGE_VIEW],
           [EventType.CUSTOM]: parsed[EventType.CUSTOM],
-          [EventType.VIEWPORT_VISIBLE]: parsed[EventType.VIEWPORT_VISIBLE],
           [EventType.SCROLL]: parsed[EventType.SCROLL]
         };
       }
@@ -4892,20 +3917,15 @@ class PageViewHandler extends StateManager {
     this.onTrack();
   }
   extractPageViewData() {
-    const { pathname, search, hash } = window.location;
     const { referrer } = document;
     const { title } = document;
-    if (!referrer && !title && !pathname && !search && !hash) {
+    if (!referrer && !title) {
       return void 0;
     }
-    const data = {
+    return {
       ...referrer && { referrer },
-      ...title && { title },
-      ...pathname && { pathname },
-      ...search && { search },
-      ...hash && { hash }
+      ...title && { title }
     };
-    return data;
   }
 }
 class ClickHandler extends StateManager {
@@ -4951,7 +3971,7 @@ class ClickHandler extends StateManager {
       }
       const trackingElement = this.findTrackingElement(clickedElement);
       const relevantClickElement = this.getRelevantClickElement(clickedElement);
-      const coordinates = this.calculateClickCoordinates(mouseEvent, clickedElement);
+      const coordinates = this.calculateClickCoordinates(mouseEvent);
       if (trackingElement) {
         const trackingData = this.extractTrackingData(trackingElement);
         if (trackingData) {
@@ -5111,21 +4131,7 @@ class ClickHandler extends StateManager {
     }
     return element;
   }
-  /**
-   * Clamps relative coordinate values to [0, 1] range with 3 decimal precision.
-   *
-   * @param value - Raw relative coordinate value
-   * @returns Clamped value between 0 and 1 with 3 decimal places (e.g., 0.123)
-   *
-   * @example
-   * clamp(1.234)   // returns 1.000
-   * clamp(0.12345) // returns 0.123
-   * clamp(-0.5)    // returns 0.000
-   */
-  clamp(value) {
-    return Math.max(0, Math.min(1, Number(value.toFixed(3))));
-  }
-  calculateClickCoordinates(event2, element) {
+  calculateClickCoordinates(event2) {
     const x2 = event2.clientX;
     const y2 = event2.clientY;
     if (typeof x2 !== "number" || typeof y2 !== "number" || !Number.isFinite(x2) || !Number.isFinite(y2)) {
@@ -5134,10 +4140,7 @@ class ClickHandler extends StateManager {
     if (x2 === 0 && y2 === 0 && !event2.isTrusted) {
       return null;
     }
-    const rect = element.getBoundingClientRect();
-    const relativeX = rect.width > 0 ? this.clamp((x2 - rect.left) / rect.width) : 0;
-    const relativeY = rect.height > 0 ? this.clamp((y2 - rect.top) / rect.height) : 0;
-    return { x: x2, y: y2, relativeX, relativeY };
+    return { x: x2, y: y2 };
   }
   extractTrackingData(trackingElement) {
     const name = trackingElement.getAttribute(`${HTML_DATA_ATTR_PREFIX}-name`);
@@ -5152,52 +4155,18 @@ class ClickHandler extends StateManager {
     };
   }
   generateClickData(clickedElement, relevantElement, coordinates) {
-    const { x: x2, y: y2, relativeX, relativeY } = coordinates;
+    const { x: x2, y: y2 } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
-    const attributes = this.extractElementAttributes(relevantElement);
+    const href = relevantElement.getAttribute("href") ?? void 0;
     return {
       x: x2,
       y: y2,
-      relativeX,
-      relativeY,
       tag: relevantElement.tagName.toLowerCase(),
       ...relevantElement.id && { id: relevantElement.id },
       ...relevantElement.className && { class: relevantElement.className },
       ...text && { text },
-      ...attributes.href && { href: attributes.href },
-      ...attributes.title && { title: attributes.title },
-      ...attributes.alt && { alt: attributes.alt },
-      ...attributes.role && { role: attributes.role },
-      ...attributes["aria-label"] && { ariaLabel: attributes["aria-label"] },
-      ...Object.keys(attributes).length > 0 && { dataAttributes: attributes }
+      ...href && { href }
     };
-  }
-  /**
-   * Sanitizes text by replacing PII patterns with [REDACTED].
-   *
-   * Protects against:
-   * - Email addresses
-   * - Phone numbers (US format)
-   * - Credit card numbers
-   * - IBAN numbers
-   * - API keys/tokens
-   * - Bearer tokens
-   *
-   * @param text - Raw text content from element
-   * @returns Sanitized text with PII replaced by [REDACTED]
-   *
-   * @example
-   * sanitizeText('Email: user@example.com')      // returns 'Email: [REDACTED]'
-   * sanitizeText('Card: 1234-5678-9012-3456')    // returns 'Card: [REDACTED]'
-   * sanitizeText('Bearer token123')              // returns '[REDACTED]'
-   */
-  sanitizeText(text) {
-    let sanitized = text;
-    for (const pattern of PII_PATTERNS) {
-      const regex = new RegExp(pattern.source, pattern.flags);
-      sanitized = sanitized.replace(regex, "[REDACTED]");
-    }
-    return sanitized;
   }
   getRelevantText(clickedElement, relevantElement) {
     const clickedText = clickedElement.textContent?.trim() ?? "";
@@ -5213,29 +4182,7 @@ class ClickHandler extends StateManager {
     } else {
       finalText = relevantText.slice(0, MAX_TEXT_LENGTH - 3) + "...";
     }
-    return this.sanitizeText(finalText);
-  }
-  extractElementAttributes(element) {
-    const commonAttributes = [
-      "id",
-      "class",
-      "data-testid",
-      "aria-label",
-      "title",
-      "href",
-      "type",
-      "name",
-      "alt",
-      "role"
-    ];
-    const result = {};
-    for (const attributeName of commonAttributes) {
-      const value = element.getAttribute(attributeName);
-      if (value) {
-        result[attributeName] = value;
-      }
-    }
-    return result;
+    return sanitizePii(finalText);
   }
   createCustomEventData(trackingData) {
     return {
@@ -5248,43 +4195,16 @@ class ScrollHandler extends StateManager {
   eventManager;
   containers = [];
   limitWarningLogged = false;
-  minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
-  minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
-  maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   containerDiscoveryTimeoutId = null;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
   }
-  /**
-   * Starts tracking scroll events across all detected scrollable containers.
-   *
-   * Automatically detects scrollable containers using TreeWalker with retry logic:
-   * - Searches DOM for elements with overflow: auto/scroll
-   * - Validates visibility and scrollability
-   * - Retries up to 5 times with 200ms intervals for dynamic content
-   * - Falls back to window-only tracking if no containers found
-   * - Applies primaryScrollSelector config override if provided
-   *
-   * Attaches debounced scroll listeners (250ms per container) with smart filtering:
-   * - Significant movement (10px minimum)
-   * - Depth change (5% minimum)
-   * - Rate limiting (500ms minimum interval)
-   * - Session cap (120 events maximum)
-   */
   startTracking() {
     this.limitWarningLogged = false;
-    this.applyConfigOverrides();
     this.set("scrollEventCount", 0);
     this.tryDetectScrollContainers(0);
   }
-  /**
-   * Stops tracking scroll events and cleans up resources.
-   *
-   * Removes all scroll event listeners, clears debounce timers, cancels retry attempts,
-   * and resets session state (event counter, warning flags). Prevents memory leaks by
-   * properly cleaning up all containers and timers.
-   */
   stopTracking() {
     if (this.containerDiscoveryTimeoutId !== null) {
       clearTimeout(this.containerDiscoveryTimeoutId);
@@ -5312,7 +4232,6 @@ class ScrollHandler extends StateManager {
         const selector = this.getElementSelector(element);
         this.setupScrollContainer(element, selector);
       }
-      this.applyPrimaryScrollSelectorIfConfigured();
       return;
     }
     if (attempt < 5) {
@@ -5324,13 +4243,6 @@ class ScrollHandler extends StateManager {
     }
     if (this.containers.length === 0) {
       this.setupScrollContainer(window, "window");
-    }
-    this.applyPrimaryScrollSelectorIfConfigured();
-  }
-  applyPrimaryScrollSelectorIfConfigured() {
-    const config = this.get("config");
-    if (config?.primaryScrollSelector) {
-      this.applyPrimaryScrollSelector(config.primaryScrollSelector);
     }
   }
   findScrollableElements() {
@@ -5374,12 +4286,6 @@ class ScrollHandler extends StateManager {
     }
     return htmlElement.tagName.toLowerCase();
   }
-  determineIfPrimary(element) {
-    if (this.isWindowScrollable()) {
-      return element === window;
-    }
-    return this.containers.length === 0;
-  }
   setupScrollContainer(element, selector) {
     const alreadyTracking = this.containers.some((c2) => c2.element === element);
     if (alreadyTracking) {
@@ -5394,17 +4300,12 @@ class ScrollHandler extends StateManager {
       this.getScrollHeight(element),
       this.getViewportHeight(element)
     );
-    const isPrimary = this.determineIfPrimary(element);
     const container = {
       element,
       selector,
-      isPrimary,
       lastScrollPos: initialScrollTop,
       lastDepth: initialDepth,
-      lastDirection: ScrollDirection.DOWN,
       lastEventTime: 0,
-      firstScrollEventTime: null,
-      maxDepthReached: initialDepth,
       debounceTimer: null,
       listener: null
     };
@@ -5412,15 +4313,11 @@ class ScrollHandler extends StateManager {
       if (this.get("suppressNextScroll")) {
         return;
       }
-      if (container.firstScrollEventTime === null) {
-        container.firstScrollEventTime = Date.now();
-      }
       this.clearContainerTimer(container);
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
         if (scrollData) {
-          const now = Date.now();
-          this.processScrollEvent(container, scrollData, now);
+          this.processScrollEvent(container, scrollData, Date.now());
         }
         container.debounceTimer = null;
       }, SCROLL_DEBOUNCE_TIME_MS);
@@ -5439,15 +4336,13 @@ class ScrollHandler extends StateManager {
     }
     container.lastEventTime = timestamp;
     container.lastDepth = scrollData.depth;
-    container.lastDirection = scrollData.direction;
     const currentCount = this.get("scrollEventCount") ?? 0;
     this.set("scrollEventCount", currentCount + 1);
     this.eventManager.track({
       type: EventType.SCROLL,
       scroll_data: {
         ...scrollData,
-        container_selector: container.selector,
-        is_primary: container.isPrimary
+        container_selector: container.selector
       }
     });
   }
@@ -5466,16 +4361,16 @@ class ScrollHandler extends StateManager {
   }
   hasReachedSessionLimit() {
     const currentCount = this.get("scrollEventCount") ?? 0;
-    return currentCount >= this.maxEventsPerSession;
+    return currentCount >= MAX_SCROLL_EVENTS_PER_SESSION;
   }
   hasElapsedMinimumInterval(container, timestamp) {
     if (container.lastEventTime === 0) {
       return true;
     }
-    return timestamp - container.lastEventTime >= this.minIntervalMs;
+    return timestamp - container.lastEventTime >= SCROLL_MIN_EVENT_INTERVAL_MS;
   }
   hasSignificantDepthChange(container, newDepth) {
-    return Math.abs(newDepth - container.lastDepth) >= this.minDepthChange;
+    return Math.abs(newDepth - container.lastDepth) >= MIN_SCROLL_DEPTH_CHANGE;
   }
   logLimitOnce() {
     if (this.limitWarningLogged) {
@@ -5483,13 +4378,8 @@ class ScrollHandler extends StateManager {
     }
     this.limitWarningLogged = true;
     log("debug", "Max scroll events per session reached", {
-      data: { limit: this.maxEventsPerSession }
+      data: { limit: MAX_SCROLL_EVENTS_PER_SESSION }
     });
-  }
-  applyConfigOverrides() {
-    this.minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
-    this.minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
-    this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
   isWindowScrollable() {
     return document.documentElement.scrollHeight > window.innerHeight;
@@ -5511,9 +4401,8 @@ class ScrollHandler extends StateManager {
     return Math.min(100, Math.max(0, Math.floor(scrollTop / maxScrollTop * 100)));
   }
   calculateScrollData(container) {
-    const { element, lastScrollPos, lastEventTime } = container;
+    const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
-    const now = Date.now();
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
       return null;
@@ -5525,25 +4414,8 @@ class ScrollHandler extends StateManager {
     const scrollHeight = this.getScrollHeight(element);
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
-    let timeDelta;
-    if (lastEventTime > 0) {
-      timeDelta = now - lastEventTime;
-    } else if (container.firstScrollEventTime !== null) {
-      timeDelta = now - container.firstScrollEventTime;
-    } else {
-      timeDelta = SCROLL_DEBOUNCE_TIME_MS;
-    }
-    const velocity = Math.round(positionDelta / timeDelta * 1e3);
-    if (depth > container.maxDepthReached) {
-      container.maxDepthReached = depth;
-    }
     container.lastScrollPos = scrollTop;
-    return {
-      depth,
-      direction,
-      velocity,
-      max_depth_reached: container.maxDepthReached
-    };
+    return { depth, direction };
   }
   getScrollTop(element) {
     return element === window ? window.scrollY : element.scrollTop;
@@ -5559,271 +4431,6 @@ class ScrollHandler extends StateManager {
     const hasVerticalScrollableOverflow = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll";
     const hasVerticalOverflowContent = element.scrollHeight > element.clientHeight;
     return hasVerticalScrollableOverflow && hasVerticalOverflowContent;
-  }
-  applyPrimaryScrollSelector(selector) {
-    let targetElement;
-    if (selector === "window") {
-      targetElement = window;
-    } else {
-      const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
-        log("debug", `Selector "${selector}" did not match an HTMLElement`);
-        return;
-      }
-      targetElement = element;
-    }
-    this.containers.forEach((container) => {
-      this.updateContainerPrimary(container, container.element === targetElement);
-    });
-    const targetAlreadyTracked = this.containers.some((c2) => c2.element === targetElement);
-    if (!targetAlreadyTracked && targetElement instanceof HTMLElement) {
-      if (this.isElementScrollable(targetElement)) {
-        this.setupScrollContainer(targetElement, selector);
-      }
-    }
-  }
-  updateContainerPrimary(container, isPrimary) {
-    container.isPrimary = isPrimary;
-  }
-}
-class ViewportHandler extends StateManager {
-  eventManager;
-  trackedElements = /* @__PURE__ */ new Map();
-  observer = null;
-  mutationObserver = null;
-  mutationDebounceTimer = null;
-  config = null;
-  constructor(eventManager) {
-    super();
-    this.eventManager = eventManager;
-  }
-  /**
-   * Starts tracking viewport visibility for configured elements
-   */
-  startTracking() {
-    const config = this.get("config");
-    this.config = config.viewport ?? null;
-    if (!this.config?.elements || this.config.elements.length === 0) {
-      return;
-    }
-    const threshold = this.config.threshold ?? 0.5;
-    const minDwellTime = this.config.minDwellTime ?? 1e3;
-    if (threshold < 0 || threshold > 1) {
-      log("debug", "ViewportHandler: Invalid threshold, must be between 0 and 1");
-      return;
-    }
-    if (minDwellTime < 0) {
-      log("debug", "ViewportHandler: Invalid minDwellTime, must be non-negative");
-      return;
-    }
-    if (typeof IntersectionObserver === "undefined") {
-      log("debug", "ViewportHandler: IntersectionObserver not supported in this browser");
-      return;
-    }
-    this.observer = new IntersectionObserver(this.handleIntersection, {
-      threshold
-    });
-    this.observeElements();
-    this.setupMutationObserver();
-  }
-  /**
-   * Stops tracking and cleans up resources
-   */
-  stopTracking() {
-    if (this.observer) {
-      this.observer.disconnect();
-      this.observer = null;
-    }
-    if (this.mutationObserver) {
-      this.mutationObserver.disconnect();
-      this.mutationObserver = null;
-    }
-    if (this.mutationDebounceTimer !== null) {
-      window.clearTimeout(this.mutationDebounceTimer);
-      this.mutationDebounceTimer = null;
-    }
-    for (const tracked of this.trackedElements.values()) {
-      if (tracked.timeoutId !== null) {
-        window.clearTimeout(tracked.timeoutId);
-      }
-    }
-    this.trackedElements.clear();
-  }
-  /**
-   * Query and observe all elements matching configured elements
-   */
-  observeElements() {
-    if (!this.config || !this.observer) return;
-    const maxTrackedElements = this.config.maxTrackedElements ?? DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS;
-    let totalTracked = this.trackedElements.size;
-    for (const elementConfig of this.config.elements) {
-      try {
-        const elements = document.querySelectorAll(elementConfig.selector);
-        for (const element of Array.from(elements)) {
-          if (totalTracked >= maxTrackedElements) {
-            log("debug", "ViewportHandler: Maximum tracked elements reached", {
-              data: {
-                limit: maxTrackedElements,
-                selector: elementConfig.selector,
-                message: "Some elements will not be tracked. Consider more specific selectors."
-              }
-            });
-            return;
-          }
-          if (element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
-            continue;
-          }
-          if (this.trackedElements.has(element)) {
-            continue;
-          }
-          this.trackedElements.set(element, {
-            element,
-            selector: elementConfig.selector,
-            id: elementConfig.id,
-            name: elementConfig.name,
-            startTime: null,
-            timeoutId: null,
-            lastFiredTime: null
-          });
-          this.observer?.observe(element);
-          totalTracked++;
-        }
-      } catch (error) {
-        log("debug", `ViewportHandler: Invalid selector "${elementConfig.selector}"`, { error });
-      }
-    }
-    log("debug", "ViewportHandler: Elements tracked", {
-      data: { count: totalTracked, limit: maxTrackedElements }
-    });
-  }
-  /**
-   * Handles intersection events from IntersectionObserver
-   */
-  handleIntersection = (entries) => {
-    if (!this.config) return;
-    const minDwellTime = this.config.minDwellTime ?? 1e3;
-    for (const entry of entries) {
-      const tracked = this.trackedElements.get(entry.target);
-      if (!tracked) continue;
-      if (entry.isIntersecting) {
-        if (tracked.startTime === null) {
-          tracked.startTime = performance.now();
-          tracked.timeoutId = window.setTimeout(() => {
-            const visibilityRatio = Math.round(entry.intersectionRatio * 100) / 100;
-            this.fireViewportEvent(tracked, visibilityRatio);
-          }, minDwellTime);
-        }
-      } else {
-        if (tracked.startTime !== null) {
-          if (tracked.timeoutId !== null) {
-            window.clearTimeout(tracked.timeoutId);
-            tracked.timeoutId = null;
-          }
-          tracked.startTime = null;
-        }
-      }
-    }
-  };
-  /**
-   * Fires a viewport visible event
-   */
-  fireViewportEvent(tracked, visibilityRatio) {
-    if (tracked.startTime === null) return;
-    const dwellTime = Math.round(performance.now() - tracked.startTime);
-    if (tracked.element.hasAttribute(`${HTML_DATA_ATTR_PREFIX}-ignore`)) {
-      return;
-    }
-    const cooldownPeriod = this.config?.cooldownPeriod ?? DEFAULT_VIEWPORT_COOLDOWN_PERIOD;
-    const now = Date.now();
-    if (tracked.lastFiredTime !== null && now - tracked.lastFiredTime < cooldownPeriod) {
-      log("debug", "ViewportHandler: Event suppressed by cooldown period", {
-        data: {
-          selector: tracked.selector,
-          cooldownRemaining: cooldownPeriod - (now - tracked.lastFiredTime)
-        }
-      });
-      tracked.startTime = null;
-      tracked.timeoutId = null;
-      return;
-    }
-    const eventData = {
-      selector: tracked.selector,
-      dwellTime,
-      visibilityRatio,
-      ...tracked.id !== void 0 && { id: tracked.id },
-      ...tracked.name !== void 0 && { name: tracked.name }
-    };
-    this.eventManager.track({
-      type: EventType.VIEWPORT_VISIBLE,
-      viewport_data: eventData
-    });
-    tracked.startTime = null;
-    tracked.timeoutId = null;
-    tracked.lastFiredTime = now;
-  }
-  /**
-   * Sets up MutationObserver to detect dynamically added elements
-   */
-  setupMutationObserver() {
-    if (!this.config || typeof MutationObserver === "undefined") {
-      return;
-    }
-    if (!document.body) {
-      log("debug", "ViewportHandler: document.body not available, skipping MutationObserver setup");
-      return;
-    }
-    this.mutationObserver = new MutationObserver((mutations) => {
-      let hasAddedNodes = false;
-      for (const mutation of mutations) {
-        if (mutation.type === "childList") {
-          if (mutation.addedNodes.length > 0) {
-            hasAddedNodes = true;
-          }
-          if (mutation.removedNodes.length > 0) {
-            this.cleanupRemovedNodes(mutation.removedNodes);
-          }
-        }
-      }
-      if (hasAddedNodes) {
-        if (this.mutationDebounceTimer !== null) {
-          window.clearTimeout(this.mutationDebounceTimer);
-        }
-        this.mutationDebounceTimer = window.setTimeout(() => {
-          this.observeElements();
-          this.mutationDebounceTimer = null;
-        }, VIEWPORT_MUTATION_DEBOUNCE_MS);
-      }
-    });
-    this.mutationObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-  /**
-   * Cleans up tracking for removed DOM nodes
-   */
-  cleanupRemovedNodes(removedNodes) {
-    removedNodes.forEach((node) => {
-      if (node.nodeType !== 1) return;
-      const element = node;
-      const tracked = this.trackedElements.get(element);
-      if (tracked) {
-        if (tracked.timeoutId !== null) {
-          window.clearTimeout(tracked.timeoutId);
-        }
-        this.observer?.unobserve(element);
-        this.trackedElements.delete(element);
-      }
-      const descendants = Array.from(this.trackedElements.keys()).filter((el) => element.contains(el));
-      descendants.forEach((el) => {
-        const descendantTracked = this.trackedElements.get(el);
-        if (descendantTracked && descendantTracked.timeoutId !== null) {
-          window.clearTimeout(descendantTracked.timeoutId);
-        }
-        this.observer?.unobserve(el);
-        this.trackedElements.delete(el);
-      });
-    });
   }
 }
 const SHOPIFY_SESSION_ATTR = "tracelog_session_id";
@@ -5916,7 +4523,6 @@ class StorageManager {
   sessionStorageRef;
   fallbackStorage = /* @__PURE__ */ new Map();
   fallbackSessionStorage = /* @__PURE__ */ new Map();
-  hasQuotaExceededError = false;
   constructor() {
     this.storage = this.initializeStorage("localStorage");
     this.sessionStorageRef = this.initializeStorage("sessionStorage");
@@ -5927,14 +4533,6 @@ class StorageManager {
       log("debug", "sessionStorage not available, using memory fallback");
     }
   }
-  /**
-   * Retrieves an item from localStorage.
-   *
-   * Automatically falls back to in-memory storage if localStorage unavailable.
-   *
-   * @param key - Storage key
-   * @returns Stored value or null if not found
-   */
   getItem(key) {
     try {
       if (this.storage) {
@@ -5945,66 +4543,39 @@ class StorageManager {
       return this.fallbackStorage.get(key) ?? null;
     }
   }
-  /**
-   * Stores an item in localStorage with automatic quota handling.
-   *
-   * **Behavior**:
-   * 1. Updates fallback storage first (ensures consistency)
-   * 2. Attempts to store in localStorage
-   * 3. On QuotaExceededError: Triggers cleanup and retries once
-   * 4. Falls back to in-memory storage if retry fails
-   *
-   * **Cleanup on Quota Error**:
-   * - Removes persisted events (largest data)
-   * - Removes up to 5 non-critical keys
-   * - Preserves session, user, device, and config keys
-   *
-   * @param key - Storage key
-   * @param value - String value to store
-   */
   setItem(key, value) {
     this.fallbackStorage.set(key, value);
+    if (!this.storage) {
+      return;
+    }
     try {
-      if (this.storage) {
-        this.storage.setItem(key, value);
-        return;
-      }
+      this.storage.setItem(key, value);
+      return;
     } catch (error) {
       const isQuotaError = error instanceof DOMException && error.name === "QuotaExceededError" || error instanceof Error && error.name === "QuotaExceededError";
-      if (isQuotaError) {
-        this.hasQuotaExceededError = true;
-        log("warn", "localStorage quota exceeded, attempting cleanup", {
+      if (!isQuotaError) {
+        return;
+      }
+      log("warn", "localStorage quota exceeded, attempting cleanup", {
+        data: { key, valueSize: value.length }
+      });
+      if (!this.cleanupOldData()) {
+        log("error", "localStorage quota exceeded and no data to cleanup - data will not persist", {
+          error,
           data: { key, valueSize: value.length }
         });
-        const cleanedUp = this.cleanupOldData();
-        if (cleanedUp) {
-          try {
-            if (this.storage) {
-              this.storage.setItem(key, value);
-              return;
-            }
-          } catch (retryError) {
-            log("error", "localStorage quota exceeded even after cleanup - data will not persist", {
-              error: retryError,
-              data: { key, valueSize: value.length }
-            });
-          }
-        } else {
-          log("error", "localStorage quota exceeded and no data to cleanup - data will not persist", {
-            error,
-            data: { key, valueSize: value.length }
-          });
-        }
+        return;
+      }
+      try {
+        this.storage.setItem(key, value);
+      } catch (retryError) {
+        log("error", "localStorage quota exceeded even after cleanup - data will not persist", {
+          error: retryError,
+          data: { key, valueSize: value.length }
+        });
       }
     }
   }
-  /**
-   * Removes an item from localStorage and fallback storage.
-   *
-   * Safe to call even if key doesn't exist (idempotent).
-   *
-   * @param key - Storage key to remove
-   */
   removeItem(key) {
     try {
       if (this.storage) {
@@ -6015,157 +4586,43 @@ class StorageManager {
     this.fallbackStorage.delete(key);
   }
   /**
-   * Clears all TraceLog-related items from storage.
-   *
-   * Only removes keys with `tracelog_` prefix (safe for shared storage).
-   * Clears both localStorage and fallback storage.
-   *
-   * **Use Cases**:
-   * - User logout/privacy actions
-   * - Development/testing cleanup
-   * - Reset analytics state
-   */
-  clear() {
-    if (!this.storage) {
-      this.fallbackStorage.clear();
-      return;
-    }
-    try {
-      const keysToRemove = [];
-      for (let i2 = 0; i2 < this.storage.length; i2++) {
-        const key = this.storage.key(i2);
-        if (key?.startsWith("tracelog_")) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((key) => {
-        this.storage.removeItem(key);
-      });
-      this.fallbackStorage.clear();
-    } catch (error) {
-      log("error", "Failed to clear storage", { error });
-      this.fallbackStorage.clear();
-    }
-  }
-  /**
-   * Checks if localStorage is available.
-   *
-   * @returns true if localStorage is working, false if using fallback
-   */
-  isAvailable() {
-    return this.storage !== null;
-  }
-  /**
-   * Checks if a QuotaExceededError has occurred during this session.
-   *
-   * **Purpose**: Detect when localStorage is full and data may not persist.
-   * Allows application to show warnings or adjust behavior.
-   *
-   * **Note**: Flag is set on first QuotaExceededError and never reset.
-   *
-   * @returns true if quota exceeded at any point during this session
-   */
-  hasQuotaError() {
-    return this.hasQuotaExceededError;
-  }
-  /**
-   * Implements two-phase cleanup strategy to free storage space when quota exceeded.
-   *
-   * **Purpose**: Removes TraceLog data intelligently to make room for new writes
-   * while preserving critical user state (session, user ID, device ID, config).
-   *
-   * **Two-Phase Cleanup Strategy**:
-   * 1. **Phase 1 (Priority)**: Remove all persisted events (`tracelog_persisted_events_*`)
-   *    - These are typically the largest data items (batches of events)
-   *    - Safe to remove as they represent recoverable failed sends
-   *    - Returns immediately if any persisted events found and removed
-   *
-   * 2. **Phase 2 (Fallback)**: Remove up to 5 non-critical keys
-   *    - Only executed if no persisted events found
-   *    - Preserves critical keys: session data, user ID, device ID, config
-   *    - Limits to 5 keys to avoid excessive cleanup time
-   *
-   * **Critical Keys (Never Removed)**:
-   * - `tracelog_session_*` - Active session data
-   * - `tracelog_user_id` - User identification
-   * - `tracelog_device_id` - Device fingerprint
-   * - `tracelog_config` - Configuration cache
-   *
-   * **Error Handling**:
-   * - Individual key removal failures silently ignored (continue cleanup)
-   * - Overall cleanup errors logged and return false
-   *
-   * @returns true if any data was successfully removed, false if nothing cleaned up
+   * Single-pass cleanup for QuotaExceededError. Purges persisted-events keys
+   * (largest, safe to discard — recoverable) and up to 5 other non-critical
+   * tracelog_* keys in one pass. Preserves session/user/device/config keys.
    */
   cleanupOldData() {
     if (!this.storage) {
       return false;
     }
     try {
-      const tracelogKeys = [];
-      const persistedEventsKeys = [];
+      const criticalPrefixes = ["tracelog_session_", "tracelog_user_id", "tracelog_device_id", "tracelog_config"];
+      const persistedKeys = [];
+      const nonCriticalKeys = [];
       for (let i2 = 0; i2 < this.storage.length; i2++) {
         const key = this.storage.key(i2);
-        if (key?.startsWith("tracelog_")) {
-          tracelogKeys.push(key);
-          if (key.startsWith("tracelog_persisted_events_")) {
-            persistedEventsKeys.push(key);
-          }
+        if (!key?.startsWith("tracelog_")) continue;
+        if (key.startsWith("tracelog_persisted_events_")) {
+          persistedKeys.push(key);
+        } else if (!criticalPrefixes.some((prefix) => key.startsWith(prefix))) {
+          nonCriticalKeys.push(key);
         }
       }
-      if (persistedEventsKeys.length > 0) {
-        persistedEventsKeys.forEach((key) => {
-          try {
-            this.storage.removeItem(key);
-          } catch {
-          }
-        });
-        return true;
+      const keysToRemove = [...persistedKeys, ...nonCriticalKeys.slice(0, 5)];
+      if (keysToRemove.length === 0) {
+        return false;
       }
-      const criticalPrefixes = ["tracelog_session_", "tracelog_user_id", "tracelog_device_id", "tracelog_config"];
-      const nonCriticalKeys = tracelogKeys.filter((key) => {
-        return !criticalPrefixes.some((prefix) => key.startsWith(prefix));
+      keysToRemove.forEach((key) => {
+        try {
+          this.storage.removeItem(key);
+        } catch {
+        }
       });
-      if (nonCriticalKeys.length > 0) {
-        const keysToRemove = nonCriticalKeys.slice(0, 5);
-        keysToRemove.forEach((key) => {
-          try {
-            this.storage.removeItem(key);
-          } catch {
-          }
-        });
-        return true;
-      }
-      return false;
+      return true;
     } catch (error) {
       log("error", "Failed to cleanup old data", { error });
       return false;
     }
   }
-  /**
-   * Initializes storage with feature detection and write-test validation.
-   *
-   * **Purpose**: Validates storage availability by performing actual write/remove test,
-   * preventing false positives in privacy modes where storage API exists but throws on write.
-   *
-   * **Validation Strategy**:
-   * 1. SSR Safety: Returns null in Node.js environments (`typeof window === 'undefined'`)
-   * 2. API Check: Verifies storage object exists on window
-   * 3. Write Test: Attempts to write test key (`__tracelog_test__`)
-   * 4. Cleanup: Removes test key immediately after validation
-   *
-   * **Why Write Test is Critical**:
-   * - Safari private browsing: storage API exists but throws QuotaExceededError on write
-   * - iOS private mode: storage appears available but operations fail
-   * - Incognito modes: API exists but writes are silently ignored or throw
-   *
-   * **Fallback Behavior**:
-   * - Returns null if storage unavailable or test fails
-   * - Caller automatically falls back to in-memory Map storage
-   *
-   * @param type - Storage type to initialize ('localStorage' | 'sessionStorage')
-   * @returns Storage instance if available and writable, null otherwise
-   */
   initializeStorage(type) {
     if (typeof window === "undefined") {
       return null;
@@ -6180,14 +4637,6 @@ class StorageManager {
       return null;
     }
   }
-  /**
-   * Retrieves an item from sessionStorage.
-   *
-   * Automatically falls back to in-memory storage if sessionStorage unavailable.
-   *
-   * @param key - Storage key
-   * @returns Stored value or null if not found
-   */
   getSessionItem(key) {
     try {
       if (this.sessionStorageRef) {
@@ -6198,20 +4647,6 @@ class StorageManager {
       return this.fallbackSessionStorage.get(key) ?? null;
     }
   }
-  /**
-   * Stores an item in sessionStorage with quota error detection.
-   *
-   * **Behavior**:
-   * 1. Updates fallback storage first (ensures consistency)
-   * 2. Attempts to store in sessionStorage
-   * 3. On QuotaExceededError: Logs error and uses fallback (no retry/cleanup)
-   *
-   * **Note**: sessionStorage quota errors are rare (typically 5-10MB per tab).
-   * No automatic cleanup unlike localStorage.
-   *
-   * @param key - Storage key
-   * @param value - String value to store
-   */
   setSessionItem(key, value) {
     this.fallbackSessionStorage.set(key, value);
     try {
@@ -6229,13 +4664,6 @@ class StorageManager {
       }
     }
   }
-  /**
-   * Removes an item from sessionStorage and fallback storage.
-   *
-   * Safe to call even if key doesn't exist (idempotent).
-   *
-   * @param key - Storage key to remove
-   */
   removeSessionItem(key) {
     try {
       if (this.sessionStorageRef) {
@@ -6253,7 +4681,6 @@ class PerformanceHandler extends StateManager {
   // FIFO queue for tracking navigation order
   observers = [];
   vitalThresholds;
-  lastLongTaskSentAt = 0;
   navigationCounter = 0;
   // Counter for handling simultaneous navigations edge case
   constructor(eventManager) {
@@ -6283,7 +4710,6 @@ class PerformanceHandler extends StateManager {
       this.vitalThresholds = { ...this.vitalThresholds, ...config.webVitalsThresholds };
     }
     await this.initWebVitals();
-    this.observeLongTasks();
   }
   /**
    * Stops tracking Web Vitals and cleans up resources.
@@ -6401,25 +4827,6 @@ class PerformanceHandler extends StateManager {
     } catch (error) {
       log("debug", "Failed to report TTFB", { error });
     }
-  }
-  observeLongTasks() {
-    this.safeObserve(
-      "longtask",
-      (list) => {
-        const entries = list.getEntries();
-        for (const entry of entries) {
-          const duration = Number(entry.duration.toFixed(PRECISION_TWO_DECIMALS));
-          const now = Date.now();
-          if (now - this.lastLongTaskSentAt >= LONG_TASK_THROTTLE_MS) {
-            if (this.shouldSendVital("LONG_TASK", duration)) {
-              this.trackWebVital("LONG_TASK", duration);
-            }
-            this.lastLongTaskSentAt = now;
-          }
-        }
-      },
-      { type: "longtask", buffered: true }
-    );
   }
   sendVital(sample) {
     if (!this.shouldSendVital(sample.type, sample.value)) {
@@ -6747,15 +5154,7 @@ class ErrorHandler extends StateManager {
   }
   sanitize(text) {
     const truncated = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + "..." : text;
-    return this.sanitizePii(truncated);
-  }
-  sanitizePii(text) {
-    let sanitized = text;
-    for (const pattern of PII_PATTERNS) {
-      const regex = new RegExp(pattern.source, pattern.flags);
-      sanitized = sanitized.replace(regex, "[REDACTED]");
-    }
-    return sanitized;
+    return sanitizePii(truncated);
   }
   shouldSuppressError(type, message) {
     const now = Date.now();
@@ -6778,10 +5177,10 @@ class ErrorHandler extends StateManager {
   }
   static TRUNCATION_SUFFIX = "\n...truncated";
   truncateStack(stack) {
-    if (stack.length <= MAX_STACK_TRACE_LENGTH) return this.sanitizePii(stack);
+    if (stack.length <= MAX_STACK_TRACE_LENGTH) return sanitizePii(stack);
     const limit = MAX_STACK_TRACE_LENGTH - ErrorHandler.TRUNCATION_SUFFIX.length;
     const truncated = stack.slice(0, limit) + ErrorHandler.TRUNCATION_SUFFIX;
-    return this.sanitizePii(truncated);
+    return sanitizePii(truncated);
   }
   pruneOldErrors() {
     const now = Date.now();
@@ -6810,8 +5209,6 @@ class App extends StateManager {
   pageShowHandler = null;
   visibilityFlushHandler = null;
   emitter = new Emitter();
-  transformers = {};
-  customHeadersProvider;
   managers = {};
   handlers = {};
   integrationInstances = {};
@@ -6821,8 +5218,6 @@ class App extends StateManager {
   /**
    * Initializes TraceLog with configuration.
    *
-   * @param config - Configuration object
-   * @throws {Error} If initialization fails
    * @internal Called from api.init()
    */
   async init(config = {}) {
@@ -6832,16 +5227,7 @@ class App extends StateManager {
     this.managers.storage = new StorageManager();
     try {
       this.setupState(config);
-      const staticHeaders = config.integrations?.custom?.headers ?? {};
-      const fetchCredentials = config.integrations?.custom?.fetchCredentials ?? "include";
-      this.managers.event = new EventManager(
-        this.managers.storage,
-        this.emitter,
-        this.transformers,
-        staticHeaders,
-        this.customHeadersProvider,
-        fetchCredentials
-      );
+      this.managers.event = new EventManager(this.managers.storage, this.emitter);
       this.loadPersistedIdentity();
       this.initializeHandlers();
       this.setupPageLifecycleListeners();
@@ -6857,49 +5243,8 @@ class App extends StateManager {
     }
   }
   /**
-   * Asynchronously flushes all pending events in the queue.
-   *
-   * Internally calls `EventManager.flushImmediately()` which uses `fetch()` with retries.
-   * Use when you need to force-send buffered events without waiting for the next send interval
-   * (e.g., before a critical user action like sign-out, or before a SPA route teardown).
-   *
-   * @returns Promise<boolean> — `true` if at least one integration accepted
-   *          the batch (optimistic removal — failures persist per-integration
-   *          and retry on the next flush). `false` if not initialized,
-   *          destroying, another flush is in flight, or all senders failed.
-   * @internal Called from api.flushImmediately()
-   */
-  async flushImmediately() {
-    return await this.managers.event?.flushImmediately() ?? false;
-  }
-  /**
-   * Synchronously flushes all pending events using `navigator.sendBeacon()`.
-   *
-   * Use only for page-unload scenarios (or equivalent) where async fetch may be cancelled.
-   * For general flush needs, prefer {@link flushImmediately}.
-   *
-   * @returns `true` if at least one integration accepted the beacon batch
-   *          during this call (optimistic removal — failures persist
-   *          per-integration). `false` if no events, all senders failed, or
-   *          the call was deferred behind an in-flight async send.
-   * @internal Called from api.flushImmediatelySync()
-   */
-  flushImmediatelySync() {
-    return this.managers.event?.flushImmediatelySync() ?? false;
-  }
-  /**
    * Sends a custom event with optional metadata and options.
    *
-   * @param name - Event name
-   * @param metadata - Optional metadata
-   * @param options - Optional event options. `{ critical: true }` drains the
-   *   queue via `navigator.sendBeacon()` immediately after tracking — the
-   *   browser guarantees the request is queued for delivery even if the page
-   *   is about to unload (typical pattern: tracking a purchase, then
-   *   `window.location.href = '/thanks'`). If an async fetch is already in
-   *   flight when the critical event is tracked, the sync flush is deferred
-   *   and re-runs from the async send's `finally` block so the critical
-   *   event is not stranded in the queue.
    * @internal Called from api.event()
    */
   sendCustomEvent(name, metadata, options) {
@@ -6943,50 +5288,9 @@ class App extends StateManager {
   off(event2, callback) {
     this.emitter.off(event2, callback);
   }
-  setTransformer(hook, fn) {
-    if (typeof fn !== "function") {
-      throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
-    }
-    this.transformers[hook] = fn;
-  }
-  removeTransformer(hook) {
-    delete this.transformers[hook];
-  }
-  getTransformer(hook) {
-    return this.transformers[hook];
-  }
-  /**
-   * Sets a callback to provide custom HTTP headers for requests to custom backends.
-   * Only applies to custom backend integration (not TraceLog SaaS).
-   *
-   * @param provider - Callback function that returns custom headers
-   * @throws {Error} If provider is not a function
-   * @internal Called from api.setCustomHeaders()
-   */
-  setCustomHeaders(provider) {
-    if (typeof provider !== "function") {
-      throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
-    }
-    this.customHeadersProvider = provider;
-    if (this.managers.event) {
-      this.managers.event.setCustomHeadersProvider(provider);
-    }
-  }
-  /**
-   * Removes the custom headers provider callback.
-   *
-   * @internal Called from api.removeCustomHeaders()
-   */
-  removeCustomHeaders() {
-    this.customHeadersProvider = void 0;
-    if (this.managers.event) {
-      this.managers.event.removeCustomHeadersProvider();
-    }
-  }
   /**
    * Destroys the TraceLog instance and cleans up all resources.
    *
-   * @param force - If true, forces cleanup even if not initialized (used during init failure)
    * @internal Called from api.destroy()
    */
   destroy(force = false) {
@@ -7020,9 +5324,6 @@ class App extends StateManager {
     this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
     this.emitter.removeAllListeners();
-    this.transformers.beforeSend = void 0;
-    this.transformers.beforeBatch = void 0;
-    this.customHeadersProvider = void 0;
     this.set("suppressNextScroll", false);
     this.set("sessionId", null);
     this.set("identity", void 0);
@@ -7049,117 +5350,34 @@ class App extends StateManager {
     }
   }
   /**
-   * Returns the current configuration object.
-   *
-   * @returns The Config object passed to init()
    * @internal Used by api.ts for configuration access
    */
   getConfig() {
     return this.get("config");
   }
   /**
-   * Returns the configured backend API URLs for event collection.
-   *
-   * @returns Object containing optional saas and custom API URLs
    * @internal Used by api.ts for backend URL access
    */
   getCollectApiUrls() {
     return this.get("collectApiUrls");
   }
   /**
-   * Returns the EventManager instance for event tracking operations.
-   *
-   * @returns The EventManager instance, or undefined if not initialized
    * @internal Used by api.ts for event operations
    */
   getEventManager() {
     return this.managers.event;
   }
   /**
-   * Returns the current session ID.
-   *
-   * @returns The session ID string, or null if not yet initialized
    * @internal Used by api.getSessionId()
    */
   getSessionId() {
     return this.get("sessionId");
   }
   /**
-   * Returns the current user ID.
-   *
-   * @returns The user ID string, or null if not yet initialized
    * @internal Used by api.getUserId()
    */
   getUserId() {
     return this.get("userId");
-  }
-  /**
-   * Validates metadata object structure and values.
-   *
-   * @param metadata - The metadata object to validate
-   * @returns Validation result with error message if invalid
-   * @internal Helper for updateGlobalMetadata and mergeGlobalMetadata
-   */
-  validateGlobalMetadata(metadata) {
-    if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
-      return {
-        valid: false,
-        error: "Global metadata must be a plain object"
-      };
-    }
-    const validation = isValidMetadata("Global", metadata, "globalMetadata");
-    if (!validation.valid) {
-      return {
-        valid: false,
-        error: validation.error
-      };
-    }
-    return { valid: true };
-  }
-  /**
-   * Replaces global metadata with new values.
-   *
-   * @param metadata - New global metadata object
-   * @throws {Error} If metadata validation fails
-   * @internal Called from api.updateGlobalMetadata()
-   */
-  updateGlobalMetadata(metadata) {
-    const validation = this.validateGlobalMetadata(metadata);
-    if (!validation.valid) {
-      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
-    }
-    const currentConfig = this.get("config");
-    const updatedConfig = {
-      ...currentConfig,
-      globalMetadata: metadata
-    };
-    this.set("config", updatedConfig);
-    log("debug", "Global metadata updated (replaced)", { data: { keys: Object.keys(metadata) } });
-  }
-  /**
-   * Merges new metadata with existing global metadata.
-   *
-   * @param metadata - Metadata to merge with existing values
-   * @throws {Error} If metadata validation fails
-   * @internal Called from api.mergeGlobalMetadata()
-   */
-  mergeGlobalMetadata(metadata) {
-    const validation = this.validateGlobalMetadata(metadata);
-    if (!validation.valid) {
-      throw new Error(`[TraceLog] Invalid global metadata: ${validation.error}`);
-    }
-    const currentConfig = this.get("config");
-    const existingMetadata = currentConfig.globalMetadata ?? {};
-    const mergedMetadata = {
-      ...existingMetadata,
-      ...metadata
-    };
-    const updatedConfig = {
-      ...currentConfig,
-      globalMetadata: mergedMetadata
-    };
-    this.set("config", updatedConfig);
-    log("debug", "Global metadata updated (merged)", { data: { keys: Object.keys(metadata) } });
   }
   /**
    * Associates the current anonymous visitor with a known user identity.
@@ -7167,11 +5385,10 @@ class App extends StateManager {
    * Identity is persisted to localStorage (project-scoped) and included in every
    * subsequent batch payload so the backend always has the latest identity.
    *
-   * Validation is duplicated here (also in api.ts) as defense-in-depth since
-   * TestBridge and internal callers bypass the API layer.
+   * @param userId - External user identifier (email, customer_id, etc.). Trimmed; max 256 chars.
+   * @param traits - Optional user attributes (name, email, plan, etc.). Only string values
+   *   are kept; non-string fields, arrays, and null are dropped silently.
    *
-   * @param userId - External user identifier (email, customer_id, etc.)
-   * @param traits - Optional user attributes (name, email, plan, etc.)
    * @internal Called from api.identify()
    */
   identify(userId, traits) {
@@ -7198,16 +5415,23 @@ class App extends StateManager {
     });
   }
   /**
-   * Clears identity, regenerates UUID, and starts a new session.
+   * Clears identity, regenerates UUID, and starts a fresh session.
    *
-   * Used for logout flows. The previous visitor profile with its identity
-   * remains in MongoDB — this method ensures the next user in the same browser
-   * gets a fresh anonymous profile.
+   * Use for logout flows: the previous visitor profile remains in the backend,
+   * and the next user in the same browser gets a clean anonymous profile.
+   *
+   * Pending events are flushed under the OLD identity first via async fetch
+   * (so any in-flight authentication headers are preserved). Then the identity
+   * is cleared, the userId is regenerated, and the session handler is
+   * restarted to emit a new `SESSION_START`.
    *
    * @internal Called from api.resetIdentity()
    */
   async resetIdentity() {
-    await this.managers.event?.flushImmediately();
+    await this.managers.event?.flushImmediately().catch((error) => {
+      log("debug", "Failed to flush before identity reset", { error });
+      return false;
+    });
     this.set("identity", void 0);
     this.clearPersistedIdentity();
     const newUserId = generateUUID();
@@ -7221,7 +5445,6 @@ class App extends StateManager {
   }
   /**
    * Returns the project ID used for identity storage scoping.
-   * Matches the same logic used by SessionHandler.
    */
   getProjectId() {
     const config = this.get("config");
@@ -7256,7 +5479,7 @@ class App extends StateManager {
           log("debug", "Invalid pending identity in localStorage, discarded");
           return;
         }
-        const normalizedPending = { ...pending, userId: pending.userId.trim() };
+        const normalizedPending = this.normalizePersistedIdentity(pending);
         storage.setItem(projectKey, JSON.stringify(normalizedPending));
         this.set("identity", normalizedPending);
         log("debug", "Migrated pending identity to project-scoped key");
@@ -7274,7 +5497,7 @@ class App extends StateManager {
           log("debug", "Invalid persisted identity in localStorage, discarded");
           return;
         }
-        const normalizedIdentity = { ...identity, userId: identity.userId.trim() };
+        const normalizedIdentity = this.normalizePersistedIdentity(identity);
         this.set("identity", normalizedIdentity);
         log("debug", "Loaded persisted identity");
       }
@@ -7283,20 +5506,28 @@ class App extends StateManager {
     }
   }
   /**
-   * Validates identity data loaded from localStorage.
-   * Guards against tampered or corrupted localStorage values.
+   * Validates identity data loaded from localStorage. `traits` is intentionally
+   * accepted as `unknown` here: `normalizePersistedIdentity()` runs it through
+   * `sanitizeTraits()` so tampered values are dropped silently instead of
+   * rejecting an otherwise-valid identity.
    */
   isValidIdentityData(data) {
     if (!data || typeof data !== "object") return false;
-    const { userId, traits } = data;
+    const { userId } = data;
     if (typeof userId !== "string" || userId.trim().length === 0 || userId.trim().length > 256) return false;
-    if (traits !== void 0) {
-      if (typeof traits !== "object" || traits === null || Array.isArray(traits)) return false;
-      for (const value of Object.values(traits)) {
-        if (typeof value !== "string") return false;
-      }
-    }
     return true;
+  }
+  /**
+   * Trims the `userId` and re-sanitizes `traits` through the same gate
+   * `identify()` uses at call time, defending later batches against tampered
+   * localStorage values.
+   */
+  normalizePersistedIdentity(identity) {
+    const validTraits = sanitizeTraits(identity.traits);
+    return {
+      userId: identity.userId.trim(),
+      ...validTraits ? { traits: validTraits } : {}
+    };
   }
   /**
    * Clears persisted identity from localStorage.
@@ -7364,10 +5595,6 @@ class App extends StateManager {
     });
     this.handlers.error = new ErrorHandler(this.managers.event, this.emitter);
     this.handlers.error.startTracking();
-    if (config.viewport) {
-      this.handlers.viewport = new ViewportHandler(this.managers.event);
-      this.handlers.viewport.startTracking();
-    }
     if (config.integrations?.tracelog?.shopify) {
       const linker = new ShopifyCartLinker();
       linker.activate();
@@ -7381,8 +5608,6 @@ class App extends StateManager {
   }
 }
 const pendingListeners = [];
-const pendingTransformers = [];
-let pendingCustomHeadersProvider = null;
 let app = null;
 let isInitializing = false;
 let isDestroying = false;
@@ -7411,18 +5636,6 @@ const init = async (config) => {
           instance.on(event2, callback);
         });
         pendingListeners.length = 0;
-        pendingTransformers.forEach(({ hook, fn }) => {
-          if (hook === "beforeSend") {
-            instance.setTransformer("beforeSend", fn);
-          } else {
-            instance.setTransformer("beforeBatch", fn);
-          }
-        });
-        pendingTransformers.length = 0;
-        if (pendingCustomHeadersProvider) {
-          instance.setCustomHeaders(pendingCustomHeadersProvider);
-          pendingCustomHeadersProvider = null;
-        }
         const appInitPromise = instance.init(validatedConfig);
         const timeoutPromise = new Promise((_2, reject) => {
           setTimeout(() => {
@@ -7462,24 +5675,6 @@ const event = (name, metadata, options) => {
   }
   app.sendCustomEvent(name, metadata, options);
 };
-const flushImmediately = async () => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return false;
-  }
-  if (!app || isDestroying) {
-    return false;
-  }
-  return app.flushImmediately();
-};
-const flushImmediatelySync = () => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return false;
-  }
-  if (!app || isDestroying) {
-    return false;
-  }
-  return app.flushImmediatelySync();
-};
 const on = (event2, callback) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
@@ -7502,75 +5697,6 @@ const off = (event2, callback) => {
     return;
   }
   app.off(event2, callback);
-};
-function setTransformer(hook, fn) {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  if (typeof fn !== "function") {
-    throw new Error(`[TraceLog] Transformer must be a function, received: ${typeof fn}`);
-  }
-  if (!app || isInitializing) {
-    const existingIndex = pendingTransformers.findIndex((t2) => t2.hook === hook);
-    if (existingIndex !== -1) {
-      pendingTransformers.splice(existingIndex, 1);
-    }
-    pendingTransformers.push({ hook, fn });
-    return;
-  }
-  if (isDestroying) {
-    throw new Error("[TraceLog] Cannot set transformers while TraceLog is being destroyed");
-  }
-  if (hook === "beforeSend") {
-    app.setTransformer("beforeSend", fn);
-  } else {
-    app.setTransformer("beforeBatch", fn);
-  }
-}
-const removeTransformer = (hook) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  if (!app) {
-    const index = pendingTransformers.findIndex((t2) => t2.hook === hook);
-    if (index !== -1) {
-      pendingTransformers.splice(index, 1);
-    }
-    return;
-  }
-  if (isDestroying) {
-    throw new Error("[TraceLog] Cannot remove transformers while TraceLog is being destroyed");
-  }
-  app.removeTransformer(hook);
-};
-const setCustomHeaders = (provider) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  if (typeof provider !== "function") {
-    throw new Error(`[TraceLog] Custom headers provider must be a function, received: ${typeof provider}`);
-  }
-  if (!app || isInitializing) {
-    pendingCustomHeadersProvider = provider;
-    return;
-  }
-  if (isDestroying) {
-    throw new Error("[TraceLog] Cannot set custom headers while TraceLog is being destroyed");
-  }
-  app.setCustomHeaders(provider);
-};
-const removeCustomHeaders = () => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  if (!app) {
-    pendingCustomHeadersProvider = null;
-    return;
-  }
-  if (isDestroying) {
-    throw new Error("[TraceLog] Cannot remove custom headers while TraceLog is being destroyed");
-  }
-  app.removeCustomHeaders();
 };
 const isInitialized = () => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -7614,8 +5740,6 @@ const destroy = () => {
     isInitializing = false;
     initPromise = null;
     pendingListeners.length = 0;
-    pendingTransformers.length = 0;
-    pendingCustomHeadersProvider = null;
     if (typeof window !== "undefined" && window.__traceLogBridge) {
       window.__traceLogBridge = void 0;
     }
@@ -7625,41 +5749,9 @@ const destroy = () => {
     isInitializing = false;
     initPromise = null;
     pendingListeners.length = 0;
-    pendingTransformers.length = 0;
-    pendingCustomHeadersProvider = null;
     isDestroying = false;
     log("warn", "Error during destroy, forced cleanup completed", { error });
   }
-};
-const setQaMode = (enabled) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  setQaMode$1(enabled);
-};
-const updateGlobalMetadata = (metadata) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  if (!app) {
-    throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
-  }
-  if (isDestroying) {
-    throw new Error("[TraceLog] Cannot update metadata while TraceLog is being destroyed");
-  }
-  app.updateGlobalMetadata(metadata);
-};
-const mergeGlobalMetadata = (metadata) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return;
-  }
-  if (!app) {
-    throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
-  }
-  if (isDestroying) {
-    throw new Error("[TraceLog] Cannot update metadata while TraceLog is being destroyed");
-  }
-  app.mergeGlobalMetadata(metadata);
 };
 const identify = (userId, traits) => {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -7744,44 +5836,26 @@ const api = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty(
   __setAppInstance,
   destroy,
   event,
-  flushImmediately,
-  flushImmediatelySync,
   getSessionId,
   getUserId,
   identify,
   init,
   isInitialized,
-  mergeGlobalMetadata,
   off,
   on,
-  removeCustomHeaders,
-  removeTransformer,
-  resetIdentity,
-  setCustomHeaders,
-  setQaMode,
-  setTransformer,
-  updateGlobalMetadata
+  resetIdentity
 }, Symbol.toStringTag, { value: "Module" }));
 const tracelog = {
   init,
   event,
   on,
   off,
-  setTransformer,
-  removeTransformer,
-  setCustomHeaders,
-  removeCustomHeaders,
   isInitialized,
   getSessionId,
   getUserId,
   destroy,
-  setQaMode,
-  updateGlobalMetadata,
-  mergeGlobalMetadata,
   identify,
-  resetIdentity,
-  flushImmediately,
-  flushImmediatelySync
+  resetIdentity
 };
 var e, n, t, r, i, o = -1, a = function(e3) {
   addEventListener("pageshow", (function(n2) {
@@ -8051,27 +6125,9 @@ class TestBridge extends App {
     }
     super.sendCustomEvent(name, data, options);
   }
-  /**
-   * Alias for sendCustomEvent (E2E test convenience).
-   *
-   * @param name - Event name
-   * @param metadata - Optional metadata
-   * @param options - Optional flags. `{ critical: true }` flushes via
-   *   sendBeacon immediately after tracking — used by E2E tests that simulate
-   *   purchase-then-navigate flows.
-   */
   event(name, metadata, options) {
     this.sendCustomEvent(name, metadata, options);
   }
-  /**
-   * QA mode control for debugging tests
-   */
-  setQaMode(enabled) {
-    setQaMode$1(enabled);
-  }
-  /**
-   * Session data inspection for E2E tests
-   */
   getSessionData() {
     const sessionId = this.get("sessionId");
     const config = this.get("config");
@@ -8081,63 +6137,30 @@ class TestBridge extends App {
       timeout: config.sessionTimeout ?? 15 * 60 * 1e3
     };
   }
-  /**
-   * Queue length inspection for E2E tests
-   */
   getQueueLength() {
     return this.managers.event?.getQueueLength() ?? 0;
   }
-  /**
-   * Event manager accessor for E2E tests
-   */
   getEventManager() {
     return this.managers.event;
   }
-  /**
-   * Performance handler accessor for tests
-   */
   getPerformanceHandler() {
     return this.handlers.performance ?? null;
   }
-  /**
-   * Error handler accessor for tests
-   */
   getErrorHandler() {
     return this.handlers.error ?? null;
   }
-  /**
-   * Session handler accessor for tests
-   */
   getSessionHandler() {
     return this.handlers.session ?? null;
   }
-  /**
-   * PageView handler accessor for tests
-   */
   getPageViewHandler() {
     return this.handlers.pageView ?? null;
   }
-  /**
-   * Click handler accessor for tests
-   */
   getClickHandler() {
     return this.handlers.click ?? null;
   }
-  /**
-   * Scroll handler accessor for tests
-   */
   getScrollHandler() {
     return this.handlers.scroll ?? null;
   }
-  /**
-   * Viewport handler accessor for tests
-   */
-  getViewportHandler() {
-    return this.handlers.viewport ?? null;
-  }
-  /**
-   * Get all handlers at once (convenience method)
-   */
   getHandlers() {
     return {
       performance: this.getPerformanceHandler(),
@@ -8145,59 +6168,24 @@ class TestBridge extends App {
       session: this.getSessionHandler(),
       pageView: this.getPageViewHandler(),
       click: this.getClickHandler(),
-      scroll: this.getScrollHandler(),
-      viewport: this.getViewportHandler()
+      scroll: this.getScrollHandler()
     };
   }
-  /**
-   * Storage manager accessor for tests
-   */
   getStorageManager() {
     return this.managers.storage ?? null;
   }
-  /**
-   * Get events from queue (for validation in tests)
-   */
   getQueueEvents() {
     return this.managers.event?.getQueueEvents() ?? [];
   }
-  /**
-   * State accessor (make public for tests)
-   */
   get(key) {
     return super.get(key);
   }
-  /**
-   * Full state snapshot (for test inspection)
-   */
   getFullState() {
     return this.getState();
   }
-  /**
-   * Update global metadata (delegates to App method)
-   */
-  updateGlobalMetadata(metadata) {
-    super.updateGlobalMetadata(metadata);
-  }
-  /**
-   * Merge global metadata (delegates to App method)
-   */
-  mergeGlobalMetadata(metadata) {
-    super.mergeGlobalMetadata(metadata);
-  }
-  /**
-   * Get state object (public override for test access)
-   *
-   * Exposes protected StateManager.getState() as public for integration tests.
-   * Equivalent to getFullState() but maintains consistency with test patterns
-   * that use bridge.getState().config pattern.
-   */
   getState() {
     return super.getState();
   }
-  /**
-   * Wait for initialization to complete (test utility)
-   */
   async waitForInitialization(timeout = 5e3) {
     const startTime = Date.now();
     while (!this.initialized && Date.now() - startTime < timeout) {
@@ -8207,21 +6195,12 @@ class TestBridge extends App {
       throw new Error("[TraceLog] Initialization timeout");
     }
   }
-  /**
-   * Trigger manual queue flush (test utility)
-   */
   async flushQueue() {
     await this.managers.event?.flushQueue();
   }
-  /**
-   * Clear event queue (test utility - use with caution)
-   */
   clearQueue() {
     this.managers.event?.clearQueue();
   }
-  /**
-   * Cleanup (syncs with api.ts)
-   */
   destroy(force = false) {
     if (!this.initialized && !force) {
       return;
@@ -8287,8 +6266,6 @@ export {
   WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
   WEB_VITALS_POOR_THRESHOLDS,
   getWebVitalsThresholds,
-  isPrimaryScrollEvent,
-  isSecondaryScrollEvent,
   tracelog
 };
 //# sourceMappingURL=tracelog.esm.js.map

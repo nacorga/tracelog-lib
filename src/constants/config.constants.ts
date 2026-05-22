@@ -28,6 +28,23 @@ export const EVENT_EXPIRY_HOURS = 2;
 export const EVENT_PERSISTENCE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 export const PERSISTENCE_THROTTLE_MS = 1000; // 1 second throttle for cross-tab persistence coordination
 
+/**
+ * Maximum age (in ms) of individual events recovered from localStorage before
+ * they are dropped during replay. Distinct from `EVENT_EXPIRY_HOURS` which
+ * gates the whole persisted envelope — this gates each `events[].timestamp`.
+ *
+ * Why this matters: a batch can survive across multiple persist/recover/fail
+ * cycles (the envelope timestamp is reset on every re-persist, but inner
+ * event timestamps stay frozen at their original capture time). A device with
+ * a stale clock or a long offline session can accumulate events older than the
+ * server's `MAX_PAST_OFFSET_DAYS` window, which the API would clamp or reject.
+ * Dropping them here avoids shipping data the server cannot trust.
+ *
+ * Kept one day under the server's 7-day past-window so borderline cases never
+ * leave the client.
+ */
+export const MAX_EVENT_AGE_MS_ON_RECOVERY = 6 * 24 * 60 * 60 * 1000; // 6 days
+
 // ============================================================================
 // LIMITS & REQUESTS
 // ============================================================================
