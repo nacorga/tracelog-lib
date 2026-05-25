@@ -448,7 +448,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
   }
 };
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "2.10.0";
+const version = "3.0.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -499,6 +499,7 @@ const mode_utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePr
   __proto__: null,
   detectQaMode
 }, Symbol.toStringTag, { value: "Module" }));
+const isPrerendering = () => typeof document !== "undefined" && document.prerendering === true;
 const COMPOUND_TLDS = [
   "co.uk",
   "org.uk",
@@ -754,8 +755,12 @@ const sanitizeMetadata = (metadata) => {
   }
 };
 const PII_PATTERNS = [
-  // Email addresses
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
+  // Email addresses.
+  // Quantifiers are bounded (local part ≤64, each label ≤63, TLD ≤63 per RFC/DNS limits)
+  // and the domain is matched as discrete dot-separated labels so the local-part and
+  // domain classes never overlap. This keeps matching linear and prevents catastrophic
+  // backtracking (ReDoS) on long, dot-heavy inputs that contain no real email.
+  /\b[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}\b/gi,
   // US Phone numbers (various formats)
   /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
   // Credit card numbers (16 digits with optional separators)
@@ -3260,6 +3265,7 @@ class SessionManager extends StateManager {
   broadcastChannel = null;
   isTracking = false;
   needsRenewal = false;
+  prerenderActivationHandler = null;
   /**
    * Creates a SessionManager instance.
    *
@@ -3469,6 +3475,19 @@ class SessionManager extends StateManager {
       this.persistSession(sessionId, Date.now(), sessionReferrer, sessionUtm);
       this.initCrossTabSync();
       this.shareSession(sessionId);
+      if (isPrerendering()) {
+        this.prerenderActivationHandler = () => {
+          this.prerenderActivationHandler = null;
+          if (!recoveredSessionId) {
+            this.eventManager.track({ type: EventType.SESSION_START });
+          }
+          this.setupSessionTimeout();
+          this.setupActivityListeners();
+          this.setupLifecycleListeners();
+        };
+        document.addEventListener("prerenderingchange", this.prerenderActivationHandler, { once: true });
+        return;
+      }
       if (!recoveredSessionId) {
         log("debug", "Emitting SESSION_START event", {
           data: { sessionId }
@@ -3633,6 +3652,7 @@ class SessionManager extends StateManager {
     this.cleanupActivityListeners();
     this.cleanupLifecycleListeners();
     this.cleanupCrossTabSync();
+    this.cleanupPrerenderActivation();
     this.clearStoredSession();
     this.set("sessionId", null);
     this.set("hasStartSession", false);
@@ -3709,9 +3729,22 @@ class SessionManager extends StateManager {
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
     this.cleanupLifecycleListeners();
+    this.cleanupPrerenderActivation();
     this.isTracking = false;
     this.needsRenewal = false;
     this.set("hasStartSession", false);
+  }
+  /**
+   * Removes the pending `prerenderingchange` listener when the manager is torn
+   * down before activation (the discarded-prerender case). On the activation path
+   * `{ once: true }` removes the listener and the handler nulls its own reference,
+   * so this is a no-op then.
+   */
+  cleanupPrerenderActivation() {
+    if (this.prerenderActivationHandler) {
+      document.removeEventListener("prerenderingchange", this.prerenderActivationHandler);
+      this.prerenderActivationHandler = null;
+    }
   }
 }
 class SessionHandler extends StateManager {
@@ -4698,7 +4731,6 @@ class PerformanceHandler extends StateManager {
    * - Reads webVitalsMode from config ('all', 'needs-improvement', 'poor')
    * - Merges webVitalsThresholds with mode defaults for custom thresholds
    * - Initializes web-vitals library observers (LCP, CLS, FCP, TTFB, INP)
-   * - Starts long task observation with 1/second throttling
    *
    * @returns Promise that resolves when tracking is initialized
    */
@@ -5208,6 +5240,7 @@ class App extends StateManager {
   pageUnloadHandler = null;
   pageShowHandler = null;
   visibilityFlushHandler = null;
+  prerenderActivationHandler = null;
   emitter = new Emitter();
   managers = {};
   handlers = {};
@@ -5320,6 +5353,10 @@ class App extends StateManager {
     if (this.visibilityFlushHandler) {
       document.removeEventListener("visibilitychange", this.visibilityFlushHandler);
       this.visibilityFlushHandler = null;
+    }
+    if (this.prerenderActivationHandler) {
+      document.removeEventListener("prerenderingchange", this.prerenderActivationHandler);
+      this.prerenderActivationHandler = null;
     }
     this.managers.event?.flushImmediatelySync();
     this.managers.event?.stop();
@@ -5584,26 +5621,37 @@ class App extends StateManager {
       }, SCROLL_DEBOUNCE_TIME_MS * SCROLL_SUPPRESS_MULTIPLIER);
     };
     this.handlers.pageView = new PageViewHandler(this.managers.event, onPageView);
-    this.handlers.pageView.startTracking();
     this.handlers.click = new ClickHandler(this.managers.event);
-    this.handlers.click.startTracking();
     this.handlers.scroll = new ScrollHandler(this.managers.event);
-    this.handlers.scroll.startTracking();
     this.handlers.performance = new PerformanceHandler(this.managers.event);
-    this.handlers.performance.startTracking().catch((error) => {
-      log("warn", "Failed to start performance tracking", { error });
-    });
     this.handlers.error = new ErrorHandler(this.managers.event, this.emitter);
-    this.handlers.error.startTracking();
-    if (config.integrations?.tracelog?.shopify) {
-      const linker = new ShopifyCartLinker();
-      linker.activate();
-      this.integrationInstances.shopifyCartLinker = linker;
-      this.emitter.on(EmitterEvent.EVENT, (event2) => {
-        if (event2.type === EventType.SESSION_START) {
-          linker.onSessionChange();
-        }
+    const startInteractionTracking = () => {
+      this.handlers.pageView?.startTracking();
+      this.handlers.click?.startTracking();
+      this.handlers.scroll?.startTracking();
+      this.handlers.performance?.startTracking().catch((error) => {
+        log("warn", "Failed to start performance tracking", { error });
       });
+      this.handlers.error?.startTracking();
+      if (config.integrations?.tracelog?.shopify) {
+        const linker = new ShopifyCartLinker();
+        linker.activate();
+        this.integrationInstances.shopifyCartLinker = linker;
+        this.emitter.on(EmitterEvent.EVENT, (event2) => {
+          if (event2.type === EventType.SESSION_START) {
+            linker.onSessionChange();
+          }
+        });
+      }
+    };
+    if (isPrerendering()) {
+      this.prerenderActivationHandler = () => {
+        this.prerenderActivationHandler = null;
+        startInteractionTracking();
+      };
+      document.addEventListener("prerenderingchange", this.prerenderActivationHandler, { once: true });
+    } else {
+      startInteractionTracking();
     }
   }
 }
