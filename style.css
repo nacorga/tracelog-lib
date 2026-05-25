@@ -869,8 +869,7 @@ body {
   color: #7c3aed;
 }
 
-.event-type-session_start,
-.event-type-session_end {
+.event-type-session_start {
   background: #fce7f3;
   color: #be185d;
 }
@@ -878,11 +877,6 @@ body {
 .event-type-error {
   background: #fee2e2;
   color: #dc2626;
-}
-
-.event-type-viewport_visible {
-  background: #e0e7ff;
-  color: #4338ca;
 }
 
 .event-status-icon {
