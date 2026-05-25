@@ -22,6 +22,48 @@
 
 
 
+
+## [3.0.0] - 2026-05-25
+
+### ✨ Features
+
+- Implement per-pageview error signature throttling and related utilities ([5f73408](../../commit/5f73408b3bd47779ca6b6d38762428ffa8b7e18b))
+
+### 🧪 Tests
+
+- Add coverage tests for TimeManager, StorageManager, SenderManager, and API ([bbe21ea](../../commit/bbe21ea36bba8b5b297a9a00e842b678aeb4dc03))
+
+### ♻️ Refactoring
+
+- Remove viewport tracking configuration and related styles; simplify session management ([30b634a](../../commit/30b634a88ce2dad4ea5abba097fcd2444d047bf0))
+- Update test command for CI and remove long task throttling from performance handler documentation; enhance PII patterns for email matching ([fc24a4b](../../commit/fc24a4b10f74e9271c2886fbe77a0e1a61b73b0e))
+- Implement recovery age filter to discard stale events during replay ([9aab6c1](../../commit/9aab6c10d653cab0cd9665bf088c612055da354c))
+- Remove primaryScrollSelector from Config and related validations ([da532db](../../commit/da532dbea0f2c9bd6799ee11dbc1f054f9e6aa4b))
+- Enhance identity management with traits support and add resetIdentity method; migrate legacy storage keys for v3 compatibility ([752763c](../../commit/752763cbf6d4a27ff236fca2d34b3b12c6081b5c))
+- Update event data structures for v3.0 compatibility; remove deprecated fields and adjust assertions ([fcdb293](../../commit/fcdb29387deeeedcd9fbf76b9de895a823e49035))
+- Remove end-to-end test from critical ingestion test script for improved clarity ([7782ba4](../../commit/7782ba4b2f80972bdbea5ecb45df7fb7cf037d10))
+- Replace real SenderManager with a fake sender in stress tests for improved isolation ([4384c21](../../commit/4384c2125ecaeb1a7cbb67457e133a1f9eba06a6))
+- Replace Response with MockResponse in SenderManager tests for improved compatibility ([6e89766](../../commit/6e89766cea61a41542382d36296b01747f7ca0f1))
+- Remove StorageManager and TimeManager tests; add PII sanitization tests ([62760f8](../../commit/62760f8e73e1a7cca8c1fc4dab46e269adec79a6))
+- Enhance error handling with per-pageview signature throttling and memory safety limits ([19a2700](../../commit/19a2700ff5b42c7fac90619eac06afa6afbc1806))
+
+### 🔧 Other Changes
+
+- Merge pull request #113 from nacorga/release/20260522.1 ([e96718f](../../commit/e96718f5517ac2725303595fa4bfb8445b6df93a))
+- Merge pull request #112 from nacorga/refactor/v2 ([901fb0b](../../commit/901fb0bfebade2e23d0ffb167ca1e71fd8bcd338))
+- Remove outdated command files and skills ([1f9f1ad](../../commit/1f9f1ad42b23ca7333a14e0303bb558057295c21))
+- Merge pull request #111 from nacorga/refactor/error-handler ([128d507](../../commit/128d507950ca1ba481391f521d011aee077f3ac3))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v2.10.0...v3.0.0
+
+
 ## [2.10.0] - 2026-05-12
 
 ### ✨ Features
