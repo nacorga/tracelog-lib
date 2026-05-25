@@ -1,6 +1,6 @@
 import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
-import { EventType, UTM } from '../types';
-import { getExternalReferrer, getUTMParameters, isPrerendering, log } from '../utils';
+import { ClickIds, EventType, UTM } from '../types';
+import { getClickIds, getExternalReferrer, getUTMParameters, isPrerendering, log } from '../utils';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { EventManager } from './event.manager';
@@ -10,6 +10,7 @@ interface StoredSessionData {
   lastActivity: number;
   referrer?: string;
   utm?: UTM;
+  clickIds?: ClickIds;
 }
 
 /**
@@ -187,12 +188,19 @@ export class SessionManager extends StateManager {
     return storedSession.id;
   }
 
-  private persistSession(sessionId: string, lastActivity: number = Date.now(), referrer?: string, utm?: UTM): void {
+  private persistSession(
+    sessionId: string,
+    lastActivity: number = Date.now(),
+    referrer?: string,
+    utm?: UTM,
+    clickIds?: ClickIds,
+  ): void {
     this.saveStoredSession({
       id: sessionId,
       lastActivity,
       ...(referrer && { referrer }),
       ...(utm && { utm }),
+      ...(clickIds && { clickIds }),
     });
   }
 
@@ -313,19 +321,22 @@ export class SessionManager extends StateManager {
     const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
 
-    // Capture or recover attribution data (referrer/UTM)
+    // Capture or recover attribution data (referrer/UTM/click-ids)
     let sessionReferrer: string;
     let sessionUtm: UTM | undefined;
+    let sessionClickIds: ClickIds | undefined;
 
     if (recoveredSessionId) {
       // Session recovered: load attribution from storage (with fallback to current context)
       const storedSession = this.loadStoredSession();
       sessionReferrer = storedSession?.referrer ?? getExternalReferrer();
       sessionUtm = storedSession?.utm ?? getUTMParameters();
+      sessionClickIds = storedSession?.clickIds ?? getClickIds();
     } else {
       // New session: capture from current page context
       sessionReferrer = getExternalReferrer();
       sessionUtm = getUTMParameters();
+      sessionClickIds = getClickIds();
     }
 
     log('debug', 'Session tracking initialized', {
@@ -335,6 +346,7 @@ export class SessionManager extends StateManager {
         willEmitSessionStart: !recoveredSessionId,
         sessionReferrer,
         hasUtm: !!sessionUtm,
+        hasClickIds: !!sessionClickIds,
       },
     });
 
@@ -344,7 +356,8 @@ export class SessionManager extends StateManager {
       this.set('sessionId', sessionId);
       this.set('sessionReferrer', sessionReferrer);
       this.set('sessionUtm', sessionUtm);
-      this.persistSession(sessionId, Date.now(), sessionReferrer, sessionUtm);
+      this.set('sessionClickIds', sessionClickIds);
+      this.persistSession(sessionId, Date.now(), sessionReferrer, sessionUtm, sessionClickIds);
       this.initCrossTabSync();
       this.shareSession(sessionId);
 
@@ -420,7 +433,13 @@ export class SessionManager extends StateManager {
     this.setupSessionTimeout();
     const sessionId = this.get('sessionId') as string;
     if (sessionId) {
-      this.persistSession(sessionId, Date.now(), this.get('sessionReferrer'), this.get('sessionUtm'));
+      this.persistSession(
+        sessionId,
+        Date.now(),
+        this.get('sessionReferrer'),
+        this.get('sessionUtm'),
+        this.get('sessionClickIds'),
+      );
     }
   }
 
@@ -455,6 +474,7 @@ export class SessionManager extends StateManager {
     const newSessionId = this.generateSessionId();
     const sessionReferrer = getExternalReferrer();
     const sessionUtm = getUTMParameters();
+    const sessionClickIds = getClickIds();
 
     log('debug', 'Renewing session after timeout', {
       data: { newSessionId },
@@ -463,7 +483,8 @@ export class SessionManager extends StateManager {
     this.set('sessionId', newSessionId);
     this.set('sessionReferrer', sessionReferrer);
     this.set('sessionUtm', sessionUtm);
-    this.persistSession(newSessionId, Date.now(), sessionReferrer, sessionUtm);
+    this.set('sessionClickIds', sessionClickIds);
+    this.persistSession(newSessionId, Date.now(), sessionReferrer, sessionUtm, sessionClickIds);
 
     // Re-initialize cross-tab sync with new session
     this.cleanupCrossTabSync();
@@ -560,6 +581,7 @@ export class SessionManager extends StateManager {
     this.set('hasStartSession', false);
     this.set('sessionReferrer', undefined);
     this.set('sessionUtm', undefined);
+    this.set('sessionClickIds', undefined);
 
     // Keep activity listeners active but switch to renewal mode
     this.needsRenewal = true;
@@ -583,6 +605,7 @@ export class SessionManager extends StateManager {
     this.set('hasStartSession', false);
     this.set('sessionReferrer', undefined);
     this.set('sessionUtm', undefined);
+    this.set('sessionClickIds', undefined);
 
     this.needsRenewal = false;
     this.isTracking = false;

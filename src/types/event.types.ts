@@ -200,6 +200,24 @@ export interface UTM {
 }
 
 /**
+ * Ad-network click identifiers auto-appended to landing URLs by ad platforms.
+ * Used by the backend to classify a session's traffic source as Paid when no
+ * manual UTM source/medium is present. Captured but never logged.
+ */
+export interface ClickIds {
+  /** Google Ads click id */
+  gclid?: string;
+  /** Google Ads iOS-privacy click id (app campaigns) */
+  gbraid?: string;
+  /** Google Ads iOS-privacy click id (web-to-app) */
+  wbraid?: string;
+  /** Meta (Facebook/Instagram) Ads click id */
+  fbclid?: string;
+  /** TikTok Ads click id */
+  ttclid?: string;
+}
+
+/**
  * Page view navigation data
  */
 export interface PageViewData {
@@ -240,6 +258,8 @@ export interface EventData {
   error_data?: ErrorData;
   /** Campaign tracking parameters */
   utm?: UTM;
+  /** Ad-network click identifiers (gclid, fbclid, ttclid, ...) captured at session start */
+  click_ids?: ClickIds;
 }
 
 /**
