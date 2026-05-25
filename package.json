@@ -58,7 +58,7 @@
     "docs:dev": "npm run docs:setup && npm run serve",
     "docs:gh-pages": "npm run build:browser && cp dist/browser/tracelog.esm.js docs/tracelog.js",
     "test:e2e": "npm run docs:setup && NODE_ENV=development playwright test",
-    "test:e2e:ci": "npm run docs:setup && NODE_ENV=development playwright test --grep-invert \"E2E: Ingestion Pipeline\"",
+    "test:e2e:ci": "npm run docs:setup && NODE_ENV=development playwright test",
     "test:critical:ingestion": "npm run test:unit -- sender-manager.test.ts session-manager.test.ts",
     "ci:build": "npm run build:all",
     "prepare": "husky",

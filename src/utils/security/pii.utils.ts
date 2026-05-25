@@ -6,8 +6,12 @@
  * a pattern here automatically widens coverage for both handlers.
  */
 export const PII_PATTERNS = [
-  // Email addresses
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi,
+  // Email addresses.
+  // Quantifiers are bounded (local part ≤64, each label ≤63, TLD ≤63 per RFC/DNS limits)
+  // and the domain is matched as discrete dot-separated labels so the local-part and
+  // domain classes never overlap. This keeps matching linear and prevents catastrophic
+  // backtracking (ReDoS) on long, dot-heavy inputs that contain no real email.
+  /\b[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}\b/gi,
 
   // US Phone numbers (various formats)
   /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,

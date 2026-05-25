@@ -19,7 +19,6 @@ type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: bo
  * - Custom threshold overrides via webVitalsThresholds config
  * - Navigation-based deduplication with 50-navigation FIFO history
  * - CLS accumulation with reset on navigation change
- * - Long task throttling (maximum 1 event per second)
  * - Automatic fallback to Performance Observer if web-vitals library fails
  * - Final values only (reportAllChanges: false for all metrics)
  *
@@ -31,7 +30,6 @@ type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: bo
  * - FCP (First Contentful Paint): Initial rendering time
  * - TTFB (Time to First Byte): Server response time
  * - INP (Interaction to Next Paint): Responsiveness measure
- * - LONG_TASK: Tasks blocking main thread (>50ms, throttled to 1/second)
  *
  * **Filtering Modes**:
  * - 'all': Track all positive metric values (threshold = 0)
@@ -70,7 +68,6 @@ export class PerformanceHandler extends StateManager {
    * - Reads webVitalsMode from config ('all', 'needs-improvement', 'poor')
    * - Merges webVitalsThresholds with mode defaults for custom thresholds
    * - Initializes web-vitals library observers (LCP, CLS, FCP, TTFB, INP)
-   * - Starts long task observation with 1/second throttling
    *
    * @returns Promise that resolves when tracking is initialized
    */
