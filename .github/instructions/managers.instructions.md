@@ -1,5 +1,6 @@
-applyTo:
-  - src/managers/**/*.ts
+---
+applyTo: 'src/managers/**/*.ts'
+---
 
 # Manager-Specific Review Instructions
 
@@ -31,24 +32,28 @@ export class CustomManager extends StateManager {
 ## Critical Checks
 
 ### 1. State Management (BLOCKING)
+
 - ✅ All managers extend `StateManager`
 - ✅ State accessed via `this.state` (read-only reference)
 - ✅ State mutations through setters or dedicated update methods
 - ❌ **BLOCK**: Direct state mutation (e.g., `this.state.foo = bar`) → State corruption
 
 ### 2. Memory Management (BLOCKING)
+
 - ✅ Cleanup methods clear all timers/intervals
 - ✅ Event listeners removed in cleanup
 - ✅ No circular references to other managers
 - ❌ **BLOCK**: Missing cleanup for timers/intervals → Memory leak
 
 ### 3. Error Handling (HIGH)
+
 - ✅ Try-catch blocks around critical operations
 - ✅ Errors logged with context information
 - ✅ Graceful degradation on failures
 - ⚠️ **HIGH**: Missing error handling in async operations → Unhandled promise rejections
 
 ### 4. Type Safety (BLOCKING)
+
 - ✅ Strict TypeScript mode compliance (no `any` without justification)
 - ✅ Proper type guards for runtime validations
 - ✅ Return types explicitly defined
@@ -57,12 +62,14 @@ export class CustomManager extends StateManager {
 ## Manager-Specific Patterns
 
 ### StateManager (Base Class)
+
 - Verify singleton pattern implementation
 - Check state initialization logic
 - Ensure state updates trigger proper notifications
 - Validate state persistence/hydration logic
 
 ### EventManager
+
 - Validate event queue management (max size, expiry)
 - Check deduplication logic correctness
 - Ensure proper event batching for network transmission
@@ -70,6 +77,7 @@ export class CustomManager extends StateManager {
 - Check event emission via `on('event')` for local consumption
 
 ### SessionManager
+
 - Validate session timeout logic (default 15min)
 - Check cross-tab synchronization (localStorage)
 - Ensure proper session ID generation (UUID v4)
@@ -77,12 +85,14 @@ export class CustomManager extends StateManager {
 - Check session expiry cleanup
 
 ### StorageManager
+
 - Validate localStorage read/write error handling
 - Check storage quota exceeded handling
 - Ensure proper JSON serialization/deserialization
 - Verify storage key namespacing (avoid collisions)
 
 ### SenderManager
+
 - Validate network request logic (`sendBeacon` fallback to `fetch`)
 - Check retry logic for failed requests
 - Ensure proper error handling for network failures
@@ -90,12 +100,14 @@ export class CustomManager extends StateManager {
 - Check that sender only operates when integration configured
 
 ### UserManager
+
 - Validate user identification logic
 - Check user metadata validation
 - Ensure user privacy (no PII unless explicitly provided)
 - Verify user ID persistence across sessions
 
 ### PerformanceHandler (Web Vitals)
+
 - Validate Web Vitals integration (`onLCP`, `onCLS`, `onINP`, etc.)
 - Check metric attribution (element, URL, load state)
 - Ensure single metric report per page load
@@ -104,18 +116,21 @@ export class CustomManager extends StateManager {
 ## Testing Requirements
 
 ### Unit Tests
+
 - Test state access patterns (`this.state`)
 - Test business logic in isolation (mock dependencies)
 - Test error handling paths
 - Test edge cases (null, undefined, invalid inputs)
 
 ### Integration Tests
+
 - Test manager interactions (e.g., EventManager → SenderManager)
 - Test state updates propagate correctly
 - Test cleanup prevents memory leaks
 - Test concurrent operation scenarios
 
 ### Coverage Requirements
+
 - **MUST**: 90%+ line coverage for all managers
 - **MUST**: 100% coverage for critical paths (event tracking, session management)
 - **SHOULD**: Test all error handling branches
@@ -123,18 +138,21 @@ export class CustomManager extends StateManager {
 ## Common Issues
 
 ### Critical (Must Fix)
+
 - ❌ Direct state mutation: `this.state.foo = bar` (use setters instead)
 - ❌ Missing cleanup for timers: `setInterval()` without `clearInterval()`
 - ❌ Circular imports between managers
 - ❌ Using `any` type without justification
 
 ### High Priority
+
 - ⚠️ Async operations without error handling (`.catch()` or `try-catch`)
 - ⚠️ No validation on constructor parameters
 - ⚠️ Heavy synchronous operations blocking main thread
 - ⚠️ Missing null checks before accessing nested properties
 
 ### Medium Priority
+
 - 💡 Complex logic not extracted to utils
 - 💡 Magic numbers without constants (use `constants/`)
 - 💡 Missing JSDoc comments on public methods
@@ -145,6 +163,7 @@ export class CustomManager extends StateManager {
 ## Code Comments Policy
 
 **✅ Use comments for:**
+
 - State management patterns and design decisions
 - Complex business logic that's non-obvious
 - Edge cases in session/event handling
@@ -152,6 +171,7 @@ export class CustomManager extends StateManager {
 - Queue management strategies
 
 **❌ NEVER use comments for:**
+
 - State access patterns (e.g., `// Get sessionId from state`)
 - Obvious method calls (e.g., `// Track event`)
 - Simple validations (e.g., `// Check if initialized`)
@@ -195,7 +215,7 @@ Managers should receive dependencies via constructor:
 export class EventManager extends StateManager {
   constructor(
     private sessionManager: SessionManager,
-    private storageManager: StorageManager
+    private storageManager: StorageManager,
   ) {
     super();
   }

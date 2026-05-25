@@ -24,41 +24,30 @@ QA mode provides enhanced debugging for both manual and automated testing.
 ### Activation/Deactivation
 
 **Via URL:**
-```bash
-# Activate
-?tlog_mode=qa
-
-# Deactivate
-?tlog_mode=qa_off
+```text
+?tlog_mode=qa       # Activate
+?tlog_mode=qa_off   # Deactivate
 ```
 
-**Programmatic API:**
-```typescript
-// Enable QA mode
-tracelog.setQaMode(true);
-
-// Disable QA mode
-tracelog.setQaMode(false);
-```
+QA mode in v3 is URL-activated only — there is no `setQaMode()` public method. The TestBridge inherits from `App` and does not re-expose QA-mode controls either; activate via URL in E2E tests, or set `sessionStorage.setItem('tlog:qa_mode', 'true')` before init in unit tests if you need to force it.
 
 ### How It Works
-1. **URL Detection**: Library checks for `?tlog_mode=qa` or `?tlog_mode=qa_off` on page load
-2. **Persistence**: Stores state in sessionStorage (`tlog:qa_mode`)
-3. **URL Cleanup**: Removes query param using `history.replaceState()`
-4. **Visual Feedback**: Console log with colored badge (orange=active, gray=disabled)
+1. **URL Detection**: library checks for `?tlog_mode=qa` or `?tlog_mode=qa_off` on page load
+2. **Persistence**: stores state in `sessionStorage` (`tlog:qa_mode`)
+3. **URL Cleanup**: removes the query param using `history.replaceState()`
+4. **Visual Feedback**: console log with a coloured badge (orange = active, gray = disabled)
 
 ### Effects When Active
-- **Custom events displayed in console** instead of being sent to server
-- **Strict validation** - Throws errors on validation failures (instead of silently ignoring)
+- **Custom events logged to console** with their name and metadata (in addition to being queued)
+- **Strict validation** — throws errors on validation failures (instead of silently warning)
 - **Events still emitted** to `on('event')` listeners for E2E testing
-- **No server transmission** - Custom events are NOT added to send queue
-- Useful for both manual debugging and automated E2E testing
+- Auto-captured events (clicks, scrolls, page views, web vitals, errors) continue to be sent to the backend normally
 
 ### E2E Testing Patterns
 
 **Activate via URL:**
 ```typescript
-// Method 1: URL parameter
+// Method 1: URL parameter on first navigation
 await page.goto('http://localhost:3000?tlog_mode=qa');
 
 // Method 2: Navigate after load
@@ -70,22 +59,22 @@ await page.evaluate(() => {
 });
 ```
 
-**Activate programmatically:**
+**Activate via sessionStorage (no navigation):**
 ```typescript
 await page.goto('http://localhost:3000');
 await page.evaluate(() => {
-  window.tracelog.setQaMode(true);
+  sessionStorage.setItem('tlog:qa_mode', 'true');
 });
+// Next init() picks up the flag.
 ```
 
 **Deactivate in tests:**
 ```typescript
-// Via URL
 await page.goto('http://localhost:3000?tlog_mode=qa_off');
 
-// Via code
+// Or clear sessionStorage directly
 await page.evaluate(() => {
-  window.tracelog.setQaMode(false);
+  sessionStorage.removeItem('tlog:qa_mode');
 });
 ```
 

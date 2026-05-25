@@ -1,3035 +1,747 @@
 /**
- * SenderManager Tests
- * Focus: Event transmission, retry logic, error handling
+ * SenderManager - Coverage Tests
+ *
+ * Exercises the v3.0 single-integration SaaS send path: queue send (async),
+ * sendBeacon (sync), retry/backoff, permanent vs transient errors,
+ * 429 rate-limit cooldown (mirrored to localStorage), network circuit
+ * breaker, persistence + recovery, idempotency token determinism,
+ * and SpecialApiUrl simulation shortcuts.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { setupTestEnvironment, cleanupTestEnvironment, advanceTimers } from '../../helpers/setup.helper';
-import { createMockFetch, createMockFetchNetworkError } from '../../helpers/mocks.helper';
-import { createMockEvent, createMockQueue } from '../../helpers/fixtures.helper';
-import { setGlobalStateValue } from '../../helpers/state.helper';
-import { EventType } from '../../../src/types';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
+import { createMockQueue, createMockEvent, MOCK_DEVICE_INFO } from '../../helpers/fixtures.helper';
+import { SenderManager } from '../../../src/managers/sender.manager';
+import { StorageManager } from '../../../src/managers/storage.manager';
+import { SpecialApiUrl, EventType, type EventsQueue } from '../../../src/types';
+import { QUEUE_KEY, RATE_LIMIT_KEY } from '../../../src/constants/storage.constants';
 
-describe('SenderManager - Event Sending (fetch)', () => {
+const PROD_URL = 'https://api.tracelog.io/p/proj-123/collect';
+const USER_ID = 'user-test';
+
+/**
+ * Lightweight Response-shaped object. We avoid `new Response()` because CI's
+ * Node version may not expose `Response` as a global, and the SenderManager
+ * only touches `.ok`, `.status`, `.statusText`, `.json()`, and `.clone()`.
+ */
+interface MockResponse {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  json: () => Promise<unknown>;
+  clone: () => MockResponse;
+}
+
+function jsonResponse(status: number, body: unknown = {}): MockResponse {
+  const resp: MockResponse = {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: `Status ${status}`,
+    json: async () => Promise.resolve(body),
+    clone: () => resp,
+  };
+  return resp;
+}
+
+function emptyResponse(status: number): MockResponse {
+  const resp: MockResponse = {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: `Status ${status}`,
+    json: async () => Promise.resolve({}),
+    clone: () => resp,
+  };
+  return resp;
+}
+
+function makeSender(apiUrl = PROD_URL): { sender: SenderManager; storage: StorageManager } {
+  const storage = new StorageManager();
+  const sender = new SenderManager(storage, apiUrl);
+  sender['set']('userId', USER_ID);
+  return { sender, storage };
+}
+
+function makeQueue(eventCount = 2, overrides?: Partial<EventsQueue>): EventsQueue {
+  const events = Array.from({ length: eventCount }, () => createMockEvent(EventType.CUSTOM));
+  return createMockQueue(events, {
+    user_id: USER_ID,
+    session_id: 'session-test',
+    device: MOCK_DEVICE_INFO,
+    ...overrides,
+  });
+}
+
+describe('SenderManager - SpecialApiUrl shortcuts', () => {
   beforeEach(() => {
     setupTestEnvironment();
   });
-
   afterEach(() => {
     cleanupTestEnvironment();
   });
 
-  it('should send events via fetch (async)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
+  it('treats Localhost (success simulation) as a successful async send', async () => {
+    const { sender } = makeSender(`http://${SpecialApiUrl.Localhost}/collect`);
+    const onSuccess = vi.fn();
+    const onFailure = vi.fn();
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const ok = await sender.sendEventsQueue(makeQueue(), { onSuccess, onFailure });
 
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: { key: 'value' } },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(ok).toBe(true);
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(onFailure).not.toHaveBeenCalled();
   });
 
-  it('should use POST method', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
+  it('treats Fail (failure simulation) as a failed async send and persists the batch', async () => {
+    const { sender, storage } = makeSender(`http://${SpecialApiUrl.Fail}/collect`);
+    const onFailure = vi.fn();
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const ok = await sender.sendEventsQueue(makeQueue(), { onFailure });
 
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.method).toBe('POST');
+    expect(ok).toBe(false);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).not.toBeNull();
   });
 
-  it('should set correct headers', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-    });
+  it('returns true on Localhost sync send', () => {
+    const { sender } = makeSender(`http://${SpecialApiUrl.Localhost}/collect`);
+    expect(sender.sendEventsQueueSync(makeQueue())).toBe(true);
   });
 
-  it('should serialize body as JSON', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: { key: 'value' } },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    const body = JSON.parse(options.body as string);
-
-    expect(body.session_id).toBe('test-session-id');
-    expect(body.user_id).toBe('test-user-id');
-    expect(body.events).toHaveLength(1);
-    expect(body.events[0].type).toBe('custom');
-    expect(body._metadata).toBeDefined();
-    expect(body._metadata.timestamp).toBeTypeOf('number');
-    expect(body._metadata.idempotency_token).toBeTypeOf('string');
-  });
-
-  it('should keep the same idempotency token across failed send and recovery', async () => {
-    const failingFetch = createMockFetchNetworkError();
-    global.fetch = failingFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    const firstResult = await sender.sendEventsQueue(eventsQueue);
-    expect(firstResult).toBe(false);
-
-    const storageKey = (sender as any).getQueueStorageKey();
-    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
-    const persistedToken = persisted._metadata?.idempotency_token;
-
-    expect(persistedToken).toBeTypeOf('string');
-
-    const successFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = successFetch;
-
-    await sender.recoverPersistedEvents();
-
-    const recoveredBody = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
-    expect(recoveredBody._metadata.idempotency_token).toBe(persistedToken);
-  });
-
-  it('should call success callback on 2xx', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    const successCallback = vi.fn();
-    const failureCallback = vi.fn();
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue, {
-      onSuccess: successCallback,
-      onFailure: failureCallback,
-    });
-
-    // Assert
-    expect(successCallback).toHaveBeenCalledTimes(1);
-    expect(successCallback).toHaveBeenCalledWith(1, expect.any(Array), expect.any(Object));
-    expect(failureCallback).not.toHaveBeenCalled();
-  });
-
-  it('should call failure callback on error', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    const successCallback = vi.fn();
-    const failureCallback = vi.fn();
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue, {
-      onSuccess: successCallback,
-      onFailure: failureCallback,
-    });
-
-    // Assert
-    expect(success).toBe(false);
-    expect(successCallback).not.toHaveBeenCalled();
-    expect(failureCallback).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle 4xx errors (permanent)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 400 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    // Setup state with userId for proper storage key
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    const failureCallback = vi.fn();
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue, {
-      onFailure: failureCallback,
-    });
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(1); // No retries for 4xx
-    expect(failureCallback).toHaveBeenCalledTimes(1);
-
-    // Should NOT persist permanent errors
-    const storageKey = 'tlog:test-user-id:queue:custom';
-    const persisted = localStorage.getItem(storageKey);
-    expect(persisted).toBeNull();
-  });
-
-  it('should handle 5xx errors (transient)', async () => {
-    // Arrange
-    vi.useFakeTimers();
-    const mockFetch = createMockFetch({ ok: false, status: 500 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    // Setup state with userId for proper storage key
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-
-    // Advance timers for retries
-    await advanceTimers(300); // First retry
-    await advanceTimers(500); // Second retry
-
-    const success = await sendPromise;
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
-
-    // Note: Persistence after exhausting retries is tested in "Event Persistence" block
-
-    vi.useRealTimers();
+  it('returns false on Fail sync send (no persistence — synchronous simulation)', () => {
+    const { sender, storage } = makeSender(`http://${SpecialApiUrl.Fail}/collect`);
+    expect(sender.sendEventsQueueSync(makeQueue())).toBe(false);
+    // Fail mode short-circuits before persistence.
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 });
 
-describe('SenderManager - Event Sending (sendBeacon)', () => {
+describe('SenderManager - async send via fetch()', () => {
   beforeEach(() => {
     setupTestEnvironment();
   });
-
   afterEach(() => {
     cleanupTestEnvironment();
   });
 
-  it('should send events via sendBeacon (sync)', async () => {
-    // Arrange
-    const mockSendBeacon = vi.fn().mockReturnValue(true);
-    global.navigator.sendBeacon = mockSendBeacon;
+  it('sends successfully on HTTP 200 and clears persisted events', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ok: true }));
+    (global as any).fetch = fetchMock;
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const { sender, storage } = makeSender();
+    // Pre-seed persisted data to confirm clearing.
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify({ events: [], timestamp: Date.now() }));
 
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const onSuccess = vi.fn();
+    const ok = await sender.sendEventsQueue(makeQueue(), { onSuccess });
 
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = sender.sendEventsQueueSync(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true);
-    expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-    expect(mockSendBeacon).toHaveBeenCalledWith('https://api.test.com/collect', expect.any(Blob));
+    expect(ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 
-  it('should use Blob with correct content-type', async () => {
-    // Arrange
-    const mockSendBeacon = vi.fn().mockReturnValue(true);
-    global.navigator.sendBeacon = mockSendBeacon;
+  it('attaches idempotency_token, client_version and referer to the request payload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200));
+    (global as any).fetch = fetchMock;
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const { sender } = makeSender();
+    await sender.sendEventsQueue(makeQueue(1));
 
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(PROD_URL);
+    expect(init.method).toBe('POST');
+    expect(init.keepalive).toBe(true);
 
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
+    const payload = JSON.parse(init.body);
+    expect(payload._metadata.idempotency_token).toMatch(/^[0-9a-f]{8}$/);
+    expect(payload._metadata.client_version).toBeTruthy();
+    expect(typeof payload._metadata.timestamp).toBe('number');
+  });
 
-    // Act
-    sender.sendEventsQueueSync(eventsQueue);
+  it('retries on transient 500 and persists after all attempts exhausted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(emptyResponse(500));
+    (global as any).fetch = fetchMock;
 
-    // Assert
-    const blob = mockSendBeacon.mock.calls[0]?.[1];
+    const { sender, storage } = makeSender();
+    const onFailure = vi.fn();
+    const ok = await sender.sendEventsQueue(makeQueue(), { onFailure });
+
+    expect(ok).toBe(false);
+    // MAX_SEND_RETRIES = 2, so total attempts = 3 (1 + 2 retries).
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).not.toBeNull();
+  }, 10_000);
+
+  it('does NOT retry on permanent 4xx and discards persisted events', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(400, { code: 'BAD_REQUEST' }));
+    (global as any).fetch = fetchMock;
+
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), 'preexisting');
+
+    const onFailure = vi.fn();
+    const ok = await sender.sendEventsQueue(makeQueue(), { onFailure });
+
+    expect(ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    // Permanent errors clear pre-existing persistence to break retry loops.
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('does retry on 408 Request Timeout (treated as transient)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(emptyResponse(408)).mockResolvedValueOnce(jsonResponse(200));
+    (global as any).fetch = fetchMock;
+
+    const { sender } = makeSender();
+    const ok = await sender.sendEventsQueue(makeQueue());
+
+    expect(ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('arms 60s rate-limit cooldown on HTTP 429 and persists to localStorage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(emptyResponse(429));
+    (global as any).fetch = fetchMock;
+
+    const { sender, storage } = makeSender();
+    const ok = await sender.sendEventsQueue(makeQueue());
+
+    expect(ok).toBe(false);
+    // 429 is not retried.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const raw = storage.getItem(RATE_LIMIT_KEY(USER_ID));
+    expect(raw).not.toBeNull();
+    const cooldownUntil = Number(raw);
+    expect(cooldownUntil).toBeGreaterThan(Date.now());
+    expect(cooldownUntil - Date.now()).toBeLessThanOrEqual(60_000 + 100);
+  });
+
+  it('skips subsequent sends while rate-limited and persists the batch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(emptyResponse(429));
+    (global as any).fetch = fetchMock;
+
+    const { sender, storage } = makeSender();
+    await sender.sendEventsQueue(makeQueue());
+
+    fetchMock.mockClear();
+
+    // Second send must skip fetch() and persist.
+    const ok = await sender.sendEventsQueue(makeQueue(3));
+    expect(ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).not.toBeNull();
+  });
+
+  it('opens the network circuit after consecutive fetch rejections', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    (global as any).fetch = fetchMock;
+
+    const { sender } = makeSender();
+
+    // Three batches, each retried up to MAX_SEND_RETRIES + 1 = 3 times.
+    // After 3 consecutive HTTP-less failures the circuit opens.
+    for (let i = 0; i < 3; i++) {
+      await sender.sendEventsQueue(makeQueue());
+    }
+
+    fetchMock.mockClear();
+
+    const ok = await sender.sendEventsQueue(makeQueue());
+    expect(ok).toBe(false);
+    // Circuit open → no further fetch attempts.
+    expect(fetchMock).not.toHaveBeenCalled();
+  }, 20_000);
+});
+
+describe('SenderManager - sync send via sendBeacon', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  it('returns true when navigator.sendBeacon accepts the payload', () => {
+    const beacon = vi.fn().mockReturnValue(true);
+    (navigator as any).sendBeacon = beacon;
+
+    const { sender } = makeSender();
+    const ok = sender.sendEventsQueueSync(makeQueue());
+
+    expect(ok).toBe(true);
+    expect(beacon).toHaveBeenCalledTimes(1);
+    const [url, blob] = beacon.mock.calls[0]!;
+    expect(url).toBe(PROD_URL);
     expect(blob).toBeInstanceOf(Blob);
-    expect(blob?.type).toBe('application/json');
   });
 
-  it('should return true on success', async () => {
-    // Arrange
-    const mockSendBeacon = vi.fn().mockReturnValue(true);
-    global.navigator.sendBeacon = mockSendBeacon;
+  it('persists when sendBeacon rejects the request', () => {
+    const beacon = vi.fn().mockReturnValue(false);
+    (navigator as any).sendBeacon = beacon;
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const { sender, storage } = makeSender();
+    const ok = sender.sendEventsQueueSync(makeQueue());
 
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = sender.sendEventsQueueSync(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true);
+    expect(ok).toBe(false);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).not.toBeNull();
   });
 
-  it('should return false on failure', async () => {
-    // Arrange
-    const mockSendBeacon = vi.fn().mockReturnValue(false);
-    global.navigator.sendBeacon = mockSendBeacon;
+  it('persists oversized payloads instead of calling sendBeacon', () => {
+    const beacon = vi.fn().mockReturnValue(true);
+    (navigator as any).sendBeacon = beacon;
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    // Build a payload larger than the 64KB beacon cap by stuffing custom_event metadata.
+    const huge = 'x'.repeat(70_000);
+    const events = [createMockEvent(EventType.CUSTOM, { custom_event: { name: 'big', metadata: { payload: huge } } })];
+    const queue: EventsQueue = {
+      user_id: USER_ID,
+      session_id: 'session-test',
+      device: MOCK_DEVICE_INFO,
+      events,
+    };
 
-    // Setup state with userId for proper storage key
-    setGlobalStateValue('userId', 'test-user-id');
+    const { sender, storage } = makeSender();
+    const ok = sender.sendEventsQueueSync(queue);
 
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = sender.sendEventsQueueSync(eventsQueue);
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-
-    // Note: Persistence behavior is tested in "Event Persistence" block
+    expect(ok).toBe(false);
+    expect(beacon).not.toHaveBeenCalled();
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).not.toBeNull();
   });
 
-  it('should preserve the same idempotency token when sendBeacon persists and recovery retries later', async () => {
-    const mockSendBeacon = vi.fn().mockReturnValue(false);
-    global.navigator.sendBeacon = mockSendBeacon;
+  it('skips sendBeacon and persists when rate-limited', () => {
+    const beacon = vi.fn().mockReturnValue(true);
+    (navigator as any).sendBeacon = beacon;
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    const { sender, storage } = makeSender();
+    // Arm cooldown via persisted key (simulates another tab that already got 429).
+    storage.setItem(RATE_LIMIT_KEY(USER_ID), String(Date.now() + 60_000));
 
-    setGlobalStateValue('userId', 'test-user-id');
+    // Reset internal cooldown so loadRateLimitCooldown() re-reads from storage.
+    (sender as any).rateLimitedUntil = 0;
 
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const ok = sender.sendEventsQueueSync(makeQueue());
 
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'send_beacon_retry_test', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
+    expect(ok).toBe(false);
+    expect(beacon).not.toHaveBeenCalled();
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).not.toBeNull();
+  });
+});
 
-    const accepted = sender.sendEventsQueueSync(eventsQueue);
-    expect(accepted).toBe(false);
+describe('SenderManager - persistence recovery', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
 
-    const storageKey = (sender as any).getQueueStorageKey();
-    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
-    const persistedToken = persisted._metadata?.idempotency_token;
+  it('recovers persisted events from a previous session and clears storage on success', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200));
+    (global as any).fetch = fetchMock;
 
-    expect(persistedToken).toBeTypeOf('string');
+    const persisted = {
+      ...makeQueue(2),
+      timestamp: Date.now() - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
 
-    const successFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = successFetch;
+    const onSuccess = vi.fn();
+    await sender.recoverPersistedEvents({ onSuccess });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('discards expired persisted data (>2h old) without sending', async () => {
+    const fetchMock = vi.fn();
+    (global as any).fetch = fetchMock;
+
+    const stale = {
+      ...makeQueue(2),
+      timestamp: Date.now() - 3 * 60 * 60 * 1000, // 3h old
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(stale));
 
     await sender.recoverPersistedEvents();
 
-    const recoveredPayload = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
-    expect(recoveredPayload._metadata.idempotency_token).toBe(persistedToken);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('discards persisted events after MAX_RECOVERY_FAILURES attempts', async () => {
+    const fetchMock = vi.fn();
+    (global as any).fetch = fetchMock;
+
+    const exhausted = {
+      ...makeQueue(2),
+      timestamp: Date.now() - 1000,
+      recoveryFailures: 3,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(exhausted));
+
+    const onFailure = vi.fn();
+    await sender.recoverPersistedEvents({ onFailure });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('bumps recoveryFailures and re-persists when recovery send fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(emptyResponse(500));
+    (global as any).fetch = fetchMock;
+
+    const persisted = {
+      ...makeQueue(1),
+      timestamp: Date.now() - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
+
+    await sender.recoverPersistedEvents();
+
+    const after = JSON.parse(storage.getItem(QUEUE_KEY(USER_ID)) ?? '{}');
+    expect(after.recoveryFailures).toBe(1);
+  }, 10_000);
+
+  it('is idempotent — concurrent calls do not double-send', async () => {
+    let resolveFetch!: (value: MockResponse) => void;
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Promise<MockResponse>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    (global as any).fetch = fetchMock;
+
+    const persisted = {
+      ...makeQueue(1),
+      timestamp: Date.now() - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
+
+    const first = sender.recoverPersistedEvents();
+    const second = sender.recoverPersistedEvents(); // should bail out immediately
+
+    resolveFetch(jsonResponse(200));
+    await Promise.all([first, second]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears persisted events on permanent error during recovery', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = fetchMock;
+
+    const persisted = {
+      ...makeQueue(1),
+      timestamp: Date.now() - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
+
+    const onFailure = vi.fn();
+    await sender.recoverPersistedEvents({ onFailure });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 });
 
-describe('SenderManager - Retry Logic', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-    vi.useRealTimers();
-  });
-
-  it('should retry transient errors (5xx)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 500 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(300); // First retry
-    await advanceTimers(500); // Second retry
-    const success = await sendPromise;
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
-  });
-
-  it('should retry network failures', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(300); // First retry
-    await advanceTimers(500); // Second retry
-    const success = await sendPromise;
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
-  });
-
-  it('should retry timeout errors (408)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 408 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(300); // First retry
-    await advanceTimers(500); // Second retry
-    const success = await sendPromise;
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries (408 is transient)
-  });
-
-  it('should NOT retry rate limit errors (429)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(1); // No retries — deferred to EventManager periodic backoff
-  });
-
-  it('should NOT retry permanent errors (4xx except 408, 429)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 400 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(1000); // Wait for any potential retries
-    const success = await sendPromise;
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(1); // No retries for 4xx
-  });
-
-  it('should attach any application code from a 4xx body to the permanent error log without retrying', async () => {
-    // Use an arbitrary code that is NOT a TraceLog SaaS gate to prove we no
-    // longer rely on a hard-coded whitelist — any string `code` is accepted.
-    const clone = vi.fn().mockReturnValue({
-      json: vi.fn().mockResolvedValue({ code: 'BAD_TENANT_HEADER' }),
-    });
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 400,
-      statusText: 'Bad Request',
-      clone,
-      headers: new Headers(),
-    } as unknown as Response);
-    global.fetch = mockFetch;
-
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-    const eventsQueue = createMockQueue([createMockEvent(EventType.PAGE_VIEW)]);
-
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(clone).toHaveBeenCalledTimes(1);
-
-    const loggedWithCode = consoleErrorSpy.mock.calls.some((call) => {
-      const payload = call[1] as { code?: string } | undefined;
-      return payload?.code === 'BAD_TENANT_HEADER';
-    });
-    expect(loggedWithCode).toBe(true);
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('should ignore oversized response codes to keep logs clean', async () => {
-    const longCode = 'X'.repeat(200);
-    const clone = vi.fn().mockReturnValue({
-      json: vi.fn().mockResolvedValue({ code: longCode }),
-    });
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 400,
-      statusText: 'Bad Request',
-      clone,
-      headers: new Headers(),
-    } as unknown as Response);
-    global.fetch = mockFetch;
-
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-    const eventsQueue = createMockQueue([createMockEvent(EventType.PAGE_VIEW)]);
-
-    await sender.sendEventsQueue(eventsQueue);
-
-    const loggedWithLongCode = consoleErrorSpy.mock.calls.some((call) => {
-      const payload = call[1] as { code?: string } | undefined;
-      return payload?.code === longCode;
-    });
-    expect(loggedWithLongCode).toBe(false);
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('should use exponential backoff', async () => {
-    // Arrange - Mock Math.random to eliminate jitter for deterministic timing
-    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
-
-    const mockFetch = createMockFetch({ ok: false, status: 500 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act - Start send and advance through retry delays
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-
-    // With Math.random() = 0 (no jitter):
-    // - First backoff: 100ms * 2^1 = 200ms
-    // - Second backoff: 100ms * 2^2 = 400ms
-    // Total time needed: 200ms + 400ms = 600ms
-
-    // Verify initial call happens immediately
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    // Advance past first backoff delay (200ms) - should trigger first retry
-    await vi.advanceTimersByTimeAsync(201);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-
-    // Advance past second backoff delay (400ms) - should trigger second retry
-    await vi.advanceTimersByTimeAsync(401);
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-
-    await sendPromise;
-
-    // Assert final state
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
-
-    // Cleanup
-    randomSpy.mockRestore();
-  });
-
-  it('should max out at 2 retries (3 total attempts)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 500 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(300); // First retry
-    await advanceTimers(500); // Second retry
-    await advanceTimers(1000); // Wait for any additional attempts
-    const success = await sendPromise;
-
-    // Assert
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Exactly 3 attempts
-  });
-});
-
-describe('SenderManager - Event Persistence', () => {
+describe('SenderManager - recovery age filter', () => {
   beforeEach(() => {
     setupTestEnvironment();
   });
-
   afterEach(() => {
     cleanupTestEnvironment();
   });
 
-  it('should NOT persist permanent errors (4xx)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 400 });
-    global.fetch = mockFetch;
+  it('drops events older than the recovery age cutoff during replay', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200));
+    (global as any).fetch = fetchMock;
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
+    const cutoffMs = 6 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const staleEvent = createMockEvent(EventType.CUSTOM, {
+      id: 'stale-evt',
+      timestamp: now - cutoffMs - 60_000,
     });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(false);
-
-    // Should NOT persist permanent errors
-    const storageKey = 'tlog:test-user-id:queue:custom';
-    const persisted = localStorage.getItem(storageKey);
-    expect(persisted).toBeNull();
-  });
-
-  it('should persist events on rate limit (429) for periodic retry', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
-    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
+    const freshEvent = createMockEvent(EventType.CUSTOM, {
+      id: 'fresh-evt',
+      timestamp: now - 60_000,
     });
-    const eventsQueue = createMockQueue([customEvent]);
 
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
+    const persisted = {
+      ...makeQueue(0, { events: [staleEvent, freshEvent] }),
+      timestamp: now - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
 
-    // Assert — 429: no retries, events persisted for EventManager periodic backoff
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(persistSpy).toHaveBeenCalledTimes(1);
-    expect(clearSpy).not.toHaveBeenCalled();
-  });
-});
+    await sender.recoverPersistedEvents();
 
-describe('SenderManager - Deterministic Idempotency Token', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].id).toBe('fresh-evt');
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 
-  it('should generate the same idempotency token for two bodies with identical events', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+  it('discards the whole batch and skips the network call when every event is stale', async () => {
+    const fetchMock = vi.fn();
+    (global as any).fetch = fetchMock;
 
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const events = [
-      createMockEvent(EventType.CLICK, { id: 'evt_1' }),
-      createMockEvent(EventType.CLICK, { id: 'evt_2' }),
-      createMockEvent(EventType.CLICK, { id: 'evt_3' }),
+    const cutoffMs = 6 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const staleEvents = [
+      createMockEvent(EventType.CUSTOM, { id: 'a', timestamp: now - cutoffMs - 60_000 }),
+      createMockEvent(EventType.CUSTOM, { id: 'b', timestamp: now - cutoffMs - 120_000 }),
     ];
 
-    const first = (sender as any).ensureBatchMetadata(createMockQueue(events)) as {
-      _metadata?: { idempotency_token?: string };
+    const persisted = {
+      ...makeQueue(0, { events: staleEvents }),
+      timestamp: now - 1000,
     };
-    const second = (sender as any).ensureBatchMetadata(createMockQueue(events)) as {
-      _metadata?: { idempotency_token?: string };
-    };
-
-    expect(first._metadata?.idempotency_token).toBeDefined();
-    expect(first._metadata?.idempotency_token).toBe(second._metadata?.idempotency_token);
-  });
-
-  it('should generate different tokens for different event sets', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const first = (sender as any).ensureBatchMetadata(
-      createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_a' })]),
-    ) as { _metadata?: { idempotency_token?: string } };
-    const second = (sender as any).ensureBatchMetadata(
-      createMockQueue([createMockEvent(EventType.CLICK, { id: 'evt_b' })]),
-    ) as { _metadata?: { idempotency_token?: string } };
-
-    expect(first._metadata?.idempotency_token).not.toBe(second._metadata?.idempotency_token);
-  });
-
-  it('should be order-independent (same events in different order produce same token)', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const a = createMockEvent(EventType.CLICK, { id: 'evt_a' });
-    const b = createMockEvent(EventType.CLICK, { id: 'evt_b' });
-    const c = createMockEvent(EventType.CLICK, { id: 'evt_c' });
-
-    const first = (sender as any).ensureBatchMetadata(createMockQueue([a, b, c])) as {
-      _metadata?: { idempotency_token?: string };
-    };
-    const second = (sender as any).ensureBatchMetadata(createMockQueue([c, a, b])) as {
-      _metadata?: { idempotency_token?: string };
-    };
-
-    expect(first._metadata?.idempotency_token).toBe(second._metadata?.idempotency_token);
-  });
-
-  it('should preserve an existing idempotency token instead of recomputing', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const events = [createMockEvent(EventType.CLICK, { id: 'evt_1' })];
-    const bodyWithPreassignedToken = createMockQueue(events, {
-      _metadata: { idempotency_token: 'legacy-token-from-storage' },
-    });
-
-    const result = (sender as any).ensureBatchMetadata(bodyWithPreassignedToken) as {
-      _metadata?: { idempotency_token?: string };
-    };
-
-    expect(result._metadata?.idempotency_token).toBe('legacy-token-from-storage');
-  });
-});
-
-describe('SenderManager - beforeBatch Transformer', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should apply beforeBatch transformer before send', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-
-    // Create transformer that adds a custom field
-    const beforeBatchTransformer = vi.fn((batch: any) => ({
-      ...batch,
-      custom_field: 'transformed',
-    }));
-
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
-      beforeBatch: beforeBatchTransformer,
-    });
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true);
-    expect(beforeBatchTransformer).toHaveBeenCalledTimes(1);
-
-    // Check that transformed data was sent
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    const body = JSON.parse(options.body as string);
-
-    expect(body.custom_field).toBe('transformed');
-  });
-
-  it('should skip beforeBatch for saas integration', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-
-    const beforeBatchTransformer = vi.fn((batch: any) => ({
-      ...batch,
-      custom_field: 'should_not_appear',
-    }));
-
-    const sender = new SenderManager(storage, 'saas', 'https://saas.test.com/collect', {
-      beforeBatch: beforeBatchTransformer,
-    });
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true);
-    expect(beforeBatchTransformer).not.toHaveBeenCalled(); // Should not be called for saas
-
-    // Check that original data was sent (no transformation)
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    const body = JSON.parse(options.body as string);
-
-    expect(body.custom_field).toBeUndefined();
-  });
-
-  it('should handle transformer errors gracefully', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-
-    // Transformer that throws error
-    const beforeBatchTransformer = vi.fn(() => {
-      throw new Error('Transformer error');
-    });
-
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
-      beforeBatch: beforeBatchTransformer,
-    });
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true); // Should still succeed with original data
-    expect(beforeBatchTransformer).toHaveBeenCalledTimes(1);
-
-    // Check that original data was sent (fallback)
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    const body = JSON.parse(options.body as string);
-
-    expect(body.events).toHaveLength(1);
-    expect(body.events[0].type).toBe('custom');
-  });
-
-  it('should use original batch if transformer returns invalid', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-
-    // Transformer that returns invalid data (missing events array)
-    const beforeBatchTransformer = vi.fn(() => ({
-      invalid: 'data',
-    })) as any;
-
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
-      beforeBatch: beforeBatchTransformer,
-    });
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true);
-    expect(beforeBatchTransformer).toHaveBeenCalledTimes(1);
-
-    // Check that original data was sent (fallback)
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    const body = JSON.parse(options.body as string);
-
-    expect(body.events).toHaveLength(1);
-    expect(body.events[0].type).toBe('custom');
-  });
-
-  it('should filter batch if transformer returns null', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-
-    // Transformer that filters batch
-    const beforeBatchTransformer = vi.fn(() => null);
-
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
-      beforeBatch: beforeBatchTransformer,
-    });
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true); // Returns true when filtered
-    expect(beforeBatchTransformer).toHaveBeenCalledTimes(1);
-    expect(mockFetch).not.toHaveBeenCalled(); // Should not send
-  });
-});
-
-describe('SenderManager - Error Handling', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should handle fetch errors', async () => {
-    // Arrange
-    const mockFetch = vi.fn(() => {
-      throw new Error('Network error');
-    });
-
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert - Should handle error gracefully without throwing
-    expect(success).toBe(false);
-    expect(mockFetch).toHaveBeenCalled();
-  });
-
-  it('should handle JSON serialization errors', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Create circular reference that will cause JSON.stringify to fail
-    const circularEvent: any = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'circular', metadata: {} },
-    });
-    circularEvent.circular = circularEvent; // Create circular reference
-
-    const eventsQueue = createMockQueue([circularEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert - Should handle serialization error gracefully
-    expect(success).toBe(false);
-    expect(mockFetch).not.toHaveBeenCalled(); // Should not reach fetch if serialization fails
-  });
-
-  it('should handle storage errors', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: false, status: 500 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    // Mock storage to throw errors
-    const storage = new StorageManager();
-    const setItemSpy = vi.spyOn(storage, 'setItem').mockImplementation(() => {
-      throw new Error('Storage quota exceeded');
-    });
-
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act - Should not throw despite storage error
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(false);
-    expect(setItemSpy).toHaveBeenCalled();
-  });
-
-  it('should handle transformer errors', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-
-    // Transformer that throws error
-    const beforeBatchTransformer = vi.fn(() => {
-      throw new Error('Transformer error');
-    });
-
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {
-      beforeBatch: beforeBatchTransformer,
-    });
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act - Should not throw despite transformer error
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert - Should succeed with original data
-    expect(success).toBe(true);
-    expect(beforeBatchTransformer).toHaveBeenCalled();
-    expect(mockFetch).toHaveBeenCalled();
-  });
-
-  it('should log errors without throwing', async () => {
-    // Arrange
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const mockFetch = vi.fn(() => {
-      throw new Error('Network error');
-    });
-
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act - Should not throw
-    await expect(sender.sendEventsQueue(eventsQueue)).resolves.not.toThrow();
-
-    // Assert
-    expect(consoleSpy).toHaveBeenCalled();
-
-    consoleSpy.mockRestore();
-  });
-
-  it('should continue operation after errors', async () => {
-    // Arrange
-    let callCount = 0;
-    const mockFetch = vi.fn(async () => {
-      callCount++;
-      // First 3 calls fail (initial + 2 retries), then succeed
-      if (callCount <= 3) {
-        throw new Error('First send fails (with retries)');
-      }
-      return Promise.resolve({ ok: true, status: 200 } as Response);
-    });
-
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act - First send fails (after retries)
-    const firstSuccess = await sender.sendEventsQueue(eventsQueue);
-
-    // Second send should work
-    const secondSuccess = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(firstSuccess).toBe(false);
-    expect(secondSuccess).toBe(true);
-    expect(mockFetch).toHaveBeenCalledTimes(4); // 3 failed + 1 success
-  });
-});
-
-describe('SenderManager - Custom Headers', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should include static headers from config in fetch request', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const staticHeaders = { 'X-Brand': 'test-brand', 'X-Tenant-Id': 'tenant-123' };
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {}, staticHeaders);
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-Brand': 'test-brand',
-      'X-Tenant-Id': 'tenant-123',
-    });
-  });
-
-  it('should include dynamic headers from provider in fetch request', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const dynamicProvider = vi.fn(() => ({
-      Authorization: 'Bearer test-token',
-      'X-Request-Id': 'req-123',
-    }));
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {}, {}, dynamicProvider);
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(dynamicProvider).toHaveBeenCalledTimes(1);
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer test-token',
-      'X-Request-Id': 'req-123',
-    });
-  });
-
-  it('should merge static and dynamic headers (dynamic overrides static)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const staticHeaders = { 'X-Brand': 'static-brand', 'X-Shared': 'from-static' };
-    const dynamicProvider = vi.fn(() => ({
-      'X-Shared': 'from-dynamic', // Should override static
-      Authorization: 'Bearer token',
-    }));
-    const sender = new SenderManager(
-      storage,
-      'custom',
-      'https://api.test.com/collect',
-      {},
-      staticHeaders,
-      dynamicProvider,
-    );
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-Brand': 'static-brand',
-      'X-Shared': 'from-dynamic', // Dynamic wins
-      Authorization: 'Bearer token',
-    });
-  });
-
-  it('should NOT apply custom headers for saas integration', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const staticHeaders = { 'X-Brand': 'test-brand' };
-    const dynamicProvider = vi.fn(() => ({ Authorization: 'Bearer token' }));
-    // Use 'saas' integration - headers should be ignored
-    const sender = new SenderManager(
-      storage,
-      'saas',
-      'https://api.tracelog.com/collect',
-      {},
-      staticHeaders,
-      dynamicProvider,
-    );
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(dynamicProvider).not.toHaveBeenCalled(); // Provider not called for saas
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      // No custom headers
-    });
-  });
-
-  it('should use empty custom headers when provider throws error', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const staticHeaders = { 'X-Brand': 'static-brand' };
-    const dynamicProvider = vi.fn(() => {
-      throw new Error('Provider error');
-    });
-    const sender = new SenderManager(
-      storage,
-      'custom',
-      'https://api.test.com/collect',
-      {},
-      staticHeaders,
-      dynamicProvider,
-    );
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true); // Request still succeeds
-    expect(dynamicProvider).toHaveBeenCalledTimes(1);
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    // Falls back to static headers only (dynamic failed)
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-Brand': 'static-brand',
-    });
-  });
-
-  it('should use empty custom headers when provider returns invalid value', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const staticHeaders = { 'X-Brand': 'static-brand' };
-    // Provider returns array instead of object (invalid)
-    const dynamicProvider = vi.fn(() => ['invalid'] as unknown as Record<string, string>);
-    const sender = new SenderManager(
-      storage,
-      'custom',
-      'https://api.test.com/collect',
-      {},
-      staticHeaders,
-      dynamicProvider,
-    );
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(success).toBe(true);
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    // Falls back to static headers only (dynamic invalid)
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-Brand': 'static-brand',
-    });
-  });
-
-  it('should allow setting provider after construction', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Set provider after construction
-    const dynamicProvider = vi.fn(() => ({ Authorization: 'Bearer late-token' }));
-    sender.setCustomHeadersProvider(dynamicProvider);
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(dynamicProvider).toHaveBeenCalledTimes(1);
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer late-token',
-    });
-  });
-
-  it('should allow removing provider', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const staticHeaders = { 'X-Brand': 'test-brand' };
-    const dynamicProvider = vi.fn(() => ({ Authorization: 'Bearer token' }));
-    const sender = new SenderManager(
-      storage,
-      'custom',
-      'https://api.test.com/collect',
-      {},
-      staticHeaders,
-      dynamicProvider,
-    );
-
-    // Remove provider
-    sender.removeCustomHeadersProvider();
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(dynamicProvider).not.toHaveBeenCalled(); // Provider was removed
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-Brand': 'test-brand', // Only static headers
-    });
-  });
-});
-
-describe('SenderManager - fetchCredentials', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should default to credentials: include', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.credentials).toBe('include');
-  });
-
-  it('should use configured fetchCredentials: same-origin', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(
-      storage,
-      'custom',
-      'https://api.test.com/collect',
-      {},
-      {},
-      undefined,
-      'same-origin',
-    );
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.credentials).toBe('same-origin');
-  });
-
-  it('should use configured fetchCredentials: omit', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect', {}, {}, undefined, 'omit');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    const fetchCall = mockFetch.mock.calls[0];
-    const [, options] = fetchCall ?? [];
-    expect(options?.credentials).toBe('omit');
-  });
-});
-
-describe('SenderManager - TimeoutError Handling', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-    vi.useRealTimers();
-  });
-
-  it('should persist the stabilized batch when all attempts time out', async () => {
-    // Arrange — fetch that never resolves, triggers abort on signal
-    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
-      return new Promise<Response>((_, reject) => {
-        if (options?.signal) {
-          options.signal.addEventListener('abort', () => {
-            reject(new DOMException('The user aborted a request.', 'AbortError'));
-          });
-        }
-      });
-    });
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    const failureCallback = vi.fn();
-
-    // Act — advance past REQUEST_TIMEOUT_MS (15s) for all 3 attempts + backoff
-    const sendPromise = sender.sendEventsQueue(eventsQueue, { onFailure: failureCallback });
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    const success = await sendPromise;
-
-    // Assert — all timeouts now keep the batch for retry with the same token
-    expect(success).toBe(false);
-    expect(failureCallback).toHaveBeenCalledTimes(1);
-
-    const storageKey = (sender as any).getQueueStorageKey();
-    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
-    expect(persisted.events).toHaveLength(1);
-    expect(persisted._metadata.idempotency_token).toBeTypeOf('string');
-  });
-
-  it('should reuse the same idempotency token after a timeout batch is retried successfully later', async () => {
-    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
-      return new Promise<Response>((_, reject) => {
-        if (options?.signal) {
-          options.signal.addEventListener('abort', () => {
-            reject(new DOMException('The user aborted a request.', 'AbortError'));
-          });
-        }
-      });
-    });
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'timeout_retry_test', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    const firstSend = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await firstSend;
-
-    const storageKey = (sender as any).getQueueStorageKey();
-    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
-    const persistedToken = persisted._metadata?.idempotency_token;
-
-    expect(persistedToken).toBeTypeOf('string');
-
-    const successFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = successFetch;
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
 
     await sender.recoverPersistedEvents();
 
-    const recoveredPayload = JSON.parse(successFetch.mock.calls[0]?.[1]?.body as string);
-    expect(recoveredPayload._metadata.idempotency_token).toBe(persistedToken);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 
-  it('should persist events when send returns false', async () => {
-    // Arrange — mock send() to throw TimeoutError directly
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
+  it('keeps every event when all timestamps are within the recovery age cutoff', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200));
+    (global as any).fetch = fetchMock;
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const now = Date.now();
+    const events = [
+      createMockEvent(EventType.CUSTOM, { id: 'recent-1', timestamp: now - 60_000 }),
+      createMockEvent(EventType.CUSTOM, { id: 'recent-2', timestamp: now - 120_000 }),
+    ];
 
-    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
-    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
+    const persisted = {
+      ...makeQueue(0, { events }),
+      timestamp: now - 1000,
+    };
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify(persisted));
 
-    vi.spyOn(sender as any, 'send').mockResolvedValue(false);
+    await sender.recoverPersistedEvents();
 
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert — all timeout paths now persist for retry
-    expect(success).toBe(false);
-    expect(persistSpy).toHaveBeenCalledTimes(1);
-    expect(clearSpy).not.toHaveBeenCalled();
-  });
-
-  it('should call persistEvents (not clearPersistedEvents) when failures are mixed', async () => {
-    // Arrange — mock send() to return false (simulates mixed failures where allTimeouts=false)
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
-    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
-
-    // Mock private send() to return false (mixed failures — not all timeouts)
-    vi.spyOn(sender as any, 'send').mockResolvedValue(false);
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const success = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert — mixed failures (send returned false): persistEvents called, not clear
-    expect(success).toBe(false);
-    expect(persistSpy).toHaveBeenCalledTimes(1);
-    expect(clearSpy).not.toHaveBeenCalled();
-  });
-
-  it('should keep persisted events when recovery send fails (recoverPersistedEvents)', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Persist events using the sender's own internal key (via persistEvents)
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'persisted_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-    (sender as any).persistEvents(eventsQueue);
-
-    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
-    const persistSpy = vi.spyOn(sender as any, 'persistEventsWithFailureCount');
-
-    vi.spyOn(sender as any, 'send').mockResolvedValue(false);
-
-    const failureCallback = vi.fn();
-
-    // Act
-    await sender.recoverPersistedEvents({ onFailure: failureCallback });
-
-    // Assert — recovery timeout: batch remains persisted and failure count advances
-    expect(clearSpy).not.toHaveBeenCalled();
-    expect(persistSpy).toHaveBeenCalled();
-    expect(failureCallback).toHaveBeenCalledTimes(1);
-  });
-
-  it('should call onFailure callback on timeout (not onSuccess)', async () => {
-    // Arrange
-    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
-      return new Promise<Response>((_, reject) => {
-        if (options?.signal) {
-          options.signal.addEventListener('abort', () => {
-            reject(new DOMException('The user aborted a request.', 'AbortError'));
-          });
-        }
-      });
-    });
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    const successCallback = vi.fn();
-    const failureCallback = vi.fn();
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue, {
-      onSuccess: successCallback,
-      onFailure: failureCallback,
-    });
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await sendPromise;
-
-    // Assert
-    expect(successCallback).not.toHaveBeenCalled();
-    expect(failureCallback).toHaveBeenCalledTimes(1);
-  });
-
-  it('should retry all 3 attempts before concluding timeout (not bail early)', async () => {
-    // Arrange
-    const fetchSpy = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
-      return new Promise<Response>((_, reject) => {
-        if (options?.signal) {
-          options.signal.addEventListener('abort', () => {
-            reject(new DOMException('The user aborted a request.', 'AbortError'));
-          });
-        }
-      });
-    });
-    global.fetch = fetchSpy;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await sendPromise;
-
-    // Assert — all 3 attempts made (initial + 2 retries)
-    expect(fetchSpy).toHaveBeenCalledTimes(3);
-  });
-
-  it('should track allTimeouts correctly in send() — all timeouts persist instead of clearing', async () => {
-    // Arrange — fetch that always times out via AbortController
-    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
-      return new Promise<Response>((_, reject) => {
-        if (options?.signal) {
-          options.signal.addEventListener('abort', () => {
-            reject(new DOMException('The user aborted a request.', 'AbortError'));
-          });
-        }
-      });
-    });
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
-    const persistSpy = vi.spyOn(sender as any, 'persistEvents');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act
-    const sendPromise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    await advanceTimers(16000);
-    const success = await sendPromise;
-
-    // Assert — allTimeouts path returns false and keeps the batch persisted
-    expect(success).toBe(false);
-    expect(persistSpy).toHaveBeenCalled();
-    expect(clearSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.events).toHaveLength(2);
+    expect(body.events.map((e: { id: string }) => e.id)).toEqual(['recent-1', 'recent-2']);
   });
 });
 
-// ============================================================================
-// NETWORK CIRCUIT BREAKER
-// ============================================================================
-
-describe('SenderManager - Network Circuit Breaker', () => {
+describe('SenderManager - idempotency token', () => {
   beforeEach(() => {
     setupTestEnvironment();
-    vi.useFakeTimers();
   });
-
   afterEach(() => {
     cleanupTestEnvironment();
   });
 
-  /**
-   * Helper: runs a single batch through all retries (3 attempts) with network error.
-   * Returns the sendEventsQueue promise result.
-   */
-  async function runFailedNetworkBatch(sender: any, eventsQueue: any): Promise<boolean> {
-    const promise = sender.sendEventsQueue(eventsQueue);
-    // Advance past backoff delays: attempt 1 immediate fail, backoff ~300ms,
-    // attempt 2 immediate fail, backoff ~500ms, attempt 3 immediate fail
-    await advanceTimers(1000);
-    return promise;
+  it('produces the same token for the same event set', async () => {
+    const tokens: string[] = [];
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      tokens.push(body._metadata.idempotency_token);
+      return Promise.resolve(jsonResponse(200));
+    });
+    (global as any).fetch = fetchMock;
+
+    const queue = makeQueue(3);
+    const { sender } = makeSender();
+
+    await sender.sendEventsQueue(queue);
+    await sender.sendEventsQueue(queue);
+
+    expect(tokens).toHaveLength(2);
+    expect(tokens[0]).toBe(tokens[1]);
+    expect(tokens[0]).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('produces a different token for a different event set', async () => {
+    const tokens: string[] = [];
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      tokens.push(JSON.parse(init.body as string)._metadata.idempotency_token);
+      return Promise.resolve(jsonResponse(200));
+    });
+    (global as any).fetch = fetchMock;
+
+    const { sender } = makeSender();
+    await sender.sendEventsQueue(makeQueue(2));
+    await sender.sendEventsQueue(makeQueue(3));
+
+    expect(tokens[0]).not.toBe(tokens[1]);
+  });
+});
+
+describe('SenderManager - v2→v3 storage migration', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+  afterEach(() => {
+    cleanupTestEnvironment();
+  });
+
+  function seedV2Storage(
+    storage: StorageManager,
+    payloads: { saasQueue?: unknown; customQueue?: unknown; saasRateLimit?: number; customRateLimit?: number },
+  ): void {
+    const baseQueue = QUEUE_KEY(USER_ID);
+    const baseRl = RATE_LIMIT_KEY(USER_ID);
+    if (payloads.saasQueue !== undefined) storage.setItem(`${baseQueue}:saas`, JSON.stringify(payloads.saasQueue));
+    if (payloads.customQueue !== undefined)
+      storage.setItem(`${baseQueue}:custom`, JSON.stringify(payloads.customQueue));
+    if (payloads.saasRateLimit !== undefined) storage.setItem(`${baseRl}:saas`, String(payloads.saasRateLimit));
+    if (payloads.customRateLimit !== undefined) storage.setItem(`${baseRl}:custom`, String(payloads.customRateLimit));
   }
 
-  it('should open circuit after MAX_CONSECUTIVE_NETWORK_FAILURES batches', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
+  function seedUserId(storage: StorageManager): void {
+    // Sender constructor reads userId before setupState in app — for tests we
+    // mirror the production order by pre-seeding state through a throwaway
+    // sender, since the v2→v3 migration runs in the constructor itself.
+    const sentinel = new SenderManager(storage, PROD_URL);
+    sentinel['set']('userId', USER_ID);
+  }
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
+  it('migrates legacy SaaS queue events into the v3 unscoped key on first construction', () => {
     const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    seedUserId(storage);
 
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act — send 3 batches, each failing all 3 attempts (9 fetch calls total)
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    expect(mockFetch).toHaveBeenCalledTimes(9); // 3 batches × 3 attempts
-
-    // 4th send should be blocked by circuit breaker (no additional fetch calls)
-    mockFetch.mockClear();
-    const result = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect(result).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(0);
-  });
-
-  it('should skip send when circuit is open (within cooldown)', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Open circuit
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    mockFetch.mockClear();
-
-    // Act — advance 60s (still within 120s cooldown) and try sending
-    await advanceTimers(60000);
-    const result = await sender.sendEventsQueue(eventsQueue);
-
-    // Assert — still blocked
-    expect(result).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(0);
-  });
-
-  it('should allow probe after CIRCUIT_BREAKER_COOLDOWN_MS (half-open)', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Open circuit
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    mockFetch.mockClear();
-
-    // Act — advance past cooldown (120s) and try sending
-    await advanceTimers(121000);
-    const promise = runFailedNetworkBatch(sender, eventsQueue);
-    await promise;
-
-    // Assert — fetch was called (probe allowed through)
-    expect(mockFetch).toHaveBeenCalled();
-  });
-
-  it('should close circuit on successful probe', async () => {
-    // Arrange
-    const mockFetchFail = createMockFetchNetworkError();
-    global.fetch = mockFetchFail;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Open circuit
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    // Advance past cooldown
-    await advanceTimers(121000);
-
-    // Switch to success mock for probe
-    const mockFetchSuccess = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetchSuccess;
-
-    // Act — probe succeeds
-    const probeResult = await sender.sendEventsQueue(eventsQueue);
-    expect(probeResult).toBe(true);
-
-    // Assert — next send also succeeds immediately (circuit closed)
-    mockFetchSuccess.mockClear();
-    const nextResult = await sender.sendEventsQueue(eventsQueue);
-    expect(nextResult).toBe(true);
-    expect(mockFetchSuccess).toHaveBeenCalledTimes(1);
-  });
-
-  it('should re-open circuit on failed probe', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Open circuit
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    // Advance past cooldown and fail probe
-    await advanceTimers(121000);
-    mockFetch.mockClear();
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    // Assert — circuit re-opened, immediate send blocked
-    mockFetch.mockClear();
-    const result = await sender.sendEventsQueue(eventsQueue);
-    expect(result).toBe(false);
-    expect(mockFetch).toHaveBeenCalledTimes(0);
-  });
-
-  it('should reset counter on successful send', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // 2 failed batches (counter = 2, below threshold of 3)
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    expect((sender as any).consecutiveNetworkFailures).toBe(2);
-
-    // Successful send resets counter
-    global.fetch = createMockFetch({ ok: true, status: 200 });
-    await sender.sendEventsQueue(eventsQueue);
-    expect((sender as any).consecutiveNetworkFailures).toBe(0);
-
-    // 2 more failures — circuit still not open (counter back to 2)
-    global.fetch = createMockFetchNetworkError();
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    expect((sender as any).consecutiveNetworkFailures).toBe(2);
-
-    // Verify circuit is NOT open (fetch still called)
-    const freshMock = createMockFetchNetworkError();
-    global.fetch = freshMock;
-    await runFailedNetworkBatch(sender, eventsQueue);
-    expect(freshMock).toHaveBeenCalled();
-  });
-
-  it('should reset counter on PermanentError (4xx)', async () => {
-    // Arrange — start with 2 network failures
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    expect((sender as any).consecutiveNetworkFailures).toBe(2);
-
-    // Act — 4xx response proves URL is reachable, resets counter
-    global.fetch = createMockFetch({ ok: false, status: 400 });
-    await sender.sendEventsQueue(eventsQueue);
-
-    // Assert
-    expect((sender as any).consecutiveNetworkFailures).toBe(0);
-  });
-
-  it('should NOT count TimeoutError toward circuit breaker', async () => {
-    // Arrange — fetch that hangs until AbortController timeout
-    global.fetch = vi.fn(async (_url: string | RequestInfo | URL, options?: RequestInit) => {
-      return new Promise<Response>((_, reject) => {
-        if (options?.signal) {
-          options.signal.addEventListener('abort', () => {
-            reject(new DOMException('The user aborted a request.', 'AbortError'));
-          });
-        }
-      });
+    const legacyEvents = [
+      createMockEvent(EventType.CUSTOM, { id: 'legacy-a' }),
+      createMockEvent(EventType.CLICK, { id: 'legacy-b' }),
+    ];
+    const legacyTimestamp = Date.now() - 60_000;
+    seedV2Storage(storage, {
+      saasQueue: {
+        user_id: USER_ID,
+        session_id: 'sess-legacy',
+        device: MOCK_DEVICE_INFO,
+        events: legacyEvents,
+        timestamp: legacyTimestamp,
+      },
     });
 
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
+    // Construct sender — migration runs in constructor.
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
 
-    setGlobalStateValue('userId', 'test-user-id');
+    const migratedRaw = storage.getItem(QUEUE_KEY(USER_ID));
+    expect(migratedRaw).not.toBeNull();
+    const migrated = JSON.parse(migratedRaw as string);
+    expect(migrated.events).toHaveLength(2);
+    expect(migrated.events.map((e: any) => e.id)).toEqual(legacyEvents.map((e) => e.id));
+    expect(migrated.timestamp).toBe(legacyTimestamp);
 
+    // Legacy SaaS queue cleared.
+    expect(storage.getItem(`${QUEUE_KEY(USER_ID)}:saas`)).toBeNull();
+  });
+
+  it('merges legacy SaaS events with an existing v3 queue, deduping by event id', () => {
     const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act — send 4 batches, all timing out (would exceed threshold if counted)
-    for (let i = 0; i < 4; i++) {
-      const sendPromise = sender.sendEventsQueue(eventsQueue);
-      // Advance past REQUEST_TIMEOUT_MS (15s) × 3 attempts + backoff
-      await advanceTimers(16000);
-      await advanceTimers(16000);
-      await advanceTimers(16000);
-      await sendPromise;
-    }
-
-    // Assert — counter stays at 0, circuit never opens
-    expect((sender as any).consecutiveNetworkFailures).toBe(0);
-  });
-
-  it('should NOT count 5xx errors toward circuit breaker (URL is reachable)', async () => {
-    // Arrange — 5xx responses prove the URL is reachable (server returned HTTP)
-    global.fetch = createMockFetch({ ok: false, status: 503 });
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Act — send 4 batches, all failing with 5xx (would exceed threshold if counted)
-    for (let i = 0; i < 4; i++) {
-      const promise = sender.sendEventsQueue(eventsQueue);
-      await advanceTimers(1000);
-      await promise;
-    }
-
-    // Assert — counter stays at 0, circuit never opens
-    expect((sender as any).consecutiveNetworkFailures).toBe(0);
-  });
-
-  it('should reset counter when HTTP response received after network failures', async () => {
-    // Arrange — start with 2 network failures
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-    expect((sender as any).consecutiveNetworkFailures).toBe(2);
-
-    // Act — 5xx response proves URL is reachable, resets counter
-    global.fetch = createMockFetch({ ok: false, status: 500 });
-    const promise = sender.sendEventsQueue(eventsQueue);
-    await advanceTimers(1000);
-    await promise;
-
-    // Assert
-    expect((sender as any).consecutiveNetworkFailures).toBe(0);
-  });
-
-  it('should track circuitOpenedAt timestamp when circuit opens', async () => {
-    // Arrange
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-
-    // Initially zero
-    expect((sender as any).circuitOpenedAt).toBe(0);
-
-    // Open circuit with 3 failed batches
-    await runFailedNetworkBatch(sender, eventsQueue);
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    const timeBeforeOpen = Date.now();
-    await runFailedNetworkBatch(sender, eventsQueue);
-
-    // Assert — timestamp set on 3rd failure
-    expect((sender as any).circuitOpenedAt).toBeGreaterThanOrEqual(timeBeforeOpen);
-    expect((sender as any).consecutiveNetworkFailures).toBe(3);
-  });
-});
-
-// ============================================================================
-// RECOVERY FAILURE TRACKING
-// ============================================================================
-
-describe('SenderManager - Recovery Failure Tracking', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should discard persisted events after MAX_RECOVERY_FAILURES', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Use sender's own persistence with MAX_RECOVERY_FAILURES
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-    (sender as any).persistEventsWithFailureCount(eventsQueue, 3);
-
-    const clearSpy = vi.spyOn(sender as any, 'clearPersistedEvents');
-    const failureCallback = vi.fn();
-
-    // Act
-    await sender.recoverPersistedEvents({ onFailure: failureCallback });
-
-    // Assert — discarded without send attempt
-    expect(clearSpy).toHaveBeenCalled();
-    expect(failureCallback).toHaveBeenCalledTimes(1);
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('should increment recoveryFailures on failed recovery', async () => {
-    // Arrange
-    vi.useFakeTimers();
-    const mockFetch = createMockFetchNetworkError();
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Use sender's own persistence with recoveryFailures: 1
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-    (sender as any).persistEventsWithFailureCount(eventsQueue, 1);
-
-    // Advance past persistence throttle window (1s)
-    await advanceTimers(1500);
-
-    // Act
-    const recoverPromise = sender.recoverPersistedEvents();
-    await advanceTimers(1000); // Past backoff delays
-    await recoverPromise;
-
-    // Assert — recoveryFailures incremented to 2
-    const storageKey = (sender as any).getQueueStorageKey();
-    const updated = JSON.parse(storage.getItem(storageKey)!);
-    expect(updated.recoveryFailures).toBe(2);
-  });
-
-  it('should clear recoveryFailures on successful recovery', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Use sender's own persistence with recoveryFailures: 2
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-    (sender as any).persistEventsWithFailureCount(eventsQueue, 2);
-
-    // Act
-    await sender.recoverPersistedEvents();
-
-    // Assert — localStorage entirely cleared
-    const storageKey = (sender as any).getQueueStorageKey();
-    expect(storage.getItem(storageKey)).toBeNull();
-  });
-
-  it('should treat missing recoveryFailures as 0', async () => {
-    // Arrange — persisted data without recoveryFailures field (backward compat)
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Use sender's own persistEvents (which sets recoveryFailures: 0, omitted from JSON)
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-    (sender as any).persistEvents(eventsQueue);
-
-    const sendSpy = vi.spyOn(sender as any, 'send');
-
-    // Act
-    await sender.recoverPersistedEvents();
-
-    // Assert — send was attempted (not discarded)
-    expect(sendSpy).toHaveBeenCalled();
-    const storageKey = (sender as any).getQueueStorageKey();
-    expect(storage.getItem(storageKey)).toBeNull(); // Cleared on success
-  });
-
-  it('should not include recoveryFailures in HTTP body', async () => {
-    // Arrange
-    const mockFetch = createMockFetch({ ok: true, status: 200 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Use sender's own persistence with recoveryFailures: 1
-    const customEvent = createMockEvent(EventType.CUSTOM, {
-      custom_event: { name: 'test_event', metadata: {} },
-    });
-    const eventsQueue = createMockQueue([customEvent]);
-    (sender as any).persistEventsWithFailureCount(eventsQueue, 1);
-
-    // Act
-    await sender.recoverPersistedEvents();
-
-    // Assert — fetch payload should NOT contain recoveryFailures
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const fetchPayload = JSON.parse(mockFetch.mock.calls[0]![1].body as string);
-    expect(fetchPayload).not.toHaveProperty('recoveryFailures');
-    expect(fetchPayload).not.toHaveProperty('timestamp');
-  });
-});
-
-describe('SenderManager - Rate-Limit Cooldown', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should skip fetch when rate-limit cooldown is active', async () => {
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    const event = createMockEvent(EventType.CUSTOM, { custom_event: { name: 'first', metadata: {} } });
-    const firstQueue = createMockQueue([event]);
-
-    // First send gets 429 → sets cooldown and persists
-    await sender.sendEventsQueue(firstQueue);
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    // Second send within cooldown window should NOT hit the network
-    const secondQueue = createMockQueue([
-      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'second', metadata: {} } }),
-    ]);
-
-    await sender.sendEventsQueue(secondQueue);
-
-    expect(mockFetch).toHaveBeenCalledTimes(1); // still 1 — cooldown short-circuited
-  });
-
-  it('should persist cooldown to storage so a fresh SenderManager respects it', async () => {
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const firstSender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    await firstSender.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
+    seedUserId(storage);
+
+    // Explicit ids — createMockEvent derives id from Date.now(), so back-to-back
+    // calls in the same millisecond would otherwise collide and falsely dedup.
+    const sharedEvent = createMockEvent(EventType.CUSTOM, { id: 'shared-evt' });
+    const legacyOnly = createMockEvent(EventType.CLICK, { id: 'legacy-evt' });
+    const currentOnly = createMockEvent(EventType.PAGE_VIEW, { id: 'current-evt' });
+    const legacyTs = Date.now() - 120_000;
+    const currentTs = Date.now() - 30_000;
+
+    // Pre-seed v3 queue first.
+    storage.setItem(
+      QUEUE_KEY(USER_ID),
+      JSON.stringify({
+        user_id: USER_ID,
+        session_id: 'sess-current',
+        device: MOCK_DEVICE_INFO,
+        events: [sharedEvent, currentOnly],
+        timestamp: currentTs,
+        recoveryFailures: 1,
+      }),
     );
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    // Then seed legacy v2 SaaS queue (overlap on sharedEvent.id).
+    seedV2Storage(storage, {
+      saasQueue: {
+        user_id: USER_ID,
+        session_id: 'sess-legacy',
+        device: MOCK_DEVICE_INFO,
+        events: [sharedEvent, legacyOnly],
+        timestamp: legacyTs,
+        recoveryFailures: 2,
+      },
+    });
 
-    // Simulate a fresh page load: new SenderManager instance, same storage
-    const secondSender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
 
-    await secondSender.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'b', metadata: {} } })]),
-    );
+    const mergedRaw = storage.getItem(QUEUE_KEY(USER_ID));
+    expect(mergedRaw).not.toBeNull();
+    const merged = JSON.parse(mergedRaw as string);
 
-    // Fresh sender inherited the cooldown from storage → no new fetch
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(merged.events).toHaveLength(3); // sharedEvent kept once
+    const ids = merged.events.map((e: any) => e.id);
+    expect(new Set(ids).size).toBe(3);
+    expect(merged.timestamp).toBe(legacyTs); // older timestamp wins (closer to expiry)
+    expect(merged.recoveryFailures).toBe(2); // max wins
+    expect(storage.getItem(`${QUEUE_KEY(USER_ID)}:saas`)).toBeNull();
   });
 
-  it('should clear cooldown once the cooldown window has elapsed', async () => {
-    vi.useFakeTimers();
-    try {
-      const mockFetch = createMockFetch({ ok: false, status: 429 });
-      global.fetch = mockFetch;
-
-      const { StorageManager } = await import('../../../src/managers/storage.manager');
-      const { SenderManager } = await import('../../../src/managers/sender.manager');
-      const { RATE_LIMIT_COOLDOWN_MS } = await import('../../../src/constants');
-
-      setGlobalStateValue('userId', 'test-user-id');
-
-      const storage = new StorageManager();
-      const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-      await sender.sendEventsQueue(
-        createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
-      );
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-
-      // Advance past the cooldown window
-      await vi.advanceTimersByTimeAsync(RATE_LIMIT_COOLDOWN_MS + 1);
-
-      // Server recovered — next attempt should succeed
-      global.fetch = createMockFetch({ ok: true, status: 200 });
-
-      await sender.sendEventsQueue(
-        createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'b', metadata: {} } })]),
-      );
-
-      expect((global.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('should skip sync (sendBeacon) path during cooldown and persist instead', async () => {
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
+  it('discards legacy custom-integration queue and rate-limit keys without sending them to SaaS', () => {
     const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    seedUserId(storage);
 
-    await sender.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
-    );
+    seedV2Storage(storage, {
+      customQueue: {
+        user_id: USER_ID,
+        session_id: 'sess-custom',
+        device: MOCK_DEVICE_INFO,
+        events: [createMockEvent(EventType.CUSTOM)],
+        timestamp: Date.now(),
+      },
+      customRateLimit: Date.now() + 60_000,
+      saasRateLimit: Date.now() + 60_000,
+    });
 
-    const beaconSpy = vi.fn().mockReturnValue(true);
-    (global as any).navigator = { ...(global as any).navigator, sendBeacon: beaconSpy };
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
 
-    const result = sender.sendEventsQueueSync(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'b', metadata: {} } })]),
-    );
-
-    expect(result).toBe(false);
-    expect(beaconSpy).not.toHaveBeenCalled();
+    // Legacy custom events MUST NOT leak into the v3 queue.
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+    expect(storage.getItem(`${QUEUE_KEY(USER_ID)}:custom`)).toBeNull();
+    expect(storage.getItem(`${RATE_LIMIT_KEY(USER_ID)}:custom`)).toBeNull();
+    expect(storage.getItem(`${RATE_LIMIT_KEY(USER_ID)}:saas`)).toBeNull();
   });
 
-  it('should defer recovery during cooldown without bumping recoveryFailures', async () => {
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
+  it('is a no-op when no legacy keys exist', () => {
     const storage = new StorageManager();
-    const firstSender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
+    seedUserId(storage);
 
-    // First send gets 429 → cooldown armed + batch persisted with recoveryFailures undefined (treated as 0)
-    await firstSender.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
-    );
+    const sender = new SenderManager(storage, PROD_URL);
+    sender['set']('userId', USER_ID);
+    void sender;
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    // Fresh page loads repeatedly while cooldown is active; each triggers recovery.
-    // Without the cooldown check, three recoveries would bump recoveryFailures to 3
-    // (= MAX_RECOVERY_FAILURES) and the next load would discard the events.
-    for (let i = 0; i < 3; i++) {
-      const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-      await sender.recoverPersistedEvents();
-    }
-
-    // No extra fetches — cooldown short-circuited every recovery
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    // Persisted batch is still there with recoveryFailures absent/0 (not bumped)
-    const storageKey = (firstSender as any).getQueueStorageKey();
-    const persistedRaw = storage.getItem(storageKey);
-    expect(persistedRaw).not.toBeNull();
-    const persisted = JSON.parse(persistedRaw as string);
-    expect(persisted.recoveryFailures ?? 0).toBe(0);
-  });
-
-  it('should preserve existing recoveryFailures when sync-persisting during cooldown', async () => {
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Seed a persisted batch with recoveryFailures = 2 (from a prior failed recovery)
-    const seededQueue = createMockQueue([
-      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'seeded', metadata: {} } }),
-    ]);
-    (sender as any).persistEventsWithFailureCount(seededQueue, 2, true);
-
-    // Arm the cooldown by sending a fresh batch that gets 429
-    await sender.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'armer', metadata: {} } })]),
-    );
-
-    // Now an unload-time sync send should persist without clobbering the counter
-    (global as any).navigator = { ...(global as any).navigator, sendBeacon: vi.fn().mockReturnValue(true) };
-
-    sender.sendEventsQueueSync(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'unload', metadata: {} } })]),
-    );
-
-    const storageKey = (sender as any).getQueueStorageKey();
-    const persistedRaw = storage.getItem(storageKey);
-    expect(persistedRaw).not.toBeNull();
-    const persisted = JSON.parse(persistedRaw as string);
-    expect(persisted.recoveryFailures).toBe(2);
-  });
-
-  it('should pick up a cooldown armed by another tab after this instance was constructed', async () => {
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-
-    // Tab B constructs its sender BEFORE Tab A receives the 429
-    const tabB = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Tab A gets 429 → writes cooldown to shared storage
-    const tabA = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-    await tabA.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'tabA', metadata: {} } })]),
-    );
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    // Tab B now tries to send — it must discover the cooldown via storage even though
-    // it has no in-memory state, otherwise it keeps hammering the API during cooldown.
-    await tabB.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'tabB', metadata: {} } })]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1); // still 1 — Tab B short-circuited
-  });
-});
-
-describe('SenderManager - Rate-Limit Cooldown (multi-tab freshness)', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should not shorten a longer cooldown already stored by another tab', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-    const key = (sender as any).getRateLimitStorageKey();
-
-    // Simulate another tab having written a far-future cooldown
-    const longCooldown = Date.now() + 300_000; // 5 minutes
-    storage.setItem(key, String(longCooldown));
-
-    // This instance tries to arm a shorter cooldown (~60s) — must not overwrite
-    (sender as any).persistRateLimitCooldown(Date.now() + 60_000);
-
-    const stored = Number(storage.getItem(key));
-    expect(stored).toBe(longCooldown);
-  });
-
-  it('should adopt a longer cooldown from storage instead of clearing it on expiry', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-    const key = (sender as any).getRateLimitStorageKey();
-
-    // In-memory cooldown thinks it's already expired (past timestamp)
-    (sender as any).rateLimitedUntil = Date.now() - 1000;
-    // Storage holds a longer active cooldown written by another tab
-    const longerCooldown = Date.now() + 30_000;
-    storage.setItem(key, String(longerCooldown));
-
-    // isRateLimited() must adopt the longer cooldown, not clear it
-    const limited = (sender as any).isRateLimited();
-
-    expect(limited).toBe(true);
-    expect((sender as any).rateLimitedUntil).toBe(longerCooldown);
-    // Storage must still hold the longer cooldown (not removed)
-    expect(storage.getItem(key)).toBe(String(longerCooldown));
-  });
-
-  it('should still clear storage when no tab has a longer cooldown', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-    const key = (sender as any).getRateLimitStorageKey();
-
-    // Both in-memory and storage hold an expired cooldown
-    (sender as any).rateLimitedUntil = Date.now() - 1000;
-    storage.setItem(key, String(Date.now() - 500));
-
-    const limited = (sender as any).isRateLimited();
-
-    expect(limited).toBe(false);
-    expect((sender as any).rateLimitedUntil).toBe(0);
-    expect(storage.getItem(key)).toBeNull();
-  });
-
-  it('should bind cooldown to the userId present at arm time (resetIdentity-safe)', async () => {
-    const mockFetch = createMockFetch({ ok: false, status: 429 });
-    global.fetch = mockFetch;
-
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-    const { getGlobalState } = await import('../../../src/managers/state.manager');
-
-    // Seed userId via the global state directly (setGlobalStateValue helper
-    // uses a window-level shim that isn't wired up in this codebase).
-    (getGlobalState() as { userId: string }).userId = 'user-before-reset';
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // 429 arms cooldown bound to 'user-before-reset'
-    await sender.sendEventsQueue(
-      createMockQueue([createMockEvent(EventType.CUSTOM, { custom_event: { name: 'a', metadata: {} } })]),
-    );
-
-    const armedKey = (sender as any).rateLimitStorageKeyAtArm as string;
-    expect(armedKey).toContain('user-before-reset');
-    expect(storage.getItem(armedKey)).not.toBeNull();
-
-    // Simulate resetIdentity: userId changes mid-cooldown
-    (getGlobalState() as { userId: string }).userId = 'user-after-reset';
-
-    // Force the cooldown fully expired (both in-memory and storage) so clear
-    // is not tempted to adopt a still-active stored value.
-    (sender as any).rateLimitedUntil = Date.now() - 1;
-    storage.setItem(armedKey, String(Date.now() - 1));
-
-    (sender as any).clearRateLimitCooldown();
-
-    // No orphan key left for the armed user
-    expect(storage.getItem(armedKey)).toBeNull();
-    // New user's key was never written → no false cooldown leaks to new identity
-    const newUserKey = (sender as any).getRateLimitStorageKey();
-    expect(newUserKey).toContain('user-after-reset');
-    expect(newUserKey).not.toBe(armedKey);
-    expect(storage.getItem(newUserKey)).toBeNull();
-    // Snapshot cleared so subsequent arms target the new user
-    expect((sender as any).rateLimitStorageKeyAtArm).toBeNull();
-  });
-});
-
-describe('SenderManager - persistEvents (recoveryFailures preservation)', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should preserve recoveryFailures when a fresh batch overwrites a previously persisted batch', async () => {
-    const { StorageManager } = await import('../../../src/managers/storage.manager');
-    const { SenderManager } = await import('../../../src/managers/sender.manager');
-
-    setGlobalStateValue('userId', 'test-user-id');
-
-    const storage = new StorageManager();
-    const sender = new SenderManager(storage, 'custom', 'https://api.test.com/collect');
-
-    // Seed storage with a batch carrying recoveryFailures = 2 (prior failed recoveries)
-    const seeded = createMockQueue([
-      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'seeded', metadata: {} } }),
-    ]);
-    (sender as any).persistEventsWithFailureCount(seeded, 2, true);
-
-    // Trigger a fresh persist via the public persistEvents helper (simulating a send failure)
-    const fresh = createMockQueue([
-      createMockEvent(EventType.CUSTOM, { custom_event: { name: 'fresh', metadata: {} } }),
-    ]);
-    (sender as any).persistEvents(fresh);
-
-    const storageKey = (sender as any).getQueueStorageKey();
-    const persisted = JSON.parse(storage.getItem(storageKey) as string);
-    expect(persisted.recoveryFailures).toBe(2); // counter preserved, not reset
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 });

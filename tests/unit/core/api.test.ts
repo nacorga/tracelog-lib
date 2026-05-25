@@ -1,928 +1,361 @@
 /**
  * Public API Tests
- * Focus: Public API methods exposed to users
+ *
+ * Covers the 9-method public surface of src/api.ts:
+ *   init, event, on, off, identify, resetIdentity, destroy, getSessionId, getUserId, isInitialized
+ *
+ * App.prototype methods are stubbed with vi.spyOn so the real api.ts wiring
+ * (singleton lifecycle, pre-init queueing, SSR no-ops) is exercised end-to-end
+ * without booting real handlers/managers.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
+import { PENDING_IDENTITY_KEY } from '../../../src/constants/storage.constants';
+import { EmitterEvent } from '../../../src/types/emitter.types';
 import * as api from '../../../src/api';
-import { destroy } from '../../../src/api';
-
-describe('Public API - init()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors during cleanup
-    }
-  });
-
-  it('should expose init method globally', () => {
-    expect(api.init).toBeDefined();
-    expect(typeof api.init).toBe('function');
-  });
-
-  it('should initialize with no arguments', async () => {
-    const result = await api.init();
-    expect(result).toHaveProperty('sessionId');
-    expect(typeof result.sessionId).toBe('string');
-    expect(result.sessionId.length).toBeGreaterThan(0);
-    expect(api.isInitialized()).toBe(true);
-  });
-
-  it('should initialize with config object', async () => {
-    const result = await api.init({ sessionTimeout: 60000 });
-    expect(result).toHaveProperty('sessionId');
-    expect(typeof result.sessionId).toBe('string');
-    expect(api.isInitialized()).toBe(true);
-  });
-
-  it('should return promise that resolves with InitResult', async () => {
-    const result = api.init();
-    expect(result).toBeInstanceOf(Promise);
-    const initResult = await result;
-    expect(initResult).toHaveProperty('sessionId');
-  });
-
-  it('should reject double initialization', async () => {
-    await api.init();
-    // Second init should be silently ignored (no-op)
-    await api.init();
-    expect(api.isInitialized()).toBe(true);
-  });
-
-  it('should return same sessionId for concurrent init calls', async () => {
-    // Call init twice without awaiting the first
-    const promise1 = api.init();
-    const promise2 = api.init();
-
-    const [result1, result2] = await Promise.all([promise1, promise2]);
-
-    expect(result1.sessionId).toBe(result2.sessionId);
-    expect(result1.sessionId.length).toBeGreaterThan(0);
-  });
-
-  it('should validate config before initializing', async () => {
-    // Invalid config should throw during validation
-    await expect(api.init({ sessionTimeout: -1000 } as any)).rejects.toThrow();
-  });
-});
-
-describe('Public API - event()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
-  });
-
-  it('should expose event method globally', () => {
-    expect(api.event).toBeDefined();
-    expect(typeof api.event).toBe('function');
-  });
-
-  it('should send custom event with name only', async () => {
-    await api.init();
-
-    // Should not throw
-    expect(() => {
-      api.event('test_event');
-    }).not.toThrow();
-  });
-
-  it('should send custom event with metadata', async () => {
-    await api.init();
-
-    const metadata = { key: 'value', count: 42 };
-    expect(() => {
-      api.event('test_event', metadata);
-    }).not.toThrow();
-  });
-
-  it('should validate event name', async () => {
-    await api.init();
-
-    // Empty string should be handled
-    expect(() => {
-      api.event('');
-    }).not.toThrow();
-  });
-
-  it('should validate metadata structure', async () => {
-    await api.init();
-
-    // Valid metadata structures
-    expect(() => {
-      api.event('test', { key: 'value' });
-    }).not.toThrow();
-    expect(() => {
-      api.event('test', [{ key: 'value' }]);
-    }).not.toThrow();
-  });
-
-  it('should throw if called before init', () => {
-    expect(() => {
-      api.event('test');
-    }).toThrow('[TraceLog] TraceLog not initialized');
-  });
-
-  it('should handle invalid metadata gracefully', async () => {
-    await api.init();
-
-    // Should handle various metadata types gracefully
-    expect(() => {
-      api.event('test', { key: null } as any);
-    }).not.toThrow();
-  });
-
-  it('should accept optional EventOptions as third argument', async () => {
-    await api.init();
-
-    expect(() => {
-      api.event('test_event', { key: 'value' }, { critical: true });
-    }).not.toThrow();
-
-    expect(() => {
-      api.event('test_event_2', undefined, { critical: false });
-    }).not.toThrow();
-  });
-});
-
-describe('Public API - on()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
-  });
-
-  it('should expose on method globally', () => {
-    expect(api.on).toBeDefined();
-    expect(typeof api.on).toBe('function');
-  });
-
-  it('should register event listener', async () => {
-    const listener = vi.fn();
-
-    api.on('event' as any, listener);
-    await api.init();
-
-    // Trigger an event
-    api.event('test_event');
-
-    // Wait for event to be processed
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(listener).toHaveBeenCalled();
-  });
-
-  it('should register queue listener', async () => {
-    const listener = vi.fn();
-
-    api.on('queue' as any, listener);
-    await api.init();
-
-    // Queue listener should be called when events are batched
-    // The listener may be called during init or after events are queued
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  });
-
-  it('should allow multiple listeners for same event', async () => {
-    const listener1 = vi.fn();
-    const listener2 = vi.fn();
-
-    api.on('event' as any, listener1);
-    api.on('event' as any, listener2);
-    await api.init();
-
-    api.event('test_event');
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(listener1).toHaveBeenCalled();
-    expect(listener2).toHaveBeenCalled();
-  });
-
-  it('should call listeners with correct data', async () => {
-    const listener = vi.fn();
-
-    api.on('event' as any, listener);
-    await api.init();
-
-    api.event('test_event', { key: 'value' });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(listener).toHaveBeenCalled();
-    const eventData = listener.mock.calls[listener.mock.calls.length - 1]?.[0];
-    expect(eventData).toHaveProperty('type');
-  });
-
-  it('should handle listener errors gracefully', async () => {
-    const errorListener = vi.fn(() => {
-      throw new Error('Listener error');
-    });
-    const validListener = vi.fn();
-
-    await api.init();
-
-    // Register both error listener and valid listener
-    api.on('event' as any, errorListener);
-    api.on('event' as any, validListener);
-
-    // Listener errors propagate (by design), so event() WILL throw
-    expect(() => {
-      api.event('test_event');
-    }).toThrow('Listener error');
-
-    // Error listener was called (threw error)
-    expect(errorListener).toHaveBeenCalled();
-    // Valid listener is NOT called because error listener threw first
-    // (emitter calls callbacks in registration order and doesn't catch errors)
-  });
-});
-
-describe('Public API - off()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
-  });
-
-  it('should expose off method globally', () => {
-    expect(api.off).toBeDefined();
-    expect(typeof api.off).toBe('function');
-  });
-
-  it('should remove specific listener', async () => {
-    const listener = vi.fn();
-
-    api.on('event' as any, listener);
-    await api.init();
-
-    // Clear calls from SESSION_START and PAGE_VIEW during init
-    listener.mockClear();
-
-    api.off('event' as any, listener);
-
-    api.event('test_event');
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Listener should not be called after removal
-    expect(listener).not.toHaveBeenCalled();
-  });
-
-  it('should not affect other listeners', async () => {
-    const listener1 = vi.fn();
-    const listener2 = vi.fn();
-
-    api.on('event' as any, listener1);
-    api.on('event' as any, listener2);
-    await api.init();
-
-    // Clear calls from SESSION_START and PAGE_VIEW during init
-    listener1.mockClear();
-    listener2.mockClear();
-
-    api.off('event' as any, listener1);
-
-    api.event('test_event');
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(listener1).not.toHaveBeenCalled();
-    expect(listener2).toHaveBeenCalled();
-  });
-
-  it('should handle removing non-existent listener', async () => {
-    const listener = vi.fn();
-
-    await api.init();
-
-    // Should not throw
-    expect(() => {
-      api.off('event' as any, listener);
-    }).not.toThrow();
-  });
-
-  it('should allow removing all listeners', async () => {
-    const listener1 = vi.fn();
-    const listener2 = vi.fn();
-
-    api.on('event' as any, listener1);
-    api.on('event' as any, listener2);
-    await api.init();
-
-    // Clear calls from SESSION_START and PAGE_VIEW during init
-    listener1.mockClear();
-    listener2.mockClear();
-
-    api.off('event' as any, listener1);
-    api.off('event' as any, listener2);
-
-    api.event('test_event');
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(listener1).not.toHaveBeenCalled();
-    expect(listener2).not.toHaveBeenCalled();
-  });
-});
-
-describe('Public API - destroy()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-  });
-
-  it('should expose destroy method globally', () => {
-    expect(api.destroy).toBeDefined();
-    expect(typeof api.destroy).toBe('function');
-  });
-
-  it('should cleanup all resources', async () => {
-    await api.init();
-    expect(api.isInitialized()).toBe(true);
-
+import { App } from '../../../src/app';
+
+const sessionIdValue = 'session-mock-123';
+const userIdValue = 'user-mock-abc';
+
+let spyInit: any;
+let spyDestroy: any;
+let spyOn: any;
+let spyOff: any;
+let spySendCustomEvent: any;
+let spyIdentify: any;
+let spyResetIdentity: any;
+
+function freshApi(): typeof api {
+  try {
     api.destroy();
+  } catch {
+    /* ignore */
+  }
+  return api;
+}
 
-    expect(api.isInitialized()).toBe(false);
+beforeEach(() => {
+  setupTestEnvironment();
+  delete (window as any).__traceLogDisabled;
+
+  spyInit = vi.spyOn(App.prototype, 'init').mockResolvedValue({ sessionId: sessionIdValue });
+  spyDestroy = vi.spyOn(App.prototype, 'destroy').mockImplementation(() => {});
+  spyOn = vi.spyOn(App.prototype, 'on').mockImplementation(() => {});
+  spyOff = vi.spyOn(App.prototype, 'off').mockImplementation(() => {});
+  spySendCustomEvent = vi.spyOn(App.prototype, 'sendCustomEvent').mockImplementation(() => {});
+  vi.spyOn(App.prototype, 'getSessionId').mockReturnValue(sessionIdValue);
+  vi.spyOn(App.prototype, 'getUserId').mockReturnValue(userIdValue);
+  spyIdentify = vi.spyOn(App.prototype, 'identify').mockImplementation(() => {});
+  spyResetIdentity = vi.spyOn(App.prototype, 'resetIdentity').mockResolvedValue();
+});
+
+afterEach(() => {
+  freshApi();
+  vi.restoreAllMocks();
+  cleanupTestEnvironment();
+});
+
+describe('api.init()', () => {
+  it('returns sessionId from App.init() and marks isInitialized', async () => {
+    const { init, isInitialized } = freshApi();
+
+    expect(isInitialized()).toBe(false);
+
+    const { sessionId } = await init();
+
+    expect(sessionId).toBe(sessionIdValue);
+    expect(spyInit).toHaveBeenCalledTimes(1);
+    expect(isInitialized()).toBe(true);
   });
 
-  it('should stop all tracking', async () => {
-    const listener = vi.fn();
+  it('returns the current sessionId without recreating App when called twice', async () => {
+    const { init } = freshApi();
+    await init();
+    const second = await init();
 
-    api.on('event' as any, listener);
-    await api.init();
-
-    api.destroy();
-
-    // Events should not be tracked after destroy
-    expect(() => {
-      api.event('test');
-    }).toThrow();
+    expect(second.sessionId).toBe(sessionIdValue);
+    expect(spyInit).toHaveBeenCalledTimes(1);
   });
 
-  it('should allow re-initialization after destroy', async () => {
-    await api.init();
-    api.destroy();
+  it('returns the same promise for concurrent init() calls (de-dupes inflight)', async () => {
+    const { init } = freshApi();
 
-    // Should be able to init again
-    const result = await api.init();
-    expect(result).toHaveProperty('sessionId');
-    expect(api.isInitialized()).toBe(true);
+    const a = init();
+    const b = init();
 
-    // Cleanup
-    api.destroy();
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(ra.sessionId).toBe(sessionIdValue);
+    expect(rb.sessionId).toBe(sessionIdValue);
+    expect(spyInit).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle destroy before init', () => {
-    // Should not throw
-    expect(() => {
-      api.destroy();
-    }).not.toThrow();
-    expect(api.isInitialized()).toBe(false);
+  it('returns empty sessionId when window.__traceLogDisabled is true', async () => {
+    (window as any).__traceLogDisabled = true;
+    const { init, isInitialized } = freshApi();
+
+    const { sessionId } = await init();
+    expect(sessionId).toBe('');
+    expect(spyInit).not.toHaveBeenCalled();
+    expect(isInitialized()).toBe(false);
+  });
+
+  it('forwards pre-init listeners to App.on() after init', async () => {
+    const { init, on } = freshApi();
+    const cb = vi.fn();
+    on(EmitterEvent.EVENT, cb);
+
+    expect(spyOn).not.toHaveBeenCalled();
+
+    await init();
+
+    expect(spyOn).toHaveBeenCalledWith(EmitterEvent.EVENT, cb);
+  });
+
+  it('clears app singleton when App.init() rejects', async () => {
+    spyInit.mockRejectedValueOnce(new Error('boom'));
+
+    const { init, isInitialized } = freshApi();
+
+    await expect(init()).rejects.toThrow('boom');
+    expect(isInitialized()).toBe(false);
+
+    spyInit.mockResolvedValueOnce({ sessionId: sessionIdValue });
+    const result = await init();
+    expect(result.sessionId).toBe(sessionIdValue);
   });
 });
 
-describe('Public API - setQaMode()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
-
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
-  });
-
-  it('should expose setQaMode method globally', () => {
-    expect(api.setQaMode).toBeDefined();
-    expect(typeof api.setQaMode).toBe('function');
-  });
-
-  it('should enable QA mode', () => {
-    api.setQaMode(true);
-
-    // Verify QA mode is stored in sessionStorage
-    const mode = sessionStorage.getItem('tlog:qa_mode');
-    expect(mode).toBe('true');
-  });
-
-  it('should disable QA mode', () => {
-    api.setQaMode(true);
-    api.setQaMode(false);
-
-    const mode = sessionStorage.getItem('tlog:qa_mode');
-    expect(mode).toBe('false');
-  });
-
-  it('should persist QA mode to sessionStorage', () => {
-    api.setQaMode(true);
-
-    const mode = sessionStorage.getItem('tlog:qa_mode');
-    expect(mode).toBe('true');
-
-    // Should persist after toggling
-    api.setQaMode(false);
-    expect(sessionStorage.getItem('tlog:qa_mode')).toBe('false');
-  });
-
-  it('should work before init', () => {
-    // Should not throw before init
+describe('api.event()', () => {
+  it('throws if called before init()', () => {
+    const { event } = freshApi();
     expect(() => {
-      api.setQaMode(true);
-    }).not.toThrow();
-    expect(sessionStorage.getItem('tlog:qa_mode')).toBe('true');
+      event('foo');
+    }).toThrow(/not initialized/i);
   });
 
-  it('should work after init', async () => {
-    await api.init();
+  it('forwards to App.sendCustomEvent() after init', async () => {
+    const { init, event } = freshApi();
+    await init();
 
-    // Should not throw after init
-    expect(() => {
-      api.setQaMode(true);
-    }).not.toThrow();
-    expect(sessionStorage.getItem('tlog:qa_mode')).toBe('true');
+    event('purchase', { orderId: 'ord-1' }, { critical: true });
+
+    expect(spySendCustomEvent).toHaveBeenCalledWith('purchase', { orderId: 'ord-1' }, { critical: true });
+  });
+
+  it('passes undefined metadata and options when omitted', async () => {
+    const { init, event } = freshApi();
+    await init();
+
+    event('simple');
+
+    expect(spySendCustomEvent).toHaveBeenCalledWith('simple', undefined, undefined);
   });
 });
 
-describe('Public API - setTransformer()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
+describe('api.on() / api.off()', () => {
+  it('queues listeners pre-init and forwards them on init', async () => {
+    const { init, on } = freshApi();
+    const a = vi.fn();
+    const b = vi.fn();
+
+    on(EmitterEvent.EVENT, a);
+    on(EmitterEvent.QUEUE, b);
+
+    await init();
+
+    expect(spyOn).toHaveBeenCalledTimes(2);
+    expect(spyOn).toHaveBeenCalledWith(EmitterEvent.EVENT, a);
+    expect(spyOn).toHaveBeenCalledWith(EmitterEvent.QUEUE, b);
   });
 
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
+  it('forwards directly to App.on() when called post-init', async () => {
+    const { init, on } = freshApi();
+    await init();
+
+    const cb = vi.fn();
+    on(EmitterEvent.EVENT, cb);
+
+    expect(spyOn).toHaveBeenCalledWith(EmitterEvent.EVENT, cb);
   });
 
-  it('should expose setTransformer method globally', () => {
-    expect(api.setTransformer).toBeDefined();
-    expect(typeof api.setTransformer).toBe('function');
+  it('off() removes a queued pre-init listener so it never reaches App', async () => {
+    const { init, on, off } = freshApi();
+    const a = vi.fn();
+    const b = vi.fn();
+
+    on(EmitterEvent.EVENT, a);
+    on(EmitterEvent.EVENT, b);
+    off(EmitterEvent.EVENT, a);
+
+    await init();
+
+    expect(spyOn).toHaveBeenCalledTimes(1);
+    expect(spyOn).toHaveBeenCalledWith(EmitterEvent.EVENT, b);
   });
 
-  it('should set beforeSend transformer', () => {
-    const transformer = (data: any): any => data;
+  it('off() forwards to App.off() post-init', async () => {
+    const { init, off } = freshApi();
+    await init();
 
-    // Should not throw
-    expect(() => {
-      api.setTransformer('beforeSend', transformer);
-    }).not.toThrow();
-  });
+    const cb = vi.fn();
+    off(EmitterEvent.EVENT, cb);
 
-  it('should set beforeBatch transformer', () => {
-    const transformer = (data: any): any => data;
-
-    // Should not throw
-    expect(() => {
-      api.setTransformer('beforeBatch', transformer);
-    }).not.toThrow();
-  });
-
-  it('should validate transformer is function', () => {
-    const transformer = (data: any): any => data;
-
-    // Valid function should not throw
-    expect(() => {
-      api.setTransformer('beforeSend', transformer);
-    }).not.toThrow();
-  });
-
-  it('should throw if transformer is not function', () => {
-    // Invalid transformers should throw
-    expect(() => {
-      api.setTransformer('beforeSend', 'not a function' as any);
-    }).toThrow('[TraceLog] Transformer must be a function');
-    expect(() => {
-      api.setTransformer('beforeSend', null as any);
-    }).toThrow('[TraceLog] Transformer must be a function');
-    expect(() => {
-      api.setTransformer('beforeSend', 42 as any);
-    }).toThrow('[TraceLog] Transformer must be a function');
-  });
-
-  it('should work before init', () => {
-    const transformer = (data: any): any => data;
-
-    // Should not throw before init
-    expect(() => {
-      api.setTransformer('beforeSend', transformer);
-    }).not.toThrow();
-  });
-
-  it('should work after init', async () => {
-    await api.init();
-
-    const transformer = (data: any): any => data;
-
-    // Should not throw after init
-    expect(() => {
-      api.setTransformer('beforeSend', transformer);
-    }).not.toThrow();
+    expect(spyOff).toHaveBeenCalledWith(EmitterEvent.EVENT, cb);
   });
 });
 
-describe('Public API - removeTransformer()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
+describe('api.identify()', () => {
+  it('forwards userId and traits to App.identify() when initialized', async () => {
+    const { init, identify } = freshApi();
+    await init();
+
+    identify('cust_42', { plan: 'pro', name: 'Maria' });
+
+    expect(spyIdentify).toHaveBeenCalledWith('cust_42', { plan: 'pro', name: 'Maria' });
   });
 
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
+  it('forwards undefined traits when none provided', async () => {
+    const { init, identify } = freshApi();
+    await init();
+
+    identify('cust_42');
+
+    expect(spyIdentify).toHaveBeenCalledWith('cust_42', undefined);
   });
 
-  it('should expose removeTransformer method globally', () => {
-    expect(api.removeTransformer).toBeDefined();
-    expect(typeof api.removeTransformer).toBe('function');
+  it('persists identity (without traits) to localStorage when called pre-init', () => {
+    const { identify } = freshApi();
+    identify('cust_42');
+
+    const raw = localStorage.getItem(PENDING_IDENTITY_KEY);
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw!)).toEqual({ userId: 'cust_42' });
+    expect(spyIdentify).not.toHaveBeenCalled();
   });
 
-  it('should remove beforeSend transformer', () => {
-    const transformer = (data: any): any => data;
+  it('persists sanitized traits to localStorage when called pre-init', () => {
+    const { identify } = freshApi();
+    identify('cust_42', { plan: 'pro', age: 30 as unknown as string });
 
-    api.setTransformer('beforeSend', transformer);
-
-    // Should not throw
-    expect(() => {
-      api.removeTransformer('beforeSend');
-    }).not.toThrow();
+    const stored = JSON.parse(localStorage.getItem(PENDING_IDENTITY_KEY)!);
+    // Only string-valued fields survive sanitizeTraits.
+    expect(stored).toEqual({ userId: 'cust_42', traits: { plan: 'pro' } });
   });
 
-  it('should remove beforeBatch transformer', () => {
-    const transformer = (data: any): any => data;
-
-    api.setTransformer('beforeBatch', transformer);
-
-    // Should not throw
-    expect(() => {
-      api.removeTransformer('beforeBatch');
-    }).not.toThrow();
+  it('trims whitespace from userId before persisting', () => {
+    const { identify } = freshApi();
+    identify('  cust_42  ');
+    const stored = JSON.parse(localStorage.getItem(PENDING_IDENTITY_KEY)!);
+    expect(stored).toEqual({ userId: 'cust_42' });
   });
 
-  it('should handle removing non-existent transformer', () => {
-    // Should not throw when removing non-existent transformer
-    expect(() => {
-      api.removeTransformer('beforeSend');
-    }).not.toThrow();
-    expect(() => {
-      api.removeTransformer('beforeBatch');
-    }).not.toThrow();
-  });
-});
+  it('ignores empty / whitespace-only userId', async () => {
+    const { init, identify } = freshApi();
+    await init();
 
-describe('Public API - updateGlobalMetadata()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
+    identify('');
+    identify('   ');
+    identify(undefined as unknown as string);
+
+    expect(spyIdentify).not.toHaveBeenCalled();
   });
 
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
-  });
+  it('ignores userId longer than 256 characters', async () => {
+    const { init, identify } = freshApi();
+    await init();
 
-  it('should expose updateGlobalMetadata method globally', () => {
-    expect(api.updateGlobalMetadata).toBeDefined();
-    expect(typeof api.updateGlobalMetadata).toBe('function');
-  });
+    identify('a'.repeat(257));
 
-  it('should replace global metadata', async () => {
-    await api.init({
-      globalMetadata: { env: 'production', version: '1.0.0' },
-    });
-
-    // Should not throw
-    expect(() => {
-      api.updateGlobalMetadata({ userId: 'user-123', plan: 'premium' });
-    }).not.toThrow();
-  });
-
-  it('should clear global metadata with empty object', async () => {
-    await api.init({
-      globalMetadata: { env: 'production' },
-    });
-
-    // Should not throw
-    expect(() => {
-      api.updateGlobalMetadata({});
-    }).not.toThrow();
-  });
-
-  it('should throw if not initialized', () => {
-    expect(() => {
-      api.updateGlobalMetadata({ key: 'value' });
-    }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
-  });
-
-  it('should throw if called during destroy', async () => {
-    await api.init();
-
-    // Mock isDestroying state
-    const destroyPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        try {
-          destroy();
-        } catch {
-          // Ignore
-        }
-        resolve();
-      }, 100);
-    });
-
-    // This test is tricky - we can't reliably test the destroying state
-    // Just verify it throws when not initialized after destroy
-    await destroyPromise;
-
-    expect(() => {
-      api.updateGlobalMetadata({ key: 'value' });
-    }).toThrow();
-  });
-
-  it('should validate metadata structure', async () => {
-    await api.init();
-
-    // Non-object types should throw
-    expect(() => {
-      api.updateGlobalMetadata(null as any);
-    }).toThrow(/Global metadata must be a plain object/);
-
-    expect(() => {
-      api.updateGlobalMetadata(['array'] as any);
-    }).toThrow(/Global metadata must be a plain object/);
-  });
-
-  it('should accept primitives', async () => {
-    await api.init();
-
-    expect(() => {
-      api.updateGlobalMetadata({
-        str: 'value',
-        num: 42,
-        bool: true,
-      });
-    }).not.toThrow();
-  });
-
-  it('should accept nested objects (1 level deep)', async () => {
-    await api.init();
-
-    expect(() => {
-      api.updateGlobalMetadata({
-        user: {
-          id: 'user-123',
-          premium: true,
-        },
-      });
-    }).not.toThrow();
-  });
-
-  it('should accept string arrays', async () => {
-    await api.init();
-
-    expect(() => {
-      api.updateGlobalMetadata({
-        tags: ['tag1', 'tag2', 'tag3'],
-      });
-    }).not.toThrow();
+    expect(spyIdentify).not.toHaveBeenCalled();
   });
 });
 
-describe('Public API - mergeGlobalMetadata()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
+describe('api.resetIdentity()', () => {
+  it('forwards to App.resetIdentity() when initialized', async () => {
+    const { init, resetIdentity } = freshApi();
+    await init();
+
+    await resetIdentity();
+
+    expect(spyResetIdentity).toHaveBeenCalledTimes(1);
   });
 
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors
-    }
-  });
+  it('clears any pending pre-init identity silently when not initialized', async () => {
+    const { identify, resetIdentity } = freshApi();
+    identify('cust_42');
+    expect(localStorage.getItem(PENDING_IDENTITY_KEY)).not.toBeNull();
 
-  it('should expose mergeGlobalMetadata method globally', () => {
-    expect(api.mergeGlobalMetadata).toBeDefined();
-    expect(typeof api.mergeGlobalMetadata).toBe('function');
-  });
+    await resetIdentity();
 
-  it('should merge with existing metadata', async () => {
-    await api.init({
-      globalMetadata: { env: 'production', version: '1.0.0' },
-    });
-
-    // Should not throw
-    expect(() => {
-      api.mergeGlobalMetadata({ userId: 'user-123' });
-    }).not.toThrow();
-  });
-
-  it('should overwrite existing keys', async () => {
-    await api.init({
-      globalMetadata: { env: 'production', version: '1.0.0' },
-    });
-
-    // Should not throw
-    expect(() => {
-      api.mergeGlobalMetadata({ version: '1.1.0' });
-    }).not.toThrow();
-  });
-
-  it('should work with no existing metadata', async () => {
-    await api.init();
-
-    // Should not throw
-    expect(() => {
-      api.mergeGlobalMetadata({ key: 'value' });
-    }).not.toThrow();
-  });
-
-  it('should throw if not initialized', () => {
-    expect(() => {
-      api.mergeGlobalMetadata({ key: 'value' });
-    }).toThrow('[TraceLog] TraceLog not initialized. Please call init() first.');
-  });
-
-  it('should throw if called during destroy', async () => {
-    await api.init();
-
-    const destroyPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        try {
-          destroy();
-        } catch {
-          // Ignore
-        }
-        resolve();
-      }, 100);
-    });
-
-    await destroyPromise;
-
-    expect(() => {
-      api.mergeGlobalMetadata({ key: 'value' });
-    }).toThrow();
-  });
-
-  it('should validate metadata structure', async () => {
-    await api.init();
-
-    // Non-object types should throw
-    expect(() => {
-      api.mergeGlobalMetadata(null as any);
-    }).toThrow(/Global metadata must be a plain object/);
-
-    expect(() => {
-      api.mergeGlobalMetadata(['array'] as any);
-    }).toThrow(/Global metadata must be a plain object/);
-  });
-
-  it('should accept primitives', async () => {
-    await api.init();
-
-    expect(() => {
-      api.mergeGlobalMetadata({
-        str: 'value',
-        num: 42,
-        bool: true,
-      });
-    }).not.toThrow();
-  });
-
-  it('should accept nested objects (1 level deep)', async () => {
-    await api.init();
-
-    expect(() => {
-      api.mergeGlobalMetadata({
-        user: {
-          id: 'user-123',
-          premium: true,
-        },
-      });
-    }).not.toThrow();
-  });
-
-  it('should accept string arrays', async () => {
-    await api.init();
-
-    expect(() => {
-      api.mergeGlobalMetadata({
-        tags: ['tag1', 'tag2', 'tag3'],
-      });
-    }).not.toThrow();
+    expect(localStorage.getItem(PENDING_IDENTITY_KEY)).toBeNull();
+    expect(spyResetIdentity).not.toHaveBeenCalled();
   });
 });
 
-describe('Public API - flushImmediately()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
-  });
+describe('api.destroy()', () => {
+  it('clears the app singleton and resets isInitialized', async () => {
+    const { init, destroy, isInitialized } = freshApi();
+    await init();
+    expect(isInitialized()).toBe(true);
 
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors during cleanup
-    }
-  });
-
-  it('should expose flushImmediately method globally', () => {
-    expect(api.flushImmediately).toBeDefined();
-    expect(typeof api.flushImmediately).toBe('function');
-  });
-
-  it('should return false when called before init()', async () => {
-    const result = await api.flushImmediately();
-    expect(result).toBe(false);
-  });
-
-  it('should return a boolean after init()', async () => {
-    await api.init();
-    const result = await api.flushImmediately();
-    expect(typeof result).toBe('boolean');
-  });
-
-  it('should return false after destroy()', async () => {
-    await api.init();
     destroy();
-    const result = await api.flushImmediately();
-    expect(result).toBe(false);
+
+    expect(spyDestroy).toHaveBeenCalledTimes(1);
+    expect(isInitialized()).toBe(false);
+  });
+
+  it('is a no-op when called before init() — no throw, no app calls', () => {
+    const { destroy, isInitialized } = freshApi();
+    expect(() => {
+      destroy();
+    }).not.toThrow();
+    expect(spyDestroy).not.toHaveBeenCalled();
+    expect(isInitialized()).toBe(false);
+  });
+
+  it('clears the singleton even if App.destroy() throws', async () => {
+    spyDestroy.mockImplementationOnce(() => {
+      throw new Error('destroy failure');
+    });
+
+    const { init, destroy, isInitialized } = freshApi();
+    await init();
+    expect(() => {
+      destroy();
+    }).not.toThrow();
+    expect(isInitialized()).toBe(false);
+  });
+
+  it('clears pre-init pending listeners on destroy', async () => {
+    const { init, on, destroy } = freshApi();
+    const cb = vi.fn();
+    on(EmitterEvent.EVENT, cb);
+
+    await init();
+    destroy();
+
+    spyOn.mockClear();
+    await init();
+    expect(spyOn).not.toHaveBeenCalled();
   });
 });
 
-describe('Public API - flushImmediatelySync()', () => {
-  beforeEach(() => {
-    setupTestEnvironment();
+describe('api.getSessionId() / api.getUserId() / api.isInitialized()', () => {
+  it('return null / false before init()', () => {
+    const { getSessionId, getUserId, isInitialized } = freshApi();
+    expect(getSessionId()).toBeNull();
+    expect(getUserId()).toBeNull();
+    expect(isInitialized()).toBe(false);
   });
 
-  afterEach(() => {
-    cleanupTestEnvironment();
-    try {
-      destroy();
-    } catch {
-      // Ignore errors during cleanup
-    }
-  });
+  it('return delegated values after init()', async () => {
+    const { init, getSessionId, getUserId, isInitialized } = freshApi();
+    await init();
 
-  it('should expose flushImmediatelySync method globally', () => {
-    expect(api.flushImmediatelySync).toBeDefined();
-    expect(typeof api.flushImmediatelySync).toBe('function');
-  });
-
-  it('should return false when called before init()', () => {
-    const result = api.flushImmediatelySync();
-    expect(result).toBe(false);
-  });
-
-  it('should return a boolean after init()', async () => {
-    await api.init();
-    const result = api.flushImmediatelySync();
-    expect(typeof result).toBe('boolean');
-  });
-
-  it('should return false after destroy()', async () => {
-    await api.init();
-    destroy();
-    const result = api.flushImmediatelySync();
-    expect(result).toBe(false);
+    expect(getSessionId()).toBe(sessionIdValue);
+    expect(getUserId()).toBe(userIdValue);
+    expect(isInitialized()).toBe(true);
   });
 });

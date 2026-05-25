@@ -1,6 +1,6 @@
-applyTo:
-  - src/utils/**/*.ts
-  - src/constants/**/*.ts
+---
+applyTo: 'src/utils/**/*.ts,src/constants/**/*.ts'
+---
 
 # Utility Functions & Constants Review Instructions
 
@@ -25,6 +25,7 @@ export const normalizeUrl = (url: string): string => {
 ## Critical Checks
 
 ### 1. Security & PII Protection (BLOCKING)
+
 - ✅ **Sanitization**: All string inputs sanitized against XSS patterns
 - ✅ **PII Redaction**: Email, phone, credit cards, API keys automatically redacted
 - ✅ **URL Filtering**: Sensitive query params removed (token, auth, key, password)
@@ -32,6 +33,7 @@ export const normalizeUrl = (url: string): string => {
 - ❌ **BLOCK**: Missing sanitization on user-provided strings → Security vulnerability
 
 ### 2. Validation Functions (BLOCKING)
+
 - ✅ Return structured validation results: `{ valid: boolean; error?: string; }`
 - ✅ Provide specific error messages for debugging
 - ✅ Validate ALL user inputs (config, metadata, event names)
@@ -39,12 +41,14 @@ export const normalizeUrl = (url: string): string => {
 - ❌ **BLOCK**: Boolean-only validation (no error message) → Hard to debug
 
 ### 3. Pure Functions (BLOCKING)
+
 - ✅ No side effects (no DOM manipulation, no API calls, no state mutation)
 - ✅ Deterministic output for same input
 - ✅ No external dependencies (except constants)
 - ❌ **BLOCK**: Side effects in utils → Wrong pattern
 
 ### 4. Error Handling (HIGH)
+
 - ✅ Try-catch blocks for operations that can throw
 - ✅ Return null/undefined/empty for invalid inputs (graceful degradation)
 - ✅ Log errors with context via `log()` utility
@@ -55,12 +59,14 @@ export const normalizeUrl = (url: string): string => {
 ### Security Utilities (`src/utils/security/`)
 
 **Critical patterns:**
+
 - **Sanitization**: Remove XSS patterns, HTML entity encoding
 - **PII Redaction**: Auto-detect and redact sensitive patterns
 - **Input Validation**: Validate before sanitizing
 - **Depth Protection**: Prevent infinite recursion (max depth: 10)
 
 **Constants to enforce:**
+
 - `MAX_STRING_LENGTH` - 1000 chars
 - `MAX_ARRAY_LENGTH` - 1000 items
 - `MAX_OBJECT_DEPTH` - 10 levels
@@ -69,6 +75,7 @@ export const normalizeUrl = (url: string): string => {
 - `PII_PATTERNS` - Email, phone, credit card, API key patterns
 
 **Example validation:**
+
 ```typescript
 // ✅ GOOD: Proper sanitization flow
 export const sanitizeString = (value: string): string => {
@@ -89,10 +96,7 @@ export const sanitizeString = (value: string): string => {
   }
 
   // HTML entity encoding
-  sanitized = sanitized
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+  sanitized = sanitized.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
   return sanitized.trim();
 };
@@ -101,12 +105,14 @@ export const sanitizeString = (value: string): string => {
 ### Validation Utilities (`src/utils/validations/`)
 
 **Critical patterns:**
+
 - **Config Validation**: Validate BEFORE using config values
 - **Event Validation**: Validate event name, metadata structure, data types
 - **Type Guards**: Runtime type checking for TypeScript strict mode
 - **Error Messages**: Specific, actionable error messages (not generic "invalid input")
 
 **Validation return structure:**
+
 ```typescript
 interface ValidationResult<T = unknown> {
   valid: boolean;
@@ -116,6 +122,7 @@ interface ValidationResult<T = unknown> {
 ```
 
 **Example validation:**
+
 ```typescript
 // ✅ GOOD: Structured validation
 export const isValidEventName = (name: string): ValidationResult => {
@@ -143,12 +150,14 @@ export const isValidEventName = (name: string): boolean => {
 ### Browser Utilities (`src/utils/browser/`)
 
 **Critical patterns:**
+
 - **Device Detection**: Detect mobile/tablet/desktop based on user agent
 - **UTM Parameters**: Extract UTM params from URL for attribution
 - **QA Mode Detection**: Detect `?tlog_mode=qa` for verbose logging
 - **Browser Compatibility**: Feature detection, not browser detection
 
 **SSR Safety:**
+
 - All browser utilities MUST check for `window` and `document` existence
 - Return safe defaults when not in browser environment
 
@@ -172,11 +181,13 @@ export const getDeviceType = (): DeviceType => {
 ### Network Utilities (`src/utils/network/`)
 
 **Critical patterns:**
+
 - **URL Normalization**: Remove sensitive query params, normalize format
 - **HTTP Protocol Validation**: Enforce HTTPS in production (unless `allowHttp: true`)
 - **URL Validation**: Validate URL structure before making requests
 
 **Security checks:**
+
 - Never allow HTTP in production without explicit opt-in
 - Validate URL protocol before sending data
 - Filter sensitive query params before logging/tracking
@@ -203,6 +214,7 @@ export const normalizeUrl = (url: string, sensitiveParams: string[] = []): strin
 ### Data Utilities (`src/utils/data/`)
 
 **Critical patterns:**
+
 - **UUID Generation**: Use `crypto.randomUUID()` when available, fallback to polyfill
 - **Date/Time**: Use ISO 8601 format for timestamps
 - **Hashing**: Never implement custom crypto (use Web Crypto API)
@@ -210,12 +222,14 @@ export const normalizeUrl = (url: string, sensitiveParams: string[] = []): strin
 ### Constants (`src/constants/`)
 
 **Critical patterns:**
+
 - **Naming Convention**: `SCREAMING_SNAKE_CASE` for all constants
 - **Grouping**: Related constants in same file (config, error, performance, storage)
 - **Documentation**: JSDoc comments for non-obvious constants
 - **Type Safety**: Export const objects with `as const` for literal types
 
 **Example constants file:**
+
 ```typescript
 /**
  * Maximum session timeout in milliseconds (24 hours)
@@ -248,12 +262,14 @@ export const DEFAULT_SENSITIVE_QUERY_PARAMS = [
 ## Testing Requirements
 
 ### Unit Tests
+
 - **MUST**: 90%+ coverage for all utility functions
 - **MUST**: Test edge cases (null, undefined, empty string, max values)
 - **MUST**: Test error handling paths
 - **SHOULD**: Test XSS/injection patterns in security utils
 
 ### Test Structure
+
 ```typescript
 describe('sanitizeString', () => {
   it('should remove XSS patterns', () => {
@@ -277,6 +293,7 @@ describe('sanitizeString', () => {
 ## Common Issues
 
 ### Critical (Must Fix)
+
 - ❌ Missing XSS sanitization on user input strings
 - ❌ Missing PII redaction in error messages or click text
 - ❌ Missing SSR safety checks (`typeof window === 'undefined'`)
@@ -285,6 +302,7 @@ describe('sanitizeString', () => {
 - ❌ Boolean-only validation (no error messages)
 
 ### High Priority
+
 - ⚠️ Missing error handling in try-catch blocks
 - ⚠️ No null checks for optional parameters
 - ⚠️ Throwing errors without proper context
@@ -292,6 +310,7 @@ describe('sanitizeString', () => {
 - ⚠️ Not using constants (magic numbers/strings hardcoded)
 
 ### Medium Priority
+
 - 💡 Complex logic not broken into smaller functions
 - 💡 Duplicate validation logic across files
 - 💡 Missing test coverage for edge cases
@@ -302,6 +321,7 @@ describe('sanitizeString', () => {
 ## Code Comments Policy
 
 **✅ Use comments for:**
+
 - Security patterns (XSS prevention, PII redaction logic)
 - Complex regex patterns and their purpose
 - Edge case handling in validation logic
@@ -309,6 +329,7 @@ describe('sanitizeString', () => {
 - Performance optimizations
 
 **❌ NEVER use comments for:**
+
 - Obvious type checks (e.g., `// Check if string`)
 - Simple regex applications (e.g., `// Replace pattern`)
 - Return statements (e.g., `// Return sanitized value`)

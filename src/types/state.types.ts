@@ -10,11 +10,9 @@ export interface State {
   /**
    * Collection of API URLs for different integrations.
    * - saas: TraceLog SaaS endpoint (if projectId configured)
-   * - custom: Custom backend endpoint (if collectApiUrl configured)
    */
   collectApiUrls: {
     saas?: string;
-    custom?: string;
   };
   config: Config;
   sessionId: string | null;

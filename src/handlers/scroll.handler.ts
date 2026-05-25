@@ -13,105 +13,42 @@ import { log } from '../utils';
 interface ScrollContainer {
   element: Window | HTMLElement;
   selector: string;
-  isPrimary: boolean;
   lastScrollPos: number;
   lastDepth: number;
-  lastDirection: ScrollDirection;
   lastEventTime: number;
-  firstScrollEventTime: number | null;
-  maxDepthReached: number;
   debounceTimer: number | null;
   listener: EventListener;
 }
 
 /**
- * Tracks scroll depth, direction, velocity, and container identification across multiple scrollable elements.
+ * Tracks scroll depth and direction across the window and any detected scrollable containers.
  *
- * **Features**:
- * - Automatic container detection with intelligent retry (5 attempts @ 200ms intervals)
- * - Manual override via primaryScrollSelector config
- * - Smart filtering with multiple guardrails:
- *   - Visibility check (element must be connected to DOM with dimensions)
- *   - Scrollability check (content must overflow container)
- *   - Significant movement (minimum 10px position delta)
- *   - Depth change (minimum 5% depth change between events)
- *   - Rate limiting (minimum 500ms interval between events per container)
- *   - Session cap (maximum 120 events per session with single warning)
- * - Multi-container support with per-container debouncing (250ms)
- * - Velocity calculation for engagement analysis
- * - Max depth tracking per session
- * - Primary vs secondary container classification
+ * **Captured fields**: `depth` (0-100), `direction` (up/down), `container_selector`.
  *
- * **Events Generated**: `scroll`
- *
- * **Analytics Fields**:
- * - depth: Current scroll depth (0-100%)
- * - direction: 'up' | 'down'
- * - container_selector: CSS selector or 'window'
- * - is_primary: Boolean indicating main scroll container
- * - velocity: Scroll speed in px/s
- * - max_depth_reached: Peak engagement per container
- *
- * **Container Detection**:
- * - Uses TreeWalker for performance
- * - Pre-filters elements with overflow: auto/scroll CSS properties
- * - Validates visibility and scrollability
- * - Retries up to 5 times for dynamically loaded content (SPAs)
- * - Falls back to window-only if no containers found
- *
- * @example
- * ```typescript
- * const handler = new ScrollHandler(eventManager);
- * handler.startTracking();
- * // Automatically detects and tracks scrollable containers
- * handler.stopTracking();
- * ```
+ * **Guardrails**:
+ * - Significant movement (minimum 10px position delta)
+ * - Depth change (minimum 5% delta between events)
+ * - Rate limiting (minimum 500ms interval between events per container)
+ * - Session cap (maximum 120 events per session)
+ * - Multi-container support with 250ms per-container debouncing
  */
 export class ScrollHandler extends StateManager {
   private readonly eventManager: EventManager;
   private readonly containers: ScrollContainer[] = [];
   private limitWarningLogged = false;
-  private minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
-  private minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
-  private maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   private containerDiscoveryTimeoutId: number | null = null;
 
   constructor(eventManager: EventManager) {
     super();
-
     this.eventManager = eventManager;
   }
 
-  /**
-   * Starts tracking scroll events across all detected scrollable containers.
-   *
-   * Automatically detects scrollable containers using TreeWalker with retry logic:
-   * - Searches DOM for elements with overflow: auto/scroll
-   * - Validates visibility and scrollability
-   * - Retries up to 5 times with 200ms intervals for dynamic content
-   * - Falls back to window-only tracking if no containers found
-   * - Applies primaryScrollSelector config override if provided
-   *
-   * Attaches debounced scroll listeners (250ms per container) with smart filtering:
-   * - Significant movement (10px minimum)
-   * - Depth change (5% minimum)
-   * - Rate limiting (500ms minimum interval)
-   * - Session cap (120 events maximum)
-   */
   startTracking(): void {
     this.limitWarningLogged = false;
-    this.applyConfigOverrides();
     this.set('scrollEventCount', 0);
     this.tryDetectScrollContainers(0);
   }
 
-  /**
-   * Stops tracking scroll events and cleans up resources.
-   *
-   * Removes all scroll event listeners, clears debounce timers, cancels retry attempts,
-   * and resets session state (event counter, warning flags). Prevents memory leaks by
-   * properly cleaning up all containers and timers.
-   */
   stopTracking(): void {
     if (this.containerDiscoveryTimeoutId !== null) {
       clearTimeout(this.containerDiscoveryTimeoutId);
@@ -145,9 +82,6 @@ export class ScrollHandler extends StateManager {
         const selector = this.getElementSelector(element);
         this.setupScrollContainer(element, selector);
       }
-
-      this.applyPrimaryScrollSelectorIfConfigured();
-
       return;
     }
 
@@ -162,16 +96,6 @@ export class ScrollHandler extends StateManager {
 
     if (this.containers.length === 0) {
       this.setupScrollContainer(window, 'window');
-    }
-
-    this.applyPrimaryScrollSelectorIfConfigured();
-  }
-
-  private applyPrimaryScrollSelectorIfConfigured(): void {
-    const config = this.get('config');
-
-    if (config?.primaryScrollSelector) {
-      this.applyPrimaryScrollSelector(config.primaryScrollSelector);
     }
   }
 
@@ -237,16 +161,6 @@ export class ScrollHandler extends StateManager {
     return htmlElement.tagName.toLowerCase();
   }
 
-  private determineIfPrimary(element: Window | HTMLElement): boolean {
-    // Window scrollable → window is primary
-    if (this.isWindowScrollable()) {
-      return element === window;
-    }
-
-    // Window not scrollable → first detected container is primary
-    return this.containers.length === 0;
-  }
-
   private setupScrollContainer(element: Window | HTMLElement, selector: string): void {
     const alreadyTracking = this.containers.some((c) => c.element === element);
 
@@ -266,18 +180,12 @@ export class ScrollHandler extends StateManager {
       this.getViewportHeight(element),
     );
 
-    const isPrimary = this.determineIfPrimary(element);
-
     const container: ScrollContainer = {
       element,
       selector,
-      isPrimary,
       lastScrollPos: initialScrollTop,
       lastDepth: initialDepth,
-      lastDirection: ScrollDirection.DOWN,
       lastEventTime: 0,
-      firstScrollEventTime: null,
-      maxDepthReached: initialDepth,
       debounceTimer: null,
       listener: null as unknown as EventListener,
     };
@@ -287,19 +195,13 @@ export class ScrollHandler extends StateManager {
         return;
       }
 
-      if (container.firstScrollEventTime === null) {
-        container.firstScrollEventTime = Date.now();
-      }
-
       this.clearContainerTimer(container);
 
       container.debounceTimer = window.setTimeout(() => {
         const scrollData = this.calculateScrollData(container);
 
         if (scrollData) {
-          const now = Date.now();
-
-          this.processScrollEvent(container, scrollData, now);
+          this.processScrollEvent(container, scrollData, Date.now());
         }
 
         container.debounceTimer = null;
@@ -307,7 +209,6 @@ export class ScrollHandler extends StateManager {
     };
 
     container.listener = handleScroll;
-
     this.containers.push(container);
 
     if (element === window) {
@@ -319,7 +220,7 @@ export class ScrollHandler extends StateManager {
 
   private processScrollEvent(
     container: ScrollContainer,
-    scrollData: Omit<ScrollData, 'container_selector' | 'is_primary'>,
+    scrollData: Omit<ScrollData, 'container_selector'>,
     timestamp: number,
   ): void {
     if (!this.shouldEmitScrollEvent(container, scrollData, timestamp)) {
@@ -328,7 +229,6 @@ export class ScrollHandler extends StateManager {
 
     container.lastEventTime = timestamp;
     container.lastDepth = scrollData.depth;
-    container.lastDirection = scrollData.direction;
 
     const currentCount = this.get('scrollEventCount') ?? 0;
     this.set('scrollEventCount', currentCount + 1);
@@ -338,14 +238,13 @@ export class ScrollHandler extends StateManager {
       scroll_data: {
         ...scrollData,
         container_selector: container.selector,
-        is_primary: container.isPrimary,
       },
     });
   }
 
   private shouldEmitScrollEvent(
     container: ScrollContainer,
-    scrollData: Omit<ScrollData, 'container_selector' | 'is_primary'>,
+    scrollData: Omit<ScrollData, 'container_selector'>,
     timestamp: number,
   ): boolean {
     if (this.hasReachedSessionLimit()) {
@@ -366,18 +265,18 @@ export class ScrollHandler extends StateManager {
 
   private hasReachedSessionLimit(): boolean {
     const currentCount = this.get('scrollEventCount') ?? 0;
-    return currentCount >= this.maxEventsPerSession;
+    return currentCount >= MAX_SCROLL_EVENTS_PER_SESSION;
   }
 
   private hasElapsedMinimumInterval(container: ScrollContainer, timestamp: number): boolean {
     if (container.lastEventTime === 0) {
       return true;
     }
-    return timestamp - container.lastEventTime >= this.minIntervalMs;
+    return timestamp - container.lastEventTime >= SCROLL_MIN_EVENT_INTERVAL_MS;
   }
 
   private hasSignificantDepthChange(container: ScrollContainer, newDepth: number): boolean {
-    return Math.abs(newDepth - container.lastDepth) >= this.minDepthChange;
+    return Math.abs(newDepth - container.lastDepth) >= MIN_SCROLL_DEPTH_CHANGE;
   }
 
   private logLimitOnce(): void {
@@ -388,14 +287,8 @@ export class ScrollHandler extends StateManager {
     this.limitWarningLogged = true;
 
     log('debug', 'Max scroll events per session reached', {
-      data: { limit: this.maxEventsPerSession },
+      data: { limit: MAX_SCROLL_EVENTS_PER_SESSION },
     });
-  }
-
-  private applyConfigOverrides(): void {
-    this.minDepthChange = MIN_SCROLL_DEPTH_CHANGE;
-    this.minIntervalMs = SCROLL_MIN_EVENT_INTERVAL_MS;
-    this.maxEventsPerSession = MAX_SCROLL_EVENTS_PER_SESSION;
   }
 
   private isWindowScrollable(): boolean {
@@ -422,12 +315,9 @@ export class ScrollHandler extends StateManager {
     return Math.min(100, Math.max(0, Math.floor((scrollTop / maxScrollTop) * 100)));
   }
 
-  private calculateScrollData(
-    container: ScrollContainer,
-  ): Omit<ScrollData, 'container_selector' | 'is_primary'> | null {
-    const { element, lastScrollPos, lastEventTime } = container;
+  private calculateScrollData(container: ScrollContainer): Omit<ScrollData, 'container_selector'> | null {
+    const { element, lastScrollPos } = container;
     const scrollTop = this.getScrollTop(element);
-    const now = Date.now();
 
     const positionDelta = Math.abs(scrollTop - lastScrollPos);
     if (positionDelta < SIGNIFICANT_SCROLL_DELTA) {
@@ -443,30 +333,9 @@ export class ScrollHandler extends StateManager {
     const direction = this.getScrollDirection(scrollTop, lastScrollPos);
     const depth = this.calculateScrollDepth(scrollTop, scrollHeight, viewportHeight);
 
-    let timeDelta: number;
-
-    if (lastEventTime > 0) {
-      timeDelta = now - lastEventTime;
-    } else if (container.firstScrollEventTime !== null) {
-      timeDelta = now - container.firstScrollEventTime;
-    } else {
-      timeDelta = SCROLL_DEBOUNCE_TIME_MS;
-    }
-
-    const velocity = Math.round((positionDelta / timeDelta) * 1000);
-
-    if (depth > container.maxDepthReached) {
-      container.maxDepthReached = depth;
-    }
-
     container.lastScrollPos = scrollTop;
 
-    return {
-      depth,
-      direction,
-      velocity,
-      max_depth_reached: container.maxDepthReached,
-    };
+    return { depth, direction };
   }
 
   private getScrollTop(element: Window | HTMLElement): number {
@@ -493,35 +362,5 @@ export class ScrollHandler extends StateManager {
     const hasVerticalOverflowContent = element.scrollHeight > element.clientHeight;
 
     return hasVerticalScrollableOverflow && hasVerticalOverflowContent;
-  }
-
-  private applyPrimaryScrollSelector(selector: string): void {
-    let targetElement: Window | HTMLElement;
-
-    if (selector === 'window') {
-      targetElement = window;
-    } else {
-      const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
-        log('debug', `Selector "${selector}" did not match an HTMLElement`);
-        return;
-      }
-      targetElement = element;
-    }
-
-    this.containers.forEach((container) => {
-      this.updateContainerPrimary(container, container.element === targetElement);
-    });
-
-    const targetAlreadyTracked = this.containers.some((c) => c.element === targetElement);
-    if (!targetAlreadyTracked && targetElement instanceof HTMLElement) {
-      if (this.isElementScrollable(targetElement)) {
-        this.setupScrollContainer(targetElement, selector);
-      }
-    }
-  }
-
-  private updateContainerPrimary(container: ScrollContainer, isPrimary: boolean): void {
-    container.isPrimary = isPrimary;
   }
 }

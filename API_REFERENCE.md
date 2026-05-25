@@ -1,6 +1,6 @@
 # TraceLog API Reference
 
-Complete API documentation for TraceLog library. For quick start and examples, see [README.md](./README.md).
+Complete API documentation for the TraceLog library. For quick start and examples, see [README.md](./README.md).
 
 ## Table of Contents
 
@@ -10,6 +10,8 @@ Complete API documentation for TraceLog library. For quick start and examples, s
 4. [Event Emitters](#event-emitters)
 5. [TypeScript Types](#typescript-types)
 6. [Error Handling](#error-handling)
+7. [Global Disable](#global-disable)
+8. [Browser Compatibility](#browser-compatibility)
 
 ---
 
@@ -17,25 +19,25 @@ Complete API documentation for TraceLog library. For quick start and examples, s
 
 ### `init(config?: Config): Promise<InitResult>`
 
-Initializes TraceLog and begins tracking. Safe to call in SSR environments (no-ops in Node.js).
+Initializes TraceLog and starts tracking. Safe to call in SSR — no-ops in Node.js.
 
 **Parameters:**
 
-- `config` (optional): Configuration object. See [Configuration](#configuration) section.
+- `config` (optional): Configuration object. See [Configuration](#configuration).
 
-**Returns:** Promise that resolves with `InitResult` containing:
+**Returns:** `Promise<InitResult>` with:
 
-- `sessionId`: The session identifier string (empty string in SSR/disabled environments)
+- `sessionId`: session identifier string (empty string in SSR or when initialization is skipped)
 
 **Throws:**
 
 - `Error` if initialization fails or times out
-- `Error` if called multiple times (subsequent calls return existing sessionId)
+- Subsequent calls after a successful init resolve with the existing `sessionId` (idempotent)
 
 **Examples:**
 
 ```typescript
-// Standalone mode - get sessionId directly
+// Standalone mode
 const { sessionId } = await tracelog.init();
 console.log('Session started:', sessionId);
 
@@ -46,48 +48,30 @@ const { sessionId } = await tracelog.init({
   },
 });
 
-// With custom backend
-const { sessionId } = await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com/collect',
-      allowHttp: false, // Only true for testing
-    },
-  },
-});
-
-// SSR-safe usage (Angular/Next.js/Nuxt)
+// SSR-safe usage (Angular Universal, Next.js, Nuxt)
 if (typeof window !== 'undefined') {
   const { sessionId } = await tracelog.init();
-  // sessionId is empty string in SSR
 }
 ```
 
-**Initialization Order Best Practice:**
-
-For optimal setup, follow this order to ensure no events are missed:
+**Initialization order best practice:**
 
 ```typescript
-// 1. Register listeners FIRST
+// 1. Register listeners FIRST so they receive the initial SESSION_START / PAGE_VIEW
 tracelog.on('event', handler);
 
-// 2. Set transformers SECOND (if using custom backend)
-tracelog.setTransformer('beforeSend', transformFn);
+// 2. Optionally identify the user (before or after init)
+tracelog.identify('cust_123', { plan: 'pro' });
 
-// 3. Set custom headers THIRD (if using custom backend)
-tracelog.setCustomHeaders(() => ({ Authorization: `Bearer ${token}` }));
-
-// 4. Initialize LAST
-await tracelog.init();
+// 3. Initialize
+await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
 ```
-
-**Why?** Events like `SESSION_START` and `PAGE_VIEW` fire immediately during `init()`. Registering listeners, transformers, and custom headers beforehand ensures you capture, transform, and send these initial events with proper authentication.
 
 **Notes:**
 
-- Automatically starts tracking page views, clicks, scrolls, sessions, and performance
-- Recovers any failed events from previous sessions (localStorage)
-- Safe to call multiple times (idempotent)
+- Automatically tracks page views, clicks, scrolls, sessions, Web Vitals, and JavaScript errors
+- Recovers any persisted events from previous sessions on init
+- Pre-init listeners and identity are buffered and applied automatically
 
 ---
 
@@ -97,8 +81,8 @@ Sends a custom event for business-specific tracking.
 
 **Parameters:**
 
-- `name` (required): Event name identifier (e.g., `'product_viewed'`, `'checkout_completed'`)
-- `metadata` (optional): Event data as object or array of objects
+- `name` (required): event name identifier (e.g., `'product_viewed'`, `'checkout_completed'`)
+- `metadata` (optional): event data as object or array of objects
 - `options` (optional): `EventOptions` — currently supports `critical?: boolean`
 
 **Throws:**
@@ -135,27 +119,23 @@ tracelog.event('purchase_completed', {
 });
 
 // Critical event — flushes via sendBeacon so it survives the redirect.
-// Use for high-value events that must reach the backend even when the page is
-// about to unload (Purchase, Signup, AddPaymentInfo).
-tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98, currency: 'USD' }, { critical: true });
+tracelog.event('purchase_completed', { orderId: 'ord-789', total: 599.98 }, { critical: true });
 window.location.href = '/thanks';
 ```
 
 **`EventOptions`:**
 
-| Field      | Type      | Default | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ---------- | --------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Field      | Type      | Default | Description |
+|------------|-----------|---------|-------------|
 | `critical` | `boolean` | `false` | If `true`, drains the event queue via `navigator.sendBeacon()` synchronously right after this event is tracked. The browser guarantees the request is queued for delivery even if the page is about to unload (typical pattern: tracking a purchase, then `window.location.href = '/thanks'`). If an async fetch is in flight when the critical event arrives, the sync flush is deferred and re-runs from the async send's `finally` block, so the critical event is not stranded in the queue. `sendBeacon` limits apply (64KB cap, no custom headers, no retry); oversized payloads are persisted to `localStorage` for recovery on next `init()`. |
 
-**Transformers and critical events:** `critical: true` does NOT bypass `beforeSend` or `beforeBatch`. If your `beforeBatch` returns `null`, the resulting batch — including the critical event — is dropped before it reaches `sendBeacon`. That is the contract you opted into when you installed the transformer. To guarantee a specific event always reaches the backend, short-circuit your transformer on its `name` and return the batch unchanged.
+**Rate limits and deduplication apply to critical events too.** `critical: true` is a delivery-transport hint, not a bypass: if the event exceeds `maxSameEventPerMinute` for its name, or is a near-duplicate of a recent event (same fingerprint within the LRU window), it is dropped *before* it reaches the queue. The subsequent `sendBeacon` flush still runs, but only carries whatever was already queued — not the dropped event. If you need an event to be guaranteed delivered regardless of bursts, choose a unique event name and call it sparingly.
 
-**Standalone mode** (`tracelog.init()` with no `integrations`): `critical: true` is a no-op for the network path (there is no backend to beacon to). Local listeners registered via `tracelog.on('queue', ...)` still observe the event exactly once via the normal flush path — no double-emission.
+**Standalone mode.** `critical: true` is a no-op for the network path (there is no backend to beacon to). Local listeners registered via `tracelog.on('queue', ...)` still observe the event exactly once via the normal flush path — no double-emission.
 
-**Rate limits and deduplication apply to critical events too.** `critical: true` is a delivery-transport hint, not a bypass: if the event exceeds `maxSameEventPerMinute` for its name, or is a near-duplicate of a recent event (same fingerprint within the LRU window), it is dropped *before* it reaches the queue. The subsequent `sendBeacon` flush still runs, but it only carries whatever was already queued — not the dropped event. If you need an event to be guaranteed delivered regardless of bursts, choose a unique event name and call it sparingly.
+**Rate limiting:**
 
-**Rate Limiting:**
-
-- Maximum 60 events per minute per event name (configurable via `maxSameEventPerMinute`)
+- Default 60 events per minute per event name (configurable via `maxSameEventPerMinute`)
 - Prevents infinite loops and accidental spam
 
 **Privacy:**
@@ -166,87 +146,25 @@ window.location.href = '/thanks';
 
 ---
 
-### `flushImmediately(): Promise<boolean>`
-
-Forces an asynchronous flush of all pending events in the queue.
-
-Use when you need to ensure events are sent before a critical user action (e.g., before sign-out, before a SPA route teardown when you can't rely on the automatic SPA-navigation flush, or before initiating a long-running task that might prevent the next batch from firing).
-
-Uses `fetch()` with retries internally. For page-unload scenarios, prefer `flushImmediatelySync()` which uses `sendBeacon` and is guaranteed to be queued by the browser even after the page closes.
-
-**Error semantics:** Unlike `event()`, this method does not throw if called before `init()` or during teardown — it resolves to `false`. Safe to call from route guards and unload listeners without try/catch.
-
-**Concurrency:** A second `flushImmediately()` call while another is still in flight resolves to `false` (the in-flight call already owns the events). `await` the returned promise if you need ordered flushes.
-
-**Returns:** `Promise<boolean>` — `true` if at least one integration accepted the batch during this call (optimistic removal — per-integration failures persist for retry on the next flush). `false` if not initialized, destroying, another flush is already in flight, or all senders failed. Mirrors `flushImmediatelySync()`'s contract — `true` ⇒ at least one integration received the batch _during this call_, not "all integrations delivered".
-
-**Example:**
-
-```typescript
-import { tracelog } from '@tracelog/lib';
-
-// Force-flush before navigating away in an Angular SPA
-router.events.pipe(filter((e) => e instanceof NavigationStart)).subscribe(async () => {
-  await tracelog.flushImmediately();
-});
-```
-
----
-
-### `flushImmediatelySync(): boolean`
-
-Synchronously flushes all pending events using `navigator.sendBeacon()`.
-
-The library already wires this to `pagehide`, `beforeunload`, and `visibilitychange` (when `document.hidden`) automatically. Consumers usually don't need to call it directly, but it's available for custom unload handlers or scenarios where you want to bypass the library's default listeners.
-
-**Limitations:**
-
-- 64KB payload limit (enforced by `sendBeacon`). Larger batches are persisted to storage for recovery on next page load.
-- No retry on failure (`sendBeacon` is fire-and-forget).
-
-For non-unload scenarios use `flushImmediately()` (async with retries).
-
-**Error semantics:** Unlike `event()`, this method does not throw if called before `init()` or during teardown — it returns `false`. Safe to call from unload listeners without try/catch.
-
-**Concurrency:** If an async `flushImmediately()` is in flight when you call this method, the sync flush is deferred (queued for replay once the async send settles) and returns `false`. Same contract as `flushImmediately()` — `true` ⇒ at least one integration received the batch _during this call_.
-
-**Returns:** `boolean` — `true` if at least one integration accepted the beacon batch during this call, `false` otherwise (not initialized, destroying, no events, all senders failed, or the call was deferred behind an in-flight async send).
-
-**Example:**
-
-```typescript
-import { tracelog } from '@tracelog/lib';
-
-// Custom unload handler
-window.addEventListener('pagehide', () => {
-  tracelog.flushImmediatelySync();
-});
-```
-
----
-
 ### `on<K extends EmitterEvent>(event: K, callback: EmitterCallback<EmitterMap[K]>): void`
 
-Subscribes to TraceLog events for real-time event consumption.
+Subscribes to TraceLog events for real-time consumption.
 
 **Parameters:**
 
-- `event`: Event type to subscribe to (`'event'` or `'queue'`)
-- `callback`: Function called when event fires
+- `event`: event type to subscribe to (`'event'` or `'queue'`)
+- `callback`: function called when the event fires
 
-**Event Types:**
+**Event types:**
 
-- `'event'`: Fired for each individual event captured (real-time)
-- `'queue'`: Fired when events are batched and ready to send (every 10s or 50 events)
+- `'event'`: fired for each individual event captured (real-time)
+- `'queue'`: fired when events are batched and ready to send (every 10s or 50 events)
 
 **Examples:**
 
 ```typescript
 // Listen to individual events
 tracelog.on('event', (event) => {
-  console.log('Event captured:', event.type, event);
-
-  // Access event data based on type
   if (event.type === 'click') {
     console.log('Clicked element:', event.click_data?.tag);
   }
@@ -255,17 +173,9 @@ tracelog.on('event', (event) => {
 // Listen to event batches
 tracelog.on('queue', (batch) => {
   console.log('Batch ready:', batch.events.length, 'events');
-  console.log('Session ID:', batch.session_id);
 });
 
-// Filter specific event types
-tracelog.on('event', (event) => {
-  if (event.type === 'page_view') {
-    console.log('Page viewed:', event.page_view?.pathname);
-  }
-});
-
-// Send events to custom analytics
+// Send events to a custom analytics destination
 tracelog.on('event', (event) => {
   window.myAnalytics?.track(event.type, event);
 });
@@ -273,8 +183,8 @@ tracelog.on('event', (event) => {
 
 **Notes:**
 
-- Register listeners **before** `init()` to catch initial events (e.g., `SESSION_START`, `PAGE_VIEW`)
-- Listeners registered before/during init are buffered and attached after initialization
+- Register listeners **before** `init()` to catch initial events (`SESSION_START`, `PAGE_VIEW`)
+- Listeners registered before init are buffered and attached after initialization
 - Safe to call in SSR (no-ops in Node.js)
 
 ---
@@ -285,36 +195,27 @@ Unsubscribes from TraceLog events.
 
 **Parameters:**
 
-- `event`: Event type to unsubscribe from
-- `callback`: Exact callback function reference used in `on()`
+- `event`: event type to unsubscribe from
+- `callback`: exact callback function reference used in `on()`
 
 **Example:**
 
 ```typescript
-const handler = (event) => {
-  console.log('Event:', event.type);
-};
-
+const handler = (event) => console.log('Event:', event.type);
 tracelog.on('event', handler);
-
-// Later...
 tracelog.off('event', handler);
 ```
 
 **Notes:**
 
-- Must pass the **exact same function reference** used in `on()`
+- Must pass the **exact** function reference used in `on()`
 - Safe to call before initialization (removes from pending listeners)
 
 ---
 
 ### `isInitialized(): boolean`
 
-Checks if TraceLog is currently initialized.
-
-**Returns:** `true` if initialized, `false` otherwise
-
-**Example:**
+Returns `true` after a successful `init()`, `false` otherwise (including during teardown).
 
 ```typescript
 if (tracelog.isInitialized()) {
@@ -326,40 +227,40 @@ if (tracelog.isInitialized()) {
 
 ### `getSessionId(): string | null`
 
-Returns the current session ID. Useful for correlating TraceLog events with your own backend systems.
-
-**Returns:** Session ID string, or `null` if not initialized or in SSR environment.
-
-**Example:**
+Returns the current session ID, or `null` if not initialized.
 
 ```typescript
 await tracelog.init();
 const sessionId = tracelog.getSessionId();
 
-// Use sessionId to correlate with your backend
 fetch('/api/user-action', {
-  headers: {
-    'X-TraceLog-Session': sessionId ?? '',
-  },
+  headers: { 'X-TraceLog-Session': sessionId ?? '' },
 });
 ```
 
-**Note:** Prefer using the `sessionId` returned by `init()` when possible, as it's guaranteed to be available immediately after initialization.
+Prefer the `sessionId` returned by `init()` when possible — it's guaranteed available immediately after initialization.
+
+---
+
+### `getUserId(): string | null`
+
+Returns the visitor UUID assigned by TraceLog, or `null` if not initialized.
+
+Use this to stitch TraceLog events to events fired from contexts outside the SDK (for example a Shopify Web Pixel, where you'd write the value as a cart attribute on the storefront so checkout events can reference the same visitor).
+
+```typescript
+const userId = tracelog.getUserId();
+```
+
+When `integrations.tracelog.shopify: true`, the library wires this automatically.
 
 ---
 
 ### `destroy(): void`
 
-Stops all tracking, cleans up listeners, and flushes pending events. Safe to call multiple times.
-
-**Throws:**
-
-- `Error` if destroy operation is already in progress
-
-**Example:**
+Stops all tracking, drains pending events via `sendBeacon()`, and releases all resources. Safe to call multiple times.
 
 ```typescript
-// Stop tracking (e.g., on user opt-out)
 tracelog.destroy();
 
 // In framework cleanup hooks
@@ -371,9 +272,9 @@ onDestroy(() => {
 **Notes:**
 
 - Sends any pending events with `sendBeacon()` (synchronous)
-- Removes all event listeners
+- Removes all event listeners and lifecycle hooks
 - Clears internal state
-- After destroy, must call `init()` again to resume tracking
+- After `destroy()` you must call `init()` again to resume tracking
 
 ---
 
@@ -383,12 +284,8 @@ Associates the current anonymous visitor with a known user identity.
 
 **Parameters:**
 
-- `userId` (required): External user identifier (email, customer_id, etc.). Max 256 characters.
-- `traits` (optional): User attributes as `Record<string, string>` (name, email, plan, etc.)
-
-**Throws:**
-
-- Nothing (logs warning on validation failure)
+- `userId` (required): external user identifier (email, customer_id, etc.). Trimmed; max 256 characters.
+- `traits` (optional): user attributes as `Record<string, string>`. Only string values are kept — non-string fields, arrays, and `null` are dropped silently.
 
 **Behavior:**
 
@@ -396,15 +293,8 @@ Associates the current anonymous visitor with a known user identity.
 - If called before `init()`, identity is persisted to localStorage and applied automatically when `init()` runs
 - Identity is included in every event batch (piggyback), so the backend always receives the latest identity
 - Calling multiple times overwrites (last-write-wins)
-
-**Integration Behavior:**
-
-| Mode              | Behavior                                         |
-| ----------------- | ------------------------------------------------ |
-| Standalone        | Identity stored in state only (no backend sends) |
-| TraceLog SaaS     | Identity included in batch payload               |
-| Custom Backend    | Identity included in batch payload               |
-| Multi-Integration | Identity included in all batch payloads          |
+- Whitespace-only or empty `userId` values are rejected (warning logged)
+- `userId` is trimmed automatically
 
 **Examples:**
 
@@ -416,490 +306,45 @@ tracelog.identify('cust_123', { name: 'Maria Garcia', plan: 'pro' });
 tracelog.identify('cust_123');
 await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
 
-// Update traits later
+// Update traits later (replaces previous traits — last-write-wins)
 tracelog.identify('cust_123', { plan: 'enterprise' });
 ```
 
-**Notes:**
-
-- Whitespace-only or empty `userId` values are rejected
-- Empty traits object `{}` is treated as no traits
-- `userId` is trimmed automatically
-- Identity persists across page reloads (localStorage, project-scoped)
+Identity persists across page reloads (localStorage, project-scoped).
 
 ---
 
 ### `resetIdentity(): Promise<void>`
 
-Clears identity, regenerates UUID, and starts a new session.
-
-Use for logout flows. The previous visitor profile remains in the backend. The next user in the same browser gets a fresh anonymous profile.
-
-**Throws:**
-
-- `Error` if called during `destroy()`
+Clears identity, regenerates the visitor UUID, and starts a new session. Use for logout flows. The previous visitor profile remains in the backend; the next user in the same browser gets a fresh anonymous profile.
 
 **Behavior:**
 
-- Flushes pending events with the **old** identity before clearing (uses `fetch`, not `sendBeacon`)
+- Flushes pending events under the **old** identity first via async `fetch` (so any in-flight authentication-related state is preserved)
+- Clears identity from state and localStorage
 - Generates a new anonymous UUID
-- Starts a new session with the new UUID
-- If called before `init()`, just clears any pending identity silently
+- Stops and restarts the session handler, emitting a new `SESSION_START`
+- If called before `init()`, just clears any pending pre-init identity silently
 
-**Examples:**
+**Example:**
 
 ```typescript
 // On logout
 await tracelog.resetIdentity();
 
-// Full login/logout flow
+// Full login → logout flow
 tracelog.identify('cust_123', { name: 'Maria' });
 // ... user activity tracked with identity ...
 await tracelog.resetIdentity(); // New anonymous profile
 ```
 
-**Notes:**
-
-- Async because it flushes pending events before resetting
-- Custom headers are preserved during the flush (unlike page unload which uses `sendBeacon`)
-- The previous visitor's events remain in the backend unchanged
-
----
-
-### `setQaMode(enabled: boolean): void`
-
-Enables or disables QA (Quality Assurance) mode for debugging.
-
-**Parameters:**
-
-- `enabled`: `true` to enable, `false` to disable
-
-**QA Mode Features:**
-
-- Custom events logged to browser console
-- Strict validation (throws errors instead of warnings)
-- Session state visible in console
-- Persistent across page reloads (sessionStorage)
-
-**Examples:**
-
-```typescript
-// Enable QA mode
-tracelog.setQaMode(true);
-
-// Send test event (will be logged to console)
-tracelog.event('test_event', { key: 'value' });
-
-// Disable QA mode
-tracelog.setQaMode(false);
-```
-
-**Alternative Activation via URL:**
-
-```bash
-# Enable
-?tlog_mode=qa
-
-# Disable
-?tlog_mode=qa_off
-```
-
-**Notes:**
-
-- QA mode custom events (via `tracelog.event()`) are:
-  - **NOT sent to backend** (logged to console only)
-  - **Still emitted to `on('event')` listeners** (for local testing)
-  - Logged with strict validation (throws errors on invalid data)
-- Automatic events (clicks, scrolls, page views, etc.) continue to be sent to backend normally
-- URL parameter auto-removed after detection
-- State persists in sessionStorage across page reloads
-
----
-
-### `setTransformer(hook: TransformerHook, fn: (data: EventData | EventsQueue) => EventData | EventsQueue | null): void`
-
-Sets a transformer function to modify events at runtime before sending to integrations.
-
-**Parameters:**
-
-- `hook`: Transformer hook type (`'beforeSend'` or `'beforeBatch'`)
-- `fn`: Transformer function that receives event/batch data and returns transformed data or `null` to filter
-
-**Throws:**
-
-- `Error` if `fn` is not a function
-- `Error` if called during `destroy()`
-
-**Transformer Hooks:**
-
-| Hook          | Timing                       | Input         | Applied To          |
-| ------------- | ---------------------------- | ------------- | ------------------- |
-| `beforeSend`  | Per-event (before queueing)  | `EventData`   | Custom backend only |
-| `beforeBatch` | Batch-level (before sending) | `EventsQueue` | Custom backend only |
-
-**Integration Behavior:**
-
-Transformers **only apply to custom backend integrations**. TraceLog SaaS always receives all events unmodified to maintain schema integrity and ensure complete analytics.
-
-- **TraceLog SaaS (only)**: Transformers silently bypassed - all events sent unmodified
-- **Custom Backend (only)**: Transformers applied as configured
-- **Multi-Integration (SaaS + Custom)**: SaaS receives original events (unfiltered), custom receives transformed/filtered events
-
-This is the same behavior as the removed `disabledEvents` configuration in v2.x, which also only affected custom backends.
-
-**Event Listeners:**
-
-Event listeners (`tracelog.on('event', ...)`) receive **original events**, not transformed events. Transformers only affect data sent to backends. If you need enriched events in listeners (e.g., for GTM relay), apply the transformation manually in your callback.
-
-**`beforeBatch` invocation count:**
-
-`beforeBatch` is invoked **once per session-batch**, not once per flush. If the in-memory queue spans more than one session (e.g. after a session-timeout renewal that happened between two `track()` calls), the flush produces one batch per `session_id` and the transformer runs once per batch. Avoid stateful transformers that assume a single invocation per flush.
-
-**Examples:**
-
-```typescript
-import { tracelog } from '@tracelog/lib';
-import type { EventData, EventsQueue } from '@tracelog/lib';
-
-// Add custom metadata to all events
-tracelog.setTransformer('beforeSend', (data: EventData | EventsQueue) => {
-  if ('type' in data) {
-    return {
-      ...data,
-      custom_event: {
-        ...data.custom_event,
-        metadata: {
-          ...data.custom_event?.metadata,
-          environment: 'production',
-          version: '1.0.0',
-        },
-      },
-    };
-  }
-  return data;
-});
-
-// Filter out sensitive events
-tracelog.setTransformer('beforeSend', (data) => {
-  if ('type' in data && data.custom_event?.name === 'internal_event') {
-    return null; // Event will be dropped
-  }
-  return data;
-});
-
-// Add batch-level metadata
-tracelog.setTransformer('beforeBatch', (data) => {
-  if ('events' in data) {
-    return {
-      ...data,
-      global_metadata: {
-        ...data.global_metadata,
-        batchSize: data.events.length,
-        batchTimestamp: Date.now(),
-      },
-    };
-  }
-  return data;
-});
-
-// Filter batch based on conditions
-tracelog.setTransformer('beforeBatch', (data) => {
-  if ('events' in data && data.events.length < 5) {
-    return null; // Don't send small batches
-  }
-  return data;
-});
-
-// Multi-integration: Filter events from custom backend only
-tracelog.setTransformer('beforeSend', (data) => {
-  if ('type' in data && ['scroll', 'web_vitals'].includes(data.type)) {
-    return null; // Filtered from custom backend ONLY
-  }
-  return data;
-});
-
-await tracelog.init({
-  integrations: {
-    tracelog: { projectId: 'proj-123' }, // Receives ALL events (unfiltered)
-    custom: { collectApiUrl: 'https://warehouse.com' }, // Receives filtered events
-  },
-});
-// Result: TraceLog SaaS gets all events, custom backend gets filtered events
-```
-
-**Error Handling:**
-
-- Transformer exceptions are caught and logged
-- Original event/batch used as fallback on error
-- Returning `null` filters out the event/batch (intended behavior)
-- Invalid return types logged as warnings, original data used
-
-**Validation:**
-
-- `beforeSend`: Only validates that `'type'` field exists (minimal check to distinguish from EventsQueue)
-- `beforeBatch`: Only validates that `'events'` array exists (minimal check to distinguish from EventData)
-- **Custom schemas fully supported** - transformers can return completely different structures for custom backends
-- All other fields are optional to allow maximum flexibility
-
-**Notes:**
-
-- Only one transformer per hook (calling again replaces previous)
-- Transformers NOT applied to TraceLog SaaS (schema protection)
-- Use for data enrichment, filtering, or custom logic
-- See [README.md Transformers section](./README.md#transformers) for detailed examples
-
----
-
-### `removeTransformer(hook: TransformerHook): void`
-
-Removes a previously set transformer function.
-
-**Parameters:**
-
-- `hook`: Transformer hook type to remove (`'beforeSend'` or `'beforeBatch'`)
-
-**Throws:**
-
-- `Error` if called during `destroy()`
-
-**Example:**
-
-```typescript
-// Remove specific transformer
-tracelog.removeTransformer('beforeSend');
-tracelog.removeTransformer('beforeBatch');
-```
-
-**Notes:**
-
-- Safe to call even if no transformer is set (doesn't throw if transformer doesn't exist)
-- Transformers automatically cleared on `destroy()`
-
----
-
-### `setCustomHeaders(provider: CustomHeadersProvider): void`
-
-Sets a callback to provide custom HTTP headers for requests to custom backends.
-
-**Parameters:**
-
-- `provider`: Callback function that returns a `Record<string, string>` of headers
-
-**Throws:**
-
-- `Error` if `provider` is not a function
-- `Error` if called during `destroy()`
-
-**Integration Behavior:**
-
-Custom headers **only apply to custom backend integrations**. TraceLog SaaS always receives requests without custom headers to maintain schema integrity.
-
-- **TraceLog SaaS (only)**: Custom headers ignored
-- **Custom Backend (only)**: Custom headers applied to all fetch requests
-- **Multi-Integration (SaaS + Custom)**: SaaS receives standard headers, custom receives custom headers
-
-**Examples:**
-
-```typescript
-import { tracelog } from '@tracelog/lib';
-import type { CustomHeadersProvider } from '@tracelog/lib';
-
-// Dynamic authorization header
-tracelog.setCustomHeaders(() => ({
-  Authorization: `Bearer ${getAuthToken()}`,
-  'X-Request-ID': crypto.randomUUID(),
-}));
-
-// Tenant identification
-tracelog.setCustomHeaders(() => ({
-  'X-Tenant-Id': getCurrentTenantId(),
-  'X-Brand': 'my-brand',
-}));
-
-// Static headers via config + dynamic via provider
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com/collect',
-      headers: { 'X-Brand': 'static-brand' }, // Static headers in config
-    },
-  },
-});
-
-// Dynamic provider overrides static on key collision
-tracelog.setCustomHeaders(() => ({
-  'X-Brand': 'dynamic-brand', // Overrides static 'X-Brand'
-  Authorization: 'Bearer token', // New header
-}));
-// Result: { 'X-Brand': 'dynamic-brand', 'Authorization': 'Bearer token' }
-```
-
-**Merge Behavior:**
-
-- Static headers (from `config.integrations.custom.headers`) are merged with dynamic headers (from provider)
-- Dynamic headers **override** static headers when keys collide
-- Provider called synchronously before each fetch request
-
-**sendBeacon Limitation:**
-
-⚠️ Custom headers are **NOT applied** to `sendBeacon()` requests (page unload). The `sendBeacon` browser API only supports Content-Type via Blob and does not allow custom headers. For scenarios requiring custom headers on all requests:
-
-- Ensure async sends complete before page unload
-- Use short-lived tokens that don't require refresh on every request
-
-**Notes:**
-
-- Can be called before or after `init()` (pending queue pattern)
-- Only one provider at a time (calling again replaces previous)
-- Provider should return empty object `{}` if no custom headers needed
-- Provider errors are caught and logged (falls back to static headers only)
-- Automatically cleared on `destroy()`
-
----
-
-### `removeCustomHeaders(): void`
-
-Removes the custom headers provider callback.
-
-**Throws:**
-
-- `Error` if called during `destroy()`
-
-**Example:**
-
-```typescript
-// Remove custom headers provider
-tracelog.removeCustomHeaders();
-
-// Subsequent requests use only static headers (from config) or none
-```
-
-**Notes:**
-
-- Safe to call even if no provider is set
-- Static headers from config remain (only dynamic provider removed)
-- Automatically called on `destroy()`
-
----
-
-### `updateGlobalMetadata(metadata: Record<string, MetadataType>): void`
-
-Replaces all global metadata with new values. Global metadata is automatically appended to every event sent to the backend.
-
-**Parameters:**
-
-- `metadata`: New global metadata object (replaces existing)
-
-**Throws:**
-
-- `Error` if TraceLog not initialized
-- `Error` if called during `destroy()`
-- `Error` if metadata validation fails
-
-**Examples:**
-
-```typescript
-// Initialize with metadata
-await tracelog.init({
-  globalMetadata: { env: 'production', version: '1.0.0' },
-});
-
-// Later: Replace ALL metadata
-tracelog.updateGlobalMetadata({
-  env: 'staging',
-  version: '1.1.0',
-  userId: 'user-123',
-});
-// Previous 'env' and 'version' values replaced, 'userId' added
-
-// User login: Replace with user context
-tracelog.updateGlobalMetadata({
-  userId: 'user-456',
-  plan: 'premium',
-  cohort: 'beta-testers',
-});
-
-// User logout: Clear all metadata
-tracelog.updateGlobalMetadata({});
-```
-
-**Validation Limits:**
-
-- Max 100 keys per metadata object
-- Max 48KB serialized size
-- Max 500 items per array field
-- Max 1000 characters per string field
-- Nested objects up to 3 levels (supports GA4 ecommerce: `{ ecommerce: { items: [{ ... }] } }`)
-
-**Notes:**
-
-- Completely replaces existing global metadata
-- Takes effect immediately on next event batch
-- Use `mergeGlobalMetadata()` to preserve existing keys
-
----
-
-### `mergeGlobalMetadata(metadata: Record<string, MetadataType>): void`
-
-Merges new metadata with existing global metadata (shallow merge). Global metadata is automatically appended to every event.
-
-**Parameters:**
-
-- `metadata`: Metadata to merge with existing values
-
-**Throws:**
-
-- `Error` if TraceLog not initialized
-- `Error` if called during `destroy()`
-- `Error` if metadata validation fails
-
-**Examples:**
-
-```typescript
-// Initialize with metadata
-await tracelog.init({
-  globalMetadata: { env: 'production', version: '1.0.0' },
-});
-
-// Add user ID while preserving env and version
-tracelog.mergeGlobalMetadata({ userId: 'user-123' });
-// Result: { env: 'production', version: '1.0.0', userId: 'user-123' }
-
-// Update version while preserving others
-tracelog.mergeGlobalMetadata({ version: '1.1.0' });
-// Result: { env: 'production', version: '1.1.0', userId: 'user-123' }
-
-// Add experiment flag
-tracelog.mergeGlobalMetadata({ experiment: 'new-checkout-v2' });
-// Result: { env: 'production', version: '1.1.0', userId: 'user-123', experiment: 'new-checkout-v2' }
-
-// Feature flags
-tracelog.mergeGlobalMetadata({
-  feature_new_ui: true,
-  feature_dark_mode: false,
-});
-```
-
-**Validation Limits:**
-
-- Max 100 keys per metadata object
-- Max 48KB serialized size
-- Max 500 items per array field
-- Max 1000 characters per string field
-- Nested objects up to 3 levels (supports GA4 ecommerce: `{ ecommerce: { items: [{ ... }] } }`)
-
-**Notes:**
-
-- Shallow merge: new keys added, existing keys overwritten
-- Preserves unspecified keys from existing metadata
-- Takes effect immediately on next event batch
-- Use `updateGlobalMetadata()` to replace all metadata
+Async because it flushes pending events before resetting.
 
 ---
 
 ## Configuration
 
-### `Config` Interface
+### `Config` interface
 
 ```typescript
 interface Config {
@@ -908,44 +353,40 @@ interface Config {
   sensitiveQueryParams?: string[];
   errorSampling?: number;
   samplingRate?: number;
-  primaryScrollSelector?: string;
-  viewport?: ViewportConfig;
   pageViewThrottleMs?: number;
   clickThrottleMs?: number;
   maxSameEventPerMinute?: number;
+  sendIntervalMs?: number;
+  flushOnSpaNavigation?: boolean;
+  flushOnPageHidden?: boolean;
   webVitalsMode?: WebVitalsMode;
   webVitalsThresholds?: Partial<Record<WebVitalType, number>>;
   integrations?: {
-    tracelog?: { projectId: string };
-    custom?: {
-      collectApiUrl: string;
-      allowHttp?: boolean;
-      headers?: Record<string, string>; // Static HTTP headers
-      fetchCredentials?: RequestCredentials; // 'include' | 'same-origin' | 'omit'
+    tracelog?: {
+      projectId: string;
+      shopify?: boolean;
     };
   };
 }
 ```
 
-### Session Configuration
+### Session
 
 #### `sessionTimeout`
 
 - **Type:** `number` (milliseconds)
 - **Default:** `900000` (15 minutes)
-- **Description:** Session inactivity timeout
+- **Description:** session inactivity timeout
 
 ```typescript
-await tracelog.init({
-  sessionTimeout: 1800000, // 30 minutes
-});
+await tracelog.init({ sessionTimeout: 1800000 }); // 30 minutes
 ```
 
 #### `globalMetadata`
 
 - **Type:** `Record<string, MetadataType>`
 - **Default:** `undefined`
-- **Description:** Metadata appended to every event
+- **Description:** metadata appended to every event sent to the backend
 
 ```typescript
 await tracelog.init({
@@ -957,98 +398,112 @@ await tracelog.init({
 });
 ```
 
+**Validation limits:**
+
+- Max 100 keys
+- Max 48 KB serialized size
+- Max 500 items per array
+- Max 1000 characters per string
+- Nested objects up to 10 levels
+
+To change global metadata after init, call `destroy()` and re-initialize with the new config (typical at login / logout).
+
 ---
 
-### Privacy Configuration
+### Privacy
 
 #### `sensitiveQueryParams`
 
 - **Type:** `string[]`
 - **Default:** `['token', 'auth', 'key', 'password', 'secret', 'api_key', 'apikey', 'access_token', 'refresh_token', 'session', 'sessionid', 'jwt', 'bearer', 'code', 'state', 'nonce']`
-- **Description:** Query parameters to remove from tracked URLs. Your custom params are **merged** with defaults.
+- **Description:** query parameters stripped from tracked URLs. Your custom params are **merged** with defaults.
 
 ```typescript
 await tracelog.init({
   sensitiveQueryParams: ['affiliate_id', 'promo_code'],
-  // Result: default params + ['affiliate_id', 'promo_code']
+  // Result: defaults + ['affiliate_id', 'promo_code']
 });
 ```
 
 #### `samplingRate`
 
-- **Type:** `number` (0-1)
+- **Type:** `number` (0–1)
 - **Default:** `1` (100%)
-- **Description:** Client-side event sampling rate
+- **Description:** client-side event sampling rate
 
 ```typescript
-await tracelog.init({
-  samplingRate: 0.5, // Track 50% of events
-});
+await tracelog.init({ samplingRate: 0.5 }); // Track 50% of events
 ```
 
 #### `errorSampling`
 
-- **Type:** `number` (0-1)
+- **Type:** `number` (0–1)
 - **Default:** `1` (100%)
-- **Description:** Client-side error event sampling rate
+- **Description:** client-side error event sampling rate
 
 ```typescript
-await tracelog.init({
-  errorSampling: 0.1, // Track 10% of errors
-});
+await tracelog.init({ errorSampling: 0.1 }); // Track 10% of errors
 ```
 
 ---
 
-### Performance Configuration
+### Performance
 
 #### `webVitalsMode`
 
 - **Type:** `'all' | 'needs-improvement' | 'poor'`
 - **Default:** `'needs-improvement'`
-- **Description:** Controls which Web Vitals metrics are tracked
+- **Description:** controls which Web Vitals metrics are tracked
 
 ```typescript
-await tracelog.init({
-  webVitalsMode: 'all', // Track all metrics for trend analysis
-});
+await tracelog.init({ webVitalsMode: 'all' });
 ```
 
-**Mode Thresholds:**
+**Mode thresholds:**
 
-| Metric | 'all'      | 'needs-improvement' | 'poor'   |
-| ------ | ---------- | ------------------- | -------- |
-| LCP    | All values | > 2500ms            | > 4000ms |
-| FCP    | All values | > 1800ms            | > 3000ms |
-| CLS    | All values | > 0.1               | > 0.25   |
-| INP    | All values | > 200ms             | > 500ms  |
-| TTFB   | All values | > 800ms             | > 1800ms |
+| Metric | `'all'`    | `'needs-improvement'` | `'poor'`  |
+|--------|------------|-----------------------|-----------|
+| LCP    | All values | > 2500 ms             | > 4000 ms |
+| FCP    | All values | > 1800 ms             | > 3000 ms |
+| CLS    | All values | > 0.1                 | > 0.25    |
+| INP    | All values | > 200 ms              | > 500 ms  |
+| TTFB   | All values | > 800 ms              | > 1800 ms |
 
 #### `webVitalsThresholds`
 
 - **Type:** `Partial<Record<WebVitalType, number>>`
 - **Default:** Core Web Vitals standards
-- **Description:** Custom thresholds (overrides mode defaults)
+- **Description:** per-metric overrides (override the threshold for the selected mode)
 
 ```typescript
 await tracelog.init({
   webVitalsMode: 'needs-improvement',
   webVitalsThresholds: {
-    LCP: 3000, // Stricter than default 2500ms
-    FCP: 2500, // Stricter than default 1800ms
-    CLS: 0.15, // Stricter than default 0.1
+    LCP: 3000,
+    FCP: 2500,
+    CLS: 0.15,
   },
 });
+```
+
+#### `sendIntervalMs`
+
+- **Type:** `number` (milliseconds)
+- **Default:** `10000` (10 seconds)
+- **Min/Max:** 1000 ms – 60000 ms
+- **Description:** batch flush interval
+
+```typescript
+await tracelog.init({ sendIntervalMs: 30000 }); // 30 seconds
 ```
 
 #### `flushOnSpaNavigation`
 
 - **Type:** `boolean`
 - **Default:** `false`
-- **Description:** Opt-in. When `true`, auto-flushes the event queue after every SPA navigation (`pushState` / `replaceState` / `popstate` / `hashchange`). Off by default because per-route flushing multiplies request volume on SPA-heavy apps (one request per route change vs. one per `sendIntervalMs`). Enable only if you need delivery between route changes faster than `sendIntervalMs` — `flushOnPageHidden` (default `true`) already covers the common tab-close / app-background case. No-op for MPAs.
+- **Description:** opt-in. When `true`, auto-flushes the event queue after every SPA navigation (`pushState` / `replaceState` / `popstate` / `hashchange`). Off by default because per-route flushing multiplies request volume on SPA-heavy apps. Enable only if you need delivery between route changes faster than `sendIntervalMs`. No-op for MPAs.
 
 ```typescript
-// Opt-in: aggressive per-route delivery for high-stakes SPA flows
 await tracelog.init({ flushOnSpaNavigation: true });
 ```
 
@@ -1056,127 +511,53 @@ await tracelog.init({ flushOnSpaNavigation: true });
 
 - **Type:** `boolean`
 - **Default:** `true`
-- **Description:** Auto-flushes the event queue on `visibilitychange` when `document.hidden === true` (tab switch, lock screen, app backgrounding). Especially relevant on mobile Safari where `pagehide`/`beforeunload` can fire unreliably.
+- **Description:** auto-flushes the event queue on `visibilitychange` when `document.hidden === true` (tab switch, lock screen, app backgrounding). Especially relevant on mobile Safari where `pagehide` / `beforeunload` can fire unreliably. Uses `sendBeacon` so the OS can't abort it mid-suspension.
 
 ```typescript
-// Opt-out (rare — only if you want to minimize requests on tab switches)
-await tracelog.init({ flushOnPageHidden: false });
+await tracelog.init({ flushOnPageHidden: false }); // Opt-out (rare)
 ```
 
 ---
 
-### Interaction Configuration
+### Interaction
 
 #### `pageViewThrottleMs`
 
 - **Type:** `number` (milliseconds)
 - **Default:** `1000` (1 second)
-- **Description:** Throttle duration for page view events (prevents rapid SPA navigation spam)
+- **Description:** throttle duration for page-view events (prevents rapid SPA navigation spam)
 
 ```typescript
-await tracelog.init({
-  pageViewThrottleMs: 500, // 500ms throttle
-});
+await tracelog.init({ pageViewThrottleMs: 500 });
 ```
 
 #### `clickThrottleMs`
 
 - **Type:** `number` (milliseconds)
-- **Default:** `300` (300ms)
-- **Description:** Throttle duration for click events (prevents double-clicks and spam)
+- **Default:** `300`
+- **Description:** throttle duration for click events (prevents double-clicks and spam)
 
 ```typescript
-await tracelog.init({
-  clickThrottleMs: 200, // 200ms throttle
-});
+await tracelog.init({ clickThrottleMs: 200 });
 ```
 
 #### `maxSameEventPerMinute`
 
 - **Type:** `number`
 - **Default:** `60`
-- **Description:** Maximum number of same custom event name per minute (rate limiting)
+- **Description:** maximum number of same custom-event names per minute (rate limiting)
 
 ```typescript
-await tracelog.init({
-  maxSameEventPerMinute: 30, // Allow 30 events/min max per name
-});
+await tracelog.init({ maxSameEventPerMinute: 30 });
 ```
 
 ---
 
-### Scroll Configuration
-
-#### `primaryScrollSelector`
-
-- **Type:** `string` (CSS selector)
-- **Default:** Auto-detected (main content)
-- **Description:** Manually override primary scroll container detection
-
-```typescript
-await tracelog.init({
-  primaryScrollSelector: '#main-content',
-});
-```
-
----
-
-### Viewport Configuration
-
-#### `viewport`
-
-- **Type:** `ViewportConfig`
-- **Default:** `undefined` (disabled)
-- **Description:** Element visibility tracking configuration
-
-```typescript
-interface ViewportConfig {
-  elements: Array<{
-    selector: string; // CSS selector
-    id?: string; // Optional unique ID
-    name?: string; // Optional display name
-  }>;
-  threshold?: number; // Visibility ratio (0-1), default: 0.5
-  minDwellTime?: number; // Milliseconds visible, default: 1000
-}
-```
-
-**Example:**
-
-```typescript
-await tracelog.init({
-  viewport: {
-    elements: [
-      {
-        selector: '.cta-button',
-        id: 'pricing-cta',
-        name: 'Pricing CTA Button',
-      },
-      {
-        selector: '#hero-section',
-        id: 'hero',
-        name: 'Hero Section',
-      },
-    ],
-    threshold: 0.5, // 50% visible
-    minDwellTime: 1000, // 1 second dwell time
-  },
-});
-```
-
-**Notes:**
-
-- Fires `VIEWPORT_VISIBLE` event when conditions met
-- Uses IntersectionObserver (graceful degradation if unavailable)
-- Tracks visibility ratio and actual dwell time
-
----
-
-### Integration Configuration
+### Integration
 
 #### `integrations.tracelog`
 
-- **Type:** `{ projectId: string }`
+- **Type:** `{ projectId: string; shopify?: boolean }`
 - **Description:** TraceLog SaaS integration
 
 ```typescript
@@ -1184,92 +565,15 @@ await tracelog.init({
   integrations: {
     tracelog: {
       projectId: 'your-project-id',
+      shopify: false, // Optional: enable Shopify cart attribute linking
     },
   },
 });
 ```
 
-#### `integrations.custom`
+**Domain requirement.** The SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`). Calls to `init()` from `localhost` or a raw IP address are rejected. For local development, omit `integrations.tracelog` to run in standalone mode, or test against a staging domain mapped via `/etc/hosts`.
 
-- **Type:** `{ collectApiUrl: string; allowHttp?: boolean; headers?: Record<string, string>; fetchCredentials?: RequestCredentials }`
-- **Description:** Custom backend integration
-
-```typescript
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'https://api.example.com/collect',
-      allowHttp: false, // Only true for local testing
-      headers: {
-        // Static HTTP headers (optional)
-        'X-Tenant-Id': 'tenant-123',
-        'X-Brand': 'my-brand',
-      },
-      fetchCredentials: 'include', // Cookie/credential policy (optional)
-    },
-  },
-});
-```
-
-**`collectApiUrl`**:
-
-- Full URL to your backend endpoint
-- Must use HTTPS in production
-
-**`allowHttp`**:
-
-- **Default:** `false`
-- Set to `true` **only for local testing** (e.g., `http://localhost:8080`)
-- Never use in production
-
-**`headers`**:
-
-- **Default:** `undefined`
-- Static HTTP headers added to all requests
-- Use for tenant identification, API keys, or fixed values
-- For dynamic headers (auth tokens), use `setCustomHeaders()` instead
-- Dynamic headers override static headers on key collision
-
-**`fetchCredentials`**:
-
-- **Default:** `'include'`
-- Controls whether cookies and HTTP credentials are sent with `fetch()` requests
-- `'include'`: Always send cookies, even cross-origin (required for cookie-based auth)
-- `'same-origin'`: Only send cookies for same-origin requests
-- `'omit'`: Never send cookies
-- **sendBeacon limitation**: This option only applies to async `fetch()` calls. `sendBeacon()` (used during page unload) always sends cookies regardless of this setting
-
-#### Multi-Integration (TraceLog SaaS + Custom Backend)
-
-```typescript
-await tracelog.init({
-  integrations: {
-    tracelog: { projectId: 'your-project-id' }, // TraceLog analytics dashboard
-    custom: { collectApiUrl: 'https://warehouse.com' }, // Custom data warehouse
-  },
-});
-
-// Events sent to BOTH endpoints with:
-// ✅ Independent error handling (4xx/5xx per integration)
-// ✅ Independent retry/persistence (separate localStorage keys)
-// ✅ Parallel sending (non-blocking)
-```
-
-**Use Cases:**
-
-- **Analytics + Data Warehouse:** Send to TraceLog for dashboards + custom warehouse for long-term storage
-- **Compliance:** Send to both production analytics and compliance logging system
-- **Migration:** Dual-send during migration from custom backend to TraceLog SaaS
-
-**Technical Details:**
-
-| Feature            | Behavior                                                                                                                                                  |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Error Handling** | Each integration handles 4xx (permanent) and 5xx (temporary) errors independently                                                                         |
-| **Persistence**    | Separate localStorage keys: `tlog:queue:{userId}:saas`, `tlog:queue:{userId}:custom`                                                                      |
-| **Recovery**       | Failed events recovered independently per integration on next page load. Recovery occurs automatically during `init()` on the subsequent page navigation. |
-| **Sending**        | Async: Parallel with `Promise.allSettled()`, Sync (sendBeacon): All must succeed                                                                          |
-| **Transformers**   | SaaS receives **original events**, custom receives **transformed events** (if transformers configured)                                                    |
+**`shopify`** — when `true`, the library writes the visitor UUID as a Shopify cart attribute (`tracelog_user_id`) so checkout-funnel events fired from the Web Pixel can be stitched back to the storefront visitor.
 
 ---
 
@@ -1277,18 +581,18 @@ await tracelog.init({
 
 All events share base properties plus type-specific data.
 
-### Base Event Properties
+### Base event properties
 
 Every event includes:
 
 ```typescript
 interface EventData {
-  id: string; // Unique event ID
-  type: EventType; // Event type enum
-  page_url: string; // Current page URL (sanitized)
-  timestamp: number; // Unix timestamp (ms)
-  referrer?: string; // HTTP referrer header
-  utm?: UTM; // UTM campaign parameters
+  id: string;          // Unique event ID (timestamp-sequence-random)
+  type: EventType;     // Event type enum
+  page_url: string;    // Current page URL (sanitized)
+  timestamp: number;   // Unix timestamp (ms)
+  referrer?: string;   // HTTP referrer
+  utm?: UTM;           // UTM campaign parameters
 }
 ```
 
@@ -1296,28 +600,27 @@ interface EventData {
 
 Navigation and page view tracking.
 
-**Additional Properties:**
+**Additional properties:**
 
 ```typescript
 {
-  page_view: {
-    referrer?: string;   // Previous page URL
-    title?: string;      // Document title
-    pathname?: string;   // URL pathname
-    search?: string;     // URL query string
-    hash?: string;       // URL hash fragment
-  },
-  from_page_url?: string  // Previous page for SPA navigation
+  page_view?: {
+    referrer?: string;  // Previous page URL
+    title?: string;     // Document title
+  };
+  from_page_url?: string; // Previous page URL for SPA navigation
 }
 ```
 
-**Captured When:**
+The full URL is always carried on the event envelope (`page_url`). The optional `page_view` block only contains `referrer` and `title` and is omitted entirely when both are empty.
+
+**Captured when:**
 
 - Initial page load
 - SPA route changes (History API, hash changes)
 - Manual `history.pushState()` / `history.replaceState()`
 
-**Throttling:** 1 second (configurable via `pageViewThrottleMs`)
+**Throttling:** 1 second (configurable via `pageViewThrottleMs`).
 
 ---
 
@@ -1325,74 +628,53 @@ Navigation and page view tracking.
 
 User click interactions.
 
-**Additional Properties:**
+**Additional properties:**
 
 ```typescript
 {
   click_data: {
-    x: number;                      // Absolute X coordinate (px)
-    y: number;                      // Absolute Y coordinate (px)
-    relativeX: number;              // Relative X within element (0-1)
-    relativeY: number;              // Relative Y within element (0-1)
-    id?: string;                    // Element ID attribute
-    class?: string;                 // Element class attribute
-    tag?: string;                   // HTML tag name
-    text?: string;                  // Element text content (truncated)
-    href?: string;                  // Link href (for <a> elements)
-    title?: string;                 // Element title attribute
-    alt?: string;                   // Image alt text (for <img>)
-    role?: string;                  // ARIA role attribute
-    ariaLabel?: string;             // ARIA label attribute
-    dataAttributes?: Record<string, string>; // Custom data-* attributes
-  }
+    x: number;        // Absolute X coordinate (px)
+    y: number;        // Absolute Y coordinate (px)
+    tag: string;      // HTML tag name (lowercase)
+    id?: string;      // Element ID attribute
+    class?: string;   // Element class attribute
+    text?: string;    // Element text content (truncated, PII-sanitized)
+    href?: string;    // Link href (anchors only)
+  };
 }
 ```
 
-**Privacy Features:**
+**Privacy features:**
 
 - Never captures values from `<input>`, `<textarea>`, `<select>`
-- Respects `data-tlog-ignore` attribute
-- Sanitizes text for PII (emails, phones, credit cards, etc.)
-- Coordinates rounded to 10px for privacy
+- Respects `data-tlog-ignore` on the clicked element or any ancestor
+- Sanitizes text for PII (emails, phones, credit cards, IBANs, API keys, bearer tokens, connection-string passwords)
 
-**Throttling:** 300ms (configurable via `clickThrottleMs`)
+**Throttling:** 300 ms per element signature (configurable via `clickThrottleMs`).
 
 ---
 
 ### `SCROLL`
 
-Scroll depth and behavior tracking.
+Scroll depth and direction tracking, per scrollable container.
 
-**Additional Properties:**
+**Additional properties:**
 
 ```typescript
 {
   scroll_data: {
-    depth: number; // Current scroll depth (0-100%)
-    direction: 'up' | 'down'; // Scroll direction
-    container_selector: string; // CSS selector of scrolled container
-    is_primary: boolean; // Whether this is the primary viewport scroll
-    velocity: number; // Scroll velocity (pixels/second)
-    max_depth_reached: number; // Maximum depth reached in session (0-100%)
-  }
+    depth: number;              // Current scroll depth (0-100%)
+    direction: 'up' | 'down';   // Scroll direction
+    container_selector: string; // CSS selector of the scrolled container (or 'window')
+  };
 }
 ```
 
 **Features:**
 
-- Tracks multiple scroll containers
-- Auto-detects primary scroll container (main content)
-- Debounced to 250ms
-
-**Filtering Primary Scroll:**
-
-```typescript
-tracelog.on('event', (event) => {
-  if (event.type === 'scroll' && event.scroll_data.is_primary) {
-    console.log('Main content scroll:', event.scroll_data.depth);
-  }
-});
-```
+- Tracks the window and any auto-detected scrollable containers
+- Per-container debouncing (250 ms)
+- Guardrails: min 10px position delta, min 5% depth change, min 500ms inter-event interval, max 120 events per session
 
 ---
 
@@ -1400,28 +682,19 @@ tracelog.on('event', (event) => {
 
 Session initialization event.
 
-**No Additional Properties** (only base properties)
+**No additional properties** (only base properties).
 
-**Captured When:**
+**Captured when:**
 
 - First page load in session
-- Session timeout expires and new session begins
-- Cross-tab sync receives new session ID
+- Session timeout expires and a new session begins
+- Cross-tab sync receives a new session ID
 
 **Notes:**
 
-- Session ID accessible via `queue.session_id` in `'queue'` event
-- Not duplicated on session recovery (localStorage)
-
----
-
-### `SESSION_END` (Removed in v2.0.0)
-
-**⚠️ DEPRECATED**: SESSION_END events are no longer emitted by the library.
-
-**Reason**: Browser `pagehide` event had 43% failure rate in production (browser crashes, force quit, mobile background, etc.), resulting in unreliable session tracking.
-
-**Migration**: Remove any `SESSION_END` event listeners from your code. The library now only emits `SESSION_START` events.
+- Session ID accessible via `queue.session_id` in `'queue'` events
+- Not duplicated on session recovery from `localStorage` / `sessionStorage`
+- The server infers session **end** from the last event timestamp — there is no `SESSION_END` event
 
 ---
 
@@ -1429,147 +702,94 @@ Session initialization event.
 
 Business-specific custom events.
 
-**Additional Properties:**
+**Additional properties:**
 
 ```typescript
 {
   custom_event: {
-    name: string;                   // Event name identifier
-    metadata?: Record<string, any> | Record<string, any>[]; // Event data
-  }
-}
-```
-
-**Example Event:**
-
-```typescript
-tracelog.event('product_viewed', {
-  productId: 'abc-123',
-  price: 299.99
-});
-
-// Results in:
-{
-  type: 'custom',
-  custom_event: {
-    name: 'product_viewed',
-    metadata: {
-      productId: 'abc-123',
-      price: 299.99
-    }
-  }
-}
-```
-
----
-
-### `WEB_VITALS`
-
-Web performance metrics (Core Web Vitals).
-
-**Additional Properties:**
-
-```typescript
-{
-  web_vitals: {
-    type: 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB' | 'LONG_TASK';
-    value: number; // Varies by type
-  }
-}
-```
-
-**Metric Details:**
-
-| Type        | Description               | Value Unit      |
-| ----------- | ------------------------- | --------------- |
-| `LCP`       | Largest Contentful Paint  | Milliseconds    |
-| `FCP`       | First Contentful Paint    | Milliseconds    |
-| `CLS`       | Cumulative Layout Shift   | Unitless (0-1+) |
-| `INP`       | Interaction to Next Paint | Milliseconds    |
-| `TTFB`      | Time to First Byte        | Milliseconds    |
-| `LONG_TASK` | Tasks exceeding 50ms      | Milliseconds    |
-
-**Filtering:**
-Controlled by `webVitalsMode` and `webVitalsThresholds` config.
-
----
-
-### `ERROR`
-
-JavaScript errors and promise rejections.
-
-**Additional Properties:**
-
-```typescript
-{
-  error_data: {
-    type: 'js_error' | 'promise_rejection';
-    message: string;      // Error message (sanitized for PII)
-    filename?: string;    // Source file
-    line?: number;        // Line number
-    column?: number;      // Column number
-  }
-}
-```
-
-**Privacy Features:**
-
-- Error messages sanitized for PII
-- Respects `errorSampling` config
-
----
-
-### `VIEWPORT_VISIBLE`
-
-Element visibility tracking (requires `viewport` config).
-
-**Additional Properties:**
-
-```typescript
-{
-  viewport_data: {
-    selector: string;         // CSS selector that matched
-    id?: string;              // Optional unique ID (from config)
-    name?: string;            // Optional display name (from config)
-    dwellTime: number;        // Actual time visible (ms)
-    visibilityRatio: number;  // Actual visibility ratio (0-1)
-  }
+    name: string;
+    metadata?: Record<string, MetadataType> | Record<string, MetadataType>[];
+  };
 }
 ```
 
 **Example:**
 
 ```typescript
-await tracelog.init({
-  viewport: {
-    elements: [{ selector: '.cta-button', id: 'cta', name: 'CTA Button' }],
-    threshold: 0.5,
-    minDwellTime: 1000
-  }
-});
+tracelog.event('product_viewed', { productId: 'abc-123', price: 299.99 });
+// →
+// {
+//   type: 'custom',
+//   custom_event: {
+//     name: 'product_viewed',
+//     metadata: { productId: 'abc-123', price: 299.99 },
+//   },
+// }
+```
 
-// Event fired when conditions met:
+---
+
+### `WEB_VITALS`
+
+Core Web Vitals performance metrics.
+
+**Additional properties:**
+
+```typescript
 {
-  type: 'viewport_visible',
-  viewport_data: {
-    selector: '.cta-button',
-    id: 'cta',
-    name: 'CTA Button',
-    dwellTime: 1234,          // Actual dwell time
-    visibilityRatio: 0.87     // Actual visibility ratio
-  }
+  web_vitals: {
+    type: 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB';
+    value: number;
+  };
 }
 ```
+
+| Metric | Description               | Unit            |
+|--------|---------------------------|-----------------|
+| `LCP`  | Largest Contentful Paint  | milliseconds    |
+| `FCP`  | First Contentful Paint    | milliseconds    |
+| `CLS`  | Cumulative Layout Shift   | unitless (0–1+) |
+| `INP`  | Interaction to Next Paint | milliseconds    |
+| `TTFB` | Time to First Byte        | milliseconds    |
+
+Filtering is controlled by `webVitalsMode` and `webVitalsThresholds`.
+
+---
+
+### `ERROR`
+
+JavaScript errors and unhandled promise rejections.
+
+**Additional properties:**
+
+```typescript
+{
+  error_data: {
+    type: 'js_error' | 'promise_rejection';
+    message: string;     // Truncated and PII-sanitized
+    filename?: string;
+    line?: number;
+    column?: number;
+    stack?: string;      // Truncated and PII-sanitized
+  };
+}
+```
+
+**Privacy features:**
+
+- Error messages and stack traces are truncated and sanitized for PII
+- Respects `errorSampling`
+- Burst suppression: identical errors within a short window are coalesced
 
 ---
 
 ## Event Emitters
 
-### `'event'` Emitter
+### `'event'` emitter
 
 Fires for every individual event captured.
 
-**Callback Signature:**
+**Callback signature:**
 
 ```typescript
 (event: EventData) => void
@@ -1579,15 +799,8 @@ Fires for every individual event captured.
 
 ```typescript
 tracelog.on('event', (event) => {
-  console.log('Event:', event.type);
-
-  // Type-safe access to event-specific data
   if (event.type === 'click') {
     console.log('Clicked:', event.click_data?.tag);
-  }
-
-  if (event.type === 'page_view') {
-    console.log('Page:', event.page_view?.pathname);
   }
 
   if (event.type === 'custom') {
@@ -1598,25 +811,26 @@ tracelog.on('event', (event) => {
 
 ---
 
-### `'queue'` Emitter
+### `'queue'` emitter
 
-Fires when events are batched and ready to send to backend.
+Fires when events are batched and ready to send.
 
-**Callback Signature:**
+**Callback signature:**
 
 ```typescript
 (queue: EventsQueue) => void
 ```
 
-**EventsQueue Structure:**
+**`EventsQueue` structure:**
 
 ```typescript
 interface EventsQueue {
-  user_id: string; // Anonymous user ID (UUID)
-  session_id: string; // Current session ID
-  device: 'mobile' | 'tablet' | 'desktop'; // Device type
-  events: EventData[]; // Array of events in batch
-  global_metadata?: Record<string, MetadataType>; // Global metadata (if configured)
+  user_id: string;
+  session_id: string;
+  device: 'mobile' | 'tablet' | 'desktop';
+  events: EventData[];
+  global_metadata?: Record<string, MetadataType>;
+  identify?: { userId: string; traits?: Record<string, string> };
 }
 ```
 
@@ -1629,10 +843,9 @@ tracelog.on('queue', (batch) => {
     userId: batch.user_id,
     device: batch.device,
     eventCount: batch.events.length,
-    hasGlobalMetadata: !!batch.global_metadata,
   });
 
-  // Send to custom analytics
+  // Forward to a custom destination (in addition to TraceLog SaaS, if configured)
   fetch('https://api.example.com/collect', {
     method: 'POST',
     body: JSON.stringify(batch),
@@ -1640,17 +853,17 @@ tracelog.on('queue', (batch) => {
 });
 ```
 
-**Batching Rules:**
+**Batching rules:**
 
-- Fires every **10 seconds** OR when **50 events** accumulated (whichever comes first)
-- Sent automatically to configured backend (if any)
-- Use this emitter to send events to additional analytics platforms
+- Fires every **10 seconds** OR when **50 events** accumulate (whichever comes first)
+- When `integrations.tracelog` is configured, the same batch is sent to the SaaS endpoint
+- Use this emitter to fan out batches to additional destinations
 
 ---
 
 ## TypeScript Types
 
-### Core Types
+### Core types
 
 ```typescript
 import {
@@ -1667,7 +880,6 @@ import {
   WebVitalsData,
   ErrorData,
   PageViewData,
-  ViewportEventData,
   UTM,
 
   // Emitters
@@ -1677,67 +889,28 @@ import {
 
   // Queue
   EventsQueue,
-
-  // Transformers & Headers
-  TransformerHook,
-  BeforeSendTransformer,
-  BeforeBatchTransformer,
-  CustomHeadersProvider,
+  IdentifyData,
 
   // Common
   MetadataType,
+  InitResult,
+  EventOptions,
 } from '@tracelog/lib';
 ```
 
 ### `MetadataType`
 
-Allowed types for metadata values:
-
 ```typescript
-type MetadataType = string | number | boolean | null | undefined;
+type MetadataType = string | number | boolean | string[] | NestedObject;
 ```
 
-**Restrictions:**
-
-- No nested objects
-- No arrays
-- No functions
-- No symbols
-
-**Valid Examples:**
-
-```typescript
-tracelog.event('example', {
-  stringValue: 'hello',
-  numberValue: 42,
-  booleanValue: true,
-  nullValue: null,
-  undefinedValue: undefined,
-});
-```
-
-**Invalid Examples:**
-
-```typescript
-// ❌ Nested objects not allowed
-tracelog.event('example', {
-  nested: { key: 'value' }, // Will be rejected
-});
-
-// ❌ Arrays not allowed (except as top-level metadata)
-tracelog.event('example', {
-  items: [1, 2, 3], // Will be rejected
-});
-
-// ✅ Arrays allowed at top level
-tracelog.event('example', [{ id: 1 }, { id: 2 }]);
-```
+Custom-event metadata supports primitives, string arrays, and nested objects (up to 10 levels). Functions, symbols, and circular references are rejected by validation.
 
 ---
 
 ## Error Handling
 
-### Initialization Errors
+### Initialization errors
 
 ```typescript
 try {
@@ -1748,15 +921,15 @@ try {
 }
 ```
 
-**Common Errors:**
+**Common causes:**
 
-- Initialization timeout (5 seconds)
-- Invalid configuration
+- Initialization timeout
+- Invalid configuration (e.g., `localhost` host with `integrations.tracelog`)
 - Browser API unavailable
 
 ---
 
-### Event Errors
+### Event errors
 
 ```typescript
 try {
@@ -1766,56 +939,51 @@ try {
 }
 ```
 
-**Common Errors:**
+**Common causes:**
 
 - Called before `init()`
 - Called during `destroy()`
-- Rate limit exceeded
+- Custom-event validation failure in QA mode
 
 ---
 
-### Network Errors
+### Network errors
 
-TraceLog uses a **retry-first, then persistence-based recovery model**:
+TraceLog uses a retry-first, then persistence-based recovery model:
 
-| Response                 | In-Session Retries                                                      | Persistence                                   |
-| ------------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
-| **2xx**                  | N/A (success)                                                           | Events removed from queue, delivery confirmed |
-| **4xx (except 408/429)** | None (permanent error)                                                  | Events discarded immediately (invalid data)   |
+| Response                 | In-session retries                                                      | Persistence                                   |
+|--------------------------|-------------------------------------------------------------------------|-----------------------------------------------|
+| **2xx**                  | N/A (success)                                                           | Events removed from queue                     |
+| **4xx (except 408/429)** | None (permanent)                                                        | Events discarded immediately                  |
 | **408**                  | Up to 2 retries with backoff                                            | Persist after exhausting retries              |
 | **429**                  | None — arms 60s cooldown (mirrored to localStorage, shared across tabs) | Persist immediately                           |
 | **5xx**                  | Up to 2 retries with backoff                                            | Persist after exhausting retries              |
 | **Network failure**      | Up to 2 retries with backoff                                            | Persist after exhausting retries              |
+| **Timeout**              | Up to 2 retries with backoff                                            | Persist after exhausting retries              |
 
-**In-Session Retry Strategy:**
+**Retry strategy:**
 
-- **Maximum Retries**: 2 additional attempts per integration (3 total attempts)
-- **Backoff Formula**: `100ms * (2 ^ attempt) + random(0-100ms)`
-- **Delays**: Attempt 1→2: 200-300ms, Attempt 2→3: 400-500ms
-- **Transient Errors**: 5xx, 408 Request Timeout, network failures
-- **Rate Limited**: 429 Too Many Requests — no inner retries; arms a 60s cooldown (mirrored to localStorage, shared across tabs on the same origin) and persists events immediately for recovery after the cooldown elapses
-- **Permanent Errors**: 4xx (except 408, 429) - no retries, immediate discard
-- **Jitter**: Random 0-100ms added to prevent thundering herd
+- Max retries: 2 additional attempts (3 total)
+- Backoff formula: `100ms * (2 ^ attempt) + random(0–100ms)`
+- Delays: attempt 1 → 2: 200–300 ms; attempt 2 → 3: 400–500 ms
+- Jitter: random 0–100 ms added to prevent thundering herd
 
-**Persistence-Based Recovery Flow:**
+**Circuit breaker:** after `MAX_CONSECUTIVE_NETWORK_FAILURES` consecutive network-level failures (DNS, connection refused), the sender opens its circuit and skips further requests until `CIRCUIT_BREAKER_COOLDOWN_MS` elapses. A single probe request is then allowed (half-open state) before fully closing.
 
-1. Page loads → Check localStorage for failed events (per-integration)
-2. If found → Wait for session initialization
-3. Retry sending failed events (once per page, NO in-session retries on recovery)
-4. Success → Clear from localStorage
-5. Fail → Re-persist for next page
+**Recovery flow:**
 
-**Expiration:**
+1. Page loads → check `localStorage` for failed events
+2. Wait for session initialization
+3. Retry sending failed events (once per page; no in-session retries on recovery)
+4. Success → clear from `localStorage`
+5. Fail → re-persist (with incremented `recoveryFailures` counter) for next page
+6. After `MAX_RECOVERY_FAILURES` attempts, persisted events are discarded to prevent an infinite loop against an unreachable backend
 
-- Failed events expire after **2 hours** in localStorage
-- Prevents stale data accumulation
+**Expiration:** failed events expire after **2 hours** in `localStorage`. Prevents stale data accumulation.
 
-**Notes:**
+**Multi-tab protection:** a 1-second window prevents two tabs from re-sending the same persisted batch simultaneously.
 
-- Multi-integration: Independent retry/persistence (separate localStorage keys)
-- Multi-tab protection (1-second recovery guard prevents concurrent recovery)
-- Automatic cleanup of expired events
-- Optimistic queue removal: Events removed if AT LEAST ONE integration succeeds
+**Idempotency.** Every batch carries `_metadata.idempotency_token` (deterministic FNV-1a hash of sorted event IDs, salted by `user_id` and `session_id`). The same retried batch produces the same token, so the backend can dedupe retries server-side.
 
 ---
 
@@ -1827,9 +995,9 @@ Disable TraceLog entirely (no initialization):
 window.__traceLogDisabled = true;
 ```
 
-**Use Cases:**
+**Use cases:**
 
-- User opt-out (set before library loads)
+- User opt-out (set before the library loads)
 - Bot detection
 - Development environments
 
@@ -1842,24 +1010,24 @@ window.__traceLogDisabled = true;
 - Safari 12+
 - Edge 79+
 
-**Graceful Degradation:**
+**Graceful degradation:**
 
-- BroadcastChannel (cross-tab sync): Falls back to localStorage-only
-- IntersectionObserver (viewport tracking): Feature disabled
-- sendBeacon (page unload): Falls back to synchronous fetch
+- BroadcastChannel (cross-tab sync) — falls back to localStorage-only
+- `sendBeacon` (page unload) — falls back to async `fetch` with `keepalive: true`
+- `performance.now()` — falls back to `Date.now()` (no monotonic-clock protection)
+- `IntersectionObserver` — not currently required by any handler
 
 ---
 
 ## Resources
 
-- [GitHub Repository](https://github.com/tracelog/tracelog)
-- [Changelog](./CHANGELOG.md)
+- [README](./README.md)
+- [Best Practices](./BEST_PRACTICES.md)
 - [Security Guide](./SECURITY.md)
+- [Changelog](./CHANGELOG.md)
 - [Handlers Documentation](./src/handlers/README.md)
 - [Managers Documentation](./src/managers/README.md)
 
 ---
 
-**Version:** 2.1.2
 **License:** MIT
-**Last Updated:** January 2026

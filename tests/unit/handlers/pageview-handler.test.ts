@@ -30,7 +30,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       setupNavigationEnvironment();
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, {});
+      eventManager = new EventManager(storageManager, null);
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -107,7 +107,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       setupNavigationEnvironment();
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, {});
+      eventManager = new EventManager(storageManager, null);
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -185,7 +185,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       previousUrl = 'http://localhost:3000/';
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, {});
+      eventManager = new EventManager(storageManager, null);
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -289,154 +289,6 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
     });
   });
 
-  describe('UTM Parameters During Navigation', () => {
-    let handler: PageViewHandler;
-    let eventManager: EventManager;
-    let storageManager: StorageManager;
-    let trackSpy: ReturnType<typeof vi.spyOn>;
-    let onTrackCallback: ReturnType<typeof vi.fn>;
-    let getSpy: ReturnType<typeof vi.spyOn>;
-    let setSpy: ReturnType<typeof vi.spyOn>;
-    let currentUrl: string;
-    let previousUrl: string;
-
-    beforeEach(() => {
-      setupTestEnvironment();
-      setupNavigationEnvironment();
-
-      currentUrl = 'http://localhost:3000/';
-      previousUrl = 'http://localhost:3000/';
-
-      storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, {});
-      onTrackCallback = vi.fn();
-
-      handler = new PageViewHandler(eventManager, onTrackCallback);
-
-      trackSpy = vi.spyOn(eventManager, 'track');
-      getSpy = vi.spyOn(handler as any, 'get');
-      setSpy = vi.spyOn(handler as any, 'set');
-
-      // @ts-expect-error - Mock implementation type
-      getSpy.mockImplementation((key: string) => {
-        if (key === 'config') {
-          return {
-            sensitiveQueryParams: [],
-            pageViewThrottleMs: 100,
-          };
-        }
-        if (key === 'pageUrl') {
-          return previousUrl;
-        }
-        return undefined;
-      });
-
-      // @ts-expect-error - Mock implementation type
-      setSpy.mockImplementation((key: string, value: unknown) => {
-        if (key === 'pageUrl') {
-          previousUrl = value as string;
-        }
-      });
-
-      // Mock window.location properties with dynamic values
-      vi.spyOn(window.location, 'href', 'get').mockImplementation(() => currentUrl);
-      vi.spyOn(window.location, 'pathname', 'get').mockImplementation(() => {
-        return new URL(currentUrl).pathname;
-      });
-      vi.spyOn(window.location, 'search', 'get').mockImplementation(() => {
-        return new URL(currentUrl).search;
-      });
-      vi.spyOn(window.location, 'hash', 'get').mockImplementation(() => {
-        return new URL(currentUrl).hash;
-      });
-    });
-
-    afterEach(() => {
-      handler.stopTracking();
-      cleanupTestEnvironment();
-    });
-
-    it('should extract utm_source parameter', async () => {
-      handler.startTracking();
-      trackSpy.mockClear();
-
-      // Wait for throttle period to pass
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // Simulate navigation with UTM
-      currentUrl = 'http://localhost:3000/?utm_source=google';
-      window.history.pushState({}, '', '/?utm_source=google');
-
-      expect(trackSpy).toHaveBeenCalled();
-      const event = getTrackedEvent(trackSpy);
-      expect(event.page_view?.search).toBe('?utm_source=google');
-    });
-
-    it('should extract utm_medium parameter', async () => {
-      handler.startTracking();
-      trackSpy.mockClear();
-
-      // Wait for throttle period to pass
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // Simulate navigation with UTM
-      currentUrl = 'http://localhost:3000/?utm_medium=cpc';
-      window.history.pushState({}, '', '/?utm_medium=cpc');
-
-      expect(trackSpy).toHaveBeenCalled();
-      const event = getTrackedEvent(trackSpy);
-      expect(event.page_view?.search).toBe('?utm_medium=cpc');
-    });
-
-    it('should extract utm_campaign parameter', async () => {
-      handler.startTracking();
-      trackSpy.mockClear();
-
-      // Wait for throttle period to pass
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // Simulate navigation with UTM
-      currentUrl = 'http://localhost:3000/?utm_campaign=summer_sale';
-      window.history.pushState({}, '', '/?utm_campaign=summer_sale');
-
-      expect(trackSpy).toHaveBeenCalled();
-      const event = getTrackedEvent(trackSpy);
-      expect(event.page_view?.search).toBe('?utm_campaign=summer_sale');
-    });
-
-    it('should extract utm_term parameter', async () => {
-      handler.startTracking();
-      trackSpy.mockClear();
-
-      // Wait for throttle period to pass
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // Simulate navigation with UTM
-      currentUrl = 'http://localhost:3000/?utm_term=running+shoes';
-      window.history.pushState({}, '', '/?utm_term=running+shoes');
-
-      expect(trackSpy).toHaveBeenCalled();
-      const event = getTrackedEvent(trackSpy);
-      expect(event.page_view?.search).toBe('?utm_term=running+shoes');
-    });
-
-    it('should extract utm_content parameter', async () => {
-      handler.startTracking();
-      trackSpy.mockClear();
-
-      // Wait for throttle period to pass
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // Simulate navigation with UTM
-      currentUrl = 'http://localhost:3000/?utm_content=logolink';
-      window.history.pushState({}, '', '/?utm_content=logolink');
-
-      expect(trackSpy).toHaveBeenCalled();
-      const event = getTrackedEvent(trackSpy);
-      expect(event.page_view?.search).toBe('?utm_content=logolink');
-    });
-  });
-
   describe('Deduplication & Throttling', () => {
     let handler: PageViewHandler;
     let eventManager: EventManager;
@@ -456,7 +308,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       previousUrl = 'http://localhost:3000/';
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, {});
+      eventManager = new EventManager(storageManager, null);
       onTrackCallback = vi.fn();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
@@ -562,7 +414,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       configFlushOnSpaNavigation = undefined;
 
       storageManager = new StorageManager();
-      eventManager = new EventManager(storageManager, null, {});
+      eventManager = new EventManager(storageManager, null);
 
       handler = new PageViewHandler(eventManager, vi.fn());
 

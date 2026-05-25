@@ -27,7 +27,6 @@ describe('EventManager - critical event race with in-flight async send', () => {
   let customSender: {
     sendEventsQueue: ReturnType<typeof vi.fn>;
     sendEventsQueueSync: ReturnType<typeof vi.fn>;
-    getIntegrationId: () => 'custom';
     stop: ReturnType<typeof vi.fn>;
   };
 
@@ -35,18 +34,17 @@ describe('EventManager - critical event race with in-flight async send', () => {
     setupTestEnvironment();
     storageManager = new StorageManager();
     emitter = new Emitter();
-    eventManager = new EventManager(storageManager, emitter, {});
+    eventManager = new EventManager(storageManager, emitter);
 
     eventManager['set']('userId', 'user-race');
     eventManager['set']('device', MOCK_DEVICE_INFO);
     eventManager['set']('pageUrl', 'https://example.com/race');
     eventManager['set']('sessionId', 'session-race');
-    eventManager['set']('collectApiUrls', { custom: 'https://custom.example.com' });
+    eventManager['set']('collectApiUrls', { saas: 'https://example.collect.tracelog.io/collect' });
 
     customSender = {
       sendEventsQueue: vi.fn(),
       sendEventsQueueSync: vi.fn().mockReturnValue(true),
-      getIntegrationId: (): 'custom' => 'custom',
       stop: vi.fn(),
     };
 

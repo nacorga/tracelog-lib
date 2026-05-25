@@ -1,8 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const CRITICAL_INGESTION_SPEC = '**/critical-paths/ingestion-pipeline.spec.ts';
 const TEMPLATE_SPEC = '**/TEMPLATE.spec.ts';
-const NON_CHROMIUM_IGNORED_SPECS = [TEMPLATE_SPEC, CRITICAL_INGESTION_SPEC];
 
 /**
  * Playwright Configuration
@@ -50,10 +48,6 @@ export default defineConfig({
     },
     {
       name: 'Mobile Chrome',
-      // The ingestion pipeline spec boots a real lib -> middleware -> api stack.
-      // We keep it on desktop chromium only to avoid redundant runs and lower-signal
-      // failures on non-canonical browsers/devices for this full-stack path.
-      testIgnore: NON_CHROMIUM_IGNORED_SPECS,
       use: {
         ...devices['Pixel 5'],
       },
@@ -61,21 +55,18 @@ export default defineConfig({
     ...(!process.env.CI ? [
       {
         name: 'firefox',
-        testIgnore: NON_CHROMIUM_IGNORED_SPECS,
         use: {
           ...devices['Desktop Firefox'],
         },
       },
       {
         name: 'webkit',
-        testIgnore: NON_CHROMIUM_IGNORED_SPECS,
         use: {
           ...devices['Desktop Safari'],
         },
       },
       {
         name: 'Mobile Safari',
-        testIgnore: NON_CHROMIUM_IGNORED_SPECS,
         use: {
           ...devices['iPhone 12'],
         },

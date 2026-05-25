@@ -12,7 +12,6 @@ import {
   MAX_CLICKS_PER_SESSION,
   MAX_PAGE_VIEWS_PER_SESSION,
   MAX_CUSTOM_EVENTS_PER_SESSION,
-  MAX_VIEWPORT_EVENTS_PER_SESSION,
   MAX_SCROLL_EVENTS_PER_SESSION,
   MAX_FINGERPRINTS,
   FINGERPRINT_CLEANUP_MULTIPLIER,
@@ -27,18 +26,8 @@ import {
   SESSION_COUNTS_CLEANUP_THROTTLE_MS,
   STORAGE_BASE_KEY,
 } from '../constants/storage.constants';
-import {
-  EventsQueue,
-  EmitterEvent,
-  EventData,
-  EventType,
-  Mode,
-  TransformerMap,
-  SessionEventCounts,
-  CustomHeadersProvider,
-  QueuedEvent,
-} from '../types';
-import { log, Emitter, generateEventId, transformEvent, transformBatch } from '../utils';
+import { EventsQueue, EmitterEvent, EventData, EventType, Mode, SessionEventCounts, QueuedEvent } from '../types';
+import { log, Emitter, generateEventId } from '../utils';
 import { SenderManager } from './sender.manager';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
@@ -124,7 +113,6 @@ interface StoredSessionCounts extends SessionEventCounts {
 export class EventManager extends StateManager {
   private readonly dataSenders: SenderManager[];
   private readonly emitter: Emitter | null;
-  private readonly transformers: TransformerMap;
   private readonly timeManager: TimeManager;
   private readonly recentEventFingerprints = new Map<string, number>();
   private readonly perEventRateLimits: Map<string, number[]> = new Map();
@@ -146,7 +134,6 @@ export class EventManager extends StateManager {
     [EventType.CLICK]: 0,
     [EventType.PAGE_VIEW]: 0,
     [EventType.CUSTOM]: 0,
-    [EventType.VIEWPORT_VISIBLE]: 0,
     [EventType.SCROLL]: 0,
   };
 
@@ -155,52 +142,20 @@ export class EventManager extends StateManager {
   /**
    * Creates an EventManager instance.
    *
-   * **Initialization**:
-   * - Creates SenderManager instances for configured integrations (SaaS/Custom)
-   * - Initializes event emitter for local consumption
-   *
    * @param storeManager - Storage manager for persistence
    * @param emitter - Optional event emitter for local event consumption
-   * @param transformers - Optional event transformation hooks
-   * @param staticHeaders - Optional static HTTP headers for custom backend (from config)
-   * @param customHeadersProvider - Optional callback for dynamic headers
-   * @param fetchCredentials - Fetch credentials mode for custom backend. @default 'include'
    */
-  constructor(
-    storeManager: StorageManager,
-    emitter: Emitter | null = null,
-    transformers: TransformerMap = {},
-    staticHeaders: Record<string, string> = {},
-    customHeadersProvider?: CustomHeadersProvider,
-    fetchCredentials: RequestCredentials = 'include',
-  ) {
+  constructor(storeManager: StorageManager, emitter: Emitter | null = null) {
     super();
 
     this.emitter = emitter;
-    this.transformers = transformers;
     this.timeManager = new TimeManager();
 
     this.dataSenders = [];
     const collectApiUrls = this.get('collectApiUrls');
 
-    // SaaS integration: no custom headers (schema protection)
     if (collectApiUrls?.saas) {
-      this.dataSenders.push(new SenderManager(storeManager, 'saas', collectApiUrls.saas, transformers));
-    }
-
-    // Custom integration: receives static headers, dynamic provider, and fetchCredentials
-    if (collectApiUrls?.custom) {
-      this.dataSenders.push(
-        new SenderManager(
-          storeManager,
-          'custom',
-          collectApiUrls.custom,
-          transformers,
-          staticHeaders,
-          customHeadersProvider,
-          fetchCredentials,
-        ),
-      );
+      this.dataSenders.push(new SenderManager(storeManager, collectApiUrls.saas));
     }
 
     // Initialize debounced session counts saver (500ms delay, trailing edge)
@@ -327,7 +282,6 @@ export class EventManager extends StateManager {
     custom_event,
     web_vitals,
     error_data,
-    viewport_data,
     page_view,
   }: Partial<EventData>): void {
     if (!type) {
@@ -361,7 +315,6 @@ export class EventManager extends StateManager {
         custom_event,
         web_vitals,
         error_data,
-        viewport_data,
         page_view,
       });
 
@@ -440,7 +393,6 @@ export class EventManager extends StateManager {
       custom_event,
       web_vitals,
       error_data,
-      viewport_data,
       page_view,
     });
 
@@ -476,39 +428,18 @@ export class EventManager extends StateManager {
       return;
     }
 
-    if (this.get('mode') === Mode.QA) {
-      if (eventType === EventType.CUSTOM && custom_event) {
-        log('info', `Custom Event: ${custom_event.name}`, {
-          visibility: 'qa',
-          data: {
-            name: custom_event.name,
-            ...(custom_event.metadata && { metadata: custom_event.metadata }),
-          },
-        });
+    if (this.get('mode') === Mode.QA && eventType === EventType.CUSTOM && custom_event) {
+      log('info', `Custom Event: ${custom_event.name}`, {
+        visibility: 'qa',
+        data: {
+          name: custom_event.name,
+          ...(custom_event.metadata && { metadata: custom_event.metadata }),
+        },
+      });
 
-        this.emitEvent(payload);
+      this.emitEvent(payload);
 
-        return;
-      }
-
-      if (eventType === EventType.VIEWPORT_VISIBLE && viewport_data) {
-        const displayName = viewport_data.name || viewport_data.id || viewport_data.selector;
-
-        log('info', `Viewport Visible: ${displayName}`, {
-          visibility: 'qa',
-          data: {
-            selector: viewport_data.selector,
-            ...(viewport_data.name && { name: viewport_data.name }),
-            ...(viewport_data.id && { id: viewport_data.id }),
-            visibilityRatio: viewport_data.visibilityRatio,
-            dwellTime: viewport_data.dwellTime,
-          },
-        });
-
-        this.emitEvent(payload);
-
-        return;
-      }
+      return;
     }
 
     this.addToQueue(payload);
@@ -590,7 +521,6 @@ export class EventManager extends StateManager {
       [EventType.CLICK]: 0,
       [EventType.PAGE_VIEW]: 0,
       [EventType.CUSTOM]: 0,
-      [EventType.VIEWPORT_VISIBLE]: 0,
       [EventType.SCROLL]: 0,
     };
     this.lastSessionId = null;
@@ -685,31 +615,6 @@ export class EventManager extends StateManager {
    */
   flushImmediatelySync(): boolean {
     return this.flushEvents(true) as boolean;
-  }
-
-  /**
-   * Sets the custom headers provider callback for the custom integration.
-   * Only affects requests to custom backend (not TraceLog SaaS).
-   *
-   * @param provider - Callback function that returns custom headers
-   */
-  setCustomHeadersProvider(provider: CustomHeadersProvider): void {
-    for (const sender of this.dataSenders) {
-      if (sender.getIntegrationId() === 'custom') {
-        sender.setCustomHeadersProvider(provider);
-      }
-    }
-  }
-
-  /**
-   * Removes the custom headers provider callback from the custom integration.
-   */
-  removeCustomHeadersProvider(): void {
-    for (const sender of this.dataSenders) {
-      if (sender.getIntegrationId() === 'custom') {
-        sender.removeCustomHeadersProvider();
-      }
-    }
   }
 
   /**
@@ -1176,7 +1081,7 @@ export class EventManager extends StateManager {
     const globalMetadata = this.get('config')?.globalMetadata;
     const identity = this.get('identity');
 
-    let queue: EventsQueue = {
+    const queue: EventsQueue = {
       user_id: this.get('userId'),
       session_id: sessionId,
       device: this.get('device'),
@@ -1184,17 +1089,6 @@ export class EventManager extends StateManager {
       ...(globalMetadata && { global_metadata: globalMetadata }),
       ...(identity && { identify: identity }),
     };
-
-    const collectApiUrls = this.get('collectApiUrls');
-    const hasAnyBackend = Boolean(collectApiUrls?.custom || collectApiUrls?.saas);
-    const beforeBatchTransformer = this.transformers.beforeBatch;
-
-    if (!hasAnyBackend && beforeBatchTransformer) {
-      const transformed = transformBatch(queue, beforeBatchTransformer, 'EventManager');
-      if (transformed !== null) {
-        queue = transformed;
-      }
-    }
 
     return queue;
   }
@@ -1240,7 +1134,7 @@ export class EventManager extends StateManager {
     const sessionReferrer = this.get('sessionReferrer');
     const sessionUtm = this.get('sessionUtm');
 
-    let payload: EventData = {
+    const payload: EventData = {
       id: generateEventId(),
       type: data.type as EventType,
       page_url: currentPageUrl,
@@ -1252,30 +1146,9 @@ export class EventManager extends StateManager {
       ...(data.custom_event && { custom_event: data.custom_event }),
       ...(data.web_vitals && { web_vitals: data.web_vitals }),
       ...(data.error_data && { error_data: data.error_data }),
-      ...(data.viewport_data && { viewport_data: data.viewport_data }),
       ...(data.page_view && { page_view: data.page_view }),
       ...(sessionUtm && { utm: sessionUtm }),
     };
-
-    const collectApiUrls = this.get('collectApiUrls');
-    const hasCustomBackend = Boolean(collectApiUrls?.custom);
-    const hasSaasBackend = Boolean(collectApiUrls?.saas);
-    const hasAnyBackend = hasCustomBackend || hasSaasBackend;
-    const isMultiIntegration = hasCustomBackend && hasSaasBackend;
-    const beforeSendTransformer = this.transformers.beforeSend;
-
-    const shouldApplyBeforeSend =
-      beforeSendTransformer && (!hasAnyBackend || (hasCustomBackend && !isMultiIntegration));
-
-    if (shouldApplyBeforeSend) {
-      const transformed = transformEvent(payload, beforeSendTransformer, 'EventManager');
-
-      if (transformed === null) {
-        return null;
-      }
-
-      payload = transformed;
-    }
 
     return { ...payload, _session_id: currentSessionId };
   }
@@ -1476,7 +1349,6 @@ export class EventManager extends StateManager {
       [EventType.CLICK]: MAX_CLICKS_PER_SESSION,
       [EventType.PAGE_VIEW]: MAX_PAGE_VIEWS_PER_SESSION,
       [EventType.CUSTOM]: MAX_CUSTOM_EVENTS_PER_SESSION,
-      [EventType.VIEWPORT_VISIBLE]: MAX_VIEWPORT_EVENTS_PER_SESSION,
       [EventType.SCROLL]: MAX_SCROLL_EVENTS_PER_SESSION,
     };
     return limits[type] ?? null;
@@ -1557,7 +1429,6 @@ export class EventManager extends StateManager {
       [EventType.CLICK]: 0,
       [EventType.PAGE_VIEW]: 0,
       [EventType.CUSTOM]: 0,
-      [EventType.VIEWPORT_VISIBLE]: 0,
       [EventType.SCROLL]: 0,
     };
   }
@@ -1619,7 +1490,6 @@ export class EventManager extends StateManager {
         typeof parsed[EventType.CLICK] === 'number' &&
         typeof parsed[EventType.PAGE_VIEW] === 'number' &&
         typeof parsed[EventType.CUSTOM] === 'number' &&
-        typeof parsed[EventType.VIEWPORT_VISIBLE] === 'number' &&
         typeof parsed[EventType.SCROLL] === 'number'
       ) {
         // Return only the SessionEventCounts fields (exclude _timestamp, _version)
@@ -1628,7 +1498,6 @@ export class EventManager extends StateManager {
           [EventType.CLICK]: parsed[EventType.CLICK],
           [EventType.PAGE_VIEW]: parsed[EventType.PAGE_VIEW],
           [EventType.CUSTOM]: parsed[EventType.CUSTOM],
-          [EventType.VIEWPORT_VISIBLE]: parsed[EventType.VIEWPORT_VISIBLE],
           [EventType.SCROLL]: parsed[EventType.SCROLL],
         };
       }

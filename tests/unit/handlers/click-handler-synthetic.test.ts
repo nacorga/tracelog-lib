@@ -33,7 +33,7 @@ describe('ClickHandler - Synthetic clicks', () => {
   beforeEach(() => {
     setupTestEnvironment();
     storageManager = new StorageManager();
-    eventManager = new EventManager(storageManager, null, {});
+    eventManager = new EventManager(storageManager, null);
     handler = new ClickHandler(eventManager);
     trackSpy = vi.spyOn(eventManager, 'track');
   });
@@ -120,13 +120,13 @@ describe('ClickHandler - Synthetic clicks', () => {
     document.body.appendChild(button);
 
     const trustedEvent = { clientX: 0, clientY: 0, isTrusted: true } as MouseEvent;
-    const coords = handler['calculateClickCoordinates'](trustedEvent, button);
+    const coords = handler['calculateClickCoordinates'](trustedEvent);
     expect(coords).not.toBeNull();
     expect(coords?.x).toBe(0);
     expect(coords?.y).toBe(0);
 
     const syntheticEvent = { clientX: 0, clientY: 0, isTrusted: false } as MouseEvent;
-    expect(handler['calculateClickCoordinates'](syntheticEvent, button)).toBeNull();
+    expect(handler['calculateClickCoordinates'](syntheticEvent)).toBeNull();
 
     document.body.removeChild(button);
   });

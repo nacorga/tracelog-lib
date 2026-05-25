@@ -15,12 +15,8 @@ export const MAX_SEND_INTERVAL_MS_CONFIG = 60000; // 60 seconds
 
 // Throttling and debouncing
 export const SCROLL_DEBOUNCE_TIME_MS = 250;
-export const DEFAULT_VISIBILITY_TIMEOUT_MS = 2000;
 export const DEFAULT_PAGE_VIEW_THROTTLE_MS = 1000; // 1 second throttle for page views
 export const DEFAULT_CLICK_THROTTLE_MS = 300; // 300ms throttle for clicks per element
-export const DEFAULT_VIEWPORT_COOLDOWN_PERIOD = 60000; // 60 seconds cooldown for viewport events
-export const DEFAULT_VIEWPORT_MAX_TRACKED_ELEMENTS = 100; // Maximum elements to track (Phase 3)
-export const VIEWPORT_MUTATION_DEBOUNCE_MS = 100; // Debounce for mutation observer re-scanning
 
 // Click throttle cache limits
 export const MAX_THROTTLE_CACHE_ENTRIES = 1000; // Maximum element signatures to track
@@ -31,6 +27,23 @@ export const THROTTLE_PRUNE_INTERVAL_MS = 30000; // 30 seconds interval for cach
 export const EVENT_EXPIRY_HOURS = 2;
 export const EVENT_PERSISTENCE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 export const PERSISTENCE_THROTTLE_MS = 1000; // 1 second throttle for cross-tab persistence coordination
+
+/**
+ * Maximum age (in ms) of individual events recovered from localStorage before
+ * they are dropped during replay. Distinct from `EVENT_EXPIRY_HOURS` which
+ * gates the whole persisted envelope — this gates each `events[].timestamp`.
+ *
+ * Why this matters: a batch can survive across multiple persist/recover/fail
+ * cycles (the envelope timestamp is reset on every re-persist, but inner
+ * event timestamps stay frozen at their original capture time). A device with
+ * a stale clock or a long offline session can accumulate events older than the
+ * server's `MAX_PAST_OFFSET_DAYS` window, which the API would clamp or reject.
+ * Dropping them here avoids shipping data the server cannot trust.
+ *
+ * Kept one day under the server's 7-day past-window so borderline cases never
+ * leave the client.
+ */
+export const MAX_EVENT_AGE_MS_ON_RECOVERY = 6 * 24 * 60 * 60 * 1000; // 6 days
 
 // ============================================================================
 // LIMITS & REQUESTS
@@ -61,7 +74,6 @@ export const MAX_EVENTS_PER_SESSION = 1000;
 export const MAX_CLICKS_PER_SESSION = 500;
 export const MAX_PAGE_VIEWS_PER_SESSION = 100;
 export const MAX_CUSTOM_EVENTS_PER_SESSION = 500;
-export const MAX_VIEWPORT_EVENTS_PER_SESSION = 200;
 
 // Queue and batch limits
 export const BATCH_SIZE_THRESHOLD = 50;
@@ -349,24 +361,12 @@ export const VALIDATION_MESSAGES = {
   INVALID_SAMPLING_RATE: 'Sampling rate must be between 0 and 1',
   INVALID_ERROR_SAMPLING_RATE: 'Error sampling must be between 0 and 1',
   INVALID_TRACELOG_PROJECT_ID: 'TraceLog project ID is required when integration is enabled',
-  INVALID_CUSTOM_API_URL: 'Custom API URL is required when integration is enabled',
   INVALID_SCROLL_CONTAINER_SELECTORS: 'Scroll container selectors must be valid CSS selectors',
   INVALID_GLOBAL_METADATA: 'Global metadata must be an object',
   INVALID_SENSITIVE_QUERY_PARAMS: 'Sensitive query params must be an array of strings',
-  INVALID_PRIMARY_SCROLL_SELECTOR: 'Primary scroll selector must be a non-empty string',
-  INVALID_PRIMARY_SCROLL_SELECTOR_SYNTAX: 'Invalid CSS selector syntax for primaryScrollSelector',
   INVALID_PAGE_VIEW_THROTTLE: 'Page view throttle must be a non-negative number',
   INVALID_CLICK_THROTTLE: 'Click throttle must be a non-negative number',
   INVALID_MAX_SAME_EVENT_PER_MINUTE: 'Max same event per minute must be a positive number',
-  INVALID_VIEWPORT_CONFIG: 'Viewport config must be an object',
-  INVALID_VIEWPORT_ELEMENTS: 'Viewport elements must be a non-empty array',
-  INVALID_VIEWPORT_ELEMENT: 'Each viewport element must have a valid selector string',
-  INVALID_VIEWPORT_ELEMENT_ID: 'Viewport element id must be a non-empty string',
-  INVALID_VIEWPORT_ELEMENT_NAME: 'Viewport element name must be a non-empty string',
-  INVALID_VIEWPORT_THRESHOLD: 'Viewport threshold must be a number between 0 and 1',
-  INVALID_VIEWPORT_MIN_DWELL_TIME: 'Viewport minDwellTime must be a non-negative number',
-  INVALID_VIEWPORT_COOLDOWN_PERIOD: 'Viewport cooldownPeriod must be a non-negative number',
-  INVALID_VIEWPORT_MAX_TRACKED_ELEMENTS: 'Viewport maxTrackedElements must be a positive number',
   INVALID_SEND_INTERVAL: `Send interval must be between ${MIN_SEND_INTERVAL_MS}ms (1 second) and ${MAX_SEND_INTERVAL_MS_CONFIG}ms (60 seconds)`,
 } as const;
 

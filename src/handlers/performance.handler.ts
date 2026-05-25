@@ -2,7 +2,6 @@ import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
 import { EventType, WebVitalType } from '../types';
 import {
-  LONG_TASK_THROTTLE_MS,
   MAX_NAVIGATION_HISTORY,
   PRECISION_TWO_DECIMALS,
   getWebVitalsThresholds,
@@ -20,7 +19,6 @@ type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: bo
  * - Custom threshold overrides via webVitalsThresholds config
  * - Navigation-based deduplication with 50-navigation FIFO history
  * - CLS accumulation with reset on navigation change
- * - Long task throttling (maximum 1 event per second)
  * - Automatic fallback to Performance Observer if web-vitals library fails
  * - Final values only (reportAllChanges: false for all metrics)
  *
@@ -32,7 +30,6 @@ type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: bo
  * - FCP (First Contentful Paint): Initial rendering time
  * - TTFB (Time to First Byte): Server response time
  * - INP (Interaction to Next Paint): Responsiveness measure
- * - LONG_TASK: Tasks blocking main thread (>50ms, throttled to 1/second)
  *
  * **Filtering Modes**:
  * - 'all': Track all positive metric values (threshold = 0)
@@ -53,7 +50,6 @@ export class PerformanceHandler extends StateManager {
   private readonly navigationHistory: string[] = []; // FIFO queue for tracking navigation order
   private readonly observers: PerformanceObserver[] = [];
   private vitalThresholds: Record<WebVitalType, number>;
-  private lastLongTaskSentAt = 0;
   private navigationCounter = 0; // Counter for handling simultaneous navigations edge case
 
   constructor(eventManager: EventManager) {
@@ -72,7 +68,6 @@ export class PerformanceHandler extends StateManager {
    * - Reads webVitalsMode from config ('all', 'needs-improvement', 'poor')
    * - Merges webVitalsThresholds with mode defaults for custom thresholds
    * - Initializes web-vitals library observers (LCP, CLS, FCP, TTFB, INP)
-   * - Starts long task observation with 1/second throttling
    *
    * @returns Promise that resolves when tracking is initialized
    */
@@ -87,7 +82,6 @@ export class PerformanceHandler extends StateManager {
     }
 
     await this.initWebVitals();
-    this.observeLongTasks();
   }
 
   /**
@@ -232,28 +226,6 @@ export class PerformanceHandler extends StateManager {
     } catch (error) {
       log('debug', 'Failed to report TTFB', { error });
     }
-  }
-
-  private observeLongTasks(): void {
-    this.safeObserve(
-      'longtask',
-      (list) => {
-        const entries = list.getEntries() as Array<{ duration: number }>;
-
-        for (const entry of entries) {
-          const duration = Number(entry.duration.toFixed(PRECISION_TWO_DECIMALS));
-          const now = Date.now();
-
-          if (now - this.lastLongTaskSentAt >= LONG_TASK_THROTTLE_MS) {
-            if (this.shouldSendVital('LONG_TASK', duration)) {
-              this.trackWebVital('LONG_TASK', duration);
-            }
-            this.lastLongTaskSentAt = now;
-          }
-        }
-      },
-      { type: 'longtask', buffered: true },
-    );
   }
 
   private sendVital(sample: { type: WebVitalType; value: number }): void {

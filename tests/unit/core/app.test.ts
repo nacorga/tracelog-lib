@@ -49,40 +49,7 @@ describe('App - Initialization', () => {
         },
       });
 
-      await expect(initTestBridge(config)).rejects.toThrow('SaaS integration not supported on localhost');
-    });
-
-    it('should initialize with custom backend integration', async () => {
-      const config = createMockConfig({
-        integrations: {
-          custom: {
-            collectApiUrl: 'https://api.custom.com/collect',
-          },
-        },
-      });
-
-      const bridge = await initTestBridge(config);
-
-      expect(bridge.initialized).toBe(true);
-      const collectApiUrls = bridge.get('collectApiUrls');
-      expect(collectApiUrls.custom).toBe('https://api.custom.com/collect');
-    });
-
-    it('should initialize with multiple integrations', async () => {
-      // Use only custom backend since SaaS not supported on localhost
-      const config = createMockConfig({
-        integrations: {
-          custom: {
-            collectApiUrl: 'https://api.custom.com/collect',
-          },
-        },
-      });
-
-      const bridge = await initTestBridge(config);
-
-      expect(bridge.initialized).toBe(true);
-      const collectApiUrls = bridge.get('collectApiUrls');
-      expect(collectApiUrls.custom).toBe('https://api.custom.com/collect');
+      await expect(initTestBridge(config)).rejects.toThrow(/SaaS integration .* localhost/);
     });
 
     it('should throw error if already initialized', async () => {
@@ -179,8 +146,19 @@ describe('App - Initialization', () => {
         },
       });
 
-      // On localhost, SaaS integration will throw error
-      await expect(initTestBridge(invalidConfig)).rejects.toThrow('SaaS integration not supported on localhost');
+      // On localhost, SaaS integration will throw error.
+      // Capture the message once — `initTestBridge` is not idempotent across
+      // two failing inits, so we only call it once and assert both invariants.
+      let errMessage = '';
+      try {
+        await initTestBridge(invalidConfig);
+      } catch (err) {
+        errMessage = err instanceof Error ? err.message : String(err);
+      }
+      expect(errMessage).toMatch(/SaaS integration .* localhost/);
+      // The v3 error must point to a real fix (standalone mode), not to the
+      // 'custom backend integration' fallback that no longer exists.
+      expect(errMessage).toMatch(/standalone mode|staging domain/);
     });
   });
 
@@ -595,20 +573,6 @@ describe('App - Error Handling', () => {
     expect(session).toBeDefined();
     expect(pageView).toBeDefined();
     expect(click).toBeDefined();
-  });
-
-  it('should handle invalid integration config', async () => {
-    const config = createMockConfig({
-      integrations: {
-        custom: {
-          collectApiUrl: '',
-        },
-      },
-    });
-
-    const bridge = await initTestBridge(config);
-
-    expect(bridge.initialized).toBe(true);
   });
 
   it('should log errors without throwing', async () => {

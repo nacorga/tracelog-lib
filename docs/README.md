@@ -59,7 +59,6 @@ tracelog.event('add_to_cart', {
 - Page views (SPA navigation with hash routing)
 - Clicks (buttons, links, nav items)
 - Scrolls (depth percentage)
-- Viewport visibility (elements entering viewport with dwell time)
 - Sessions (start/end with cross-tab sync)
 - Web Vitals (LCP, INP, CLS)
 - Errors (with stack traces)
@@ -110,19 +109,7 @@ await tracelog.init({
   // Event Rate Control
   pageViewThrottleMs: 1000,        // Throttle rapid navigation (default: 1s)
   clickThrottleMs: 300,             // Throttle clicks per element (default: 300ms)
-  maxSameEventPerMinute: 60,        // Limit same custom event name (default: 60)
-
-  // Viewport Tracking
-  viewport: {
-    elements: [
-      { selector: '.hero', id: 'hero-section', name: 'Hero Banner' },
-      { selector: '.product-card', name: 'Product Cards' }
-    ],
-    threshold: 0.5,                  // Visibility threshold (50%)
-    minDwellTime: 1000,              // Minimum visible time (1s)
-    cooldownPeriod: 60000,           // Cooldown between triggers (60s)
-    maxTrackedElements: 100          // Maximum tracked elements
-  }
+  maxSameEventPerMinute: 60         // Limit same custom event name (default: 60)
 });
 ```
 
@@ -136,10 +123,6 @@ await tracelog.init({
 | `pageViewThrottleMs` | `1000` | 0+ |
 | `clickThrottleMs` | `300` | 0+ |
 | `maxSameEventPerMinute` | `60` | 1+ |
-| `viewport.threshold` | `0.5` (50%) | 0 - 1 |
-| `viewport.minDwellTime` | `1000` | 0+ |
-| `viewport.cooldownPeriod` | `60000` (60s) | 0+ |
-| `viewport.maxTrackedElements` | `100` | 1+ |
 
 ### Backend Integration (Optional)
 
@@ -179,12 +162,6 @@ http://localhost:3000?tlog_mode=qa
 http://localhost:3000?tlog_mode=qa_off
 ```
 
-#### Programmatic API
-```javascript
-// Enable QA mode
-tracelog.setQaMode(true);
-```
-
 ### QA Mode Features
 - ✅ **Console Logging**: All events logged to browser console
 - ✅ **Strict Validation**: Errors thrown instead of silent failures
@@ -206,8 +183,7 @@ open http://localhost:3000?tlog_mode=qa_off
 
 **Console Testing:**
 ```javascript
-// From browser console
-tracelog.setQaMode(true);
+// From browser console (after activating QA mode via ?tlog_mode=qa)
 tracelog.event('test_event', { foo: 'bar' });
 // Event will be logged to console
 ```
@@ -230,7 +206,7 @@ npm run serve                # Start HTTP server
 ## Key Features
 
 ### Intelligent Event Management
-- **Smart throttling**: PAGE_VIEW (1s), CLICK (300ms), VIEWPORT (60s cooldown)
+- **Smart throttling**: PAGE_VIEW (1s), CLICK (300ms)
 - **Per-event-name rate limiting**: Prevents infinite loops (60/minute configurable)
 - **Per-session caps**: Limits total events per session with type-specific thresholds
 - **Deduplication**: Fingerprint-based duplicate detection with LRU cache

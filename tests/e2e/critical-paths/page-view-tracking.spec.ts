@@ -79,7 +79,9 @@ test.describe('E2E: Page View Tracking', () => {
       assertEventStructure(pageViewEvent, 'page_view');
       assertPageViewData(pageViewEvent);
       expect(pageViewEvent.page_url).toContain('/');
-      expect(pageViewEvent.page_view?.pathname).toBe('/');
+      // v3.0: pathname/search/hash were removed from page_view payload;
+      // the full URL is now sent via page_url instead.
+      expect(new URL(pageViewEvent.page_url!).pathname).toBe('/');
     });
 
     test('should track referrer', async ({ page }) => {

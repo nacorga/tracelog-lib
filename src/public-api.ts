@@ -1,24 +1,4 @@
-import {
-  init,
-  event,
-  on,
-  off,
-  isInitialized,
-  getSessionId,
-  getUserId,
-  destroy,
-  setQaMode,
-  setTransformer,
-  removeTransformer,
-  setCustomHeaders,
-  removeCustomHeaders,
-  updateGlobalMetadata,
-  mergeGlobalMetadata,
-  identify,
-  resetIdentity,
-  flushImmediately,
-  flushImmediatelySync,
-} from './api';
+import { init, event, on, off, isInitialized, getSessionId, getUserId, destroy, identify, resetIdentity } from './api';
 
 // Constants
 export * from './app.constants';
@@ -32,19 +12,10 @@ export const tracelog = {
   event,
   on,
   off,
-  setTransformer,
-  removeTransformer,
-  setCustomHeaders,
-  removeCustomHeaders,
   isInitialized,
   getSessionId,
   getUserId,
   destroy,
-  setQaMode,
-  updateGlobalMetadata,
-  mergeGlobalMetadata,
   identify,
   resetIdentity,
-  flushImmediately,
-  flushImmediatelySync,
 };
