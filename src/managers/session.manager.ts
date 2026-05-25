@@ -1,6 +1,6 @@
 import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
 import { EventType, UTM } from '../types';
-import { getExternalReferrer, getUTMParameters, log } from '../utils';
+import { getExternalReferrer, getUTMParameters, isPrerendering, log } from '../utils';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { EventManager } from './event.manager';
@@ -96,6 +96,7 @@ export class SessionManager extends StateManager {
   private broadcastChannel: BroadcastChannel | null = null;
   private isTracking = false;
   private needsRenewal = false;
+  private prerenderActivationHandler: (() => void) | null = null;
 
   /**
    * Creates a SessionManager instance.
@@ -347,6 +348,28 @@ export class SessionManager extends StateManager {
       this.initCrossTabSync();
       this.shareSession(sessionId);
 
+      // Pre-render guard. The server upserts a session from ANY event carrying a
+      // session_id (not only SESSION_START), so to keep a never-activated prerender
+      // from creating a phantom session the page must emit NOTHING until activation.
+      // We defer the SESSION_START emit + session listeners here; App.initializeHandlers()
+      // defers the interaction handlers (page view, click, ...) in parallel. `sessionId`
+      // is already allocated + cross-tab shared above so init() still returns a real id.
+      // This listener is registered before App's, so SESSION_START is emitted before the
+      // first PAGE_VIEW on activation.
+      if (isPrerendering()) {
+        this.prerenderActivationHandler = (): void => {
+          this.prerenderActivationHandler = null;
+          if (!recoveredSessionId) {
+            this.eventManager.track({ type: EventType.SESSION_START });
+          }
+          this.setupSessionTimeout();
+          this.setupActivityListeners();
+          this.setupLifecycleListeners();
+        };
+        document.addEventListener('prerenderingchange', this.prerenderActivationHandler, { once: true });
+        return;
+      }
+
       // Only emit SESSION_START for NEW sessions (not recovered)
       // Recovered sessions already had their SESSION_START tracked on initial creation
       // Server infers session end from last event timestamp (v2.0+)
@@ -553,6 +576,7 @@ export class SessionManager extends StateManager {
     this.cleanupActivityListeners();
     this.cleanupLifecycleListeners();
     this.cleanupCrossTabSync();
+    this.cleanupPrerenderActivation();
     this.clearStoredSession();
 
     this.set('sessionId', null);
@@ -633,8 +657,22 @@ export class SessionManager extends StateManager {
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
     this.cleanupLifecycleListeners();
+    this.cleanupPrerenderActivation();
     this.isTracking = false;
     this.needsRenewal = false;
     this.set('hasStartSession', false);
+  }
+
+  /**
+   * Removes the pending `prerenderingchange` listener when the manager is torn
+   * down before activation (the discarded-prerender case). On the activation path
+   * `{ once: true }` removes the listener and the handler nulls its own reference,
+   * so this is a no-op then.
+   */
+  private cleanupPrerenderActivation(): void {
+    if (this.prerenderActivationHandler) {
+      document.removeEventListener('prerenderingchange', this.prerenderActivationHandler);
+      this.prerenderActivationHandler = null;
+    }
   }
 }

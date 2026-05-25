@@ -72,6 +72,7 @@ await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
 - Automatically tracks page views, clicks, scrolls, sessions, Web Vitals, and JavaScript errors
 - Recovers any persisted events from previous sessions on init
 - Pre-init listeners and identity are buffered and applied automatically
+- **Pre-rendering:** when called on a pre-rendered/prefetched page (Speculation Rules API, `document.prerendering === true`), `init()` returns a real `sessionId` but emits no events until the page is activated (`prerenderingchange`). A page that is pre-rendered but never activated emits nothing, matching how GA4 treats pre-renders. No configuration needed.
 
 ---
 
