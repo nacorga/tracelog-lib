@@ -1,0 +1,1 @@
+../../../.claude/rules/check-catalog.md
