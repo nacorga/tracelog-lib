@@ -23,12 +23,6 @@
 
 
 
-## [Unreleased]
-
-### ✨ Features
-
-- **Pre-render guard:** a page being pre-rendered/prefetched (Speculation Rules API) now emits zero events until activation (`prerenderingchange`), so a never-activated prerender never creates a server-side session — aligning session counts with GA4, which discounts pre-renders. `init()` still returns a real `sessionId` synchronously; on activation the full tracking sequence (SESSION_START, page view, interaction handlers) starts exactly as before. Always on, no configuration. Standalone and non-pre-rendering pages are unaffected.
-
 ## [3.0.0] - 2026-05-25
 
 ### ✨ Features

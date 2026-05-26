@@ -90,6 +90,24 @@ describe('Integration: Pre-render guard', () => {
     expect(countType(bridge, 'page_view')).toBeGreaterThanOrEqual(1);
   });
 
+  it('emits SESSION_START before the first PAGE_VIEW on activation', async () => {
+    // The ordering is an implicit cross-file contract: SessionManager registers its
+    // `prerenderingchange` listener (in session.startTracking()) before App registers
+    // its own, and same-target DOM listeners fire in registration order — so the
+    // SESSION_START emit must land in the queue ahead of the initial PAGE_VIEW.
+    setPrerendering(true);
+    bridge = await initTestBridge();
+
+    activate();
+
+    const types = getQueueState(bridge).events.map((e) => e.type as string);
+    const sessionStartIdx = types.indexOf('session_start');
+    const firstPageViewIdx = types.indexOf('page_view');
+
+    expect(sessionStartIdx).toBeGreaterThanOrEqual(0);
+    expect(firstPageViewIdx).toBeGreaterThan(sessionStartIdx);
+  });
+
   it('emits SESSION_START only once even if prerenderingchange fires repeatedly', async () => {
     setPrerendering(true);
     bridge = await initTestBridge();
