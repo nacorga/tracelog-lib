@@ -38,6 +38,10 @@ This document outlines TraceLog's security guarantees, privacy protections, and 
    - String values in custom-event metadata are scanned against an `XSS_PATTERNS` deny-list and stripped of matching content
    - A warning is logged when patterns are removed, so you can audit your own event-emitting code
 
+6. **Marketing attribution capture, never logged**
+   - UTM parameters and ad-network click identifiers (`gclid`, `gbraid`, `wbraid`, `fbclid`, `ttclid`) are captured once at session start and attached to events for traffic-source classification
+   - Click identifiers are cross-site advertising identifiers (not GDPR PII, and stripped by iOS), but they are scrutinized: TraceLog captures them for attribution only and **never** writes them to the console or any log, in any mode
+
 ### We Do NOT
 
 1. **Track form submissions automatically**

@@ -511,6 +511,45 @@ describe('SessionManager - Cross-Tab Sync', () => {
     expect(updatedSessionId).toBeTruthy();
   });
 
+  it('preserves session attribution (referrer/utm/clickIds) when adopting a session from another tab', async () => {
+    setupMockBroadcastChannel();
+
+    const bridge = await initTestBridge();
+    const BroadcastChannelMock = global.BroadcastChannel as any;
+    const channelInstance = BroadcastChannelMock.mock.results[0]?.value;
+
+    // Another tab created the session WITH attribution and persisted it to the shared
+    // localStorage before broadcasting (persist precedes shareSession). The adopting tab
+    // must not wipe that attribution by re-persisting with only id + timestamp.
+    const newSessionId = `${Date.now()}-attribabc`;
+    const storageKey = SESSION_STORAGE_KEY('custom');
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        id: newSessionId,
+        lastActivity: Date.now(),
+        referrer: 'https://google.com',
+        utm: { source: 'newsletter' },
+        clickIds: { gclid: 'abc123' },
+      }),
+    );
+
+    channelInstance.onmessage({
+      data: { action: 'session_start', projectId: 'custom', sessionId: newSessionId, timestamp: Date.now() },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // Stored attribution survives the cross-tab adoption (no erasure on shared storage)...
+    const stored = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    expect(stored.referrer).toBe('https://google.com');
+    expect(stored.utm).toEqual({ source: 'newsletter' });
+    expect(stored.clickIds).toEqual({ gclid: 'abc123' });
+
+    // ...and the adopting tab attributes its own events to the adopted session.
+    expect(bridge.get('sessionClickIds')).toEqual({ gclid: 'abc123' });
+  });
+
   it('should not emit duplicate SESSION_START events', async () => {
     setupMockBroadcastChannel();
 

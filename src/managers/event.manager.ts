@@ -1133,6 +1133,7 @@ export class EventManager extends StateManager {
     // Get session-level attribution from global state (captured once at SESSION_START)
     const sessionReferrer = this.get('sessionReferrer');
     const sessionUtm = this.get('sessionUtm');
+    const sessionClickIds = this.get('sessionClickIds');
 
     const payload: EventData = {
       id: generateEventId(),
@@ -1148,6 +1149,7 @@ export class EventManager extends StateManager {
       ...(data.error_data && { error_data: data.error_data }),
       ...(data.page_view && { page_view: data.page_view }),
       ...(sessionUtm && { utm: sessionUtm }),
+      ...(sessionClickIds && { click_ids: sessionClickIds }),
     };
 
     return { ...payload, _session_id: currentSessionId };

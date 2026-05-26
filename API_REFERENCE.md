@@ -72,6 +72,7 @@ await tracelog.init({ integrations: { tracelog: { projectId: '...' } } });
 - Automatically tracks page views, clicks, scrolls, sessions, Web Vitals, and JavaScript errors
 - Recovers any persisted events from previous sessions on init
 - Pre-init listeners and identity are buffered and applied automatically
+- **Pre-rendering:** when called on a pre-rendered/prefetched page (Speculation Rules API, `document.prerendering === true`), `init()` returns a real `sessionId` but emits no events until the page is activated (`prerenderingchange`). A page that is pre-rendered but never activated emits nothing, matching how GA4 treats pre-renders. No configuration needed.
 
 ---
 
@@ -593,8 +594,23 @@ interface EventData {
   timestamp: number;   // Unix timestamp (ms)
   referrer?: string;   // HTTP referrer
   utm?: UTM;           // UTM campaign parameters
+  click_ids?: ClickIds; // Ad-network click identifiers (gclid, fbclid, ...)
 }
 ```
+
+**Session attribution** — `referrer`, `utm`, and `click_ids` are captured once at session start (from the landing URL) and attached to every event in that session, so the backend can classify the session's traffic source. `click_ids` carries ad-network click identifiers auto-appended by ad platforms:
+
+```typescript
+interface ClickIds {
+  gclid?: string;   // Google Ads
+  gbraid?: string;  // Google Ads iOS-privacy (app campaigns)
+  wbraid?: string;  // Google Ads iOS-privacy (web-to-app)
+  fbclid?: string;  // Meta (Facebook/Instagram) Ads
+  ttclid?: string;  // TikTok Ads
+}
+```
+
+Click identifiers are cross-site advertising identifiers, not personal data — they are captured for attribution only and are **never** written to the console or any log, in any mode. The field is omitted entirely when no click identifier is present on the landing URL.
 
 ### `PAGE_VIEW`
 
@@ -881,6 +897,7 @@ import {
   ErrorData,
   PageViewData,
   UTM,
+  ClickIds,
 
   // Emitters
   EmitterEvent,
