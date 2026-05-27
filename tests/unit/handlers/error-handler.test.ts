@@ -797,4 +797,39 @@ describe('ErrorHandler - Per-Pageview Signature Throttle', () => {
       localHandler.stopTracking();
     }
   });
+
+  it('collapses inline-script errors across SPA paths to one origin signature', () => {
+    // The real-world case the `page_url` wiring exists for: an inline-script (theme) error
+    // reports the browser's page URL as `filename`. handleError passes window.location.href
+    // as page_url, so buildErrorSignatureKey collapses each path to the shared origin —
+    // four such errors across two paths within one pageview hit the SAME per-pageview cap
+    // instead of fragmenting into one signature per path. Distinct numeric content bypasses
+    // the 5s identical-message window while normalizing to the same `failed to load [n]`.
+    const originalPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    try {
+      history.pushState({}, '', '/collections/kids');
+      window.dispatchEvent(
+        new ErrorEvent('error', { message: 'Failed to load 10001', filename: window.location.href, lineno: 7 }),
+      );
+      window.dispatchEvent(
+        new ErrorEvent('error', { message: 'Failed to load 10002', filename: window.location.href, lineno: 7 }),
+      );
+
+      history.pushState({}, '', '/collections/adults');
+      window.dispatchEvent(
+        new ErrorEvent('error', { message: 'Failed to load 10003', filename: window.location.href, lineno: 7 }),
+      );
+      window.dispatchEvent(
+        new ErrorEvent('error', { message: 'Failed to load 10004', filename: window.location.href, lineno: 7 }),
+      );
+
+      const errorCalls = trackSpy.mock.calls.filter(
+        (call) => (call[0] as { type?: EventType }).type === EventType.ERROR,
+      );
+      expect(errorCalls).toHaveLength(MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW);
+    } finally {
+      history.pushState({}, '', originalPath || '/');
+    }
+  });
 });

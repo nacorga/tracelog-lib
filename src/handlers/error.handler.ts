@@ -165,12 +165,13 @@ export class ErrorHandler extends StateManager {
    * silences identical repeats, and double-counting here would skew the cap for any
    * later signature that recycles the same map key after a counter reset.
    */
-  private shouldThrottleBySignature(input: { message: string; filename?: string; line?: number }): boolean {
-    const key = buildErrorSignatureKey({
-      message: input.message,
-      filename: input.filename,
-      line: input.line,
-    });
+  private shouldThrottleBySignature(input: {
+    message: string;
+    filename?: string;
+    line?: number;
+    page_url?: string;
+  }): boolean {
+    const key = buildErrorSignatureKey(input);
     const current = this.pageviewSignatureCounts.get(key) ?? 0;
 
     if (current >= MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW) {
@@ -207,6 +208,11 @@ export class ErrorHandler extends StateManager {
         message: sanitizedMessage,
         filename: event.filename,
         line: event.lineno,
+        // Inline-script errors report the page URL as `filename`; passing the current
+        // page URL lets buildErrorSignatureKey collapse them to origin, matching the
+        // normalized input the server hashes for cap/dedup. normalizeFilename strips
+        // query/hash internally.
+        page_url: window.location.href,
       })
     ) {
       return;
