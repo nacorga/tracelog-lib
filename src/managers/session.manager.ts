@@ -1,6 +1,6 @@
 import { BROADCAST_CHANNEL_NAME, DEFAULT_SESSION_TIMEOUT, SESSION_STORAGE_KEY } from '../constants';
-import { EventType, UTM } from '../types';
-import { getExternalReferrer, getUTMParameters, log } from '../utils';
+import { ClickIds, EventType, UTM } from '../types';
+import { getClickIds, getExternalReferrer, getUTMParameters, isPrerendering, log } from '../utils';
 import { StateManager } from './state.manager';
 import { StorageManager } from './storage.manager';
 import { EventManager } from './event.manager';
@@ -10,6 +10,7 @@ interface StoredSessionData {
   lastActivity: number;
   referrer?: string;
   utm?: UTM;
+  clickIds?: ClickIds;
 }
 
 /**
@@ -96,6 +97,7 @@ export class SessionManager extends StateManager {
   private broadcastChannel: BroadcastChannel | null = null;
   private isTracking = false;
   private needsRenewal = false;
+  private prerenderActivationHandler: (() => void) | null = null;
 
   /**
    * Creates a SessionManager instance.
@@ -129,7 +131,18 @@ export class SessionManager extends StateManager {
 
       if (action === 'session_start' && sessionId && typeof timestamp === 'number' && timestamp > Date.now() - 5000) {
         this.set('sessionId', sessionId);
-        this.persistSession(sessionId, timestamp);
+
+        // Adopt the session-level attribution persisted by the tab that created the
+        // session. localStorage is shared across tabs, so re-persisting with only
+        // id + timestamp would wipe referrer/utm/clickIds for every tab and any later
+        // recovery. Syncing it into state also keeps this tab's events attributed to
+        // the session's origin rather than to this tab's own landing URL.
+        const stored = this.loadStoredSession();
+        this.set('sessionReferrer', stored?.referrer);
+        this.set('sessionUtm', stored?.utm);
+        this.set('sessionClickIds', stored?.clickIds);
+        this.persistSession(sessionId, timestamp, stored?.referrer, stored?.utm, stored?.clickIds);
+
         if (this.isTracking) {
           this.setupSessionTimeout();
         }
@@ -186,12 +199,19 @@ export class SessionManager extends StateManager {
     return storedSession.id;
   }
 
-  private persistSession(sessionId: string, lastActivity: number = Date.now(), referrer?: string, utm?: UTM): void {
+  private persistSession(
+    sessionId: string,
+    lastActivity: number = Date.now(),
+    referrer?: string,
+    utm?: UTM,
+    clickIds?: ClickIds,
+  ): void {
     this.saveStoredSession({
       id: sessionId,
       lastActivity,
       ...(referrer && { referrer }),
       ...(utm && { utm }),
+      ...(clickIds && { clickIds }),
     });
   }
 
@@ -285,6 +305,13 @@ export class SessionManager extends StateManager {
    * - Prevents race condition with secondary tabs
    * - Ensures secondary tabs can receive session_start message
    *
+   * **Pre-rendering**:
+   * - On a pre-rendered page (`document.prerendering === true`), every observable side
+   *   effect (persistence, cross-tab sync, SESSION_START, listeners) is deferred to the
+   *   `prerenderingchange` activation event via `activateSession()`. `sessionId` is still
+   *   set in state synchronously so `init()` returns a real id. A prerender that is never
+   *   activated persists and emits nothing.
+   *
    * **Called by**: `SessionHandler.startTracking()` during `App.init()`
    *
    * **Important**: After successful call, `sessionId` is available in global state
@@ -312,19 +339,22 @@ export class SessionManager extends StateManager {
     const recoveredSessionId = this.recoverSession();
     const sessionId = recoveredSessionId ?? this.generateSessionId();
 
-    // Capture or recover attribution data (referrer/UTM)
+    // Capture or recover attribution data (referrer/UTM/click-ids)
     let sessionReferrer: string;
     let sessionUtm: UTM | undefined;
+    let sessionClickIds: ClickIds | undefined;
 
     if (recoveredSessionId) {
       // Session recovered: load attribution from storage (with fallback to current context)
       const storedSession = this.loadStoredSession();
       sessionReferrer = storedSession?.referrer ?? getExternalReferrer();
       sessionUtm = storedSession?.utm ?? getUTMParameters();
+      sessionClickIds = storedSession?.clickIds ?? getClickIds();
     } else {
       // New session: capture from current page context
       sessionReferrer = getExternalReferrer();
       sessionUtm = getUTMParameters();
+      sessionClickIds = getClickIds();
     }
 
     log('debug', 'Session tracking initialized', {
@@ -334,6 +364,7 @@ export class SessionManager extends StateManager {
         willEmitSessionStart: !recoveredSessionId,
         sessionReferrer,
         hasUtm: !!sessionUtm,
+        hasClickIds: !!sessionClickIds,
       },
     });
 
@@ -343,30 +374,30 @@ export class SessionManager extends StateManager {
       this.set('sessionId', sessionId);
       this.set('sessionReferrer', sessionReferrer);
       this.set('sessionUtm', sessionUtm);
-      this.persistSession(sessionId, Date.now(), sessionReferrer, sessionUtm);
-      this.initCrossTabSync();
-      this.shareSession(sessionId);
+      this.set('sessionClickIds', sessionClickIds);
 
-      // Only emit SESSION_START for NEW sessions (not recovered)
-      // Recovered sessions already had their SESSION_START tracked on initial creation
-      // Server infers session end from last event timestamp (v2.0+)
-      if (!recoveredSessionId) {
-        log('debug', 'Emitting SESSION_START event', {
-          data: { sessionId },
-        });
-
-        this.eventManager.track({
-          type: EventType.SESSION_START,
-        });
-      } else {
-        log('debug', 'Session recovered, skipping SESSION_START', {
-          data: { sessionId },
-        });
+      // Pre-render guard. The server upserts a session from ANY event carrying a
+      // session_id (not only SESSION_START), and a persisted session can later be
+      // recovered by a real visit — so a page that is pre-rendered but never activated
+      // must persist NOTHING and emit NOTHING until activation, or it would seed a
+      // phantom server-side session (via the first PAGE_VIEW) or be mis-attributed when
+      // a later real navigation recovers the stale record. We defer every observable
+      // side effect — persistence, cross-tab broadcast, SESSION_START and the session
+      // listeners — to the `prerenderingchange` event; App.initializeHandlers() defers
+      // the interaction handlers (page view, click, ...) in parallel. `sessionId` is set
+      // in state above so init() still returns a real id synchronously. This listener is
+      // registered before App's, so SESSION_START is emitted before the first PAGE_VIEW
+      // on activation.
+      if (isPrerendering()) {
+        this.prerenderActivationHandler = (): void => {
+          this.prerenderActivationHandler = null;
+          this.activateSession(sessionId, recoveredSessionId, sessionReferrer, sessionUtm, sessionClickIds);
+        };
+        document.addEventListener('prerenderingchange', this.prerenderActivationHandler, { once: true });
+        return;
       }
 
-      this.setupSessionTimeout();
-      this.setupActivityListeners();
-      this.setupLifecycleListeners();
+      this.activateSession(sessionId, recoveredSessionId, sessionReferrer, sessionUtm, sessionClickIds);
     } catch (error) {
       this.isTracking = false;
       this.clearSessionTimeout();
@@ -377,6 +408,43 @@ export class SessionManager extends StateManager {
 
       throw error;
     }
+  }
+
+  /**
+   * Commits all observable session side effects: persistence, cross-tab sync, the
+   * SESSION_START emit (new sessions only) and the activity/lifecycle/timeout listeners.
+   *
+   * Runs synchronously on a normal page load. On a pre-rendered page it is deferred to
+   * the `prerenderingchange` (activation) event, so a prerender that is never activated
+   * persists nothing and emits nothing.
+   *
+   * BroadcastChannel is initialized before SESSION_START so secondary tabs can receive
+   * the `session_start` message (avoids a cross-tab race).
+   */
+  private activateSession(
+    sessionId: string,
+    recoveredSessionId: string | null,
+    referrer: string,
+    utm: UTM | undefined,
+    clickIds: ClickIds | undefined,
+  ): void {
+    this.persistSession(sessionId, Date.now(), referrer, utm, clickIds);
+    this.initCrossTabSync();
+    this.shareSession(sessionId);
+
+    // Only emit SESSION_START for NEW sessions (not recovered). Recovered sessions
+    // already had their SESSION_START tracked on initial creation; the server infers
+    // session end from the last event timestamp (v2.0+).
+    if (!recoveredSessionId) {
+      log('debug', 'Emitting SESSION_START event', { data: { sessionId } });
+      this.eventManager.track({ type: EventType.SESSION_START });
+    } else {
+      log('debug', 'Session recovered, skipping SESSION_START', { data: { sessionId } });
+    }
+
+    this.setupSessionTimeout();
+    this.setupActivityListeners();
+    this.setupLifecycleListeners();
   }
 
   private generateSessionId(): string {
@@ -397,7 +465,13 @@ export class SessionManager extends StateManager {
     this.setupSessionTimeout();
     const sessionId = this.get('sessionId') as string;
     if (sessionId) {
-      this.persistSession(sessionId, Date.now(), this.get('sessionReferrer'), this.get('sessionUtm'));
+      this.persistSession(
+        sessionId,
+        Date.now(),
+        this.get('sessionReferrer'),
+        this.get('sessionUtm'),
+        this.get('sessionClickIds'),
+      );
     }
   }
 
@@ -432,6 +506,7 @@ export class SessionManager extends StateManager {
     const newSessionId = this.generateSessionId();
     const sessionReferrer = getExternalReferrer();
     const sessionUtm = getUTMParameters();
+    const sessionClickIds = getClickIds();
 
     log('debug', 'Renewing session after timeout', {
       data: { newSessionId },
@@ -440,7 +515,8 @@ export class SessionManager extends StateManager {
     this.set('sessionId', newSessionId);
     this.set('sessionReferrer', sessionReferrer);
     this.set('sessionUtm', sessionUtm);
-    this.persistSession(newSessionId, Date.now(), sessionReferrer, sessionUtm);
+    this.set('sessionClickIds', sessionClickIds);
+    this.persistSession(newSessionId, Date.now(), sessionReferrer, sessionUtm, sessionClickIds);
 
     // Re-initialize cross-tab sync with new session
     this.cleanupCrossTabSync();
@@ -537,6 +613,7 @@ export class SessionManager extends StateManager {
     this.set('hasStartSession', false);
     this.set('sessionReferrer', undefined);
     this.set('sessionUtm', undefined);
+    this.set('sessionClickIds', undefined);
 
     // Keep activity listeners active but switch to renewal mode
     this.needsRenewal = true;
@@ -553,12 +630,14 @@ export class SessionManager extends StateManager {
     this.cleanupActivityListeners();
     this.cleanupLifecycleListeners();
     this.cleanupCrossTabSync();
+    this.cleanupPrerenderActivation();
     this.clearStoredSession();
 
     this.set('sessionId', null);
     this.set('hasStartSession', false);
     this.set('sessionReferrer', undefined);
     this.set('sessionUtm', undefined);
+    this.set('sessionClickIds', undefined);
 
     this.needsRenewal = false;
     this.isTracking = false;
@@ -633,8 +712,22 @@ export class SessionManager extends StateManager {
     this.cleanupActivityListeners();
     this.cleanupCrossTabSync();
     this.cleanupLifecycleListeners();
+    this.cleanupPrerenderActivation();
     this.isTracking = false;
     this.needsRenewal = false;
     this.set('hasStartSession', false);
+  }
+
+  /**
+   * Removes the pending `prerenderingchange` listener when the manager is torn
+   * down before activation (the discarded-prerender case). On the activation path
+   * `{ once: true }` removes the listener and the handler nulls its own reference,
+   * so this is a no-op then.
+   */
+  private cleanupPrerenderActivation(): void {
+    if (this.prerenderActivationHandler) {
+      document.removeEventListener('prerenderingchange', this.prerenderActivationHandler);
+      this.prerenderActivationHandler = null;
+    }
   }
 }

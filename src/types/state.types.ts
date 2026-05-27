@@ -1,6 +1,6 @@
 import { Config } from './config.types';
 import { DeviceInfo } from './device.types';
-import { UTM } from './event.types';
+import { ClickIds, UTM } from './event.types';
 import { Mode } from './mode.types';
 import { IdentifyData } from './queue.types';
 
@@ -24,6 +24,7 @@ export interface State {
   scrollEventCount?: number;
   sessionReferrer?: string;
   sessionUtm?: UTM;
+  sessionClickIds?: ClickIds;
   /** Visitor identity from identify() call */
   identity?: IdentifyData;
 }

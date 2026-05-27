@@ -24,6 +24,7 @@ import {
   Emitter,
   getCollectApiUrls,
   detectQaMode,
+  isPrerendering,
   log,
   generateUUID,
   sanitizeTraits,
@@ -40,6 +41,7 @@ export class App extends StateManager {
   private pageUnloadHandler: (() => void) | null = null;
   private pageShowHandler: ((event: PageTransitionEvent) => void) | null = null;
   private visibilityFlushHandler: (() => void) | null = null;
+  private prerenderActivationHandler: (() => void) | null = null;
 
   private readonly emitter = new Emitter();
 
@@ -200,6 +202,11 @@ export class App extends StateManager {
     if (this.visibilityFlushHandler) {
       document.removeEventListener('visibilitychange', this.visibilityFlushHandler);
       this.visibilityFlushHandler = null;
+    }
+
+    if (this.prerenderActivationHandler) {
+      document.removeEventListener('prerenderingchange', this.prerenderActivationHandler);
+      this.prerenderActivationHandler = null;
     }
 
     this.managers.event?.flushImmediatelySync();
@@ -501,6 +508,8 @@ export class App extends StateManager {
       this.managers.event as EventManager,
     );
 
+    // Allocates `sessionId` synchronously (so init() returns a real id) and, while
+    // pre-rendering, internally defers its SESSION_START emit + session listeners.
     this.handlers.session.startTracking();
 
     const onPageView = (): void => {
@@ -516,32 +525,48 @@ export class App extends StateManager {
     };
 
     this.handlers.pageView = new PageViewHandler(this.managers.event as EventManager, onPageView);
-    this.handlers.pageView.startTracking();
-
     this.handlers.click = new ClickHandler(this.managers.event as EventManager);
-    this.handlers.click.startTracking();
-
     this.handlers.scroll = new ScrollHandler(this.managers.event as EventManager);
-    this.handlers.scroll.startTracking();
-
     this.handlers.performance = new PerformanceHandler(this.managers.event as EventManager);
-    this.handlers.performance.startTracking().catch((error) => {
-      log('warn', 'Failed to start performance tracking', { error });
-    });
-
     this.handlers.error = new ErrorHandler(this.managers.event as EventManager, this.emitter);
-    this.handlers.error.startTracking();
 
-    if (config.integrations?.tracelog?.shopify) {
-      const linker = new ShopifyCartLinker();
-      linker.activate();
-      this.integrationInstances.shopifyCartLinker = linker;
-
-      this.emitter.on(EmitterEvent.EVENT, (event) => {
-        if (event.type === EventType.SESSION_START) {
-          linker.onSessionChange();
-        }
+    const startInteractionTracking = (): void => {
+      this.handlers.pageView?.startTracking();
+      this.handlers.click?.startTracking();
+      this.handlers.scroll?.startTracking();
+      this.handlers.performance?.startTracking().catch((error) => {
+        log('warn', 'Failed to start performance tracking', { error });
       });
+      this.handlers.error?.startTracking();
+
+      if (config.integrations?.tracelog?.shopify) {
+        const linker = new ShopifyCartLinker();
+        linker.activate();
+        this.integrationInstances.shopifyCartLinker = linker;
+
+        this.emitter.on(EmitterEvent.EVENT, (event) => {
+          if (event.type === EventType.SESSION_START) {
+            linker.onSessionChange();
+          }
+        });
+      }
+    };
+
+    // Pre-render guard (orchestration half): defer all interaction tracking until
+    // activation so a pre-rendered page emits zero PAGE_VIEW/CLICK/... events. The
+    // server upserts a session from ANY event with a session_id, so deferring only
+    // SESSION_START would still create a phantom session from the initial PAGE_VIEW.
+    // SessionManager defers its own SESSION_START in parallel; its listener is
+    // registered above (in session.startTracking()), so it fires first and
+    // SESSION_START precedes the first PAGE_VIEW on activation.
+    if (isPrerendering()) {
+      this.prerenderActivationHandler = (): void => {
+        this.prerenderActivationHandler = null;
+        startInteractionTracking();
+      };
+      document.addEventListener('prerenderingchange', this.prerenderActivationHandler, { once: true });
+    } else {
+      startInteractionTracking();
     }
   }
 }
