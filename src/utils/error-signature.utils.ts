@@ -3,14 +3,17 @@
  *
  * SOURCE: tracelog-api/src/lib/error-classification/error-fingerprint.service.ts
  *
- * The regex set below MUST stay byte-identical to the API's `normalizeErrorMessage`
- * so that client-side throttling and server-side dedup agree on what counts as the
- * "same" error. The lib's variant skips the SHA-256 step the API performs after
- * normalization: the throttle map key is the composite string itself, avoiding a
- * `crypto` import and shaving bytes from the browser bundle.
+ * The regex set AND `normalizeFilename` below MUST stay byte-identical to the API's
+ * `normalizeErrorMessage` / `normalizeFilename` so that client-side throttling and
+ * server-side cap/dedup agree on what counts as the "same" error. The lib's variant
+ * skips the SHA-256 step the API performs after normalization: the throttle map key is
+ * the composite string itself, avoiding a `crypto` import and shaving bytes from the
+ * browser bundle.
  *
- * If either side changes the regex set, update both AND adjust the unit test that
- * codifies the expected outputs against fixed inputs (`error-signature.utils.test.ts`).
+ * If either side changes the regex set, `normalizeFilename`, or the `ErrorSignatureInput`
+ * shape, update both AND adjust the unit tests that codify the expected outputs against
+ * fixed inputs (`error-signature.utils.test.ts` here, `error-fingerprint.service.spec.ts`
+ * in the API).
  */
 
 const URL_PATTERN = /https?:\/\/\S+/g;
@@ -23,6 +26,12 @@ export interface ErrorSignatureInput {
   message: string;
   filename?: string;
   line?: number | string;
+  /**
+   * Full page URL where the error fired. Inline-script errors report the page URL as
+   * `filename`; when they match, the signature collapses to the URL origin (see
+   * `normalizeFilename`). Optional — omit when no page context is available.
+   */
+  page_url?: string;
 }
 
 export function normalizeErrorMessage(message: string): string {
@@ -36,12 +45,41 @@ export function normalizeErrorMessage(message: string): string {
     .trim();
 }
 
+/** Cut a string at the first `?` or `#`. Shared by filename + page-URL normalization. */
+function stripQueryHash(value: string): string {
+  const cut = value.search(/[?#]/);
+  return cut === -1 ? value : value.slice(0, cut);
+}
+
+/**
+ * MIRROR of `ErrorFingerprintService.normalizeFilename` in the API — MUST produce
+ * byte-identical output.
+ *
+ * Browsers report the PAGE URL as `filename` for inline-script errors. When
+ * `filename === page_url` (query/hash stripped from both) collapse to the URL `origin`
+ * so one theme bug = one signature across pages. Real asset URLs on another path keep
+ * their full URL (the path discriminates distinct assets); `data:` / `blob:` and other
+ * non-http(s) schemes have no stable identity → `''`; relative / bare names (`bundle.js`)
+ * and malformed input fall back to the query/hash-stripped raw string.
+ */
+function normalizeFilename(filename: string | undefined, pageUrl?: string): string {
+  const raw = stripQueryHash((filename ?? '').trim());
+  if (!raw) return '';
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+  const page = stripQueryHash((pageUrl ?? '').trim());
+  if (page && raw === page) return parsed.origin;
+  return raw;
+}
+
 export function buildErrorSignatureKey(input: ErrorSignatureInput): string {
   const message = normalizeErrorMessage(input.message);
-  const rawFilename = (input.filename ?? '').trim();
-  // Strip query string and hash fragment so UTM / campaign params don't split signatures.
-  const cut = rawFilename.search(/[?#]/);
-  const filename = cut === -1 ? rawFilename : rawFilename.slice(0, cut);
+  const filename = normalizeFilename(input.filename, input.page_url);
   const line = input.line == null ? '' : String(input.line);
   return `${message}|${filename}|${line}`;
 }
