@@ -209,8 +209,9 @@ export class ErrorHandler extends StateManager {
         filename: event.filename,
         line: event.lineno,
         // Inline-script errors report the page URL as `filename`; passing the current
-        // page URL lets buildErrorSignatureKey collapse them to origin, byte-identical
-        // to the server cap/dedup hash. normalizeFilename strips query/hash internally.
+        // page URL lets buildErrorSignatureKey collapse them to origin, matching the
+        // normalized input the server hashes for cap/dedup. normalizeFilename strips
+        // query/hash internally.
         page_url: window.location.href,
       })
     ) {

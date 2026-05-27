@@ -117,13 +117,16 @@ describe('buildErrorSignatureKey', () => {
     ).toBe('boom|https://cdn.shopify.com/s/files/1/app.js|10');
   });
 
-  it('drops data: and blob: filenames (no stable identity)', () => {
+  it('drops data:/blob:/file: and other non-http(s) schemes (no stable identity)', () => {
     expect(buildErrorSignatureKey({ message: 'Boom', filename: 'data:text/javascript,console.log(1)', line: 1 })).toBe(
       'boom||1',
     );
     expect(
       buildErrorSignatureKey({ message: 'Boom', filename: 'blob:https://koopsbrand.com/9f3c-uuid', line: 1 }),
     ).toBe('boom||1');
+    expect(buildErrorSignatureKey({ message: 'Boom', filename: 'file:///Users/dev/theme/app.js', line: 1 })).toBe(
+      'boom||1',
+    );
   });
 
   it('returns an empty filename segment for whitespace-only filename', () => {
