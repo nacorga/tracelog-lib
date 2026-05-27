@@ -23,6 +23,33 @@
 
 
 
+
+## [3.1.0] - 2026-05-27
+
+### ✨ Features
+
+- Implement click ID attribution and pre-render guard; add integration and unit tests ([051d584](../../commit/051d584f52b3f83c3c2d3aeb704d70d6cabef76a))
+- Implement click identifier capture for session attribution; add related tests ([ede3cd7](../../commit/ede3cd7882db0c40e22f5e7bec2b01c51a331e07))
+- Update version to 3.0.0 and implement prerendering support for session management ([6eb7b84](../../commit/6eb7b8447b373d54702b4ea9d5915faca69fae8b))
+- Implement pre-render guard to defer event emissions until page activation; add related tests ([9cbd4e8](../../commit/9cbd4e87d19e09eeeee15320dc9f0a7d606e0317))
+
+### 🔧 Other Changes
+
+- Merge pull request #115 from nacorga/release/20260526.1 ([33a29a6](../../commit/33a29a668693018a5eeebb055e744dec8244cc43))
+- Add symlink for check catalog rules ([a1a00a2](../../commit/a1a00a217d172d316654404fe7aaca929ea693b7))
+- Add symlink for check catalog rules ([c43a36e](../../commit/c43a36ef6c1faaeb3dfe1b5bc6bc44000c614559))
+- Merge pull request #114 from nacorga/feature/pre-render-guard ([5aa74cf](../../commit/5aa74cffcdb22e0a073993747ce68e62e46e43f0))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.0.0...v3.1.0
+
+
 ## [3.0.0] - 2026-05-25
 
 ### ✨ Features
