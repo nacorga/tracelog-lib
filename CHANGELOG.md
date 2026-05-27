@@ -24,6 +24,28 @@
 
 
 
+
+## [3.1.1] - 2026-05-27
+
+### ✨ Features
+
+- Enhance error handling and signature generation for inline-script errors; add related tests ([dc94585](../../commit/dc945850bb750b6f59da80f8af8161403bdf961a))
+- Enhance error signature handling with page URL support and add related tests ([ae5dba0](../../commit/ae5dba00f381e6aeecda9ba126fd300ca08389dd))
+
+### 🔧 Other Changes
+
+- Merge pull request #116 from nacorga/hotfix/20260527.1 ([92daf39](../../commit/92daf39399331f319fb706f2ebfda3f06d4fa08a))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.1.0...v3.1.1
+
+
 ## [3.1.0] - 2026-05-27
 
 ### ✨ Features
