@@ -64,15 +64,20 @@ const generateSaasApiUrl = (projectId: string): string => {
 };
 
 /**
- * Generates collection API URLs for the configured TraceLog SaaS integration
- * @param config - The TraceLog configuration
+ * Generates collection API URLs for the configured TraceLog SaaS integration.
+ *
+ * When `integrations.tracelog.collectUrl` is set, it is used verbatim and the
+ * CNAME-derived URL (and its localhost/raw-IP restriction) is skipped. Otherwise
+ * the URL is derived from `window.location.hostname` as `https://{projectId}.{rootDomain}/collect`.
+ *
+ * @param config - The TraceLog configuration (assumed already validated)
  * @returns Object containing the SaaS API URL (if configured)
  */
 export const getCollectApiUrls = (config: Config): { saas?: string } => {
   const urls: { saas?: string } = {};
 
   if (config.integrations?.tracelog?.projectId) {
-    urls.saas = generateSaasApiUrl(config.integrations.tracelog.projectId);
+    urls.saas = config.integrations.tracelog.collectUrl ?? generateSaasApiUrl(config.integrations.tracelog.projectId);
   }
 
   return urls;

@@ -558,7 +558,7 @@ await tracelog.init({ maxSameEventPerMinute: 30 });
 
 #### `integrations.tracelog`
 
-- **Type:** `{ projectId: string; shopify?: boolean }`
+- **Type:** `{ projectId: string; collectUrl?: string; shopify?: boolean }`
 - **Description:** TraceLog SaaS integration
 
 ```typescript
@@ -566,13 +566,16 @@ await tracelog.init({
   integrations: {
     tracelog: {
       projectId: 'your-project-id',
+      collectUrl: 'https://ingest.tracelog.io/p/your-project-id/collect', // Optional: explicit managed ingest endpoint
       shopify: false, // Optional: enable Shopify cart attribute linking
     },
   },
 });
 ```
 
-**Domain requirement.** The SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`). Calls to `init()` from `localhost` or a raw IP address are rejected. For local development, omit `integrations.tracelog` to run in standalone mode, or test against a staging domain mapped via `/etc/hosts`.
+**Domain requirement (CNAME fallback).** When `collectUrl` is not provided, the SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`). In that mode, calls to `init()` from `localhost` or a raw IP address are rejected — for local development, omit `integrations.tracelog` to run in standalone mode, or test against a staging domain mapped via `/etc/hosts`.
+
+**`collectUrl`** — optional HTTPS URL that explicitly sets the managed ingest endpoint (e.g., `https://ingest.tracelog.io/p/{projectId}/collect`). When present, the library skips the CNAME-derived URL and the `localhost` restriction. This is the recommended setup: the TraceLog dashboard surfaces the recommended value in the install snippet, so most users get it for free. Validation: must be a valid `https://` URL.
 
 **`shopify`** — when `true`, the library writes the visitor UUID as a Shopify cart attribute (`tracelog_user_id`) so checkout-funnel events fired from the Web Pixel can be stitched back to the storefront visitor.
 
