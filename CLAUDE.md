@@ -138,7 +138,7 @@ await tracelog.init({
 });
 ```
 
-**Domain requirement.** The SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`), so `init()` rejects when called from `localhost` or a raw IP address. For local development, omit `integrations.tracelog` to run in standalone mode.
+**Collect endpoint resolution.** When `integrations.tracelog.collectUrl` is set (recommended; surfaced by the dashboard install snippet), it is used verbatim as the managed ingest endpoint and the `localhost`/raw-IP restriction is lifted. Validation requires a non-empty `https://` URL. When `collectUrl` is omitted, the endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`), so `init()` rejects when called from `localhost` or a raw IP address. For local development, omit `integrations.tracelog` to run in standalone mode.
 
 **Removed in v3:** `integrations.custom`, transformers (`setTransformer` / `removeTransformer`), custom headers (`setCustomHeaders` / `removeCustomHeaders`), multi-integration, `flushImmediately()` / `flushImmediatelySync()` public surface, `setQaMode()` programmatic API, `updateGlobalMetadata()` / `mergeGlobalMetadata()`, viewport handler / events / config, `LONG_TASK` web vital, `relativeX/Y` and extended attribute fields on click data, `is_primary` / `velocity` / `max_depth_reached` on scroll data, `pathname` / `search` / `hash` on page-view data (full URL still on event envelope), `StorageManager.clear()` / `isAvailable()` / `hasQuotaError()`, `TimeManager.getClockSkew()` / `getBootInfo()`.
 

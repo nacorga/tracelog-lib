@@ -132,16 +132,11 @@ await tracelog.init({
 // TraceLog SaaS
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'your-project-id' }
-  }
-});
-
-// Custom backend
-await tracelog.init({
-  integrations: {
-    custom: {
-      collectApiUrl: 'http://localhost:8080/collect',
-      allowHttp: true // Dev only
+    tracelog: {
+      projectId: 'your-project-id',
+      // Optional: explicit managed ingest endpoint (recommended; surfaced by the dashboard snippet).
+      // When omitted, the endpoint is derived from the host domain as https://{projectId}.{rootDomain}/collect.
+      collectUrl: 'https://ingest.tracelog.io/p/your-project-id/collect'
     }
   }
 });

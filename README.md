@@ -189,6 +189,7 @@ await tracelog.init({
   integrations: {
     tracelog: {
       projectId: 'your-project-id',
+      collectUrl: 'https://ingest.tracelog.io/p/your-project-id/collect', // Optional: explicit managed ingest endpoint
       shopify: false                // Optional: enable Shopify cart attribute linking
     }
   }
@@ -277,12 +278,17 @@ Perfect for custom analytics pipelines, testing, or privacy-focused implementati
 ```typescript
 await tracelog.init({
   integrations: {
-    tracelog: { projectId: 'your-project-id' }
+    tracelog: {
+      projectId: 'your-project-id',
+      collectUrl: 'https://ingest.tracelog.io/p/your-project-id/collect' // recommended
+    }
   }
 });
 ```
 
-**Domain requirement.** The SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`), so `init()` rejects when called from `localhost` or a raw IP address. For local development, omit `integrations.tracelog` to run in standalone mode, or test against a staging domain mapped via `/etc/hosts`.
+**`collectUrl` (recommended).** Optional HTTPS URL that explicitly sets the managed ingest endpoint. When present, the library uses it verbatim and skips both the CNAME-derived URL and the `localhost`/raw-IP restriction. The TraceLog dashboard surfaces the recommended value in the install snippet, so most users get it for free.
+
+**Domain requirement (CNAME fallback).** When `collectUrl` is omitted, the SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`), so `init()` rejects when called from `localhost` or a raw IP address. For local development, omit `integrations.tracelog` to run in standalone mode, or test against a staging domain mapped via `/etc/hosts`.
 
 **→ [Integration Reference](./API_REFERENCE.md#integration-configuration)**
 
