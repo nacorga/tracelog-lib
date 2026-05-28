@@ -103,6 +103,19 @@ describe('config-validations.utils', () => {
           }).not.toThrow();
         });
 
+        it('should accept valid HTTPS collectUrl', () => {
+          expect(() => {
+            validateAppConfig({
+              integrations: {
+                tracelog: {
+                  projectId: 'valid-project-id',
+                  collectUrl: 'https://ingest.tracelog.io/p/valid-project-id/collect',
+                },
+              },
+            });
+          }).not.toThrow();
+        });
+
         it('should throw error for missing projectId', () => {
           expect(() => {
             validateAppConfig({
@@ -123,6 +136,49 @@ describe('config-validations.utils', () => {
           expect(() => {
             validateAppConfig({
               integrations: { tracelog: { projectId: 123 as unknown as string } },
+            });
+          }).toThrow(IntegrationValidationError);
+        });
+
+        it('should throw error for non-HTTPS collectUrl', () => {
+          expect(() => {
+            validateAppConfig({
+              integrations: {
+                tracelog: {
+                  projectId: 'valid-project-id',
+                  collectUrl: 'http://ingest.tracelog.io/p/valid-project-id/collect',
+                },
+              },
+            });
+          }).toThrow(IntegrationValidationError);
+        });
+
+        it('should throw error for empty collectUrl', () => {
+          expect(() => {
+            validateAppConfig({
+              integrations: {
+                tracelog: { projectId: 'valid-project-id', collectUrl: '   ' },
+              },
+            });
+          }).toThrow(IntegrationValidationError);
+        });
+
+        it('should throw error for non-string collectUrl', () => {
+          expect(() => {
+            validateAppConfig({
+              integrations: {
+                tracelog: { projectId: 'valid-project-id', collectUrl: 123 as unknown as string },
+              },
+            });
+          }).toThrow(IntegrationValidationError);
+        });
+
+        it('should throw error for malformed collectUrl', () => {
+          expect(() => {
+            validateAppConfig({
+              integrations: {
+                tracelog: { projectId: 'valid-project-id', collectUrl: 'not-a-url' },
+              },
             });
           }).toThrow(IntegrationValidationError);
         });

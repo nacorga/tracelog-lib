@@ -183,6 +183,26 @@ const validateIntegrations = (integrations: Config['integrations']): void => {
     if (integrations.tracelog.shopify !== undefined && typeof integrations.tracelog.shopify !== 'boolean') {
       throw new IntegrationValidationError('tracelog.shopify must be a boolean', 'config');
     }
+
+    if (integrations.tracelog.collectUrl !== undefined) {
+      const collectUrlError = 'tracelog.collectUrl must be a non-empty HTTPS URL';
+      const { collectUrl } = integrations.tracelog;
+
+      if (typeof collectUrl !== 'string' || collectUrl.trim() === '') {
+        throw new IntegrationValidationError(collectUrlError, 'config');
+      }
+
+      let parsed: URL;
+      try {
+        parsed = new URL(collectUrl);
+      } catch {
+        throw new IntegrationValidationError(collectUrlError, 'config');
+      }
+
+      if (parsed.protocol !== 'https:') {
+        throw new IntegrationValidationError(collectUrlError, 'config');
+      }
+    }
   }
 };
 

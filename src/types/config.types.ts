@@ -59,6 +59,15 @@ export interface Config {
     tracelog?: {
       /** Required project ID for TraceLog SaaS integration. */
       projectId: string;
+      /**
+       * Optional explicit HTTPS collect endpoint. When present, the SDK sends batches
+       * here instead of deriving a CNAME URL from the current hostname, and the
+       * localhost/raw-IP restriction is lifted. Must be an `https://` URL.
+       *
+       * The TraceLog dashboard surfaces the recommended value in the install snippet;
+       * passing it explicitly is the recommended setup.
+       */
+      collectUrl?: string;
       /** Enable Shopify cart attribute linking for webhook revenue attribution. */
       shopify?: boolean;
     };
