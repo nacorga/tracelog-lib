@@ -1,7 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { getCollectApiUrls } from '../../../../src/utils/network/url.utils';
+import { setupTestEnvironment, cleanupTestEnvironment } from '../../../helpers/setup.helper';
 
 describe('network url utils', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanupTestEnvironment();
+  });
+
   describe('getCollectApiUrls', () => {
     it('uses explicit collectUrl when provided', () => {
       const urls = getCollectApiUrls({
@@ -38,8 +48,6 @@ describe('network url utils', () => {
       });
 
       expect(urls.saas).toBe('https://project-1.example.com/collect');
-
-      vi.unstubAllGlobals();
     });
 
     it('throws on localhost when collectUrl is absent', () => {
