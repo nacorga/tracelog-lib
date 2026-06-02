@@ -16,6 +16,8 @@ import {
   CIRCUIT_BREAKER_COOLDOWN_MS,
   RATE_LIMIT_COOLDOWN_MS,
   MAX_RESPONSE_CODE_LENGTH,
+  HEALTH_BEACON_THROTTLE_MS,
+  MAX_BEACON_ERROR_LENGTH,
 } from '../constants';
 import {
   PersistedEventsQueue,
@@ -49,6 +51,8 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly apiUrl: string;
   private lastPermanentErrorLog: { key: string; timestamp: number } | null = null;
+  /** Last emit time per beacon reason, for low-frequency throttling. */
+  private readonly lastBeaconAt: Record<string, number> = {};
   private recoveryInProgress = false;
   private lastMetadataTimestamp = 0;
   private readonly pendingControllers = new Set<AbortController>();
@@ -480,6 +484,13 @@ export class SenderManager extends StateManager {
         if (error instanceof PermanentError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
+          // A 403 means the snippet reached TraceLog but the domain gate rejected it — the backend
+          // will never see these events, so the browser is the only place that can report it. Emit a
+          // diagnostic beacon to the gate-bypassing endpoint. Only 403 (host reachable) qualifies: an
+          // NXDOMAIN/network failure can't reach any TraceLog host anyway and is server-detected via DNS.
+          if (error.statusCode === 403) {
+            this.emitHealthBeacon('events_blocked', error.message);
+          }
           throw error;
         }
 
@@ -828,6 +839,58 @@ export class SenderManager extends StateManager {
       });
 
       this.lastPermanentErrorLog = { key, timestamp: now };
+    }
+  }
+
+  /**
+   * Emits a low-frequency, deduplicated diagnostic "health beacon" to the gate-bypassing
+   * `/client-error` endpoint. Best-effort and silent: never blocks, never throws, never logs to the
+   * host page. Opt out via `integrations.tracelog.healthBeacon: false`.
+   */
+  private emitHealthBeacon(reason: 'events_blocked' | 'ingest_unreachable', lastError?: string): void {
+    try {
+      const tracelog = this.get('config')?.integrations?.tracelog;
+      if (!tracelog?.projectId || tracelog.healthBeacon === false) return;
+
+      const url = this.resolveBeaconUrl();
+      if (!url) return;
+
+      const now = Date.now();
+      if (now - (this.lastBeaconAt[reason] ?? 0) < HEALTH_BEACON_THROTTLE_MS) return;
+      this.lastBeaconAt[reason] = now;
+
+      const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+      const payload = JSON.stringify({
+        projectId: tracelog.projectId,
+        reason,
+        origin,
+        ...(lastError ? { lastError: lastError.slice(0, MAX_BEACON_ERROR_LENGTH) } : {}),
+      });
+      this.postBeacon(url, payload);
+    } catch {
+      // Diagnostic beacon is best-effort; never surface to the host page.
+    }
+  }
+
+  /** The collect URL the lib already derived, with the path swapped to the diagnostics route. */
+  private resolveBeaconUrl(): string | null {
+    if (this.apiUrl.includes(SpecialApiUrl.Localhost) || this.apiUrl.includes(SpecialApiUrl.Fail)) return null;
+    if (!/\/collect$/.test(this.apiUrl)) return null;
+    return this.apiUrl.replace(/\/collect$/, '/client-error');
+  }
+
+  private postBeacon(url: string, payload: string): void {
+    if (this.isSendBeaconAvailable()) {
+      const blob = new Blob([payload], { type: 'application/json' });
+      if (navigator.sendBeacon(url, blob)) return;
+    }
+    if (typeof fetch === 'function') {
+      void fetch(url, {
+        method: 'POST',
+        body: payload,
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => undefined);
     }
   }
 }

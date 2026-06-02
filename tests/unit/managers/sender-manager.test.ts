@@ -745,3 +745,85 @@ describe('SenderManager - v2→v3 storage migration', () => {
     expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 });
+
+describe('SenderManager - health beacon (T15)', () => {
+  const PROJECT_ID = 'proj-123';
+
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+  afterEach(() => {
+    cleanupTestEnvironment();
+    delete (navigator as any).sendBeacon;
+  });
+
+  function makeSaasSender(): { sender: SenderManager; beacon: ReturnType<typeof vi.fn> } {
+    const beacon = vi.fn(() => true);
+    (navigator as any).sendBeacon = beacon;
+    const { sender } = makeSender();
+    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
+    return { sender, beacon };
+  }
+
+  it('emits an events_blocked beacon to the /client-error sibling path on a 403', async () => {
+    // Force the fetch fallback (delete sendBeacon) so the payload is a readable string.
+    delete (navigator as any).sendBeacon;
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = fetchMock;
+    const { sender } = makeSender();
+    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
+
+    await sender.sendEventsQueue(makeQueue());
+
+    const beaconCall = fetchMock.mock.calls.find(
+      (call) => typeof call[0] === 'string' && call[0].endsWith('/client-error'),
+    );
+    expect(beaconCall).toBeDefined();
+    expect(beaconCall![0]).toBe('https://api.tracelog.io/p/proj-123/client-error');
+    const body = JSON.parse((beaconCall![1] as RequestInit).body as string);
+    expect(body.projectId).toBe(PROJECT_ID);
+    expect(body.reason).toBe('events_blocked');
+  });
+
+  it('throttles repeated 403s to a single beacon within the throttle window', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const { sender, beacon } = makeSaasSender();
+
+    await sender.sendEventsQueue(makeQueue());
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beacon).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not emit a beacon when healthBeacon is disabled', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const beacon = vi.fn(() => true);
+    (navigator as any).sendBeacon = beacon;
+    const { sender } = makeSender();
+    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID, healthBeacon: false } } });
+
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beacon).not.toHaveBeenCalled();
+  });
+
+  it('does not emit a beacon for a non-403 permanent error', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(400, { code: 'BAD_REQUEST' }));
+    const { sender, beacon } = makeSaasSender();
+
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beacon).not.toHaveBeenCalled();
+  });
+
+  it('does not emit a beacon in standalone mode (no projectId configured)', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const beacon = vi.fn(() => true);
+    (navigator as any).sendBeacon = beacon;
+    const { sender } = makeSender();
+
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beacon).not.toHaveBeenCalled();
+  });
+});
