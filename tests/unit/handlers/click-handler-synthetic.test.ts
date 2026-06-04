@@ -11,7 +11,7 @@
  * coordinates and are legitimate even when triggered programmatically.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 import { createMockElement } from '../../helpers/fixtures.helper';
 import { ClickHandler } from '../../../src/handlers/click.handler';
@@ -28,7 +28,7 @@ describe('ClickHandler - Synthetic clicks', () => {
   let handler: ClickHandler;
   let eventManager: EventManager;
   let storageManager: StorageManager;
-  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let trackSpy: MockInstance<EventManager['track']>;
 
   beforeEach(() => {
     setupTestEnvironment();

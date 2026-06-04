@@ -22,7 +22,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
     let eventManager: EventManager;
     let storageManager: StorageManager;
     let trackSpy: ReturnType<typeof vi.spyOn>;
-    let onTrackCallback: ReturnType<typeof vi.fn>;
+    let onTrackCallback: ReturnType<typeof vi.fn<() => void>>;
     let getSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
@@ -31,14 +31,13 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
 
       storageManager = new StorageManager();
       eventManager = new EventManager(storageManager, null);
-      onTrackCallback = vi.fn();
+      onTrackCallback = vi.fn<() => void>();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
 
       trackSpy = vi.spyOn(eventManager, 'track');
       getSpy = vi.spyOn(handler as any, 'get');
 
-      // @ts-expect-error - Mock implementation type
       getSpy.mockImplementation((key: string) => {
         if (key === 'config') {
           return {
@@ -97,7 +96,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
     let handler: PageViewHandler;
     let eventManager: EventManager;
     let storageManager: StorageManager;
-    let onTrackCallback: ReturnType<typeof vi.fn>;
+    let onTrackCallback: ReturnType<typeof vi.fn<() => void>>;
     let getSpy: ReturnType<typeof vi.spyOn>;
     let originalPushState: typeof window.history.pushState;
     let originalReplaceState: typeof window.history.replaceState;
@@ -108,13 +107,12 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
 
       storageManager = new StorageManager();
       eventManager = new EventManager(storageManager, null);
-      onTrackCallback = vi.fn();
+      onTrackCallback = vi.fn<() => void>();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
 
       getSpy = vi.spyOn(handler as any, 'get');
 
-      // @ts-expect-error - Mock implementation type
       getSpy.mockImplementation((key: string) => {
         if (key === 'config') {
           return {
@@ -171,7 +169,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
     let eventManager: EventManager;
     let storageManager: StorageManager;
     let trackSpy: ReturnType<typeof vi.spyOn>;
-    let onTrackCallback: ReturnType<typeof vi.fn>;
+    let onTrackCallback: ReturnType<typeof vi.fn<() => void>>;
     let getSpy: ReturnType<typeof vi.spyOn>;
     let setSpy: ReturnType<typeof vi.spyOn>;
     let currentUrl: string;
@@ -186,7 +184,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
 
       storageManager = new StorageManager();
       eventManager = new EventManager(storageManager, null);
-      onTrackCallback = vi.fn();
+      onTrackCallback = vi.fn<() => void>();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
 
@@ -194,7 +192,6 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       getSpy = vi.spyOn(handler as any, 'get');
       setSpy = vi.spyOn(handler as any, 'set');
 
-      // @ts-expect-error - Mock implementation type
       getSpy.mockImplementation((key: string) => {
         if (key === 'config') {
           return {
@@ -208,7 +205,6 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
         return undefined;
       });
 
-      // @ts-expect-error - Mock implementation type
       setSpy.mockImplementation((key: string, value: unknown) => {
         if (key === 'pageUrl') {
           previousUrl = value as string;
@@ -294,7 +290,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
     let eventManager: EventManager;
     let storageManager: StorageManager;
     let trackSpy: ReturnType<typeof vi.spyOn>;
-    let onTrackCallback: ReturnType<typeof vi.fn>;
+    let onTrackCallback: ReturnType<typeof vi.fn<() => void>>;
     let getSpy: ReturnType<typeof vi.spyOn>;
     let setSpy: ReturnType<typeof vi.spyOn>;
     let currentUrl: string;
@@ -309,7 +305,7 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
 
       storageManager = new StorageManager();
       eventManager = new EventManager(storageManager, null);
-      onTrackCallback = vi.fn();
+      onTrackCallback = vi.fn<() => void>();
 
       handler = new PageViewHandler(eventManager, onTrackCallback);
 
@@ -317,7 +313,6 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       getSpy = vi.spyOn(handler as any, 'get');
       setSpy = vi.spyOn(handler as any, 'set');
 
-      // @ts-expect-error - Mock implementation type
       getSpy.mockImplementation((key: string) => {
         if (key === 'config') {
           return {
@@ -331,7 +326,6 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
         return undefined;
       });
 
-      // @ts-expect-error - Mock implementation type
       setSpy.mockImplementation((key: string, value: unknown) => {
         if (key === 'pageUrl') {
           previousUrl = value as string;
@@ -422,7 +416,6 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       getSpy = vi.spyOn(handler as any, 'get');
       setSpy = vi.spyOn(handler as any, 'set');
 
-      // @ts-expect-error - Mock implementation type
       getSpy.mockImplementation((key: string) => {
         if (key === 'config') {
           return {
@@ -437,7 +430,6 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
         return undefined;
       });
 
-      // @ts-expect-error - Mock implementation type
       setSpy.mockImplementation((key: string, value: unknown) => {
         if (key === 'pageUrl') {
           previousUrl = value as string;

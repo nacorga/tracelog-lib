@@ -631,6 +631,11 @@ describe('SessionManager - Edge Cases', () => {
     expect(() => {
       bridge.destroy();
     }).not.toThrow();
+
+    // The channel instance is cached by the shared mock and reused by later tests.
+    // Vitest 4's restoreAllMocks no longer resets vi.fn() implementations, so the
+    // throwing implementation must be removed here or it leaks into the next init.
+    channelInstance.postMessage.mockReset();
   });
 
   it('should handle rapid page navigations', async () => {

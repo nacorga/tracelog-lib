@@ -154,6 +154,7 @@ await tracelog.init({
 - **Cross-tab protection**: 1-second window prevents two tabs from re-sending the same persisted batch
 - **429 rate limit**: arms a 60s cooldown mirrored to localStorage and shared across tabs on the same origin
 - **Circuit breaker**: after `MAX_CONSECUTIVE_NETWORK_FAILURES` consecutive DNS / connection-refused failures, opens until `CIRCUIT_BREAKER_COOLDOWN_MS` elapses; allows one probe (half-open) before fully closing
+- **Health beacon (403)**: when the domain gate rejects ingest with 403, emits a diagnostic beacon to the sibling `/client-error` path (`reason: 'events_blocked'`, never analytics data) so the dashboard can flag "snippet alive, events blocked". Throttled to once per 10 min via localStorage (`tlog:beacon:{projectId}:{reason}`, MPA- and multi-tab-safe). Opt out via `integrations.tracelog.healthBeacon: false`
 - **v2→v3 migration**: `SenderManager` constructor migrates legacy `:saas` queue keys into the new unscoped key on first run, then drops the legacy `:custom` keys (their events were destined for a different backend and must not be forwarded)
 - **Auto-flush triggers** (in addition to the 10s / 50-event interval):
   - SPA navigation (`pushState` / `replaceState` / `popstate` / `hashchange`) — opt-in via `flushOnSpaNavigation: true` (default `false`)

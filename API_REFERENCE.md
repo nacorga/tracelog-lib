@@ -366,6 +366,7 @@ interface Config {
     tracelog?: {
       projectId: string;
       shopify?: boolean;
+      healthBeacon?: boolean;
     };
   };
 }
@@ -558,8 +559,9 @@ await tracelog.init({ maxSameEventPerMinute: 30 });
 
 #### `integrations.tracelog`
 
-- **Type:** `{ projectId: string; shopify?: boolean }`
+- **Type:** `{ projectId: string; shopify?: boolean; healthBeacon?: boolean }`
 - **Description:** TraceLog SaaS integration
+- **`healthBeacon`** (default `true`): when ingest is rejected at the domain gate (HTTP 403), emit a diagnostic beacon so the dashboard can tell you your snippet is alive but events are blocked. Throttled to at most one per 10 minutes per browser (persisted in localStorage, shared across pages and tabs). Diagnostic only — never carries analytics data. Set `false` to opt out.
 
 ```typescript
 await tracelog.init({

@@ -16,7 +16,7 @@ describe('ShopifyCartLinker - Activation', () => {
     setupTestEnvironment();
     resetGlobalState();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
     linker = new ShopifyCartLinker();
   });
 
@@ -141,7 +141,7 @@ describe('ShopifyCartLinker - Session Change', () => {
     setupTestEnvironment();
     resetGlobalState();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
     linker = new ShopifyCartLinker();
   });
 
@@ -200,7 +200,7 @@ describe('ShopifyCartLinker - Deduplication', () => {
     setupTestEnvironment();
     resetGlobalState();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
     linker = new ShopifyCartLinker();
     (linker as any).set('sessionId', 'sess-1');
     (linker as any).set('userId', 'user-1');
@@ -241,7 +241,7 @@ describe('ShopifyCartLinker - Visibility Change', () => {
     setupTestEnvironment();
     resetGlobalState();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
     linker = new ShopifyCartLinker();
   });
 
@@ -308,7 +308,7 @@ describe('ShopifyCartLinker - bfcache restore (pageshow)', () => {
     setupTestEnvironment();
     resetGlobalState();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
     linker = new ShopifyCartLinker();
   });
 
