@@ -25,6 +25,32 @@
 
 
 
+
+## [3.2.0] - 2026-06-04
+
+### ✨ Features
+
+- Update health beacon functionality to include projectId in storage keys and improve throttling logic ([03d774d](../../commit/03d774d397070d2eb4f06e6cf991f6c780808485))
+- Add health beacon functionality and improve error handling; update test configurations ([3d91ffc](../../commit/3d91ffcc5318c5e3f0a043c0a283050d31d687f3))
+- Enhance health beacon functionality for 403 errors; improve throttling and add related tests ([c6c5232](../../commit/c6c5232aff048ec6cf5406c3f7d342903517cef6))
+- Add health beacon functionality for 403 errors; include throttling and related tests ([3405e2d](../../commit/3405e2d53447e1f21f614bb75ff4259d478c4834))
+
+### 🔧 Other Changes
+
+- Merge pull request #120 from nacorga/release/20260604.1 ([b6acc7d](../../commit/b6acc7dc6fbb02997e282a1be986f59e01dc16c2))
+- Merge pull request #119 from nacorga/task/minimal-analyst-direction ([80d6239](../../commit/80d6239189c2d53fead7f0afa070b04f794b5870))
+- Update vitest and coverage dependencies to latest versions ([3a04a14](../../commit/3a04a1487cf3926446f5628baca3fca0f8f4f5e4))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.1.1...v3.2.0
+
+
 ## [3.1.1] - 2026-05-27
 
 ### ✨ Features
