@@ -9,7 +9,7 @@
  * event would be lost. With the fix, the `finally` block of the in-flight
  * send re-runs `flushImmediatelySync()` so the event leaves via `sendBeacon`.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 import { MOCK_DEVICE_INFO } from '../../helpers/fixtures.helper';
@@ -24,10 +24,12 @@ describe('EventManager - critical event race with in-flight async send', () => {
   let eventManager: EventManager;
   let storageManager: StorageManager;
   let emitter: Emitter;
+  // Explicit signatures: Vitest 4's untyped vi.fn() defaults to a void-returning
+  // mock, which makes async mockImplementation trip no-misused-promises.
   let customSender: {
-    sendEventsQueue: ReturnType<typeof vi.fn>;
-    sendEventsQueueSync: ReturnType<typeof vi.fn>;
-    stop: ReturnType<typeof vi.fn>;
+    sendEventsQueue: Mock<(...args: unknown[]) => Promise<boolean>>;
+    sendEventsQueueSync: Mock<(...args: unknown[]) => boolean>;
+    stop: Mock<() => void>;
   };
 
   beforeEach(() => {
@@ -43,9 +45,9 @@ describe('EventManager - critical event race with in-flight async send', () => {
     eventManager['set']('collectApiUrls', { saas: 'https://example.collect.tracelog.io/collect' });
 
     customSender = {
-      sendEventsQueue: vi.fn(),
-      sendEventsQueueSync: vi.fn().mockReturnValue(true),
-      stop: vi.fn(),
+      sendEventsQueue: vi.fn<(...args: unknown[]) => Promise<boolean>>(),
+      sendEventsQueueSync: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+      stop: vi.fn<() => void>(),
     };
 
     // Replace dataSenders with our controllable double.

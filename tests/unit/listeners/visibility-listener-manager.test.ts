@@ -4,13 +4,13 @@ import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setu
 
 describe('VisibilityListenerManager', () => {
   let manager: VisibilityListenerManager;
-  let onActivityMock: ReturnType<typeof vi.fn>;
-  let onVisibilityChangeMock: ReturnType<typeof vi.fn>;
+  let onActivityMock: ReturnType<typeof vi.fn<() => void>>;
+  let onVisibilityChangeMock: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     setupTestEnvironment();
-    onActivityMock = vi.fn();
-    onVisibilityChangeMock = vi.fn();
+    onActivityMock = vi.fn<() => void>();
+    onVisibilityChangeMock = vi.fn<() => void>();
     manager = new VisibilityListenerManager(onActivityMock, onVisibilityChangeMock);
   });
 

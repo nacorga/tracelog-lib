@@ -4,11 +4,11 @@ import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setu
 
 describe('TouchListenerManager', () => {
   let manager: TouchListenerManager;
-  let onActivityMock: ReturnType<typeof vi.fn>;
+  let onActivityMock: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     setupTestEnvironment();
-    onActivityMock = vi.fn();
+    onActivityMock = vi.fn<() => void>();
     manager = new TouchListenerManager(onActivityMock);
   });
 

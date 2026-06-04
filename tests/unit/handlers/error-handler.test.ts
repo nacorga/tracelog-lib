@@ -3,7 +3,7 @@
  * Focus: JavaScript error tracking
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 import { ErrorHandler } from '../../../src/handlers/error.handler';
 import { EventManager } from '../../../src/managers/event.manager';
@@ -16,7 +16,7 @@ import { Emitter } from '../../../src/utils/emitter.utils';
 describe('ErrorHandler - Error Tracking', () => {
   let errorHandler: ErrorHandler;
   let eventManager: EventManager;
-  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let trackSpy: MockInstance<EventManager['track']>;
 
   beforeEach(() => {
     setupTestEnvironment();
@@ -189,7 +189,7 @@ describe('ErrorHandler - Error Tracking', () => {
 describe('ErrorHandler - PII Sanitization', () => {
   let errorHandler: ErrorHandler;
   let eventManager: EventManager;
-  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let trackSpy: MockInstance<EventManager['track']>;
 
   beforeEach(() => {
     setupTestEnvironment();
@@ -275,7 +275,7 @@ describe('ErrorHandler - PII Sanitization', () => {
 describe('ErrorHandler - Sampling', () => {
   let errorHandler: ErrorHandler;
   let eventManager: EventManager;
-  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let trackSpy: MockInstance<EventManager['track']>;
 
   beforeEach(() => {
     setupTestEnvironment();
@@ -356,7 +356,7 @@ describe('ErrorHandler - Sampling', () => {
 describe('ErrorHandler - Stack Traces', () => {
   let errorHandler: ErrorHandler;
   let eventManager: EventManager;
-  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let trackSpy: MockInstance<EventManager['track']>;
 
   beforeEach(() => {
     setupTestEnvironment();
@@ -514,7 +514,7 @@ describe('ErrorHandler - Stack Traces', () => {
 describe('ErrorHandler - Rejection Message Extraction', () => {
   let errorHandler: ErrorHandler;
   let eventManager: EventManager;
-  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let trackSpy: MockInstance<EventManager['track']>;
 
   beforeEach(() => {
     setupTestEnvironment();
@@ -579,7 +579,7 @@ describe('ErrorHandler - Rejection Message Extraction', () => {
 describe('ErrorHandler - Per-Pageview Signature Throttle', () => {
   let errorHandler: ErrorHandler;
   let eventManager: EventManager;
-  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let trackSpy: MockInstance<EventManager['track']>;
 
   beforeEach(() => {
     setupTestEnvironment();

@@ -43,7 +43,7 @@ describe('Integration: Shopify Cart Linker', () => {
     setupTestEnvironment();
     mockProductionHostname();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
   });
 
   afterEach(() => {

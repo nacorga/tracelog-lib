@@ -8,6 +8,18 @@ import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setu
 import { initTestBridge, destroyTestBridge, getQueueState } from '../../helpers/bridge.helper';
 import { waitForCondition } from '../../helpers/wait.helper';
 
+/**
+ * Wraps a per-test channel factory in a `new`-able mock constructor. Vitest 4
+ * constructs vi.fn implementations directly, so an arrow implementation throws
+ * "is not a constructor"; a regular function returning an object keeps
+ * `new BroadcastChannel(name)` yielding the factory's channel.
+ */
+function mockBroadcastChannelConstructor(factory: () => any): any {
+  return vi.fn(function (this: unknown) {
+    return factory();
+  });
+}
+
 describe('Integration: Multi-Tab Session Sync', () => {
   let originalBroadcastChannel: any;
 
@@ -29,7 +41,7 @@ describe('Integration: Multi-Tab Session Sync', () => {
       capturedMessage = message;
     });
 
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => ({
+    (global as any).BroadcastChannel = mockBroadcastChannelConstructor(() => ({
       postMessage: mockPostMessage,
       close: vi.fn(),
       onmessage: null,
@@ -59,7 +71,7 @@ describe('Integration: Multi-Tab Session Sync', () => {
     let onMessageHandler: ((event: any) => void) | null = null;
 
     // Mock BroadcastChannel to capture the onmessage handler
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => {
+    (global as any).BroadcastChannel = mockBroadcastChannelConstructor(() => {
       const channel = {
         postMessage: vi.fn(),
         close: vi.fn(),
@@ -108,7 +120,7 @@ describe('Integration: Multi-Tab Session Sync', () => {
   it('should not create SESSION_START when receiving external session', async () => {
     let onMessageHandler: ((event: any) => void) | null = null;
 
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => {
+    (global as any).BroadcastChannel = mockBroadcastChannelConstructor(() => {
       const channel = {
         postMessage: vi.fn(),
         close: vi.fn(),
@@ -160,7 +172,7 @@ describe('Integration: Multi-Tab Session Sync', () => {
     let onMessageHandler: ((event: any) => void) | null = null;
     let capturedBroadcast: any = null;
 
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => {
+    (global as any).BroadcastChannel = mockBroadcastChannelConstructor(() => {
       const channel = {
         postMessage: vi.fn((message) => {
           capturedBroadcast = message;
@@ -233,7 +245,7 @@ describe('Integration: Multi-Tab Event Tracking', () => {
   });
 
   it('should track events with shared sessionId', async () => {
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => ({
+    (global as any).BroadcastChannel = mockBroadcastChannelConstructor(() => ({
       postMessage: vi.fn(),
       close: vi.fn(),
       onmessage: null,
@@ -255,7 +267,7 @@ describe('Integration: Multi-Tab Event Tracking', () => {
   });
 
   it('should maintain independent event queues per tab instance', async () => {
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => ({
+    (global as any).BroadcastChannel = mockBroadcastChannelConstructor(() => ({
       postMessage: vi.fn(),
       close: vi.fn(),
       onmessage: null,
@@ -282,7 +294,7 @@ describe('Integration: Multi-Tab Event Tracking', () => {
   it('should allow multiple tabs to track different events with same sessionId', async () => {
     let onMessageHandler: ((event: any) => void) | null = null;
 
-    (global as any).BroadcastChannel = vi.fn().mockImplementation(() => {
+    (global as any).BroadcastChannel = mockBroadcastChannelConstructor(() => {
       const channel = {
         postMessage: vi.fn(),
         close: vi.fn(),
