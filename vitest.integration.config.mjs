@@ -16,11 +16,7 @@ export default defineConfig({
     teardownTimeout: 10000,
     silent: true,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    maxWorkers: 1,
     coverage: {
       enabled: true,
       provider: 'v8',

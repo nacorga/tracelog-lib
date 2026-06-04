@@ -11,12 +11,8 @@ export default defineConfig({
     include: ['tests/unit/**/*.{test,spec}.ts'],
     silent: true,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        isolate: true,
-      },
-    },
+    maxWorkers: 1,
+    isolate: true,
     environmentOptions: {
       jsdom: {
         url: 'http://localhost:3000',
