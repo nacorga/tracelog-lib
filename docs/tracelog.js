@@ -136,7 +136,7 @@ const QA_MODE_ENABLE_VALUE = "qa";
 const QA_MODE_DISABLE_VALUE = "qa_off";
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const RATE_LIMIT_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:rate_limit` : `${STORAGE_BASE_KEY}:rate_limit`;
-const HEALTH_BEACON_KEY = (reason) => `${STORAGE_BASE_KEY}:beacon:${reason}`;
+const HEALTH_BEACON_KEY = (projectId, reason) => `${STORAGE_BASE_KEY}:beacon:${projectId}:${reason}`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
 const SESSION_COUNTS_KEY = (userId, sessionId) => `${STORAGE_BASE_KEY}:${userId}:session_counts:${sessionId}`;
@@ -1967,8 +1967,9 @@ class SenderManager extends StateManager {
       if (!tracelog2?.projectId || tracelog2.healthBeacon === false) return;
       const url = this.resolveBeaconUrl();
       if (!url) return;
-      if (!this.markBeaconEmitted(reason)) return;
       const origin = typeof window !== "undefined" && window.location ? window.location.origin : "";
+      if (!origin) return;
+      if (!this.markBeaconEmitted(tracelog2.projectId, reason)) return;
       const payload = JSON.stringify({
         projectId: tracelog2.projectId,
         reason,
@@ -1989,9 +1990,9 @@ class SenderManager extends StateManager {
    * transports fail, waiting out the window is fine for a diagnostic signal
    * and avoids turning transport failures into retry bursts.
    */
-  markBeaconEmitted(reason) {
+  markBeaconEmitted(projectId, reason) {
     const now = Date.now();
-    const key = HEALTH_BEACON_KEY(reason);
+    const key = HEALTH_BEACON_KEY(projectId, reason);
     let lastEmit = this.lastBeaconAt[reason] ?? 0;
     try {
       const stored = Number(this.storeManager.getItem(key));

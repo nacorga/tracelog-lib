@@ -53,7 +53,7 @@ type HealthBeaconReason = 'events_blocked';
  * **Storage Keys**:
  * - Queue: `tlog:{userId}:queue`
  * - Rate limit cooldown: `tlog:{userId}:rate_limit`
- * - Health beacon throttle: `tlog:beacon:{reason}`
+ * - Health beacon throttle: `tlog:beacon:{projectId}:{reason}`
  *
  * **Multi-Tab Protection**: Persisted events include `lastPersistTime`; recovery
  * skips events persisted within 1 second (active tab may retry).
@@ -871,9 +871,13 @@ export class SenderManager extends StateManager {
       const url = this.resolveBeaconUrl();
       if (!url) return;
 
-      if (!this.markBeaconEmitted(reason)) return;
-
+      // The middleware DTO rejects empty origins (@IsNotEmpty), so bail before
+      // consuming the throttle window on a payload that can never validate.
       const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+      if (!origin) return;
+
+      if (!this.markBeaconEmitted(tracelog.projectId, reason)) return;
+
       const payload = JSON.stringify({
         projectId: tracelog.projectId,
         reason,
@@ -896,9 +900,9 @@ export class SenderManager extends StateManager {
    * transports fail, waiting out the window is fine for a diagnostic signal
    * and avoids turning transport failures into retry bursts.
    */
-  private markBeaconEmitted(reason: HealthBeaconReason): boolean {
+  private markBeaconEmitted(projectId: string, reason: HealthBeaconReason): boolean {
     const now = Date.now();
-    const key = HEALTH_BEACON_KEY(reason);
+    const key = HEALTH_BEACON_KEY(projectId, reason);
 
     let lastEmit = this.lastBeaconAt[reason] ?? 0;
     try {

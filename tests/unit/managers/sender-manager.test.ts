@@ -758,11 +758,11 @@ describe('SenderManager - health beacon (T15)', () => {
     delete (navigator as any).sendBeacon;
   });
 
-  function makeSaasSender(): { sender: SenderManager; beacon: ReturnType<typeof vi.fn> } {
+  function makeSaasSender(projectId = PROJECT_ID): { sender: SenderManager; beacon: ReturnType<typeof vi.fn> } {
     const beacon = vi.fn(() => true);
     (navigator as any).sendBeacon = beacon;
     const { sender } = makeSender();
-    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
+    sender['set']('config', { integrations: { tracelog: { projectId } } });
     return { sender, beacon };
   }
 
@@ -809,6 +809,19 @@ describe('SenderManager - health beacon (T15)', () => {
     expect(second.beacon).not.toHaveBeenCalled();
   });
 
+  it('scopes the throttle per project — a different projectId emits its own beacon', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const first = makeSaasSender();
+    await first.sender.sendEventsQueue(makeQueue());
+    expect(first.beacon).toHaveBeenCalledTimes(1);
+
+    // A different project on the same origin must not be suppressed by the first one's window.
+    const other = makeSaasSender('proj-other');
+    await other.sender.sendEventsQueue(makeQueue());
+
+    expect(other.beacon).toHaveBeenCalledTimes(1);
+  });
+
   it('emits again once the persisted throttle window has elapsed', async () => {
     (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
     const first = makeSaasSender();
@@ -816,7 +829,7 @@ describe('SenderManager - health beacon (T15)', () => {
 
     // Age the stored timestamp past the window instead of faking timers
     // (backoffDelay uses real setTimeout in this suite).
-    const key = HEALTH_BEACON_KEY('events_blocked');
+    const key = HEALTH_BEACON_KEY(PROJECT_ID, 'events_blocked');
     localStorage.setItem(key, String(Number(localStorage.getItem(key)) - HEALTH_BEACON_THROTTLE_MS - 1));
 
     const second = makeSaasSender();
@@ -850,7 +863,7 @@ describe('SenderManager - health beacon (T15)', () => {
     sender['emitHealthBeacon']('events_blocked', 'HTTP 403: Forbidden');
 
     expect(beacon).not.toHaveBeenCalled();
-    expect(localStorage.getItem(HEALTH_BEACON_KEY('events_blocked'))).toBeNull();
+    expect(localStorage.getItem(HEALTH_BEACON_KEY(PROJECT_ID, 'events_blocked'))).toBeNull();
   });
 
   it('does not emit a beacon when healthBeacon is disabled', async () => {
