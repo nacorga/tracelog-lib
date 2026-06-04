@@ -136,6 +136,7 @@ const QA_MODE_ENABLE_VALUE = "qa";
 const QA_MODE_DISABLE_VALUE = "qa_off";
 const QUEUE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:queue` : `${STORAGE_BASE_KEY}:queue`;
 const RATE_LIMIT_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:rate_limit` : `${STORAGE_BASE_KEY}:rate_limit`;
+const HEALTH_BEACON_KEY = (reason) => `${STORAGE_BASE_KEY}:beacon:${reason}`;
 const SESSION_STORAGE_KEY = (id) => id ? `${STORAGE_BASE_KEY}:${id}:session` : `${STORAGE_BASE_KEY}:session`;
 const BROADCAST_CHANNEL_NAME = (id) => id ? `${STORAGE_BASE_KEY}:${id}:broadcast` : `${STORAGE_BASE_KEY}:broadcast`;
 const SESSION_COUNTS_KEY = (userId, sessionId) => `${STORAGE_BASE_KEY}:${userId}:session_counts:${sessionId}`;
@@ -426,6 +427,8 @@ const MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW = 3;
 const MAX_PAGEVIEW_SIGNATURE_KEYS = 200;
 const PERMANENT_ERROR_LOG_THROTTLE_MS = 6e4;
 const MAX_RESPONSE_CODE_LENGTH = 64;
+const HEALTH_BEACON_THROTTLE_MS = 10 * 6e4;
+const MAX_BEACON_ERROR_LENGTH = 200;
 const WEB_VITALS_GOOD_THRESHOLDS = {
   LCP: 2500,
   FCP: 1800,
@@ -461,7 +464,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
   }
 };
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "3.0.0";
+const version = "3.1.1";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -1251,11 +1254,27 @@ const LONG_QUOTED_PATTERN = /(['"])[^'"]{20,}\1/g;
 function normalizeErrorMessage(message) {
   return message.replace(URL_PATTERN, "[URL]").replace(UUID_PATTERN, "[ID]").replace(HEX_ADDR_PATTERN, "[ADDR]").replace(LONG_NUMBER_PATTERN, "[N]").replace(LONG_QUOTED_PATTERN, "$1[VAR]$1").toLowerCase().trim();
 }
+function stripQueryHash(value) {
+  const cut = value.search(/[?#]/);
+  return cut === -1 ? value : value.slice(0, cut);
+}
+function normalizeFilename(filename, pageUrl) {
+  const raw = stripQueryHash((filename ?? "").trim());
+  if (!raw) return "";
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+  const page = stripQueryHash((pageUrl ?? "").trim());
+  if (page && raw === page) return parsed.origin;
+  return raw;
+}
 function buildErrorSignatureKey(input) {
   const message = normalizeErrorMessage(input.message);
-  const rawFilename = (input.filename ?? "").trim();
-  const cut = rawFilename.search(/[?#]/);
-  const filename = cut === -1 ? rawFilename : rawFilename.slice(0, cut);
+  const filename = normalizeFilename(input.filename, input.page_url);
   const line = input.line == null ? "" : String(input.line);
   return `${message}|${filename}|${line}`;
 }
@@ -1284,6 +1303,13 @@ class SenderManager extends StateManager {
   storeManager;
   apiUrl;
   lastPermanentErrorLog = null;
+  /**
+   * In-memory fallback for the beacon throttle when localStorage is
+   * unavailable. The primary throttle state lives in localStorage (see
+   * {@link HEALTH_BEACON_KEY}) so it survives MPA navigations and is shared
+   * across tabs.
+   */
+  lastBeaconAt = {};
   recoveryInProgress = false;
   lastMetadataTimestamp = 0;
   pendingControllers = /* @__PURE__ */ new Set();
@@ -1650,6 +1676,9 @@ class SenderManager extends StateManager {
         if (error instanceof PermanentError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
+          if (error.statusCode === 403) {
+            this.emitHealthBeacon("events_blocked", error.message);
+          }
           throw error;
         }
         if (error instanceof RateLimitError) {
@@ -1925,6 +1954,78 @@ class SenderManager extends StateManager {
         data: { status: error.statusCode, code: error.responseCode, message: error.message }
       });
       this.lastPermanentErrorLog = { key, timestamp: now };
+    }
+  }
+  /**
+   * Emits a low-frequency, deduplicated diagnostic "health beacon" to the gate-bypassing
+   * `/client-error` endpoint. Best-effort and silent: never blocks, never throws, never logs to the
+   * host page. Opt out via `integrations.tracelog.healthBeacon: false`.
+   */
+  emitHealthBeacon(reason, lastError) {
+    try {
+      const tracelog2 = this.get("config")?.integrations?.tracelog;
+      if (!tracelog2?.projectId || tracelog2.healthBeacon === false) return;
+      const url = this.resolveBeaconUrl();
+      if (!url) return;
+      if (!this.markBeaconEmitted(reason)) return;
+      const origin = typeof window !== "undefined" && window.location ? window.location.origin : "";
+      const payload = JSON.stringify({
+        projectId: tracelog2.projectId,
+        reason,
+        origin,
+        ...lastError ? { lastError: lastError.slice(0, MAX_BEACON_ERROR_LENGTH) } : {}
+      });
+      this.postBeacon(url, payload);
+    } catch {
+    }
+  }
+  /**
+   * Throttle gate: returns `true` and records the emit timestamp when the
+   * beacon may fire, `false` when still inside {@link HEALTH_BEACON_THROTTLE_MS}.
+   *
+   * State lives in localStorage so the window survives MPA navigations and is
+   * shared across tabs; the in-memory map covers storage-disabled browsers.
+   * The timestamp is deliberately recorded BEFORE the send attempt: if both
+   * transports fail, waiting out the window is fine for a diagnostic signal
+   * and avoids turning transport failures into retry bursts.
+   */
+  markBeaconEmitted(reason) {
+    const now = Date.now();
+    const key = HEALTH_BEACON_KEY(reason);
+    let lastEmit = this.lastBeaconAt[reason] ?? 0;
+    try {
+      const stored = Number(this.storeManager.getItem(key));
+      if (Number.isFinite(stored) && stored > lastEmit) {
+        lastEmit = stored;
+      }
+    } catch {
+    }
+    if (now - lastEmit < HEALTH_BEACON_THROTTLE_MS) return false;
+    this.lastBeaconAt[reason] = now;
+    try {
+      this.storeManager.setItem(key, String(now));
+    } catch {
+    }
+    return true;
+  }
+  /** The collect URL the lib already derived, with the path swapped to the diagnostics route. */
+  resolveBeaconUrl() {
+    if (this.apiUrl.includes(SpecialApiUrl.Localhost) || this.apiUrl.includes(SpecialApiUrl.Fail)) return null;
+    if (!/\/collect$/.test(this.apiUrl)) return null;
+    return this.apiUrl.replace(/\/collect$/, "/client-error");
+  }
+  postBeacon(url, payload) {
+    if (this.isSendBeaconAvailable()) {
+      const blob = new Blob([payload], { type: "application/json" });
+      if (navigator.sendBeacon(url, blob)) return;
+    }
+    if (typeof fetch === "function") {
+      void fetch(url, {
+        method: "POST",
+        body: payload,
+        keepalive: true,
+        headers: { "Content-Type": "application/json" }
+      }).catch(() => void 0);
     }
   }
 }
@@ -5140,11 +5241,7 @@ class ErrorHandler extends StateManager {
    * later signature that recycles the same map key after a counter reset.
    */
   shouldThrottleBySignature(input) {
-    const key = buildErrorSignatureKey({
-      message: input.message,
-      filename: input.filename,
-      line: input.line
-    });
+    const key = buildErrorSignatureKey(input);
     const current = this.pageviewSignatureCounts.get(key) ?? 0;
     if (current >= MAX_ERRORS_PER_SIGNATURE_PER_PAGEVIEW) {
       log("debug", "Error throttled (pageview cap)", {
@@ -5171,7 +5268,12 @@ class ErrorHandler extends StateManager {
     if (this.shouldThrottleBySignature({
       message: sanitizedMessage,
       filename: event2.filename,
-      line: event2.lineno
+      line: event2.lineno,
+      // Inline-script errors report the page URL as `filename`; passing the current
+      // page URL lets buildErrorSignatureKey collapse them to origin, matching the
+      // normalized input the server hashes for cap/dedup. normalizeFilename strips
+      // query/hash internally.
+      page_url: window.location.href
     })) {
       return;
     }

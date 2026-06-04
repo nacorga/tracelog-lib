@@ -61,6 +61,13 @@ export interface Config {
       projectId: string;
       /** Enable Shopify cart attribute linking for webhook revenue attribution. */
       shopify?: boolean;
+      /**
+       * Emit a low-frequency diagnostic "health beacon" when ingest is rejected at the domain
+       * gate (HTTP 403) so the dashboard can tell the merchant their snippet is alive but their
+       * events are blocked. Diagnostic only — it never carries analytics data. Set `false` to opt out.
+       * @default true
+       */
+      healthBeacon?: boolean;
     };
   };
 }

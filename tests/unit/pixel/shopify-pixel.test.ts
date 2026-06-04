@@ -9,17 +9,19 @@
  * - Failed map (no identity) → sendBatch NOT called
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { registerShopifyPixel } from '../../../src/pixel/shopify-pixel';
 
+type SubscribeFn = (event: string, callback: (event: unknown) => void) => void;
+
 describe('registerShopifyPixel', () => {
-  let subscribeSpy: ReturnType<typeof vi.fn>;
+  let subscribeSpy: Mock<SubscribeFn>;
   let fetchSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    subscribeSpy = vi.fn();
+    subscribeSpy = vi.fn<SubscribeFn>();
     fetchSpy = vi.fn().mockResolvedValue({ ok: true });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
   });
 
   afterEach(() => {

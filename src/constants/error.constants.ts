@@ -126,3 +126,15 @@ export const PERMANENT_ERROR_LOG_THROTTLE_MS = 60_000; // 1 minute
  * longer is treated as untrusted noise and ignored to avoid log pollution.
  */
 export const MAX_RESPONSE_CODE_LENGTH = 64;
+
+/**
+ * Throttle window for the diagnostic health beacon, per reason. A blocked project keeps 403ing on
+ * every batch; the beacon only needs to reach the backend occasionally to flip the dashboard state,
+ * so it is emitted at most once per this window to stay low-frequency and non-abusive. The window
+ * is persisted to localStorage (see `HEALTH_BEACON_KEY`) so it holds across MPA page navigations
+ * and tabs, not just within a single page's lifetime.
+ */
+export const HEALTH_BEACON_THROTTLE_MS = 10 * 60_000; // 10 minutes
+
+/** Maximum length of the `lastError` detail string forwarded with a health beacon. */
+export const MAX_BEACON_ERROR_LENGTH = 200;

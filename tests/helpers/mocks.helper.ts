@@ -110,7 +110,11 @@ export function createMockBroadcastChannel(name = 'test-channel'): any {
 export function setupMockBroadcastChannel(): void {
   const channels = new Map<string, any>();
 
-  (global as any).BroadcastChannel = vi.fn().mockImplementation((name: string) => {
+  // Regular function (not arrow) so the mock stays `new`-able: Vitest 4 constructs
+  // the implementation directly, and arrow functions throw "is not a constructor".
+  // Returning an object from a constructor overrides `this`, so the shared channel
+  // instance is what `new BroadcastChannel(name)` yields.
+  (global as any).BroadcastChannel = vi.fn(function (this: unknown, name: string) {
     if (!channels.has(name)) {
       channels.set(name, createMockBroadcastChannel(name));
     }

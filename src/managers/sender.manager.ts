@@ -1,6 +1,7 @@
 import {
   QUEUE_KEY,
   RATE_LIMIT_KEY,
+  HEALTH_BEACON_KEY,
   EVENT_EXPIRY_HOURS,
   MAX_EVENT_AGE_MS_ON_RECOVERY,
   REQUEST_TIMEOUT_MS,
@@ -16,6 +17,8 @@ import {
   CIRCUIT_BREAKER_COOLDOWN_MS,
   RATE_LIMIT_COOLDOWN_MS,
   MAX_RESPONSE_CODE_LENGTH,
+  HEALTH_BEACON_THROTTLE_MS,
+  MAX_BEACON_ERROR_LENGTH,
 } from '../constants';
 import {
   PersistedEventsQueue,
@@ -35,12 +38,22 @@ interface SendCallbacks {
 }
 
 /**
+ * Client-emitted diagnostic beacon reasons. Only `events_blocked` (403 at the
+ * domain gate) is browser-detectable; `ingest_unreachable` (NXDOMAIN) is
+ * detected server-side via DNS and intentionally NOT emitted from here.
+ * Mirror of `PROJECT_CLIENT_ERROR_REASONS` in tracelog-api — keep the subset
+ * in lockstep when adding reasons.
+ */
+type HealthBeaconReason = 'events_blocked';
+
+/**
  * Manages sending event queues to the TraceLog SaaS endpoint with persistence,
  * recovery, retry, circuit breaker, and 429 cooldown.
  *
  * **Storage Keys**:
  * - Queue: `tlog:{userId}:queue`
  * - Rate limit cooldown: `tlog:{userId}:rate_limit`
+ * - Health beacon throttle: `tlog:beacon:{reason}`
  *
  * **Multi-Tab Protection**: Persisted events include `lastPersistTime`; recovery
  * skips events persisted within 1 second (active tab may retry).
@@ -49,6 +62,13 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly apiUrl: string;
   private lastPermanentErrorLog: { key: string; timestamp: number } | null = null;
+  /**
+   * In-memory fallback for the beacon throttle when localStorage is
+   * unavailable. The primary throttle state lives in localStorage (see
+   * {@link HEALTH_BEACON_KEY}) so it survives MPA navigations and is shared
+   * across tabs.
+   */
+  private readonly lastBeaconAt: Partial<Record<HealthBeaconReason, number>> = {};
   private recoveryInProgress = false;
   private lastMetadataTimestamp = 0;
   private readonly pendingControllers = new Set<AbortController>();
@@ -480,6 +500,13 @@ export class SenderManager extends StateManager {
         if (error instanceof PermanentError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
+          // A 403 means the snippet reached TraceLog but the domain gate rejected it — the backend
+          // will never see these events, so the browser is the only place that can report it. Emit a
+          // diagnostic beacon to the gate-bypassing endpoint. Only 403 (host reachable) qualifies: an
+          // NXDOMAIN/network failure can't reach any TraceLog host anyway and is server-detected via DNS.
+          if (error.statusCode === 403) {
+            this.emitHealthBeacon('events_blocked', error.message);
+          }
           throw error;
         }
 
@@ -828,6 +855,91 @@ export class SenderManager extends StateManager {
       });
 
       this.lastPermanentErrorLog = { key, timestamp: now };
+    }
+  }
+
+  /**
+   * Emits a low-frequency, deduplicated diagnostic "health beacon" to the gate-bypassing
+   * `/client-error` endpoint. Best-effort and silent: never blocks, never throws, never logs to the
+   * host page. Opt out via `integrations.tracelog.healthBeacon: false`.
+   */
+  private emitHealthBeacon(reason: HealthBeaconReason, lastError?: string): void {
+    try {
+      const tracelog = this.get('config')?.integrations?.tracelog;
+      if (!tracelog?.projectId || tracelog.healthBeacon === false) return;
+
+      const url = this.resolveBeaconUrl();
+      if (!url) return;
+
+      if (!this.markBeaconEmitted(reason)) return;
+
+      const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+      const payload = JSON.stringify({
+        projectId: tracelog.projectId,
+        reason,
+        origin,
+        ...(lastError ? { lastError: lastError.slice(0, MAX_BEACON_ERROR_LENGTH) } : {}),
+      });
+      this.postBeacon(url, payload);
+    } catch {
+      // Diagnostic beacon is best-effort; never surface to the host page.
+    }
+  }
+
+  /**
+   * Throttle gate: returns `true` and records the emit timestamp when the
+   * beacon may fire, `false` when still inside {@link HEALTH_BEACON_THROTTLE_MS}.
+   *
+   * State lives in localStorage so the window survives MPA navigations and is
+   * shared across tabs; the in-memory map covers storage-disabled browsers.
+   * The timestamp is deliberately recorded BEFORE the send attempt: if both
+   * transports fail, waiting out the window is fine for a diagnostic signal
+   * and avoids turning transport failures into retry bursts.
+   */
+  private markBeaconEmitted(reason: HealthBeaconReason): boolean {
+    const now = Date.now();
+    const key = HEALTH_BEACON_KEY(reason);
+
+    let lastEmit = this.lastBeaconAt[reason] ?? 0;
+    try {
+      const stored = Number(this.storeManager.getItem(key));
+      if (Number.isFinite(stored) && stored > lastEmit) {
+        lastEmit = stored;
+      }
+    } catch {
+      // Storage unreadable — in-memory value still applies.
+    }
+
+    if (now - lastEmit < HEALTH_BEACON_THROTTLE_MS) return false;
+
+    this.lastBeaconAt[reason] = now;
+    try {
+      this.storeManager.setItem(key, String(now));
+    } catch {
+      // Storage full or disabled — throttle still works in-memory for this instance.
+    }
+    return true;
+  }
+
+  /** The collect URL the lib already derived, with the path swapped to the diagnostics route. */
+  private resolveBeaconUrl(): string | null {
+    if (this.apiUrl.includes(SpecialApiUrl.Localhost) || this.apiUrl.includes(SpecialApiUrl.Fail)) return null;
+    if (!/\/collect$/.test(this.apiUrl)) return null;
+    return this.apiUrl.replace(/\/collect$/, '/client-error');
+  }
+
+  private postBeacon(url: string, payload: string): void {
+    if (this.isSendBeaconAvailable()) {
+      const blob = new Blob([payload], { type: 'application/json' });
+      if (navigator.sendBeacon(url, blob)) return;
+    }
+    if (typeof fetch === 'function') {
+      void fetch(url, {
+        method: 'POST',
+        body: payload,
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => undefined);
     }
   }
 }
