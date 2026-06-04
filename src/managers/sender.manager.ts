@@ -1,6 +1,7 @@
 import {
   QUEUE_KEY,
   RATE_LIMIT_KEY,
+  HEALTH_BEACON_KEY,
   EVENT_EXPIRY_HOURS,
   MAX_EVENT_AGE_MS_ON_RECOVERY,
   REQUEST_TIMEOUT_MS,
@@ -37,12 +38,22 @@ interface SendCallbacks {
 }
 
 /**
+ * Client-emitted diagnostic beacon reasons. Only `events_blocked` (403 at the
+ * domain gate) is browser-detectable; `ingest_unreachable` (NXDOMAIN) is
+ * detected server-side via DNS and intentionally NOT emitted from here.
+ * Mirror of `PROJECT_CLIENT_ERROR_REASONS` in tracelog-api — keep the subset
+ * in lockstep when adding reasons.
+ */
+type HealthBeaconReason = 'events_blocked';
+
+/**
  * Manages sending event queues to the TraceLog SaaS endpoint with persistence,
  * recovery, retry, circuit breaker, and 429 cooldown.
  *
  * **Storage Keys**:
  * - Queue: `tlog:{userId}:queue`
  * - Rate limit cooldown: `tlog:{userId}:rate_limit`
+ * - Health beacon throttle: `tlog:beacon:{reason}`
  *
  * **Multi-Tab Protection**: Persisted events include `lastPersistTime`; recovery
  * skips events persisted within 1 second (active tab may retry).
@@ -51,8 +62,13 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly apiUrl: string;
   private lastPermanentErrorLog: { key: string; timestamp: number } | null = null;
-  /** Last emit time per beacon reason, for low-frequency throttling. */
-  private readonly lastBeaconAt: Record<string, number> = {};
+  /**
+   * In-memory fallback for the beacon throttle when localStorage is
+   * unavailable. The primary throttle state lives in localStorage (see
+   * {@link HEALTH_BEACON_KEY}) so it survives MPA navigations and is shared
+   * across tabs.
+   */
+  private readonly lastBeaconAt: Partial<Record<HealthBeaconReason, number>> = {};
   private recoveryInProgress = false;
   private lastMetadataTimestamp = 0;
   private readonly pendingControllers = new Set<AbortController>();
@@ -847,7 +863,7 @@ export class SenderManager extends StateManager {
    * `/client-error` endpoint. Best-effort and silent: never blocks, never throws, never logs to the
    * host page. Opt out via `integrations.tracelog.healthBeacon: false`.
    */
-  private emitHealthBeacon(reason: 'events_blocked' | 'ingest_unreachable', lastError?: string): void {
+  private emitHealthBeacon(reason: HealthBeaconReason, lastError?: string): void {
     try {
       const tracelog = this.get('config')?.integrations?.tracelog;
       if (!tracelog?.projectId || tracelog.healthBeacon === false) return;
@@ -855,9 +871,7 @@ export class SenderManager extends StateManager {
       const url = this.resolveBeaconUrl();
       if (!url) return;
 
-      const now = Date.now();
-      if (now - (this.lastBeaconAt[reason] ?? 0) < HEALTH_BEACON_THROTTLE_MS) return;
-      this.lastBeaconAt[reason] = now;
+      if (!this.markBeaconEmitted(reason)) return;
 
       const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
       const payload = JSON.stringify({
@@ -870,6 +884,41 @@ export class SenderManager extends StateManager {
     } catch {
       // Diagnostic beacon is best-effort; never surface to the host page.
     }
+  }
+
+  /**
+   * Throttle gate: returns `true` and records the emit timestamp when the
+   * beacon may fire, `false` when still inside {@link HEALTH_BEACON_THROTTLE_MS}.
+   *
+   * State lives in localStorage so the window survives MPA navigations and is
+   * shared across tabs; the in-memory map covers storage-disabled browsers.
+   * The timestamp is deliberately recorded BEFORE the send attempt: if both
+   * transports fail, waiting out the window is fine for a diagnostic signal
+   * and avoids turning transport failures into retry bursts.
+   */
+  private markBeaconEmitted(reason: HealthBeaconReason): boolean {
+    const now = Date.now();
+    const key = HEALTH_BEACON_KEY(reason);
+
+    let lastEmit = this.lastBeaconAt[reason] ?? 0;
+    try {
+      const stored = Number(this.storeManager.getItem(key));
+      if (Number.isFinite(stored) && stored > lastEmit) {
+        lastEmit = stored;
+      }
+    } catch {
+      // Storage unreadable — in-memory value still applies.
+    }
+
+    if (now - lastEmit < HEALTH_BEACON_THROTTLE_MS) return false;
+
+    this.lastBeaconAt[reason] = now;
+    try {
+      this.storeManager.setItem(key, String(now));
+    } catch {
+      // Storage full or disabled — throttle still works in-memory for this instance.
+    }
+    return true;
   }
 
   /** The collect URL the lib already derived, with the path swapped to the diagnostics route. */

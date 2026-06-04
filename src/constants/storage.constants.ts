@@ -60,6 +60,20 @@ export const RATE_LIMIT_KEY = (id: string): string =>
   id ? `${STORAGE_BASE_KEY}:${id}:rate_limit` : `${STORAGE_BASE_KEY}:rate_limit`;
 
 /**
+ * Generates storage key for the last health-beacon emit timestamp, per reason.
+ *
+ * Persisted in `localStorage` (not memory) because the target ICP is largely
+ * MPA storefronts: every navigation creates a fresh `SenderManager`, so an
+ * in-memory throttle would re-emit one beacon per page view instead of one
+ * per `HEALTH_BEACON_THROTTLE_MS`. Sharing the key across tabs also dedups
+ * multi-tab sessions. Not user-scoped — the beacon is a project-level signal.
+ *
+ * @param reason - Beacon reason (e.g., 'events_blocked')
+ * @returns localStorage key (e.g., 'tlog:beacon:events_blocked')
+ */
+export const HEALTH_BEACON_KEY = (reason: string): string => `${STORAGE_BASE_KEY}:beacon:${reason}`;
+
+/**
  * Generates storage key for session data
  *
  * @param id - Project identifier

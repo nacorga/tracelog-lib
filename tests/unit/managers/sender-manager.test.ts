@@ -14,7 +14,8 @@ import { createMockQueue, createMockEvent, MOCK_DEVICE_INFO } from '../../helper
 import { SenderManager } from '../../../src/managers/sender.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { SpecialApiUrl, EventType, type EventsQueue } from '../../../src/types';
-import { QUEUE_KEY, RATE_LIMIT_KEY } from '../../../src/constants/storage.constants';
+import { QUEUE_KEY, RATE_LIMIT_KEY, HEALTH_BEACON_KEY } from '../../../src/constants/storage.constants';
+import { HEALTH_BEACON_THROTTLE_MS } from '../../../src/constants/error.constants';
 
 const PROD_URL = 'https://api.tracelog.io/p/proj-123/collect';
 const USER_ID = 'user-test';
@@ -793,6 +794,63 @@ describe('SenderManager - health beacon (T15)', () => {
     await sender.sendEventsQueue(makeQueue());
 
     expect(beacon).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists the throttle across SenderManager instances (MPA navigation)', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const first = makeSaasSender();
+    await first.sender.sendEventsQueue(makeQueue());
+    expect(first.beacon).toHaveBeenCalledTimes(1);
+
+    // A fresh instance on the next page load must respect the stored window.
+    const second = makeSaasSender();
+    await second.sender.sendEventsQueue(makeQueue());
+
+    expect(second.beacon).not.toHaveBeenCalled();
+  });
+
+  it('emits again once the persisted throttle window has elapsed', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const first = makeSaasSender();
+    await first.sender.sendEventsQueue(makeQueue());
+
+    // Age the stored timestamp past the window instead of faking timers
+    // (backoffDelay uses real setTimeout in this suite).
+    const key = HEALTH_BEACON_KEY('events_blocked');
+    localStorage.setItem(key, String(Number(localStorage.getItem(key)) - HEALTH_BEACON_THROTTLE_MS - 1));
+
+    const second = makeSaasSender();
+    await second.sender.sendEventsQueue(makeQueue());
+
+    expect(second.beacon).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to fetch when sendBeacon rejects the beacon payload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = fetchMock;
+    (navigator as any).sendBeacon = vi.fn(() => false);
+    const { sender } = makeSender();
+    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
+
+    await sender.sendEventsQueue(makeQueue());
+
+    const beaconCall = fetchMock.mock.calls.find(
+      (call) => typeof call[0] === 'string' && call[0].endsWith('/client-error'),
+    );
+    expect(beaconCall).toBeDefined();
+  });
+
+  it('does not emit a beacon for SpecialApiUrl simulation endpoints', () => {
+    const beacon = vi.fn(() => true);
+    (navigator as any).sendBeacon = beacon;
+    const { sender } = makeSender(`http://${SpecialApiUrl.Fail}/collect`);
+    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
+
+    // Exercise the throttle gate directly: resolveBeaconUrl must veto simulation URLs.
+    sender['emitHealthBeacon']('events_blocked', 'HTTP 403: Forbidden');
+
+    expect(beacon).not.toHaveBeenCalled();
+    expect(localStorage.getItem(HEALTH_BEACON_KEY('events_blocked'))).toBeNull();
   });
 
   it('does not emit a beacon when healthBeacon is disabled', async () => {
