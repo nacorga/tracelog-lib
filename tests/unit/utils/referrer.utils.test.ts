@@ -153,4 +153,33 @@ describe('referrer.utils - getExternalReferrer()', () => {
     const result = getExternalReferrer();
     expect(result).toBe('https://other-site.co.uk/page');
   });
+
+  it('should strip default sensitive query params from external referrers', () => {
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://google.com/search?q=test&token=secret123',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: { hostname: 'example.com' },
+      configurable: true,
+    });
+
+    const result = getExternalReferrer();
+    expect(result).toBe('https://google.com/search?q=test');
+    expect(result).not.toContain('secret123');
+  });
+
+  it('should strip custom sensitive query params from external referrers', () => {
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://partner.com/landing?affiliate_id=aff-99&q=1',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'location', {
+      value: { hostname: 'example.com' },
+      configurable: true,
+    });
+
+    const result = getExternalReferrer(['affiliate_id']);
+    expect(result).toBe('https://partner.com/landing?q=1');
+  });
 });

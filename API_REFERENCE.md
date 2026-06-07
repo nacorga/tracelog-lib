@@ -417,8 +417,8 @@ To change global metadata after init, call `destroy()` and re-initialize with th
 #### `sensitiveQueryParams`
 
 - **Type:** `string[]`
-- **Default:** `['token', 'auth', 'key', 'password', 'secret', 'api_key', 'apikey', 'access_token', 'refresh_token', 'session', 'sessionid', 'jwt', 'bearer', 'code', 'state', 'nonce']`
-- **Description:** query parameters stripped from tracked URLs. Your custom params are **merged** with defaults.
+- **Default:** `['token', 'auth', 'key', 'session', 'reset', 'password', 'api_key', 'apikey', 'secret', 'access_token', 'refresh_token', 'verification', 'code', 'otp']`
+- **Description:** query parameters stripped from every tracked URL — `page_url`, click `href`, and referrers (session attribution and `page_view.referrer`). Your custom params are **merged** with defaults.
 
 ```typescript
 await tracelog.init({
@@ -594,7 +594,7 @@ interface EventData {
   type: EventType;     // Event type enum
   page_url: string;    // Current page URL (sanitized)
   timestamp: number;   // Unix timestamp (ms)
-  referrer?: string;   // HTTP referrer
+  referrer?: string;   // HTTP referrer (sensitive query params removed)
   utm?: UTM;           // UTM campaign parameters
   click_ids?: ClickIds; // Ad-network click identifiers (gclid, fbclid, ...)
 }
@@ -623,7 +623,7 @@ Navigation and page view tracking.
 ```typescript
 {
   page_view?: {
-    referrer?: string;  // Previous page URL
+    referrer?: string;  // Previous page URL (sensitive query params removed)
     title?: string;     // Document title
   };
   from_page_url?: string; // Previous page URL for SPA navigation
@@ -654,10 +654,10 @@ User click interactions.
     x: number;        // Absolute X coordinate (px)
     y: number;        // Absolute Y coordinate (px)
     tag: string;      // HTML tag name (lowercase)
-    id?: string;      // Element ID attribute
-    class?: string;   // Element class attribute
+    id?: string;      // Element ID attribute (PII-sanitized)
+    class?: string;   // Element class attribute (PII-sanitized)
     text?: string;    // Element text content (truncated, PII-sanitized)
-    href?: string;    // Link href (anchors only)
+    href?: string;    // Link href (anchors only, sensitive query params removed)
   };
 }
 ```
@@ -666,7 +666,8 @@ User click interactions.
 
 - Never captures values from `<input>`, `<textarea>`, `<select>`
 - Respects `data-tlog-ignore` on the clicked element or any ancestor
-- Sanitizes text for PII (emails, phones, credit cards, IBANs, API keys, bearer tokens, connection-string passwords)
+- Sanitizes text, `id`, and `class` for PII (emails, phones, credit cards, IBANs, API keys, bearer tokens, connection-string passwords)
+- Strips sensitive query parameters from `href` (same deny-list as `page_url`, extended via `sensitiveQueryParams`); relative hrefs keep their relative form
 
 **Throttling:** 300 ms per element signature (configurable via `clickThrottleMs`).
 

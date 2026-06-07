@@ -10,7 +10,7 @@ import {
 import { ClickCoordinates, ClickData, ClickTrackingElementData, EventType } from '../types';
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { log, sanitizePii } from '../utils';
+import { log, normalizeUrl, sanitizePii } from '../utils';
 
 /**
  * Captures mouse clicks and converts them into analytics events with element context and coordinates.
@@ -345,14 +345,16 @@ export class ClickHandler extends StateManager {
   ): ClickData {
     const { x, y } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
-    const href = relevantElement.getAttribute('href') ?? undefined;
+    const rawHref = relevantElement.getAttribute('href');
+    // Same scrubbing as page_url: hrefs can carry tokens (magic links, OAuth redirects)
+    const href = rawHref ? normalizeUrl(rawHref, this.get('config')?.sensitiveQueryParams) : undefined;
 
     return {
       x,
       y,
       tag: relevantElement.tagName.toLowerCase(),
-      ...(relevantElement.id && { id: relevantElement.id }),
-      ...(relevantElement.className && { class: relevantElement.className }),
+      ...(relevantElement.id && { id: sanitizePii(relevantElement.id) }),
+      ...(relevantElement.className && { class: sanitizePii(relevantElement.className) }),
       ...(text && { text }),
       ...(href && { href }),
     };

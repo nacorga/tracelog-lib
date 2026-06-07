@@ -50,7 +50,9 @@ export class PerformanceHandler extends StateManager {
   private readonly navigationHistory: string[] = []; // FIFO queue for tracking navigation order
   private readonly observers: PerformanceObserver[] = [];
   private vitalThresholds: Record<WebVitalType, number>;
-  private navigationCounter = 0; // Counter for handling simultaneous navigations edge case
+  private navigationCounter = 0; // Suffix counter for repeat navigations to the same path (SPA A→B→A)
+  private currentNavBase: string | null = null;
+  private currentNavId: string | null = null;
 
   constructor(eventManager: EventManager) {
     super();
@@ -105,6 +107,9 @@ export class PerformanceHandler extends StateManager {
     this.observers.length = 0;
     this.reportedByNav.clear();
     this.navigationHistory.length = 0;
+    this.navigationCounter = 0;
+    this.currentNavBase = null;
+    this.currentNavId = null;
   }
 
   private observeWebVitalsFallback(): void {
@@ -277,21 +282,23 @@ export class PerformanceHandler extends StateManager {
   }
 
   /**
-   * Generates a unique navigation identifier for deduplication.
+   * Generates a deterministic navigation identifier for deduplication.
    *
-   * **Purpose**: Creates deterministic IDs to prevent duplicate Web Vitals reporting
-   * across multiple metrics for the same navigation event.
+   * **Purpose**: Every call within the same navigation must return the SAME id,
+   * so `reportedByNav` can collapse duplicate Web Vitals (one emission per
+   * metric type per navigation — critical for the fallback observers, which
+   * fire per entry batch).
    *
-   * **ID Format**: `{timestamp}_{pathname}` or `{timestamp}_{pathname}_{counter}`
+   * **ID Format**: `{startTime}_{pathname}` or `{startTime}_{pathname}_{counter}`
    *
-   * **Edge Case Handling**:
-   * - If multiple navigations occur to the same pathname in the same millisecond,
-   *   a counter suffix is appended (e.g., `1234.56_/home_2`)
-   * - Counter only added when > 1 to minimize ID length for common case
-   *
-   * **Why Deterministic**:
-   * - Previous implementation used random string → duplicate metrics on page reload
-   * - Now: Same navigation = same ID = proper deduplication via reportedByNav Map
+   * **Determinism**:
+   * - Base id is derived only from the navigation entry's `startTime` (0 by spec
+   *   for the document navigation — no `performance.now()` fallback, which made
+   *   every call unique) and the current pathname.
+   * - The id is cached per navigation; the counter suffix is appended ONLY on a
+   *   real collision: a new navigation whose base id was already reported
+   *   (SPA revisit to the same path, e.g. A→B→A), so the revisit's vitals are
+   *   not suppressed by the first visit's dedup entries.
    *
    * @returns Navigation ID string or null if navigation timing unavailable
    *
@@ -305,15 +312,16 @@ export class PerformanceHandler extends StateManager {
         return null;
       }
 
-      const timestamp = nav.startTime || performance.now();
-      const counter = ++this.navigationCounter;
+      const baseId = `${nav.startTime.toFixed(2)}_${window.location.pathname}`;
 
-      // Base ID: timestamp + pathname (deterministic for deduplication)
-      const baseId = `${timestamp.toFixed(2)}_${window.location.pathname}`;
+      if (baseId === this.currentNavBase && this.currentNavId !== null) {
+        return this.currentNavId;
+      }
 
-      // Append counter only if > 1 (edge case: simultaneous navigations)
-      // This prevents collisions if two navigations occur in the same millisecond to the same path
-      return counter > 1 ? `${baseId}_${counter}` : baseId;
+      this.currentNavBase = baseId;
+      this.currentNavId = this.reportedByNav.has(baseId) ? `${baseId}_${++this.navigationCounter}` : baseId;
+
+      return this.currentNavId;
     } catch (error) {
       log('debug', 'Failed to get navigation ID', { error });
       return null;

@@ -66,6 +66,25 @@ describe('PageViewHandler - Isolated Unit Tests', () => {
       expect(event.page_url).toBeTruthy();
     });
 
+    it('should strip sensitive query params from page_view referrer', () => {
+      const originalReferrer = document.referrer;
+      Object.defineProperty(document, 'referrer', {
+        value: 'https://google.com/landing?q=test&token=secret123',
+        configurable: true,
+      });
+
+      handler.startTracking();
+
+      const event = getTrackedEvent(trackSpy);
+      expect(event.page_view?.referrer).toBe('https://google.com/landing?q=test');
+      expect(event.page_view?.referrer).not.toContain('secret123');
+
+      Object.defineProperty(document, 'referrer', {
+        value: originalReferrer,
+        configurable: true,
+      });
+    });
+
     it('should call onTrack callback after initial page view', () => {
       handler.startTracking();
 

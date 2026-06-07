@@ -1,4 +1,5 @@
 import { log } from '../logging.utils';
+import { normalizeUrl } from '../network/url.utils';
 
 /**
  * List of compound TLDs that require special handling for root domain extraction.
@@ -78,9 +79,10 @@ const isSameDomain = (hostname1: string, hostname2: string): boolean => {
  * - `blog.example.com` → `example.com` ✓ (internal)
  * - `example.com` → `www.example.com` ✓ (internal)
  *
- * @returns External referrer URL or 'Direct'
+ * @param sensitiveQueryParams - Custom sensitive params to strip from the referrer (merged with defaults)
+ * @returns External referrer URL (sensitive query params removed) or 'Direct'
  */
-export const getExternalReferrer = (): string => {
+export const getExternalReferrer = (sensitiveQueryParams: string[] = []): string => {
   const referrer = document.referrer;
   if (!referrer) {
     return 'Direct';
@@ -91,7 +93,8 @@ export const getExternalReferrer = (): string => {
     if (isSameDomain(referrerHostname, currentHostname)) {
       return 'Direct';
     }
-    return referrer;
+    // Referrers can carry tokens (e.g. magic-link landing pages) — scrub like page_url
+    return normalizeUrl(referrer, sensitiveQueryParams);
   } catch (error) {
     log('debug', 'Failed to parse referrer URL, using raw value', { error, data: { referrer } });
     return referrer;

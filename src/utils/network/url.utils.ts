@@ -92,7 +92,18 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
   }
 
   try {
-    const urlObject = new URL(url);
+    let urlObject: URL;
+    let isRelative = false;
+
+    try {
+      urlObject = new URL(url);
+    } catch {
+      // Relative URL (e.g. click hrefs like "/checkout?token=x") — resolve against
+      // the current page so sensitive params can still be stripped.
+      urlObject = new URL(url, window.location.href);
+      isRelative = true;
+    }
+
     const searchParams = urlObject.searchParams;
 
     const allSensitiveParams = [...new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
@@ -108,12 +119,15 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
       }
     });
 
-    if (!hasChanged && url.includes('?')) {
+    if (!hasChanged && (isRelative || url.includes('?'))) {
       return url;
     }
 
     urlObject.search = searchParams.toString();
-    return urlObject.toString();
+
+    // Preserve the relative form — returning the resolved absolute URL would
+    // change the captured data shape (e.g. click hrefs) for no privacy gain.
+    return isRelative ? `${urlObject.pathname}${urlObject.search}${urlObject.hash}` : urlObject.toString();
   } catch (error) {
     log('warn', 'URL normalization failed, returning original', { error, data: { urlLength: url?.length } });
     return url;

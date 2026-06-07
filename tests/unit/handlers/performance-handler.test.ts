@@ -6,6 +6,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 import { initTestBridge, destroyTestBridge, getHandlers } from '../../helpers/bridge.helper';
+import { PerformanceHandler } from '../../../src/handlers/performance.handler';
+import { EventManager } from '../../../src/managers/event.manager';
+import { StorageManager } from '../../../src/managers/storage.manager';
 import type { TraceLogTestBridge } from '../../../src/types';
 import { EventType } from '../../../src/types';
 
@@ -356,5 +359,168 @@ describe('PerformanceHandler - Integration', () => {
     expect(perfHandler).toBeDefined();
 
     destroyTestBridge();
+  });
+});
+
+describe('PerformanceHandler - Navigation ID & Deduplication', () => {
+  let handler: PerformanceHandler;
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+  let originalLocation: Location;
+
+  const setPathname = (pathname: string): void => {
+    Object.defineProperty(window, 'location', {
+      value: { pathname, href: `http://localhost:3000${pathname}`, hostname: 'localhost' },
+      configurable: true,
+      writable: true,
+    });
+  };
+
+  const getNavId = (): string | null => (handler as any).getNavigationId();
+  const sendVital = (type: string, value: number): void => (handler as any).sendVital({ type, value });
+
+  const trackedVitals = (type?: string): unknown[] =>
+    trackSpy.mock.calls
+      .map((call: unknown[]) => call[0] as { type: EventType; web_vitals?: { type: string } })
+      .filter(
+        (e: { type: EventType; web_vitals?: { type: string } }) =>
+          e.type === EventType.WEB_VITALS && (!type || e.web_vitals?.type === type),
+      );
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    originalLocation = window.location;
+
+    const mockNavEntry = {
+      entryType: 'navigation',
+      name: 'document',
+      startTime: 0,
+      duration: 1000,
+      responseStart: 150.5,
+    };
+
+    (window as any).performance.getEntriesByType = vi.fn((type: string) => {
+      if (type === 'navigation') {
+        return [mockNavEntry];
+      }
+      return [];
+    });
+
+    setPathname('/');
+
+    storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager, null);
+    handler = new PerformanceHandler(eventManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+  });
+
+  afterEach(() => {
+    handler.stopTracking();
+    Object.defineProperty(window, 'location', {
+      value: originalLocation,
+      configurable: true,
+      writable: true,
+    });
+    cleanupTestEnvironment();
+  });
+
+  it('should return the same navigation id across multiple calls (deterministic)', () => {
+    const first = getNavId();
+    const second = getNavId();
+    const third = getNavId();
+
+    expect(first).not.toBeNull();
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    expect(first).not.toMatch(/_\d+$/); // No counter suffix without a collision
+  });
+
+  it('should deduplicate the same vital type within one navigation', () => {
+    sendVital('LCP', 5000);
+    sendVital('LCP', 5200);
+    sendVital('LCP', 5400);
+
+    expect(trackedVitals('LCP')).toHaveLength(1);
+  });
+
+  it('should allow different vital types within one navigation', () => {
+    sendVital('LCP', 5000);
+    sendVital('CLS', 0.5);
+    sendVital('INP', 600);
+
+    expect(trackedVitals()).toHaveLength(3);
+  });
+
+  it('should produce a new id after SPA navigation to a different path', () => {
+    const homeId = getNavId();
+
+    setPathname('/checkout');
+    const checkoutId = getNavId();
+
+    expect(checkoutId).not.toBe(homeId);
+    expect(checkoutId).toContain('/checkout');
+  });
+
+  it('should suffix only on a real collision (SPA revisit to the same path)', () => {
+    sendVital('LCP', 5000); // Registers the first navigation in reportedByNav
+    const firstId = getNavId();
+
+    setPathname('/other');
+    getNavId();
+
+    setPathname('/');
+    const revisitId = getNavId();
+
+    expect(revisitId).not.toBe(firstId);
+    expect(revisitId).toMatch(/_\d+$/);
+
+    // Revisit vitals are NOT suppressed by the first visit's dedup entries
+    sendVital('LCP', 4800);
+    expect(trackedVitals('LCP')).toHaveLength(2);
+  });
+
+  it('should stop the fallback observers from flooding repeated CLS/INP emissions', () => {
+    const triggers = new Map<string, (entries: unknown[]) => void>();
+
+    class MockPerformanceObserver {
+      static supportedEntryTypes = ['largest-contentful-paint', 'layout-shift', 'paint', 'event', 'navigation'];
+      private readonly cb: PerformanceObserverCallback;
+
+      constructor(cb: PerformanceObserverCallback) {
+        this.cb = cb;
+      }
+
+      observe(options?: { type?: string }): void {
+        if (options?.type) {
+          triggers.set(options.type, (entries: unknown[]) => {
+            this.cb({ getEntries: () => entries } as unknown as PerformanceObserverEntryList, this as any);
+          });
+        }
+      }
+
+      disconnect(): void {}
+      takeRecords(): PerformanceEntry[] {
+        return [];
+      }
+    }
+
+    (window as any).PerformanceObserver = MockPerformanceObserver;
+
+    (handler as any).observeWebVitalsFallback();
+
+    // Each observer batch fires the callback again — pre-fix this emitted one event per batch
+    const clsEntry = { value: 0.5, hadRecentInput: false };
+    triggers.get('layout-shift')?.([clsEntry]);
+    triggers.get('layout-shift')?.([clsEntry]);
+    triggers.get('layout-shift')?.([clsEntry]);
+
+    const inpEntry = { startTime: 0, processingEnd: 600 };
+    triggers.get('event')?.([inpEntry]);
+    triggers.get('event')?.([inpEntry]);
+    triggers.get('event')?.([inpEntry]);
+
+    expect(trackedVitals('CLS')).toHaveLength(1);
+    expect(trackedVitals('INP')).toHaveLength(1);
   });
 });
