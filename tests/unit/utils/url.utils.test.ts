@@ -52,6 +52,19 @@ describe('url.utils - normalizeUrl()', () => {
       const result = normalizeUrl('/account?auth=xyz#settings');
       expect(result).toBe('/account#settings');
     });
+
+    it('should keep the host for a cross-origin protocol-relative href', () => {
+      // jsdom base is http://localhost:3000 — a protocol-relative href to a different
+      // host must NOT be collapsed to a path-only form (that would drop the host).
+      const result = normalizeUrl('//cdn.other.com/x?token=secret123&v=1');
+      expect(result).toBe('http://cdn.other.com/x?v=1');
+      expect(result).not.toContain('secret123');
+    });
+
+    it('should preserve a cross-origin protocol-relative href with no sensitive params', () => {
+      const result = normalizeUrl('//cdn.other.com/asset.js?v=1');
+      expect(result).toBe('//cdn.other.com/asset.js?v=1');
+    });
   });
 
   it('should return empty string for empty input', () => {

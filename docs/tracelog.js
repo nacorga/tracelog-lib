@@ -578,20 +578,19 @@ const normalizeUrl = (url, sensitiveQueryParams = []) => {
     try {
       urlObject = new URL(url);
     } catch {
-      urlObject = new URL(url, window.location.href);
-      isRelative = true;
+      const base = window.location.href;
+      urlObject = new URL(url, base);
+      isRelative = urlObject.origin === new URL(base).origin;
     }
     const searchParams = urlObject.searchParams;
     const allSensitiveParams = [.../* @__PURE__ */ new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
     let hasChanged = false;
-    const removedParams = [];
-    allSensitiveParams.forEach((param) => {
+    for (const param of allSensitiveParams) {
       if (searchParams.has(param)) {
         searchParams.delete(param);
         hasChanged = true;
-        removedParams.push(param);
       }
-    });
+    }
     if (!hasChanged && (isRelative || url.includes("?"))) {
       return url;
     }

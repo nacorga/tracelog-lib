@@ -124,10 +124,14 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
     try {
       urlObject = new URL(url);
     } catch {
-      // Relative URL (e.g. click hrefs like "/checkout?token=x") — resolve against
-      // the current page so sensitive params can still be stripped.
-      urlObject = new URL(url, window.location.href);
-      isRelative = true;
+      // Path-relative href (e.g. "/checkout?token=x") — resolve against the current
+      // page so sensitive params can still be stripped. Only collapse back to the
+      // relative form when it stays same-origin: a protocol-relative href
+      // ("//cdn.other.com/x") resolves to a different origin and must keep its
+      // absolute form, or we'd silently drop the host from the captured data.
+      const base = window.location.href;
+      urlObject = new URL(url, base);
+      isRelative = urlObject.origin === new URL(base).origin;
     }
 
     const searchParams = urlObject.searchParams;
@@ -135,15 +139,13 @@ export const normalizeUrl = (url: string, sensitiveQueryParams: string[] = []): 
     const allSensitiveParams = [...new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
 
     let hasChanged = false;
-    const removedParams: string[] = [];
 
-    allSensitiveParams.forEach((param) => {
+    for (const param of allSensitiveParams) {
       if (searchParams.has(param)) {
         searchParams.delete(param);
         hasChanged = true;
-        removedParams.push(param);
       }
-    });
+    }
 
     if (!hasChanged && (isRelative || url.includes('?'))) {
       return url;
