@@ -559,8 +559,9 @@ await tracelog.init({ maxSameEventPerMinute: 30 });
 
 #### `integrations.tracelog`
 
-- **Type:** `{ projectId: string; shopify?: boolean; healthBeacon?: boolean }`
+- **Type:** `{ projectId: string; shopify?: boolean; firstParty?: boolean; healthBeacon?: boolean }`
 - **Description:** TraceLog SaaS integration
+- **`firstParty`** (default `false`): opt into "Accuracy mode". By default events post to the hosted endpoint `https://ingest.tracelog.io/p/{projectId}/collect`, which works the instant the snippet is pasted — **no DNS setup**. Set `true` to instead send through your own first-party subdomain (`https://{projectId}.{rootDomain}/collect`, a CNAME → middleware), which recovers ~10–30% of visits that ad-blockers strip from third-party hosts. Only enable it once the CNAME (and the domain-ownership TXT record) are verified — the dashboard surfaces this flag in your snippet only after verification.
 - **`healthBeacon`** (default `true`): when ingest is rejected at the domain gate (HTTP 403), emit a diagnostic beacon so the dashboard can tell you your snippet is alive but events are blocked. Throttled to at most one per 10 minutes per browser (persisted in localStorage, shared across pages and tabs). Diagnostic only — never carries analytics data. Set `false` to opt out.
 
 ```typescript
@@ -574,7 +575,9 @@ await tracelog.init({
 });
 ```
 
-**Domain requirement.** The SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`). Calls to `init()` from `localhost` or a raw IP address are rejected. For local development, omit `integrations.tracelog` to run in standalone mode, or test against a staging domain mapped via `/etc/hosts`.
+**No DNS required (default).** The collect endpoint defaults to the hosted host `https://ingest.tracelog.io/p/{projectId}/collect`, so the snippet captures events the moment it is installed — on any host, including `localhost`. No CNAME, no waiting on DNS propagation.
+
+**Domain requirement (Accuracy mode only).** When `firstParty: true`, the endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`), so `init()` from `localhost` or a raw IP address is rejected. For local development, omit `integrations.tracelog` to run in standalone mode, leave `firstParty` off to use the hosted default, or test against a staging domain mapped via `/etc/hosts`.
 
 **`shopify`** — when `true`, the library writes the visitor UUID as a Shopify cart attribute (`tracelog_user_id`) so checkout-funnel events fired from the Web Pixel can be stitched back to the storefront visitor.
 
@@ -944,7 +947,7 @@ try {
 **Common causes:**
 
 - Initialization timeout
-- Invalid configuration (e.g., `localhost` host with `integrations.tracelog`)
+- Invalid configuration (e.g., `localhost` host with `integrations.tracelog` **and** `firstParty: true`)
 - Browser API unavailable
 
 ---

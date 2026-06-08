@@ -62,6 +62,20 @@ export interface Config {
       /** Enable Shopify cart attribute linking for webhook revenue attribution. */
       shopify?: boolean;
       /**
+       * Opt into "Accuracy mode": send events through the merchant's own first-party
+       * subdomain (`https://{projectId}.{rootDomain}/collect`, a CNAME → middleware)
+       * instead of the default hosted endpoint (`https://ingest.tracelog.io/p/{projectId}/collect`).
+       *
+       * Leave unset (the default) and events post to the hosted endpoint with zero DNS
+       * setup — the snippet works the moment it is pasted. Only enable this once the
+       * CNAME (and the domain-ownership TXT record) are verified; the dashboard surfaces
+       * this flag in the snippet only after verification, so the lib never points at an
+       * unresolved subdomain. First-party transport recovers ~10–30% of visits that
+       * ad-blockers strip from third-party hosts.
+       * @default false
+       */
+      firstParty?: boolean;
+      /**
        * Emit a low-frequency diagnostic "health beacon" when ingest is rejected at the domain
        * gate (HTTP 403) so the dashboard can tell the merchant their snippet is alive but their
        * events are blocked. Diagnostic only — it never carries analytics data. Set `false` to opt out.

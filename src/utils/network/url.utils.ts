@@ -1,5 +1,5 @@
 import { Config } from '../../types';
-import { DEFAULT_SENSITIVE_QUERY_PARAMS } from '../../constants';
+import { DEFAULT_SENSITIVE_QUERY_PARAMS, INGEST_HOST } from '../../constants';
 import { log } from '../logging.utils';
 
 /**
@@ -14,11 +14,29 @@ const isValidUrl = (url: string): boolean => {
 };
 
 /**
- * Generates a SaaS API URL based on the given project ID and the current browser domain.
- * @param projectId - The project ID to use as a subdomain.
- * @returns The generated SaaS API URL.
+ * Generates the hosted, zero-DNS collect URL for a project.
+ *
+ * This is the DEFAULT transport: a CORS endpoint that works the instant the snippet is
+ * pasted, with no merchant DNS setup. Unlike {@link generateFirstPartyApiUrl} it does
+ * NOT depend on the page's domain, so it is valid on any host (including localhost).
+ * @param projectId - The TraceLog project identifier.
+ * @returns `${INGEST_HOST}/p/{projectId}/collect`.
  */
-const generateSaasApiUrl = (projectId: string): string => {
+const generateHostedApiUrl = (projectId: string): string => {
+  return `${INGEST_HOST}/p/${encodeURIComponent(projectId)}/collect`;
+};
+
+/**
+ * Generates a first-party SaaS API URL ("Accuracy mode") from the project ID and the
+ * current browser domain (`https://{projectId}.{rootDomain}/collect`, a CNAME → middleware).
+ *
+ * Opt-in only (`integrations.tracelog.firstParty: true`). Requires a real domain hostname,
+ * so it rejects on localhost / raw IPs — for local development omit `integrations.tracelog`
+ * (standalone mode) or use the hosted default.
+ * @param projectId - The project ID to use as a subdomain.
+ * @returns The generated first-party SaaS API URL.
+ */
+const generateFirstPartyApiUrl = (projectId: string): string => {
   try {
     const url = new URL(window.location.href);
     const host = url.hostname;
@@ -64,15 +82,23 @@ const generateSaasApiUrl = (projectId: string): string => {
 };
 
 /**
- * Generates collection API URLs for the configured TraceLog SaaS integration
+ * Generates collection API URLs for the configured TraceLog SaaS integration.
+ *
+ * Defaults to the hosted, zero-DNS endpoint so the snippet works the moment it is pasted
+ * (this kills the silent zero-event activation failure caused by an unconfigured CNAME).
+ * Only when the merchant explicitly opts into Accuracy mode (`integrations.tracelog.firstParty`)
+ * does it derive the first-party subdomain URL from the page domain.
  * @param config - The TraceLog configuration
- * @returns Object containing the SaaS API URL (if configured)
+ * @returns Object containing the SaaS API URL (if a projectId is configured)
  */
 export const getCollectApiUrls = (config: Config): { saas?: string } => {
   const urls: { saas?: string } = {};
+  const tracelog = config.integrations?.tracelog;
 
-  if (config.integrations?.tracelog?.projectId) {
-    urls.saas = generateSaasApiUrl(config.integrations.tracelog.projectId);
+  if (tracelog?.projectId) {
+    urls.saas = tracelog.firstParty
+      ? generateFirstPartyApiUrl(tracelog.projectId)
+      : generateHostedApiUrl(tracelog.projectId);
   }
 
   return urls;

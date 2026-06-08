@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { normalizeUrl } from '../../../src/utils/network/url.utils';
+import { describe, it, expect, afterEach } from 'vitest';
+import { getCollectApiUrls, normalizeUrl } from '../../../src/utils/network/url.utils';
+import { INGEST_HOST } from '../../../src/constants';
+import type { Config } from '../../../src/types';
 
 describe('url.utils - normalizeUrl()', () => {
   describe('absolute URLs', () => {
@@ -54,5 +56,53 @@ describe('url.utils - normalizeUrl()', () => {
 
   it('should return empty string for empty input', () => {
     expect(normalizeUrl('')).toBe('');
+  });
+});
+
+describe('url.utils - getCollectApiUrls()', () => {
+  const originalLocation = window.location;
+
+  const setLocation = (href: string): void => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: new URL(href),
+    });
+  };
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+  });
+
+  it('returns no saas url when no projectId is configured (standalone)', () => {
+    expect(getCollectApiUrls({})).toEqual({});
+    expect(getCollectApiUrls({ integrations: { tracelog: { projectId: '' } } })).toEqual({});
+  });
+
+  it('defaults to the hosted zero-DNS endpoint (no firstParty flag)', () => {
+    const config: Config = { integrations: { tracelog: { projectId: 'proj-123' } } };
+    expect(getCollectApiUrls(config)).toEqual({ saas: `${INGEST_HOST}/p/proj-123/collect` });
+  });
+
+  it('uses the hosted endpoint even on localhost — no domain dependency', () => {
+    // jsdom default url is http://localhost:3000; the hosted default must NOT reject it.
+    const config: Config = { integrations: { tracelog: { projectId: 'proj-123' } } };
+    expect(getCollectApiUrls(config).saas).toBe(`${INGEST_HOST}/p/proj-123/collect`);
+  });
+
+  it('encodes unsafe characters in the hosted url', () => {
+    const config: Config = { integrations: { tracelog: { projectId: 'a b/c' } } };
+    expect(getCollectApiUrls(config)).toEqual({ saas: `${INGEST_HOST}/p/a%20b%2Fc/collect` });
+  });
+
+  it('derives the first-party subdomain url when firstParty is true', () => {
+    setLocation('https://shop.example.com/products');
+    const config: Config = { integrations: { tracelog: { projectId: 'proj-123', firstParty: true } } };
+    expect(getCollectApiUrls(config)).toEqual({ saas: 'https://proj-123.example.com/collect' });
+  });
+
+  it('throws for first-party mode on localhost (requires a real domain)', () => {
+    setLocation('http://localhost:3000/');
+    const config: Config = { integrations: { tracelog: { projectId: 'proj-123', firstParty: true } } };
+    expect(() => getCollectApiUrls(config)).toThrow(/SaaS/);
   });
 });
