@@ -26,6 +26,38 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.filePath
 # Exit if no file path
 [[ -z "$FILE_PATH" ]] && exit 0
 
+# ─── Internal task/audit reference guard (cross-package; see .claude/rules/check-catalog.md) ───
+# Code comments/test-names AND technical docs describe BEHAVIOR — never the task/audit that
+# produced it. Ephemeral IDs (WP3, P0-1, audit Finding 6, task 12, §N, ui-big-bang, DA-5,
+# D-PA2, TS-7, parenthesized short codes (A4)/(D1/D2)) leak internal process and rot.
+# Docs use the full pattern; code drops standalone "task N"/"Finding N" (they collide with
+# test data and the product's own "finding" term). docs/tasks/ is EXEMPT (it IS the tracker).
+# Cite external RFCs as "section N", not "§N". See memory no-task-refs-in-page-docs.
+# (Runs for ALL lib src/tests/docs; the pixel-specific checks below stay scoped to src/pixel.)
+_IREFS_DOCS='WP[0-9]|WP-[A-Z]|(^|[^A-Za-z0-9])P[0-9]-[0-9]|A-P[0-9]-[0-9]|DA-[0-9]|D-PA[0-9]|TS-[0-9]|§[0-9]|ui-big-bang|[Tt]asks?[[:space:]]+[0-9]|Finding[[:space:]]+[0-9]|enmienda|injerto|[Aa]udit[[:space:]]+(Finding|backlog|flagged)|\([A-Z]{1,3}[0-9]{1,2}(/[A-Z]{1,3}[0-9]{1,2})*\)'
+_IREFS_CODE='WP[0-9]|WP-[A-Z]|(^|[^A-Za-z0-9])P[0-9]-[0-9]|A-P[0-9]-[0-9]|DA-[0-9]|D-PA[0-9]|TS-[0-9]|§[0-9]|ui-big-bang|enmienda|injerto|[Aa]udit[[:space:]]+(Finding|backlog|flagged)|\([A-Z]{1,3}[0-9]{1,2}(/[A-Z]{1,3}[0-9]{1,2})*\)'
+_iref_report() {
+  {
+    echo ""
+    echo "INTERNAL TASK/AUDIT REFERENCE in $(basename "$FILE_PATH"):"
+    echo "$1" | sed 's/^/  /'
+    echo ""
+    echo "  Describe behavior, not the task/audit that produced it. Remove ephemeral IDs"
+    echo "  (WP3, P0-1, audit Finding N, task 12, §N, ui-big-bang, D-PA*, DA-*, TS-*,"
+    echo "  short codes like (A4)/(D1/D2)). docs/tasks/ is exempt; cite RFCs as 'section N'."
+    echo "  See .claude/rules/check-catalog.md + memory no-task-refs-in-page-docs."
+    echo ""
+  } >&2
+}
+if [[ "$FILE_PATH" == */docs/*.md && "$FILE_PATH" != */docs/tasks/* ]]; then
+  _IREF_HITS=$(grep -nE "$_IREFS_DOCS" "$FILE_PATH" 2>/dev/null | head -10)
+  [[ -n "$_IREF_HITS" ]] && { _iref_report "$_IREF_HITS"; exit 2; }
+fi
+if [[ ( "$FILE_PATH" == */src/* || "$FILE_PATH" == */test/* || "$FILE_PATH" == */tests/* ) && "$FILE_PATH" == *.ts ]]; then
+  _IREF_HITS=$(grep -nE "$_IREFS_CODE" "$FILE_PATH" 2>/dev/null | head -10)
+  [[ -n "$_IREF_HITS" ]] && { _iref_report "$_IREF_HITS"; exit 2; }
+fi
+
 # Scope: pixel TypeScript only (this is the redirect target).
 [[ "$FILE_PATH" != *.ts ]] && exit 0
 [[ "$FILE_PATH" != *src/pixel/* ]] && exit 0
