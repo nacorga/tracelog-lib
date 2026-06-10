@@ -26,6 +26,37 @@
 
 
 
+
+## [3.3.0] - 2026-06-10
+
+### ✨ Features
+
+- Expand sensitive query param filtering with credential-specific params ([c9dd176](../../commit/c9dd176af18a6208fdd3f1d487077787599335b3))
+- Support hosted ingest endpoint (zero-DNS) and firstParty accuracy mode; add URL utilities ([3b72e44](../../commit/3b72e44378fa411ddf87c99681fd7dfc27b294ed))
+- Improve navigation deduplication and URL normalization; add comprehensive handler tests ([4fd4309](../../commit/4fd4309c00a5c9c6e7d707d64672d41b51976029))
+
+### ♻️ Refactoring
+
+- Url utils improves ([24090ac](../../commit/24090ac9bf4ec6720bdaff4b6aa6e3aa65de6040))
+
+### 🔧 Other Changes
+
+- Merge pull request #123 from nacorga/release/20260610.1 ([7516ad9](../../commit/7516ad9089e6d21b4d13e26acab04d153e381c28))
+- Enforce internal task/audit reference guard in lint hook; remove existing violations ([6503333](../../commit/6503333b288b21319fc3204a955b118f3b4e7360))
+- Add lint-patterns hook and settings for pixel integrity enforcement ([29d6ed4](../../commit/29d6ed4fcb13b3ef35912efa8c6e29dcaaa2ebcf))
+- Merge pull request #122 from nacorga/refactor/general-improves ([7fe3d23](../../commit/7fe3d230b24c50bf25646c58ae373d50185f85fa))
+- Commit skill ([464e6ca](../../commit/464e6ca90a4fceeee1ff6cf25909e25c8eb5f7bb))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.2.0...v3.3.0
+
+
 ## [3.2.0] - 2026-06-04
 
 ### ✨ Features
