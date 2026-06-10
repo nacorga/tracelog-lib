@@ -417,7 +417,7 @@ To change global metadata after init, call `destroy()` and re-initialize with th
 #### `sensitiveQueryParams`
 
 - **Type:** `string[]`
-- **Default:** `['token', 'auth', 'key', 'session', 'reset', 'password', 'api_key', 'apikey', 'secret', 'access_token', 'refresh_token', 'verification', 'code', 'otp']`
+- **Default:** `['token', 'auth', 'key', 'session', 'sessionid', 'session_id', 'jwt', 'bearer', 'oauth', 'reset', 'password', 'api_key', 'apikey', 'secret', 'access_token', 'refresh_token', 'verification', 'code', 'otp']`
 - **Description:** query parameters stripped from every tracked URL — `page_url`, click `href`, and referrers (session attribution and `page_view.referrer`). Your custom params are **merged** with defaults.
 
 ```typescript

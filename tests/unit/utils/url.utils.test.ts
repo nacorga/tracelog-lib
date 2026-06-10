@@ -29,6 +29,15 @@ describe('url.utils - normalizeUrl()', () => {
       const result = normalizeUrl('https://example.com/page');
       expect(result).toBe('https://example.com/page');
     });
+
+    it.each(['sessionid', 'session_id', 'jwt', 'bearer', 'oauth'])(
+      'should strip credential param "%s" by default',
+      (param) => {
+        const result = normalizeUrl(`https://example.com/cb?${param}=leak&keep=1`);
+        expect(result).toBe('https://example.com/cb?keep=1');
+        expect(result).not.toContain('leak');
+      },
+    );
   });
 
   describe('relative URLs (click hrefs)', () => {

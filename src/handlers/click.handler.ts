@@ -347,7 +347,7 @@ export class ClickHandler extends StateManager {
     const text = this.getRelevantText(clickedElement, relevantElement);
     const rawHref = relevantElement.getAttribute('href');
     // Same scrubbing as page_url: hrefs can carry tokens (magic links, OAuth redirects)
-    const href = rawHref ? normalizeUrl(rawHref, this.get('config')?.sensitiveQueryParams) : undefined;
+    const href = rawHref ? normalizeUrl(rawHref, this.get('config').sensitiveQueryParams) : undefined;
 
     return {
       x,

@@ -179,7 +179,7 @@ export const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term
  * Default list of sensitive URL query parameters to filter out for privacy protection
  *
  * Includes:
- * - Authentication tokens (token, auth, key, session, access_token, refresh_token)
+ * - Authentication tokens (token, auth, key, session, sessionid, session_id, jwt, bearer, oauth, access_token, refresh_token)
  * - Password reset links (reset, password, verification, code, otp)
  * - API keys (api_key, apikey, secret)
  *
@@ -190,6 +190,11 @@ export const DEFAULT_SENSITIVE_QUERY_PARAMS = [
   'auth',
   'key',
   'session',
+  'sessionid',
+  'session_id',
+  'jwt',
+  'bearer',
+  'oauth',
   'reset',
   'password',
   'api_key',

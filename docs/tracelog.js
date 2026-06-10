@@ -86,6 +86,11 @@ const DEFAULT_SENSITIVE_QUERY_PARAMS = [
   "auth",
   "key",
   "session",
+  "sessionid",
+  "session_id",
+  "jwt",
+  "bearer",
+  "oauth",
   "reset",
   "password",
   "api_key",
@@ -3593,11 +3598,11 @@ class SessionManager extends StateManager {
     let sessionClickIds;
     if (recoveredSessionId) {
       const storedSession = this.loadStoredSession();
-      sessionReferrer = storedSession?.referrer ?? getExternalReferrer(this.get("config")?.sensitiveQueryParams);
+      sessionReferrer = storedSession?.referrer ?? getExternalReferrer(this.get("config").sensitiveQueryParams);
       sessionUtm = storedSession?.utm ?? getUTMParameters();
       sessionClickIds = storedSession?.clickIds ?? getClickIds();
     } else {
-      sessionReferrer = getExternalReferrer(this.get("config")?.sensitiveQueryParams);
+      sessionReferrer = getExternalReferrer(this.get("config").sensitiveQueryParams);
       sessionUtm = getUTMParameters();
       sessionClickIds = getClickIds();
     }
@@ -3709,7 +3714,7 @@ class SessionManager extends StateManager {
   renewSession() {
     this.needsRenewal = false;
     const newSessionId = this.generateSessionId();
-    const sessionReferrer = getExternalReferrer(this.get("config")?.sensitiveQueryParams);
+    const sessionReferrer = getExternalReferrer(this.get("config").sensitiveQueryParams);
     const sessionUtm = getUTMParameters();
     const sessionClickIds = getClickIds();
     log("debug", "Renewing session after timeout", {
@@ -4349,7 +4354,7 @@ class ClickHandler extends StateManager {
     const { x: x2, y: y2 } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
     const rawHref = relevantElement.getAttribute("href");
-    const href = rawHref ? normalizeUrl(rawHref, this.get("config")?.sensitiveQueryParams) : void 0;
+    const href = rawHref ? normalizeUrl(rawHref, this.get("config").sensitiveQueryParams) : void 0;
     return {
       x: x2,
       y: y2,
