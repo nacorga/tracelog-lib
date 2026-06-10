@@ -162,7 +162,7 @@ await tracelog.init({
   // Privacy
   samplingRate: 1.0,                // 100% (default)
   errorSampling: 1.0,               // 100% (default)
-  sensitiveQueryParams: ['token'],  // Added to the 15-param default deny-list
+  sensitiveQueryParams: ['token'],  // Added to the 19-param default deny-list
 
   // Throttles
   pageViewThrottleMs: 1000,         // Min interval between page_view events

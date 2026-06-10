@@ -347,12 +347,12 @@ export class SessionManager extends StateManager {
     if (recoveredSessionId) {
       // Session recovered: load attribution from storage (with fallback to current context)
       const storedSession = this.loadStoredSession();
-      sessionReferrer = storedSession?.referrer ?? getExternalReferrer();
+      sessionReferrer = storedSession?.referrer ?? getExternalReferrer(this.get('config').sensitiveQueryParams);
       sessionUtm = storedSession?.utm ?? getUTMParameters();
       sessionClickIds = storedSession?.clickIds ?? getClickIds();
     } else {
       // New session: capture from current page context
-      sessionReferrer = getExternalReferrer();
+      sessionReferrer = getExternalReferrer(this.get('config').sensitiveQueryParams);
       sessionUtm = getUTMParameters();
       sessionClickIds = getClickIds();
     }
@@ -504,7 +504,7 @@ export class SessionManager extends StateManager {
     this.needsRenewal = false;
 
     const newSessionId = this.generateSessionId();
-    const sessionReferrer = getExternalReferrer();
+    const sessionReferrer = getExternalReferrer(this.get('config').sensitiveQueryParams);
     const sessionUtm = getUTMParameters();
     const sessionClickIds = getClickIds();
 

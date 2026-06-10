@@ -149,7 +149,8 @@ export class PageViewHandler extends StateManager {
   }
 
   private extractPageViewData(): PageViewData | undefined {
-    const { referrer } = document;
+    // Referrers can carry tokens (e.g. magic-link landing pages) — scrub like page_url
+    const referrer = document.referrer ? normalizeUrl(document.referrer, this.get('config').sensitiveQueryParams) : '';
     const { title } = document;
 
     if (!referrer && !title) {

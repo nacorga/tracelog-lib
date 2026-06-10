@@ -13,7 +13,7 @@ This document outlines TraceLog's security guarantees, privacy protections, and 
    - Click events on form fields only capture element metadata (tag, id, class), never the `value` attribute
 
 2. **PII sanitization**
-   - Automatically redact sensitive data patterns in error messages, stack traces, and click text:
+   - Automatically redact sensitive data patterns in error messages, stack traces, click text, and click element `id` / `class` attributes:
      - Email addresses → `[REDACTED]`
      - Phone numbers (US formats) → `[REDACTED]`
      - Credit card numbers → `[REDACTED]`
@@ -25,7 +25,7 @@ This document outlines TraceLog's security guarantees, privacy protections, and 
    - Patterns live in [`src/utils/security/pii.utils.ts`](./src/utils/security/pii.utils.ts) and apply to `ClickHandler` and `ErrorHandler` automatically
 
 3. **Default URL parameter filtering**
-   - Automatically remove sensitive query parameters from tracked URLs (15-param default deny-list: `token`, `auth`, `key`, `password`, `secret`, `api_key`, `apikey`, `access_token`, `refresh_token`, `session`, `sessionid`, `jwt`, `bearer`, `code`, `state`, `nonce`)
+   - Automatically remove sensitive query parameters from every tracked URL — `page_url`, click `href` attributes, and referrers (19-param default deny-list: `token`, `auth`, `key`, `session`, `sessionid`, `session_id`, `jwt`, `bearer`, `oauth`, `reset`, `password`, `api_key`, `apikey`, `secret`, `access_token`, `refresh_token`, `verification`, `code`, `otp`)
    - Common parameters like `email` and `user` are NOT filtered by default (legitimate use in confirmation links, attribution)
    - Extend the list via `config.sensitiveQueryParams`
 
@@ -343,7 +343,7 @@ npm run test:e2e -- error-tracking
 |------------------------------|------------------------------------------------|------------------------------------|
 | **Input value protection**   | ✅ Never captured                              | Trust but verify in tests          |
 | **PII in text / errors**     | ✅ Auto-sanitized (emails, phones, cards, …)   | Extend for domain-specific PII     |
-| **URL parameters**           | ✅ Default 15-param deny-list                  | Add app-specific params            |
+| **URL parameters**           | ✅ Default 19-param deny-list                  | Add app-specific params            |
 | **Consent management**       | ❌ Not handled                                 | Implement before `init()`          |
 | **Sensitive UI elements**    | ✅ `data-tlog-ignore` support                  | Mark all sensitive elements        |
 | **Custom-event data**        | ⚠️ XSS-scanned only                            | Sanitize for PII before sending    |

@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupTestEnvironment, cleanupTestEnvironment } from '../../helpers/setup.helper';
 import { createMockConfig } from '../../helpers/fixtures.helper';
 import { initTestBridge, destroyTestBridge, getManagers, getHandlers } from '../../helpers/bridge.helper';
+import { INGEST_HOST } from '../../../src/constants';
 
 describe('App - Initialization', () => {
   beforeEach(() => {
@@ -39,8 +40,9 @@ describe('App - Initialization', () => {
       expect(config.globalMetadata).toEqual({ env: 'test' });
     });
 
-    it('should initialize with tracelog integration', async () => {
-      // TraceLog SaaS not supported on localhost, so this test validates the error
+    it('should initialize with tracelog integration on localhost (hosted default, zero-DNS)', async () => {
+      // The hosted default works on any host (incl. localhost) — no domain dependency.
+      // This is the fix for the silent zero-event activation bug.
       const config = createMockConfig({
         integrations: {
           tracelog: {
@@ -49,7 +51,12 @@ describe('App - Initialization', () => {
         },
       });
 
-      await expect(initTestBridge(config)).rejects.toThrow(/SaaS integration .* localhost/);
+      const bridge = await initTestBridge(config);
+
+      expect(bridge.initialized).toBe(true);
+      expect(bridge.get('collectApiUrls')).toEqual({
+        saas: `${INGEST_HOST}/p/test-project-id/collect`,
+      });
     });
 
     it('should throw error if already initialized', async () => {
@@ -136,17 +143,18 @@ describe('App - Initialization', () => {
       expect(pageUrl).toBeDefined();
     });
 
-    it('should handle init errors gracefully', async () => {
-      // Test that init errors are caught and thrown appropriately
+    it('should handle init errors gracefully (first-party mode on localhost)', async () => {
+      // Accuracy mode (`firstParty: true`) derives the endpoint from the page domain,
+      // so it still rejects on localhost — the hosted default does not.
       const invalidConfig = createMockConfig({
         integrations: {
           tracelog: {
-            projectId: 'test-id', // SaaS not supported on localhost
+            projectId: 'test-id',
+            firstParty: true, // forces the domain-derived (first-party) endpoint
           },
         },
       });
 
-      // On localhost, SaaS integration will throw error.
       // Capture the message once — `initTestBridge` is not idempotent across
       // two failing inits, so we only call it once and assert both invariants.
       let errMessage = '';

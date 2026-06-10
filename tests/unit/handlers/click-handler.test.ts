@@ -296,6 +296,94 @@ describe('ClickHandler - PII Sanitization', () => {
   });
 });
 
+describe('ClickHandler - href & Attribute Sanitization', () => {
+  let handler: ClickHandler;
+  let eventManager: EventManager;
+  let storageManager: StorageManager;
+  let trackSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setupTestEnvironment();
+    storageManager = new StorageManager();
+    eventManager = new EventManager(storageManager, null);
+    handler = new ClickHandler(eventManager);
+    trackSpy = vi.spyOn(eventManager, 'track');
+  });
+
+  afterEach(() => {
+    handler.stopTracking();
+    cleanupTestEnvironment();
+  });
+
+  it('should strip sensitive query params from absolute hrefs', () => {
+    handler.startTracking();
+
+    const anchor = createMockElement('a', { href: 'https://example.com/reset?token=secret123&foo=1' }, 'Reset');
+    document.body.appendChild(anchor);
+    dispatchClick(anchor);
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.href).toBe('https://example.com/reset?foo=1');
+    expect(event.click_data?.href).not.toContain('secret123');
+
+    document.body.removeChild(anchor);
+  });
+
+  it('should strip sensitive query params from relative hrefs', () => {
+    handler.startTracking();
+
+    const anchor = createMockElement('a', { href: '/reset-password?token=secret123' }, 'Reset');
+    document.body.appendChild(anchor);
+    dispatchClick(anchor);
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.href).toBe('/reset-password');
+
+    document.body.removeChild(anchor);
+  });
+
+  it('should keep non-sensitive hrefs untouched', () => {
+    handler.startTracking();
+
+    const anchor = createMockElement('a', { href: '/products?category=shoes' }, 'Shoes');
+    document.body.appendChild(anchor);
+    dispatchClick(anchor);
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.href).toBe('/products?category=shoes');
+
+    document.body.removeChild(anchor);
+  });
+
+  it('should sanitize PII in element id', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', { id: 'row-user@example.com' }, 'Open');
+    document.body.appendChild(button);
+    dispatchClick(button);
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.id).toContain('[REDACTED]');
+    expect(event.click_data?.id).not.toContain('user@example.com');
+
+    document.body.removeChild(button);
+  });
+
+  it('should sanitize PII in element class', () => {
+    handler.startTracking();
+
+    const button = createMockElement('button', { class: 'btn js-user@example.com' }, 'Open');
+    document.body.appendChild(button);
+    dispatchClick(button);
+
+    const event = getTrackedEvent(trackSpy);
+    expect(event.click_data?.class).toContain('[REDACTED]');
+    expect(event.click_data?.class).not.toContain('user@example.com');
+
+    document.body.removeChild(button);
+  });
+});
+
 describe('ClickHandler - Element Data Capture', () => {
   let handler: ClickHandler;
   let eventManager: EventManager;

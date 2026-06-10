@@ -8,6 +8,8 @@ TraceLog is a **client-first analytics library** that captures user interactions
 
 **Core Principle**: Client-only first. Events captured locally, network requests are opt-in.
 
+**No internal task/audit refs**: code comments, test/`describe` names, and docs describe *behavior*, never the task/audit that produced it — no `WP3`, `P0-1`, `DA-5`, `audit Finding N`, `task N`, `§N`, `ui-big-bang`, short codes `(A4)`/`(T15)`. Cite external RFCs as "section N". Enforced write-time by `.claude/hooks/lint-patterns.sh` (covers `src/`, `tests/`, `docs/`; `docs/tasks/` exempt). See memory `no-task-refs-in-page-docs`.
+
 ---
 
 ## Essential Commands
@@ -138,7 +140,9 @@ await tracelog.init({
 });
 ```
 
-**Domain requirement.** The SaaS endpoint is derived from the host page's domain (`https://{projectId}.{rootDomain}/collect`), so `init()` rejects when called from `localhost` or a raw IP address. For local development, omit `integrations.tracelog` to run in standalone mode.
+**Transport default (zero-DNS).** The SaaS collect endpoint defaults to the hosted host `https://ingest.tracelog.io/p/{projectId}/collect` (a CORS endpoint), so the snippet captures events the moment it is installed — on any host, including `localhost`, with no CNAME/DNS setup. This is the fix for the silent zero-event activation bug: an unconfigured first-party subdomain no longer means zero events.
+
+**Accuracy mode (opt-in).** `integrations.tracelog.firstParty: true` switches transport to the merchant's own first-party subdomain (`https://{projectId}.{rootDomain}/collect`, CNAME → middleware). Only this mode derives the endpoint from the page domain, so only this mode rejects `init()` on `localhost` / raw IP. The URL is chosen once at init (`getCollectApiUrls`) — there is no runtime cross-host fallback; each `SenderManager` owns a single immutable `apiUrl`. For local development, omit `integrations.tracelog` (standalone) or leave `firstParty` off (hosted default).
 
 **Removed in v3:** `integrations.custom`, transformers (`setTransformer` / `removeTransformer`), custom headers (`setCustomHeaders` / `removeCustomHeaders`), multi-integration, `flushImmediately()` / `flushImmediatelySync()` public surface, `setQaMode()` programmatic API, `updateGlobalMetadata()` / `mergeGlobalMetadata()`, viewport handler / events / config, `LONG_TASK` web vital, `relativeX/Y` and extended attribute fields on click data, `is_primary` / `velocity` / `max_depth_reached` on scroll data, `pathname` / `search` / `hash` on page-view data (full URL still on event envelope), `StorageManager.clear()` / `isAvailable()` / `hasQuotaError()`, `TimeManager.getClockSkew()` / `getBootInfo()`.
 

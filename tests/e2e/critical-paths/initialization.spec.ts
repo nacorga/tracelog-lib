@@ -35,7 +35,7 @@ test.describe('E2E: Initialization', () => {
   });
 
   test.describe('Integration Configuration', () => {
-    test('should reject tracelog integration on localhost', async ({ page }) => {
+    test('should accept hosted tracelog integration on localhost (zero-DNS default)', async ({ page }) => {
       const result = await page.evaluate(async () => {
         let retries = 0;
         while (!window.__traceLogBridge && retries < 50) {
@@ -48,7 +48,7 @@ test.describe('E2E: Initialization', () => {
 
         window.__traceLogBridge.destroy(true);
 
-        // SaaS integration should be rejected on localhost for security
+        // Hosted default endpoint is a CORS endpoint that works on any host (incl. localhost).
         let initError: string | null = null;
         try {
           await window.__traceLogBridge.init({
@@ -64,14 +64,16 @@ test.describe('E2E: Initialization', () => {
 
         return {
           initError,
+          initialized: window.__traceLogBridge.initialized,
         };
       });
 
-      // SaaS integration should fail on localhost
-      expect(result.initError).toMatch(/SaaS integration .* localhost/);
+      // Hosted default must NOT reject on localhost — that was the silent zero-event activation bug.
+      expect(result.initError).toBeNull();
+      expect(result.initialized).toBe(true);
     });
 
-    test('should reject saas integration on localhost (duplicate guard)', async ({ page }) => {
+    test('should reject first-party (Accuracy mode) tracelog integration on localhost', async ({ page }) => {
       const result = await page.evaluate(async () => {
         let retries = 0;
         while (!window.__traceLogBridge && retries < 50) {
@@ -84,12 +86,14 @@ test.describe('E2E: Initialization', () => {
 
         window.__traceLogBridge.destroy(true);
 
+        // Accuracy mode derives the endpoint from the page domain, so it must reject localhost.
         let initError: string | null = null;
         try {
           await window.__traceLogBridge.init({
             integrations: {
               tracelog: {
                 projectId: 'test-project-456',
+                firstParty: true,
               },
             },
           });
@@ -102,7 +106,7 @@ test.describe('E2E: Initialization', () => {
         };
       });
 
-      // SaaS integration should fail on localhost
+      // First-party SaaS integration must fail on localhost
       expect(result.initError).toMatch(/SaaS integration .* localhost/);
     });
   });

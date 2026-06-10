@@ -306,7 +306,7 @@ await tracelog.init({
     'auth_token',
     'api_key',
     'reset_token',
-    // Merged with the 15-param default list (token, auth, key, password, etc.)
+    // Merged with the 19-param default list (token, auth, key, password, etc.)
   ],
 });
 ```

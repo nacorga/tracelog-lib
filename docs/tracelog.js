@@ -86,6 +86,11 @@ const DEFAULT_SENSITIVE_QUERY_PARAMS = [
   "auth",
   "key",
   "session",
+  "sessionid",
+  "session_id",
+  "jwt",
+  "bearer",
+  "oauth",
   "reset",
   "password",
   "api_key",
@@ -270,6 +275,7 @@ const getClickIds = () => {
   const result = Object.keys(clickIds).length ? clickIds : void 0;
   return result;
 };
+const INGEST_HOST = "https://ingest.tracelog.io";
 const LOG_STYLE_ACTIVE = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
 const LOG_STYLE_DISABLED = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;";
 const formatLogMsg = (msg, error) => {
@@ -464,7 +470,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
   }
 };
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "3.1.1";
+const version = "3.2.0";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -516,6 +522,90 @@ const mode_utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePr
   detectQaMode
 }, Symbol.toStringTag, { value: "Module" }));
 const isPrerendering = () => typeof document !== "undefined" && document.prerendering === true;
+const isValidUrl = (url) => {
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+const generateHostedApiUrl = (projectId) => {
+  return `${INGEST_HOST}/p/${encodeURIComponent(projectId)}/collect`;
+};
+const generateFirstPartyApiUrl = (projectId) => {
+  try {
+    const url = new URL(window.location.href);
+    const host = url.hostname;
+    if (!host || typeof host !== "string") {
+      throw new Error("Invalid hostname");
+    }
+    if (host === "localhost" || host === "127.0.0.1" || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+      throw new Error(
+        "SaaS integration requires a domain hostname; localhost and IP addresses are not supported. For local development, omit `integrations.tracelog` to run in standalone mode (events emitted locally, no network requests), or test against a staging domain that resolves to your dev machine via /etc/hosts."
+      );
+    }
+    const parts = host.split(".");
+    if (!parts || !Array.isArray(parts) || parts.length === 0 || parts.length === 1 && parts[0] === "") {
+      throw new Error("Invalid hostname structure");
+    }
+    if (parts.length === 1) {
+      throw new Error("Single-part domain not supported for SaaS integration");
+    }
+    const cleanDomain = parts.length === 2 ? parts.join(".") : parts.slice(-2).join(".");
+    if (!cleanDomain || cleanDomain.split(".").length < 2) {
+      throw new Error("Invalid domain structure for SaaS");
+    }
+    const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
+    if (!isValidUrl(collectApiUrl)) {
+      throw new Error("Generated URL failed validation");
+    }
+    return collectApiUrl;
+  } catch (error) {
+    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+const getCollectApiUrls = (config) => {
+  const urls = {};
+  const tracelog2 = config.integrations?.tracelog;
+  if (tracelog2?.projectId) {
+    urls.saas = tracelog2.firstParty ? generateFirstPartyApiUrl(tracelog2.projectId) : generateHostedApiUrl(tracelog2.projectId);
+  }
+  return urls;
+};
+const normalizeUrl = (url, sensitiveQueryParams = []) => {
+  if (!url || typeof url !== "string") {
+    log("warn", "Invalid URL provided to normalizeUrl", { data: { type: typeof url } });
+    return url || "";
+  }
+  try {
+    let urlObject;
+    let isRelative = false;
+    try {
+      urlObject = new URL(url);
+    } catch {
+      const base = window.location.href;
+      urlObject = new URL(url, base);
+      isRelative = urlObject.origin === new URL(base).origin;
+    }
+    const searchParams = urlObject.searchParams;
+    const allSensitiveParams = [.../* @__PURE__ */ new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
+    let hasChanged = false;
+    for (const param of allSensitiveParams) {
+      if (searchParams.has(param)) {
+        searchParams.delete(param);
+        hasChanged = true;
+      }
+    }
+    if (!hasChanged && (isRelative || url.includes("?"))) {
+      return url;
+    }
+    urlObject.search = searchParams.toString();
+    return isRelative ? `${urlObject.pathname}${urlObject.search}${urlObject.hash}` : urlObject.toString();
+  } catch (error) {
+    log("warn", "URL normalization failed, returning original", { error, data: { urlLength: url?.length } });
+    return url;
+  }
+};
 const COMPOUND_TLDS = [
   "co.uk",
   "org.uk",
@@ -546,7 +636,7 @@ const isSameDomain = (hostname1, hostname2) => {
   }
   return getRootDomain(hostname1) === getRootDomain(hostname2);
 };
-const getExternalReferrer = () => {
+const getExternalReferrer = (sensitiveQueryParams = []) => {
   const referrer = document.referrer;
   if (!referrer) {
     return "Direct";
@@ -557,7 +647,7 @@ const getExternalReferrer = () => {
     if (isSameDomain(referrerHostname, currentHostname)) {
       return "Direct";
     }
-    return referrer;
+    return normalizeUrl(referrer, sensitiveQueryParams);
   } catch (error) {
     log("debug", "Failed to parse referrer URL, using raw value", { error, data: { referrer } });
     return referrer;
@@ -614,80 +704,6 @@ const generateEventId = () => {
     random = Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0");
   }
   return `${timestamp}-${sequence}-${random}`;
-};
-const isValidUrl = (url) => {
-  try {
-    return new URL(url).protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-const generateSaasApiUrl = (projectId) => {
-  try {
-    const url = new URL(window.location.href);
-    const host = url.hostname;
-    if (!host || typeof host !== "string") {
-      throw new Error("Invalid hostname");
-    }
-    if (host === "localhost" || host === "127.0.0.1" || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
-      throw new Error(
-        "SaaS integration requires a domain hostname; localhost and IP addresses are not supported. For local development, omit `integrations.tracelog` to run in standalone mode (events emitted locally, no network requests), or test against a staging domain that resolves to your dev machine via /etc/hosts."
-      );
-    }
-    const parts = host.split(".");
-    if (!parts || !Array.isArray(parts) || parts.length === 0 || parts.length === 1 && parts[0] === "") {
-      throw new Error("Invalid hostname structure");
-    }
-    if (parts.length === 1) {
-      throw new Error("Single-part domain not supported for SaaS integration");
-    }
-    const cleanDomain = parts.length === 2 ? parts.join(".") : parts.slice(-2).join(".");
-    if (!cleanDomain || cleanDomain.split(".").length < 2) {
-      throw new Error("Invalid domain structure for SaaS");
-    }
-    const collectApiUrl = `https://${projectId}.${cleanDomain}/collect`;
-    if (!isValidUrl(collectApiUrl)) {
-      throw new Error("Generated URL failed validation");
-    }
-    return collectApiUrl;
-  } catch (error) {
-    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-const getCollectApiUrls = (config) => {
-  const urls = {};
-  if (config.integrations?.tracelog?.projectId) {
-    urls.saas = generateSaasApiUrl(config.integrations.tracelog.projectId);
-  }
-  return urls;
-};
-const normalizeUrl = (url, sensitiveQueryParams = []) => {
-  if (!url || typeof url !== "string") {
-    log("warn", "Invalid URL provided to normalizeUrl", { data: { type: typeof url } });
-    return url || "";
-  }
-  try {
-    const urlObject = new URL(url);
-    const searchParams = urlObject.searchParams;
-    const allSensitiveParams = [.../* @__PURE__ */ new Set([...DEFAULT_SENSITIVE_QUERY_PARAMS, ...sensitiveQueryParams])];
-    let hasChanged = false;
-    const removedParams = [];
-    allSensitiveParams.forEach((param) => {
-      if (searchParams.has(param)) {
-        searchParams.delete(param);
-        hasChanged = true;
-        removedParams.push(param);
-      }
-    });
-    if (!hasChanged && url.includes("?")) {
-      return url;
-    }
-    urlObject.search = searchParams.toString();
-    return urlObject.toString();
-  } catch (error) {
-    log("warn", "URL normalization failed, returning original", { error, data: { urlLength: url?.length } });
-    return url;
-  }
 };
 const sanitizeString = (value) => {
   if (!value || typeof value !== "string" || value.trim().length === 0) {
@@ -3582,11 +3598,11 @@ class SessionManager extends StateManager {
     let sessionClickIds;
     if (recoveredSessionId) {
       const storedSession = this.loadStoredSession();
-      sessionReferrer = storedSession?.referrer ?? getExternalReferrer();
+      sessionReferrer = storedSession?.referrer ?? getExternalReferrer(this.get("config").sensitiveQueryParams);
       sessionUtm = storedSession?.utm ?? getUTMParameters();
       sessionClickIds = storedSession?.clickIds ?? getClickIds();
     } else {
-      sessionReferrer = getExternalReferrer();
+      sessionReferrer = getExternalReferrer(this.get("config").sensitiveQueryParams);
       sessionUtm = getUTMParameters();
       sessionClickIds = getClickIds();
     }
@@ -3698,7 +3714,7 @@ class SessionManager extends StateManager {
   renewSession() {
     this.needsRenewal = false;
     const newSessionId = this.generateSessionId();
-    const sessionReferrer = getExternalReferrer();
+    const sessionReferrer = getExternalReferrer(this.get("config").sensitiveQueryParams);
     const sessionUtm = getUTMParameters();
     const sessionClickIds = getClickIds();
     log("debug", "Renewing session after timeout", {
@@ -4097,7 +4113,7 @@ class PageViewHandler extends StateManager {
     this.onTrack();
   }
   extractPageViewData() {
-    const { referrer } = document;
+    const referrer = document.referrer ? normalizeUrl(document.referrer, this.get("config").sensitiveQueryParams) : "";
     const { title } = document;
     if (!referrer && !title) {
       return void 0;
@@ -4337,13 +4353,14 @@ class ClickHandler extends StateManager {
   generateClickData(clickedElement, relevantElement, coordinates) {
     const { x: x2, y: y2 } = coordinates;
     const text = this.getRelevantText(clickedElement, relevantElement);
-    const href = relevantElement.getAttribute("href") ?? void 0;
+    const rawHref = relevantElement.getAttribute("href");
+    const href = rawHref ? normalizeUrl(rawHref, this.get("config").sensitiveQueryParams) : void 0;
     return {
       x: x2,
       y: y2,
       tag: relevantElement.tagName.toLowerCase(),
-      ...relevantElement.id && { id: relevantElement.id },
-      ...relevantElement.className && { class: relevantElement.className },
+      ...relevantElement.id && { id: sanitizePii(relevantElement.id) },
+      ...relevantElement.className && { class: sanitizePii(relevantElement.className) },
       ...text && { text },
       ...href && { href }
     };
@@ -4862,7 +4879,9 @@ class PerformanceHandler extends StateManager {
   observers = [];
   vitalThresholds;
   navigationCounter = 0;
-  // Counter for handling simultaneous navigations edge case
+  // Suffix counter for repeat navigations to the same path (SPA A→B→A)
+  currentNavBase = null;
+  currentNavId = null;
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -4910,6 +4929,9 @@ class PerformanceHandler extends StateManager {
     this.observers.length = 0;
     this.reportedByNav.clear();
     this.navigationHistory.length = 0;
+    this.navigationCounter = 0;
+    this.currentNavBase = null;
+    this.currentNavId = null;
   }
   observeWebVitalsFallback() {
     this.reportTTFB();
@@ -5047,21 +5069,23 @@ class PerformanceHandler extends StateManager {
     });
   }
   /**
-   * Generates a unique navigation identifier for deduplication.
+   * Generates a deterministic navigation identifier for deduplication.
    *
-   * **Purpose**: Creates deterministic IDs to prevent duplicate Web Vitals reporting
-   * across multiple metrics for the same navigation event.
+   * **Purpose**: Every call within the same navigation must return the SAME id,
+   * so `reportedByNav` can collapse duplicate Web Vitals (one emission per
+   * metric type per navigation — critical for the fallback observers, which
+   * fire per entry batch).
    *
-   * **ID Format**: `{timestamp}_{pathname}` or `{timestamp}_{pathname}_{counter}`
+   * **ID Format**: `{startTime}_{pathname}` or `{startTime}_{pathname}_{counter}`
    *
-   * **Edge Case Handling**:
-   * - If multiple navigations occur to the same pathname in the same millisecond,
-   *   a counter suffix is appended (e.g., `1234.56_/home_2`)
-   * - Counter only added when > 1 to minimize ID length for common case
-   *
-   * **Why Deterministic**:
-   * - Previous implementation used random string → duplicate metrics on page reload
-   * - Now: Same navigation = same ID = proper deduplication via reportedByNav Map
+   * **Determinism**:
+   * - Base id is derived only from the navigation entry's `startTime` (0 by spec
+   *   for the document navigation — no `performance.now()` fallback, which made
+   *   every call unique) and the current pathname.
+   * - The id is cached per navigation; the counter suffix is appended ONLY on a
+   *   real collision: a new navigation whose base id was already reported
+   *   (SPA revisit to the same path, e.g. A→B→A), so the revisit's vitals are
+   *   not suppressed by the first visit's dedup entries.
    *
    * @returns Navigation ID string or null if navigation timing unavailable
    *
@@ -5073,10 +5097,13 @@ class PerformanceHandler extends StateManager {
       if (!nav) {
         return null;
       }
-      const timestamp = nav.startTime || performance.now();
-      const counter = ++this.navigationCounter;
-      const baseId = `${timestamp.toFixed(2)}_${window.location.pathname}`;
-      return counter > 1 ? `${baseId}_${counter}` : baseId;
+      const baseId = `${nav.startTime.toFixed(2)}_${window.location.pathname}`;
+      if (baseId === this.currentNavBase && this.currentNavId !== null) {
+        return this.currentNavId;
+      }
+      this.currentNavBase = baseId;
+      this.currentNavId = this.reportedByNav.has(baseId) ? `${baseId}_${++this.navigationCounter}` : baseId;
+      return this.currentNavId;
     } catch (error) {
       log("debug", "Failed to get navigation ID", { error });
       return null;

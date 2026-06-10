@@ -747,7 +747,7 @@ describe('SenderManager - v2→v3 storage migration', () => {
   });
 });
 
-describe('SenderManager - health beacon (T15)', () => {
+describe('SenderManager - health beacon', () => {
   const PROJECT_ID = 'proj-123';
 
   beforeEach(() => {
