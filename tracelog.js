@@ -264,7 +264,7 @@ const Ft = () => {
     default:
       return ze;
   }
-}, Jt = 50, Zt = "3.2.0", es = Zt, ts = () => typeof window < "u" && typeof sessionStorage < "u", ss = () => {
+}, Jt = 50, Zt = "3.3.0", es = Zt, ts = () => typeof window < "u" && typeof sessionStorage < "u", ss = () => {
   try {
     const n = new URLSearchParams(window.location.search);
     n.delete(nt);
@@ -3815,7 +3815,7 @@ class ne extends T {
   handleError = (e) => {
     if (!this.shouldSample())
       return;
-    const t = this.sanitize(e.message || "Unknown error");
+    const t = this.sanitizeMessage(e.message, "Unknown error");
     if (this.shouldSuppressError(x.JS_ERROR, t) || this.shouldThrottleBySignature({
       message: t,
       filename: e.filename,
@@ -3844,7 +3844,7 @@ class ne extends T {
   handleRejection = (e) => {
     if (!this.shouldSample())
       return;
-    const t = this.extractRejectionMessage(e.reason), s = this.sanitize(t);
+    const t = this.extractRejectionMessage(e.reason), s = this.sanitizeMessage(t, "Unknown rejection");
     if (this.shouldSuppressError(x.PROMISE_REJECTION, s) || this.shouldThrottleBySignature({ message: s }))
       return;
     const r = e.reason instanceof Error && typeof e.reason.stack == "string" ? this.truncateStack(e.reason.stack) : void 0, i = e.reason instanceof Error && e.reason.name !== "Error" ? e.reason.name : void 0;
@@ -3874,6 +3874,17 @@ class ne extends T {
   sanitize(e) {
     const t = e.length > je ? e.slice(0, je) + "..." : e;
     return U(t);
+  }
+  /**
+   * Sanitizes an error message and guarantees a non-empty result.
+   *
+   * An empty `error_data.message` (from a `Promise.reject('')`, `new Error('')`,
+   * or `{ message: '' }` reason — all of which stringify to '') is rejected by
+   * the ingestion DTO, which 400s the whole batch and drops the co-traveling
+   * events. Every error path must fall back to a non-empty placeholder.
+   */
+  sanitizeMessage(e, t) {
+    return this.sanitize(e) || t;
   }
   shouldSuppressError(e, t) {
     const s = Date.now(), r = `${e}:${t}`, i = this.recentErrors.get(r);
