@@ -241,7 +241,11 @@ export class ErrorHandler extends StateManager {
     }
 
     const message = this.extractRejectionMessage(event.reason);
-    const sanitizedMessage = this.sanitize(message);
+    // Guard against an empty result (a `Promise.reject('')`, `new Error('')`, or
+    // `{ message: '' }` reason all stringify to ''): an empty error_data.message is
+    // rejected by the ingestion DTO, which 400s the whole batch and drops the
+    // co-traveling events. Mirrors the `|| 'Unknown error'` guard in handleError.
+    const sanitizedMessage = this.sanitize(message) || 'Unknown rejection';
 
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
       return;
