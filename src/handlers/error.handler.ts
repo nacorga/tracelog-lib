@@ -197,7 +197,7 @@ export class ErrorHandler extends StateManager {
       return;
     }
 
-    const sanitizedMessage = this.sanitize(event.message || 'Unknown error');
+    const sanitizedMessage = this.sanitizeMessage(event.message, 'Unknown error');
 
     if (this.shouldSuppressError(ErrorType.JS_ERROR, sanitizedMessage)) {
       return;
@@ -241,11 +241,7 @@ export class ErrorHandler extends StateManager {
     }
 
     const message = this.extractRejectionMessage(event.reason);
-    // Guard against an empty result (a `Promise.reject('')`, `new Error('')`, or
-    // `{ message: '' }` reason all stringify to ''): an empty error_data.message is
-    // rejected by the ingestion DTO, which 400s the whole batch and drops the
-    // co-traveling events. Mirrors the `|| 'Unknown error'` guard in handleError.
-    const sanitizedMessage = this.sanitize(message) || 'Unknown rejection';
+    const sanitizedMessage = this.sanitizeMessage(message, 'Unknown rejection');
 
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
       return;
@@ -299,6 +295,18 @@ export class ErrorHandler extends StateManager {
   private sanitize(text: string): string {
     const truncated = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + '...' : text;
     return sanitizePii(truncated);
+  }
+
+  /**
+   * Sanitizes an error message and guarantees a non-empty result.
+   *
+   * An empty `error_data.message` (from a `Promise.reject('')`, `new Error('')`,
+   * or `{ message: '' }` reason — all of which stringify to '') is rejected by
+   * the ingestion DTO, which 400s the whole batch and drops the co-traveling
+   * events. Every error path must fall back to a non-empty placeholder.
+   */
+  private sanitizeMessage(raw: string, fallback: string): string {
+    return this.sanitize(raw) || fallback;
   }
 
   private shouldSuppressError(type: ErrorType, message: string): boolean {

@@ -118,6 +118,23 @@ describe('ErrorHandler - Error Tracking', () => {
     );
   });
 
+  it('falls back to a non-empty message for an empty error message', () => {
+    const errorEvent = new ErrorEvent('error', {
+      message: '',
+    });
+
+    window.dispatchEvent(errorEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          type: ErrorType.JS_ERROR,
+          message: 'Unknown error',
+        }),
+      }),
+    );
+  });
+
   it('should capture error type', () => {
     const errorEvent = new ErrorEvent('error', {
       message: 'Type test',
