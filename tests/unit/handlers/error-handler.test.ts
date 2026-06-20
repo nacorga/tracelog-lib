@@ -118,6 +118,23 @@ describe('ErrorHandler - Error Tracking', () => {
     );
   });
 
+  it('falls back to a non-empty message for an empty error message', () => {
+    const errorEvent = new ErrorEvent('error', {
+      message: '',
+    });
+
+    window.dispatchEvent(errorEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          type: ErrorType.JS_ERROR,
+          message: 'Unknown error',
+        }),
+      }),
+    );
+  });
+
   it('should capture error type', () => {
     const errorEvent = new ErrorEvent('error', {
       message: 'Type test',
@@ -562,6 +579,69 @@ describe('ErrorHandler - Rejection Message Extraction', () => {
     const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
       promise,
       reason: null,
+    });
+
+    window.dispatchEvent(rejectionEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          message: 'Unknown rejection',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to a non-empty message for an empty-string rejection reason', () => {
+    const promise = Promise.reject('');
+    promise.catch(() => {});
+
+    const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+      promise,
+      reason: '',
+    });
+
+    window.dispatchEvent(rejectionEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          type: ErrorType.PROMISE_REJECTION,
+          message: 'Unknown rejection',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to a non-empty message for an Error with an empty message', () => {
+    const error = new Error('');
+    const promise = Promise.reject(error);
+    promise.catch(() => {});
+
+    const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+      promise,
+      reason: error,
+    });
+
+    window.dispatchEvent(rejectionEvent);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_data: expect.objectContaining({
+          message: 'Unknown rejection',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to a non-empty message for an object reason with an empty message', () => {
+    const reason = { message: '' };
+    const promise = Promise.reject(reason);
+    promise.catch(() => {});
+
+    const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+      promise,
+      reason,
     });
 
     window.dispatchEvent(rejectionEvent);
