@@ -27,6 +27,32 @@
 
 
 
+
+## [3.3.1] - 2026-06-20
+
+### 🐛 Bug Fixes
+
+- Prevent empty rejection messages from failing batch ingestion ([9497567](../../commit/9497567e9bb201807f27eb87b7fbd93e07b3f10e))
+
+### ♻️ Refactoring
+
+- Consolidate empty message guards into sanitizeMessage helper ([60af333](../../commit/60af3333122b4da4e04a6172327a740f9ffd7a54))
+
+### 🔧 Other Changes
+
+- Merge pull request #124 from nacorga/hotfix/20260620.1 ([94b9f46](../../commit/94b9f465e9b5dd711475899d2d20ed3441e14cd9))
+- Patch vite and js-yaml dev deps to clear npm audit advisories ([31a11b3](../../commit/31a11b34c886603948411008f361eba4982d1496))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.3.0...v3.3.1
+
+
 ## [3.3.0] - 2026-06-10
 
 ### ✨ Features
