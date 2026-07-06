@@ -35,7 +35,7 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.filePath
 # Cite external RFCs as "section N", not "§N". See memory no-task-refs-in-page-docs.
 # (Runs for ALL lib src/tests/docs; the pixel-specific checks below stay scoped to src/pixel.)
 _IREFS_DOCS='WP[0-9]|WP-[A-Z]|(^|[^A-Za-z0-9])P[0-9]-[0-9]|A-P[0-9]-[0-9]|DA-[0-9]|D-PA[0-9]|TS-[0-9]|§[0-9]|ui-big-bang|[Tt]asks?[[:space:]]+[0-9]|Finding[[:space:]]+[0-9]|enmienda|injerto|[Aa]udit[[:space:]]+(Finding|backlog|flagged)|\([A-Z]{1,3}[0-9]{1,2}(/[A-Z]{1,3}[0-9]{1,2})*\)'
-_IREFS_CODE='WP[0-9]|WP-[A-Z]|(^|[^A-Za-z0-9])P[0-9]-[0-9]|A-P[0-9]-[0-9]|DA-[0-9]|D-PA[0-9]|TS-[0-9]|§[0-9]|ui-big-bang|enmienda|injerto|[Aa]udit[[:space:]]+(Finding|backlog|flagged)|\([A-Z]{1,3}[0-9]{1,2}(/[A-Z]{1,3}[0-9]{1,2})*\)'
+_IREFS_CODE='WP[0-9]|WP-[A-Z]|(^|[^A-Za-z0-9])P[0-9]-[0-9]|A-P[0-9]-[0-9]|DA-[0-9]|D-PA[0-9]|TS-[0-9]|§[0-9]|ui-big-bang|enmienda|injerto|[Aa]udit[[:space:]]+(Finding|backlog|flagged)|\([A-Z]{1,3}[0-9]{1,2}(/[A-Z]{1,3}[0-9]{1,2})*\)|(^|[^A-Za-z0-9])TRA-[0-9]'
 _iref_report() {
   {
     echo ""

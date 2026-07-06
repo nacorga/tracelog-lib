@@ -1,0 +1,56 @@
+{
+  "$comment": "Code paths -> related internal + customer-facing docs for tracelog-lib. Consumed by .claude/hooks/check-docs.sh on every Write/Edit. Patterns are substring-matched against the file path relative to the package root. Paths starting with ../tracelog-docs/ resolve to the sibling tracelog-docs package.",
+  "$updated": "2026-07-06",
+  "mappings": [
+    {
+      "pattern": "src/handlers/",
+      "docs": ["src/handlers/README.md", "API_REFERENCE.md", "../tracelog-docs/docs/library/automatic-tracking.md"],
+      "description": "Auto-tracking handlers: click, scroll, page-view, performance (web vitals), error, session, viewport"
+    },
+    {
+      "pattern": "src/managers/",
+      "docs": [
+        "src/managers/README.md",
+        "API_REFERENCE.md",
+        "BEST_PRACTICES.md",
+        "../tracelog-docs/docs/library/identify.md",
+        "../tracelog-docs/docs/library/global-metadata.md"
+      ],
+      "description": "Stateful coordinators: event, sender, session, state, storage, time, user"
+    },
+    {
+      "pattern": "src/ecommerce/",
+      "docs": ["API_REFERENCE.md", "../tracelog-docs/docs/library/custom-events.md"],
+      "description": "E-commerce integrations (Shopify, etc.)"
+    },
+    {
+      "pattern": "src/constants/",
+      "docs": ["API_REFERENCE.md", "../tracelog-docs/docs/library/qa-mode.md"],
+      "description": "Defaults and config bounds (e.g. DEFAULT_SESSION_TIMEOUT, qa-mode flags)"
+    },
+    {
+      "pattern": "src/types/",
+      "docs": ["API_REFERENCE.md"],
+      "description": "Public type definitions (event shapes, config, integration contracts)"
+    },
+    {
+      "pattern": "src/api.ts",
+      "docs": ["API_REFERENCE.md", "README.md"],
+      "description": "Public entry point (tracelog.init, etc.)"
+    }
+  ],
+  "no_docs_needed": [
+    {
+      "pattern": "src/listeners/",
+      "reason": "Internal DOM listener wrappers, an implementation detail behind the public handlers/managers surface"
+    },
+    {
+      "pattern": "src/utils/",
+      "reason": "Internal validation/helper utilities, not part of the public API surface"
+    },
+    {
+      "pattern": "src/pixel/",
+      "reason": "Shopify Web Pixel extension source — covered by its own lint hook (lint-patterns.sh pixel scope) and tracelog-shopify-app docs, not a general library doc surface"
+    }
+  ]
+}
