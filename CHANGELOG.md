@@ -28,6 +28,30 @@
 
 
 
+
+## [3.3.2] - 2026-07-08
+
+### ✨ Features
+
+- Add documentation mapping and check-docs hook for improved doc alignment ([5d6bcec](../../commit/5d6bcec3776d17bdd1f4eecd249a29b65faac67c))
+
+### 🔧 Other Changes
+
+- Merge pull request #126 from nacorga/release/20260708.1 ([005af69](../../commit/005af69fac671a2a26b8ec449a846de4b928a92c))
+- Claude code setup update ([7783e2a](../../commit/7783e2a87ac4799f1b9b4281ff47da50fac918a6))
+- Merge branch 'main' of github.com:nacorga/tracelog-lib into develop ([3bc8c2f](../../commit/3bc8c2f707e86ba9a898fd85fbc422b695d31f3a))
+- Control tower skill ([dc0c28c](../../commit/dc0c28cbd022a1fa72307887aedb044b4f3a1997))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.3.1...v3.3.2
+
+
 ## [3.3.1] - 2026-06-20
 
 ### 🐛 Bug Fixes
