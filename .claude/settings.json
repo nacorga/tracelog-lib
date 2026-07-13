@@ -28,17 +28,6 @@
         ]
       }
     ],
-    "PostCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/compact-context.sh"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
