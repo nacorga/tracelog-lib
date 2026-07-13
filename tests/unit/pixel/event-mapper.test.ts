@@ -8,7 +8,7 @@
  * - Stitching metadata (shopify_client_id, checkout_token)
  * - Drop-on-no-identity behavior
  *
- * Reference payloads from `docs/tasks/shopify-hybrid-capture/04-spike-report.md`.
+ * Reference payloads mirror Shopify Web Pixel runtime events.
  */
 
 import { describe, it, expect } from 'vitest';
