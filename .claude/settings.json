@@ -13,6 +13,11 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-docs.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/mark-changes.sh",
+            "timeout": 5
           }
         ]
       }
@@ -32,9 +37,9 @@
       {
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "You are a quality gate for @tracelog/lib, a client-side analytics library. Analyze the conversation to determine if the task is truly complete. Check: 1) If source code in src/ was modified, were quality checks run (npm run check or npm run fix + npm run type-check)? 2) If test files or tested code was changed, were tests run (npm test)? 3) Were there any TypeScript errors or test failures left unresolved? 4) If build-affecting changes were made, was npm run build:all verified? If ANY checks were skipped or failed, respond with {\"ok\": false, \"reason\": \"<specific missing step>\"}. If all checks passed or the task was research/conversation only, respond with {\"ok\": true}.",
-            "timeout": 15
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-check.sh",
+            "timeout": 10
           }
         ]
       }
