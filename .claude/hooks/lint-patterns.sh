@@ -8,11 +8,11 @@
 # delegates to. The substantive integrity rules therefore live here, not in the
 # shopify-app repo.
 #
-# Rules (deterministic):
-#   1. No console.* — the library is silent in production; use the emitter/log()
-#   2. No backend dependency import (@nestjs / mongoose / openai) — lib is standalone
-#   3. No PII identifier — the pixel must forward only non-PII analytics fields;
-#      a checkout carries email/phone/addresses but the payload must never copy them
+# Rules live in .claude/rules/check-rules.json at the monorepo root — the
+# machine-readable half of .claude/rules/check-catalog.md (no console.*, no
+# backend dependency import, no PII identifier in the payload). This script does
+# not restate them; it loads the tracelog-lib rules and executes them. Add or
+# change a rule THERE, never here.
 #
 # Intentionally NOT enforced (review-only): "value/cart_total set without a
 # currency" — value and currency are set on separate lines (buildMetadata), so a
@@ -66,23 +66,25 @@ fi
 [[ "$FILE_PATH" == *".spec.ts" ]] && exit 0
 [[ "$FILE_PATH" == *".test.ts" ]] && exit 0
 
+# ─── Rule runner ───
+# Patterns live in .claude/rules/check-rules.json at the monorepo root. See the
+# tracelog-api hook for the resolution contract and the base64 field transport.
+
 ERRORS=""
 
-# 1. console.* (library must be silent in production — use the emitter / log())
-if grep -qE "console\.(log|warn|error|info|debug)\(" "$FILE_PATH" 2>/dev/null; then
-  ERRORS="${ERRORS}\n  - CONSOLE.* in pixel. The library is silent in production — use the emitter / log() with a visibility level."
-fi
+RULES_FILE="$CLAUDE_PROJECT_DIR/../.claude/rules/check-rules.json"
+[[ -f "$RULES_FILE" ]] || RULES_FILE="$CLAUDE_PROJECT_DIR/.claude/rules/check-rules.json"
+RULE_RUNNER="${RULES_FILE%/rules/check-rules.json}/hooks/lib/rule-runner.sh"
 
-# 2. Backend dependency import (lib is standalone)
-if grep -qE "from[[:space:]]+['\"](@nestjs|mongoose|openai)" "$FILE_PATH" 2>/dev/null; then
-  ERRORS="${ERRORS}\n  - BACKEND DEPENDENCY import in pixel. @tracelog/lib must work standalone — no NestJS/Mongoose/OpenAI."
-fi
-
-# 3. PII identifier — the pixel must never forward customer PII to ingest.
-PII=$(grep -nE "\.email\b|\.phone\b|billingAddress|shippingAddress|\bcustomer\.(email|phone|firstName|lastName|first_name|last_name)|firstName|lastName" "$FILE_PATH" 2>/dev/null)
-if [[ -n "$PII" ]]; then
-  LINES=$(echo "$PII" | cut -d: -f1 | tr '\n' ' ')
-  ERRORS="${ERRORS}\n  - POSSIBLE PII in pixel payload (line(s): ${LINES}). The Shopify pixel must forward only non-PII analytics fields (value, currency, items, counts) — never email/phone/addresses/customer names."
+if [[ -f "$RULES_FILE" && -f "$RULE_RUNNER" ]]; then
+  PKG="tracelog-lib"
+  # shellcheck source=/dev/null
+  . "$RULE_RUNNER"
+  run_rules_for_package
+else
+  # Announce the gap instead of staying silent: no enforcement must not read
+  # like clean enforcement. Expected in a standalone package clone.
+  echo "lint-patterns: shared rules/runner unreachable — pattern enforcement is OFF for this edit." >&2
 fi
 
 if [[ -n "$ERRORS" ]]; then
@@ -90,7 +92,7 @@ if [[ -n "$ERRORS" ]]; then
     echo ""
     echo "PIXEL INTEGRITY VIOLATION in $(basename "$FILE_PATH"):"
     echo -e "$ERRORS"
-    echo "   Fix these before continuing."
+    echo "   Fix these before continuing. Rules: .claude/rules/check-rules.json"
     echo ""
   } >&2
   exit 2
